@@ -68,10 +68,20 @@ const slothlet = {
 		for (const entry of entries) {
 			if (entry.isDirectory() && !entry.name.startsWith(".")) {
 				const categoryPath = path.join(dir, entry.name);
-				api[entry.name] = await this._eagerLoadCategory(categoryPath);
+				api[this._toApiKey(entry.name)] = await this._eagerLoadCategory(categoryPath);
 			}
 		}
 		return api;
+	},
+	/**
+	 * Converts a filename or folder name to camelCase for API property.
+	 * @param {string} name
+	 * @returns {string}
+	 * @example
+	 * toApiKey('root-math') // 'rootMath'
+	 */
+	_toApiKey(name) {
+		return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
 	},
 
 	/**
@@ -93,7 +103,7 @@ const slothlet = {
 		const categoryModules = {};
 		for (const file of mjsFiles) {
 			const moduleName = path.basename(file, ".mjs");
-			categoryModules[moduleName] = await this._loadSingleModule(path.join(categoryPath, file));
+			categoryModules[this._toApiKey(moduleName)] = await this._loadSingleModule(path.join(categoryPath, file));
 		}
 		return categoryModules;
 	},
@@ -135,30 +145,28 @@ const slothlet = {
 			{
 				get(target, prop) {
 					if (typeof prop !== "string" || prop.startsWith("_")) return undefined;
-					if (cache[prop]) return cache[prop];
-					const entry = entries.find((e) => e.name === prop);
+					const apiKey = this._toApiKey(prop);
+					if (cache[apiKey]) return cache[apiKey];
+					const entry = entries.find((e) => this._toApiKey(e.name) === apiKey);
 					if (!entry) {
 						throw new Error(`slothlet: API path or method '${prop}' does not exist in directory '${dir}'.`);
 					}
 					if (entry.isDirectory()) {
-						// Lazy load subdirectory as another proxy (if within lazyDepth)
 						if (depth + 1 < self.config.lazyDepth) {
-							const subdirPath = path.join(dir, prop);
+							const subdirPath = path.join(dir, entry.name);
 							const promiseProxy = self._createLazyApiProxy(subdirPath, depth + 1);
-							cache[prop] = promiseProxy;
+							cache[apiKey] = promiseProxy;
 							return promiseProxy;
 						} else {
-							// Eager load at this depth
-							const subdirPath = path.join(dir, prop);
+							const subdirPath = path.join(dir, entry.name);
 							const promise = self._eagerLoadCategory(subdirPath);
-							cache[prop] = promise;
+							cache[apiKey] = promise;
 							return promise;
 						}
 					} else if (entry.isFile() && entry.name.endsWith(".mjs")) {
-						// Lazy load module file
 						const modulePath = path.join(dir, entry.name);
 						const promise = self._loadSingleModule(modulePath);
-						cache[prop] = promise;
+						cache[apiKey] = promise;
 						return promise;
 					}
 					throw new Error(`slothlet: API path or method '${prop}' does not exist in directory '${dir}'.`);
@@ -253,7 +261,8 @@ const slothlet = {
 		return new Proxy(proxyApi, {
 			get(target, prop) {
 				if (typeof prop !== "string" || prop.startsWith("_")) return undefined;
-				const value = target[prop];
+				const apiKey = this._toApiKey(prop);
+				const value = target[apiKey];
 				if (value instanceof Promise) {
 					// Await and build module with context
 					return (async () => {

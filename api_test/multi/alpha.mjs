@@ -6,13 +6,13 @@
  * api.multi.alpha.hello(); // 'alpha hello'
  */
 export default {
-  /**
-   * Returns a test string.
-   * @returns {string}
-   * @example
-   * hello(); // 'alpha hello'
-   */
-  hello() {
-    return 'alpha hello';
-  }
+	/**
+	 * Returns a test string.
+	 * @returns {string}
+	 * @example
+	 * hello(); // 'alpha hello'
+	 */
+	hello() {
+		return "alpha hello";
+	}
 };

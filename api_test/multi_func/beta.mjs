@@ -6,13 +6,13 @@
  * api.multi_func.beta.hello(); // 'beta hello'
  */
 export default {
-  /**
-   * Returns a test string.
-   * @returns {string}
-   * @example
-   * hello(); // 'beta hello'
-   */
-  hello() {
-    return 'beta hello';
-  }
+	/**
+	 * Returns a test string.
+	 * @returns {string}
+	 * @example
+	 * hello(); // 'beta hello'
+	 */
+	hello() {
+		return "beta hello";
+	}
 };

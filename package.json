@@ -1,0 +1,53 @@
+{
+	"name": "@cldmv/slothlet",
+	"version": "1.0.0",
+	"description": "Slothlet: Lazy Modular API Loader for Node.js. Dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
+	"main": "slothlet.mjs",
+	"exports": {
+		".": "./slothlet.mjs"
+	},
+	"directories": {
+		"test": "tests"
+	},
+	"scripts": {
+		"test": "jest"
+	},
+	"keywords": [
+		"api",
+		"lazy-loading",
+		"modular",
+		"nodejs",
+		"esm"
+	],
+	"author": {
+		"name": "Shinrai",
+		"email": "git@cldmv.net",
+		"url": "https://cldmv.net"
+	},
+	"contributors": [
+		{
+			"name": "CLDMV",
+			"url": "https://github.com/CLDMV"
+		}
+	],
+	"license": "Apache-2.0",
+	"type": "module",
+	"devDependencies": {
+		"jest": "^30.0.5"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/CLDMV/slothlet.git"
+	},
+	"bugs": {
+		"url": "https://github.com/CLDMV/slothlet/issues"
+	},
+	"homepage": "https://github.com/CLDMV/slothlet#readme",
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"README.md",
+		"LICENSE"
+	]
+}

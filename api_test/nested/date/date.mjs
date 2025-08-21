@@ -6,13 +6,13 @@
  * api.nested.date.today(); // '2025-08-15'
  */
 export default {
-  /**
-   * Returns today's date as YYYY-MM-DD.
-   * @returns {string}
-   * @example
-   * today(); // '2025-08-15'
-   */
-  today() {
-    return '2025-08-15';
-  }
+	/**
+	 * Returns today's date as YYYY-MM-DD.
+	 * @returns {string}
+	 * @example
+	 * today(); // '2025-08-15'
+	 */
+	today() {
+		return "2025-08-15";
+	}
 };

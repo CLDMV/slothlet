@@ -6,24 +6,24 @@
  * api.string.upper('abc'); // 'ABC'
  */
 export default {
-  /**
-   * Converts a string to uppercase.
-   * @param {string} str
-   * @returns {string}
-   * @example
-   * upper('abc'); // 'ABC'
-   */
-  upper(str) {
-    return str.toUpperCase();
-  },
-  /**
-   * Reverses a string.
-   * @param {string} str
-   * @returns {string}
-   * @example
-   * reverse('abc'); // 'cba'
-   */
-  reverse(str) {
-    return str.split('').reverse().join('');
-  }
+	/**
+	 * Converts a string to uppercase.
+	 * @param {string} str
+	 * @returns {string}
+	 * @example
+	 * upper('abc'); // 'ABC'
+	 */
+	upper(str) {
+		return str.toUpperCase();
+	},
+	/**
+	 * Reverses a string.
+	 * @param {string} str
+	 * @returns {string}
+	 * @example
+	 * reverse('abc'); // 'cba'
+	 */
+	reverse(str) {
+		return str.split("").reverse().join("");
+	}
 };
