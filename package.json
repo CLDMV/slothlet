@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Slothlet: Lazy Modular API Loader for Node.js. Dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
 	"main": "slothlet.mjs",
 	"exports": {

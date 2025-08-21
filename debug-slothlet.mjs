@@ -184,6 +184,36 @@ async function runDebug(config, label, awaitCalls = false) {
 			]
 		},
 		{
+			section: "multi_func.uniqueOne",
+			calls: [
+				{
+					path: ["multi_func", "uniqueOne"],
+					args: ["uniqueOne"],
+					label: 'bound.multi_func.uniqueOne("uniqueOne")'
+				}
+			]
+		},
+		{
+			section: "multi_func.uniqueTwo",
+			calls: [
+				{
+					path: ["multi_func", "uniqueTwo"],
+					args: ["uniqueTwo"],
+					label: 'bound.multi_func.uniqueTwo("uniqueTwo")'
+				}
+			]
+		},
+		{
+			section: "multi_func.uniqueThree",
+			calls: [
+				{
+					path: ["multi_func", "uniqueThree"],
+					args: ["uniqueThree"],
+					label: 'bound.multi_func.uniqueThree("uniqueThree")'
+				}
+			]
+		},
+		{
 			section: "exportDefault",
 			calls: [
 				{
