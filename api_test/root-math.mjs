@@ -6,26 +6,26 @@
  * api.math.add(2, 3); // 5
  */
 export default {
-  /**
-   * Adds two numbers.
-   * @param {number} a
-   * @param {number} b
-   * @returns {number}
-   * @example
-   * add(2, 3); // 5
-   */
-  add(a, b) {
-    return a + b;
-  },
-  /**
-   * Multiplies two numbers.
-   * @param {number} a
-   * @param {number} b
-   * @returns {number}
-   * @example
-   * multiply(2, 3); // 6
-   */
-  multiply(a, b) {
-    return a * b;
-  }
+	/**
+	 * Adds two numbers.
+	 * @param {number} a
+	 * @param {number} b
+	 * @returns {number}
+	 * @example
+	 * add(2, 3); // 5
+	 */
+	add(a, b) {
+		return a + b;
+	},
+	/**
+	 * Multiplies two numbers.
+	 * @param {number} a
+	 * @param {number} b
+	 * @returns {number}
+	 * @example
+	 * multiply(2, 3); // 6
+	 */
+	multiply(a, b) {
+		return a * b;
+	}
 };

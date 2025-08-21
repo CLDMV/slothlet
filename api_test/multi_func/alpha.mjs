@@ -6,6 +6,6 @@
  * import api from './api_test';
  * api.multi_func.alpha('alpha'); // 'alpha: alpha'
  */
-export default function(name) {
-  return `alpha: ${name}`;
+export default function (name) {
+	return `alpha: ${name}`;
 }

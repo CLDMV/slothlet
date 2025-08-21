@@ -6,13 +6,13 @@
  * api.multi.beta.world(); // 'beta world'
  */
 export default {
-  /**
-   * Returns a test string.
-   * @returns {string}
-   * @example
-   * world(); // 'beta world'
-   */
-  world() {
-    return 'beta world';
-  }
+	/**
+	 * Returns a test string.
+	 * @returns {string}
+	 * @example
+	 * world(); // 'beta world'
+	 */
+	world() {
+		return "beta world";
+	}
 };

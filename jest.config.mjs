@@ -1,4 +1,4 @@
 export default {
-	testMatch: ["**/test/**/*.jest.*.js"],
+	testMatch: ["**/test/**/*.jest.js"],
 	testPathIgnorePatterns: ["/node_modules/"]
 };
