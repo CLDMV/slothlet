@@ -89,7 +89,7 @@ export const slothlet = {
 		let dispose;
 		if (mode === "singleton") {
 			const { context = null, reference = null, ...loadConfig } = options;
-			await slothlet.load(loadConfig, { context, reference });
+			await this.load(loadConfig, { context, reference });
 			// console.log("this.boundapi", this.boundapi);
 			// process.exit(0);
 			return this.boundapi;
@@ -211,7 +211,11 @@ export const slothlet = {
 		this.config = { ...this.config, ...config };
 		// console.log("this.config", this.config);
 		// process.exit(0);
-		const apiDir = this.config.dir || __dirname;
+		let apiDir = this.config.dir || __dirname;
+		// If apiDir is relative, resolve it from process.cwd() (the caller's working directory)
+		if (apiDir && !path.isAbsolute(apiDir)) {
+			apiDir = path.resolve(process.cwd(), apiDir);
+		}
 		if (this.loaded) return this.api;
 		if (this.config.lazy) {
 			this.api = await this._createLazyApiProxy(apiDir, 0);
@@ -359,6 +363,12 @@ export const slothlet = {
 		}
 
 		const moduleExports = Object.entries(module);
+		// If there are no exports, throw a clear error
+		if (!moduleExports.length) {
+			throw new Error(
+				`slothlet: No exports found in module '${modulePath}'. The file is empty or does not export any function/object/variable.`
+			);
+		}
 		if (this.config.debug) console.log("moduleExports: ", moduleExports);
 
 		// Handle both module.default and moduleExports[0][1] for callable and object default exports

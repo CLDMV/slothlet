@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": false,
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"outDir": "./types",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"target": "ES2022",
+		"skipLibCheck": true
+	},
+	"include": ["./**/*.js", "./**/*.mjs", "./**/*.d.ts"],
+	"exclude": [
+		"api_test",
+		"tests",
+		"types",
+		"dist",
+		"node_modules",
+		"**/* copy.mjs", // matches "foo copy.mjs"
+		"**/* copy *.mjs" // anything with space + something before .mjs
+	]
+}
