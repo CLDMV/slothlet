@@ -1,16 +1,19 @@
 /**
  * Beta module for multi-file API loader test (exports an object with methods).
- * @returns {object}
- * @example
- * import api from './api_test';
+ * @returns {object} beta API methods.
+ * @example Beta object usage
+ * ```javascript
  * api.multi_func.beta.hello(); // 'beta hello'
+ * ```
  */
-export default {
+export const beta = {
 	/**
 	 * Returns a test string.
 	 * @returns {string}
 	 * @example
-	 * hello(); // 'beta hello'
+	 * ```javascript
+	 * api.multi_func.beta.hello(); // 'beta hello'
+	 * ```
 	 */
 	hello() {
 		return "beta hello";

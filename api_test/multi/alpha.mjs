@@ -1,16 +1,19 @@
 /**
  * Alpha module for multi-file API loader test.
- * @returns {object}
- * @example
- * import api from './api_test';
+ * @returns {object} alpha API methods.
+ * @example Alpha object usage
+ * ```javascript
  * api.multi.alpha.hello(); // 'alpha hello'
+ * ```
  */
-export default {
+export const alpha = {
 	/**
 	 * Returns a test string.
 	 * @returns {string}
 	 * @example
-	 * hello(); // 'alpha hello'
+	 * ```javascript
+	 * api.multi.alpha.hello(); // 'alpha hello'
+	 * ```
 	 */
 	hello() {
 		return "alpha hello";

@@ -1,17 +1,21 @@
 /**
  * String API module for testing slothlet loader (single-file flattening).
- * @returns {object} String API methods.
- * @example
- * import api from './api_test';
+ * @returns {object} string API methods.
+ * @example String usage with slothlet loader
+ * ```javascript
  * api.string.upper('abc'); // 'ABC'
+ * api.string.reverse('abc'); // 'cba'
+ * ```
  */
-export default {
+export const string = {
 	/**
 	 * Converts a string to uppercase.
 	 * @param {string} str
 	 * @returns {string}
 	 * @example
-	 * upper('abc'); // 'ABC'
+	 * ```javascript
+	 * api.string.upper('abc'); // 'ABC'
+	 * ```
 	 */
 	upper(str) {
 		return str.toUpperCase();
@@ -21,7 +25,9 @@ export default {
 	 * @param {string} str
 	 * @returns {string}
 	 * @example
-	 * reverse('abc'); // 'cba'
+	 * ```javascript
+	 * api.string.reverse('abc'); // 'cba'
+	 * ```
 	 */
 	reverse(str) {
 		return str.split("").reverse().join("");

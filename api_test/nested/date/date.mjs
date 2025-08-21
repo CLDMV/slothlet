@@ -1,16 +1,19 @@
 /**
  * Date API module for testing slothlet loader nested loading.
- * @returns {object} Date API methods.
- * @example
- * import api from './api_test';
+ * @returns {object} date API methods.
+ * @example Date usage with slothlet loader
+ * ```javascript
  * api.nested.date.today(); // '2025-08-15'
+ * ```
  */
-export default {
+export const date = {
 	/**
 	 * Returns today's date as YYYY-MM-DD.
 	 * @returns {string}
 	 * @example
-	 * today(); // '2025-08-15'
+	 * ```javascript
+	 * api.nested.date.today(); // '2025-08-15'
+	 * ```
 	 */
 	today() {
 		return "2025-08-15";
