@@ -1,4 +1,5 @@
 export default {
-	testMatch: ["**/test/**/*.jest.js"],
+	testMatch: ["**/tests/**/*.jest.mjs", "**/tests/**/*.jest.cjs", "**/tests/**/*.jest.js"],
+	testEnvironment: "node",
 	testPathIgnorePatterns: ["/node_modules/"]
 };

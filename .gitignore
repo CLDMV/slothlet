@@ -7,8 +7,10 @@ build/zips/
 build/tmp/
 *copy/
 *copy (*)/
+*copy */
 *copy.*
 *copy (*).*
+*copy *.*
 tmp/
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt

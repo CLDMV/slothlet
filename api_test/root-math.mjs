@@ -1,18 +1,22 @@
 /**
  * Math API module for testing slothlet loader.
- * @returns {object} Math API methods.
- * @example
- * import api from './api_test';
- * api.math.add(2, 3); // 5
+ * @returns {object} rootMath API methods.
+ * @example Math usage with slothlet loader
+ * ```javascript
+ * api.rootMath.add(2, 3); // 5
+ * api.rootMath.multiply(2, 3); // 6
+ * ```
  */
-export default {
+export const rootMath = {
 	/**
 	 * Adds two numbers.
 	 * @param {number} a
 	 * @param {number} b
 	 * @returns {number}
 	 * @example
-	 * add(2, 3); // 5
+	 * ```javascript
+	 * api.rootMath.add(2, 3); // 5
+	 * ```
 	 */
 	add(a, b) {
 		return a + b;
@@ -23,7 +27,9 @@ export default {
 	 * @param {number} b
 	 * @returns {number}
 	 * @example
-	 * multiply(2, 3); // 6
+	 * ```javascript
+	 * api.rootMath.multiply(2, 3); // 6
+	 * ```
 	 */
 	multiply(a, b) {
 		return a * b;

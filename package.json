@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Slothlet: Lazy Modular API Loader for Node.js. Dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
 	"main": "slothlet.mjs",
 	"exports": {
@@ -10,7 +10,8 @@
 		"test": "tests"
 	},
 	"scripts": {
-		"test": "jest"
+		"test": "vitest run",
+		"testjest": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
 	},
 	"keywords": [
 		"api",
@@ -33,7 +34,9 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"devDependencies": {
-		"jest": "^30.0.5"
+		"jest": "^30.0.5",
+		"vest": "^5.4.6",
+		"vitest": "^3.2.4"
 	},
 	"repository": {
 		"type": "git",

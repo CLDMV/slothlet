@@ -2,7 +2,7 @@
  * Lazy test for slothlet API loader using Jest.
  * Runs every call in api_test with lazy loading.
  */
-import slothlet from "../slothlet.mjs";
+import slothlet from "../src/slothlet.mjs";
 
 let bound;
 beforeAll(async () => {
