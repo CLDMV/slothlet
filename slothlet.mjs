@@ -311,6 +311,7 @@ export const slothlet = {
 	 * @private
 	 */
 	async _eagerLoadCategory(categoryPath) {
+		let flattened = false;
 		const files = await fs.readdir(categoryPath);
 		const mjsFiles = files.filter((f) => f.endsWith(".mjs") && !f.startsWith("."));
 		if (mjsFiles.length === 1) {
@@ -320,17 +321,24 @@ export const slothlet = {
 				const mod = await this._loadSingleModule(path.join(categoryPath, mjsFiles[0]));
 				// If the module is an object with only named exports, flatten them
 				if (mod && typeof mod === "object" && !mod.default) {
+					flattened = true;
 					return { ...mod };
 				}
 				return mod;
 			}
 		}
+		const categoryName = path.basename(categoryPath);
 		const categoryModules = {};
 		for (const file of mjsFiles) {
 			const moduleName = path.basename(file, ".mjs");
 			const mod = await this._loadSingleModule(path.join(categoryPath, file));
-			// For multi-file categories, always assign to property (do not flatten)
-			categoryModules[this._toApiKey(moduleName)] = mod;
+			if (moduleName === categoryName && mod && typeof mod === "object") {
+				// Flatten all exports from the file matching the folder name
+				Object.assign(categoryModules, mod);
+				flattened = true;
+			} else {
+				categoryModules[this._toApiKey(moduleName)] = mod;
+			}
 		}
 		return categoryModules;
 	},
@@ -732,6 +740,8 @@ export const slothlet = {
 		for (const entry of entries) {
 			if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 
+			let flattened = false;
+
 			const categoryPath = path.join(dir, entry.name);
 			const subEntries = await fs.readdir(categoryPath, { withFileTypes: true });
 			const mjsFiles = subEntries.filter((e) => e.isFile() && e.name.endsWith(".mjs") && !e.name.startsWith("."));
@@ -753,7 +763,17 @@ export const slothlet = {
 				const moduleName = path.basename(fileEntry.name, ".mjs");
 				const modKey = self._toApiKey(moduleName);
 				const loader = createLoader(() => self._loadSingleModule(path.join(categoryPath, fileEntry.name)));
-				categoryObj[modKey] = loader;
+				if (moduleName === categoryName) {
+					// Flatten all exports from the file matching the folder name
+					loader().then((mod) => {
+						if (mod && typeof mod === "object") {
+							Object.assign(categoryObj, mod);
+						}
+					});
+					flattened = true;
+				} else {
+					categoryObj[modKey] = loader;
+				}
 			}
 			for (const subDirEntry of subDirs) {
 				categoryObj[self._toApiKey(subDirEntry.name)] = await self._createLazyApiProxy(
