@@ -1,0 +1,18 @@
+{
+	"source": {
+		"includePattern": ".+\\.(mjs|js)(doc|x)?$",
+        "excludePattern": "(.config|dist|build)/"
+	},
+	"tags": { "dictionaries": ["jsdoc", "closure"] },
+	"plugins": ["plugins/markdown"],
+	"opts": {
+		"encoding": "utf8",
+		"destination": "./docs/"
+	},
+	"separators": true,
+	"global-index-format": "none",
+	"jsdoc2md": {
+		"separators": true,
+		"global-index-format": "none"
+	}
+}
