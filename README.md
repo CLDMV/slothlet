@@ -3,113 +3,370 @@
 [![npm version](https://img.shields.io/npm/v/@cldmv/slothlet.svg)](https://www.npmjs.com/package/@cldmv/slothlet)
 [![license](https://img.shields.io/github/license/CLDMV/slothlet.svg)](LICENSE)
 ![size](https://img.shields.io/npm/unpacked-size/@cldmv/slothlet.svg)
-![npm-downloads](https://img.shields.io/npm/dm/@cldmv/slothlet.svg)
-![github-downloads](https://img.shields.io/github/downloads/CLDMV/slothlet/total)
+[![npm-downloads](https://img.shields.io/npm/dm/@cldmv/slothlet.svg)](https://www.npmjs.com/package/@cldmv/slothlet)
+[![github-downloads](https://img.shields.io/github/downloads/CLDMV/slothlet/total)](https://github.com/CLDMV/slothlet/releases)
 
-> **⚠️ WARNING: This module is under active development!**
+> **🚀 Production Ready Modes:**
 >
-> - The standard **eager mode** works well and is stable for production use.
-> - **Lazy mode** has been tested and works for most use cases.
-> - **Experimental modes** (such as worker, child process, and advanced context binding) are in development and may not be fully functional or stable.
+> - **Eager Mode**: Fully stable and production-ready for immediate module loading
+> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 44x faster startup (1.3x slower function calls)
 >
-> Please report issues, contribute, and use experimental features with caution.
+> **⚙️ Experimental Modes:**
+>
+> - **Worker, Fork, Child, VM modes**: In active development, not recommended for production use
+>
+> Please report issues and contribute feedback to help improve the experimental features.
 
-**@cldmv/slothlet** is a modern, lazy modular API loader for Node.js projects. Designed for developers who want fast, flexible, and memory-efficient access to large modular APIs, it dynamically loads API modules and submodules only when accessed. Slothlet supports both lazy and eager loading, automatic flattening of single-file modules, and descriptive error handling—all with a fun branding twist: "slothlet is anything but slow."
+**@cldmv/slothlet** is an advanced module loading framework that eliminates the pain of working with massive APIs in Node.js. Built for developers who need smart, efficient module loading without compromising on performance or developer experience.
 
-## Features
+Instead of loading everything upfront and watching your memory usage spike, slothlet intelligently loads only what you need, when you need it. Whether you want lazy loading for optimal memory usage or eager loading for maximum performance, slothlet adapts to your workflow.
 
-- **Lazy loading:** API endpoints are loaded on demand using ES6 Proxy, minimizing initial load time and memory usage.
-- **Eager loading:** Optionally load all modules up front for maximum performance.
-- **Automatic flattening:** Single-file modules (e.g., `math/math.mjs`) become `api.math`.
-- **CamelCase mapping:** Filenames and folders with dashes are mapped to camelCase API properties (e.g., `root-math.mjs` → `api.rootMath`).
-- **Descriptive errors:** Throws clear errors for missing API paths or methods.
-- **Configurable:** Set root directory and lazy loading depth.
-- **ESM-first:** Clean, standards-based API.
-- **TypeScript-friendly:** JSDoc-annotated API for editor support.
-- **Lightweight:** No dependencies, minimal footprint.
+With our new **copy-left materialization** in lazy mode, you get the best of both worlds: the memory efficiency of lazy loading with near-eager performance on repeated calls. Once a module is materialized, it stays materialized—no re-processing overhead.
 
-## Installation
+The name might suggest we're taking it easy, but don't be fooled. Slothlet delivers speed where it counts, with smart optimizations that make your APIs fly.
+
+"slothlet is anything but slow."
+
+## ✨ Key Features
+
+### 🎯 **Dual Loading Strategies**
+
+- **Eager Loading**: Immediate loading for maximum performance in production environments
+- **Lazy Loading**: Copy-left materialization with look-ahead proxies (44x faster startup, 1.3x slower calls after materialization)
+
+### ⚡ Performance
+
+- **📊 For comprehensive performance analysis, benchmarks, and recommendations, see [PERFORMANCE.md](PERFORMANCE.md)**
+
+### 🔧 **Smart API Management**
+
+- **Callable Interface**: Use `slothlet(options)` or `slothlet.create(options)` interchangeably
+- **Automatic Flattening**: Single-file modules become direct API properties (`math/math.mjs` → `api.math`)
+- **CamelCase Mapping**: Dash-separated names convert automatically (`root-math.mjs` → `api.rootMath`)
+- **Hybrid Exports**: Support for callable APIs with methods, default + named exports, and mixed patterns
+
+### 🔗 **Advanced Binding System**
+
+- **Live Bindings**: Dynamic context and reference binding for runtime API mutation
+- **Copy-Left Preservation**: Materialized functions stay materialized, preserving performance gains
+- **Bubble-Up Updates**: Parent API synchronization ensures consistency across the API tree
+
+### 🛠 **Developer Experience**
+
+- **Descriptive Errors**: Clear, actionable error messages with full context
+- **TypeScript-Friendly**: Comprehensive JSDoc annotations for excellent editor support
+- **Configurable Debug**: Detailed logging for development and troubleshooting
+- **Multiple Instances**: Parameter-based isolation for complex applications
+
+### 🏗 **Architecture & Compatibility**
+
+- **ESM-First**: Built for modern JavaScript with full ES module support
+- **Zero Dependencies**: Lightweight footprint with no external dependencies
+- **Cross-Platform**: Works seamlessly across all Node.js environments
+- **Extensible**: Modular architecture designed for future plugin system (in development)
+
+## 📦 Installation
 
 ```sh
 npm install @cldmv/slothlet
 ```
 
-## Usage
+## 🚀 Quick Start
 
-> **Note:**
->
-> - When using **lazy mode**, all API calls must be `await`ed, as modules are loaded asynchronously on access.
-> - If you need to create more than one slothlet instance, you must import the slothlet module using a param string (e.g., `import slothlet from "./slothlet.mjs?instance=1"`).
->   - **Caveat:** Live bindings (`self`, `context`, `reference`) will only work correctly if you use the same param string for both the loader and any submodules that import those bindings. Mismatched param strings will result in separate module instances and broken live bindings.
-
-### Node.js API
+### ESM (ES Modules)
 
 ```js
 import slothlet from "@cldmv/slothlet";
 
-// Lazy load from default directory
-const api = await slothlet.create({ lazy: true, context });
+// Direct usage - eager mode by default (auto-detects callable interface)
+const api = await slothlet({
+	dir: "./api",
+	context: { user: "alice" }
+});
 
-// Access API endpoints
-const sum = await api.math.add(2, 3); // 5
-const upper = await api.string.upper("abc"); // 'ABC'
-const today = await api.nested.date.today(); // '2025-08-15'
+// API calls are synchronous in eager mode (no await needed for API calls)
+const result = api.math.add(2, 3); // 5
 
-
-
-// Eager load from a custom directory
-const api = await slothlet.create({ lazy: false, dir: "./api_test" context });
-
-// Access API endpoints
-const sum = api.math.add(2, 3); // 5
-const upper = api.string.upper("abc"); // 'ABC'
-const today = api.nested.date.today(); // '2025-08-15'
+// If root function detected, API is also callable
+const greeting = api("World"); // "Hello, World!" (if root function exists)
 ```
 
-## API Reference
+### CommonJS (CJS)
 
-### Main Methods
+```js
+const slothlet = require("@cldmv/slothlet");
 
-- `slothlet.create(options)` — Loads API modules and returns a bound API object. Options include lazy/eager mode, context, reference, and directory.
-- `slothlet.load(config, ctxRef)` — Loads API modules (lazy or eager) and binds context/reference. Returns the API object.
-- `slothlet.createBoundApi(context, reference)` — Returns an API object bound to the provided context and reference.
-- `slothlet.getApi()` — Returns the loaded API object (Proxy or plain object).
-- `slothlet.getBoundApi()` — Returns the bound API object (with context/reference).
-- `slothlet.isLoaded()` — Returns true if the API is loaded.
-- `slothlet.shutdown()` — Gracefully shuts down the API and internal resources.
+// Same usage pattern works with CommonJS
+const api = await slothlet({
+	dir: "./api",
+	context: { env: "production" }
+});
 
-### Config Options
+const result = api.math.multiply(4, 5); // 20
+```
 
-- `lazy` (boolean): Enable lazy loading (default: true)
-- `lazyDepth` (number): How deep to lazy load subdirectories (default: Infinity)
-- `dir` (string): Directory to load API modules from (default: loader's directory)
-- `debug` (boolean): Enable debug logging (default: false)
+### Lazy Loading Mode
 
-### Context & Reference
+```js
+import slothlet from "@cldmv/slothlet";
 
-- `context`: Object passed to API modules for contextual data (e.g., user/session info)
-- `reference`: Object passed to API modules for additional references or configuration
+// Lazy mode with copy-left materialization (opt-in)
+const api = await slothlet({
+	lazy: true,
+	dir: "./api",
+	apiDepth: 3
+});
+```
 
-### Error Handling
+### Multiple Instances
 
-- Throws descriptive errors for missing API paths or methods
-- All errors include the requested path and directory for easier debugging
+```js
+// When creating multiple instances, use parameter isolation
+const { slothlet: slothlet1 } = await import("@cldmv/slothlet?_slothlet=instance1");
+const { slothlet: slothlet2 } = await import("@cldmv/slothlet?_slothlet=instance2");
 
-### JSDoc
+const api1 = await slothlet1({ dir: "./api1" });
+const api2 = await slothlet2({ dir: "./api2" });
+```
 
-See JSDoc comments in the source code for detailed type annotations and usage examples.
+## 📚 API Reference
 
-## Module Structure
+### Core Methods
 
-- Single-file modules: `api_test/math/math.mjs` → `api.math`
-- Multi-file modules: `api_test/multi/alpha.mjs` → `api.multi.alpha`, `api_test/multi/beta.mjs` → `api.multi.beta`
-- Dashes in names: `api_test/root-math.mjs` → `api.rootMath`
+#### `slothlet(options)` / `slothlet.create(options)`
 
-## Safety & Errors
+Creates and loads an API instance with the specified configuration.
 
-- Throws descriptive errors for missing API paths or methods
-- Only loads modules when accessed (lazy) or all at once (eager)
+**Parameters:**
 
-## License
+- `options` (object): Configuration options
+
+**Returns:** `Promise<object>` - Bound API object
+
+**Options:**
+
+- `dir` (string): Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd(). (default: `"api"`)
+- `lazy` (boolean): Loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate) (default: `false`)
+- `apiDepth` (number): Directory traversal depth control - `0` for root only, `Infinity` for all levels (default: `Infinity`)
+- `debug` (boolean): Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable (default: `false`)
+- `mode` (string): Execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"` (default: `"singleton"`)
+- `api_mode` (string): API structure behavior when root-level default functions exist:
+  - `"auto"` (default): Automatically detects if root has default function export and creates callable API
+  - `"function"`: Forces API to be callable (use when you have root-level default function exports)
+  - `"object"`: Forces API to be object-only (use when you want object interface regardless of exports)
+- `context` (object): Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from '@cldmv/slothlet'` (default: `{}`)
+- `reference` (object): Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API (default: `{}`)
+
+#### `slothlet.getApi()` → `object`
+
+Returns the raw API object (Proxy or plain object).
+
+#### `slothlet.getBoundApi()` → `object`
+
+Returns the bound API object with context and reference.
+
+#### `slothlet.isLoaded()` → `boolean`
+
+Returns true if the API is loaded.
+
+#### `slothlet.shutdown()` → `Promise<void>`
+
+Gracefully shuts down the API and cleans up resources.
+
+> **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](docs/API.md)**
+
+### Live Bindings
+
+Access live-bound references in your API modules:
+
+```js
+// In your API modules
+const { self, context, reference } = await import(
+	new URL(`@cldmv/slothlet?_slothlet=${new URL(import.meta.url).searchParams.get("_slothlet") || ""}`, import.meta.url).href
+);
+
+export function myFunction() {
+	console.log(context.user); // Access live context
+	return self.otherModule.helper(); // Access other API modules
+}
+```
+
+### API Mode Configuration
+
+The `api_mode` option controls how slothlet handles root-level default function exports:
+
+#### Auto-Detection (Recommended)
+
+```js
+const api = await slothlet({
+	api_mode: "auto" // Default - automatically detects structure
+});
+
+// If you have a root-level function export:
+// root-function.mjs: export default function(name) { return `Hello, ${name}!` }
+// Result: api("World") works AND api.otherModule.method() works
+
+// If you only have object exports:
+// Result: api.math.add() works, api("World") doesn't exist
+```
+
+#### Explicit Function Mode
+
+```js
+const api = await slothlet({
+	api_mode: "function" // Force callable interface
+});
+
+// Always creates callable API even without root default export
+// Useful when you know you have root functions
+const result = api("World"); // Calls root default function
+const math = api.math.add(2, 3); // Also access other modules
+```
+
+#### Explicit Object Mode
+
+```js
+const api = await slothlet({
+	api_mode: "object" // Force object-only interface
+});
+
+// Always creates object interface even with root default export
+// api("World") won't work, but api.rootFunction("World") will
+const result = api.rootFunction("World"); // Access via property
+const math = api.math.add(2, 3); // Normal module access
+```
+
+## 🏗 Module Structure & Examples
+
+The `api_test` folder demonstrates comprehensive module organization patterns:
+
+### Root-Level Modules
+
+```
+root-math.mjs     → api.rootMath (dash-to-camelCase)
+rootstring.mjs    → api.rootstring
+config.mjs        → api.config
+```
+
+### Single-File Modules
+
+```
+math/math.mjs     → api.math (automatic flattening)
+string/string.mjs → api.string
+```
+
+### Multi-File Modules
+
+```
+multi/
+  ├── alpha.mjs   → api.multi.alpha
+  └── beta.mjs    → api.multi.beta
+```
+
+### Function-Based Modules
+
+```
+funcmod/funcmod.mjs → api.funcmod() (callable function)
+multi_func/
+  ├── alpha.mjs     → api.multi_func.alpha()
+  └── beta.mjs      → api.multi_func.beta()
+```
+
+### Hybrid Export Patterns
+
+```
+exportDefault/exportDefault.mjs → api.exportDefault() (callable with methods)
+objectDefaultMethod/            → api.objectDefaultMethod() (object with default)
+```
+
+### Nested Structure
+
+```
+nested/
+  └── date/
+      └── date.mjs → api.nested.date
+advanced/
+  ├── selfObject/  → api.advanced.selfObject
+  └── nest*/       → Various nesting examples
+```
+
+### Utility Modules
+
+```
+util/
+  ├── controller/  → api.util.controller
+  ├── extract/     → api.util.extract
+  └── url/         → api.util.url
+```
+
+### Eager Mode (Default)
+
+```js
+const api = await slothlet({ dir: "./api" }); // lazy: false by default
+
+// All modules loaded upfront - always fast, no await needed
+const result = api.math.add(2, 3); // Always fast
+const greeting = api("World"); // Instant if callable
+```
+
+### Lazy Mode with Copy-Left Materialization (Opt-in)
+
+```js
+const api = await slothlet({ lazy: true, dir: "./api" });
+
+// First access: ~33μs (materialization overhead)
+const result1 = await api.math.add(2, 3);
+
+// Subsequent access: ~0.5μs (materialized function)
+const result2 = await api.math.add(5, 7); // 70x faster than first call!
+```
+
+**Quick Summary:**
+
+- **Startup**: Lazy wins (44x faster - 91μs vs 4ms)
+- **Function calls**: Eager wins (1.3x faster - 0.36μs vs 0.46μs)
+- **Memory**: Lazy wins (loads only what you use)
+- **Predictability**: Eager wins (no materialization delays)
+
+## 🛡 Error Handling
+
+Slothlet provides descriptive errors with full context:
+
+```js
+try {
+	await api.nonexistent.method();
+} catch (error) {
+	// Error includes requested path, directory, and suggestions
+	console.error(error.message);
+}
+```
+
+## 🔧 Production vs Development Modes
+
+### Production Ready ✅
+
+- **Eager Mode**: Stable, battle-tested, maximum performance
+- **Lazy Mode**: Production-ready with copy-left optimization
+- **Singleton Mode**: Default mode for standard applications
+
+### Experimental ⚠️
+
+- **Worker Mode**: Thread isolation (in development)
+- **Fork Mode**: Process isolation (in development)
+- **Child Mode**: Child process execution (in development)
+- **VM Mode**: Virtual machine context (in development)
+
+The experimental modes are located in `src/lib/engine/` and should not be used in production environments.
+
+## 🤝 Contributing
+
+We welcome contributions! The experimental modes in particular need development and testing. Please:
+
+1. Review the code in `src/lib/engine/` for experimental features
+2. Report issues with detailed reproduction steps
+3. Submit pull requests with tests
+4. Provide feedback on API design and performance
+
+## 📄 License
 
 Apache-2.0 © Shinrai / CLDMV

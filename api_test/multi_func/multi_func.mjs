@@ -19,3 +19,17 @@ export function uniqueTwo(msg) {
 export function uniqueThree(msg) {
 	return `uniqueThree: ${msg}`;
 }
+
+export const multi_func = {
+	/**
+	 * Returns a test string.
+	 * @returns {string}
+	 * @example
+	 * ```javascript
+	 * api.multi_func.multi_func_hello(); // 'beta hello'
+	 * ```
+	 */
+	multi_func_hello() {
+		return "beta hello";
+	}
+};

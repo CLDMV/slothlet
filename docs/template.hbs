@@ -1,0 +1,73 @@
+{{! Module header + description }}
+{{#modules}}
+	#
+	{{name}}
+	{{{description}}}
+
+	{{! Prefer members.static; but also fall back to all functions whose memberof matches this module }}
+	{{#if members.static}}
+		## Exports
+		{{#members.static}}
+			###
+			{{name}}
+			{{{description}}}
+
+			{{#if params}}
+				#### Parameters
+				{{#params}}
+					- `{{name}}`{{#if type}}{{#if type.names}} *{{lookup type.names 0}}*{{/if}}{{/if}}{{#if description}} — {{description}}{{/if}}
+				{{/params}}
+			{{/if}}
+
+			{{#if returns}}
+				#### Returns
+				{{#returns}}
+					-
+					{{#if type}}{{#if type.names}}*{{lookup type.names 0}}*{{/if}}{{/if}}{{#if description}} — {{description}}{{/if}}
+				{{/returns}}
+			{{/if}}
+
+			{{#if examples}}
+				#### Examples
+				{{#examples}}
+					```js
+					{{{this}}}
+					```
+				{{/examples}}
+			{{/if}}
+		{{/members.static}}
+	{{/if}}
+	{{!-- Fallback: collect free-standing functions that are members of this module --}}
+	{{#functions}}
+		{{#if (eq memberof ../name)}}
+
+			{{name}}
+
+			{{{description}}}
+
+		{{/if}}
+
+		{{#if params}}
+			#### Parameters
+			{{#params}}
+				- `{{name}}`{{#if type}}{{#if type.names}} *{{lookup type.names 0}}*{{/if}}{{/if}}{{#if description}} — {{description}}{{/if}}
+			{{/params}}
+		{{/if}}
+
+		{{#if returns}}
+			#### Returns
+			{{#returns}}
+				- {{#if type}}{{#if type.names}}*{{lookup type.names 0}}*{{/if}}{{/if}}{{#if description}} — {{description}}{{/if}}
+			{{/returns}}
+		{{/if}}
+
+		{{#if examples}}
+			#### Examples
+			{{#examples}}
+				```js
+				{{{this}}}
+				```
+			{{/examples}}
+		{{/if}}
+	{{/functions}}
+{{/modules}}

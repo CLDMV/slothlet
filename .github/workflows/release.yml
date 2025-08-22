@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    branches: [master] # or main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run semantic-release in dry run mode"
+        required: false
+        default: "false"
+      npm_publish:
+        description: "Set NPM_PUBLISH env var"
+        required: false
+        default: "true"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Release
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Running semantic-release in DRY RUN mode"
+            npx -y \
+              -p semantic-release \
+              -p @semantic-release/changelog \
+              -p @semantic-release/git \
+              -p @semantic-release/github \
+              -p @semantic-release/npm \
+              -p conventional-changelog-conventionalcommits \
+              semantic-release --dry-run
+          else
+            npx -y \
+              -p semantic-release \
+              -p @semantic-release/changelog \
+              -p @semantic-release/git \
+              -p @semantic-release/github \
+              -p @semantic-release/npm \
+              -p conventional-changelog-conventionalcommits \
+              semantic-release
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Provide the token in BOTH env vars:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }} # used by @semantic-release/npm
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # used by npm / whoami
+          NPM_PUBLISH: ${{ inputs.npm_publish }}

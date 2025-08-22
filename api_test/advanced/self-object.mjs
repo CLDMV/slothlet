@@ -1,4 +1,7 @@
-import { self, context, reference } from "../../slothlet.mjs";
+const { self, context, reference } = await import(
+	new URL(`../../src/slothlet.mjs?_slothlet=${new URL(import.meta.url).searchParams.get("_slothlet") || ""}`, import.meta.url).href
+);
+
 /**
  * advanced API module for testing slothlet loader (self reference).
  * @returns {object} selfObject API methods.
@@ -20,6 +23,8 @@ export const selfObject = {
 	 * ```
 	 */
 	addViaSelf(a, b) {
+		// console.log("self: ", self);
+		// process.exit(0);
 		if (self && typeof self.math?.add === "function") {
 			return self.math.add(a, b);
 		}

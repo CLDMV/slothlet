@@ -1,81 +1,51 @@
-import { describe, test, expect, beforeAll } from "vitest";
-import slothlet from "../slothlet.mjs";
+import { describe, test, expect } from "vitest";
+import slothletEager from "../src/slothlet.mjs?_slothlet=eager";
+import { callNestedFunction, testConfig } from "./test-utils.mjs";
 
-let bound;
-beforeAll(async () => {
-	await slothlet.load({ lazy: false, dir: "./api_test" });
-	bound = slothlet.createBoundApi({});
+/**
+ * Mock MD5 function for testing reference functionality
+ * @param {string} input - String to hash
+ * @returns {string} Mock MD5 hash
+ */
+function mockMd5(input) {
+	return "mock-md5-hash-" + input.length;
+}
+
+// Initialize slothlet at top level instead of in beforeAll
+const bound = await slothletEager({
+	lazy: false,
+	dir: "./api_test",
+	api_mode: "function",
+	reference: { md5: mockMd5 }
 });
 
-describe("objectDefaultMethod module (object with default method)", () => {
-	test("default method via api.objectDefaultMethod()", () => {
-		expect(bound.objectDefaultMethod("Hello World")).toBe("INFO: Hello World");
-		expect(bound.objectDefaultMethod("Warn World", "warn")).toBe("WARN: Warn World");
-		expect(bound.objectDefaultMethod("Error World", "error")).toBe("ERROR: Error World");
-		expect(bound.objectDefaultMethod("Unknown World", "unknown")).toBe("INFO: Unknown World");
-	});
-	test("named info method", () => {
-		expect(bound.objectDefaultMethod.info("Info Only")).toBe("INFO: Info Only");
-	});
-	test("named warn method", () => {
-		expect(bound.objectDefaultMethod.warn("Warn Only")).toBe("WARN: Warn Only");
-	});
-	test("named error method", () => {
-		expect(bound.objectDefaultMethod.error("Error Only")).toBe("ERROR: Error Only");
-	});
-});
+// Generate test cases from JSON configuration
+const { apiTests } = testConfig.testConfig;
 
-describe("Standard API modules", () => {
-	describe("math", () => {
-		test("add", async () => {
-			expect(bound.math.add(2, 3)).toBe(5);
-		});
-		test("multiply", async () => {
-			expect(bound.math.multiply(2, 3)).toBe(6);
-		});
+for (const section of apiTests) {
+	describe(section.section, () => {
+		for (const call of section.calls) {
+			test(call.label, async () => {
+				const result = await callNestedFunction(bound, call.path, call.args, false);
+				expect(result).toBe(call.expected);
+			});
+		}
 	});
-	describe("string", () => {
-		test("upper", async () => {
-			expect(bound.string.upper("abc")).toBe("ABC");
-		});
-		test("reverse", async () => {
-			expect(bound.string.reverse("abc")).toBe("cba");
-		});
-	});
-	test("funcmod", async () => {
-		expect(bound.funcmod("slothlet")).toBe("Hello, slothlet!");
-	});
-});
+}
 
-describe("nested.date module", () => {
-	test("today", async () => {
-		expect(bound.nested.date.today()).toBe("2025-08-15");
+describe("Additional functions", () => {
+	test("md5 reference function", () => {
+		expect(typeof bound.md5).toBe("function");
+		// Test that reference function is callable and works
+		const result = bound.md5("test");
+		expect(result).toBe("mock-md5-hash-4"); // "test" has 4 characters
 	});
-});
 
-describe("multi module", () => {
-	test("alpha.hello", async () => {
-		expect(bound.multi.alpha.hello()).toBe("alpha hello");
+	test("describe function", () => {
+		expect(typeof bound.describe).toBe("function");
 	});
-	test("beta.world", async () => {
-		expect(bound.multi.beta.world()).toBe("beta world");
-	});
-});
 
-describe("multi_func module", () => {
-	test("alpha", async () => {
-		expect(bound.multi_func.alpha("alpha")).toBe("alpha: alpha");
-	});
-	test("beta.hello", async () => {
-		expect(bound.multi_func.beta.hello()).toBe("beta hello");
-	});
-});
-
-describe("exportDefault module", () => {
-	test("default", async () => {
-		expect(bound.exportDefault()).toBe("exportDefault default");
-	});
-	test("extra", async () => {
-		expect(bound.exportDefault.extra()).toBe("extra method overridden");
+	test("shutdown function", () => {
+		expect(typeof bound.shutdown).toBe("function");
 	});
 });
