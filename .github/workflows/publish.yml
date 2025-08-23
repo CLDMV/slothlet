@@ -1,0 +1,15 @@
+name: Publish on Release
+on:
+  release:
+    types: [published] # when you merge the Release PR, a GitHub Release is created
+  workflow_dispatch: {} # manual button, if you ever want to re-run
+
+jobs:
+  call-publish:
+    uses: CLDMV/.github/.github/workflows/publish-on-release.yml@master
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    with:
+      node_version: "lts/*"

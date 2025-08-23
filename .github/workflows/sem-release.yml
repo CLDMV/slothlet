@@ -1,8 +1,8 @@
 name: Release
 
 on:
-  push:
-    branches: [master] # or main
+  #   push:
+  #     branches: [master] # or main
   workflow_dispatch:
     inputs:
       dry_run:

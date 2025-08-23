@@ -1,0 +1,12 @@
+name: Release PR
+on:
+  push:
+    branches: [master] # or main
+  workflow_dispatch: {} # manual button as well
+jobs:
+  call-release-please:
+    uses: CLDMV/.github/.github/workflows/release-please.yml@master
+    with:
+      package_name: "@cldmv/slothlet" # <-- your package name (scoped or not)
+      default_branch: master # or main
+      node_version: "lts/*"
