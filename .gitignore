@@ -1,6 +1,10 @@
 # custom
 trash/
 other_drivers/
+dist
+dist/
+types/dist
+types/dist/
 build/
 build.zip
 build/zips/
@@ -12,6 +16,10 @@ build/tmp/
 *copy (*).*
 *copy *.*
 tmp/
+.todo
+commits*
+ts-validate*
+.squashr-cache*
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
@@ -65,7 +73,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # FuseBox cache
 .fusebox/
 # github data
-.github/
+# .github/
 # Logs
 logs
 *.log
@@ -96,7 +104,7 @@ build/Release
 *.tgz
 # Nuxt.js build / generate output
 .nuxt
-dist
+# dist
 
 # Gatsby files
 .cache/
@@ -147,6 +155,7 @@ web_modules/
 .yarn/install-state.gz
 .pnp.*
 
+.github/*.md
 
 .data/*
 clickup-data/*

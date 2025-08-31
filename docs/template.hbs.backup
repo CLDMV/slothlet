@@ -1,0 +1,60 @@
+{{!-- Check if we have a root module, if not create one --}}
+{{#unless (hasRootModule .)}}
+{{#with (partialMissingRootModule .)}}
+{{!-- Auto-generated root module --}}
+<a id="{{generateDocletAnchor this}}"></a>
+
+## {{name}}
+{{#if description}}<p><strong style="font-size: 1.1em;">{{{description}}}</strong></p>{{/if}}
+{{#if summary}}{{{summary}}}{{/if}}
+
+
+{{!-- Auto-generated module: Table of Contents --}}
+{{#with (getModuleFunction ../this longname)}}
+* [{{../name}}({{#each params}}{{name}}{{#unless @last}}, {{/unless}}{{/each}})](#{{generateDocletAnchor ../this}}) ⇒ {{#if returns}}{{#each returns}}<code>{{{type.names}}}</code>{{/each}}{{/if}}
+{{else}}
+* [{{name}}](#{{generateDocletAnchor this}})
+{{/with}}
+{{!-- Auto-generated intermediate modules: Scan for nested patterns --}}
+{{{partialIntegratedTOC ../this longname}}}
+
+{{!-- Auto-generated module: Examples --}}
+{{{partialExamples this}}}
+
+* * *
+
+{{!-- Integrated Documentation: Auto-generated and manual modules in natural order --}}
+{{{partialIntegratedModules ../this longname}}}
+
+{{/with}}
+{{/unless}}
+
+{{!-- Process existing modules with hierarchical ordering --}}
+{{#each (getOrderModulesHierarchically .)}}
+<a id="{{generateDocletAnchor this}}"></a>
+
+## {{getOriginalModuleTitle}}
+{{#if description}}<p><strong style="font-size: 1.1em;">{{{description}}}</strong></p>{{/if}}
+{{#if summary}}{{{summary}}}{{/if}}
+
+
+{{!-- Module Table of Contents --}}
+{{#with (getModuleFunction ../this longname)}}
+* [{{../name}}({{#each params}}{{name}}{{#unless @last}}, {{/unless}}{{/each}})](#{{generateDocletAnchor ../this}}) ⇒ {{#if returns}}{{#each returns}}<code>{{{type.names}}}</code>{{/each}}{{/if}}
+{{else}}
+* [{{name}}](#{{generateDocletAnchor this}})
+{{/with}}
+{{{partialIntegratedTOC ../this longname}}}
+
+{{!-- Module Examples --}}
+{{{partialExamples this}}}
+
+* * *
+
+{{!-- Integrated Documentation: Show content for all modules --}}
+{{{partialIntegratedModules ../this longname}}}
+
+{{/each}}
+
+{{!-- Global Type Definitions Section: All typedefs appear at the end of the document --}}
+{{{partialGlobalTypedefDefinitions .}}}

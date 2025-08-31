@@ -1,33 +1,123 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "1.0.3",
-	"description": "Slothlet: Lazy Modular API Loader for Node.js. Dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
-	"main": "slothlet.mjs",
+	"version": "1.3.0",
+	"moduleVersions": {
+		"lazy": "1.0.0",
+		"eager": "1.0.0"
+	},
+	"description": "Slothlet: Modular API Loader for Node.js. Lazy mode dynamically loads API modules and submodules only when accessed, supporting both lazy and eager loading.",
+	"main": "./index.cjs",
+	"module": "./index.mjs",
 	"exports": {
 		".": {
-			"types": "./types/slothlet.d.ts",
-			"import": "./slothlet.mjs",
-			"default": "./slothlet.mjs"
+			"types": "./types/index.d.mts",
+			"import": "./index.mjs",
+			"require": "./index.cjs"
+		},
+		"./devcheck": {
+			"types": "./types/devcheck.d.mts",
+			"import": "./devcheck.mjs"
+		},
+		"./slothlet": {
+			"development": {
+				"types": "./types/src/slothlet.d.mts",
+				"import": "./src/slothlet.mjs"
+			},
+			"types": "./types/dist/slothlet.d.mts",
+			"import": "./dist/slothlet.mjs"
+		},
+		"./runtime": {
+			"development": {
+				"types": "./types/src/lib/runtime/runtime.d.mts",
+				"import": "./src/lib/runtime/runtime.mjs"
+			},
+			"types": "./types/dist/lib/runtime/runtime.d.mts",
+			"import": "./dist/lib/runtime/runtime.mjs"
+		},
+		"./helpers/*": {
+			"development": {
+				"types": "./types/src/lib/helpers/*.d.mts",
+				"import": "./src/lib/helpers/*.mjs"
+			},
+			"types": "./types/dist/lib/helpers/*.d.mts",
+			"import": "./dist/lib/helpers/*.mjs"
+		},
+		"./modes/*": {
+			"development": {
+				"types": "./types/src/lib/modes/*.d.mts",
+				"import": "./src/lib/modes/*.mjs"
+			},
+			"types": "./types/dist/lib/modes/*.d.mts",
+			"import": "./dist/lib/modes/*.mjs"
 		}
 	},
-	"types": "./types/slothlet.d.ts",
-	"directories": {
-		"test": "tests"
-	},
+	"types": "./types/index.d.mts",
 	"scripts": {
-		"test": "vitest run",
-		"testjest": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
+		"publish:manual": "npm publish --access public",
+		"test": "npm run test:pre-build",
+		"test:pre-build": "npm run test:unit && npm run test:node",
+		"test:post-build": "npm run test:types",
+		"test:complete": "npm run test:pre-build && npm run test:post-build",
+		"test:unit": "vitest --config .configs/vitest.config.mjs run",
+		"test:node": "node tests/run-all-tests.mjs",
+		"test:all": "npm run test:pre-build && npm run test:node",
+		"test:types": "node tests/validate-typescript.mjs",
+		"debug": "node tests/debug-slothlet.mjs",
+		"test:entry": "node tests/test-entry-points.mjs",
+		"test:performance": "node tests/performance-benchmark.mjs",
+		"test:performance-aggregated": "node tests/performance-benchmark-aggregated.mjs",
+		"lint": "eslint --config .configs/eslint.config.mjs .",
+		"build": "node tools/build-with-tests.mjs",
+		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
+		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
+		"build:cleanup": "shx rm -rf types && shx rm -rf dist",
+		"build:dist": "shx mkdir -p dist && shx cp -r src/* dist/ && shx rm -rf dist/**/*.backup",
+		"build:types": "npx tsc -p .configs/tsconfig.dts.jsonc",
+		"build:docs": "npm run build:docs:slothlet && npm run build:docs:api-tests",
+		"build:docs:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/helpers.cjs\" --template \"docs/template.hbs\" \"src/{slothlet.mjs,lib/{modes,helpers,runtime}/**/*.mjs}\" > docs/API.md",
+		"build:docs:api-tests": "npm run build:docs:api-test && npm run build:docs:api-test-cjs && npm run build:docs:api-test-mixed",
+		"build:docs:api-test": "shx mkdir -p docs/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/helpers.cjs\" --template \"docs/template.hbs\" \"api_tests/api_test/**/*.mjs\" > docs/api_tests/api_test.md",
+		"build:docs:api-test-cjs": "shx mkdir -p docs/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/helpers.cjs\" --template \"docs/template.hbs\" \"api_tests/api_test_cjs/**/*.{mjs,cjs}\" > docs/api_tests/api_test_cjs.md",
+		"build:docs:api-test-mixed": "shx mkdir -p docs/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/helpers.cjs\" --template \"docs/template.hbs\" \"api_tests/api_test_mixed/**/*.{mjs,cjs}\" > docs/api_tests/api_test_mixed.md",
+		"build:docs:tools": "shx mkdir -p docs/tools && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/helpers.cjs\" --template \"docs/template.hbs\" \"tools/**/*.mjs\" > docs/tools/build-tools.md",
+		"build:exports": "node tools/build-exports.mjs",
+		"build:prepend-license": "node tools/prepend-license.mjs dist",
+		"prepublish-check": "npm run build && npm pack && node tools/prepublish-check.mjs"
 	},
 	"keywords": [
 		"api",
+		"api-loader",
+		"api-management",
+		"module-loader",
 		"lazy-loading",
+		"eager-loading",
+		"copy-left-materialization",
+		"proxy",
+		"asynclocalstorage",
+		"live-binding",
+		"context-isolation",
+		"dual-loading",
 		"modular",
+		"performance",
+		"optimization",
+		"startup-performance",
 		"nodejs",
-		"esm"
+		"esm",
+		"cjs",
+		"mixed-modules",
+		"dynamic-import",
+		"deferred-loading",
+		"framework",
+		"typescript",
+		"zero-dependencies"
 	],
+	"engines": {
+		"node": ">=16.4.0"
+	},
 	"author": {
 		"name": "Shinrai",
-		"email": "git@cldmv.net",
+		"company": "CLDMV",
+		"email": "git+npm@cldmv.net",
 		"url": "https://cldmv.net"
 	},
 	"contributors": [
@@ -37,9 +127,28 @@
 		}
 	],
 	"license": "Apache-2.0",
+	"funding": {
+		"type": "github",
+		"url": "https://github.com/sponsors/shinrai"
+	},
 	"type": "module",
 	"devDependencies": {
-		"jest": "^30.0.5",
+		"@eslint/css": "^0.10.0",
+		"@eslint/js": "^9.33.0",
+		"@eslint/json": "^0.13.1",
+		"@eslint/markdown": "^7.2.0",
+		"@html-eslint/eslint-plugin": "^0.45.0",
+		"@html-eslint/parser": "^0.45.0",
+		"chalk": "^5.6.0",
+		"dmd": "^7.1.1",
+		"eslint": "^9.33.0",
+		"jsdoc": "^4.0.4",
+		"jsdoc-to-markdown": "^9.1.2",
+		"jsdoc2md": "^1.0.0",
+		"jsonc-parser": "^3.3.1",
+		"prettier": "^3.3.3",
+		"shx": "^0.4.0",
+		"typescript": "^5.9.2",
 		"vest": "^5.4.6",
 		"vitest": "^3.2.4"
 	},
@@ -54,12 +163,16 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"prepack": "npm run build:ci",
 	"files": [
+		"index.mjs",
+		"index.cjs",
 		"README.md",
 		"LICENSE",
-		"types/"
+		"types/dist/",
+		"types/index.d.mts",
+		"types/index.d.mts.map",
+		"dist/"
 	],
-	"dependencies": {
-		"typescript": "^5.9.2"
-	}
+	"sideEffects": false
 }
