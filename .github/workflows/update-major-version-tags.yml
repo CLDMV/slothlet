@@ -1,0 +1,18 @@
+# Individual repo: .github/workflows/update-version-tags.yml
+name: 🏷️ Update Version Tags
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  update-tags:
+    uses: CLDMV/.github/.github/workflows/update-major-version-tags.yml@v1
+    with:
+      # Documentation Configuration
+      create_documentation: true # Create/update VERSION_TAGS.md documentation
+    permissions:
+      contents: write
