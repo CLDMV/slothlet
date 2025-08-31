@@ -1,0 +1,2216 @@
+// CommonJS so jsdoc2md can require() it
+
+// Helper functions for template
+
+const helper = {
+	// Equality comparison helper
+	eq: (a, b) => a === b,
+	and: (a, b) => a && b,
+	or: (a, b) => a || b,
+	not: (a) => !a,
+	gt: (a, b) => a > b,
+
+	// Utility functions
+	concat: (...args) => {
+		const arr = Array.from(args);
+		arr.pop(); // remove Handlebars options hash
+		return arr.join("");
+	},
+
+	// Check if doclets contain a root module
+	hasRootModule(doclets) {
+		return doclets.some(
+			(doc) => doc.kind === "module" && doc.longname && doc.longname.startsWith("module:") && !doc.longname.includes(".") // Root module shouldn't have dots
+		);
+	},
+
+	// Add dot prefix to name for TOC
+	nameWithDot: (name) => "." + name,
+
+	isCallableFunction: (doclet) => doclet.kind === "function",
+
+	// Check if a function should be merged with its module (same longname)
+	isModuleFunction: (func, baseModuleLongname) => {
+		if (!func || func.kind !== "function") return false;
+		// Function with same longname as module should be merged (e.g., callable module)
+		return func.longname === baseModuleLongname;
+	},
+
+	// Convert ID to anchor name (encode only truly problematic characters)
+	generateAnchor(id) {
+		if (!id) return "";
+
+		// Only encode characters that are actually problematic for markdown/HTML anchors
+		return id
+			.replace(/:/g, "_") // colons to underscores
+			.replace(/@/g, "_at_") // @ to _at_ (preserves meaning)
+			.replace(/\//g, "_slash_") // / to _slash_ (preserves meaning)
+			.replace(/\./g, "_dot_") // . to _dot_ (periods might cause ESLint issues)
+			.replace(/#/g, "_hash_") // # to _hash_ (# is invalid in anchor IDs)
+			.replace(/\s+/g, "_") // spaces to underscores
+			.replace(/[<>'"&]/g, ""); // Remove only truly problematic HTML characters
+	},
+
+	generateTypedefAnchor(moduleId, typedefName) {
+		if (!moduleId || !typedefName) return typedefName || "";
+		// Strip "module:" prefix if present, then sanitize the same way as generateAnchor
+		const cleanModuleId = moduleId.startsWith("module:") ? moduleId.slice(7) : moduleId;
+		const sanitizedModuleId = this.generateAnchor(cleanModuleId);
+		const sanitizedTypedefName = this.generateAnchor(typedefName);
+		return `typedef_module_${sanitizedModuleId}_${sanitizedTypedefName}`;
+	},
+
+	// Generate consistent anchor ID for any JSDoc doclet
+	generateDocletAnchor(doclet) {
+		if (!doclet) return "";
+
+		// For modules, use longname
+		if (doclet.kind === "module" && doclet.longname) {
+			const cleaned = doclet.longname.replace(/^module:/, "");
+			return helper.generateAnchor(`module_${cleaned}`);
+		}
+
+		// For other doclets, check if they have a proper longname
+		if (doclet.longname) {
+			const cleaned = doclet.longname.replace(/^module:/, "");
+			return helper.generateAnchor(cleaned);
+		}
+
+		// Fallback to existing id if available, or generate from name
+		if (doclet.id) {
+			return helper.generateAnchor(doclet.id);
+		}
+
+		if (doclet.name) {
+			return helper.generateAnchor(doclet.name);
+		}
+
+		return "";
+	},
+
+	belongsToModule(memberof, moduleName) {
+		if (typeof memberof !== "string" || typeof moduleName !== "string") return false;
+		const normalizedMemberof = this.normalizeMemberof(memberof).replace(/^module:/, "");
+		const normalizedModule = moduleName.replace(/^module:/, "");
+		return normalizedMemberof === normalizedModule;
+	},
+
+	// Normalize memberof strings that have -- patterns like "module:@cldmv/slothlet--slothlet.modes.eager"
+	normalizeMemberof(memberof) {
+		if (typeof memberof !== "string") return memberof;
+
+		// Handle -- pattern: "module:@cldmv/slothlet--slothlet.modes.eager"
+		// becomes "module:@cldmv/slothlet.modes.eager"
+		// Also handle: "module:@cldmv/slothlet--slothlet/runtime"
+		// becomes "module:@cldmv/slothlet/runtime"
+		if (memberof.includes("--")) {
+			const parts = memberof.split("--");
+			if (parts.length === 2) {
+				const prefix = parts[0]; // "module:@cldmv/slothlet"
+				const suffix = parts[1]; // "slothlet.modes.eager" or "slothlet/runtime"
+
+				// Determine separator (. or /)
+				const hasDots = suffix.includes(".");
+				const hasSlashes = suffix.includes("/");
+
+				if (hasDots) {
+					// Remove the first segment from suffix ("slothlet" from "slothlet.modes.eager")
+					const suffixParts = suffix.split(".");
+					if (suffixParts.length > 1) {
+						suffixParts.shift(); // Remove first part
+						const normalizedSuffix = suffixParts.join(".");
+						return prefix + "." + normalizedSuffix;
+					}
+				} else if (hasSlashes) {
+					// Remove the first segment from suffix ("slothlet" from "slothlet/runtime")
+					const suffixParts = suffix.split("/");
+					if (suffixParts.length > 1) {
+						suffixParts.shift(); // Remove first part
+						const normalizedSuffix = suffixParts.join("/");
+						return prefix + "/" + normalizedSuffix;
+					}
+				}
+			}
+		}
+
+		return memberof;
+	},
+
+	// Helper to check if a doclet should be included based on access level
+	shouldInclude(doclet) {
+		// Check if function/doclet is private
+		const isPrivate = doclet.access === "private" || (doclet.tags && doclet.tags.some((tag) => tag.title === "private"));
+
+		// Check if function/doclet is package-level
+		const isPackage = doclet.access === "package" || (doclet.tags && doclet.tags.some((tag) => tag.title === "package"));
+
+		// Check for internal tags as well
+		const isInternal = doclet.customTags && doclet.customTags.some((tag) => tag.tag === "internal");
+
+		// Exclude private items unless --private flag is explicitly set
+		if (isPrivate) {
+			return process.argv.includes("--private");
+		}
+
+		// Exclude package items unless --package flag is explicitly set
+		if (isPackage) {
+			return process.argv.includes("--package");
+		}
+
+		// Exclude internal items unless --private OR --package flag is explicitly set
+		if (isInternal) {
+			return process.argv.includes("--private") || process.argv.includes("--package");
+		}
+
+		// Include all other items (public)
+		return true;
+	},
+
+	belongsToNamespace(memberof, namespaceName) {
+		if (typeof memberof !== "string" || typeof namespaceName !== "string") return false;
+		// For functions: memberof = "module:@cldmv/slothlet/api_tests/api_test_mixed.mathEsm"
+		// For namespaces: longname = "module:@cldmv/slothlet/api_tests/api_test_mixed.mathEsm"
+		return memberof === namespaceName;
+	},
+
+	// Format parameters for function signature
+	formatParams(params) {
+		if (!Array.isArray(params) || params.length === 0) return "()";
+		const paramNames = params.map((p) => p.name || "param");
+		return "(" + paramNames.join(", ") + ")";
+	},
+
+	// Format return description
+	formatReturnsDesc(returns) {
+		if (!Array.isArray(returns) || returns.length === 0) return "";
+		const returnInfo = returns[0];
+		let desc = returnInfo.description || "";
+		// Strip HTML tags like <p> and </p>
+		desc = desc.replace(/<\/?p>/g, "").trim();
+		return desc;
+	},
+
+	// Format type for table - with HTML entities
+	formatTypeForTable(type) {
+		if (!type || !type.names || !Array.isArray(type.names)) return "";
+		let typeStr = type.names.join(" | ");
+		// Convert < and > to HTML entities like the original
+		typeStr = helper.escapeHtml(typeStr);
+		return typeStr;
+	},
+
+	// Format parameters for TOC - like "(a, b)" not "((a, b))"
+	// Only show top-level parameters, not nested ones like "options.property"
+	formatParamsForTOC(params) {
+		if (!Array.isArray(params) || !params.length) return "";
+		return params
+			.filter((p) => p.name && !p.name.includes("."))
+			.map((p) => p.name || "param")
+			.join(", ");
+	},
+
+	// Format returns for TOC - like "Promise.<number>" with HTML entities
+	formatReturnsForTOC(returns) {
+		if (!Array.isArray(returns) || !returns.length) return "";
+		const returnInfo = returns[0];
+		if (!returnInfo || !returnInfo.type || !returnInfo.type.names) return "";
+
+		const types = returnInfo.type.names;
+		if (!Array.isArray(types) || !types.length) return "";
+
+		let typeStr = types.join(" | ");
+		// Convert < and > to HTML entities like the original
+		typeStr = helper.escapeHtml(typeStr);
+		return "<code>" + typeStr + "</code>";
+	},
+
+	// Get module name from memberof field
+	getModuleName(memberof) {
+		if (!memberof) return "";
+		return memberof.replace(/^module:/, "").replace(/_/g, "\\_");
+	},
+
+	// Clean display name for titles (remove module: prefix and escape underscores)
+	displayName(name) {
+		if (typeof name !== "string") return "";
+		// Convert module:@cldmv/slothlet/api_tests/api_test_mixed to @cldmv/slothlet/api\_tests/api\_test\_mixed
+		return name.replace(/^module:/, "").replace(/_/g, "\\_");
+	},
+
+	// String startsWith helper
+	startsWith(str, prefix) {
+		if (typeof str !== "string" || typeof prefix !== "string") return false;
+		return str.startsWith(prefix);
+	},
+
+	// Remove module: prefix and escape for title
+	titleFromLongname(longname) {
+		return longname.replace(/^module:/, "").replace(/_/g, "\\_");
+	},
+
+	// Get namespace name from longname for function titles
+	getNamespacePrefix(longname) {
+		const parts = longname.replace(/^module:/, "").split(".");
+		return parts[parts.length - 2]; // Get the namespace part
+	},
+
+	// Escape title for markdown headings (remove module: prefix and escape underscores)
+	escapeTitle() {
+		if (!this.longname) return "";
+		const cleaned = this.longname.replace(/^module:/, "");
+		return cleaned.replace(/_/g, "\\_");
+	},
+
+	// Check if module has namespaces
+	hasNamespaces(moduleDoc, options) {
+		const allDocs = options.data.root;
+		if (!moduleDoc || !Array.isArray(allDocs)) return false;
+		return allDocs.some((doc) => doc.kind === "namespace" && this.normalizeMemberof(doc.memberof) === moduleDoc.longname);
+	},
+
+	// Escape HTML entities
+	escapeHtml(str) {
+		if (typeof str !== "string") return "";
+		return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	},
+
+	// Get length of array/object
+	length(obj) {
+		if (!obj) return 0;
+		if (Array.isArray(obj)) return obj.length;
+		if (typeof obj === "object") return Object.keys(obj).length;
+		return 0;
+	},
+
+	// Debug helper to check function matching
+	debugFunction(doc, namespaceLongname) {
+		console.log("Checking function:", doc.name, "memberof:", doc.memberof, "against namespace:", namespaceLongname);
+		return this.belongsToNamespace(this.normalizeMemberof(doc.memberof), namespaceLongname);
+	},
+
+	// Debug helper
+	debug(obj) {
+		console.log("DEBUG:", JSON.stringify(obj, null, 2));
+		return "";
+	}
+};
+
+const gets = {
+	// Get original module title (from @module tag, not affected by @name)
+	originalModuleTitle() {
+		// For modules, prefer alias (which should contain the original path)
+		// over name (which might be shortened by @name tag)
+		if (this.kind === "module") {
+			if (this.alias && this.alias !== this.name) {
+				return this.alias.replace(/_/g, "\\_");
+			}
+			// Fallback to longname if no alias
+			const originalPath = this.longname.replace(/^module:/, "");
+			return originalPath.replace(/_/g, "\\_");
+		}
+		return this.name || "";
+	},
+
+	// Check if a module has a callable function (same longname)
+	moduleFunction(doclets, moduleLongname) {
+		if (!Array.isArray(doclets) || !moduleLongname) return null;
+		return doclets.find((doc) => doc.kind === "function" && doc.longname === moduleLongname && helper.shouldInclude(doc));
+	},
+
+	/**
+	 * Get the depth of a module based on '/' separators in the module name
+	 * @param {string} moduleName - Module name like "@cldmv/slothlet/runtime"
+	 * @returns {number} Depth level (0 for root, 1 for first level, etc.)
+	 */
+	moduleDepth(moduleName) {
+		if (!moduleName || typeof moduleName !== "string") return 0;
+		const cleanName = moduleName.replace(/^module:/, "");
+		const parts = cleanName.split("/");
+		return parts.length - 1; // Root has 0 depth, "/runtime" has depth 1
+	},
+
+	/**
+	 * Extract parent module name from a child module
+	 * @param {string} childModule - Child module name like "@cldmv/slothlet/runtime"
+	 * @returns {string} Parent module name like "@cldmv/slothlet"
+	 */
+	parentModule: (childModule) => {
+		if (!childModule || typeof childModule !== "string") return "";
+		const cleanChild = childModule.replace(/^module:/, "");
+		const lastSlash = cleanChild.lastIndexOf("/");
+		if (lastSlash === -1) return ""; // No parent
+		return cleanChild.substring(0, lastSlash);
+	},
+
+	/**
+	 * Build module hierarchy tree structure based on '/' notation depth
+	 * @param {Array} doclets - Array of all doclets
+	 * @returns {Object} Hierarchy tree with parent-child relationships
+	 */
+	buildModuleHierarchy(doclets) {
+		if (!Array.isArray(doclets)) return { modules: [], hierarchy: {} };
+
+		// Filter for modules only
+		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:"));
+
+		// Build hierarchy map
+		const moduleMap = {};
+
+		modules.forEach((module) => {
+			const cleanName = module.longname.replace(/^module:/, "");
+			const depth = cleanName.split("/").length - 1;
+			const parentName = gets.parentModule(module.longname);
+
+			moduleMap[cleanName] = {
+				doclet: module,
+				depth: depth,
+				parent: parentName,
+				children: [],
+				isRoot: depth === 0
+			};
+		});
+
+		// Link children to parents
+		Object.values(moduleMap).forEach((moduleInfo) => {
+			if (moduleInfo.parent && moduleMap[moduleInfo.parent]) {
+				moduleMap[moduleInfo.parent].children.push(moduleInfo);
+			}
+		});
+
+		return { modules, hierarchy: moduleMap };
+	},
+
+	/**
+	 * Order modules hierarchically with smart parent-child relationships
+	 * Parents appear first, then their children in alphabetical order within each level
+	 * @param {Array} doclets - Array of all doclets
+	 * @returns {Array} Ordered array of module doclets
+	 */
+	orderModulesHierarchically(doclets) {
+		if (!Array.isArray(doclets)) return [];
+
+		// Filter for modules only
+		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:"));
+
+		// Sort by depth first, then alphabetically
+		return modules.sort((a, b) => {
+			const depthA = gets.moduleDepth(a.longname);
+			const depthB = gets.moduleDepth(b.longname);
+
+			// Primary sort: by depth (parents first)
+			if (depthA !== depthB) {
+				return depthA - depthB;
+			}
+
+			// Secondary sort: alphabetically within same depth
+			return a.longname.localeCompare(b.longname);
+		});
+	},
+
+	/**
+	 * Check if a child module should share typedefs with its parent
+	 * @param {string} childModule - Child module name
+	 * @param {string} parentModule - Parent module name
+	 * @returns {boolean} Whether typedefs should be shared
+	 */
+	shouldShareTypedefs(childModule, parentModule) {
+		if (!childModule || !parentModule) return false;
+		const cleanChild = childModule.replace(/^module:/, "");
+		const cleanParent = parentModule.replace(/^module:/, "");
+		return cleanChild.startsWith(cleanParent + "/");
+	},
+
+	/**
+	 * Get the primary module for typedef definitions (first parent in hierarchy)
+	 * @param {string} moduleName - Module name to find primary for
+	 * @param {Array} allModules - All available modules
+	 * @returns {string} Primary module name for typedef definitions
+	 */
+	getPrimaryModuleForTypedefs(moduleName, allModules) {
+		if (!moduleName || !Array.isArray(allModules)) return moduleName;
+
+		const cleanName = moduleName.replace(/^module:/, "");
+		const parts = cleanName.split("/");
+
+		// Find the root module (first part)
+		for (let i = 0; i < parts.length; i++) {
+			const candidateName = parts.slice(0, i + 1).join("/");
+			const moduleExists = allModules.some((mod) => mod.longname === `module:${candidateName}`);
+			if (moduleExists) {
+				return `module:${candidateName}`;
+			}
+		}
+
+		return moduleName; // Fallback to original if no parent found
+	},
+
+	/**
+	 * Determine if this module should show typedef definitions
+	 * Only the primary (root) module in a hierarchy should show typedefs
+	 * @param {string} moduleName - Current module name
+	 * @param {Array} allModules - All available modules
+	 * @returns {boolean} Whether this module should show typedefs
+	 */
+	shouldShowTypedefs(moduleName, allModules) {
+		if (!moduleName || !Array.isArray(allModules)) return true;
+
+		const primaryModule = gets.getPrimaryModuleForTypedefs(moduleName, allModules);
+		return primaryModule === moduleName; // Only show typedefs if this is the primary module
+	}
+};
+
+const format = {
+	// Format type for table with typedef linking
+	typeForTableWithLinks(type, moduleId, availableTypedefs) {
+		if (!type || !type.names || !Array.isArray(type.names)) return "";
+
+		let typeNames = type.names.map((typeName) => {
+			// Clean the type name (remove array brackets, etc.)
+			const cleanTypeName = typeName.replace(/\[\]$/, "");
+			const isArray = typeName.endsWith("[]");
+
+			// Check if this type is a known typedef
+			if (availableTypedefs && availableTypedefs.includes(cleanTypeName)) {
+				const anchor = helper.generateTypedefAnchor(moduleId, cleanTypeName);
+				const linkedType = `[${cleanTypeName}](#${anchor})`;
+				return isArray ? `${linkedType}[]` : linkedType;
+			}
+
+			return typeName;
+		});
+
+		let typeStr = typeNames.join(" | ");
+		typeStr = helper.escapeHtml(typeStr);
+		return typeStr;
+	}
+};
+
+const functions = {
+	// Get function name with namespace prefix (e.g., "mathEsm.add")
+	// functionDisplayName(funcDoc, namespaceDoc) {
+	// 	if (!funcDoc || !namespaceDoc) return funcDoc?.name || "";
+	// 	return `${namespaceDoc.name}.${funcDoc.name}`;
+	// }
+	// Auto-detect code language from file extension or context
+	detectCodeLanguage(doclet) {
+		// Check if the doclet has file information
+		if (doclet && doclet.meta && doclet.meta.filename) {
+			const filename = doclet.meta.filename.toLowerCase();
+
+			// Map file extensions to language identifiers
+			if (filename.endsWith(".mjs") || filename.endsWith(".js")) return "js";
+			if (filename.endsWith(".cjs")) return "js";
+			if (filename.endsWith(".ts")) return "ts";
+			if (filename.endsWith(".mts")) return "ts";
+			if (filename.endsWith(".cts")) return "ts";
+			if (filename.endsWith(".jsx")) return "jsx";
+			if (filename.endsWith(".tsx")) return "tsx";
+			if (filename.endsWith(".json")) return "json";
+			if (filename.endsWith(".md")) return "markdown";
+			if (filename.endsWith(".html")) return "html";
+			if (filename.endsWith(".css")) return "css";
+			if (filename.endsWith(".scss") || filename.endsWith(".sass")) return "scss";
+			if (filename.endsWith(".py")) return "python";
+			if (filename.endsWith(".sh")) return "bash";
+			if (filename.endsWith(".yaml") || filename.endsWith(".yml")) return "yaml";
+			if (filename.endsWith(".xml")) return "xml";
+		}
+
+		// Default fallback for JavaScript-like projects
+		return "js";
+	},
+
+	// Hierarchical Module Support Functions
+
+	/**
+	 * Detect parent-child relationships in module names
+	 * @param {string} childModule - Potential child module name
+	 * @param {string} parentModule - Potential parent module name
+	 * @returns {boolean} True if childModule is a child of parentModule
+	 */
+	isChildModule(childModule, parentModule) {
+		if (!childModule || !parentModule) return false;
+		const cleanChild = childModule.replace(/^module:/, "");
+		const cleanParent = parentModule.replace(/^module:/, "");
+
+		// Child must start with parent name followed by '/'
+		return cleanChild.startsWith(cleanParent + "/") && cleanChild !== cleanParent;
+	},
+
+	/**
+	 * Determine if typedefs should be shared between child and parent modules
+	 * @param {string} childModule - Child module name
+	 * @param {string} parentModule - Parent module name
+	 * @returns {boolean} True if typedefs should be shared
+	 */
+	shouldShareTypedefs(childModule, parentModule) {
+		return functions.isChildModule(childModule, parentModule);
+	},
+
+	// Shared sorting function for consistent TOC and content ordering
+	sortHierarchyItems(hierarchyEntries) {
+		return hierarchyEntries.sort((a, b) => {
+			let _;
+			let itemA;
+			let itemB;
+			[_, itemA] = a;
+			[_, itemB] = b;
+			const orderA = itemA.doc?.order;
+			const orderB = itemB.doc?.order;
+			if (orderA !== undefined && orderB !== undefined) {
+				return orderA - orderB;
+			}
+			if (orderA !== undefined) return -1;
+			if (orderB !== undefined) return 1;
+			// If both are missing order, preserve insertion order
+			return 0;
+		});
+	}
+};
+
+const partials = {
+	/**
+	 * Renders exported constants (with -- in memberof) as full documentation blocks for any section.
+	 * @param {Array} doclets - All JSDoc doclets
+	 * @param {object} item - The current hierarchy item (module, pseudo-object, etc.)
+	 * @param {string} baseModuleName - The base module name
+	 * @param {string} moduleName - The current module name (may be undefined for some types)
+	 * @param {string} output - The output string to append to
+	 * @returns {string} Updated output string
+	 */
+	exportedConstantsBlock(doclets, item, baseModuleName, moduleName, output) {
+		const exportedConstants = doclets.filter(
+			(d) =>
+				d.kind === "constant" &&
+				d.memberof &&
+				d.memberof.includes("--") &&
+				helper.normalizeMemberof(d.memberof).replace(/--.*/, "") === (item.doc?.longname || item.doc?.name || item.name)
+		);
+		exportedConstants.forEach((constant) => {
+			output += `\n* * *\n\n`;
+			const encodedConstantName = helper.generateAnchor(constant.name);
+			output += `<a id="${helper.generateAnchor(item.doc?.id || item.id)}_dot_${encodedConstantName}"></a>\n\n`;
+			const constHeadingLevel = "#".repeat(moduleName ? Math.min(4 + item.level - 1, 6) : 4);
+			const typeInfo = constant.type && constant.type.names ? ` : <code>${constant.type.names.join(" | ")}</code>` : "";
+			output += `${constHeadingLevel} ${baseModuleName}${moduleName ? "." + moduleName : ""}.${constant.name}${typeInfo}\n`;
+			output += `${constant.description || ""}\n\n`;
+			output += `**Kind**: export of [<code>${baseModuleName}${moduleName ? "." + moduleName : ""}</code>](#${helper.generateAnchor(
+				item.doc?.id || item.id
+			)})\n\n`;
+			output = partials.examples(constant, output);
+		});
+		return output;
+	},
+	returns(func, output) {
+		if (func.returns) {
+			const returnsDesc = helper.formatReturnsDesc(func.returns);
+			output += `**Returns**:\n\n`;
+			output += `- <code>${helper.formatTypeForTable(func.returns[0].type)}</code> <p>${returnsDesc || ""}</p>\n`;
+			// output += `**Returns**: ${helper.formatReturnsForTOC(func.returns)}`;
+			// if (returnsDesc) {
+			// 	output += `  \n${returnsDesc}`;
+			// }
+			output += "\n\n";
+		}
+		return output;
+	},
+
+	throws(func, output) {
+		if (func.exceptions && func.exceptions.length > 0) {
+			output += `**Throws**:\n\n`;
+			func.exceptions.forEach((exc) => {
+				output += `- <code>${helper.formatTypeForTable(exc.type)}</code> ${exc.description || ""}\n`;
+			});
+			output += "\n\n";
+		}
+		return output;
+	},
+
+	params(func, output, availableTypedefs, moduleId) {
+		if (func.params && func.params.length > 0) {
+			output += `\n| Param | Type | Description |\n`;
+			output += `| --- | --- | --- |\n`;
+			func.params.forEach((param) => {
+				output += `| ${param.name} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${
+					param.description || ""
+				} |\n`;
+			});
+			output += "\n\n";
+		}
+		return output;
+	},
+
+	examples(func, options) {
+		// Handle both direct calls (with string output) and Handlebars calls (with context object)
+		let output = "";
+		if (typeof options === "string") {
+			output = options;
+		} else if (options && typeof options === "object" && options.name) {
+			// This is a Handlebars context object, ignore it
+			output = "";
+		}
+
+		// console.log("[DEBUG] Processing examples for:", func.name || func.longname);
+
+		if (func.examples && func.examples.length > 0) {
+			// console.log("[DEBUG] Found", func.examples.length, "examples");
+			// Auto-detect code language for this doclet
+			const codeLanguage = functions.detectCodeLanguage(func);
+
+			func.examples.forEach((example, _) => {
+				// console.log("[DEBUG] Processing example", index, "content:", example.substring(0, 100) + "...");
+
+				// Find all GitHub alerts and their content
+				const lines = example.split("\n");
+				const extractedAlerts = [];
+				let currentAlert = null;
+				let alertContent = [];
+				let codeSegments = [];
+				let currentCodeSegment = [];
+
+				for (let i = 0; i < lines.length; i++) {
+					const line = lines[i];
+					const alertMatch = line.match(/^\s*>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/);
+					const contentMatch = line.match(/^\s*>\s*(?!\[!)(.+)$/);
+
+					if (alertMatch) {
+						// Finish current code segment if exists
+						if (currentCodeSegment.length > 0) {
+							codeSegments.push(currentCodeSegment.join("\n"));
+							currentCodeSegment = [];
+						}
+
+						// Save previous alert if exists
+						if (currentAlert) {
+							extractedAlerts.push({
+								type: currentAlert,
+								content: alertContent.join("\n").trim()
+							});
+						}
+						// Start new alert
+						currentAlert = alertMatch[1];
+						alertContent = [];
+					} else if (contentMatch && currentAlert) {
+						// Add content to current alert
+						alertContent.push(contentMatch[1]);
+					} else if (currentAlert && line.match(/^\s*>\s*$/)) {
+						// Empty alert line - keep it
+						alertContent.push("");
+					} else {
+						// Save current alert if exists and switch to code
+						if (currentAlert) {
+							extractedAlerts.push({
+								type: currentAlert,
+								content: alertContent.join("\n").trim()
+							});
+
+							// Start new code segment
+							currentCodeSegment = [];
+							currentAlert = null;
+							alertContent = [];
+						}
+						// Regular code line
+						currentCodeSegment.push(line);
+					}
+				}
+
+				// Save final code segment
+				if (currentCodeSegment.length > 0) {
+					codeSegments.push(currentCodeSegment.join("\n"));
+				}
+
+				// Save final alert if exists
+				if (currentAlert) {
+					extractedAlerts.push({
+						type: currentAlert,
+						content: alertContent.join("\n").trim()
+					});
+				}
+
+				// If no alerts were found, treat the whole example as one code block
+				if (extractedAlerts.length === 0) {
+					output += `**Example**\n\`\`\`${codeLanguage}\n${example.trim()}\n\`\`\`\n`;
+				} else {
+					// Render interspersed code segments and alerts
+					let segmentIndex = 0;
+
+					// If we have a code segment before any alerts, render it first
+					if (codeSegments.length > 0 && codeSegments[0].trim()) {
+						output += `**Example**\n\`\`\`${codeLanguage}\n${codeSegments[segmentIndex].trim()}\n\`\`\`\n`;
+						segmentIndex++;
+					}
+
+					// Render alerts and any following code segments
+					extractedAlerts.forEach((alert) => {
+						// Render the alert
+						output += `\n> [!${alert.type}]\n`;
+						const contentLines = alert.content.split("\n");
+						contentLines.forEach((line) => {
+							output += `> ${line}\n`;
+						});
+						output += "\n";
+
+						// Render next code segment if it exists
+						if (segmentIndex < codeSegments.length && codeSegments[segmentIndex].trim()) {
+							output += `\`\`\`${codeLanguage}\n${codeSegments[segmentIndex].trim()}\n\`\`\`\n`;
+						}
+						segmentIndex++;
+					});
+				}
+			});
+			output += "\n\n";
+		}
+		return output;
+	},
+
+	/**
+	 * Global typedef definitions - appears at the end of the document
+	 * Collects ALL typedefs regardless of module and displays them in a single section
+	 * @param {Array} doclets - All JSDoc doclets
+	 * @param {*} _ - Unused Handlebars options
+	 * @returns {string} Global typedef definitions section
+	 */
+	globalTypedefDefinitions(doclets, _) {
+		if (!Array.isArray(doclets)) return "";
+
+		// Filter ALL typedefs with global scope (ignoring module membership)
+		const typedefs = doclets.filter((d) => {
+			return d.kind === "typedef" && d.scope === "global";
+		});
+
+		if (typedefs.length === 0) return "";
+
+		let output = "\n\n* * *\n\n";
+		output += "## Type Definitions\n\n";
+
+		typedefs.forEach((typedef) => {
+			// For global typedefs, use the root module (without submodules like /runtime)
+			// Find the base module like "module:@cldmv/slothlet" not "module:@cldmv/slothlet/runtime"
+			const rootModuleDoclet = doclets.find(
+				(d) => d.kind === "module" && d.longname && d.longname.match(/^module:@cldmv\/slothlet$/) // Exact match for root module
+			);
+			const moduleId = rootModuleDoclet ? rootModuleDoclet.longname : "module:@cldmv/slothlet";
+			const anchor = helper.generateTypedefAnchor(moduleId, typedef.name);
+			output += `<a id="${anchor}"></a>\n\n`;
+
+			const headingLevel = "###"; // h3 for typedefs
+			const typeInfo = typedef.type && typedef.type.names ? ` : <code>${typedef.type.names.join(" | ")}</code>` : "";
+
+			output += `${headingLevel} ${typedef.name}${typeInfo}\n`;
+			output += `${typedef.description || ""}\n\n`;
+			output += `**Kind**: typedef  \n`;
+			output += `**Scope**: ${typedef.scope || "global"}\n\n`;
+
+			// Add properties table if the typedef has properties
+			if (typedef.properties && typedef.properties.length > 0) {
+				// Simple table with HTML cleanup
+				output += "\n| Param | Type | Default | Description |\n";
+				output += "| --- | --- | --- | --- |\n";
+				typedef.properties.forEach((prop) => {
+					const name = prop.optional ? `[${prop.name}]` : prop.name;
+					const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
+					const defaultValue = prop.defaultvalue ? `<code>${prop.defaultvalue}</code>` : "";
+
+					// Clean HTML from description and convert to markdown-safe format
+					let description = "";
+					if (prop.description) {
+						description = prop.description
+							// Remove paragraph tags
+							.replace(/<\/?p>/g, "")
+							// Convert lists to simple text with bullets
+							.replace(/<ul>/g, "")
+							.replace(/<\/ul>/g, "")
+							.replace(/<li>/g, "• ")
+							.replace(/<\/li>/g, " ")
+							// Convert code tags to backticks
+							.replace(/<code>/g, "`")
+							.replace(/<\/code>/g, "`")
+							// Convert strong tags
+							.replace(/<strong>/g, "**")
+							.replace(/<\/strong>/g, "**")
+							// Remove any remaining HTML tags
+							.replace(/<[^>]*>/g, "")
+							// Clean up extra whitespace and newlines
+							.replace(/\s+/g, " ")
+							.trim()
+							// Escape pipe characters that would break the table
+							.replace(/\|/g, "\\|");
+					}
+
+					output += `| ${name} | ${type} | ${defaultValue} | ${description} |\n`;
+				});
+				output += "\n";
+			}
+
+			output = partials.examples(typedef, output);
+
+			output += `\n* * *\n\n`;
+		});
+
+		return output;
+	},
+
+	// Auto-generate root module when missing
+	missingRootModule(doclets) {
+		// Extract base module name from memberof patterns
+		let baseModuleName = null;
+
+		// Look for patterns like "module:api_test_cjs" or "api_test_cjs" in memberof fields
+		for (const doc of doclets) {
+			if (doc.memberof) {
+				const memberof = doc.memberof;
+				// Extract base module name from patterns like:
+				// "module:api_test_cjs.advanced" -> "api_test_cjs"
+				// "api_test_cjs.advanced" -> "api_test_cjs"
+				const match = memberof.match(/^(?:module:)?([^.]+)/);
+				if (match && match[1]) {
+					baseModuleName = match[1];
+					break;
+				}
+			}
+		}
+
+		if (!baseModuleName) {
+			// Fallback: try to extract from longnames
+			for (const doc of doclets) {
+				if (doc.longname && doc.longname.includes(".")) {
+					const match = doc.longname.match(/^([^.]+)/);
+					if (match && match[1]) {
+						baseModuleName = match[1];
+						break;
+					}
+				}
+			}
+		}
+
+		if (!baseModuleName) return null;
+
+		// Create auto-generated root module
+		return {
+			kind: "module",
+			longname: `module:${baseModuleName}`,
+			name: baseModuleName,
+			id: helper.generateAnchor(`module_${baseModuleName}`),
+			description: `Auto-generated module for ${baseModuleName} API.`,
+			summary: `<em>This module was automatically generated because no root jsdoc.mjs file was found.</em> It provides access to the ${baseModuleName} API components.`,
+			examples: [
+				`// ESM usage via slothlet API\nimport slothlet from '@cldmv/slothlet';\nconst ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });`,
+				`// ESM usage via slothlet API (inside async function)\nasync function example() {\n  const { default: slothlet } = await import('@cldmv/slothlet');\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n}`,
+				`// CJS usage via slothlet API (top-level)\nlet slothlet;\n(async () => {\n  ({ slothlet } = await import('@cldmv/slothlet'));\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n})();`,
+				`// CJS usage via slothlet API (inside async function)\nconst slothlet = require('@cldmv/slothlet');\nconst ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });`
+			],
+			meta: {
+				filename: "auto-generated",
+				lineno: 1,
+				columnno: 1,
+				path: "auto-generated"
+			}
+		};
+	},
+
+	integratedTOC(doclets, baseModuleLongname, _) {
+		if (!Array.isArray(doclets)) return "";
+		if (!baseModuleLongname || typeof baseModuleLongname !== "string") return "";
+
+		// Build a complete hierarchy map
+		const hierarchy = new Map();
+		const baseModuleName = baseModuleLongname.replace(/^module:/, "");
+
+		// Collect all modules and constants and organize them
+		doclets.forEach((doc) => {
+			if (doc.kind === "module" && doc.longname !== baseModuleLongname) {
+				// Skip package/private/internal modules unless --private or --package flag is set
+				if (!helper.shouldInclude(doc)) {
+					return; // Skip this module
+				}
+
+				// Handle slothlet-specific module naming pattern: "@cldmv/slothlet.helpers.module:cjs-integration"
+				// Slash-separated modules like "@cldmv/slothlet/runtime" are separate modules, not nested
+				const baseName = baseModuleLongname.replace(/^module:/, ""); // "@cldmv/slothlet"
+				if (doc.longname.startsWith(baseName + ".")) {
+					// Extract the path like "helpers.module:cjs-integration" from "@cldmv/slothlet.helpers.module:cjs-integration"
+					const separator = ".";
+					const suffix = doc.longname.substring(baseName.length + 1); // Remove "@cldmv/slothlet."
+
+					// Parse patterns like "helpers.module:cjs-integration" -> ["helpers", "cjs-integration"]
+					// or "advanced.nest2.module:alpha" -> ["advanced", "nest2", "alpha"]
+					// or "module:runtime" -> ["runtime"] or "runtime" -> ["runtime"]
+					let relativeParts;
+					if (suffix.includes(".module:")) {
+						const [namespace, moduleName] = suffix.split(".module:");
+						// Split namespace on dots to get proper hierarchy: "advanced.nest2" -> ["advanced", "nest2"]
+						const namespaceParts = namespace.split(".");
+						relativeParts = [...namespaceParts, moduleName];
+					} else if (suffix.startsWith("module:")) {
+						relativeParts = [suffix.substring("module:".length)];
+					} else if (separator === "/") {
+						// Handle slash-separated paths like "runtime"
+						relativeParts = suffix.split("/").filter(Boolean);
+					} else {
+						relativeParts = suffix.split(".");
+					}
+
+					// Create the module entry
+					const moduleKey = relativeParts.join(".");
+					hierarchy.set(moduleKey, {
+						type: "module",
+						doc: doc,
+						path: relativeParts,
+						level: relativeParts.length,
+						sortKey: `${relativeParts.length}_${moduleKey}`
+					});
+
+					// Also create intermediate namespace objects (like "helpers", "modes")
+					// but only if the module itself should be included
+					if (relativeParts.length > 1 && helper.shouldInclude(doc)) {
+						for (let i = 1; i < relativeParts.length; i++) {
+							const intermediatePath = relativeParts.slice(0, i);
+							const intermediateKey = intermediatePath.join(".");
+							const intermediateName = relativeParts[i - 1];
+
+							if (!hierarchy.has(intermediateKey)) {
+								hierarchy.set(intermediateKey, {
+									type: "namespace",
+									name: intermediateName,
+									path: intermediatePath,
+									level: intermediatePath.length,
+									sortKey: `${intermediatePath.length}_${intermediateKey}`
+								});
+							}
+						}
+					}
+				}
+			} else if (doc.kind === "constant") {
+				// Skip private/internal constants unless --private or --package flag is set
+				if (!helper.shouldInclude(doc)) {
+					return; // Skip this constant
+				}
+
+				const normalizedMemberof = helper.normalizeMemberof(doc.memberof);
+
+				if (normalizedMemberof === baseModuleLongname) {
+					// Direct member of this module (could be base module or any other module)
+					// Skip constants that have the -- pattern (exports) as they'll be handled in the separate Exports section
+					if (!(doc.memberof && doc.memberof.includes("--"))) {
+						hierarchy.set(doc.name, {
+							type: "constant",
+							doc: doc,
+							path: [doc.name],
+							level: 1,
+							sortKey: `1_${doc.name}`
+						});
+					}
+				} else if (normalizedMemberof && normalizedMemberof.startsWith(baseModuleLongname + ".")) {
+					// Nested member - extract the intermediate path (only for dot-separated)
+					const memberofClean = normalizedMemberof.replace(/^module:/, "");
+					const baseClean = baseModuleLongname.replace(/^module:/, "");
+
+					// Use dot separator for nested members
+					const separator = ".";
+					const baseParts = baseClean.split(separator);
+					const memberofParts = memberofClean.split(separator);
+
+					// Get the path relative to base module
+					const relativeParts = memberofParts.slice(baseParts.length);
+
+					// Create intermediate namespaces for each level
+					for (let i = 0; i < relativeParts.length; i++) {
+						const namespacePath = relativeParts.slice(0, i + 1);
+						const namespaceKey = namespacePath.join(".");
+						const namespaceName = relativeParts[i];
+
+						if (!hierarchy.has(namespaceKey)) {
+							hierarchy.set(namespaceKey, {
+								type: "pseudo-object", // Changed from "namespace" to "pseudo-object"
+								name: namespaceName,
+								path: namespacePath,
+								level: i + 1,
+								sortKey: `${i + 1}_${namespaceKey}`,
+								constants: []
+							});
+						}
+					}
+
+					// Add the constant directly under its immediate parent namespace
+					// e.g., for memberof "api_test_cjs.advanced", the constant goes under "advanced"
+					const constantPath = [...relativeParts, doc.name];
+					const constantKey = constantPath.join(".");
+					hierarchy.set(constantKey, {
+						type: "constant",
+						doc: doc,
+						path: constantPath,
+						level: relativeParts.length + 1,
+						sortKey: `${relativeParts.length + 1}_${constantKey}`,
+						parent: relativeParts.join(".")
+					});
+				}
+			}
+		});
+
+		// Add main module functions to hierarchy for consistent ordering with content
+		const mainModuleFunctions = doclets.filter((d) => {
+			if (!helper.isCallableFunction(d)) return false;
+			if (!helper.shouldInclude(d)) return false;
+
+			const memberof = d.memberof;
+			if (memberof === baseModuleLongname) return true;
+
+			const lastSegment = baseModuleLongname.split(/[:/]/).pop();
+			const expectedPattern = `${baseModuleLongname}--${lastSegment}`;
+			if (memberof === expectedPattern) return true;
+
+			if (memberof && memberof.startsWith(expectedPattern)) {
+				const afterPattern = memberof.substring(expectedPattern.length);
+				if (afterPattern.startsWith(".") && afterPattern.indexOf(".", 1) !== -1) {
+					return false;
+				}
+				return true;
+			}
+			return false;
+		});
+
+		// Add main functions to hierarchy for proper sorting
+		mainModuleFunctions.forEach((func) => {
+			hierarchy.set(`__main_${func.name}`, {
+				type: "main-function",
+				doc: func,
+				path: [func.name],
+				level: 0
+			});
+		});
+
+		// build hierarchy if no cache available
+		const sortedItemsFromHierarchy = functions.sortHierarchyItems(Array.from(hierarchy.entries()));
+		let sortedItems = sortedItemsFromHierarchy;
+
+		// Generate TOC
+		let output = "";
+
+		const processedModules = new Set(); // Track modules that are processed as children
+		const seenMembers = new Map(); // Track all members (functions, objects, constants) already documented at each level (key: level, value: Set of member names)
+
+		// Use the sorted main functions from hierarchy instead of re-filtering
+		const mainFunctionsFromHierarchy = sortedItems.filter(([_, item]) => item.type === "main-function");
+
+		mainFunctionsFromHierarchy.forEach(([_, item]) => {
+			const func = item.doc;
+			const level = 0; // Main module level
+			// Skip if this function is the main callable export (alias for module)
+			if (
+				helper.isModuleFunction(func, baseModuleLongname) &&
+				(func.name === baseModuleName || func.longname === baseModuleLongname || func.alias === baseModuleLongname)
+			) {
+				return;
+			}
+			if (!seenMembers.has(level)) {
+				seenMembers.set(level, new Set());
+			}
+			// Check if this function has already been documented at this level
+			const functionKey = `${func.name}(${helper.formatParamsForTOC(func.params)})`;
+			if (seenMembers.get(level).has(functionKey)) {
+				return; // Skip duplicate
+			}
+			seenMembers.get(level).add(functionKey);
+
+			const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+			const encodedFuncName = func.name.replace(/\./g, "_dot_");
+			const anchor = helper.generateAnchor(func.id) || helper.generateAnchor(`${baseModuleName}_dot_${encodedFuncName}`);
+			output += `    * [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${anchor})${returns}\n`;
+		});
+
+		sortedItems.forEach(([path, item]) => {
+			const indent = "    ".repeat(item.level);
+
+			if (item.type === "namespace") {
+				// Namespace objects like "helpers", "modes"
+				const anchorId = item.doc?.id
+					? helper.generateAnchor(item.doc.id)
+					: helper.generateAnchor(`module_${baseModuleName}_${item.path.join(".")}`);
+				const level = item.level;
+				const memberKey = item.name;
+
+				// Check for duplicates at this level
+				if (!seenMembers.has(level)) {
+					seenMembers.set(level, new Set());
+				}
+				if (seenMembers.get(level).has(memberKey)) {
+					return; // Skip duplicate namespace
+				}
+				seenMembers.get(level).add(memberKey);
+
+				// output += `<!-- type: namespace -->"`;
+				output += `${indent}* [.${item.name}](#${anchorId}) : <code>object</code>\n`;
+
+				// Find child modules that belong to this namespace
+				const childModules = sortedItems.filter(([_, childItem]) => {
+					if (childItem.type !== "module") return false;
+					// Check if this module's path starts with the namespace path
+					if (childItem.path.length !== item.path.length + 1) return false;
+					for (let i = 0; i < item.path.length; i++) {
+						if (childItem.path[i] !== item.path[i]) return false;
+					}
+					return true;
+				});
+
+				childModules.forEach(([childPath, childItem]) => {
+					processedModules.add(childPath); // Mark as processed
+					const childLevel = childItem.level;
+					const childMemberKey = childItem.path[childItem.path.length - 1];
+
+					// Check for duplicates at this level
+					if (!seenMembers.has(childLevel)) {
+						seenMembers.set(childLevel, new Set());
+					}
+					if (seenMembers.get(childLevel).has(childMemberKey)) {
+						return; // Skip duplicate child module
+					}
+					seenMembers.get(childLevel).add(childMemberKey);
+
+					const childIndent = "    ".repeat(childItem.level);
+					const childAnchorId = helper.generateAnchor(childItem.doc.id);
+					output += `${childIndent}* [.${childItem.path[childItem.path.length - 1]}](#${childAnchorId}) : <code>object</code>\n`;
+
+					// Find functions that belong to this child module
+					const moduleFunctions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+						const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+						return normalizedMemberof === childItem.doc.longname || normalizedMemberof === childItem.doc.name;
+					});
+
+					moduleFunctions.forEach((func) => {
+						const level = childItem.level + 1;
+						if (!seenMembers.has(level)) {
+							seenMembers.set(level, new Set());
+						}
+
+						// Check if this function has already been documented at this level
+						const functionKey = `${func.name}(${helper.formatParamsForTOC(func.params)})`;
+						if (seenMembers.get(level).has(functionKey)) {
+							return; // Skip duplicate
+						}
+						seenMembers.get(level).add(functionKey);
+
+						const funcIndent = "    ".repeat(childItem.level + 1);
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						const encodedFuncName = helper.generateAnchor(func.name);
+						output += `${funcIndent}* [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${childAnchorId}_dot_${encodedFuncName})${returns}\n`;
+					});
+				});
+			} else if (item.type === "module" && !processedModules.has(path)) {
+				// Top-level modules like "runtime" (not nested under a namespace)
+				const anchorId = helper.generateAnchor(item.doc.id);
+				const level = item.level;
+				const memberKey = item.path.join(".");
+
+				// Check for duplicates at this level
+				if (!seenMembers.has(level)) {
+					seenMembers.set(level, new Set());
+				}
+				if (seenMembers.get(level).has(memberKey)) {
+					return; // Skip duplicate module
+				}
+				seenMembers.get(level).add(memberKey);
+
+				// output += `<!-- type: module -->"`;
+				output += `${indent}* [.${item.path.join(".")}](#${anchorId}) : <code>object</code>\n`;
+
+				// Find functions that belong to this module
+				const moduleFunctions = doclets.filter((d) => {
+					if (!helper.isCallableFunction(d)) return false;
+					if (!helper.shouldInclude(d)) return false;
+					const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+					return normalizedMemberof === item.doc.longname || normalizedMemberof === item.doc.name;
+				});
+
+				moduleFunctions.forEach((func) => {
+					const funcLevel = item.level + 1;
+					const functionKey = `${func.name}(${helper.formatParamsForTOC(func.params)})`;
+
+					// Check for duplicate functions at this level
+					if (!seenMembers.has(funcLevel)) {
+						seenMembers.set(funcLevel, new Set());
+					}
+					if (seenMembers.get(funcLevel).has(functionKey)) {
+						return; // Skip duplicate function
+					}
+					seenMembers.get(funcLevel).add(functionKey);
+
+					const funcIndent = "    ".repeat(item.level + 1);
+					const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+					const encodedFuncName = func.name.replace(/\./g, "_dot_");
+					output += `${funcIndent}* [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${anchorId}_dot_${encodedFuncName})${returns}\n`;
+				});
+
+				// Find constants that belong to this module
+				const moduleConstants = doclets.filter((d) => {
+					if (d.kind !== "constant") return false;
+					if (!helper.shouldInclude(d)) return false;
+					const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+					return normalizedMemberof === item.doc.longname || normalizedMemberof === item.doc.name;
+				});
+
+				moduleConstants.forEach((constant) => {
+					const constIndent = "    ".repeat(item.level + 1);
+					const typeInfo = constant.type && constant.type.names ? ` : <code>${constant.type.names.join(" | ")}</code>` : "";
+					const encodedConstantName = constant.name.replace(/\./g, "_dot_");
+					output += `${constIndent}* [.${constant.name}](#${anchorId}_dot_${encodedConstantName})${typeInfo}\n`;
+				});
+			} else if (item.type === "constant") {
+				// Direct constants of the base module (e.g., api.config, api.math)
+				const level = item.level;
+				const memberKey = item.doc.name;
+
+				// Check for duplicates at this level
+				if (!seenMembers.has(level)) {
+					seenMembers.set(level, new Set());
+				}
+				if (seenMembers.get(level).has(memberKey)) {
+					return; // Skip duplicate constant
+				}
+				seenMembers.get(level).add(memberKey);
+
+				const anchorId = helper.generateAnchor(item.doc.id);
+				const typeInfo =
+					item.doc.type && item.doc.type.names ? ` : <code>${item.doc.type.names.join(" | ")}</code>` : " : <code>object</code>";
+				output += `${indent}* [.${item.doc.name}](#${anchorId})${typeInfo}\n`;
+
+				// Find functions that belong to this constant (object methods)
+				const constantFunctions = doclets.filter((d) => {
+					if (!helper.isCallableFunction(d)) return false;
+					if (!helper.shouldInclude(d)) return false;
+					const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+					return normalizedMemberof === item.doc.longname || normalizedMemberof === item.doc.name || normalizedMemberof === item.doc.id;
+				});
+
+				constantFunctions.forEach((func) => {
+					const funcLevel = item.level + 1;
+					const functionKey = `${func.name}(${helper.formatParamsForTOC(func.params)})`;
+
+					// Check for duplicate functions at this level
+					if (!seenMembers.has(funcLevel)) {
+						seenMembers.set(funcLevel, new Set());
+					}
+					if (seenMembers.get(funcLevel).has(functionKey)) {
+						return; // Skip duplicate function
+					}
+					seenMembers.get(funcLevel).add(functionKey);
+
+					const funcIndent = "    ".repeat(item.level + 1);
+					const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+					const encodedFuncName = func.name.replace(/\./g, "_dot_");
+					output += `${funcIndent}* [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${anchorId}_dot_${encodedFuncName})${returns}\n`;
+				});
+			} else if (item.type === "pseudo-object") {
+				const anchorId = item.doc?.id
+					? helper.generateAnchor(item.doc.id)
+					: helper.generateAnchor(`module_${baseModuleName}_${item.path.join(".")}`);
+				// output += `<!-- type: pseudo-object -->"`;
+				output += `${indent}* [.${item.name}](#${anchorId}) : <code>object</code>\n`;
+
+				// Find constants that belong to this pseudo-object
+				const childConstants = Array.from(hierarchy.entries()).filter(([_, childItem]) => {
+					return childItem.type === "constant" && childItem.parent === path;
+				});
+
+				childConstants.forEach(([_, childItem]) => {
+					const childIndent = "    ".repeat(childItem.level);
+					output += `${childIndent}* [.${childItem.doc.name}](#${helper.generateAnchor(childItem.doc.id)}) : <code>object</code>\n`;
+
+					// Add functions under this child constant
+					const functions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+						const possibleMemberofs = [
+							childItem.doc.name,
+							childItem.doc.id,
+							childItem.doc.longname,
+							`${baseModuleName}.module:${childItem.doc.name}`,
+							`module:${baseModuleName}.${childItem.doc.name}`
+						];
+						return possibleMemberofs.includes(d.memberof);
+					});
+
+					functions.forEach((func) => {
+						const funcIndent = "    ".repeat(childItem.level + 1);
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						const encodedFuncName = func.name.replace(/\./g, "_dot_");
+						output += `${funcIndent}* [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${helper.generateAnchor(
+							childItem.doc.id
+						)}_dot_${encodedFuncName})${returns}\n`;
+					});
+				});
+			} else if (item.type === "real-module") {
+				const anchorId = helper.generateAnchor(item.doc.id);
+				// output += `<!-- type: real-module -->"`;
+				output += `${indent}* [.${item.name}](#${anchorId}) : <code>object</code>\n`;
+
+				// Find constants that belong to this real module
+				const childConstants = Array.from(hierarchy.entries()).filter(([_, childItem]) => {
+					return childItem.type === "constant" && childItem.parent === path;
+				});
+
+				childConstants.forEach(([_, childItem]) => {
+					const childIndent = "    ".repeat(childItem.level);
+					output += `${childIndent}* [.${childItem.doc.name}](#${helper.generateAnchor(childItem.doc.id)}) : <code>object</code>\n`;
+
+					// Add functions under this child constant
+					const functions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+						const possibleMemberofs = [
+							childItem.doc.name,
+							childItem.doc.id,
+							childItem.doc.longname,
+							`${baseModuleName}.module:${childItem.doc.name}`,
+							`module:${baseModuleName}.${childItem.doc.name}`
+						];
+						return possibleMemberofs.includes(d.memberof);
+					});
+
+					functions.forEach((func) => {
+						const funcIndent = "    ".repeat(childItem.level + 1);
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						const encodedFuncName = func.name.replace(/\./g, "_dot_");
+						output += `${funcIndent}* [.${func.name}(${helper.formatParamsForTOC(func.params)})](#${helper.generateAnchor(
+							childItem.doc.id
+						)}_dot_${encodedFuncName})${returns}\n`;
+					});
+				});
+			}
+		});
+
+		// Add typedefs to TOC (include module-owned and global typedefs actually used by module)
+		const typedefs = doclets.filter((d) => {
+			if (d.kind !== "typedef") return false;
+
+			// Include typedefs that explicitly belong to this module
+			if (d.memberof === baseModuleLongname) {
+				return true;
+			}
+
+			// For global typedefs, check if they're actually used by this module's functions
+			if (!d.memberof) {
+				// Check if any function in this module uses this typedef in params or returns
+				const modulesFunctions = doclets.filter(
+					(doc) =>
+						helper.isCallableFunction(doc) && helper.shouldInclude(doc) && helper.normalizeMemberof(doc.memberof) === baseModuleLongname
+				);
+
+				return modulesFunctions.some((func) => {
+					// Check parameters
+					if (func.params && func.params.some((param) => param.type && param.type.names && param.type.names.includes(d.name))) {
+						return true;
+					}
+					// Check return type
+					if (func.returns && func.returns.some((ret) => ret.type && ret.type.names && ret.type.names.includes(d.name))) {
+						return true;
+					}
+					return false;
+				});
+			}
+
+			return false;
+		});
+
+		if (typedefs.length > 0) {
+			output += `\n* **Typedefs**\n`;
+			typedefs.forEach((typedef) => {
+				const typeInfo = typedef.type && typedef.type.names ? ` : <code>${typedef.type.names.join(" | ")}</code>` : "";
+				const anchor = helper.generateTypedefAnchor(baseModuleLongname, typedef.name);
+				output += `    * [${typedef.name}](#${anchor})${typeInfo}\n`;
+			});
+		}
+
+		// Add constants to TOC (only exports with -- pattern, not regular constants)
+		const constants = doclets.filter((d) => {
+			if (d.kind !== "constant") return false;
+			if (!helper.shouldInclude(d)) return false;
+			const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+			return normalizedMemberof === baseModuleLongname;
+		});
+
+		// Only show exported constants (with -- pattern) in separate Exports section
+		// Regular constants should appear in main TOC as normal API members
+		const exportedConstants = constants.filter((c) => c.memberof && c.memberof.includes("--"));
+
+		if (exportedConstants.length > 0) {
+			output += `\n* **Exports**\n`;
+			exportedConstants.forEach((constant) => {
+				const typeInfo =
+					constant.type && constant.type.names ? ` : <code>${constant.type.names.join(" | ")}</code>` : " : <code>object</code>";
+				output += `    * [${constant.name}](#${helper.generateAnchor(constant.id)})${typeInfo}\n`;
+			});
+		}
+
+		return output;
+	},
+
+	// Build integrated modules with auto-generated intermediate modules in natural order
+	integratedModules(doclets, baseModuleLongname, _) {
+		if (!Array.isArray(doclets)) return "";
+		if (!baseModuleLongname || typeof baseModuleLongname !== "string") return "";
+
+		// Build a complete hierarchy map
+		const hierarchy = new Map();
+		const baseModuleName = baseModuleLongname.replace(/^module:/, "");
+
+		// Pre-process to find the "last" occurrence of each function (last one wins)
+		const functionsByName = new Map();
+		doclets.forEach((doc, index) => {
+			if (helper.isCallableFunction(doc) && helper.shouldInclude(doc)) {
+				const key = `${doc.name}_${doc.memberof || "global"}`;
+				functionsByName.set(key, { doc, index });
+			}
+		});
+
+		// Create a set of "winning" function docs (only the last occurrence of each)
+		const winningFunctions = new Set();
+		functionsByName.forEach(({ doc }) => {
+			winningFunctions.add(doc);
+		});
+
+		// Collect available typedefs for linking - ONLY GLOBAL TYPEDEFS
+		const availableTypedefs = doclets
+			.filter((d) => d.kind === "typedef")
+			.filter((d) => !d.memberof) // Only global typedefs without memberof
+			.map((d) => d.name);
+
+		// Collect all modules and constants (both direct and nested)
+		doclets.forEach((doc) => {
+			if (!helper.shouldInclude(doc)) {
+				return; // Skip this module
+			}
+			if (doc.kind === "module" && doc.longname !== baseModuleLongname) {
+				// Handle slothlet-specific module naming pattern: "@cldmv/slothlet.helpers.module:cjs-integration"
+				// Slash-separated modules like "@cldmv/slothlet/runtime" are separate modules, not nested
+				const baseName = baseModuleLongname.replace(/^module:/, ""); // "@cldmv/slothlet"
+				if (doc.longname.startsWith(baseName + ".")) {
+					// Extract the path like "helpers.module:cjs-integration" from "@cldmv/slothlet.helpers.module:cjs-integration"
+					const suffix = doc.longname.substring(baseName.length + 1); // Remove "@cldmv/slothlet."
+
+					// Parse patterns like "helpers.module:cjs-integration" -> ["helpers", "cjs-integration"]
+					// or "module:runtime" -> ["runtime"] or "runtime" -> ["runtime"]
+					let relativeParts;
+					if (suffix.includes(".module:")) {
+						const [namespace, moduleName] = suffix.split(".module:");
+						relativeParts = [namespace, moduleName];
+					} else if (suffix.startsWith("module:")) {
+						relativeParts = [suffix.substring("module:".length)];
+					} else {
+						relativeParts = suffix.split(".");
+					}
+
+					// Create the module entry
+					const moduleKey = relativeParts.join(".");
+					hierarchy.set(moduleKey, {
+						type: "module",
+						doc: doc,
+						path: relativeParts,
+						level: relativeParts.length
+					});
+
+					// Also create intermediate namespace objects (like "helpers", "modes")
+					if (relativeParts.length > 1) {
+						for (let i = 1; i < relativeParts.length; i++) {
+							const intermediatePath = relativeParts.slice(0, i);
+							const intermediateKey = intermediatePath.join(".");
+							const intermediateName = relativeParts[i - 1];
+
+							if (!hierarchy.has(intermediateKey)) {
+								hierarchy.set(intermediateKey, {
+									type: "namespace",
+									name: intermediateName,
+									path: intermediatePath,
+									level: intermediatePath.length
+								});
+							}
+						}
+					}
+				}
+			} else if (doc.kind === "constant") {
+				// Skip private/internal constants unless --private or --package flag is set
+				if (!helper.shouldInclude(doc)) {
+					return; // Skip this constant
+				}
+
+				const normalizedMemberof = helper.normalizeMemberof(doc.memberof);
+				if (normalizedMemberof === baseModuleLongname) {
+					// Direct member of base module
+					hierarchy.set(doc.name, {
+						type: "constant",
+						doc: doc,
+						path: [doc.name],
+						level: 1
+					});
+				} else if (normalizedMemberof && normalizedMemberof.startsWith(baseModuleLongname + ".")) {
+					// Nested member - extract the intermediate path (only for dot-separated)
+					const memberofClean = normalizedMemberof.replace(/^module:/, "");
+					const baseClean = baseModuleLongname.replace(/^module:/, "");
+
+					// Use dot separator for nested members
+					const separator = ".";
+					const baseParts = baseClean.split(separator);
+					const memberofParts = memberofClean.split(separator);
+
+					// Get the path relative to base module
+					const relativeParts = memberofParts.slice(baseParts.length);
+
+					// Create intermediate objects for each level, checking for real modules first
+					for (let i = 0; i < relativeParts.length; i++) {
+						const intermediatePath = relativeParts.slice(0, i + 1);
+						const intermediateKey = intermediatePath.join(".");
+						const intermediateName = relativeParts[i];
+
+						if (!hierarchy.has(intermediateKey)) {
+							// Check if a real module exists for this intermediate path
+							const possibleModuleLongnames = [
+								`${baseModuleName}.module:${intermediateName}`, // "api_test_cjs.module:advanced"
+								`module:${baseModuleName}.${intermediateName}`, // "module:api_test_cjs.advanced"
+								`${baseModuleName}.${intermediateName}` // "api_test_cjs.advanced"
+							];
+
+							const realModule = doclets.find((d) => d.kind === "module" && possibleModuleLongnames.includes(d.longname));
+
+							if (realModule) {
+								// Use real module data
+								hierarchy.set(intermediateKey, {
+									type: "real-module",
+									doc: realModule,
+									name: intermediateName,
+									path: intermediatePath,
+									level: i + 1,
+									constants: []
+								});
+							} else {
+								// Create pseudo-object
+								hierarchy.set(intermediateKey, {
+									type: "pseudo-object",
+									name: intermediateName,
+									path: intermediatePath,
+									level: i + 1,
+									constants: []
+								});
+							}
+						}
+					}
+
+					// Add the constant directly under its immediate parent namespace
+					const constantPath = [...relativeParts, doc.name];
+					const constantKey = constantPath.join(".");
+					hierarchy.set(constantKey, {
+						type: "constant",
+						doc: doc,
+						path: constantPath,
+						level: relativeParts.length + 1,
+						parent: relativeParts.join(".")
+					});
+				}
+			}
+		});
+
+		// Add main module functions to hierarchy for proper ordering
+		const mainModuleFunctions = doclets.filter((d) => {
+			if (!helper.isCallableFunction(d)) return false;
+			if (!helper.shouldInclude(d)) return false;
+			if (!winningFunctions.has(d)) return false;
+
+			const memberof = d.memberof;
+			if (memberof === baseModuleLongname) return true;
+
+			const lastSegment = baseModuleLongname.split(/[:/]/).pop();
+			const expectedPattern = `${baseModuleLongname}--${lastSegment}`;
+			if (memberof === expectedPattern) return true;
+
+			if (memberof && memberof.startsWith(expectedPattern)) {
+				const afterPattern = memberof.substring(expectedPattern.length);
+				if (afterPattern.startsWith(".") && afterPattern.indexOf(".", 1) !== -1) {
+					return false;
+				}
+				return true;
+			}
+			return false;
+		});
+
+		// Add main functions to hierarchy for proper sorting
+		mainModuleFunctions.forEach((func) => {
+			hierarchy.set(`__main_${func.name}`, {
+				type: "main-function",
+				doc: func,
+				path: [func.name],
+				level: 0,
+				sortKey: `0_${func.name}`
+			});
+		});
+
+		const sortedItems = functions.sortHierarchyItems(Array.from(hierarchy.entries()));
+
+		// Generate documentation sections
+		let output = "";
+		const baseModuleAnchor = helper.generateAnchor(baseModuleLongname);
+
+		// Track processed functions to avoid duplication
+		const processedFunctions = new Set();
+
+		// Process all items in sorted order (including main functions)
+		sortedItems.forEach(([path, item]) => {
+			if (item.type === "main-function") {
+				// Main module functions
+				const func = item.doc;
+				const isMainCallable = helper.isModuleFunction(func, baseModuleLongname);
+				// Only document as main export, skip as method if alias
+				if (isMainCallable && (func.name === baseModuleName || func.longname === baseModuleLongname || func.alias === baseModuleLongname)) {
+					if (processedFunctions.has(func.name)) return;
+					processedFunctions.add(func.name);
+					output += `<a id="${helper.generateAnchor(func.id)}"></a>\n\n`;
+					const headingLevel = "##";
+					const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+					output += `${headingLevel} ${baseModuleName}(${helper.formatParamsForTOC(func.params)})${returns}\n`;
+					output += `${func.description || ""}\n\n`;
+					output += `**Kind**: main callable export of <code>${baseModuleName}</code>\n\n`;
+					output = partials.returns(func, output);
+					output = partials.throws(func, output);
+					output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+					output = partials.examples(func, output);
+					output += `\n* * *\n\n`;
+				} else if (
+					!(isMainCallable && (func.name === baseModuleName || func.longname === baseModuleLongname || func.alias === baseModuleLongname))
+				) {
+					if (processedFunctions.has(func.name)) return;
+					processedFunctions.add(func.name);
+					output += `<a id="${helper.generateAnchor(func.id)}"></a>\n\n`;
+					const headingLevel = "###";
+					const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+					output += `${headingLevel} ${baseModuleName}.${func.name}(${helper.formatParamsForTOC(func.params)})${returns}\n`;
+					output += `${func.description || ""}\n\n`;
+					output += `**Kind**: static method of [<code>${baseModuleName}</code>](#${baseModuleAnchor})\n\n`;
+					output = partials.returns(func, output);
+					output = partials.throws(func, output);
+					output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+					output = partials.examples(func, output);
+					output += `\n* * *\n\n`;
+				}
+			} else if (item.type === "namespace") {
+				// Namespace objects like "helpers", "modes"
+				const headingLevel = "#".repeat(Math.min(3 + item.level - 1, 6)); // Start at h3
+				const anchorId = helper.generateAnchor(`module_${baseModuleName}_${item.path.join(".")}`);
+
+				output += `<a id="${anchorId}"></a>\n\n`;
+				output += `${headingLevel} ${baseModuleName}.${item.name} : <code>object</code>\n`;
+				output += `Namespace for ${item.name} modules.\n\n`;
+				output += `**Kind**: static namespace of [<code>${baseModuleName}</code>](#${baseModuleAnchor})\n\n`;
+				output += `* * *\n\n`;
+			} else if (item.type === "module") {
+				// Real module - e.g., helpers.cjs-integration, modes.eager
+				const headingLevel = "#".repeat(Math.min(3 + item.level - 1, 6)); // Start at h3
+				const moduleName = item.path.join(".");
+
+				output += `<a id="${helper.generateAnchor(item.doc.id)}"></a>\n\n`;
+				output += `${headingLevel} ${baseModuleName}.${moduleName} : <code>object</code>\n`;
+				output += `${item.doc.description || item.doc.summary || ""}\n\n`;
+				output += `**Kind**: static namespace of [<code>${baseModuleName}</code>](#${baseModuleAnchor})\n\n`;
+
+				output = partials.examples(item.doc, output);
+
+				// Find functions that belong to this module
+				const moduleFunctions = doclets.filter((d) => {
+					if (!helper.isCallableFunction(d)) return false;
+					if (!helper.shouldInclude(d)) return false;
+
+					// Only include "winning" functions (last one wins for duplicates)
+					if (!winningFunctions.has(d)) {
+						return false;
+					}
+
+					const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+
+					// Check direct matches
+					if (normalizedMemberof === item.doc.longname || normalizedMemberof === item.doc.name) {
+						return true;
+					}
+
+					// ENHANCED: Check if function is from the same file as the module
+					// Functions exported from a module file should belong to that module
+					if (!d.memberof && item.doc.meta && d.meta) {
+						// If function has no explicit memberof but is from same file as module
+						if (item.doc.meta.filename === d.meta.filename && item.doc.meta.path === d.meta.path) {
+							return true;
+						}
+					}
+
+					// ENHANCED: Check for module:filename pattern
+					// JSDoc may auto-generate memberof as "module:filename" for file-level exports
+					if (item.doc.meta && d.memberof) {
+						const moduleFileName = item.doc.meta.filename?.replace(/\.m?js$/, "");
+						if (d.memberof === `module:${moduleFileName}` || d.memberof === `module:@cldmv/slothlet.helpers.${moduleFileName}`) {
+							return true;
+						}
+					}
+
+					// Special handling for namespace modules like modes.eager, helpers.sanitize
+					// When processing all files together, functions may have different memberof patterns than modules
+					// Module longname: "@cldmv/slothlet.modes.module:eager"
+					// Function memberof: "module:@cldmv/slothlet.modes.eager"
+					const modulePath = item.path.join("."); // e.g., "modes.eager"
+					const expectedMemberof = `module:${baseModuleLongname}.${modulePath}`;
+
+					if (normalizedMemberof === expectedMemberof) {
+						return true;
+					}
+
+					// Additional pattern matching for modes where module longname has "module:" suffix
+					// and function memberof has "module:" prefix
+					if (item.doc.longname && item.doc.longname.includes(".module:")) {
+						// Extract the actual module name: "@cldmv/slothlet.modes.module:eager" -> "eager"
+						const moduleMatch = item.doc.longname.match(/\.module:(.+)$/);
+						if (moduleMatch) {
+							const moduleName = moduleMatch[1]; // "eager" or "lazy"
+							const namespacePrefix = item.doc.longname.split(".module:")[0]; // "@cldmv/slothlet.modes"
+							const expectedPattern = `module:${namespacePrefix}.${moduleName}`;
+
+							if (normalizedMemberof === expectedPattern) {
+								return true;
+							}
+						}
+					}
+
+					return false;
+				});
+
+				if (moduleFunctions.length > 0) {
+					moduleFunctions.forEach((func) => {
+						processedFunctions.add(func.name); // Track this function as processed
+						output += `\n* * *\n\n`;
+						const encodedFuncName = helper.generateAnchor(func.name);
+						output += `<a id="${helper.generateAnchor(item.doc.id)}_dot_${encodedFuncName}"></a>\n\n`;
+
+						const funcHeadingLevel = "#".repeat(Math.min(4 + item.level - 1, 6)); // One level deeper
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						output += `${funcHeadingLevel} ${baseModuleName}.${moduleName}.${func.name}(${helper.formatParamsForTOC(
+							func.params
+						)})${returns}\n`;
+						output += `${func.description || ""}\n\n`;
+						output += `**Kind**: static method of [<code>${baseModuleName}.${moduleName}</code>](#${helper.generateAnchor(
+							item.doc.id
+						)})\n\n`;
+
+						output = partials.returns(func, output);
+						output = partials.throws(func, output);
+						output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+						output = partials.examples(func, output);
+					});
+				}
+
+				// Find constants that belong to this module
+				const moduleConstants = doclets.filter((d) => {
+					if (d.kind !== "constant") return false;
+					if (!helper.shouldInclude(d)) return false;
+					const normalizedMemberof = helper.normalizeMemberof(d.memberof);
+
+					// Check if constant belongs to this module
+					return normalizedMemberof === item.doc.longname || normalizedMemberof === item.doc.name;
+				});
+
+				if (moduleConstants.length > 0) {
+					moduleConstants.forEach((constant) => {
+						output += `\n* * *\n\n`;
+						const encodedConstantName = helper.generateAnchor(constant.name);
+						output += `<a id="${helper.generateAnchor(item.doc.id)}_dot_${encodedConstantName}"></a>\n\n`;
+
+						const constHeadingLevel = "#".repeat(Math.min(4 + item.level - 1, 6)); // One level deeper
+						const typeInfo = constant.type && constant.type.names ? ` : <code>${constant.type.names.join(" | ")}</code>` : "";
+						output += `${constHeadingLevel} ${baseModuleName}.${moduleName}.${constant.name}${typeInfo}\n`;
+						output += `${constant.description || ""}\n\n`;
+						output += `**Kind**: static constant of [<code>${baseModuleName}.${moduleName}</code>](#${helper.generateAnchor(
+							item.doc.id
+						)})\n\n`;
+
+						output = partials.examples(constant, output);
+					});
+				}
+
+				output += `\n* * *\n\n`;
+			} else if (item.type === "pseudo-object") {
+				// Auto-generated intermediate pseudo-object
+				const anchorId = helper.generateAnchor(`module_${baseModuleName}_${item.path.join(".")}`);
+				const headingLevel = "#".repeat(Math.min(3 + item.level - 1, 6)); // Start at h3
+
+				output += `<a id="${anchorId}"></a>\n\n`;
+				output += `${headingLevel} ${baseModuleName}.${item.name} : <code>object</code>\n`;
+				output += `Auto-generated intermediate object for nested components.\n\n`;
+				output += `**Kind**: static object of [<code>${baseModuleName}</code>](#${baseModuleAnchor})\n\n`;
+				output += `* * *\n\n`;
+
+				// Immediately add child constants under this pseudo-object
+				const childConstants = Array.from(hierarchy.entries()).filter(([_, childItem]) => {
+					return childItem.type === "constant" && childItem.parent === path;
+				});
+
+				childConstants.forEach(([_, childItem]) => {
+					// Generate child constant documentation
+					const childHeadingLevel = "####";
+
+					output += `<a id="${helper.generateAnchor(childItem.doc.id)}"></a>\n\n`;
+					output += `${childHeadingLevel} ${baseModuleName}.${childItem.path.join(".")} : <code>object</code>\n`;
+					output += `${childItem.doc.description || ""}\n\n`;
+					output += `**Kind**: static constant of [<code>${baseModuleName}.${item.name}</code>](#${anchorId})\n\n`;
+
+					output = partials.examples(childItem, output);
+
+					// Add functions under this child constant
+					const functions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+
+						// Only include "winning" functions (last one wins for duplicates)
+						if (!winningFunctions.has(d)) {
+							return false;
+						}
+
+						const possibleMemberofs = [
+							childItem.doc.name,
+							childItem.doc.id,
+							childItem.doc.longname,
+							`${baseModuleName}.module:${childItem.doc.name}`,
+							`module:${baseModuleName}.${childItem.doc.name}`
+						];
+						return possibleMemberofs.includes(d.memberof);
+					});
+
+					functions.forEach((func) => {
+						output += `\n* * *\n\n`;
+						const encodedFuncName = helper.generateAnchor(func.name);
+						output += `<a id="${helper.generateAnchor(childItem.doc.id)}_dot_${encodedFuncName}"></a>\n\n`;
+
+						const funcHeadingLevel = "#####";
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						output += `${funcHeadingLevel} ${baseModuleName}.${childItem.path.join(".")}.${func.name}(${helper.formatParamsForTOC(
+							func.params
+						)})${returns}\n`;
+						output += `${func.description || ""}\n\n`;
+						output += `**Kind**: static method of [<code>${baseModuleName}.${childItem.path.join(".")}</code>](#${helper.generateAnchor(
+							childItem.doc.id
+						)})\n`;
+
+						output = partials.returns(func, output);
+						output = partials.throws(func, output);
+						output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+						output = partials.examples(func, output);
+					});
+
+					output += `\n* * *\n\n`;
+				});
+			} else if (item.type === "real-module") {
+				// Real module - use actual JSDoc data
+				const headingLevel = "#".repeat(Math.min(3 + item.level - 1, 6)); // Start at h3
+
+				output += `<a id="${helper.generateAnchor(item.doc.id)}"></a>\n\n`;
+				output += `${headingLevel} ${baseModuleName}.${item.name} : <code>object</code>\n`;
+				output += `${item.doc.description || ""}\n\n`;
+				output += `**Kind**: static constant of [<code>${baseModuleName}</code>](#${baseModuleAnchor})\n\n`;
+
+				output = partials.examples(item, output);
+
+				output += `* * *\n\n`;
+
+				// Immediately add child constants under this real module
+				const childConstants = Array.from(hierarchy.entries()).filter(([_, childItem]) => {
+					return childItem.type === "constant" && childItem.parent === path;
+				});
+
+				childConstants.forEach(([_, childItem]) => {
+					// Generate child constant documentation
+					const childHeadingLevel = "####";
+
+					output += `<a id="${helper.generateAnchor(childItem.doc.id)}"></a>\n\n`;
+					output += `${childHeadingLevel} ${baseModuleName}.${childItem.path.join(".")} : <code>object</code>\n`;
+					output += `${childItem.doc.description || ""}\n\n`;
+					output += `**Kind**: static constant of [<code>${baseModuleName}.${item.name}</code>](#${helper.generateAnchor(
+						item.doc.id
+					)})\n\n`;
+
+					output = partials.examples(childItem, output);
+
+					// Add functions under this child constant
+					const functions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+
+						// Only include "winning" functions (last one wins for duplicates)
+						if (!winningFunctions.has(d)) {
+							return false;
+						}
+
+						const possibleMemberofs = [
+							childItem.doc.name,
+							childItem.doc.id,
+							childItem.doc.longname,
+							`${baseModuleName}.module:${childItem.doc.name}`,
+							`module:${baseModuleName}.${childItem.doc.name}`
+						];
+						return possibleMemberofs.includes(d.memberof);
+					});
+
+					functions.forEach((func) => {
+						output += `\n* * *\n\n`;
+						const encodedFuncName = helper.generateAnchor(func.name);
+						output += `<a id="${helper.generateAnchor(childItem.doc.id)}_dot_${encodedFuncName}"></a>\n\n`;
+
+						const funcHeadingLevel = "#####";
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						output += `${funcHeadingLevel} ${baseModuleName}.${childItem.path.join(".")}.${func.name}(${helper.formatParamsForTOC(
+							func.params
+						)})${returns}\n`;
+						output += `${func.description || ""}\n\n`;
+						output += `**Kind**: static method of [<code>${baseModuleName}.${childItem.path.join(".")}</code>](#${helper.generateAnchor(
+							childItem.doc.id
+						)})\n`;
+
+						output = partials.returns(func, output);
+						output = partials.throws(func, output);
+						output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+						output = partials.examples(func, output);
+					});
+
+					output += `\n* * *\n\n`;
+				});
+			} else if (item.type === "constant") {
+				// Only process top-level constants (those without a parent or with the base module as parent)
+				if (!item.parent || item.parent === baseModuleName) {
+					// Regular constant documentation
+					const headingLevel = item.level === 1 ? "###" : "####";
+					const parentAnchor = baseModuleAnchor;
+					const parentName = baseModuleName;
+
+					// Check if this is an exported constant (has -- pattern in memberof)
+					const isExported = item.doc.memberof && item.doc.memberof.includes("--");
+					const kindLabel = isExported ? "export" : "static constant";
+
+					output += `<a id="${helper.generateAnchor(item.doc.id)}"></a>\n\n`;
+					// Use just the constant name, not the full module path
+					if (item.doc?.alias === baseModuleLongname + "." + item.doc.name) {
+						// output += `${item.doc?.alias} - ${item.path} - ${parentName} - ${parentAnchor} - ${baseModuleLongname}`;
+						output += `${headingLevel} ${baseModuleName}.${item.doc.name} : <code>${
+							item.doc.type?.names?.join(" | ") || "object"
+						}</code>\n`;
+					} else {
+						output += `${headingLevel} ${item.doc.name} : <code>${item.doc.type?.names?.join(" | ") || "object"}</code>\n`;
+					}
+					output += `${item.doc.description || ""}\n\n`;
+					output += `**Kind**: ${kindLabel} of [<code>${parentName}</code>](#${parentAnchor})\n\n`;
+
+					output = partials.examples(item, output);
+
+					// Add functions under this constant
+					const functions = doclets.filter((d) => {
+						if (!helper.isCallableFunction(d)) return false;
+						if (!helper.shouldInclude(d)) return false;
+
+						// Only include "winning" functions (last one wins for duplicates)
+						if (!winningFunctions.has(d)) {
+							return false;
+						}
+
+						const possibleMemberofs = [
+							item.doc.name,
+							item.doc.id,
+							item.doc.longname,
+							`${baseModuleName}.module:${item.doc.name}`,
+							`module:${baseModuleName}.${item.doc.name}`
+						];
+						return possibleMemberofs.includes(d.memberof);
+					});
+
+					functions.forEach((func) => {
+						output += `\n* * *\n\n`;
+						const encodedFuncName = helper.generateAnchor(func.name);
+						output += `<a id="${helper.generateAnchor(item.doc.id)}_dot_${encodedFuncName}"></a>\n\n`;
+
+						const funcHeadingLevel = item.level === 1 ? "####" : "#####";
+						const returns = func.returns ? ` ⇒ ${helper.formatReturnsForTOC(func.returns)}` : "";
+						output += `${funcHeadingLevel} ${baseModuleName}.${item.path.join(".")}.${func.name}(${helper.formatParamsForTOC(
+							func.params
+						)})${returns}\n`;
+						output += `${func.description || ""}\n\n`;
+						output += `**Kind**: static method of [<code>${baseModuleName}.${item.path.join(".")}</code>](#${helper.generateAnchor(
+							item.doc.id
+						)})\n`;
+
+						output = partials.returns(func, output);
+						output = partials.throws(func, output);
+						output = partials.params(func, output, availableTypedefs, baseModuleLongname);
+						output = partials.examples(func, output);
+					});
+
+					output += `\n* * *\n\n`;
+				}
+			}
+		});
+
+		// Process any remaining functions that weren't captured by module processing
+		const remainingFunctions = doclets.filter((d) => {
+			return (
+				helper.isCallableFunction(d) &&
+				helper.shouldInclude(d) &&
+				winningFunctions.has(d) && // Only include "winning" functions
+				!processedFunctions.has(d.name) &&
+				d.memberof &&
+				d.memberof.includes(baseModuleName)
+			);
+		});
+
+		if (remainingFunctions.length > 0) {
+			output += `\n<!-- ORPHANED FUNCTIONS: ${remainingFunctions.length} functions not attached to modules -->\n`;
+			output += `<!-- Orphaned function names: ${remainingFunctions
+				.map((f) => f.name + " (memberof: " + f.memberof + ")")
+				.join(", ")} -->\n\n`;
+
+			// DON'T output them - this is just for debugging
+			// The goal is to fix the module association so they appear with their modules
+		}
+
+		return output;
+	},
+
+	// Generate typedef definitions section
+	typedefDefinitions(doclets, baseModuleLongname, _) {
+		if (!Array.isArray(doclets)) return "";
+		if (!baseModuleLongname || typeof baseModuleLongname !== "string") return "";
+
+		// Filter typedefs using the same logic as TOC
+		const typedefs = doclets.filter((d) => {
+			if (d.kind !== "typedef") return false;
+			// Typedefs are typically global or belong to the module scope
+			return !d.memberof || d.memberof === baseModuleLongname;
+		});
+
+		if (typedefs.length === 0) return "";
+
+		let output = "\n## Type Definitions\n\n";
+
+		typedefs.forEach((typedef) => {
+			// Generate typedef anchor using the local function
+			const anchor = helper.generateTypedefAnchor(baseModuleLongname, typedef.name);
+			output += `<a id="${anchor}"></a>\n\n`;
+
+			const headingLevel = "###"; // h3 for typedefs
+			const typeInfo = typedef.type && typedef.type.names ? ` : <code>${typedef.type.names.join(" | ")}</code>` : "";
+
+			output += `${headingLevel} ${typedef.name}${typeInfo}\n`;
+			output += `${typedef.description || ""}\n\n`;
+			output += `**Kind**: typedef\n\n`;
+
+			// Add properties table if the typedef has properties
+			if (typedef.properties && typedef.properties.length > 0) {
+				// Simple table with HTML cleanup
+				output += "\n| Param | Type | Default | Description |\n";
+				output += "| --- | --- | --- | --- |\n";
+				typedef.properties.forEach((prop) => {
+					const name = prop.optional ? `[${prop.name}]` : prop.name;
+					const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
+					const defaultValue = prop.defaultvalue ? `<code>${prop.defaultvalue}</code>` : "";
+
+					// Clean HTML from description and convert to markdown-safe format
+					let description = "";
+					if (prop.description) {
+						description = prop.description
+							// Remove paragraph tags
+							.replace(/<\/?p>/g, "")
+							// Convert lists to simple text with bullets
+							.replace(/<ul>/g, "")
+							.replace(/<\/ul>/g, "")
+							.replace(/<li>/g, "• ")
+							.replace(/<\/li>/g, " ")
+							// Convert code tags to backticks
+							.replace(/<code>/g, "`")
+							.replace(/<\/code>/g, "`")
+							// Convert strong tags
+							.replace(/<strong>/g, "**")
+							.replace(/<\/strong>/g, "**")
+							// Remove any remaining HTML tags
+							.replace(/<[^>]*>/g, "")
+							// Clean up extra whitespace and newlines
+							.replace(/\s+/g, " ")
+							.trim()
+							// Escape pipe characters that would break the table
+							.replace(/\|/g, "\\|");
+					}
+
+					output += `| ${name} | ${type} | ${defaultValue} | ${description} |\n`;
+				});
+				output += "\n";
+			}
+
+			output = partials.examples(typedef, output);
+
+			output += `\n* * *\n\n`;
+		});
+
+		return output;
+	},
+
+	/**
+	 * Check if typedefs should be shared between child and parent modules
+	 * @param {string} childModule - Child module name
+	 * @param {string} parentModule - Parent module name
+	 * @returns {boolean} True if typedefs should be shared
+	 */
+	shouldShareTypedefs: (childModule, parentModule) => {
+		return functions.isChildModule(childModule, parentModule);
+	}
+};
+/*
+	Custom Helpers (from helpers.cjs):
+	hasRootModule - Checks if a root module exists in the doclets
+		partials.missingRootModule - buildMissingRootModule - Creates a missing root module from memberof patterns
+	generateAnchor - Generates HTML anchors for documentation sections
+		gets.moduleFunction - getModuleFunction - Retrieves module function data
+		partials.integratedTOC - buildIntegratedTOC - Builds integrated table of contents with real + auto-generated modules
+		partials.integratedModules - buildIntegratedModules - Generates documentation sections for all module types
+		gets.originalModuleTitle - getOriginalModuleTitle - Gets the original module title
+		partials.typedefDefinitions - buildTypedefDefinitions - Builds typedef definition sections
+*/
+/**
+ * Converts a string to camelCase, preserving uppercase sequences.
+ * Digits are allowed except at the start.
+ * @param {string} str
+ * @param {boolean} upperFirst - If true, uppercase the first letter.
+ * @returns {string}
+ */
+function camelCase(str, upperFirst = false) {
+	str = str.replace(/^[0-9]+/, "");
+	// Split on non-alphanumeric or before uppercase letters (but preserve uppercase runs)
+	const parts = str
+		.replace(/[^a-zA-Z0-9]+/g, " ") // split on non-alphanumeric
+		.replace(/([a-z0-9])([A-Z])/g, "$1 $2") // split before uppercase after lowercase/digit
+		.split(" ")
+		.filter(Boolean);
+	let result = parts
+		.map((word, i) => {
+			if (i === 0 && !upperFirst) return word.toLowerCase();
+			return word[0].toUpperCase() + word.slice(1);
+		})
+		.join("");
+	if (upperFirst && result) {
+		result = result[0].toUpperCase() + result.slice(1);
+	}
+	return result;
+}
+
+for (const key of Object.keys(helper)) {
+	module.exports[key] = helper[key];
+}
+
+for (const key of Object.keys(partials)) {
+	const newKey = "partial" + camelCase(key, true);
+	// console.log(newKey);
+	module.exports[newKey] = partials[key];
+}
+
+for (const key of Object.keys(gets)) {
+	const newKey = "get" + camelCase(key, true);
+	// console.log(newKey);
+	module.exports[newKey] = gets[key];
+}
+
+// module.exports.helper = helper;

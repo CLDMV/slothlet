@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
+      - ".gitignore"
+
+jobs:
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run pre-build tests
+        run: npm test
+        env:
+          NODE_ENV: development
+          NODE_OPTIONS: --conditions=development
+
+      - name: Build package (includes post-build tests)
+        run: npm run build:ci
+        env:
+          NODE_ENV: production
+
+      - name: Run entry point tests
+        run: npm run test:entry
+
+      - name: Run performance benchmarks
+        run: npm run test:performance
+
+  test-multiple-node:
+    name: Test Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ["18", "20", "21"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: development
+          NODE_OPTIONS: --conditions=development
+
+      - name: Build package
+        run: npm run build:ci
+        env:
+          NODE_ENV: production
