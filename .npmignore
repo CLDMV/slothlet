@@ -1,0 +1,36 @@
+# NPM ignore file for @cldmv/slothlet
+# Exclude development and backup files from published package
+
+# Backup files
+*.backup
+**/*.backup
+
+# Development files
+src/
+api_tests/
+tests/
+tmp-tests/
+tools/
+docs/
+.configs/
+
+# Build artifacts that shouldn't be in the package
+.github/
+.git/
+.vscode/
+*.log
+*.tgz
+
+# Documentation that's not needed in package
+CONTRIBUTING.md
+SECURITY.md
+TODO.md
+PERFORMANCE.md
+
+# Test and config files
+*.test.*
+*.spec.*
+.eslintrc.*
+.prettierrc.*
+tsconfig*.json
+*.config.*
