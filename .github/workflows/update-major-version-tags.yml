@@ -1,0 +1,53 @@
+# Individual repo: .github/workflows/update-version-tags.yml
+name: 🏷️ Update Version Tags
+
+on:
+  release:
+    types: [published]
+  push:
+
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Enable debug logging for troubleshooting"
+        type: boolean
+        required: false
+        default: false
+      create_documentation:
+        description: "Whether to create/update VERSION_TAGS.md documentation"
+        type: boolean
+        required: false
+        default: true
+      sign:
+        description: "Smart signing mode (auto/true/false)"
+        required: false
+        default: "auto"
+      annotate:
+        description: "Smart annotate mode (auto/true/false)"
+        required: false
+        default: "auto"
+      use_gpg:
+        description: "If true, forward provided secrets to enable signing"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  update-tags:
+    uses: CLDMV/.github/.github/workflows/update-major-version-tags.yml@v1
+    permissions:
+      contents: write
+    with:
+      debug: ${{ github.event_name == 'workflow_dispatch' && inputs.debug || false }}
+      create_documentation: ${{ github.event_name == 'workflow_dispatch' && inputs.create_documentation || true }}
+      sign: ${{ github.event_name == 'workflow_dispatch' && inputs.sign || 'auto' }}
+      annotate: ${{ github.event_name == 'workflow_dispatch' && inputs.annotate || 'auto' }}
+      use_gpg: ${{ github.event_name == 'workflow_dispatch' && inputs.use_gpg || false }}
+    secrets:
+      # Map your repo/org secrets to the expected names
+      TAGGER_NAME: ${{ secrets.CLDMV_BOT_NAME }}
+      TAGGER_EMAIL: ${{ secrets.CLDMV_BOT_EMAIL }}
+      GPG_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.CLDMV_BOT_GPG_PASSPHRASE }}
+      BOT_APP_ID: ${{ secrets.CLDMV_BOT_APP_ID }}
+      BOT_APP_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_APP_PRIVATE_KEY }}
