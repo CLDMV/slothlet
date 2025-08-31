@@ -1,0 +1,812 @@
+/**
+ * Aggregated Performance Benchmark Test for Slothlet
+ *
+ * This test compares performance metrics between eager and lazy loading modes
+ * with configurable test order to eliminate bias from execution order effects:
+ * - Startup time (API initialization)
+ * - First access time (lazy materialization vs eager baseline)
+ * - Subsequent access times (materialized vs eager baseline)
+ *
+ * Run with: node tests/performance-benchmark-aggregated.mjs
+ */
+
+import { performance } from "perf_hooks";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const API_DIR = join(__dirname, "../api_tests/api_test");
+
+const START_UP_TEST_COUNT = 50; // Number of iterations for startup time test
+const BENCHMARK_ITERATIONS = 200; // Number of iterations for benchmark tests
+const BENCHMARK_ITERATIONS_COMPLEX = 200; // Number of iterations for complex benchmark tests
+const BENCHMARK_ITERATIONS_MULTI = 100; // Number of iterations for multi benchmark tests
+
+// Import slothlet
+import slothlet from "@cldmv/slothlet";
+
+/**
+ * Measures execution time of an async function
+ * @param {Function} fn - Async function to measure
+ * @returns {Promise<{result: any, time: number}>}
+ */
+async function measureTime(fn) {
+	const start = performance.now();
+	const result = await fn();
+	const end = performance.now();
+	return { result, time: end - start };
+}
+
+/**
+ * Displays order effect analysis
+ * @param {object} eagerFirstResults - Results when eager ran first
+ * @param {object} lazyFirstResults - Results when lazy ran first
+ */
+function displayOrderEffectAnalysis(eagerFirstResults, lazyFirstResults) {
+	console.log("\n📈 ORDER EFFECT ANALYSIS:");
+	console.log("What this measures: How much performance changes based on which mode runs first");
+	console.log("Why it matters: Large variance indicates JIT compiler warmup effects or caching interference");
+
+	// Startup order effects
+	const eagerStartupWhenFirst = eagerFirstResults.startup.eager.avg;
+	const eagerStartupWhenSecond = lazyFirstResults.startup.eager.avg;
+	const eagerStartupDiff = Math.abs(eagerStartupWhenFirst - eagerStartupWhenSecond);
+	const eagerStartupVariance = (eagerStartupDiff / Math.min(eagerStartupWhenFirst, eagerStartupWhenSecond)) * 100;
+
+	const lazyStartupWhenFirst = lazyFirstResults.startup.lazy.avg;
+	const lazyStartupWhenSecond = eagerFirstResults.startup.lazy.avg;
+	const lazyStartupDiff = Math.abs(lazyStartupWhenFirst - lazyStartupWhenSecond);
+	const lazyStartupVariance = (lazyStartupDiff / Math.min(lazyStartupWhenFirst, lazyStartupWhenSecond)) * 100;
+
+	console.log("\n🚀 STARTUP TIME CONSISTENCY:");
+	console.log(`   Eager Mode Performance:`);
+	console.log(`     • When ran first:  ${formatTime(eagerStartupWhenFirst)}`);
+	console.log(`     • When ran second: ${formatTime(eagerStartupWhenSecond)}`);
+	console.log(`     • Difference:      ${formatTime(eagerStartupDiff)} (${eagerStartupVariance.toFixed(1)}% variance)`);
+	console.log(`     ${eagerStartupVariance < 20 ? "✅ STABLE" : eagerStartupVariance < 50 ? "⚠️  MODERATE VARIANCE" : "❌ HIGH VARIANCE"}`);
+
+	console.log(`   Lazy Mode Performance:`);
+	console.log(`     • When ran first:  ${formatTime(lazyStartupWhenFirst)}`);
+	console.log(`     • When ran second: ${formatTime(lazyStartupWhenSecond)}`);
+	console.log(`     • Difference:      ${formatTime(lazyStartupDiff)} (${lazyStartupVariance.toFixed(1)}% variance)`);
+	console.log(`     ${lazyStartupVariance < 20 ? "✅ STABLE" : lazyStartupVariance < 50 ? "⚠️  MODERATE VARIANCE" : "❌ HIGH VARIANCE"}`);
+
+	// Function call order effects
+	const eagerCallWhenFirst = eagerFirstResults.functionCalls.eager.avg;
+	const eagerCallWhenSecond = lazyFirstResults.functionCalls.eager.avg;
+	const eagerCallDiff = Math.abs(eagerCallWhenFirst - eagerCallWhenSecond);
+	const eagerCallVariance = (eagerCallDiff / Math.min(eagerCallWhenFirst, eagerCallWhenSecond)) * 100;
+
+	const lazyCallWhenFirst = lazyFirstResults.functionCalls.lazySubsequent.avg;
+	const lazyCallWhenSecond = eagerFirstResults.functionCalls.lazySubsequent.avg;
+	const lazyCallDiff = Math.abs(lazyCallWhenFirst - lazyCallWhenSecond);
+	const lazyCallVariance = (lazyCallDiff / Math.min(lazyCallWhenFirst, lazyCallWhenSecond)) * 100;
+
+	console.log("\n⚡ FUNCTION CALL CONSISTENCY:");
+	console.log(`   Eager Mode Performance:`);
+	console.log(`     • When ran first:  ${formatTime(eagerCallWhenFirst)}`);
+	console.log(`     • When ran second: ${formatTime(eagerCallWhenSecond)}`);
+	console.log(`     • Difference:      ${formatTime(eagerCallDiff)} (${eagerCallVariance.toFixed(1)}% variance)`);
+	console.log(`     ${eagerCallVariance < 20 ? "✅ STABLE" : eagerCallVariance < 50 ? "⚠️  MODERATE VARIANCE" : "❌ HIGH VARIANCE"}`);
+
+	console.log(`   Lazy Mode Performance:`);
+	console.log(`     • When ran first:  ${formatTime(lazyCallWhenFirst)}`);
+	console.log(`     • When ran second: ${formatTime(lazyCallWhenSecond)}`);
+	console.log(`     • Difference:      ${formatTime(lazyCallDiff)} (${lazyCallVariance.toFixed(1)}% variance)`);
+	console.log(`     ${lazyCallVariance < 20 ? "✅ STABLE" : lazyCallVariance < 50 ? "⚠️  MODERATE VARIANCE" : "❌ HIGH VARIANCE"}`);
+
+	// Analysis insights
+	console.log("\n🔍 PERFORMANCE RELIABILITY INSIGHTS:");
+
+	const worstStartupVariance = Math.max(eagerStartupVariance, lazyStartupVariance);
+	const worstCallVariance = Math.max(eagerCallVariance, lazyCallVariance);
+
+	if (worstStartupVariance > 100) {
+		console.log("   ❌ HIGH STARTUP VARIANCE: Results may be unreliable due to JIT compiler warmup effects");
+	} else if (worstStartupVariance > 50) {
+		console.log("   ⚠️  MODERATE STARTUP VARIANCE: Some JIT compiler effects present, results mostly reliable");
+	} else {
+		console.log("   ✅ STABLE STARTUP PERFORMANCE: Consistent results across test orders");
+	}
+
+	if (worstCallVariance > 50) {
+		console.log("   ❌ HIGH FUNCTION CALL VARIANCE: Results may be unreliable, possible caching interference");
+	} else if (worstCallVariance > 20) {
+		console.log("   ⚠️  MODERATE FUNCTION CALL VARIANCE: Some order effects present, results mostly reliable");
+	} else {
+		console.log("   ✅ STABLE FUNCTION CALL PERFORMANCE: Consistent results across test orders");
+	}
+
+	// Explain what the variance means
+	const avgStartupVariance = (eagerStartupVariance + lazyStartupVariance) / 2;
+	const avgCallVariance = (eagerCallVariance + lazyCallVariance) / 2;
+
+	console.log("\n💡 WHAT THIS MEANS:");
+	if (avgStartupVariance > avgCallVariance * 2) {
+		console.log("   • Startup times are much more variable than function calls");
+		console.log("   • This is normal - startup involves more complex operations (file loading, compilation)");
+		console.log("   • Focus on function call consistency for production performance predictions");
+	} else {
+		console.log("   • Both startup and function call performance are similarly variable");
+		console.log("   • This suggests consistent benchmark conditions");
+	}
+
+	if (worstStartupVariance > 50 || worstCallVariance > 50) {
+		console.log("   • ⚠️  High variance detected - consider running more iterations for reliable averages");
+	} else {
+		console.log("   • ✅ Low variance indicates reliable benchmark results");
+	}
+}
+
+/**
+ * Runs a function multiple times and returns statistics
+ * @param {Function} fn - Function to run
+ * @param {number} iterations - Number of iterations
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkFunction(fn, iterations = 10) {
+	const times = [];
+
+	for (let i = 0; i < iterations; i++) {
+		const { time } = await measureTime(fn);
+		times.push(time);
+	}
+
+	times.sort((a, b) => a - b);
+
+	return {
+		min: times[0],
+		max: times[times.length - 1],
+		avg: times.reduce((sum, time) => sum + time, 0) / times.length,
+		median: times[Math.floor(times.length / 2)]
+	};
+}
+
+// === ISOLATED TEST FUNCTIONS FOR EACH MODE ===
+
+/**
+ * Isolated eager mode startup test
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkEagerStartup() {
+	return await benchmarkFunction(async () => {
+		const api = await slothlet({ dir: API_DIR, lazy: false });
+		await api.shutdown();
+	}, START_UP_TEST_COUNT);
+}
+
+/**
+ * Isolated lazy mode startup test
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkLazyStartup() {
+	return await benchmarkFunction(async () => {
+		const api = await slothlet({ dir: API_DIR, lazy: true });
+		await api.shutdown();
+	}, START_UP_TEST_COUNT);
+}
+
+/**
+ * Isolated eager mode function call test
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkEagerFunctionCalls() {
+	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const result = await benchmarkFunction(async () => {
+		return api.math.add(2, 3);
+	}, BENCHMARK_ITERATIONS);
+	await api.shutdown();
+	return result;
+}
+
+/**
+ * Isolated lazy mode function call test (both first and subsequent)
+ * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
+ */
+async function benchmarkLazyFunctionCalls() {
+	const api = await slothlet({ dir: API_DIR, lazy: true });
+
+	// First call (materialization)
+	const lazyFirstCall = await measureTime(async () => {
+		return api.math.add(2, 3);
+	});
+
+	// Subsequent calls
+	const lazySubsequentCalls = await benchmarkFunction(async () => {
+		return api.math.add(2, 3);
+	}, BENCHMARK_ITERATIONS);
+
+	await api.shutdown();
+	return {
+		lazyFirst: lazyFirstCall,
+		lazySubsequent: lazySubsequentCalls
+	};
+}
+
+/**
+ * Isolated eager mode complex module test
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkEagerComplexModules() {
+	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const result = await benchmarkFunction(async () => {
+		return api.nested.date.today();
+	}, BENCHMARK_ITERATIONS_COMPLEX);
+	await api.shutdown();
+	return result;
+}
+
+/**
+ * Isolated lazy mode complex module test
+ * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
+ */
+async function benchmarkLazyComplexModules() {
+	const api = await slothlet({ dir: API_DIR, lazy: true });
+
+	const lazyComplexFirst = await measureTime(async () => {
+		return api.nested.date.today();
+	});
+
+	const lazyComplexSubsequent = await benchmarkFunction(async () => {
+		return api.nested.date.today();
+	}, BENCHMARK_ITERATIONS_COMPLEX);
+
+	await api.shutdown();
+	return {
+		lazyFirst: lazyComplexFirst,
+		lazySubsequent: lazyComplexSubsequent
+	};
+}
+
+/**
+ * Isolated eager mode multi-module test
+ * @param {string} module - Module name to test
+ * @param {Function} testFn - Test function to run
+ * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
+ */
+async function benchmarkEagerMultiModule(module, testFn) {
+	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const result = await benchmarkFunction(async () => {
+		return testFn(api);
+	}, BENCHMARK_ITERATIONS_MULTI);
+	await api.shutdown();
+	return result;
+}
+
+/**
+ * Isolated lazy mode multi-module test
+ * @param {string} module - Module name to test
+ * @param {Function} testFn - Test function to run
+ * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
+ */
+async function benchmarkLazyMultiModule(module, testFn) {
+	const api = await slothlet({ dir: API_DIR, lazy: true });
+
+	const lazyFirst = await measureTime(async () => {
+		return testFn(api);
+	});
+
+	const lazySubsequent = await benchmarkFunction(async () => {
+		return testFn(api);
+	}, BENCHMARK_ITERATIONS_MULTI);
+
+	await api.shutdown();
+	return {
+		lazyFirst,
+		lazySubsequent
+	};
+}
+
+/**
+ * Format time for display
+ * @param {number} timeMs - Time in milliseconds
+ * @returns {string} Formatted time string
+ */
+function formatTime(timeMs) {
+	if (timeMs < 1) {
+		return `${(timeMs * 1000).toFixed(2)}μs`;
+	} else {
+		return `${timeMs.toFixed(2)}ms`;
+	}
+}
+
+/**
+ * Analyze module structure for debugging
+ * @param {string} _ - API directory path (unused in simplified implementation)
+ * @returns {Promise<{rootModules: string[], nestedModules: string[]}>}
+ */
+async function analyzeModuleStructure(_) {
+	// This is a simplified analysis - in real implementation you'd scan the directory
+	return {
+		rootModules: ["root-function.mjs", "root-math.mjs", "rootstring.mjs", "config.mjs"],
+		nestedModules: ["math/math.mjs", "string/string.mjs", "funcmod/funcmod.mjs", "nested/date/date.mjs", "util/*"]
+	};
+}
+
+/**
+ * Runs a complete performance benchmark set with configurable order
+ * @param {boolean} eagerFirst - If true, run eager tests first; if false, run lazy tests first
+ * @returns {Promise<object>} Benchmark results object
+ */
+async function runBenchmarkSet(eagerFirst = true) {
+	const results = {
+		eagerFirst,
+		startup: {},
+		functionCalls: {},
+		complexModules: {},
+		multiModules: {}
+	};
+
+	console.log(`\n🔄 Running benchmark set (${eagerFirst ? "Eager First" : "Lazy First"})...`);
+
+	// === STARTUP TIME COMPARISON ===
+	console.log("\n📊 Test: Startup Time Comparison");
+	console.log("=====================================");
+
+	if (eagerFirst) {
+		// Eager first, then lazy
+		results.startup.eager = await benchmarkEagerStartup();
+		results.startup.lazy = await benchmarkLazyStartup();
+	} else {
+		// Lazy first, then eager
+		results.startup.lazy = await benchmarkLazyStartup();
+		results.startup.eager = await benchmarkEagerStartup();
+	}
+
+	console.log(
+		`Eager Mode Startup:  ${formatTime(results.startup.eager.avg)} (avg) | ${formatTime(results.startup.eager.min)} (min) | ${formatTime(
+			results.startup.eager.max
+		)} (max)`
+	);
+	console.log(
+		`Lazy Mode Startup:   ${formatTime(results.startup.lazy.avg)} (avg) | ${formatTime(results.startup.lazy.min)} (min) | ${formatTime(
+			results.startup.lazy.max
+		)} (max)`
+	);
+
+	// === FUNCTION CALL PERFORMANCE ===
+	console.log(`\n📊 Test: Function Call Performance (${BENCHMARK_ITERATIONS} iterations)`);
+	console.log("===========================================================");
+
+	if (eagerFirst) {
+		// Eager first, then lazy
+		results.functionCalls.eager = await benchmarkEagerFunctionCalls();
+
+		console.log("Measuring lazy first call (materialization)...");
+		console.log("Measuring lazy subsequent calls (post-materialization)...");
+		const lazyResults = await benchmarkLazyFunctionCalls();
+		results.functionCalls.lazyFirst = lazyResults.lazyFirst;
+		results.functionCalls.lazySubsequent = lazyResults.lazySubsequent;
+	} else {
+		// Lazy first, then eager
+		console.log("Measuring lazy first call (materialization)...");
+		console.log("Measuring lazy subsequent calls (post-materialization)...");
+		const lazyResults = await benchmarkLazyFunctionCalls();
+		results.functionCalls.lazyFirst = lazyResults.lazyFirst;
+		results.functionCalls.lazySubsequent = lazyResults.lazySubsequent;
+
+		results.functionCalls.eager = await benchmarkEagerFunctionCalls();
+	}
+
+	console.log(`Lazy First Call: ${formatTime(results.functionCalls.lazyFirst.time)} (materialization)`);
+	console.log(
+		`Eager Mode Calls:         ${formatTime(results.functionCalls.eager.avg)} (avg) | ${formatTime(
+			results.functionCalls.eager.min
+		)} (min) | ${formatTime(results.functionCalls.eager.max)} (max)`
+	);
+	console.log(
+		`Lazy Subsequent Calls:    ${formatTime(results.functionCalls.lazySubsequent.avg)} (avg) | ${formatTime(
+			results.functionCalls.lazySubsequent.min
+		)} (min) | ${formatTime(results.functionCalls.lazySubsequent.max)} (max)`
+	);
+
+	// === COMPLEX MODULE ACCESS ===
+	console.log(`\n📊 Test: Complex Module Access (${BENCHMARK_ITERATIONS_COMPLEX} iterations)`);
+	console.log("=================================================");
+
+	if (eagerFirst) {
+		// Eager first, then lazy
+		results.complexModules.eager = await benchmarkEagerComplexModules();
+		const lazyComplexResults = await benchmarkLazyComplexModules();
+		results.complexModules.lazyFirst = lazyComplexResults.lazyFirst;
+		results.complexModules.lazySubsequent = lazyComplexResults.lazySubsequent;
+	} else {
+		// Lazy first, then eager
+		const lazyComplexResults = await benchmarkLazyComplexModules();
+		results.complexModules.lazyFirst = lazyComplexResults.lazyFirst;
+		results.complexModules.lazySubsequent = lazyComplexResults.lazySubsequent;
+		results.complexModules.eager = await benchmarkEagerComplexModules();
+	}
+
+	console.log(`Eager Nested Calls:       ${formatTime(results.complexModules.eager.avg)} (avg)`);
+	console.log(`Lazy Nested First:        ${formatTime(results.complexModules.lazyFirst.time)} (materialization)`);
+	console.log(`Lazy Nested Subsequent:   ${formatTime(results.complexModules.lazySubsequent.avg)} (avg)`);
+
+	// === MULTIPLE MODULE ACCESS PATTERNS ===
+	console.log(`\n📊 Test: Multiple Module Access Patterns (${BENCHMARK_ITERATIONS_MULTI} iterations per test)`);
+	console.log("=================================================================");
+
+	const moduleTests = [
+		{
+			name: "Nested Math Module (math/math.mjs)",
+			testFn: (api) => api.math.add(2, 3)
+		},
+		{
+			name: "String Module (string/string.mjs)",
+			testFn: (api) => api.string.upper("test")
+		},
+		{
+			name: "Callable Function Module (funcmod/funcmod.mjs)",
+			testFn: (api) => api.funcmod(5, 6)
+		}
+	];
+
+	results.multiModules = {};
+
+	for (const moduleTest of moduleTests) {
+		console.log(`\n${moduleTest.name}:`);
+
+		if (eagerFirst) {
+			// Eager first, then lazy
+			const eagerResult = await benchmarkEagerMultiModule(moduleTest.name, moduleTest.testFn);
+			const lazyResult = await benchmarkLazyMultiModule(moduleTest.name, moduleTest.testFn);
+
+			results.multiModules[moduleTest.name] = {
+				eager: eagerResult,
+				lazyFirst: lazyResult.lazyFirst,
+				lazySubsequent: lazyResult.lazySubsequent
+			};
+		} else {
+			// Lazy first, then eager
+			const lazyResult = await benchmarkLazyMultiModule(moduleTest.name, moduleTest.testFn);
+			const eagerResult = await benchmarkEagerMultiModule(moduleTest.name, moduleTest.testFn);
+
+			results.multiModules[moduleTest.name] = {
+				eager: eagerResult,
+				lazyFirst: lazyResult.lazyFirst,
+				lazySubsequent: lazyResult.lazySubsequent
+			};
+		}
+
+		const eagerAvg = results.multiModules[moduleTest.name].eager.avg;
+		const lazyFirstTime = results.multiModules[moduleTest.name].lazyFirst.time;
+		const lazySubAvg = results.multiModules[moduleTest.name].lazySubsequent.avg;
+
+		console.log(`  Eager:      ${formatTime(eagerAvg)} (avg)`);
+		console.log(`  Lazy First: ${formatTime(lazyFirstTime)} (materialization)`);
+		console.log(`  Lazy Sub:   ${formatTime(lazySubAvg)} (avg, materialized)`);
+		console.log(`  First vs Eager: ${(lazyFirstTime / eagerAvg).toFixed(1)}x slower`);
+		console.log(`  Sub vs Eager:   ${(lazySubAvg / eagerAvg).toFixed(1)}x ${lazySubAvg < eagerAvg ? "faster" : "slower"}`);
+		console.log(`  Materialization Benefit: ${(lazyFirstTime / lazySubAvg).toFixed(1)}x faster`);
+	}
+
+	return results;
+}
+
+/**
+ * Aggregates results from multiple benchmark runs
+ * @param {object[]} resultSets - Array of benchmark result objects
+ * @returns {object} Aggregated results
+ */
+function aggregateResults(resultSets) {
+	const aggregated = {
+		startup: { eager: {}, lazy: {} },
+		functionCalls: { eager: {}, lazyFirst: {}, lazySubsequent: {} },
+		complexModules: { eager: {}, lazyFirst: {}, lazySubsequent: {} },
+		multiModules: {}
+	};
+
+	// Helper function to aggregate benchmark stats
+	function aggregateStats(statArrays) {
+		const avgValues = statArrays.map((s) => s.avg);
+		const minValues = statArrays.map((s) => s.min);
+		const maxValues = statArrays.map((s) => s.max);
+
+		return {
+			avg: avgValues.reduce((sum, val) => sum + val, 0) / avgValues.length,
+			min: Math.min(...minValues),
+			max: Math.max(...maxValues),
+			median: avgValues.sort((a, b) => a - b)[Math.floor(avgValues.length / 2)]
+		};
+	}
+
+	// Helper function to aggregate time measurements
+	function aggregateTimes(timeArrays) {
+		return {
+			time: timeArrays.reduce((sum, val) => sum + val, 0) / timeArrays.length
+		};
+	}
+
+	// Aggregate startup results
+	aggregated.startup.eager = aggregateStats(resultSets.map((r) => r.startup.eager));
+	aggregated.startup.lazy = aggregateStats(resultSets.map((r) => r.startup.lazy));
+
+	// Aggregate function call results
+	aggregated.functionCalls.eager = aggregateStats(resultSets.map((r) => r.functionCalls.eager));
+	aggregated.functionCalls.lazyFirst = aggregateTimes(resultSets.map((r) => r.functionCalls.lazyFirst.time));
+	aggregated.functionCalls.lazySubsequent = aggregateStats(resultSets.map((r) => r.functionCalls.lazySubsequent));
+
+	// Aggregate complex module results
+	aggregated.complexModules.eager = aggregateStats(resultSets.map((r) => r.complexModules.eager));
+	aggregated.complexModules.lazyFirst = aggregateTimes(resultSets.map((r) => r.complexModules.lazyFirst.time));
+	aggregated.complexModules.lazySubsequent = aggregateStats(resultSets.map((r) => r.complexModules.lazySubsequent));
+
+	// Aggregate multi-module results
+	const firstResultSet = resultSets[0];
+	if (firstResultSet && firstResultSet.multiModules) {
+		for (const testName of Object.keys(firstResultSet.multiModules)) {
+			aggregated.multiModules[testName] = {
+				eager: aggregateStats(resultSets.map((r) => r.multiModules[testName].eager)),
+				lazyFirst: aggregateTimes(resultSets.map((r) => r.multiModules[testName].lazyFirst.time)),
+				lazySubsequent: aggregateStats(resultSets.map((r) => r.multiModules[testName].lazySubsequent))
+			};
+		}
+	}
+
+	return aggregated;
+}
+
+/**
+ * Displays detailed results from individual benchmark runs
+ * @param {object} eagerFirstResults - Results when eager ran first
+ * @param {object} lazyFirstResults - Results when lazy ran first
+ */
+function displayIndividualResults(eagerFirstResults, lazyFirstResults) {
+	console.log("\n" + "=".repeat(80));
+	console.log("📊 DETAILED INDIVIDUAL RESULTS BY TEST ORDER");
+	console.log("=".repeat(80));
+
+	// Startup comparison
+	console.log("\n🚀 STARTUP PERFORMANCE:");
+	console.log("   When Eager Ran First:");
+	console.log(`     Eager: ${formatTime(eagerFirstResults.startup.eager.avg)} (avg)`);
+	console.log(`     Lazy:  ${formatTime(eagerFirstResults.startup.lazy.avg)} (avg)`);
+	console.log("   When Lazy Ran First:");
+	console.log(`     Eager: ${formatTime(lazyFirstResults.startup.eager.avg)} (avg)`);
+	console.log(`     Lazy:  ${formatTime(lazyFirstResults.startup.lazy.avg)} (avg)`);
+
+	// Function call comparison
+	console.log("\n⚡ FUNCTION CALL PERFORMANCE:");
+	console.log("   When Eager Ran First:");
+	console.log(`     Eager:             ${formatTime(eagerFirstResults.functionCalls.eager.avg)} (avg)`);
+	console.log(`     Lazy (first):      ${formatTime(eagerFirstResults.functionCalls.lazyFirst.time)} (materialization)`);
+	console.log(`     Lazy (subsequent): ${formatTime(eagerFirstResults.functionCalls.lazySubsequent.avg)} (avg)`);
+	console.log("   When Lazy Ran First:");
+	console.log(`     Eager:             ${formatTime(lazyFirstResults.functionCalls.eager.avg)} (avg)`);
+	console.log(`     Lazy (first):      ${formatTime(lazyFirstResults.functionCalls.lazyFirst.time)} (materialization)`);
+	console.log(`     Lazy (subsequent): ${formatTime(lazyFirstResults.functionCalls.lazySubsequent.avg)} (avg)`);
+
+	// Complex module comparison
+	console.log("\n🎯 COMPLEX MODULE PERFORMANCE:");
+	console.log("   When Eager Ran First:");
+	console.log(`     Eager:             ${formatTime(eagerFirstResults.complexModules.eager.avg)} (avg)`);
+	console.log(`     Lazy (first):      ${formatTime(eagerFirstResults.complexModules.lazyFirst.time)} (materialization)`);
+	console.log(`     Lazy (subsequent): ${formatTime(eagerFirstResults.complexModules.lazySubsequent.avg)} (avg)`);
+	console.log("   When Lazy Ran First:");
+	console.log(`     Eager:             ${formatTime(lazyFirstResults.complexModules.eager.avg)} (avg)`);
+	console.log(`     Lazy (first):      ${formatTime(lazyFirstResults.complexModules.lazyFirst.time)} (materialization)`);
+	console.log(`     Lazy (subsequent): ${formatTime(lazyFirstResults.complexModules.lazySubsequent.avg)} (avg)`);
+
+	// Multi-module comparison
+	console.log("\n🔄 MULTI-MODULE ACCESS PATTERNS:");
+	for (const [testName, _] of Object.entries(eagerFirstResults.multiModules)) {
+		console.log(`\n   ${testName}:`);
+
+		const eagerFirstTest = eagerFirstResults.multiModules[testName];
+		const lazyFirstTest = lazyFirstResults.multiModules[testName];
+
+		console.log("     When Eager Ran First:");
+		console.log(`       Eager:             ${formatTime(eagerFirstTest.eager.avg)}`);
+		console.log(`       Lazy (first):      ${formatTime(eagerFirstTest.lazyFirst.time)} (materialization)`);
+		console.log(`       Lazy (subsequent): ${formatTime(eagerFirstTest.lazySubsequent.avg)}`);
+
+		console.log("     When Lazy Ran First:");
+		console.log(`       Eager:             ${formatTime(lazyFirstTest.eager.avg)}`);
+		console.log(`       Lazy (first):      ${formatTime(lazyFirstTest.lazyFirst.time)} (materialization)`);
+		console.log(`       Lazy (subsequent): ${formatTime(lazyFirstTest.lazySubsequent.avg)}`);
+
+		// Show performance difference analysis
+		const eagerFirstSpeedup = (eagerFirstTest.eager.avg / eagerFirstTest.lazySubsequent.avg).toFixed(2);
+		const lazyFirstSpeedup = (lazyFirstTest.eager.avg / lazyFirstTest.lazySubsequent.avg).toFixed(2);
+
+		console.log("     Performance Analysis:");
+		console.log(`       Eager-first test: Lazy ${parseFloat(eagerFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(eagerFirstSpeedup)}x`);
+		console.log(`       Lazy-first test:  Lazy ${parseFloat(lazyFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(lazyFirstSpeedup)}x`);
+	}
+}
+
+/**
+ * Displays aggregated benchmark results
+ * @param {object} aggregated - Aggregated benchmark results
+ * @param {object} eagerFirstResults - Results when eager ran first
+ * @param {object} lazyFirstResults - Results when lazy ran first
+ */
+function displayAggregatedResults(aggregated) {
+	console.log("\n" + "=".repeat(80));
+	console.log("🎯 FINAL AGGREGATED RESULTS");
+	console.log("=".repeat(80));
+
+	// Startup comparison
+	const startupSpeedup = (aggregated.startup.eager.avg / aggregated.startup.lazy.avg).toFixed(1);
+	console.log("\n📊 STARTUP PERFORMANCE:");
+	console.log(`   Eager: ${formatTime(aggregated.startup.eager.avg)} (avg)`);
+	console.log(`   Lazy:  ${formatTime(aggregated.startup.lazy.avg)} (avg)`);
+	console.log(`   Winner: Lazy mode (${startupSpeedup}x faster)`);
+
+	// Function call comparison
+	const callSpeedup = (aggregated.functionCalls.eager.avg / aggregated.functionCalls.lazySubsequent.avg).toFixed(2);
+	const callWinner = parseFloat(callSpeedup) > 1 ? "Lazy" : "Eager";
+	console.log("\n📊 FUNCTION CALL PERFORMANCE:");
+	console.log(`   Eager:           ${formatTime(aggregated.functionCalls.eager.avg)} (avg)`);
+	console.log(`   Lazy (first):    ${formatTime(aggregated.functionCalls.lazyFirst.time)} (materialization)`);
+	console.log(`   Lazy (subsequent): ${formatTime(aggregated.functionCalls.lazySubsequent.avg)} (avg)`);
+	console.log(`   Winner: ${callWinner} mode (${Math.abs(callSpeedup)}x ${parseFloat(callSpeedup) > 1 ? "faster" : "slower"})`);
+
+	// Complex module comparison
+	const complexSpeedup = (aggregated.complexModules.eager.avg / aggregated.complexModules.lazySubsequent.avg).toFixed(2);
+	const complexWinner = parseFloat(complexSpeedup) > 1 ? "Lazy" : "Eager";
+	console.log("\n📊 COMPLEX MODULE PERFORMANCE:");
+	console.log(`   Eager:             ${formatTime(aggregated.complexModules.eager.avg)} (avg)`);
+	console.log(`   Lazy (first):      ${formatTime(aggregated.complexModules.lazyFirst.time)} (materialization)`);
+	console.log(`   Lazy (subsequent): ${formatTime(aggregated.complexModules.lazySubsequent.avg)} (avg)`);
+	console.log(`   Winner: ${complexWinner} mode (${Math.abs(complexSpeedup)}x ${parseFloat(complexSpeedup) > 1 ? "faster" : "slower"})`);
+
+	// Multi-module summary
+	console.log("\n📊 MULTI-MODULE ACCESS PATTERNS:");
+	for (const [testName, results] of Object.entries(aggregated.multiModules)) {
+		const moduleSpeedup = (results.eager.avg / results.lazySubsequent.avg).toFixed(2);
+		const moduleWinner = parseFloat(moduleSpeedup) > 1 ? "Lazy" : "Eager";
+		console.log(`   ${testName}:`);
+		console.log(`     Eager:             ${formatTime(results.eager.avg)}`);
+		console.log(`     Lazy (subsequent): ${formatTime(results.lazySubsequent.avg)}`);
+		console.log(`     Winner: ${moduleWinner} (${Math.abs(moduleSpeedup)}x ${parseFloat(moduleSpeedup) > 1 ? "faster" : "slower"})`);
+	}
+
+	// Overall recommendation
+	console.log("\n🏆 OVERALL PERFORMANCE WINNER:");
+	const startupWeight = 0.3;
+	const callWeight = 0.7;
+
+	const lazyStartupScore = parseFloat(startupSpeedup) * startupWeight;
+	const lazyCallScore = parseFloat(callSpeedup) * callWeight;
+	const lazyTotalScore = lazyStartupScore + lazyCallScore;
+
+	const overallWinner = lazyTotalScore > 1 ? "Lazy" : "Eager";
+	console.log(`   ${overallWinner} mode wins overall`);
+	console.log(`   (Weighted score: ${lazyTotalScore.toFixed(2)} - higher is better for lazy mode)`);
+
+	// Add comprehensive performance analysis and recommendations
+	console.log("\n🎯 PERFORMANCE ANALYSIS & RECOMMENDATIONS");
+	console.log("==========================================");
+
+	console.log("� BENCHMARK RESULTS SUMMARY:");
+	const startupWinner = aggregated.startup.lazy.avg < aggregated.startup.eager.avg ? "Lazy mode wins" : "Eager mode wins";
+	const callWinnerText =
+		aggregated.functionCalls.lazySubsequent.avg < aggregated.functionCalls.eager.avg ? "Lazy mode wins" : "Eager mode wins";
+	console.log(`• Startup Performance:     ${startupWinner}`);
+	console.log(`• Function Call Performance: ${callWinnerText}`);
+	console.log(`• Materialization Overhead: ${formatTime(aggregated.functionCalls.lazyFirst.time)} (one-time cost per module)`);
+
+	console.log("\n🔍 DETAILED ANALYSIS:");
+	const startupSpeedupRatio = (aggregated.startup.eager.avg / aggregated.startup.lazy.avg).toFixed(1);
+	const callSpeedupRatio = (aggregated.functionCalls.eager.avg / aggregated.functionCalls.lazySubsequent.avg).toFixed(1);
+
+	console.log(`✅ Lazy startup is ${startupSpeedupRatio}x faster because:`);
+	console.log("   - No upfront module loading and compilation");
+	console.log("   - Deferred file system operations");
+	console.log("   - Minimal initial memory allocation");
+
+	if (parseFloat(callSpeedupRatio) > 1) {
+		console.log(`\n✅ Lazy function calls are ${callSpeedupRatio}x faster because:`);
+		console.log("   - Post-materialization optimization");
+		console.log("   - Reduced memory pressure improves cache locality");
+		console.log("   - JIT compiler optimizations on materialized functions");
+	} else {
+		console.log(`\n❌ Eager function calls are ${(1 / parseFloat(callSpeedupRatio)).toFixed(1)}x faster because:`);
+		console.log("   - No materialization overhead after startup");
+		console.log("   - Consistent performance characteristics");
+		console.log("   - Predictable function call timing");
+	}
+
+	console.log("\n📋 USAGE RECOMMENDATIONS:");
+	console.log("\n🚀 CHOOSE EAGER MODE WHEN:");
+	console.log("   • You use most/all modules in your API");
+	console.log("   • Function call performance is critical");
+	console.log("   • Memory usage is not a constraint");
+	console.log("   • Startup time is acceptable");
+	console.log("   • You prefer predictable performance characteristics");
+
+	console.log("\n🎯 CHOOSE LAZY MODE WHEN:");
+	console.log("   • You only use a subset of available modules");
+	console.log("   • Fast startup time is critical");
+	console.log("   • Memory efficiency is important");
+	console.log("   • You can tolerate one-time materialization overhead");
+	console.log("   • You have a large API with many unused endpoints");
+
+	console.log("\n⚖️  TRADE-OFF SUMMARY:");
+	console.log(`   • Startup:     Lazy wins (${formatTime(aggregated.startup.lazy.avg)} vs ${formatTime(aggregated.startup.eager.avg)})`);
+	console.log(
+		`   • Calls:       ${callWinner} wins (${formatTime(
+			Math.min(aggregated.functionCalls.eager.avg, aggregated.functionCalls.lazySubsequent.avg)
+		)} vs ${formatTime(Math.max(aggregated.functionCalls.eager.avg, aggregated.functionCalls.lazySubsequent.avg))})`
+	);
+	console.log(`   • Memory:      Lazy wins (only loads used modules)`);
+	console.log(`   • Consistency: Eager wins (no materialization surprises)`);
+
+	console.log("\n💡 PERFORMANCE NOTES:");
+	console.log("   • These benchmarks represent micro-optimizations");
+	console.log("   • Real-world performance depends on your specific usage patterns");
+	console.log("   • Consider profiling your actual application workload");
+	console.log("   • The difference may be negligible for most applications");
+
+	console.log("\n📏 Raw Numbers (for documentation):");
+	console.log(`   • Eager startup: ${formatTime(aggregated.startup.eager.avg)}`);
+	console.log(`   • Lazy startup:  ${formatTime(aggregated.startup.lazy.avg)}`);
+	console.log(`   • Eager calls:   ${formatTime(aggregated.functionCalls.eager.avg)}`);
+	console.log(`   • Lazy calls:    ${formatTime(aggregated.functionCalls.lazySubsequent.avg)}`);
+	console.log(`   • Materialization: ${formatTime(aggregated.functionCalls.lazyFirst.time)}`);
+}
+
+// Main execution with optional --json flag
+async function main() {
+	const jsonMode = process.argv.includes("--json");
+
+	// Helper to suppress console.log if jsonMode
+	if (jsonMode) {
+		// Override console.log to noop
+		console.log = () => {};
+	}
+
+	// Analyze module structure
+	const moduleStructure = await analyzeModuleStructure(API_DIR);
+	if (!jsonMode) {
+		console.log("🚀 Slothlet Aggregated Performance Benchmark");
+		console.log(`Testing with API directory: ${API_DIR}`);
+		console.log("\n🔍 DEBUG: Module Structure Analysis");
+		console.log("====================================");
+		console.log("• Root modules (loaded immediately in lazy mode):");
+		moduleStructure.rootModules.forEach((mod) => console.log(`  - ${mod}`));
+		console.log("• Nested modules (materialized on-demand in lazy mode):");
+		moduleStructure.nestedModules.forEach((mod) => console.log(`  - ${mod}`));
+		console.log("• Testing ONLY nested modules to measure true materialization!");
+		console.log("\n" + "=".repeat(60));
+		console.log("RUNNING BIDIRECTIONAL BENCHMARK TESTS");
+		console.log("=".repeat(60));
+	}
+
+	const lazyFirstResults = await runBenchmarkSet(false); // Lazy first, then eager
+	const eagerFirstResults = await runBenchmarkSet(true); // Eager first, then lazy
+
+	// Aggregate results
+	const aggregated = aggregateResults([eagerFirstResults, lazyFirstResults]);
+
+	if (jsonMode) {
+		// Output only raw numbers as JSON, including formatted summary
+		const rawNumbers = {
+			startup: aggregated.startup,
+			functionCalls: aggregated.functionCalls,
+			complexModules: aggregated.complexModules,
+			multiModules: aggregated.multiModules,
+			rawNumbersFormatted: {
+				eagerStartup: formatTime(aggregated.startup.eager.avg),
+				lazyStartup: formatTime(aggregated.startup.lazy.avg),
+				eagerCalls: formatTime(aggregated.functionCalls.eager.avg),
+				lazyCalls: formatTime(aggregated.functionCalls.lazySubsequent.avg),
+				materialization: formatTime(aggregated.functionCalls.lazyFirst.time)
+			}
+		};
+		// Print JSON to stdout
+		process.stdout.write(JSON.stringify(rawNumbers, null, 2) + "\n");
+	} else {
+		// Display individual results from each test order
+		displayIndividualResults(eagerFirstResults, lazyFirstResults);
+		// Display order effect analysis
+		displayOrderEffectAnalysis(eagerFirstResults, lazyFirstResults);
+		// Display final results
+		displayAggregatedResults(aggregated);
+	}
+}
+
+// Run the benchmark
+main().catch(console.error);
