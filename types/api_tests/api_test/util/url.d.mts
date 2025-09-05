@@ -1,4 +1,9 @@
 /**
+ * @fileoverview URL utility functions for testing endpoint cleaning and URL building. Internal file (not exported in package.json).
+ * @module api_test.util.url
+ * @memberof module:api_test
+ */
+/**
  * Stub for cleanEndpoint. Returns the function name as a string.
  * Accessed as `api.util.url.cleanEndpoint()` in the slothlet API.
  * @function cleanEndpoint
@@ -34,7 +39,7 @@
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.url.cleanEndpoint('sites_list', { site: 'default' })); // "cleanEndpoint"
  */
-export function cleanEndpoint(endpoint: string, siteKey?: boolean | string, variables?: object, apiEndPointVersionOverride?: boolean | string, apiEndPointTypeOverride?: boolean | string): string;
+export function cleanEndpoint(..._: any[]): string;
 /**
  * Stub for buildUrlWithParams. Returns the function name as a string.
  * Accessed as `api.util.url.buildUrlWithParams()` in the slothlet API.
@@ -68,5 +73,5 @@ export function cleanEndpoint(endpoint: string, siteKey?: boolean | string, vari
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.url.buildUrlWithParams("10.0.0.1", { foo: "bar" })); // "buildUrlWithParams"
  */
-export function buildUrlWithParams(str: string, params?: any): string;
+export function buildUrlWithParams(str: string, _?: {}): string;
 //# sourceMappingURL=url.d.mts.map
