@@ -1,4 +1,9 @@
 /**
+ * @fileoverview Utility functions module for testing nested namespace behavior. Internal file (not exported in package.json).
+ * @module api_test.util.util
+ * @memberof module:api_test
+ */
+/**
  * Returns a string indicating size functionality.
  * Accessed as `api.util.size()` in the slothlet API.
  * @function size
@@ -30,7 +35,7 @@
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.util.size('test')); // 'size'
  */
-export function size(variable: any): string;
+export function size(_: any): string;
 /**
  * Returns a string indicating second function functionality.
  * Accessed as `api.util.secondFunc()` in the slothlet API.
@@ -63,5 +68,5 @@ export function size(variable: any): string;
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.util.secondFunc('test')); // 'secondFunc'
  */
-export function secondFunc(variable: any): string;
+export function secondFunc(_: any): string;
 //# sourceMappingURL=util.d.mts.map
