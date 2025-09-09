@@ -1,0 +1,77 @@
+# Individual repo: .github/workflows/publish.yml
+name: 📦 Release and Publish
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Enable debug logging for troubleshooting"
+        type: boolean
+        required: false
+        default: false
+      skip_publish:
+        description: "Skip ALL publishing, for testing"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  publish-package:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    uses: CLDMV/.github/.github/workflows/publish.yml@v1
+    with:
+      package_name: "@cldmv/slothlet" # Required: Your NPM package name
+      debug: ${{ github.event_name == 'workflow_dispatch' && inputs.debug || false }}
+      # skip_publish: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_publish || false }}
+      # version: "1.0.0" # Version to publish - auto-detected from package.json if not provided (default: "")
+
+      # Node.js Version Configuration
+      # node_version: "lts/*" # Single Node.js version for build/test (default: lts/*)
+      min_node_version: "16.4" # Minimum Node.js version for matrix testing (default: 20)
+      # max_node_major: "22" # Maximum Node.js major version (default: 22)
+
+      # Package & Build Configuration
+      # package_manager: "npm" # Package manager - npm or yarn (default: npm)
+      test_command: "npm test" # Command to run tests (default: npm test)
+      build_command: "npm run build:ci" # Command to build package (default: npm run build:ci)
+
+      # Publishing Configuration
+      # publish_to_npm: true # Publish to NPM registry (default: true)
+      # publish_to_github_packages: true # Publish to GitHub Packages registry (default: true)
+      # skip_publish: false # Skip ALL publishing, for testing (default: false)
+      # publish_command: "" # Custom NPM publish command - auto-detects access level (default: "")
+      # github_packages_publish_command: "" # Custom GitHub Packages publish command (default: "")
+
+      # Release Configuration
+      # is_prerelease: false # Whether this is a prerelease (default: false)
+      # release_source_only: false # Create source-only release, no package assets (default: false)
+      # create_documentation: true # Create/update VERSION_TAGS.md (default: true)
+
+      # Test Control Options
+      # skip_performance_tests: true # Skip performance tests during CI (default: false)
+      # skip_matrix_tests: false # Skip matrix testing, use single version (default: false)
+
+      # Bot Configuration Options
+      # use_gpg: false # Enable GPG signing with your bot (default: false)
+      # sign: "auto" # Smart signing mode: auto/true/false (default: auto)
+      # annotate: "auto" # Smart annotate mode: auto/true/false (default: auto)
+
+    # Authentication & Bot Configuration
+    # The workflow supports automatic App token detection for enhanced permissions and proper attribution:
+    # - WITH App secrets: Operations attributed to CLDMV bot, enhanced permissions for workflow repositories
+    # - WITHOUT App secrets: Falls back to GitHub Actions bot with standard permissions
+    # To set up App authentication, add these secrets to your repository settings:
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # CLDMV Bot credentials for enhanced permissions and proper attribution
+      # Uncomment these lines to use your bot instead of github-actions[bot]
+      BOT_APP_ID: ${{ secrets.CLDMV_BOT_APP_ID }}
+      BOT_APP_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_APP_PRIVATE_KEY }}
+      # Optional: GPG signing credentials (only needed if use_gpg: true)
+      TAGGER_NAME: ${{ secrets.CLDMV_BOT_NAME }}
+      TAGGER_EMAIL: ${{ secrets.CLDMV_BOT_EMAIL }}
+      GPG_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.CLDMV_BOT_GPG_PASSPHRASE }}
