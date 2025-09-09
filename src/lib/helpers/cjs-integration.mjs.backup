@@ -1,0 +1,151 @@
+/**
+ * @fileoverview CJS integration helpers for mixed ESM/CJS module loading
+ *
+ * Provides utilities for integrating CommonJS modules into ESM-based slothlet instances,
+ * including module-level live bindings support and context management.
+ * @module @cldmv/slothlet.helpers.cjs-integration
+ * @memberof module:@cldmv/slothlet.helpers
+ */
+
+// import { pathToFileURL } from "url";
+import path from "path";
+import { createRequire } from "module";
+
+// Create require function for this module
+const require = createRequire(import.meta.url);
+
+/**
+ * Sets the global instance ID that CJS modules can use to get the correct bindings.
+ * @internal
+ * @param {string} instanceId - The instance ID to set globally
+ * @throws {TypeError} When instanceId is not a string
+ */
+export function setGlobalCjsInstanceId(instanceId) {
+	global.__slothletCurrentInstanceId = instanceId;
+}
+
+/**
+ * Gets the current global instance ID for CJS modules.
+ * @internal
+ * @returns {string} The current instance ID or empty string
+ */
+export function getGlobalCjsInstanceId() {
+	return global.__slothletCurrentInstanceId || "";
+}
+
+/**
+ * Wraps a CJS function to provide instance context when called.
+ * Sets up module-level live bindings for CJS modules in mixed mode.
+ *
+ * @internal
+ * @param {Function} fn - The CJS function to wrap
+ * @param {string} instanceId - The slothlet instance ID
+ * @param {object} slothletInstance - The current slothlet instance
+ * @returns {Function} The wrapped function with instance context
+ * @throws {TypeError} When fn is not a function or instanceId is not a string
+ *
+ * @example
+ * // Wrap a CJS function for mixed mode operation
+ * const wrappedFn = wrapCjsFunction(originalFn, 'instance1', slothletInstance);
+ * const result = await wrappedFn(arg1, arg2);
+ */
+export function wrapCjsFunction(fn, instanceId, slothletInstance) {
+	if (slothletInstance.config.debug) {
+		console.log(`Creating CJS wrapper for function with bound instanceId: ${instanceId}`);
+	}
+
+	return async function (...args) {
+		if (slothletInstance.config.debug) {
+			console.log(`CJS function called from instance: ${instanceId}`);
+		}
+
+		// Set up module-level live bindings for CJS modules
+		const originalGetBindings = global.__slothletGetBindings;
+		global.__slothletGetBindings = () => ({
+			self: slothletInstance.boundapi,
+			context: slothletInstance.context,
+			reference: slothletInstance.reference
+		});
+
+		try {
+			// Execute the original function with the correct instance context
+			return fn.apply(this, args);
+		} finally {
+			// Restore the previous global state
+			if (originalGetBindings) {
+				global.__slothletGetBindings = originalGetBindings;
+			} else {
+				delete global.__slothletGetBindings;
+			}
+		}
+	};
+}
+
+/**
+ * Creates a CJS proxy instance for a specific module and instance ID.
+ * This leverages the existing index.cjs infrastructure to provide
+ * module-level bindings for CJS modules in mixed mode.
+ *
+ * @param {string} modulePath - Path to the CJS module
+ * @param {string} instanceId - The slothlet instance ID
+ * @param {object} slothletInstance - The current slothlet instance
+ * @returns {Promise<object>} The CJS module with proper live bindings
+ */
+export async function createCjsModuleProxy(modulePath, instanceId) {
+	// Get the index.cjs path relative to the current module
+	const indexCjsPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../index.cjs");
+
+	// Load the CJS proxy infrastructure
+	const cjsProxy = require(indexCjsPath).withInstanceId(instanceId);
+
+	// Set up the live bindings for this instance
+	// This essentially "pre-loads" the instance so getBindings() will work
+	await cjsProxy.$load();
+
+	// Now the CJS module can use require('../index.cjs').getBindings()
+	// and it will get the correct instance bindings
+
+	// Load the actual CJS module through the proxy context
+	const moduleExports = require(modulePath);
+
+	return moduleExports;
+}
+
+/**
+ * Detects if a module path is a CJS module based on file extension.
+ *
+ * @param {string} modulePath - Path to the module
+ * @returns {boolean} True if the module is a CJS module
+ */
+export function isCjsModule(modulePath) {
+	return modulePath.endsWith(".cjs") || modulePath.endsWith(".js");
+}
+
+/**
+ * Gets live bindings for CJS modules. Uses global mechanism if available,
+ * otherwise falls back to the current global instance ID and index.cjs approach.
+ * Intended for use in CJS modules that need live-binding access via
+ * require('index.cjs').getBindings().
+ *
+ * @returns {Promise<object>} The live bindings { self, context, reference }
+ */
+export async function getCjsBindings() {
+	if (global.__slothletGetBindings) {
+		return global.__slothletGetBindings();
+	}
+
+	// Use the global instance ID to get bindings from the correct instance
+	const instanceId = getGlobalCjsInstanceId();
+	try {
+		const slothlet = require("../../index.cjs");
+		if (instanceId) {
+			const instance = slothlet.withInstanceId(instanceId);
+			return await instance.getBindings();
+		} else {
+			return await slothlet.getBindings();
+		}
+	} catch (error) {
+		console.warn("[slothlet] Could not get CJS bindings:", error.message);
+		return { self: {}, context: {}, reference: {} };
+	}
+}

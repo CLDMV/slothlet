@@ -1,0 +1,20 @@
+{{!-- Process existing modules with hierarchical ordering --}}
+{{#each (getOrderModulesHierarchically .)}}
+<a id="{{getDocletValue this "anchor"}}"></a>
+
+## {{getOriginalModuleTitle}}
+{{{partialDescription this}}}
+
+{{!-- Module Table of Contents --}}
+{{{partialIntegratedTOC ../this longname}}}
+
+{{!-- Module Examples --}}
+{{{partialExamples this}}}
+
+{{!-- Integrated Documentation: Show content for all modules --}}
+{{{partialIntegratedModules ../this longname}}}
+
+{{/each}}
+
+{{!-- Global Type Definitions Section: All typedefs appear at the end of the document --}}
+{{{partialGlobalTypedefDefinitions .}}}

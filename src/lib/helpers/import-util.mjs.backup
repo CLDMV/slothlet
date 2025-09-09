@@ -1,0 +1,56 @@
+/**
+ * @fileoverview Import utilities for node module resolution with query strings.
+ * Provides utilities for importing Node.js modules with optional query string parameters,
+ * enabling instance-specific module loading for slothlet.
+ * @module @cldmv/slothlet.helpers.import-util
+ * @memberof module:@cldmv/slothlet.helpers
+ */
+
+// import-utils.mjs
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Import a Node module (from node_modules or builtins) with an optional query string.
+ * Supports both separate specifier+query and combined specifier?query patterns.
+ *
+ * @internal
+ * @param {string} specOrFull - Module specifier or specifier with ?query
+ * @param {string} [query=""] - Optional query string (e.g. "?_foo=bar")
+ * @returns {Promise<any>} The imported module
+ * @throws {Error} When module resolution or import fails
+ *
+ * @example
+ * // Separate specifier and query
+ * await _import("@cldmv/slothlet", "?_slothlet=unifi");
+ *
+ * @example
+ * // Combined specifier with query
+ * await _import("@cldmv/slothlet?_slothlet=unifi");
+ *
+ * @example
+ * // Basic module import without query
+ * await _import("lodash");
+ */
+export async function _import(specOrFull, query = "") {
+	let spec = specOrFull;
+	let q = query;
+
+	// if the first arg already contains a ?, split it
+	const idx = specOrFull.indexOf("?");
+	if (idx !== -1) {
+		spec = specOrFull.slice(0, idx);
+		q = specOrFull.slice(idx); // includes the "?"
+	}
+
+	// 1. resolve the module entry
+	const resolved = require.resolve(spec);
+
+	// 2. turn it into a file:// URL
+	const url = pathToFileURL(resolved).href + (q || "");
+
+	// 3. dynamic import
+	return import(url);
+}
