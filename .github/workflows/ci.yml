@@ -47,13 +47,13 @@ jobs:
       # skip_matrix_tests: true # Use this with node_version (default: false)
 
       # Option 2: Matrix testing (comprehensive) - DEFAULT BEHAVIOR
-      # min_node_version: "20" # Minimum Node.js version for matrix testing (default: 20)
+      min_node_version: "16.4" # Minimum Node.js version for matrix testing (default: 20)
       # max_node_major: "22" # Maximum Node.js major version (default: 22)
 
       # Package & Build Configuration
       # package_manager: "npm" # Package manager - npm or yarn (default: npm)
-      # test_command: "npm test" # Command to run tests (default: npm test)
-      # build_command: "npm run build:ci" # Command to build package (default: npm run build:ci)
+      test_command: "npm test" # Command to run tests (default: npm test)
+      build_command: "npm run build:ci" # Command to build package (default: npm run build:ci)
 
       # Test Control Options
       # skip_performance_tests: false # Skip performance tests during CI (default: false)
