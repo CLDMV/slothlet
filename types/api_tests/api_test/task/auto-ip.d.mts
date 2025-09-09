@@ -1,4 +1,9 @@
 /**
+ * @fileoverview Auto IP detection functionality for testing task modules. Internal file (not exported in package.json).
+ * @module api_test.task.autoIp
+ * @memberof module:api_test
+ */
+/**
  * Automatically detects IP configuration.
  * Accessed as `api.task.autoIp()` in the slothlet API.
  * @alias module:api_test.task.autoIp
