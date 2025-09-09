@@ -42,8 +42,10 @@ export const reference: object;
 export default slothlet;
 export type SlothletOptions = {
     /**
-     * - Directory to load API modules from. Can be absolute or relative path.
-     * If relative, resolved from process.cwd(). Defaults to "api" directory in current working directory.
+     * - Directory to load API modules from.
+     * - Can be absolute or relative path.
+     * - If relative, resolved from the calling file's location.
+     * - Defaults to "api" directory relative to caller.
      */
     dir?: string;
     /**
@@ -84,22 +86,16 @@ export type SlothletOptions = {
     api_mode?: string;
     /**
      * - Context data object injected into live-binding `context` reference.
-     * Available to all loaded modules via `import { context } from 'slothlet'`. Useful for request data,
-     * user sessions, environment configs, etc.
+     * - Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`. Useful for request data,
+     * - user sessions, environment configs, etc.
      */
     context?: object;
     /**
      * - Reference object merged into the API root level.
-     * Properties not conflicting with loaded modules are added directly to the API.
-     * Useful for utility functions, constants, or external service connections.
+     * - Properties not conflicting with loaded modules are added directly to the API.
+     * - Useful for utility functions, constants, or external service connections.
      */
     reference?: object;
-    /**
-     * - Entry module URL for advanced use cases.
-     * Defaults to slothlet's own module URL. Only modify if implementing custom loaders.
-     * **Warning**: This parameter is experimental and not officially supported. Use at your own risk.
-     */
-    entry?: string;
 };
 /**
  * Creates a slothlet API instance with the specified configuration.
