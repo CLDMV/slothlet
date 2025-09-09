@@ -18,3 +18,4 @@ _No bug fixes_
 
 ### 👥 Contributors
 - @Shinrai
+- @cldmv-bot[bot]
