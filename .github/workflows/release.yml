@@ -78,7 +78,7 @@ jobs:
       package_name: "@cldmv/slothlet" # Required: Your NPM package name
       debug: ${{ github.event.inputs.debug || false }}
       node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
-      min_node_version: ${{ github.event.inputs.min_node_version || '20' }}
+      min_node_version: ${{ github.event.inputs.min_node_version || '16.4' }}
       max_node_major: ${{ github.event.inputs.max_node_major || '22' }}
       package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
       test_command: "npm test"

@@ -93,7 +93,7 @@ jobs:
       publish_command: ${{ github.event.inputs.publish_command || '' }}
       github_packages_publish_command: ${{ github.event.inputs.github_packages_publish_command || '' }}
       skip_publish: ${{ github.event.inputs.skip_publish || false }}
-      min_node_version: ${{ github.event.inputs.min_node_version || '20' }}
+      min_node_version: ${{ github.event.inputs.min_node_version || '16.4' }}
       max_node_major: ${{ github.event.inputs.max_node_major || '22' }}
       test_command: "npm test"
       build_command: "npm run build:ci"
