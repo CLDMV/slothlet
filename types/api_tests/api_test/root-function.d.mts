@@ -1,4 +1,9 @@
 /**
+ * @fileoverview Root-level function exports for greeting functionality. Internal file (not exported in package.json).
+ * @module api_test.rootFunction
+ * @memberof module:api_test
+ */
+/**
  * Greets a name (default export).
  * This is the main callable API function.
  * Accessed as `api()` in the slothlet API.
