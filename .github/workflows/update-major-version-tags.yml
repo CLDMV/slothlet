@@ -20,12 +20,12 @@ on:
         description: "Whether to create/update VERSION_TAGS.md documentation"
         type: boolean
         required: false
-        default: true
+        default: false
       use_gpg:
         description: "Enable GPG signing (if GPG secrets provided)"
         type: boolean
         required: false
-        default: false
+        default: true
       # Tag health configuration
       max_tags:
         description: "Maximum number of tags to process (safety limit)"
