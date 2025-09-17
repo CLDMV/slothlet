@@ -147,34 +147,70 @@ runTest(
 console.log("\n=== Testing within-segment pattern transformations ===");
 
 // Test 15: Within-segment URL pattern transformations
-runTest("(within camelCase segment)", "buildUrlWithParams", { upper: ["*URL*"] }, "buildURLWithParams", "within-segment URL transformation");
+runTest(
+	"(within camelCase segment)",
+	"buildUrlWithParams",
+	{ upper: ["*URL*"] },
+	"buildURLWithParams",
+	"within-segment URL transformation"
+);
 
 // Test 16: Within-segment pattern on simple camelCase
 runTest("(within simple camelCase)", "parseUrl", { upper: ["*URL*"] }, "parseURL", "simple camelCase URL transformation");
 
 // Test 17: Within-segment pattern on complex camelCase
-runTest("(within complex camelCase)", "validateUrlString", { upper: ["*URL*"] }, "validateURLString", "complex camelCase URL transformation");
+runTest(
+	"(within complex camelCase)",
+	"validateUrlString",
+	{ upper: ["*URL*"] },
+	"validateURLString",
+	"complex camelCase URL transformation"
+);
 
 // Test 18: Within-segment pattern should still work on standalone words
 runTest("(standalone word)", "url", { upper: ["*URL*"] }, "URL", "standalone URL transformation");
 
 // Test 19: Within-segment pattern with multiple occurrences
-runTest("(multiple URL occurrences)", "parseUrlFromUrlString", { upper: ["*URL*"] }, "parseURLFromURLString", "multiple URL transformations");
+runTest(
+	"(multiple URL occurrences)",
+	"parseUrlFromUrlString",
+	{ upper: ["*URL*"] },
+	"parseURLFromURLString",
+	"multiple URL transformations"
+);
 
 // === Boundary-Requiring Pattern Tests (**STRING**) ===
 console.log("\n--- Boundary-Requiring Pattern Tests (**STRING**) ---");
 
 // Test 20: **url** should match "url" only when surrounded by other characters
-runTest("(boundary-requiring surrounded)", "buildUrlWithParams", { upper: ["**url**"] }, "buildURLWithParams", "buildUrlWithParams with **url** boundary pattern");
+runTest(
+	"(boundary-requiring surrounded)",
+	"buildUrlWithParams",
+	{ upper: ["**url**"] },
+	"buildURLWithParams",
+	"buildUrlWithParams with **url** boundary pattern"
+);
 
 // Test 21: **url** should NOT match standalone "url" (no surrounding characters)
 runTest("(boundary-requiring standalone)", "url", { upper: ["**url**"] }, "url", "standalone url should NOT match **url** pattern");
 
 // Test 22: **json** boundary-requiring pattern
-runTest("(boundary-requiring json)", "parseJsonData", { upper: ["**json**"] }, "parseJSONData", "parseJsonData with **json** boundary pattern");
+runTest(
+	"(boundary-requiring json)",
+	"parseJsonData",
+	{ upper: ["**json**"] },
+	"parseJSONData",
+	"parseJsonData with **json** boundary pattern"
+);
 
 // Test 23: **json** should NOT match standalone "json"
-runTest("(boundary-requiring standalone json)", "json", { upper: ["**json**"] }, "json", "standalone json should NOT match **json** pattern");
+runTest(
+	"(boundary-requiring standalone json)",
+	"json",
+	{ upper: ["**json**"] },
+	"json",
+	"standalone json should NOT match **json** pattern"
+);
 
 // Test 24: **api** boundary-requiring pattern in middle of word
 runTest("(boundary-requiring api)", "getApiStatus", { upper: ["**api**"] }, "getAPIStatus", "getApiStatus with **api** boundary pattern");
@@ -183,7 +219,13 @@ runTest("(boundary-requiring api)", "getApiStatus", { upper: ["**api**"] }, "get
 runTest("(boundary-requiring standalone api)", "api", { upper: ["**api**"] }, "api", "standalone api should NOT match **api** pattern");
 
 // Test 26: Multiple boundary-requiring patterns
-runTest("(multiple boundary patterns)", "buildApiUrlParser", { upper: ["**api**", "**url**"] }, "buildAPIURLParser", "multiple boundary patterns on same string");
+runTest(
+	"(multiple boundary patterns)",
+	"buildApiUrlParser",
+	{ upper: ["**api**", "**url**"] },
+	"buildAPIURLParser",
+	"multiple boundary patterns on same string"
+);
 
 // Final results
 console.log(`\n=== Test Results ===`);

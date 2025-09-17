@@ -229,22 +229,20 @@ export function sanitizePathName(input, opts = {}) {
 						// Check if the string contains the pattern surrounded by other characters
 						// Create a simple regex that matches the inner string case-insensitively
 						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
-						
+
 						// Check all matches to see if any are surrounded by other characters
 						const matches = [...transformedSeg.matchAll(innerRegex)];
 						for (const match of matches) {
 							const startPos = match.index;
 							const endPos = startPos + match[0].length;
-							
+
 							// Check if the match is surrounded by other characters
 							const hasCharBefore = startPos > 0;
 							const hasCharAfter = endPos < transformedSeg.length;
-							
+
 							if (hasCharBefore && hasCharAfter) {
 								// Replace this occurrence with the uppercase version
-								transformedSeg = transformedSeg.substring(0, startPos) + 
-									innerString.toUpperCase() + 
-									transformedSeg.substring(endPos);
+								transformedSeg = transformedSeg.substring(0, startPos) + innerString.toUpperCase() + transformedSeg.substring(endPos);
 								break; // Only replace the first surrounded occurrence
 							}
 						}
@@ -274,22 +272,20 @@ export function sanitizePathName(input, opts = {}) {
 						// Check if the string contains the pattern surrounded by other characters
 						// Create a simple regex that matches the inner string case-insensitively
 						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
-						
+
 						// Check all matches to see if any are surrounded by other characters
 						const matches = [...transformedSeg.matchAll(innerRegex)];
 						for (const match of matches) {
 							const startPos = match.index;
 							const endPos = startPos + match[0].length;
-							
+
 							// Check if the match is surrounded by other characters
 							const hasCharBefore = startPos > 0;
 							const hasCharAfter = endPos < transformedSeg.length;
-							
+
 							if (hasCharBefore && hasCharAfter) {
 								// Replace this occurrence with the lowercase version
-								transformedSeg = transformedSeg.substring(0, startPos) + 
-									innerString.toLowerCase() + 
-									transformedSeg.substring(endPos);
+								transformedSeg = transformedSeg.substring(0, startPos) + innerString.toLowerCase() + transformedSeg.substring(endPos);
 								break; // Only replace the first surrounded occurrence
 							}
 						}
