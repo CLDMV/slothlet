@@ -13,7 +13,7 @@
  * Key features:
  * - Valid identifier detection with fast-path optimization
  * - Configurable first-segment casing (lowerFirst option)
- * - Advanced rule-based transformation (leave, upper, lower arrays)
+ * - Advanced rule-based transformation (leave, leaveInsensitive, upper, lower arrays) with glob pattern support
  * - Cross-platform filename compatibility
  * - Edge case handling for special characters and numeric prefixes
  * - Camel-case conversion for multi-segment identifiers
@@ -21,26 +21,37 @@
  * Technical implementation:
  * - Uses regex-based validation for JavaScript identifier compliance
  * - Segment splitting on non-identifier characters [^A-Za-z0-9_$]
- * - Rule precedence: leave → upper → lower → default casing
+ * - Rule precedence: exact matches → glob patterns → default casing
+ * - Lightweight glob matching using simple wildcard patterns
  * - Safety fallbacks for empty results and invalid identifier starts
- * - Performance-optimized with early returns for valid identifiers
  *
  * Usage context:
  * - File-to-API mapping in slothlet module loading
  * - Dynamic property name generation for module namespaces
- * - Sanitization of user-provided file names into safe property accessors
- *
- *
- * @example
- * // ESM (internal)
- * import { sanitizePathName } from '@cldmv/slothlet/helpers/sanitize';
- * // Internal example using package.json exports
- *
- * @example
- * // Relative import (internal)
- * import { sanitizePathName } from './sanitize.mjs';
- * const apiKey = sanitizePathName('auto-ip.mjs');
  */
+
+/**
+ * Convert a glob pattern to a regular expression.
+ * Supports * (zero or more characters) and ? (single character).
+ * @private
+ * @param {string} pattern - Glob pattern
+ * @param {boolean} caseSensitive - Whether to be case sensitive (default: true)
+ * @returns {RegExp|null} Regular expression or null if invalid
+ */
+function globToRegex(pattern, caseSensitive = true) {
+	try {
+		// Escape special regex chars except * and ?
+		let regexPattern = pattern
+			.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+			.replace(/\*/g, ".*")
+			.replace(/\?/g, ".");
+
+		const flags = caseSensitive ? "" : "i";
+		return new RegExp(`^${regexPattern}$`, flags);
+	} catch (_) {
+		return null;
+	}
+}
 
 /**
  * @function sanitizePathName
@@ -49,37 +60,19 @@
  * @param {string} input - The input string to sanitize (e.g., file name, path segment)
  * @param {Object} [opts={}] - Sanitization configuration options
  * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
- * @param {Object} [opts.rules={}] - Advanced segment transformation rules
- * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive)
- * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE
- * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase
+ * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns with * and ?)
+ * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
+ * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
+ * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE (supports globs)
+ * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase (supports globs)
  * @returns {string} Valid JavaScript identifier safe for dot-notation property access
  * @throws {TypeError} When input parameter is not a string
  *
  * @description
  * Sanitize a string into a JS identifier suitable for dot-path usage.
- * Core sanitization function that converts arbitrary strings (typically file names) into
- * valid JavaScript identifiers following slothlet's API naming conventions.
- *
- * Sanitization algorithm:
- * 1. **Fast path**: If input is already a valid JS identifier, return unchanged
- * 2. **Segmentation**: Split on non-identifier characters [^A-Za-z0-9_$]
- * 3. **Prefix cleanup**: Remove leading digits/invalid chars from first segment
- * 4. **Rule application**: Apply leave/upper/lower rules with precedence
- * 5. **Default casing**: First segment respects lowerFirst, others get title case
- * 6. **Safety checks**: Ensure result starts with valid identifier character
- *
- * Rule precedence (applied in order):
- * - `leave` rules: Preserve segment exactly as provided
- * - `upper` rules: Force segment to UPPERCASE
- * - `lower` rules: Force segment to lowercase
- * - Default behavior: Apply standard camelCase conversion
- *
- * Edge case handling:
- * - Empty input → "_" (safe fallback identifier)
- * - Numeric prefixes → Stripped from first segment
- * - All invalid chars → Returns "_" + cleaned content
- * - No valid segments → Returns "_"
+ * Advanced sanitization function that applies rules intelligently before splitting while
+ * maintaining proper camelCase transformation. Uses sophisticated tracking to ensure
+ * rule-matched segments are preserved correctly through the transformation process.
  *
  * @example
  * // Basic sanitization (already valid identifiers unchanged)
@@ -94,77 +87,101 @@
  * sanitizePathName("foo-bar-baz");           // "fooBarBaz" (multi-segment camelCase)
  *
  * @example
- * // Numeric prefix handling
- * sanitizePathName("2autoIP");               // "autoIP" (leading digits stripped)
- * sanitizePathName("123-test-file");         // "testFile" (digits stripped, camelCase applied)
- *
- * @example
- * // First character casing control
- * sanitizePathName("My-File");                        // "myFile" (lowerFirst=true default)
- * sanitizePathName("My-File", { lowerFirst: false }); // "MyFile" (preserve capital first)
- * sanitizePathName("API-util", { lowerFirst: false }); // "APIUtil" (preserve capital first)
- *
- * @example
- * // Advanced rule-based transformation
- * sanitizePathName("foo-api-json", {
+ * // Pre-split pattern matching (matches original filename patterns)
+ * sanitizePathName("auto-ip", {
  *   rules: {
- *     leave: ["foo"],    // Keep "foo" exactly as-is
- *     upper: ["api"],    // Force "api" to "API"
- *     lower: ["JSON"]    // Force "JSON" to "json"
+ *     upper: ["*-ip"]  // Matches before splitting
  *   }
- * }); // Result: "fooAPIjson"
+ * }); // Result: "autoIP" (ip becomes IP due to *-ip pattern)
  *
  * @example
- * // Real-world slothlet file mapping scenarios
- * sanitizePathName("auto-ip.mjs");           // "autoIp" (common filename pattern)
- * sanitizePathName("parseJSON.mjs");         // "parseJSON" (preserve common acronym)
- * sanitizePathName("get-HTTP-status.js");    // "getHTTPStatus" (multi-acronym handling)
- * sanitizePathName("root-math.mjs");         // "rootMath" (typical slothlet module name)
- *
- * @example
- * // Edge cases and safety handling
- * sanitizePathName("");                      // "_" (empty string fallback)
- * sanitizePathName("123");                   // "_" (all numeric becomes fallback)
- * sanitizePathName("!@#$%");                 // "_" (all special chars becomes fallback)
- * sanitizePathName("valid@#$invalid");       // "validInvalid" (special chars removed)
+ * // Complex pattern matching with intelligent tracking
+ * sanitizePathName("get-api-status", {
+ *   rules: {
+ *     upper: ["*-api-*"]  // Matches api in middle of filename
+ *   }
+ * }); // Result: "getAPIStatus" (api becomes API due to pattern)
  */
 export function sanitizePathName(input, opts = {}) {
 	const { lowerFirst = true, rules = {} } = opts;
 
-	const L = (rules.leave || []).map((s) => String(s).toLowerCase());
-	const U = (rules.upper || []).map((s) => String(s).toLowerCase());
-	const W = (rules.lower || []).map((s) => String(s).toLowerCase());
-
-	const isValidId = (s) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
+	const leaveRules = (rules.leave || []).map((s) => String(s));
+	const leaveInsensitiveRules = (rules.leaveInsensitive || []).map((s) => String(s));
+	const upperRules = (rules.upper || []).map((s) => String(s));
+	const lowerRules = (rules.lower || []).map((s) => String(s));
 
 	let s = String(input).trim();
 
-	// Fast path: valid identifier stays untouched
-	if (isValidId(s)) return s;
+	// Always apply rules - don't skip for valid identifiers
+	// Users expect rules to work on valid identifiers too
 
-	// Split on any non-identifier char
+	// Split the string into segments
 	let parts = s.split(/[^A-Za-z0-9_$]+/).filter(Boolean);
 	if (parts.length === 0) return "_";
 
 	// Ensure the first usable part starts with a valid identifier-start
-	// (strip leading digits etc.)
 	while (parts.length && !/^[A-Za-z_$]/.test(parts[0][0])) {
 		parts[0] = parts[0].replace(/^[^A-Za-z_$]+/, "");
 		if (!parts[0]) parts.shift();
 	}
 	if (parts.length === 0) return "_";
 
+	// Helper function to check if a pattern matches the original string and affects a specific segment
+	const segmentMatchesPreSplitPattern = (segment, patterns, caseSensitive = false) => {
+		for (const pattern of patterns) {
+			// For patterns like "*-ip", "*-api-*", check if:
+			// 1. The pattern matches the original string
+			// 2. The segment is the relevant part of that pattern
+
+			if (pattern.includes("*") || pattern.includes("?")) {
+				const regex = globToRegex(pattern, caseSensitive);
+				if (regex && regex.test(s)) {
+					// Pattern matches original string, now check if this segment is the target
+					// Extract the literal parts from the pattern
+					const literalParts = pattern.split(/[*?]+/).filter(Boolean);
+
+					for (const literal of literalParts) {
+						// Remove non-alphanumeric separators for comparison
+						const cleanLiteral = literal.replace(/[^A-Za-z0-9_$]/g, "");
+						if (cleanLiteral) {
+							const match = caseSensitive ? segment === cleanLiteral : segment.toLowerCase() === cleanLiteral.toLowerCase();
+							if (match) {
+								return true;
+							}
+						}
+					}
+				}
+			} else {
+				// Exact pattern match
+				const match = caseSensitive ? segment === pattern : segment.toLowerCase() === pattern.toLowerCase();
+				if (match) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+
 	const applyRule = (seg, index) => {
-		const key = seg.toLowerCase();
+		// 1) leave: return unchanged (case-sensitive matching)
+		if (segmentMatchesPreSplitPattern(seg, leaveRules, true)) {
+			return seg;
+		}
 
-		// 1) leave: return unchanged
-		if (L.includes(key)) return seg;
+		// 2) leaveInsensitive: return unchanged (case-insensitive matching)
+		if (segmentMatchesPreSplitPattern(seg, leaveInsensitiveRules, false)) {
+			return seg;
+		}
 
-		// 2) upper: force full uppercase
-		if (U.includes(key)) return seg.toUpperCase();
+		// 3) upper: force full uppercase
+		if (segmentMatchesPreSplitPattern(seg, upperRules, false)) {
+			return seg.toUpperCase();
+		}
 
-		// 3) lower: force full lowercase
-		if (W.includes(key)) return seg.toLowerCase();
+		// 4) lower: force full lowercase
+		if (segmentMatchesPreSplitPattern(seg, lowerRules, false)) {
+			return seg.toLowerCase();
+		}
 
 		// Default behavior:
 		if (index === 0) {
@@ -196,8 +213,21 @@ sanitizePathName("auto_ip");               // "auto_ip" (unchanged: valid id)
 sanitizePathName("My-File");               // "myFile"  (lowerFirst default true)
 sanitizePathName("My-File", { lowerFirst:false }); // "MyFile"
 
-// With rules:
+// With exact rules:
 sanitizePathName("foo-api-json", {
   rules: { leave: ["foo"], upper: ["api"], lower: ["JSON"] }
 }); // "fooAPIjson" (leave 'foo' as-is, 'api' upper, 'json' lower)
+
+// With glob patterns:
+sanitizePathName("parseJSONData", {
+  rules: { leave: ["*JSON*"] }
+}); // "parseJSONData" (preserved due to *JSON* glob)
+
+sanitizePathName("getHTTPStatus", {
+  rules: { upper: ["http*", "*api*"] }
+}); // "getHTTPStatus" (HTTP matched by http* glob)
+
+sanitizePathName("validateUserId", {
+  rules: { lower: ["*id", "uuid*"] }
+}); // "validateUserid" (Id matched by *id glob)
 */

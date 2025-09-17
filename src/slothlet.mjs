@@ -1503,4 +1503,13 @@ export default slothlet;
  * @property {object} [reference={}] - Reference object merged into the API root level.
  *   - Properties not conflicting with loaded modules are added directly to the API.
  *   - Useful for utility functions, constants, or external service connections.
+ * @property {object} [sanitize] - Filename sanitization options for API property names.
+ *   - Controls how file names are converted to valid JavaScript identifiers.
+ *   - Default behavior: camelCase conversion with lowerFirst=true.
+ * @property {boolean} [sanitize.lowerFirst=true] - Lowercase first character of first segment for camelCase convention.
+ * @property {object} [sanitize.rules={}] - Advanced segment transformation rules with glob pattern support.
+ * @property {string[]} [sanitize.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.upper=[]] - Segments to force to UPPERCASE (case-insensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.lower=[]] - Segments to force to lowercase (case-insensitive, supports * and ? globs).
  */
