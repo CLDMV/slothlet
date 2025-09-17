@@ -32,7 +32,7 @@
 
 /**
  * Convert a glob pattern to a regular expression.
- * Supports * (zero or more characters) and ? (single character).
+ * Supports * (zero or more characters), ? (single character), and **STRING** (boundary-requiring matches).
  * @private
  * @param {string} pattern - Glob pattern
  * @param {boolean} caseSensitive - Whether to be case sensitive (default: true)
@@ -40,6 +40,18 @@
  */
 function globToRegex(pattern, caseSensitive = true) {
 	try {
+		// Handle **STRING** pattern - matches only when surrounded by other characters
+		if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
+			const innerString = pattern.slice(2, -2);
+			// Escape special regex chars in the inner string
+			const escapedString = innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&");
+			// Use positive lookbehind and lookahead to ensure surrounding characters
+			// Pattern must not be at start or end of string (requires surrounding chars)
+			const flags = caseSensitive ? "" : "i";
+			return new RegExp(`(?<=.)${escapedString}(?=.)`, flags);
+		}
+
+		// Standard glob pattern processing
 		// Escape special regex chars except * and ?
 		let regexPattern = pattern
 			.replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -60,11 +72,11 @@ function globToRegex(pattern, caseSensitive = true) {
  * @param {string} input - The input string to sanitize (e.g., file name, path segment)
  * @param {Object} [opts={}] - Sanitization configuration options
  * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
- * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns with * and ?)
+ * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns: *, ?, **STRING**)
  * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
  * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
- * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE (supports globs)
- * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase (supports globs)
+ * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE (supports globs and **STRING** boundary patterns)
+ * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase (supports globs and **STRING** boundary patterns)
  * @returns {string} Valid JavaScript identifier safe for dot-notation property access
  * @throws {TypeError} When input parameter is not a string
  *
@@ -101,6 +113,26 @@ function globToRegex(pattern, caseSensitive = true) {
  *     upper: ["*-api-*"]  // Matches api in middle of filename
  *   }
  * }); // Result: "getAPIStatus" (api becomes API due to pattern)
+ *
+ * @example
+ * // Boundary-requiring patterns with **STRING** syntax
+ * sanitizePathName("buildUrlWithParams", {
+ *   rules: {
+ *     upper: ["**url**"]  // Only matches "url" when surrounded by other characters
+ *   }
+ * }); // Result: "buildURLWithParams" (url becomes URL, surrounded by other chars)
+ *
+ * sanitizePathName("url", {
+ *   rules: {
+ *     upper: ["**url**"]  // Does NOT match standalone "url" (no surrounding chars)
+ *   }
+ * }); // Result: "url" (unchanged - no surrounding characters)
+ *
+ * sanitizePathName("parseJsonData", {
+ *   rules: {
+ *     upper: ["**json**"]  // Matches "json" surrounded by other characters
+ *   }
+ * }); // Result: "parseJSONData" (json becomes JSON)
  */
 export function sanitizePathName(input, opts = {}) {
 	const { lowerFirst = true, rules = {} } = opts;
@@ -173,14 +205,134 @@ export function sanitizePathName(input, opts = {}) {
 			return seg;
 		}
 
-		// 3) upper: force full uppercase
+		// 3) upper: force full uppercase (for pre-split pattern matches)
 		if (segmentMatchesPreSplitPattern(seg, upperRules, false)) {
 			return seg.toUpperCase();
 		}
 
-		// 4) lower: force full lowercase
+		// 4) lower: force full lowercase (for pre-split pattern matches)
 		if (segmentMatchesPreSplitPattern(seg, lowerRules, false)) {
 			return seg.toLowerCase();
+		}
+
+		// 5) Apply pattern-based transformations within the segment (for within-segment patterns)
+		let transformedSeg = seg;
+
+		// Apply upper rule patterns that don't match pre-split
+		for (const pattern of upperRules) {
+			if (pattern.includes("*") || pattern.includes("?")) {
+				// Only apply within-segment transformation if this pattern doesn't match pre-split
+				if (!segmentMatchesPreSplitPattern(seg, [pattern], false)) {
+					// Handle **STRING** boundary-requiring patterns
+					if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
+						const innerString = pattern.slice(2, -2);
+						// Check if the string contains the pattern surrounded by other characters
+						// Create a simple regex that matches the inner string case-insensitively
+						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
+						
+						// Check all matches to see if any are surrounded by other characters
+						const matches = [...transformedSeg.matchAll(innerRegex)];
+						for (const match of matches) {
+							const startPos = match.index;
+							const endPos = startPos + match[0].length;
+							
+							// Check if the match is surrounded by other characters
+							const hasCharBefore = startPos > 0;
+							const hasCharAfter = endPos < transformedSeg.length;
+							
+							if (hasCharBefore && hasCharAfter) {
+								// Replace this occurrence with the uppercase version
+								transformedSeg = transformedSeg.substring(0, startPos) + 
+									innerString.toUpperCase() + 
+									transformedSeg.substring(endPos);
+								break; // Only replace the first surrounded occurrence
+							}
+						}
+					} else {
+						// Standard within-segment transformation
+						const literalParts = pattern.split(/[*?]+/).filter(Boolean);
+						for (const literal of literalParts) {
+							if (literal) {
+								// Create case-insensitive regex for the literal part
+								const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
+								transformedSeg = transformedSeg.replace(literalRegex, literal.toUpperCase());
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Apply lower rule patterns that don't match pre-split
+		for (const pattern of lowerRules) {
+			if (pattern.includes("*") || pattern.includes("?")) {
+				// Only apply within-segment transformation if this pattern doesn't match pre-split
+				if (!segmentMatchesPreSplitPattern(seg, [pattern], false)) {
+					// Handle **STRING** boundary-requiring patterns
+					if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
+						const innerString = pattern.slice(2, -2);
+						// Check if the string contains the pattern surrounded by other characters
+						// Create a simple regex that matches the inner string case-insensitively
+						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
+						
+						// Check all matches to see if any are surrounded by other characters
+						const matches = [...transformedSeg.matchAll(innerRegex)];
+						for (const match of matches) {
+							const startPos = match.index;
+							const endPos = startPos + match[0].length;
+							
+							// Check if the match is surrounded by other characters
+							const hasCharBefore = startPos > 0;
+							const hasCharAfter = endPos < transformedSeg.length;
+							
+							if (hasCharBefore && hasCharAfter) {
+								// Replace this occurrence with the lowercase version
+								transformedSeg = transformedSeg.substring(0, startPos) + 
+									innerString.toLowerCase() + 
+									transformedSeg.substring(endPos);
+								break; // Only replace the first surrounded occurrence
+							}
+						}
+					} else {
+						// Standard within-segment transformation
+						const literalParts = pattern.split(/[*?]+/).filter(Boolean);
+						for (const literal of literalParts) {
+							if (literal) {
+								const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
+								transformedSeg = transformedSeg.replace(literalRegex, literal.toLowerCase());
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// 6) Check for full segment upper/lower rules (for exact/non-glob patterns)
+		// upper: force full uppercase (only for exact matches, not glob patterns)
+		for (const pattern of upperRules) {
+			if (!pattern.includes("*") && !pattern.includes("?")) {
+				// Exact pattern match
+				const match = seg.toLowerCase() === pattern.toLowerCase();
+				if (match) {
+					return seg.toUpperCase();
+				}
+			}
+		}
+
+		// 7) lower: force full lowercase (only for exact matches, not glob patterns)
+		for (const pattern of lowerRules) {
+			if (!pattern.includes("*") && !pattern.includes("?")) {
+				// Exact pattern match
+				const match = seg.toLowerCase() === pattern.toLowerCase();
+				if (match) {
+					return seg.toLowerCase();
+				}
+			}
+		}
+
+		// If transformations were applied, return the transformed segment
+		if (transformedSeg !== seg) {
+			return transformedSeg;
 		}
 
 		// Default behavior:
