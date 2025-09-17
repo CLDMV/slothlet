@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.0.1",
+	"version": "2.1.0",
 	"moduleVersions": {
 		"lazy": "1.0.0",
 		"eager": "1.0.0"
