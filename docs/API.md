@@ -375,6 +375,13 @@ console.log(reference); // Current reference data
 | [api_mode] | <code>string</code> | <code>auto</code> | API structure and calling convention: <ul> <li>`"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)</li> <li>`"function"`: Force API to be callable as function with properties attached</li> <li>`"object"`: Force API to be plain object with method properties</li> </ul> |
 | [context] | <code>object</code> | <code>{}</code> | Context data object injected into live-binding `context` reference. <ul> <li>Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`. Useful for request data,</li> <li>user sessions, environment configs, etc.</li> </ul> |
 | [reference] | <code>object</code> | <code>{}</code> | Reference object merged into the API root level. <ul> <li>Properties not conflicting with loaded modules are added directly to the API.</li> <li>Useful for utility functions, constants, or external service connections.</li> </ul> |
+| [sanitize] | <code>object</code> |  | Filename sanitization options for API property names. <ul> <li>Controls how file names are converted to valid JavaScript identifiers.</li> <li>Default behavior: camelCase conversion with lowerFirst=true.</li> </ul> |
+| [sanitize.lowerFirst] | <code>boolean</code> | <code>true</code> | Lowercase first character of first segment for camelCase convention. |
+| [sanitize.rules] | <code>object</code> | <code>{}</code> | Advanced segment transformation rules with glob pattern support. |
+| [sanitize.rules.leave] | <code>Array.<string></code> | <code>[]</code> | Segments to preserve exactly as-is (case-sensitive, supports * and ? globs). |
+| [sanitize.rules.leaveInsensitive] | <code>Array.<string></code> | <code>[]</code> | Segments to preserve exactly as-is (case-insensitive, supports * and ? globs). |
+| [sanitize.rules.upper] | <code>Array.<string></code> | <code>[]</code> | Segments to force to UPPERCASE (case-insensitive, supports * and ? globs). |
+| [sanitize.rules.lower] | <code>Array.<string></code> | <code>[]</code> | Segments to force to lowercase (case-insensitive, supports * and ? globs). |
 
 
 * * *

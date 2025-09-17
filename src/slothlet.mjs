@@ -246,7 +246,7 @@ const slothletObject = {
 	reference: {},
 	mode: "singleton",
 	loaded: false,
-	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null },
+	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null },
 	_dispose: null,
 	_boundAPIShutdown: null,
 
@@ -321,9 +321,14 @@ const slothletObject = {
 		let api;
 		let dispose;
 		if (mode === "singleton") {
-			const { context = null, reference = null, ...loadConfig } = options;
+			const { context = null, reference = null, sanitize = null, ...loadConfig } = options;
 			this.context = context;
 			this.reference = reference;
+
+			// Store sanitize options in config for use by _toApiKey
+			if (sanitize !== null) {
+				this.config.sanitize = sanitize;
+			}
 
 			/**
 			 * Conditionally initialize boundapi as a function or object based on api_mode.
@@ -517,7 +522,7 @@ const slothletObject = {
 	 * _toApiKey('root-math') // 'rootMath'
 	 */
 	_toApiKey(name) {
-		return sanitizePathName(name);
+		return sanitizePathName(name, this.config.sanitize || {});
 		// return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
 	},
 
@@ -949,7 +954,7 @@ const slothletObject = {
 					// 	if (this.config.debug) console.log(`Skipping named export '${exportName}' - already wrapped in default export`);
 					// 	continue;
 					// }
-					obj[exportName] = exportValue;
+					obj[this._toApiKey(exportName)] = exportValue;
 				}
 			}
 
@@ -986,7 +991,7 @@ const slothletObject = {
 		for (const [exportName, exportValue] of namedExports) {
 			// Wrap CJS functions
 			// apiExport[exportName] = isCjsModuleFile && typeof exportValue === "function" ? this._wrapCjsFunction(exportValue) : exportValue;
-			apiExport[exportName] = exportValue;
+			apiExport[this._toApiKey(exportName)] = exportValue;
 		}
 		return apiExport;
 	},
@@ -1503,4 +1508,13 @@ export default slothlet;
  * @property {object} [reference={}] - Reference object merged into the API root level.
  *   - Properties not conflicting with loaded modules are added directly to the API.
  *   - Useful for utility functions, constants, or external service connections.
+ * @property {object} [sanitize] - Filename sanitization options for API property names.
+ *   - Controls how file names are converted to valid JavaScript identifiers.
+ *   - Default behavior: camelCase conversion with lowerFirst=true.
+ * @property {boolean} [sanitize.lowerFirst=true] - Lowercase first character of first segment for camelCase convention.
+ * @property {object} [sanitize.rules={}] - Advanced segment transformation rules with glob pattern support.
+ * @property {string[]} [sanitize.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.upper=[]] - Segments to force to UPPERCASE (case-insensitive, supports * and ? globs).
+ * @property {string[]} [sanitize.rules.lower=[]] - Segments to force to lowercase (case-insensitive, supports * and ? globs).
  */

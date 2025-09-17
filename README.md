@@ -1,7 +1,7 @@
 # @cldmv/slothlet
 
 <div align="center">
-  <img src="images/slothlet-logo-v1-horizontal-transparent.png" alt="Slothlet Logo" width="600">
+  <img src="https://github.com/CLDMV/slothlet/raw/HEAD/images/slothlet-logo-v1-horizontal-transparent.png" alt="Slothlet Logo" width="600">
 </div>
 
 **@cldmv/slothlet** is a sophisticated module loading framework that revolutionizes how you work with massive APIs in Node.js. Built for developers who demand smart, efficient module loading without compromising performance or developer experience.
@@ -52,6 +52,14 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Smart Function Naming**: Preserves original capitalization (`autoIP`, `parseJSON`, `getHTTPStatus`)
 - **Multi-Execution Environments**: Singleton, VM, worker, fork isolation modes (experimental)
 
+### 🔧 **Advanced Sanitization Control** ⭐ NEW
+
+- **Custom API Naming**: Control how filenames become API property names through sanitize options
+- **Boundary Pattern Matching**: Use `**string**` patterns for precise transformations (`**url**` → `buildURLWithParams`)
+- **Glob Pattern Support**: Apply rules with wildcards (`*json*`, `auto*`, `http*`) for flexible naming control
+- **Case-Sensitive Rules**: Preserve important naming patterns (acronyms, technical terms, branding)
+- **Mixed Rule Types**: Combine exact matches, globs, and boundary patterns for sophisticated naming strategies
+
 ### 📊 **Performance Optimizations**
 
 - **Startup**: Lazy mode 4.3x faster (564.17μs vs 2.45ms)
@@ -76,7 +84,7 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 
 ### ⚡ Performance Excellence
 
-- **📊 For comprehensive performance analysis, benchmarks, and recommendations, see [PERFORMANCE.md](PERFORMANCE.md)**
+- **📊 For comprehensive performance analysis, benchmarks, and recommendations, see [PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/HEAD/PERFORMANCE.md)**
 
 ### 🔧 **Smart API Management**
 
@@ -87,7 +95,7 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Hybrid Exports**: Support for callable APIs with methods, default + named exports, and mixed patterns
 
 > [!TIP]  
-> **📁 For comprehensive examples of API flattening, naming conventions, and function preservation patterns, see the test modules in [api_tests/](api_tests/) and their documentation in [docs/api_tests/](docs/api_tests/)**
+> **📁 For comprehensive examples of API flattening, naming conventions, and function preservation patterns, see the test modules in [api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests) and their documentation in [docs/api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/docs/api_tests)**
 
 ### 🔗 **Advanced Binding System**
 
@@ -215,9 +223,51 @@ const api = await slothlet({
 		helpers: {
 			/* ... */
 		}
+	},
+	sanitize: {
+		// 🔧 NEW: Control API property naming
+		lowerFirst: false, // Keep first character casing
+		rules: {
+			leave: ["parseJSON", "autoIP"], // Preserve exact names
+			leaveInsensitive: ["*xml*"], // Case-insensitive preservation
+			upper: ["**url**", "api", "http*"], // Force uppercase (including boundary patterns)
+			lower: ["id", "uuid", "*id"] // Force lowercase
+		}
 	}
 });
 ```
+
+### Sanitize Options Examples
+
+Transform module filenames into clean, professional API property names:
+
+```javascript
+// Without sanitize options (default behavior)
+const api = await slothlet({ dir: "./api" });
+// Files: build-url-with-params.mjs, parse-json-data.mjs, auto-ip.mjs
+// Result: api.buildUrlWithParams, api.parseJsonData, api.autoIp
+
+// With sanitize options (custom naming control)
+const api = await slothlet({
+	dir: "./api",
+	sanitize: {
+		lowerFirst: false,
+		rules: {
+			leave: ["parseJSON"], // Exact match preservation
+			upper: ["**url**", "ip", "http*"], // Boundary + glob patterns
+			leaveInsensitive: ["*xml*"] // Case-insensitive globs
+		}
+	}
+});
+// Result: api.buildURLWithParams, api.parseJSON, api.autoIP
+```
+
+**Sanitize Pattern Types:**
+
+- **Exact Match**: `"parseJSON"` - Matches exact string only
+- **Glob Patterns**: `"*json*"`, `"auto*"`, `"http*"` - Wildcard matching
+- **Boundary Patterns**: `"**url**"` - Only matches when surrounded by word boundaries
+- **Case Control**: `leaveInsensitive` for case-insensitive matching
 
 ### Multiple Instances
 
@@ -284,6 +334,7 @@ Creates and loads an API instance with the specified configuration.
 | `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports) |
 | `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`                                                                                                                                                                                                                        |
 | `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                      |
+| `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Control how filenames become API property names. Supports exact matches, glob patterns (`*json*`), and boundary patterns (`**url**`). Configure `lowerFirst` and `rules` for `leave`, `leaveInsensitive`, `upper`, and `lower` transformations                                                                                                                         |
 
 #### `slothlet.getApi()` ⇒ `object`
 
@@ -310,7 +361,7 @@ Gracefully shuts down the API and cleans up resources.
 **Returns:** `Promise<void>` - Resolves when shutdown is complete
 
 > [!NOTE]  
-> **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](docs/API.md)**
+> **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)**
 
 ### Live Bindings
 
@@ -809,7 +860,7 @@ We welcome contributions! The experimental modes in particular need development 
 4. **Provide feedback** on API design and performance
 5. **Documentation improvements** are always appreciated
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+See [CONTRIBUTING.md](https://github.com/CLDMV/slothlet/blob/HEAD/CONTRIBUTING.md) for detailed contribution guidelines.
 
 [![Contributors]][contributors_url] [![Sponsor shinrai]][sponsor_url]
 
@@ -819,7 +870,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 For comprehensive performance benchmarks, analysis, and recommendations:
 
-**📈 [See PERFORMANCE.md](PERFORMANCE.md)**
+**📈 [See PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/HEAD/PERFORMANCE.md)**
 
 Key highlights:
 
@@ -836,11 +887,11 @@ Key highlights:
 
 ## 📚 Documentation
 
-- **[API Documentation](docs/API.md)** - Complete API reference with examples
-- **[Performance Analysis](PERFORMANCE.md)** - Detailed benchmarks and recommendations
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
-- **[Security Policy](SECURITY.md)** - Security guidelines and reporting
-- **[Test Documentation](api_tests/)** - Comprehensive test module examples
+- **[API Documentation](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)** - Complete API reference with examples
+- **[Performance Analysis](https://github.com/CLDMV/slothlet/blob/HEAD/PERFORMANCE.md)** - Detailed benchmarks and recommendations
+- **[Contributing Guide](https://github.com/CLDMV/slothlet/blob/HEAD/CONTRIBUTING.md)** - How to contribute to the project
+- **[Security Policy](https://github.com/CLDMV/slothlet/blob/HEAD/SECURITY.md)** - Security guidelines and reporting
+- **[Test Documentation](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests)** - Comprehensive test module examples
 
 ---
 
@@ -895,7 +946,7 @@ Slothlet v2.0 represents a complete architectural rewrite with enterprise-grade 
 [repo size]: https://img.shields.io/github/repo-size/CLDMV/slothlet?style=for-the-badge&logo=github&logoColor=white&labelColor=181717
 [repo_size_url]: https://github.com/CLDMV/slothlet
 [github license]: https://img.shields.io/github/license/CLDMV/slothlet.svg?style=for-the-badge&logo=github&logoColor=white&labelColor=181717
-[github_license_url]: LICENSE
+[github_license_url]: https://github.com/CLDMV/slothlet/blob/HEAD/LICENSE
 [npm license]: https://img.shields.io/npm/l/%40cldmv%2Fslothlet.svg?style=for-the-badge&logo=npm&logoColor=white&labelColor=CB3837
 [npm_license_url]: https://www.npmjs.com/package/@cldmv/slothlet
 [contributors]: https://img.shields.io/github/contributors/CLDMV/slothlet.svg?style=for-the-badge&logo=github&logoColor=white&labelColor=181717

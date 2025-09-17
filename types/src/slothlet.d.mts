@@ -96,6 +96,20 @@ export type SlothletOptions = {
      * - Useful for utility functions, constants, or external service connections.
      */
     reference?: object;
+    /**
+     * - Filename sanitization options for API property names.
+     * - Controls how file names are converted to valid JavaScript identifiers.
+     * - Default behavior: camelCase conversion with lowerFirst=true.
+     */
+    sanitize?: {
+        lowerFirst?: boolean;
+        rules?: {
+            leave?: string[];
+            leaveInsensitive?: string[];
+            upper?: string[];
+            lower?: string[];
+        };
+    };
 };
 /**
  * Creates a slothlet API instance with the specified configuration.
