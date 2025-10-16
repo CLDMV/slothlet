@@ -105,7 +105,6 @@ function runtime_isClassInstance(val) {
 		val == null ||
 		typeof val !== "object" ||
 		!val.constructor ||
-		val.constructor.name === "Object" || // Defensive: exclude plain objects
 		EXCLUDED_CONSTRUCTORS.has(val.constructor) ||
 		ArrayBuffer.isView(val)
 	) {
@@ -163,7 +162,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 				typeof value === "function" &&
 				typeof prop === "string" && // Exclude symbol properties
 				prop !== "constructor" &&
-				!Object.prototype.hasOwnProperty.call(Object.prototype, prop) &&
+				!(prop in Object.prototype) &&
 				!prop.startsWith("__")
 			) {
 				/**
