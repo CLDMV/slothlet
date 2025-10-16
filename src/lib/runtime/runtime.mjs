@@ -78,6 +78,12 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
  */
 export const getCtx = () => als.getStore() || null;
 
+// Set of constructors to exclude from being considered as class instances
+const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
+
+// Array of classes for instanceof checks
+const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
+
 /**
  * @function runtime_isClassInstance
  * @internal
@@ -88,31 +94,31 @@ export const getCtx = () => als.getStore() || null;
  * @description
  * Determines if a value is a class instance (not a plain object, array, or primitive)
  * that should have its methods wrapped to preserve AsyncLocalStorage context.
+ * Uses systematic exclusion lists for better maintainability.
  *
  * @example
  * // Check if value is a class instance
  * const isInstance = runtime_isClassInstance(new MyClass());
  */
 function runtime_isClassInstance(val) {
-	return (
-		val != null &&
-		typeof val === "object" &&
-		val.constructor &&
-		val.constructor !== Object &&
-		val.constructor !== Array &&
-		val.constructor !== Promise &&
-		val.constructor !== Date &&
-		val.constructor !== RegExp &&
-		val.constructor !== Error &&
-		val.constructor.name !== "Object" &&
-		// Avoid wrapping built-in objects and common types
-		!ArrayBuffer.isView(val) &&
-		!(val instanceof ArrayBuffer) &&
-		!(val instanceof Map) &&
-		!(val instanceof Set) &&
-		!(val instanceof WeakMap) &&
-		!(val instanceof WeakSet)
-	);
+	if (
+		val == null ||
+		typeof val !== "object" ||
+		!val.constructor ||
+		val.constructor.name === "Object" || // Defensive: exclude plain objects
+		EXCLUDED_CONSTRUCTORS.has(val.constructor) ||
+		ArrayBuffer.isView(val)
+	) {
+		return false;
+	}
+
+	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
+		if (val instanceof cls) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /**
