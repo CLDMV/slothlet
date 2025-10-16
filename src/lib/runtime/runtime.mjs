@@ -139,12 +139,20 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 		return instanceCache.get(instance);
 	}
 
+	// Cache for wrapped methods to avoid creating new function instances on repeated access
+	const methodCache = new Map();
+
 	const wrappedInstance = new Proxy(instance, {
 		get(target, prop, receiver) {
 			const value = Reflect.get(target, prop, receiver);
 
 			// If it's a method (function), wrap it to preserve context
 			if (typeof value === "function" && prop !== "constructor") {
+				// Return cached wrapper if it exists
+				if (methodCache.has(prop)) {
+					return methodCache.get(prop);
+				}
+
 				/**
 				 * @function runtime_contextPreservingMethod
 				 * @internal
@@ -162,6 +170,9 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 				const runtime_contextPreservingMethod = function (...args) {
 					return runWithCtx(ctx, value, target, args);
 				};
+
+				// Cache the wrapped method for future access
+				methodCache.set(prop, runtime_contextPreservingMethod);
 				return runtime_contextPreservingMethod;
 			}
 
@@ -170,6 +181,10 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 		},
 
 		set(target, prop, value, receiver) {
+			// Clear method cache for this property if it's being overwritten
+			if (methodCache.has(prop)) {
+				methodCache.delete(prop);
+			}
 			return Reflect.set(target, prop, value, receiver);
 		}
 	});
