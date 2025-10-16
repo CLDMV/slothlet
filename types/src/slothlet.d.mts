@@ -103,6 +103,8 @@ export type SlothletOptions = {
      */
     sanitize?: {
         lowerFirst?: boolean;
+        preserveAllUpper?: boolean;
+        preserveAllLower?: boolean;
         rules?: {
             leave?: string[];
             leaveInsensitive?: string[];
