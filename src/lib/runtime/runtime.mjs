@@ -85,6 +85,32 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
 const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
 
 /**
+ * @function runtime_shouldWrapMethod
+ * @internal
+ * @private
+ * @param {any} value - The property value to check
+ * @param {string|symbol} prop - The property name
+ * @returns {boolean} True if the method should be wrapped
+ *
+ * @description
+ * Determines if a method should be wrapped with context preservation.
+ * Excludes built-in methods, constructors, and internal methods.
+ *
+ * @example
+ * // Check if method should be wrapped
+ * const shouldWrap = runtime_shouldWrapMethod(obj.method, 'method');
+ */
+function runtime_shouldWrapMethod(value, prop) {
+	return (
+		typeof value === "function" &&
+		typeof prop === "string" && // Exclude symbol properties
+		prop !== "constructor" &&
+		!(prop in Object.prototype) &&
+		!prop.startsWith("__")
+	);
+}
+
+/**
  * @function runtime_isClassInstance
  * @internal
  * @private
@@ -105,6 +131,7 @@ function runtime_isClassInstance(val) {
 		val == null ||
 		typeof val !== "object" ||
 		!val.constructor ||
+		typeof val.constructor !== "function" ||
 		EXCLUDED_CONSTRUCTORS.has(val.constructor) ||
 		ArrayBuffer.isView(val)
 	) {
@@ -158,13 +185,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 
 			// If it's a method (function), wrap it to preserve context
 			// Exclude constructor, Object.prototype methods, and double-underscore methods to avoid introspection issues
-			if (
-				typeof value === "function" &&
-				typeof prop === "string" && // Exclude symbol properties
-				prop !== "constructor" &&
-				!(prop in Object.prototype) &&
-				!prop.startsWith("__")
-			) {
+			if (runtime_shouldWrapMethod(value, prop)) {
 				/**
 				 * @function runtime_contextPreservingMethod
 				 * @internal
@@ -175,6 +196,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 				 * @description
 				 * Wrapper function that executes the original method within the AsyncLocalStorage context
 				 * and recursively wraps the return value to maintain context preservation chain.
+				 * Note: wrapFn includes circular reference protection via WeakMap cache.
 				 *
 				 * @example
 				 * // Method wrapper that preserves context
@@ -182,6 +204,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 				 */
 				const runtime_contextPreservingMethod = function (...args) {
 					const result = runWithCtx(ctx, value, target, args);
+					// wrapFn handles circular reference detection via WeakMap cache
 					return wrapFn(result);
 				};
 
