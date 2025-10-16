@@ -81,7 +81,7 @@ export const getCtx = () => als.getStore() || null;
 // Set of constructors to exclude from being considered as class instances
 const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
 
-// Array of classes for instanceof checks
+// Array of constructor functions for instanceof checks
 const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
 
 /**
@@ -132,8 +132,7 @@ function runtime_isClassInstance(val) {
 		typeof val !== "object" ||
 		!val.constructor ||
 		typeof val.constructor !== "function" ||
-		EXCLUDED_CONSTRUCTORS.has(val.constructor) ||
-		ArrayBuffer.isView(val)
+		EXCLUDED_CONSTRUCTORS.has(val.constructor)
 	) {
 		return false;
 	}
@@ -176,7 +175,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 
 	const wrappedInstance = new Proxy(instance, {
 		get(target, prop, receiver) {
-			// Check method cache first to avoid unnecessary property access
+			// Check method cache first to avoid unnecessary property access and function creation
 			if (methodCache.has(prop)) {
 				return methodCache.get(prop);
 			}
@@ -186,6 +185,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 			// If it's a method (function), wrap it to preserve context
 			// Exclude constructor, Object.prototype methods, and double-underscore methods to avoid introspection issues
 			if (runtime_shouldWrapMethod(value, prop)) {
+				// Function creation only occurs on cache miss - subsequent accesses return cached wrapper
 				/**
 				 * @function runtime_contextPreservingMethod
 				 * @internal
@@ -208,7 +208,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 					return wrapFn(result);
 				};
 
-				// Cache the wrapped method for future access
+				// Cache the wrapped method for future access - prevents recreation on subsequent calls
 				methodCache.set(prop, runtime_contextPreservingMethod);
 				return runtime_contextPreservingMethod;
 			}
