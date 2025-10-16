@@ -122,6 +122,7 @@ function runtime_isClassInstance(val) {
  * @param {object} instance - The class instance to wrap
  * @param {object} ctx - The AsyncLocalStorage context to preserve
  * @param {Function} wrapFn - The wrap function for recursive wrapping
+ * @param {WeakMap} instanceCache - The cache for wrapped instances
  * @returns {Proxy} A proxied instance with context-aware method calls
  *
  * @description
@@ -131,11 +132,9 @@ function runtime_isClassInstance(val) {
  *
  * @example
  * // Wrap a class instance to preserve context
- * const wrappedInstance = runtime_wrapClassInstance(instance, ctx, wrap);
+ * const wrappedInstance = runtime_wrapClassInstance(instance, ctx, wrap, instanceCache);
  */
-function runtime_wrapClassInstance(instance, ctx, wrapFn) {
-	const instanceCache = new WeakMap();
-
+function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 	if (instanceCache.has(instance)) {
 		return instanceCache.get(instance);
 	}
@@ -201,6 +200,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn) {
  */
 export const makeWrapper = (ctx) => {
 	const cache = new WeakMap();
+	const instanceCache = new WeakMap();
 	const wrap = (val) => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
@@ -222,7 +222,7 @@ export const makeWrapper = (ctx) => {
 
 				// Auto-wrap returned class instances to preserve context for method calls
 				if (runtime_isClassInstance(result)) {
-					return runtime_wrapClassInstance(result, ctx, wrap);
+					return runtime_wrapClassInstance(result, ctx, wrap, instanceCache);
 				}
 
 				return result;
@@ -233,7 +233,7 @@ export const makeWrapper = (ctx) => {
 
 				// Auto-wrap constructed instances to preserve context for method calls
 				if (runtime_isClassInstance(result)) {
-					return runtime_wrapClassInstance(result, ctx, wrap);
+					return runtime_wrapClassInstance(result, ctx, wrap, instanceCache);
 				}
 
 				return result;
