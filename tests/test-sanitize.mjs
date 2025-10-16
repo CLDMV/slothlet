@@ -7,12 +7,18 @@ console.log("Testing sanitizePathName with pattern matching...\n");
 let passCount = 0;
 let failCount = 0;
 
-function runTest(description, input, rules, expected, testName) {
-	const result = sanitizePathName(input, { rules });
+function runTest(description, input, optionsOrRules, expected, testName) {
+	// If optionsOrRules has preserveAllUpper or preserveAllLower, treat as full options
+	// Otherwise, treat as rules and wrap in { rules: ... }
+	const options = (optionsOrRules.preserveAllUpper !== undefined || optionsOrRules.preserveAllLower !== undefined) 
+		? optionsOrRules 
+		: { rules: optionsOrRules };
+		
+	const result = sanitizePathName(input, options);
 	const passed = result === expected;
 
 	console.log(`\nInput: "${input}"`);
-	console.log(`Rule: ${JSON.stringify(rules)} ${description}`);
+	console.log(`Options: ${JSON.stringify(options)} ${description}`);
 	console.log("Result:", result);
 	console.log(`Expected: "${expected}"`);
 	console.log("Match:", passed ? "✅ PASS" : "❌ FAIL");
@@ -103,7 +109,7 @@ runTest(
 // Test 12: leave with pattern match
 runTest("(pattern containing IoT)", "auto-IoT-device", { leave: ["*-IoT-*"] }, "autoIoTDevice", "leave rule pattern match");
 
-console.log("\n=== Testing rule precedence (leave > leaveInsensitive > upper > lower) ===");
+console.log("\n=== Testing rule precedence (leave > leaveInsensitive > preserveAllUpper/preserveAllLower > upper > lower) ===");
 
 // Test 13: Multiple rules - leave should win over leaveInsensitive
 runTest(
@@ -132,7 +138,29 @@ runTest(
 	"rule precedence - leaveInsensitive wins"
 );
 
-// Test 14: upper vs lower - upper should win
+// Test 13.6: preserveAllUpper should win over upper/lower rules
+runTest(
+	"(preserveAllUpper should win over upper)",
+	"XML_DATA",
+	{
+		preserveAllUpper: true,
+		rules: { upper: ["xml"] }
+	},
+	"XML_DATA",
+	"rule precedence - preserveAllUpper wins over upper"
+);
+
+// Test 13.7: leave should win over preserveAllUpper
+runTest(
+	"(leave should win over preserveAllUpper)",
+	"XML_DATA",
+	{
+		preserveAllUpper: true,
+		rules: { leave: ["XML_DATA"] }
+	},
+	"XML_DATA",
+	"rule precedence - leave wins over preserveAllUpper"
+);// Test 14: upper vs lower - upper should win
 runTest(
 	"(upper should win)",
 	"get-json-data",
@@ -143,6 +171,75 @@ runTest(
 	"getJSONData",
 	"rule precedence - upper wins over lower"
 );
+
+console.log("\n=== Testing NEW preserveAllUpper option ===");
+
+// Test 15: preserveAllUpper with all-uppercase identifier
+runTest(
+	"(all-uppercase preserved)",
+	"COMMON_APPS",
+	{ preserveAllUpper: true },
+	"COMMON_APPS",
+	"preserveAllUpper with all-uppercase identifier"
+);
+
+// Test 16: preserveAllUpper with mixed case (should NOT preserve)
+runTest(
+	"(mixed case not preserved)",
+	"cOMMON_APPS",
+	{ preserveAllUpper: true },
+	"cOMMON_APPS",
+	"preserveAllUpper with mixed case should not preserve"
+);
+
+// Test 17: preserveAllUpper in multi-segment context
+runTest(
+	"(multi-segment with uppercase)",
+	"parse-XML-data",
+	{ preserveAllUpper: true },
+	"parseXMLData",
+	"preserveAllUpper in multi-segment context"
+);
+
+console.log("\n=== Testing NEW preserveAllLower option ===");
+
+// Test 18: preserveAllLower with all-lowercase identifier
+runTest(
+	"(all-lowercase preserved)",
+	"common_apps",
+	{ preserveAllLower: true },
+	"common_apps",
+	"preserveAllLower with all-lowercase identifier"
+);
+
+// Test 19: preserveAllLower with mixed case (should NOT preserve)
+runTest(
+	"(mixed case not preserved)",
+	"Common_apps",
+	{ preserveAllLower: true },
+	"common_apps",
+	"preserveAllLower with mixed case should not preserve"
+);
+
+// Test 20: preserveAllLower in multi-segment context
+runTest(
+	"(multi-segment with lowercase)",
+	"parse-xml-data",
+	{ preserveAllLower: true },
+	"parsexmldata",
+	"preserveAllLower in multi-segment context"
+);
+
+console.log("\n=== Testing edge cases with new options ===");
+
+// Test 21: Numeric identifiers (should not be affected by preserve options)
+runTest("(numeric identifier)", "123_456", { preserveAllUpper: true }, "_456", "numeric identifier with preserveAllUpper");
+
+// Test 22: Single letter segments
+runTest("(single uppercase letter)", "A", { preserveAllUpper: true }, "A", "single uppercase letter with preserveAllUpper");
+
+// Test 23: Single letter segments lowercase
+runTest("(single lowercase letter)", "a", { preserveAllLower: true }, "a", "single lowercase letter with preserveAllLower");
 
 console.log("\n=== Testing within-segment pattern transformations ===");
 

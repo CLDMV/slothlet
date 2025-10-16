@@ -72,6 +72,8 @@ function globToRegex(pattern, caseSensitive = true) {
  * @param {string} input - The input string to sanitize (e.g., file name, path segment)
  * @param {Object} [opts={}] - Sanitization configuration options
  * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
+ * @param {boolean} [opts.preserveAllUpper=false] - Automatically preserve any identifier that is already in all-uppercase format
+ * @param {boolean} [opts.preserveAllLower=false] - Automatically preserve any identifier that is already in all-lowercase format
  * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns: *, ?, **STRING**)
  * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
  * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
@@ -115,6 +117,20 @@ function globToRegex(pattern, caseSensitive = true) {
  * }); // Result: "getAPIStatus" (api becomes API due to pattern)
  *
  * @example
+ * // Automatic case preservation
+ * sanitizePathName("COMMON_APPS", { preserveAllUpper: true });      // "COMMON_APPS" (preserved)
+ * sanitizePathName("cOMMON_APPS", { preserveAllUpper: true });      // "cOMMON_APPS" (not all-uppercase, transformed)
+ * sanitizePathName("common_apps", { preserveAllLower: true });      // "common_apps" (preserved)
+ * sanitizePathName("Common_apps", { preserveAllLower: true });      // "commonApps" (not all-lowercase, transformed)
+ *
+ * @example
+ * // Combining preserve options with other rules
+ * sanitizePathName("parse-XML-data", { 
+ *   preserveAllUpper: true, 
+ *   rules: { upper: ["xml"] } 
+ * }); // "parseXMLData" (XML preserved by preserveAllUpper)
+ *
+ * @example
  * // Boundary-requiring patterns with **STRING** syntax
  * sanitizePathName("buildUrlWithParams", {
  *   rules: {
@@ -135,7 +151,7 @@ function globToRegex(pattern, caseSensitive = true) {
  * }); // Result: "parseJSONData" (json becomes JSON)
  */
 export function sanitizePathName(input, opts = {}) {
-	const { lowerFirst = true, rules = {} } = opts;
+	const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = opts;
 
 	const leaveRules = (rules.leave || []).map((s) => String(s));
 	const leaveInsensitiveRules = (rules.leaveInsensitive || []).map((s) => String(s));
@@ -205,17 +221,27 @@ export function sanitizePathName(input, opts = {}) {
 			return seg;
 		}
 
-		// 3) upper: force full uppercase (for pre-split pattern matches)
+		// 3) preserveAllUpper: preserve segments that are already all-uppercase
+		if (preserveAllUpper && seg === seg.toUpperCase() && seg !== seg.toLowerCase() && /[A-Z]/.test(seg)) {
+			return seg;
+		}
+
+		// 4) preserveAllLower: preserve segments that are already all-lowercase  
+		if (preserveAllLower && seg === seg.toLowerCase() && seg !== seg.toUpperCase() && /[a-z]/.test(seg)) {
+			return seg;
+		}
+
+		// 5) upper: force full uppercase (for pre-split pattern matches)
 		if (segmentMatchesPreSplitPattern(seg, upperRules, false)) {
 			return seg.toUpperCase();
 		}
 
-		// 4) lower: force full lowercase (for pre-split pattern matches)
+		// 6) lower: force full lowercase (for pre-split pattern matches)
 		if (segmentMatchesPreSplitPattern(seg, lowerRules, false)) {
 			return seg.toLowerCase();
 		}
 
-		// 5) Apply pattern-based transformations within the segment (for within-segment patterns)
+		// 7) Apply pattern-based transformations within the segment (for within-segment patterns)
 		let transformedSeg = seg;
 
 		// Apply upper rule patterns that don't match pre-split
@@ -303,7 +329,7 @@ export function sanitizePathName(input, opts = {}) {
 			}
 		}
 
-		// 6) Check for full segment upper/lower rules (for exact/non-glob patterns)
+		// 8) Check for full segment upper/lower rules (for exact/non-glob patterns)
 		// upper: force full uppercase (only for exact matches, not glob patterns)
 		for (const pattern of upperRules) {
 			if (!pattern.includes("*") && !pattern.includes("?")) {
@@ -315,7 +341,7 @@ export function sanitizePathName(input, opts = {}) {
 			}
 		}
 
-		// 7) lower: force full lowercase (only for exact matches, not glob patterns)
+		// 9) lower: force full lowercase (only for exact matches, not glob patterns)
 		for (const pattern of lowerRules) {
 			if (!pattern.includes("*") && !pattern.includes("?")) {
 				// Exact pattern match

@@ -5,6 +5,8 @@
  * @param {string} input - The input string to sanitize (e.g., file name, path segment)
  * @param {Object} [opts={}] - Sanitization configuration options
  * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
+ * @param {boolean} [opts.preserveAllUpper=false] - Automatically preserve any identifier that is already in all-uppercase format
+ * @param {boolean} [opts.preserveAllLower=false] - Automatically preserve any identifier that is already in all-lowercase format
  * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns: *, ?, **STRING**)
  * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
  * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
@@ -48,6 +50,20 @@
  * }); // Result: "getAPIStatus" (api becomes API due to pattern)
  *
  * @example
+ * // Automatic case preservation
+ * sanitizePathName("COMMON_APPS", { preserveAllUpper: true });      // "COMMON_APPS" (preserved)
+ * sanitizePathName("cOMMON_APPS", { preserveAllUpper: true });      // "cOMMON_APPS" (not all-uppercase, transformed)
+ * sanitizePathName("common_apps", { preserveAllLower: true });      // "common_apps" (preserved)
+ * sanitizePathName("Common_apps", { preserveAllLower: true });      // "commonApps" (not all-lowercase, transformed)
+ *
+ * @example
+ * // Combining preserve options with other rules
+ * sanitizePathName("parse-XML-data", {
+ *   preserveAllUpper: true,
+ *   rules: { upper: ["xml"] }
+ * }); // "parseXMLData" (XML preserved by preserveAllUpper)
+ *
+ * @example
  * // Boundary-requiring patterns with **STRING** syntax
  * sanitizePathName("buildUrlWithParams", {
  *   rules: {
@@ -69,6 +85,8 @@
  */
 export function sanitizePathName(input: string, opts?: {
     lowerFirst?: boolean;
+    preserveAllUpper?: boolean;
+    preserveAllLower?: boolean;
     rules?: {
         leave?: string[];
         leaveInsensitive?: string[];

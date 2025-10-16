@@ -1512,6 +1512,8 @@ export default slothlet;
  *   - Controls how file names are converted to valid JavaScript identifiers.
  *   - Default behavior: camelCase conversion with lowerFirst=true.
  * @property {boolean} [sanitize.lowerFirst=true] - Lowercase first character of first segment for camelCase convention.
+ * @property {boolean} [sanitize.preserveAllUpper=false] - Automatically preserve any identifier that is already in all-uppercase format.
+ * @property {boolean} [sanitize.preserveAllLower=false] - Automatically preserve any identifier that is already in all-lowercase format.
  * @property {object} [sanitize.rules={}] - Advanced segment transformation rules with glob pattern support.
  * @property {string[]} [sanitize.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports * and ? globs).
  * @property {string[]} [sanitize.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports * and ? globs).
