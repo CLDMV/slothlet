@@ -50,6 +50,20 @@
  * }); // Result: "getAPIStatus" (api becomes API due to pattern)
  *
  * @example
+ * // Automatic case preservation
+ * sanitizePathName("COMMON_APPS", { preserveAllUpper: true });      // "COMMON_APPS" (preserved)
+ * sanitizePathName("cOMMON_APPS", { preserveAllUpper: true });      // "cOMMON_APPS" (not all-uppercase, transformed)
+ * sanitizePathName("common_apps", { preserveAllLower: true });      // "common_apps" (preserved)
+ * sanitizePathName("Common_apps", { preserveAllLower: true });      // "commonApps" (not all-lowercase, transformed)
+ *
+ * @example
+ * // Combining preserve options with other rules
+ * sanitizePathName("parse-XML-data", {
+ *   preserveAllUpper: true,
+ *   rules: { upper: ["xml"] }
+ * }); // "parseXMLData" (XML preserved by preserveAllUpper)
+ *
+ * @example
  * // Boundary-requiring patterns with **STRING** syntax
  * sanitizePathName("buildUrlWithParams", {
  *   rules: {
@@ -69,18 +83,15 @@
  *   }
  * }); // Result: "parseJSONData" (json becomes JSON)
  */
-export function sanitizePathName(
-	input: string,
-	opts?: {
-		lowerFirst?: boolean;
-		preserveAllUpper?: boolean;
-		preserveAllLower?: boolean;
-		rules?: {
-			leave?: string[];
-			leaveInsensitive?: string[];
-			upper?: string[];
-			lower?: string[];
-		};
-	}
-): string;
+export function sanitizePathName(input: string, opts?: {
+    lowerFirst?: boolean;
+    preserveAllUpper?: boolean;
+    preserveAllLower?: boolean;
+    rules?: {
+        leave?: string[];
+        leaveInsensitive?: string[];
+        upper?: string[];
+        lower?: string[];
+    };
+}): string;
 //# sourceMappingURL=sanitize.d.mts.map
