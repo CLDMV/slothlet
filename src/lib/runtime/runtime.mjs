@@ -138,7 +138,7 @@ function runtime_isClassInstance(val) {
 	}
 
 	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
-		if (val instanceof cls) {
+		if (typeof cls === "function" && val instanceof cls) {
 			return false;
 		}
 	}
