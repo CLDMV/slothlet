@@ -79,6 +79,107 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 export const getCtx = () => als.getStore() || null;
 
 /**
+ * @function runtime_isClassInstance
+ * @internal
+ * @private
+ * @param {any} val - The value to check
+ * @returns {boolean} True if the value is a class instance that should be wrapped
+ *
+ * @description
+ * Determines if a value is a class instance (not a plain object, array, or primitive)
+ * that should have its methods wrapped to preserve AsyncLocalStorage context.
+ *
+ * @example
+ * // Check if value is a class instance
+ * const isInstance = runtime_isClassInstance(new MyClass());
+ */
+function runtime_isClassInstance(val) {
+	return (
+		val != null &&
+		typeof val === "object" &&
+		val.constructor &&
+		val.constructor !== Object &&
+		val.constructor !== Array &&
+		val.constructor !== Promise &&
+		val.constructor !== Date &&
+		val.constructor !== RegExp &&
+		val.constructor !== Error &&
+		val.constructor.name !== "Object" &&
+		// Avoid wrapping built-in objects and common types
+		!ArrayBuffer.isView(val) &&
+		!(val instanceof ArrayBuffer) &&
+		!(val instanceof Map) &&
+		!(val instanceof Set) &&
+		!(val instanceof WeakMap) &&
+		!(val instanceof WeakSet)
+	);
+}
+
+/**
+ * @function runtime_wrapClassInstance
+ * @internal
+ * @private
+ * @param {object} instance - The class instance to wrap
+ * @param {object} ctx - The AsyncLocalStorage context to preserve
+ * @param {Function} wrapFn - The wrap function for recursive wrapping
+ * @returns {Proxy} A proxied instance with context-aware method calls
+ *
+ * @description
+ * Wraps a class instance so that all method calls maintain the AsyncLocalStorage context.
+ * This ensures that calls to methods on returned class instances preserve the slothlet
+ * context for runtime imports like `self` and `context`.
+ *
+ * @example
+ * // Wrap a class instance to preserve context
+ * const wrappedInstance = runtime_wrapClassInstance(instance, ctx, wrap);
+ */
+function runtime_wrapClassInstance(instance, ctx, wrapFn) {
+	const instanceCache = new WeakMap();
+
+	if (instanceCache.has(instance)) {
+		return instanceCache.get(instance);
+	}
+
+	const wrappedInstance = new Proxy(instance, {
+		get(target, prop, receiver) {
+			const value = Reflect.get(target, prop, receiver);
+
+			// If it's a method (function), wrap it to preserve context
+			if (typeof value === "function" && prop !== "constructor") {
+				/**
+				 * @function runtime_contextPreservingMethod
+				 * @internal
+				 * @private
+				 * @param {...any} args - Arguments to pass to the original method
+				 * @returns {any} Result from the original method call
+				 *
+				 * @description
+				 * Wrapper function that executes the original method within the AsyncLocalStorage context.
+				 *
+				 * @example
+				 * // Method wrapper that preserves context
+				 * const result = runtime_contextPreservingMethod(arg1, arg2);
+				 */
+				const runtime_contextPreservingMethod = function (...args) {
+					return runWithCtx(ctx, value, target, args);
+				};
+				return runtime_contextPreservingMethod;
+			}
+
+			// For non-function properties, recursively wrap if needed
+			return wrapFn(value);
+		},
+
+		set(target, prop, value, receiver) {
+			return Reflect.set(target, prop, value, receiver);
+		}
+	});
+
+	instanceCache.set(instance, wrappedInstance);
+	return wrappedInstance;
+}
+
+/**
  * @function makeWrapper
  * @package
  * @param {object} ctx - The context object containing self, context, and reference
@@ -116,11 +217,26 @@ export const makeWrapper = (ctx) => {
 				// 	ctxReferenceKeys: Object.keys(ctx.reference || {}),
 				// 	hasRunWithCtx: typeof runWithCtx === "function"
 				// });
-				return runWithCtx(ctx, target, thisArg, args);
+
+				const result = runWithCtx(ctx, target, thisArg, args);
+
+				// Auto-wrap returned class instances to preserve context for method calls
+				if (runtime_isClassInstance(result)) {
+					return runtime_wrapClassInstance(result, ctx, wrap);
+				}
+
+				return result;
 			},
 			construct(target, args, newTarget) {
 				// If callers "new" a function off the API, preserve context too
-				return runWithCtx(ctx, Reflect.construct, undefined, [target, args, newTarget]);
+				const result = runWithCtx(ctx, Reflect.construct, undefined, [target, args, newTarget]);
+
+				// Auto-wrap constructed instances to preserve context for method calls
+				if (runtime_isClassInstance(result)) {
+					return runtime_wrapClassInstance(result, ctx, wrap);
+				}
+
+				return result;
 			},
 			get(target, prop, receiver) {
 				return wrap(Reflect.get(target, prop, receiver));
