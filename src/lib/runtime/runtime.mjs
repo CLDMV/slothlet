@@ -152,17 +152,14 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 			const value = Reflect.get(target, prop, receiver);
 
 			// If it's a method (function), wrap it to preserve context
-			// Exclude constructor and built-in prototype methods to avoid introspection issues
-			if (typeof value === "function" && 
-				prop !== "constructor" &&
-				prop !== "toString" &&
-				prop !== "valueOf" &&
-				prop !== "hasOwnProperty" &&
-				prop !== "isPrototypeOf" &&
-				prop !== "propertyIsEnumerable" &&
-				prop !== "toLocaleString" &&
+			// Exclude constructor, Object.prototype methods, and double-underscore methods to avoid introspection issues
+			if (
+				typeof value === "function" &&
 				typeof prop === "string" && // Exclude symbol properties
-				!prop.startsWith("__")) { // Exclude double-underscore methods
+				prop !== "constructor" &&
+				!Object.prototype.hasOwnProperty.call(Object.prototype, prop) &&
+				!prop.startsWith("__")
+			) {
 				/**
 				 * @function runtime_contextPreservingMethod
 				 * @internal
