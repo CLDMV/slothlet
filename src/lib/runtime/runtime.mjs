@@ -158,17 +158,19 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 				 * @internal
 				 * @private
 				 * @param {...any} args - Arguments to pass to the original method
-				 * @returns {any} Result from the original method call
+				 * @returns {any} Result from the original method call, recursively wrapped if needed
 				 *
 				 * @description
-				 * Wrapper function that executes the original method within the AsyncLocalStorage context.
+				 * Wrapper function that executes the original method within the AsyncLocalStorage context
+				 * and recursively wraps the return value to maintain context preservation chain.
 				 *
 				 * @example
 				 * // Method wrapper that preserves context
 				 * const result = runtime_contextPreservingMethod(arg1, arg2);
 				 */
 				const runtime_contextPreservingMethod = function (...args) {
-					return runWithCtx(ctx, value, target, args);
+					const result = runWithCtx(ctx, value, target, args);
+					return wrapFn(result);
 				};
 
 				// Cache the wrapped method for future access
