@@ -144,15 +144,15 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 
 	const wrappedInstance = new Proxy(instance, {
 		get(target, prop, receiver) {
+			// Check method cache first to avoid unnecessary property access
+			if (methodCache.has(prop)) {
+				return methodCache.get(prop);
+			}
+
 			const value = Reflect.get(target, prop, receiver);
 
 			// If it's a method (function), wrap it to preserve context
 			if (typeof value === "function" && prop !== "constructor") {
-				// Return cached wrapper if it exists
-				if (methodCache.has(prop)) {
-					return methodCache.get(prop);
-				}
-
 				/**
 				 * @function runtime_contextPreservingMethod
 				 * @internal
