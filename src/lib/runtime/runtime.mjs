@@ -320,7 +320,7 @@ export const makeWrapper = (ctx) => {
 						const wrappedArgs = args.map((arg) => {
 							if (typeof arg === "function") {
 								return function (...callbackArgs) {
-									return runWithCtx(ctx, arg, this, callbackArgs);
+									return runWithCtx(ctx, arg, undefined, callbackArgs);
 								};
 							}
 							return arg;
@@ -338,7 +338,14 @@ export const makeWrapper = (ctx) => {
 
 				return wrap(value);
 			},
-			set: Reflect.set,
+			set(target, prop, value, receiver) {
+				// Invalidate cached Promise method wrapper for this (target, prop)
+				const methodCache = promiseMethodCache.get(target);
+				if (methodCache && methodCache.has(prop)) {
+					methodCache.delete(prop);
+				}
+				return Reflect.set(target, prop, value, receiver);
+			},
 			defineProperty: Reflect.defineProperty,
 			deleteProperty: Reflect.deleteProperty,
 			ownKeys: Reflect.ownKeys,
