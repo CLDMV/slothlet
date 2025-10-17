@@ -84,6 +84,9 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
 // Array of constructor functions for instanceof checks
 const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
 
+// Promise method names that need special context-preserving handling
+const PROMISE_METHODS = new Set(["then", "catch", "finally"]);
+
 /**
  * @function runtime_shouldWrapMethod
  * @internal
@@ -253,6 +256,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 export const makeWrapper = (ctx) => {
 	const cache = new WeakMap();
 	const instanceCache = new WeakMap();
+	const promiseMethodCache = new WeakMap(); // Memoize Promise method wrappers
 	const wrap = (val) => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
@@ -291,11 +295,66 @@ export const makeWrapper = (ctx) => {
 				return result;
 			},
 			get(target, prop, receiver) {
-				return wrap(Reflect.get(target, prop, receiver));
+				const value = Reflect.get(target, prop, receiver);
+
+				// Special handling for Promise methods to preserve prototype chain and context
+				// Support both native Promises and thenables (objects with callable 'then')
+				const isPromiseMethod = typeof value === "function" && PROMISE_METHODS.has(prop);
+				const isNativePromise = util.types.isPromise(target);
+				const hasThen = typeof target?.then === "function";
+
+				if (isPromiseMethod && (isNativePromise || hasThen)) {
+					// Memoize Promise method wrappers to preserve function identity
+					let targetMethodCache = promiseMethodCache.get(target);
+					if (!targetMethodCache) {
+						targetMethodCache = new Map();
+						promiseMethodCache.set(target, targetMethodCache);
+					}
+
+					if (targetMethodCache.has(prop)) {
+						return targetMethodCache.get(prop);
+					}
+
+					const wrappedMethod = function (...args) {
+						// Wrap callback functions to preserve runtime context
+						const wrappedArgs = args.map((arg) => {
+							if (typeof arg === "function") {
+								return function (...callbackArgs) {
+									return runWithCtx(ctx, arg, undefined, callbackArgs);
+								};
+							}
+							return arg;
+						});
+
+						// Use Reflect.apply for cross-realm safety and avoid overridden apply
+						const result = Reflect.apply(value, target, wrappedArgs);
+						// The result might be a new Promise that also needs context wrapping
+						return wrap(result);
+					};
+
+					targetMethodCache.set(prop, wrappedMethod);
+					return wrappedMethod;
+				}
+
+				return wrap(value);
 			},
-			set: Reflect.set,
+			set(target, prop, value, receiver) {
+				// Invalidate cached Promise method wrapper for this (target, prop)
+				const methodCache = promiseMethodCache.get(target);
+				if (methodCache && methodCache.has(prop)) {
+					methodCache.delete(prop);
+				}
+				return Reflect.set(target, prop, value, receiver);
+			},
 			defineProperty: Reflect.defineProperty,
-			deleteProperty: Reflect.deleteProperty,
+			deleteProperty(target, prop) {
+				// Invalidate cached Promise method wrapper for this (target, prop)
+				const methodCache = promiseMethodCache.get(target);
+				if (methodCache && methodCache.has(prop)) {
+					methodCache.delete(prop);
+				}
+				return Reflect.deleteProperty(target, prop);
+			},
 			ownKeys: Reflect.ownKeys,
 			getOwnPropertyDescriptor: Reflect.getOwnPropertyDescriptor,
 			has: Reflect.has
