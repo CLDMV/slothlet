@@ -84,6 +84,9 @@ const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Err
 // Array of constructor functions for instanceof checks
 const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
 
+// Promise method names that need special context-preserving handling
+const PROMISE_METHODS = new Set(["then", "catch", "finally"]);
+
 /**
  * @function runtime_shouldWrapMethod
  * @internal
@@ -294,7 +297,12 @@ export const makeWrapper = (ctx) => {
 				const value = Reflect.get(target, prop, receiver);
 
 				// Special handling for Promise methods to preserve prototype chain and context
-				if (util.types.isPromise(target) && typeof value === "function" && (prop === "then" || prop === "catch" || prop === "finally")) {
+				// Support both native Promises and thenables (objects with callable 'then')
+				const isPromiseMethod = typeof value === "function" && PROMISE_METHODS.has(prop);
+				const isNativePromise = util.types.isPromise(target);
+				const isThenable = prop === "then" && typeof target?.then === "function";
+				
+				if (isPromiseMethod && (isNativePromise || isThenable)) {
 					return function (...args) {
 						// Wrap callback functions to preserve runtime context
 						const wrappedArgs = args.map((arg) => {
