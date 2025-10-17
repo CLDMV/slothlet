@@ -293,11 +293,21 @@ export const makeWrapper = (ctx) => {
 			get(target, prop, receiver) {
 				const value = Reflect.get(target, prop, receiver);
 
-				// Special handling for Promise methods to preserve prototype chain
-				if (target instanceof Promise && typeof value === "function" && (prop === "then" || prop === "catch" || prop === "finally")) {
+				// Special handling for Promise methods to preserve prototype chain and context
+				if (util.types.isPromise(target) && typeof value === "function" && (prop === "then" || prop === "catch" || prop === "finally")) {
 					return function (...args) {
+						// Wrap callback functions to preserve runtime context
+						const wrappedArgs = args.map((arg) => {
+							if (typeof arg === "function") {
+								return function (...callbackArgs) {
+									return runWithCtx(ctx, arg, this, callbackArgs);
+								};
+							}
+							return arg;
+						});
+
 						// Bind the Promise method to the original target to preserve prototype
-						const result = value.apply(target, args);
+						const result = value.apply(target, wrappedArgs);
 						// The result might be a new Promise that also needs context wrapping
 						return wrap(result);
 					};
