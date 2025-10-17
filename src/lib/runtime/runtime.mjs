@@ -291,7 +291,19 @@ export const makeWrapper = (ctx) => {
 				return result;
 			},
 			get(target, prop, receiver) {
-				return wrap(Reflect.get(target, prop, receiver));
+				const value = Reflect.get(target, prop, receiver);
+
+				// Special handling for Promise methods to preserve prototype chain
+				if (target instanceof Promise && typeof value === "function" && (prop === "then" || prop === "catch" || prop === "finally")) {
+					return function (...args) {
+						// Bind the Promise method to the original target to preserve prototype
+						const result = value.apply(target, args);
+						// The result might be a new Promise that also needs context wrapping
+						return wrap(result);
+					};
+				}
+
+				return wrap(value);
 			},
 			set: Reflect.set,
 			defineProperty: Reflect.defineProperty,
