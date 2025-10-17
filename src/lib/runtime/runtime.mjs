@@ -256,6 +256,7 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 export const makeWrapper = (ctx) => {
 	const cache = new WeakMap();
 	const instanceCache = new WeakMap();
+	const promiseMethodCache = new WeakMap(); // Memoize Promise method wrappers
 	const wrap = (val) => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
@@ -300,10 +301,21 @@ export const makeWrapper = (ctx) => {
 				// Support both native Promises and thenables (objects with callable 'then')
 				const isPromiseMethod = typeof value === "function" && PROMISE_METHODS.has(prop);
 				const isNativePromise = util.types.isPromise(target);
-				const isThenable = prop === "then" && typeof target?.then === "function";
-				
+				const isThenable = prop === "then" && typeof value === "function";
+
 				if (isPromiseMethod && (isNativePromise || isThenable)) {
-					return function (...args) {
+					// Memoize Promise method wrappers to preserve function identity
+					let targetMethodCache = promiseMethodCache.get(target);
+					if (!targetMethodCache) {
+						targetMethodCache = new Map();
+						promiseMethodCache.set(target, targetMethodCache);
+					}
+
+					if (targetMethodCache.has(prop)) {
+						return targetMethodCache.get(prop);
+					}
+
+					const wrappedMethod = function (...args) {
 						// Wrap callback functions to preserve runtime context
 						const wrappedArgs = args.map((arg) => {
 							if (typeof arg === "function") {
@@ -314,11 +326,14 @@ export const makeWrapper = (ctx) => {
 							return arg;
 						});
 
-						// Bind the Promise method to the original target to preserve prototype
-						const result = value.apply(target, wrappedArgs);
+						// Use Reflect.apply for cross-realm safety and avoid overridden apply
+						const result = Reflect.apply(value, target, wrappedArgs);
 						// The result might be a new Promise that also needs context wrapping
 						return wrap(result);
 					};
+
+					targetMethodCache.set(prop, wrappedMethod);
+					return wrappedMethod;
 				}
 
 				return wrap(value);
