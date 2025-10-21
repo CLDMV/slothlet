@@ -140,6 +140,10 @@ export const tcp =
 						contextUser: immediateContextUser,
 						testContextUser: dataTest.contextUser
 					});
+
+					// Send response back to client
+					socket.write("Response: EventEmitter context propagation test completed\n");
+					socket.end();
 				});
 			});
 
