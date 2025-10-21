@@ -720,7 +720,9 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		hasErrors = true;
 		console.log(chalk.yellowBright("⚠️  Value differences:"));
 		compared.differingValues.forEach((diff) => {
-			console.log(`  - ${diff.path}: (${diff.aType}) ${diff.aValue} vs (${diff.bType}) ${diff.bValue}`);
+			const aValueStr = typeof diff.aValue === "function" ? "[Function]" : diff.aValue;
+			const bValueStr = typeof diff.bValue === "function" ? "[Function]" : diff.bValue;
+			console.log(`  - ${diff.path}: (${diff.aType}) ${aValueStr} vs (${diff.bType}) ${bValueStr}`);
 		});
 		console.log();
 	}
