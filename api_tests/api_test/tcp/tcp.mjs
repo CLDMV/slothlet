@@ -1,11 +1,24 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/tcp/tcp.mjs
+ *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-21 16:01:36 -07:00 (1761087696)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview TCP server API module for testing automatic EventEmitter context propagation. Internal file (not exported in package.json).
  * @module api_test.tcp
  * @memberof module:api_test
  */
 
 import net from "node:net";
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
  * TCP server API object for testing automatic EventEmitter context propagation.
@@ -19,199 +32,140 @@ export const tcp =
 	/** @lends tcp */
 	{
 		/**
-		 * Creates a test TCP server that uses EventEmitter callbacks to verify context preservation.
-		 * @function createTestServer
-		 * @public
-		 * @param {number} [port=0] - Port to listen on (0 for random port)
-		 * @returns {Promise<object>} Server instance and port information
-		 * @example
-		 * const serverInfo = await api.tcp.createTestServer();
-		 * console.log('Server listening on port:', serverInfo.port);
+		 * Test context availability in the tcp module.
+		 * @function testContext
+		 * @returns {object} Context test results
 		 */
-		async createTestServer(port = 0) {
-			return new Promise((resolve, reject) => {
-				// Create server - should be automatically wrapped when returned
-				const server = net.createServer();
+		testContext() {
+			const selfKeys = Object.keys(self);
+			const immediateContext = context;
+			const immediateUser = context?.user;
 
-				const contextTests = [];
-
-				// Test 1: Server connection handler - should preserve context automatically
-				server.on("connection", (socket) => {
-					console.log("  🔌 TCP Connection established");
-					const socketOnMethod = socket.on;
-					console.log("    socket.on type:", typeof socketOnMethod);
-					console.log("    socket.on is function:", typeof socketOnMethod === "function");
-
-					// Check if socket is wrapped properly
-					console.log("  🔍 DEBUG - Socket inspection:");
-					console.log("    Socket type:", typeof socket);
-					console.log("    Socket constructor:", socket.constructor.name);
-					console.log('    Socket has "on" method:', typeof socket.on === "function");
-					console.log('    Socket has "emit" method:', typeof socket.emit === "function");
-					console.log(
-						"    Socket is proxied:",
-						socket.toString().includes("Proxy") || Object.getOwnPropertyDescriptor(socket, "constructor") !== undefined
-					);
-
-					// Check context availability in connection handler - immediate access
-					const immediateContext = context;
-					const immediateUser = context?.user;
-					const selfKeys = Object.keys(self);
-
-					console.log("  🔍 DEBUG - Connection handler context access:");
-					console.log("    Immediate context:", immediateContext);
-					console.log("    Immediate user:", immediateUser);
-					console.log("    Self keys count:", selfKeys.length);
-
-					const connectionTest = {
-						event: "connection",
-						selfAvailable: selfKeys.length > 1,
-						selfKeys: selfKeys,
-						contextAvailable: immediateUser === "test-user",
-						contextData: immediateContext,
-						contextUser: immediateUser,
-						timestamp: new Date().toISOString()
-					};
-
-					contextTests.push(connectionTest);
-					console.log("  📊 Context in connection handler:", {
-						selfKeys: connectionTest.selfKeys.length,
-						contextUser: immediateUser,
-						testContextUser: connectionTest.contextUser
-					});
-
-					// Debug: Check if socket is wrapped before calling socket.on()
-					console.log("  🔍 DEBUG - Before socket.on('data') call:");
-					console.log("    Socket type:", typeof socket);
-					console.log("    Socket constructor:", socket.constructor.name);
-					console.log("    Socket 'on' method type:", typeof socket.on);
-					console.log("    Socket toString contains Proxy:", socket.toString().includes("Proxy"));
-					console.log("    Socket proxy detection:", Object.getOwnPropertyDescriptor(socket, "constructor"));
-
-					// Test 2: Socket data handler - nested EventEmitter callback
-					socket.on("data", (_) => {
-						console.log("  📥 Data received on socket");
-
-						// Check context availability in data handler - immediate access
-						const immediateContextData = context;
-						const immediateContextUser = context?.user;
-						const selfKeysData = Object.keys(self);
-
-						console.log("  🔍 DEBUG - Data handler context access:");
-						console.log("    Immediate context:", immediateContextData);
-						console.log("    Immediate user:", immediateContextUser);
-						console.log("    Self keys count:", selfKeysData.length);
-
-						const dataTest = {
-							event: "data",
-							selfAvailable: selfKeysData.length > 1,
-							selfKeys: selfKeysData,
-							contextAvailable: immediateContextUser === "test-user",
-							contextData: immediateContextData,
-							contextUser: immediateContextUser,
-							timestamp: new Date().toISOString()
-						};
-
-						contextTests.push(dataTest);
-						console.log("  📊 Context in data handler:", {
-							selfKeys: dataTest.selfKeys.length,
-							contextUser: immediateContextUser,
-							testContextUser: dataTest.contextUser
-						});
-
-						// Test 3: Try to access other API modules from within the socket handler
-						let apiAccessTest = null;
-						try {
-							if (self.math && typeof self.math.add === "function") {
-								const mathResult = self.math.add(10, 15);
-								apiAccessTest = {
-									success: true,
-									result: mathResult,
-									error: null
-								};
-								console.log("  🧮 API call from socket handler: 10 + 15 =", mathResult);
-							} else {
-								apiAccessTest = {
-									success: false,
-									result: null,
-									error: "self.math not available"
-								};
-							}
-						} catch (error) {
-							apiAccessTest = {
-								success: false,
-								result: null,
-								error: error.message
-							};
-							console.log("  ❌ API call failed:", error.message);
-						}
-
-						// Send test results back to client
-						const response = {
-							message: "Context test completed",
-							tests: contextTests,
-							apiAccess: apiAccessTest,
-							serverContext: {
-								user: context?.user,
-								session: context?.session
-							}
-						};
-
-						socket.write(JSON.stringify(response) + "\n");
-						socket.end();
-					});
-
-					socket.on("error", (error) => {
-						console.log("  ❌ Socket error:", error.message);
-					});
-				});
-
-				server.on("error", (error) => {
-					console.log("  ❌ Server error:", error.message);
-					reject(error);
-				});
-
-				server.listen(port, "localhost", () => {
-					const actualPort = server.address().port;
-					console.log(`  🌐 TCP Server listening on port ${actualPort}`);
-
-					resolve({
-						server,
-						port: actualPort,
-						close: () => {
-							return new Promise((resolveClose) => {
-								server.close(() => {
-									console.log("  🛑 TCP Server closed");
-									resolveClose();
-								});
-							});
-						}
-					});
-				});
-			});
+			return {
+				selfAvailable: selfKeys.length > 1,
+				selfKeys: selfKeys,
+				contextAvailable: immediateUser === "test-user",
+				contextData: immediateContext,
+				contextUser: immediateUser,
+				timestamp: new Date().toISOString()
+			};
 		},
 
 		/**
-		 * Tests context availability within the TCP module itself.
-		 * @function testContext
-		 * @public
-		 * @returns {object} Context information from within the TCP API module
+		 * Create a test TCP server that tests context propagation in EventEmitter callbacks.
+		 * @function createTestServer
+		 * @param {number} [port=0] - Port to listen on (0 for random)
+		 * @returns {Promise<{port: number, server: import('net').Server}>} Server instance and port
 		 */
-		testContext() {
-			// More detailed self analysis
-			const selfKeys = Object.keys(self);
-			const selfHasContent = selfKeys.length > 1; // More than just '_impl'
+		async createTestServer(port = 0) {
+			const server = net.createServer();
 
-			return {
-				selfAvailable: selfHasContent,
-				selfKeys: selfKeys,
-				selfType: typeof self,
-				contextAvailable: context?.user === "test-user",
-				contextType: typeof context,
-				contextData: context,
-				contextUser: context?.user,
-				referenceType: typeof reference,
-				timestamp: new Date().toISOString()
-			};
+			console.log("  🔍 DEBUG - Server inspection:");
+			console.log("    Server type:", typeof server);
+			console.log("    Server constructor:", server.constructor.name);
+			console.log('    Server has "on" method:', typeof server.on === "function");
+			console.log('    Server has "emit" method:', typeof server.emit === "function");
+			console.log("    Server toString contains Proxy:", server.toString().includes("Proxy"));
+
+			const contextTests = [];
+
+			// CRITICAL: Set up connection handler BEFORE starting server
+			// The key insight: this callback will use the original server.on method
+			// Server only gets wrapped when the Promise resolves with the {server} object
+			server.on("connection", (socket) => {
+				console.log("  🔌 TCP Connection established");
+
+				// Check context availability in connection handler
+				const immediateContext = context;
+				const immediateUser = context?.user;
+				const selfKeys = Object.keys(self);
+
+				console.log("  🔍 DEBUG - Connection handler context access:");
+				console.log("    Immediate context:", immediateContext);
+				console.log("    Immediate user:", immediateUser);
+				console.log("    Self keys count:", selfKeys.length);
+
+				const connectionTest = {
+					event: "connection",
+					selfAvailable: selfKeys.length > 1,
+					selfKeys: selfKeys,
+					contextAvailable: immediateUser === "test-user",
+					contextData: immediateContext,
+					contextUser: immediateUser,
+					timestamp: new Date().toISOString()
+				};
+
+				contextTests.push(connectionTest);
+				console.log("  📊 Context in connection handler:", {
+					selfKeys: connectionTest.selfKeys.length,
+					contextUser: immediateUser,
+					testContextUser: connectionTest.contextUser
+				});
+
+				// Debug: Check if socket is wrapped before calling socket.on()
+				console.log("  🔍 DEBUG - Before socket.on('data') call:");
+				console.log("    Socket type:", typeof socket);
+				console.log("    Socket constructor:", socket.constructor.name);
+				console.log("    Socket 'on' method type:", typeof socket.on);
+				console.log("    Socket toString contains Proxy:", socket.toString().includes("Proxy"));
+				console.log("    Socket proxy detection:", Object.getOwnPropertyDescriptor(socket, "constructor"));
+
+				// Test socket data handler - this should now preserve context
+				socket.on("data", (_) => {
+					console.log("  📥 Data received on socket");
+
+					// Check context availability in data handler
+					const immediateContextData = context;
+					const immediateContextUser = context?.user;
+					const selfKeysData = Object.keys(self);
+
+					console.log("  🔍 DEBUG - Data handler context access:");
+					console.log("    Immediate context:", immediateContextData);
+					console.log("    Immediate user:", immediateContextUser);
+					console.log("    Self keys count:", selfKeysData.length);
+
+					const dataTest = {
+						event: "data",
+						selfAvailable: selfKeysData.length > 1,
+						selfKeys: selfKeysData,
+						contextAvailable: immediateContextUser === "test-user",
+						contextData: immediateContextData,
+						contextUser: immediateContextUser,
+						timestamp: new Date().toISOString()
+					};
+
+					contextTests.push(dataTest);
+					console.log("  📊 Context in data handler:", {
+						selfKeys: dataTest.selfKeys.length,
+						contextUser: immediateContextUser,
+						testContextUser: dataTest.contextUser
+					});
+				});
+			});
+
+			// Start listening and return server info
+			return new Promise((resolve, reject) => {
+				server.listen(port, (err) => {
+					if (err) {
+						console.log("  ❌ Server failed to start:", err.message);
+						reject(err);
+					} else {
+						const actualPort = server.address()?.port || port;
+						console.log(`  🌐 TCP Server listening on port ${actualPort}`);
+
+						// Return object containing server - this will trigger immediate wrapping
+						resolve({
+							port: actualPort,
+							server: server,
+							contextTests: contextTests,
+							close: () => {
+								return new Promise((resolveClose) => {
+									server.close(() => resolveClose());
+								});
+							}
+						});
+					}
+				});
+			});
 		}
 	};

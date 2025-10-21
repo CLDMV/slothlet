@@ -1,18 +1,18 @@
-import chalk from "chalk";
-// const resolvedUrl = new URL("../src/slothlet.mjs?_slothlet=eager", import.meta.url).href;
-// console.log("[debug-slothlet.mjs]  resolvedUrl:", resolvedUrl);
-// import slothletEager from "file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/slothlet.mjs?testParam=maybe&_slothlet=eager";
-// import slothletEager from "./slothlet.mjs?testParam=maybe&_slothlet=eager";
-// const slothletEager = await import("./slothlet.mjs?_slothlet=eager");
-// const { default: slothletEager } = await import("./slothlet.mjs?_slothlet=eager");
-// import slothlet from "./slothlet.mjs";
-// import slothletLazy from "./slothlet.mjs?testParam=maybe&_slothlet=lazy";
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/debug-slothlet.mjs
+ *	@Date: 2025-10-21 14:29:00 -07:00 (1761082140)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-21 14:32:16 -07:00 (1761082336)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
 
-// const { slothlet: slothletEager } = await import(new URL("../src/slothlet.mjs?_slothlet=eager", import.meta.url).href);
-// const { slothlet: slothletLazy } = await import(new URL("../src/slothlet.mjs?_slothlet=lazy", import.meta.url).href);
-// const { slothlet: slothletEager } = await import(new URL("../index.mjs", import.meta.url).href);
-// const { slothlet: slothletLazy } = await import(new URL("../index.mjs", import.meta.url).href);
-// const { slothlet } = await import(new URL("../index.mjs", import.meta.url).href);
+import chalk from "chalk";
+
 import slothlet from "@cldmv/slothlet";
 import crypto from "crypto";
 
@@ -455,6 +455,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "task.autoIP",
 			calls: [{ path: ["task", "autoIP"], args: [] }]
+		},
+		{
+			section: "tcp.testContext",
+			calls: [{ path: ["tcp", "testContext"], args: [] }]
 		}
 	];
 

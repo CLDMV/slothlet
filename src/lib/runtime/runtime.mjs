@@ -20,8 +20,12 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
+import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
 
 const als = new AsyncLocalStorage();
+
+// Enable AsyncLocalStorage context propagation for all EventEmitter instances
+enableAlsForEventEmitters(als);
 
 /**
  * @function runWithCtx
@@ -55,17 +59,7 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 	 * const result = runtime_runInALS();
 	 */
 	const runtime_runInALS = () => {
-		// Debug: Log what arguments are being passed to the function
-		console.log(`[DEBUG runWithCtx] Calling function with ${args?.length || 0} arguments:`);
-		args?.forEach((arg, index) => {
-			console.log(
-				`  runWithCtx arg ${index}: type=${typeof arg}, constructor=${arg?.constructor?.name}, isProxy=${typeof arg === "object" && arg.toString().includes("Proxy")}`
-			);
-		});
-
 		const result = Reflect.apply(fn, thisArg, args);
-
-		console.log(`[DEBUG runWithCtx] Function completed`);
 		return result;
 	};
 	return als.run(ctx, runtime_runInALS);
@@ -89,50 +83,13 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 export const getCtx = () => als.getStore() || null;
 
 // Set of constructors to exclude from being considered as class instances
-const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error, Buffer]);
+const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
 
 // Array of constructor functions for instanceof checks
-const EXCLUDED_INSTANCEOF_CLASSES = [
-	ArrayBuffer,
-	Map,
-	Set,
-	WeakMap,
-	WeakSet,
-	Uint8Array,
-	Int8Array,
-	Uint16Array,
-	Int16Array,
-	Uint32Array,
-	Int32Array,
-	Float32Array,
-	Float64Array
-];
+const EXCLUDED_INSTANCEOF_CLASSES = [ArrayBuffer, Map, Set, WeakMap, WeakSet];
 
 // Promise method names that need special context-preserving handling
 const PROMISE_METHODS = new Set(["then", "catch", "finally"]);
-
-// EventEmitter method names that accept callback functions as arguments
-const EVENTEMITTER_METHODS = new Set([
-	"on",
-	"once",
-	"addListener",
-	"prependListener",
-	"prependOnceListener",
-	"removeListener",
-	"off",
-	"removeAllListeners"
-]);
-
-// EventEmitter callback position mapping - which argument position contains the callback
-const EVENTEMITTER_CALLBACK_POSITIONS = new Map([
-	["on", 1],
-	["once", 1],
-	["addListener", 1],
-	["prependListener", 1],
-	["prependOnceListener", 1],
-	["removeListener", 1],
-	["off", 1]
-]);
 
 /**
  * @function runtime_shouldWrapMethod
@@ -225,115 +182,12 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 
 	const wrappedInstance = new Proxy(instance, {
 		get(target, prop, receiver) {
-			// Debug EventEmitter method access
-			if (prop === "on" && typeof target?.on === "function" && typeof target?.emit === "function") {
-				console.log(`[DEBUG Proxy] Accessing '${prop}' on EventEmitter-like object:`, {
-					constructor: target?.constructor?.name,
-					hasOn: typeof target?.on === "function",
-					hasEmit: typeof target?.emit === "function"
-				});
-			}
-
 			// Check method cache first to avoid unnecessary property access and function creation
 			if (methodCache.has(prop)) {
 				return methodCache.get(prop);
 			}
 
 			const value = Reflect.get(target, prop, receiver);
-
-			// Special handling for EventEmitter methods to preserve context in event callbacks
-			// Detect EventEmitter instances by checking for 'on' and 'emit' methods
-			const isEventEmitterMethod = typeof value === "function" && EVENTEMITTER_METHODS.has(prop);
-			const hasOnMethod = typeof target?.on === "function";
-			const hasEmitMethod = typeof target?.emit === "function";
-			const isEventEmitter = hasOnMethod && hasEmitMethod;
-
-			// Debug EventEmitter detection for class instances
-			if (prop === "on" || isEventEmitterMethod) {
-				console.log(`[DEBUG ClassInstance] EventEmitter detection for '${prop}':`, {
-					isEventEmitterMethod,
-					hasOnMethod,
-					hasEmitMethod,
-					isEventEmitter,
-					valueType: typeof value,
-					targetConstructor: target?.constructor?.name,
-					eventemitterMethodsHasProp: EVENTEMITTER_METHODS.has(prop)
-				});
-			}
-
-			if (isEventEmitterMethod && isEventEmitter) {
-				// Check if this method accepts a callback at a known position
-				const callbackPosition = EVENTEMITTER_CALLBACK_POSITIONS.get(prop);
-
-				if (callbackPosition !== undefined) {
-					console.log(`[DEBUG ClassInstance] Creating EventEmitter wrapper for ${prop} on ${target?.constructor?.name}`);
-					/**
-					 * @function runtime_classInstanceEventEmitterMethodWrapper
-					 * @internal
-					 * @private
-					 * @param {...any} args - Arguments passed to the EventEmitter method
-					 * @returns {any} Result from the original EventEmitter method
-					 */
-					const runtime_classInstanceEventEmitterMethodWrapper = function (...args) {
-						console.log(`[DEBUG ClassInstance] ${target?.constructor?.name}.${prop}() called with ${args.length} arguments`);
-						console.log(`[DEBUG ClassInstance] Checking callback wrapping conditions:`, {
-							argsLength: args.length,
-							callbackPosition,
-							hasCallbackArg: args.length > callbackPosition,
-							callbackArgType: typeof args[callbackPosition],
-							isFunction: typeof args[callbackPosition] === "function"
-						});
-
-						// Clone args array to avoid mutating the original
-						const wrappedArgs = [...args];
-
-						// Wrap the callback function at the specified position if it exists and is a function
-						if (args.length > callbackPosition && typeof args[callbackPosition] === "function") {
-							const originalCallback = args[callbackPosition];
-							console.log(
-								`[DEBUG ClassInstance] Wrapping callback at position ${callbackPosition} for ${target?.constructor?.name}.${prop}()`
-							);
-
-							wrappedArgs[callbackPosition] = function (...callbackArgs) {
-								// Debug: Log callback argument wrapping for class instances
-								console.log(`[DEBUG ClassInstance] EventEmitter callback for ${prop} - wrapping ${callbackArgs.length} arguments`);
-								callbackArgs.forEach((arg, index) => {
-									console.log(
-										`  Arg ${index}: type=${typeof arg}, constructor=${arg?.constructor?.name}, needsWrap=${arg != null && (typeof arg === "object" || typeof arg === "function")}`
-									);
-								});
-
-								// Also wrap the callback arguments (like socket instances) to preserve context in nested callbacks
-								const wrappedCallbackArgs = callbackArgs.map((arg, index) => {
-									const wrapped = wrapFn(arg);
-									console.log(`  Wrapped arg ${index}: same=${wrapped === arg}, isProxy=${typeof wrapped === "object" && wrapped !== arg}`);
-									console.log(`  Wrapped arg ${index} constructor:`, wrapped?.constructor?.name);
-									console.log(`  Wrapped arg ${index} toString:`, wrapped.toString());
-									return wrapped;
-								});
-
-								console.log(`[DEBUG ClassInstance] About to call original callback with ${wrappedCallbackArgs.length} wrapped args`);
-								wrappedCallbackArgs.forEach((arg, index) => {
-									console.log(`  Pre-call wrapped arg ${index}: type=${typeof arg}, constructor=${arg?.constructor?.name}`);
-								});
-
-								const result = runWithCtx(ctx, originalCallback, this, wrappedCallbackArgs);
-
-								console.log(`[DEBUG ClassInstance] Original callback completed`);
-								return result;
-							};
-						}
-
-						// Use Reflect.apply for cross-realm safety
-						const result = Reflect.apply(value, target, wrappedArgs);
-						console.log(`[DEBUG ClassInstance] ${target?.constructor?.name}.${prop}() returned:`, typeof result);
-						return result;
-					};
-
-					methodCache.set(prop, runtime_classInstanceEventEmitterMethodWrapper);
-					return runtime_classInstanceEventEmitterMethodWrapper;
-				}
-			}
 
 			// If it's a method (function), wrap it to preserve context
 			// Exclude constructor, Object.prototype methods, and double-underscore methods to avoid introspection issues
@@ -384,33 +238,6 @@ function runtime_wrapClassInstance(instance, ctx, wrapFn, instanceCache) {
 }
 
 /**
- * @function runtime_createEventEmitterHook
- * @internal
- * @private
- * @param {Function} wrapFn - The wrapper function
- * @returns {object} Hook object with cleanup method
- *
- * @description
- * Creates a hook that automatically wraps EventEmitter objects during function execution.
- * This ensures EventEmitters are wrapped immediately when created, not just when returned.
- *
- * @example
- * // Create auto-wrapping hook
- * const hook = runtime_createEventEmitterHook(wrap);
- * // ... function execution ...
- * hook.cleanup();
- */
-function runtime_createEventEmitterHook(_) {
-	// Return a no-op hook since we don't need module-specific interception
-	// The emit interception in runtime_deepWrapEventEmitters handles all cases
-	return {
-		cleanup() {
-			// No cleanup needed
-		}
-	};
-}
-
-/**
  * @function makeWrapper
  * @package
  * @param {object} ctx - The context object containing self, context, and reference
@@ -434,99 +261,9 @@ export const makeWrapper = (ctx) => {
 	const cache = new WeakMap();
 	const instanceCache = new WeakMap();
 	const promiseMethodCache = new WeakMap(); // Memoize Promise method wrappers
-
 	const wrap = (val) => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
-
-		// Skip wrapping for problematic built-in objects that cause proxy issues
-		if (
-			val instanceof Buffer ||
-			val instanceof ArrayBuffer ||
-			val instanceof Uint8Array ||
-			val instanceof Int8Array ||
-			val instanceof Uint16Array ||
-			val instanceof Int16Array ||
-			val instanceof Uint32Array ||
-			val instanceof Int32Array ||
-			val instanceof Float32Array ||
-			val instanceof Float64Array
-		) {
-			return val;
-		}
-
-		// Debug: Log what we're wrapping
-		// console.log(`[DEBUG wrap] Wrapping object:`, {
-		// 	type: typeof val,
-		// 	constructor: val?.constructor?.name,
-		// 	isClassInstance: runtime_isClassInstance(val),
-		// 	hasOn: typeof val?.on === "function",
-		// 	hasEmit: typeof val?.emit === "function",
-		// 	hasServerProperty: val?.server !== undefined
-		// });
-
-		// Prioritize EventEmitter-like objects for immediate wrapping
-		// This ensures Node.js objects like net.Server get wrapped before their methods are called
-		const hasOnMethod = typeof val?.on === "function";
-		const hasEmitMethod = typeof val?.emit === "function";
-		const isEventEmitterLike = hasOnMethod && hasEmitMethod;
-
-		if (isEventEmitterLike && runtime_isClassInstance(val)) {
-			console.log(`[DEBUG wrap] Auto-wrapping EventEmitter-like class instance:`, {
-				constructor: val?.constructor?.name,
-				hasOn: hasOnMethod,
-				hasEmit: hasEmitMethod
-			});
-			const wrapped = runtime_wrapClassInstance(val, ctx, wrap, instanceCache);
-			cache.set(val, wrapped);
-			return wrapped;
-		}
-
-		// Auto-wrap other class instances immediately to enable method context preservation
-		if (runtime_isClassInstance(val)) {
-			console.log(`[DEBUG wrap] Auto-wrapping non-EventEmitter class instance:`, {
-				constructor: val?.constructor?.name,
-				hasOn: typeof val?.on === "function",
-				hasEmit: typeof val?.emit === "function"
-			});
-			const wrapped = runtime_wrapClassInstance(val, ctx, wrap, instanceCache);
-			cache.set(val, wrapped);
-			return wrapped;
-		}
-
-		// Special handling for Promises to wrap resolved values
-		const isPromise = val && typeof val.then === "function";
-		if (isPromise) {
-			console.log(`[DEBUG wrap] Wrapping Promise to auto-wrap resolved values`);
-
-			// Create a new Promise that wraps the resolved value
-			const wrappedPromise = val.then((resolvedValue) => {
-				console.log(`[DEBUG Promise] Wrapping resolved value:`, {
-					valueType: typeof resolvedValue,
-					valueConstructor: resolvedValue?.constructor?.name,
-					hasServerProperty: resolvedValue?.server !== undefined
-				});
-
-				// Deep scan for EventEmitters in the resolved value
-				console.log("[DEBUG Promise] Starting deep EventEmitter scan...");
-				console.log("[DEBUG Promise] Resolved value details:", {
-					type: typeof resolvedValue,
-					constructor: resolvedValue?.constructor?.name,
-					hasServer: resolvedValue?.server !== undefined,
-					serverType: typeof resolvedValue?.server,
-					serverConstructor: resolvedValue?.server?.constructor?.name,
-					serverHasOn: typeof resolvedValue?.server?.on === "function",
-					serverHasEmit: typeof resolvedValue?.server?.emit === "function"
-				});
-				runtime_deepWrapEventEmitters(resolvedValue, wrap);
-				console.log("[DEBUG Promise] Deep EventEmitter scan completed");
-
-				return wrap(resolvedValue);
-			});
-
-			cache.set(val, wrappedPromise);
-			return wrappedPromise;
-		}
 
 		const proxied = new Proxy(val, {
 			apply(target, thisArg, args) {
@@ -541,62 +278,28 @@ export const makeWrapper = (ctx) => {
 				// 	hasRunWithCtx: typeof runWithCtx === "function"
 				// });
 
-				// Store the current context for potential EventEmitter auto-wrapping
-				const enhancedContext = { ...ctx, _wrapFn: wrap };
+				const result = runWithCtx(ctx, target, thisArg, args);
 
-				const result = als.run(enhancedContext, () => {
-					// Set up automatic EventEmitter wrapping during this function call
-					const eventEmitterHook = runtime_createEventEmitterHook(wrap);
-
-					try {
-						return Reflect.apply(target, thisArg, args);
-					} finally {
-						eventEmitterHook.cleanup();
-					}
-				});
-
-				// Auto-wrap all return values recursively to catch class instances in nested objects
-				// This ensures that objects like { server, port } get their server property wrapped
-				console.log(`[DEBUG] Auto-wrapping function result:`, {
-					functionName: target?.name || "anonymous",
-					resultType: typeof result,
-					resultConstructor: result?.constructor?.name,
-					isClassInstance: runtime_isClassInstance(result),
-					isEventEmitter: result && typeof result.on === "function" && typeof result.emit === "function"
-				});
-
-				// Special handling: if the result is an EventEmitter-like object, wrap it immediately
-				// This ensures objects like net.createServer() are wrapped before .on() is called
-				if (result && typeof result.on === "function" && typeof result.emit === "function" && runtime_isClassInstance(result)) {
-					console.log(`[DEBUG] Auto-wrapping EventEmitter function result:`, {
-						functionName: target?.name || "anonymous",
-						resultConstructor: result?.constructor?.name
-					});
-					return wrap(result);
+				// Auto-wrap returned class instances to preserve context for method calls
+				if (runtime_isClassInstance(result)) {
+					return runtime_wrapClassInstance(result, ctx, wrap, instanceCache);
 				}
 
-				return wrap(result);
+				return result;
 			},
 			construct(target, args, newTarget) {
 				// If callers "new" a function off the API, preserve context too
 				const result = runWithCtx(ctx, Reflect.construct, undefined, [target, args, newTarget]);
 
-				// Auto-wrap all constructed values recursively to catch class instances
-				return wrap(result);
+				// Auto-wrap constructed instances to preserve context for method calls
+				if (runtime_isClassInstance(result)) {
+					return runtime_wrapClassInstance(result, ctx, wrap, instanceCache);
+				}
+
+				return result;
 			},
 			get(target, prop, receiver) {
 				const value = Reflect.get(target, prop, receiver);
-
-				// Debug EventEmitter detection for 'on' method calls
-				if (prop === "on" && typeof value === "function") {
-					console.log(`[DEBUG] Accessing 'on' method on:`, {
-						targetType: typeof target,
-						targetConstructor: target?.constructor?.name,
-						hasOn: typeof target?.on === "function",
-						hasEmit: typeof target?.emit === "function",
-						valueType: typeof value
-					});
-				}
 
 				// Special handling for Promise methods to preserve prototype chain and context
 				// Support both native Promises and thenables (objects with callable 'then')
@@ -629,125 +332,12 @@ export const makeWrapper = (ctx) => {
 
 						// Use Reflect.apply for cross-realm safety and avoid overridden apply
 						const result = Reflect.apply(value, target, wrappedArgs);
-
-						// Auto-wrap EventEmitter objects immediately when they're returned from function calls
-						// This ensures objects like net.createServer() are wrapped before .on() calls happen
-						let processedResult = result;
-						if (result && typeof result === "object" && typeof result.on === "function" && typeof result.emit === "function") {
-							console.log(`[DEBUG EventEmitter] Auto-wrapping EventEmitter from function call:`, result.constructor?.name);
-							processedResult = wrap(result);
-						}
-
-						// Recursively auto-wrap any EventEmitter objects in the result
-						runtime_deepWrapEventEmitters(processedResult, wrap);
-
 						// The result might be a new Promise that also needs context wrapping
-						const wrappedResult = wrap(processedResult);
-
-						// For Promise resolution, we need to wrap the resolved value when it becomes available
-						if (wrappedResult && typeof wrappedResult.then === "function") {
-							return wrappedResult.then((resolvedValue) => {
-								console.log(`[DEBUG Promise] Wrapping resolved value:`, {
-									valueType: typeof resolvedValue,
-									valueConstructor: resolvedValue?.constructor?.name,
-									hasServerProperty: resolvedValue?.server !== undefined
-								});
-
-								// Deep scan for EventEmitters in the resolved value
-								console.log("[DEBUG Promise] Starting deep EventEmitter scan...");
-								console.log("[DEBUG Promise] Resolved value details:", {
-									type: typeof resolvedValue,
-									constructor: resolvedValue?.constructor?.name,
-									hasServer: resolvedValue?.server !== undefined,
-									serverType: typeof resolvedValue?.server,
-									serverConstructor: resolvedValue?.server?.constructor?.name,
-									serverHasOn: typeof resolvedValue?.server?.on === "function",
-									serverHasEmit: typeof resolvedValue?.server?.emit === "function"
-								});
-								runtime_deepWrapEventEmitters(resolvedValue, wrap);
-								console.log("[DEBUG Promise] Deep EventEmitter scan completed");
-
-								return wrap(resolvedValue);
-							});
-						}
-
-						return wrappedResult;
+						return wrap(result);
 					};
 
 					targetMethodCache.set(prop, wrappedMethod);
 					return wrappedMethod;
-				}
-
-				// Special handling for EventEmitter methods to preserve context in event callbacks
-				// Detect EventEmitter instances by checking for 'on' and 'emit' methods
-				const isEventEmitterMethod = typeof value === "function" && EVENTEMITTER_METHODS.has(prop);
-				const hasOnMethod = typeof target?.on === "function";
-				const hasEmitMethod = typeof target?.emit === "function";
-				const isEventEmitter = hasOnMethod && hasEmitMethod;
-
-				// Debug EventEmitter detection for ALL methods
-				if (prop === "on" || isEventEmitterMethod) {
-					console.log(`[DEBUG] EventEmitter detection for '${prop}':`, {
-						isEventEmitterMethod,
-						hasOnMethod,
-						hasEmitMethod,
-						isEventEmitter,
-						valueType: typeof value,
-						targetConstructor: target?.constructor?.name,
-						eventemitterMethodsHasProp: EVENTEMITTER_METHODS.has(prop)
-					});
-				}
-
-				if (isEventEmitterMethod && isEventEmitter) {
-					// Check if this method accepts a callback at a known position
-					const callbackPosition = EVENTEMITTER_CALLBACK_POSITIONS.get(prop);
-
-					if (callbackPosition !== undefined) {
-						/**
-						 * @function runtime_eventEmitterMethodWrapper
-						 * @internal
-						 * @private
-						 * @param {...any} args - Arguments passed to the EventEmitter method
-						 * @returns {any} Result from the original EventEmitter method
-						 *
-						 * @description
-						 * Wrapper for EventEmitter methods that automatically preserves AsyncLocalStorage
-						 * context in event handler callbacks without requiring consumer changes.
-						 */
-						const runtime_eventEmitterMethodWrapper = function (...args) {
-							// Clone args array to avoid mutating the original
-							const wrappedArgs = [...args];
-
-							// Wrap the callback function at the specified position if it exists and is a function
-							if (args.length > callbackPosition && typeof args[callbackPosition] === "function") {
-								const originalCallback = args[callbackPosition];
-								wrappedArgs[callbackPosition] = function (...callbackArgs) {
-									// Debug: Log callback argument wrapping
-									console.log(`[DEBUG] EventEmitter callback for ${prop} - wrapping ${callbackArgs.length} arguments`);
-									callbackArgs.forEach((arg, index) => {
-										console.log(
-											`  Arg ${index}: type=${typeof arg}, constructor=${arg?.constructor?.name}, needsWrap=${arg != null && (typeof arg === "object" || typeof arg === "function")}`
-										);
-									});
-
-									// Also wrap the callback arguments (like socket instances) to preserve context in nested callbacks
-									const wrappedCallbackArgs = callbackArgs.map((arg, index) => {
-										const wrapped = wrap(arg);
-										console.log(`  Wrapped arg ${index}: same=${wrapped === arg}, isProxy=${wrapped.toString().includes("Proxy")}`);
-										return wrapped;
-									});
-									return runWithCtx(ctx, originalCallback, this, wrappedCallbackArgs);
-								};
-							}
-
-							// Use Reflect.apply for cross-realm safety
-							const result = Reflect.apply(value, target, wrappedArgs);
-							// Return the result (usually the EventEmitter instance for chaining)
-							return wrap(result);
-						};
-
-						return runtime_eventEmitterMethodWrapper;
-					}
 				}
 
 				return wrap(value);
@@ -777,172 +367,8 @@ export const makeWrapper = (ctx) => {
 		cache.set(val, proxied);
 		return proxied;
 	};
-
-	// Auto-wrap EventEmitters created by common Node.js functions during API execution
-	runtime_interceptEventEmitterConstructors(ctx, wrap);
-
 	return wrap;
 };
-
-/**
- * @function runtime_interceptEventEmitterConstructors
- * @internal
- * @private
- * @param {object} ctx - The AsyncLocalStorage context
- * @param {Function} wrapFn - The wrapper function
- *
- * @description
- * Intercepts Node.js EventEmitter constructor functions to automatically wrap
- * their results when called from within slothlet API execution context.
- */
-function runtime_interceptEventEmitterConstructors(_) {
-	// Only patch if we're in Node.js environment
-	if (typeof globalThis.process === "undefined" || !globalThis.process.versions?.node) {
-		return;
-	}
-
-	// Track if we've already patched to avoid double-patching
-	if (globalThis._slothletIntercepted) {
-		return;
-	}
-	globalThis._slothletIntercepted = true;
-}
-
-/**
- * @function runtime_deepWrapEventEmitters
- * @internal
- * @private
- * @param {any} obj - Object to scan for EventEmitter instances
- * @param {Function} wrapFn - The wrapper function
- *
- * @description
- * Recursively scans an object for EventEmitter instances and wraps them.
- * This catches EventEmitter objects regardless of how they were created.
- */
-function runtime_deepWrapEventEmitters(obj, wrapFn) {
-	// Avoid infinite recursion and only process objects
-	if (!obj || typeof obj !== "object" || obj._slothletScanned) {
-		return;
-	}
-
-	// Mark as scanned to avoid cycles
-	try {
-		Object.defineProperty(obj, "_slothletScanned", {
-			value: true,
-			writable: false,
-			enumerable: false,
-			configurable: true
-		});
-	} catch (_) {
-		// Ignore if we can't mark it (some objects are sealed)
-		return;
-	}
-
-	// Check if this object is an EventEmitter (but not a lazy proxy)
-	if (typeof obj.on === "function" && typeof obj.emit === "function") {
-		// Additional check: lazy proxies have __materialized property, real EventEmitters don't
-		if (obj.__materialized !== undefined || obj._materialize !== undefined) {
-			// This is a lazy proxy, not a real EventEmitter - skip it
-			return;
-		}
-
-		// Found an EventEmitter! We need to wrap it in place
-
-		// Store original methods
-		const originalOn = obj.on;
-		const originalOnce = obj.once;
-		const originalEmit = obj.emit;
-
-		// Replace the emit method to wrap callback arguments dynamically
-		obj.emit = function runtime_wrappedEmit(event, ...args) {
-			// Wrap any EventEmitter arguments passed to the event
-			const wrappedArgs = args.map((arg) => {
-				if (arg && typeof arg === "object" && typeof arg.on === "function" && typeof arg.emit === "function") {
-					return wrapFn(arg);
-				}
-				return arg;
-			});
-
-			return originalEmit.call(this, event, ...wrappedArgs);
-		};
-
-		// Replace EventEmitter registration methods with wrapped versions for future listeners
-		if (typeof originalOn === "function") {
-			obj.on = function runtime_wrappedOn(event, callback) {
-				if (typeof callback === "function") {
-					// Wrap the callback to preserve context and auto-wrap arguments
-					const wrappedCallback = function runtime_eventCallback(...args) {
-						console.log(`[DEBUG DeepWrap] EventEmitter callback for '${event}' called with ${args.length} args`);
-
-						// Auto-wrap any EventEmitter arguments (like socket)
-						const wrappedArgs = args.map((arg, index) => {
-							if (arg && typeof arg === "object" && typeof arg.on === "function" && typeof arg.emit === "function") {
-								console.log(`[DEBUG DeepWrap] Auto-wrapping EventEmitter callback argument ${index}:`, arg.constructor?.name);
-								return wrapFn(arg);
-							}
-							return arg;
-						});
-
-						// Execute callback in preserved context
-						const currentStore = als.getStore();
-						if (currentStore) {
-							return als.run(currentStore, callback, ...wrappedArgs);
-						}
-						return callback(...wrappedArgs);
-					};
-
-					return originalOn.call(this, event, wrappedCallback);
-				}
-				return originalOn.call(this, event, callback);
-			};
-		}
-
-		// Similar for once and addListener
-		if (typeof originalOnce === "function") {
-			obj.once = function runtime_wrappedOnce(event, callback) {
-				if (typeof callback === "function") {
-					const wrappedCallback = function runtime_eventOnceCallback(...args) {
-						const wrappedArgs = args.map((arg) => {
-							if (arg && typeof arg === "object" && typeof arg.on === "function" && typeof arg.emit === "function") {
-								console.log(`[DEBUG DeepWrap] Auto-wrapping EventEmitter once callback argument:`, arg.constructor?.name);
-								return wrapFn(arg);
-							}
-							return arg;
-						});
-
-						const currentStore = als.getStore();
-						if (currentStore) {
-							return als.run(currentStore, callback, ...wrappedArgs);
-						}
-						return callback(...wrappedArgs);
-					};
-
-					return originalOnce.call(this, event, wrappedCallback);
-				}
-				return originalOnce.call(this, event, callback);
-			};
-		}
-
-		if (typeof originalAddListener === "function") {
-			obj.addListener = obj.on; // addListener is typically an alias for on
-		}
-	}
-
-	// Recursively scan object properties for nested EventEmitters
-	try {
-		for (const key in obj) {
-			if (Object.prototype.hasOwnProperty.call(obj, key)) {
-				runtime_deepWrapEventEmitters(obj[key], wrapFn);
-			}
-		}
-	} catch (_) {
-		// Ignore errors when scanning (some objects may have getters that throw)
-	}
-}
-
-/**
- * @function runtime_mutateLiveBinding
-
 /**
  * @function runtime_mutateLiveBinding
  * @internal
@@ -1273,98 +699,3 @@ export const context = runtime_createLiveBinding("context");
  * console.log(reference); // Current reference data
  */
 export const reference = runtime_createLiveBinding("reference");
-
-/**
- * @function bindContext
- * @memberof module:@cldmv/slothlet/runtime
- * @export module:@cldmv/slothlet/runtime
- * @public
- * @param {Function} callback - The callback function to bind with current AsyncLocalStorage context
- * @returns {Function} A new function that preserves the AsyncLocalStorage context when called
- * @throws {TypeError} When callback is not a function
- *
- * @description
- * Binds the current AsyncLocalStorage context to a callback function, ensuring that
- * slothlet runtime imports (self, context, reference) remain accessible within the
- * callback even when it's executed in a different async execution context (such as
- * Node.js socket event handlers, timers, or other async operations).
- *
- * This is essential for preserving slothlet context across async boundaries where
- * AsyncLocalStorage context would normally be lost, such as:
- * - Socket event handlers (socket.on('data', callback))
- * - Timer callbacks (setTimeout, setInterval)
- * - EventEmitter listeners
- * - Promise executors and callbacks
- * - Stream handlers
- *
- * @example // ESM usage (socket event handler)
- * import { bindContext, self } from '@cldmv/slothlet/runtime';
- * import net from 'net';
- *
- * // Without bindContext - self would be empty in the callback
- * socket.on('data', (data) => {
- *   console.log(self); // {} - empty, context lost
- * });
- *
- * // With bindContext - self maintains the API context
- * socket.on('data', bindContext((data) => {
- *   console.log(self.tcp.handlers); // Available! Context preserved
- *   const response = await self.tcp.handlers.config.get('setting');
- * }));
- *
- * @example // ESM usage (timer callback)
- * import { bindContext, self, context } from '@cldmv/slothlet/runtime';
- *
- * setTimeout(bindContext(() => {
- *   console.log('API available:', !!self.api);
- *   console.log('User context:', context.user);
- * }), 1000);
- *
- * @example // CJS usage (socket event handler)
- * const { bindContext, self } = require('@cldmv/slothlet/runtime');
- * const net = require('net');
- *
- * socket.on('data', bindContext(async (data) => {
- *   const command = JSON.parse(data);
- *   const response = await self.tcp.handlers[command.type].handle(command);
- *   socket.write(JSON.stringify(response));
- * }));
- *
- * @example // CJS usage (EventEmitter)
- * const { bindContext, self, context } = require('@cldmv/slothlet/runtime');
- *
- * emitter.on('event', bindContext((eventData) => {
- *   self.logger.info('Event received', { eventData, user: context.user });
- * }));
- */
-export function bindContext(callback) {
-	if (typeof callback !== "function") {
-		throw new TypeError("bindContext expects a function as the first argument");
-	}
-
-	// Capture the current AsyncLocalStorage context
-	const currentContext = getCtx();
-
-	if (!currentContext) {
-		// If no context is available, return the original callback
-		// This allows bindContext to be used safely even outside slothlet context
-		return callback;
-	}
-
-	/**
-	 * @function runtime_contextBoundCallback
-	 * @internal
-	 * @private
-	 * @param {...any} args - Arguments passed to the original callback
-	 * @returns {any} Result from the original callback execution
-	 *
-	 * @description
-	 * Wrapper function that executes the original callback within the captured
-	 * AsyncLocalStorage context, ensuring slothlet runtime imports remain accessible.
-	 */
-	const runtime_contextBoundCallback = function (...args) {
-		return runWithCtx(currentContext, callback, this, args);
-	};
-
-	return runtime_contextBoundCallback;
-}

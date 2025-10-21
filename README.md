@@ -104,6 +104,8 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Copy-Left Preservation**: Materialized functions stay materialized, preserving performance gains
 - **Bubble-Up Updates**: Parent API synchronization ensures consistency across the API tree
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules in the same API
+- **EventEmitter Context Propagation**: Automatic context preservation across EventEmitter callbacks using AsyncResource patterns
+- **Class Instance Context Propagation**: Automatic context preservation across class method calls with transparent wrapping
 
 ### 🛠 **Developer Experience**
 
@@ -418,6 +420,142 @@ function cjsFunction(data) {
 
 module.exports = { cjsFunction };
 ```
+
+### EventEmitter Context Propagation
+
+Slothlet automatically preserves AsyncLocalStorage context across all EventEmitter callbacks using Node.js AsyncResource patterns. This ensures your API modules maintain full context access in event handlers without any configuration.
+
+```javascript
+// api/tcp-server.mjs - Your API module
+import { self, context } from "@cldmv/slothlet/runtime";
+import net from "node:net";
+
+export function createTcpServer() {
+	const server = net.createServer();
+	
+	// Connection handler maintains full context automatically
+	server.on('connection', (socket) => {
+		console.log(`User: ${context.user}`); // ✅ Context preserved
+		console.log(`API keys: ${Object.keys(self).length}`); // ✅ Full API access
+		
+		// Socket data handler also maintains context automatically
+		socket.on('data', (data) => {
+			console.log(`Session: ${context.session}`); // ✅ Context preserved
+			console.log(`Processing for: ${context.user}`); // ✅ Context preserved
+			
+			// Full API access in nested event handlers
+			const processed = self.dataProcessor.handle(data.toString());
+			socket.write(processed);
+		});
+		
+		socket.on('error', (err) => {
+			// Error handlers also maintain context
+			self.logger.error(`Error for user ${context.user}: ${err.message}`);
+		});
+	});
+	
+	return server;
+}
+
+export function startServer(port = 3000) {
+	const server = createTcpServer();
+	server.listen(port);
+	return server;
+}
+```
+
+```javascript
+// Usage in your application
+import slothlet from '@cldmv/slothlet';
+
+const api = await slothlet({
+	dir: "./api",
+	context: { user: "alice", session: "tcp-session" }
+});
+
+// Start the server - all event handlers will have full context
+const server = api.startServer(8080);
+console.log('TCP server started with context preservation');
+```
+
+**Key Benefits:**
+
+- ✅ **Automatic**: No configuration needed - works transparently in all API modules
+- ✅ **Complete Context**: Full `context` object and `self` API access in all event handlers
+- ✅ **Nested Events**: Works with any depth of EventEmitter nesting (server → socket → custom emitters)
+- ✅ **Universal Support**: All EventEmitter methods (`on`, `once`, `addListener`) are automatically context-aware
+- ✅ **Production Ready**: Uses Node.js AsyncResource patterns for reliable context propagation
+- ✅ **Zero Overhead**: Only wraps listeners when context is active, minimal performance impact
+
+> [!TIP]  
+> **Automatic Context Propagation**: EventEmitter context propagation works automatically in both lazy and eager modes. TCP servers, HTTP servers, custom EventEmitters, and any other event-driven patterns in your API modules will maintain full slothlet context and API access without any code changes.
+
+### Class Instance Context Propagation
+
+Slothlet automatically preserves AsyncLocalStorage context across all class instance method calls. When your API functions return class instances, slothlet wraps them transparently to ensure all method calls maintain full context access.
+
+```javascript
+// api/data-processor.mjs - Your API module
+import { self, context } from "@cldmv/slothlet/runtime";
+
+class DataProcessor {
+	constructor(config) {
+		this.config = config;
+	}
+	
+	process(data) {
+		// Context automatically available in all methods
+		console.log(`Processing for user: ${context.user}`); // ✅ Context preserved
+		console.log(`Request ID: ${context.requestId}`); // ✅ Context preserved
+		
+		// Full API access in class methods
+		const validated = self.validator.check(data);
+		return this.transform(validated);
+	}
+	
+	transform(data) {
+		// Context preserved in nested method calls
+		console.log(`Transforming for: ${context.user}`); // ✅ Context preserved
+		
+		// Call other API modules from class methods
+		return self.utils.format(data);
+	}
+}
+
+export function createProcessor(config) {
+	// Return class instance - slothlet automatically wraps it
+	return new DataProcessor(config);
+}
+```
+
+```javascript
+// Usage in your application
+import slothlet from '@cldmv/slothlet';
+
+const api = await slothlet({
+	dir: "./api",
+	context: { user: "alice", requestId: "req-123" }
+});
+
+// Create processor instance - all methods will have full context
+const processor = api.createProcessor({ format: 'json' });
+
+// All method calls maintain context automatically
+const result = processor.process({ data: 'test' });
+console.log('Processing completed with context preservation');
+```
+
+**Key Benefits:**
+
+- ✅ **Automatic**: Class instances returned from API functions are automatically context-aware
+- ✅ **Transparent**: No code changes needed - works with existing class patterns
+- ✅ **Complete Context**: Full `context` object and `self` API access in all class methods
+- ✅ **Nested Methods**: Context preserved across method chains and internal calls
+- ✅ **Constructor Support**: Context preserved for both function calls and `new` constructor usage
+- ✅ **Performance Optimized**: Method wrapping is cached to avoid overhead on repeated calls
+
+> [!TIP]  
+> **Universal Class Support**: Any class instance returned from your API functions automatically maintains slothlet context. This includes database models, service classes, utility classes, and any other object-oriented patterns in your codebase.
 
 ### API Mode Configuration
 
