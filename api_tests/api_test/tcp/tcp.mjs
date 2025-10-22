@@ -141,8 +141,28 @@ export const tcp =
 						testContextUser: dataTest.contextUser
 					});
 
-					// Send response back to client
-					socket.write("Response: EventEmitter context propagation test completed\n");
+					// Test API access from within the socket handler
+					let apiAccess = { success: false, error: "Not attempted" };
+					try {
+						if (self.math && typeof self.math.add === "function") {
+							const result = self.math.add(10, 20);
+							apiAccess = { success: true, result: result };
+						} else {
+							apiAccess = { success: false, error: "Math API not available" };
+						}
+					} catch (error) {
+						apiAccess = { success: false, error: error.message };
+					}
+
+					// Send JSON response with all test results
+					const response = {
+						tests: contextTests,
+						apiAccess: apiAccess,
+						serverContext: immediateContextData,
+						timestamp: new Date().toISOString()
+					};
+
+					socket.write(JSON.stringify(response) + "\n");
 					socket.end();
 				});
 			});
