@@ -5,7 +5,7 @@ export function installPortalForSelf(): void;
 export function asUrl(p: any): any;
 export function isPlainObject(o: any): boolean;
 export function guessName(v: any): any;
-export function makeNodeishContext(): any;
+export function makeNodeishContext(): vm.Context;
 /**
  * Loads a module into a VM context, supporting ESM (mjs), CJS (cjs), or auto-detection.
  * @param {object} context - The VM context.
@@ -21,4 +21,5 @@ export function marshalArgsReplaceFunctions(value: any, registerCb: any): any;
 export function reviveArgsReplaceTokens(value: any, invokeCb: any): any;
 export function containsFunction(value: any): boolean;
 export const HAS_STM: boolean;
+import vm from "vm";
 //# sourceMappingURL=slothlet_helpers.d.mts.map

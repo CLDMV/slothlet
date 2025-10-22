@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/runtime/runtime.mjs
+ *	@Date: 2025-10-21 16:20:59 -07:00 (1761088859)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:00:15 -07:00 (1761141615)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Runtime utilities for AsyncLocalStorage context management.
  * @module @cldmv/slothlet/runtime
  * @memberof module:@cldmv/slothlet
@@ -18,14 +31,19 @@
  * const { self, context, reference } = require('@cldmv/slothlet/runtime');
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
-import util from "node:util";
+import { AsyncLocalStorage } from "async_hooks";
+import util from "util";
 import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
 
 const als = new AsyncLocalStorage();
 
-// Export the shared ALS instance for use by helpers
-export { als as sharedALS };
+/**
+ * Shared AsyncLocalStorage instance for all slothlet instances.
+ * Provides unified context management across all EventEmitter wrappers.
+ * @type {AsyncLocalStorageType}
+ * @public
+ */
+export const sharedALS = new AsyncLocalStorage();
 
 // Enable AsyncLocalStorage context propagation for all EventEmitter instances
 enableAlsForEventEmitters(als);
@@ -702,3 +720,7 @@ export const context = runtime_createLiveBinding("context");
  * console.log(reference); // Current reference data
  */
 export const reference = runtime_createLiveBinding("reference");
+
+/**
+ * @typedef {import('async_hooks').AsyncLocalStorage} AsyncLocalStorageType
+ */

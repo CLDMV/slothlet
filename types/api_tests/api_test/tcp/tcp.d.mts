@@ -16,5 +16,5 @@ export namespace tcp {
         server: NetServer;
     }>;
 }
-export type NetServer = object;
+export type NetServer = import("node:net").Server;
 //# sourceMappingURL=tcp.d.mts.map

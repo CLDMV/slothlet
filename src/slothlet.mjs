@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/slothlet.mjs
+ *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:00:27 -07:00 (1761141627)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Slothlet - Advanced module loader with lazy and eager loading capabilities
  * @module @cldmv/slothlet
  * @typicalname slothlet

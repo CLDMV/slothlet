@@ -1,4 +1,10 @@
-export { als as sharedALS };
+/**
+ * Shared AsyncLocalStorage instance for all slothlet instances.
+ * Provides unified context management across all EventEmitter wrappers.
+ * @type {AsyncLocalStorageType}
+ * @public
+ */
+export const sharedALS: AsyncLocalStorageType;
 export function runWithCtx(ctx: object, fn: Function, thisArg: any, args: any[]): any;
 export function getCtx(): object | null;
 export function makeWrapper(ctx: object): Function;
@@ -47,5 +53,6 @@ export const context: object;
  * console.log(reference); // Current reference data
  */
 export const reference: object;
-declare const als: any;
+export type AsyncLocalStorageType = AsyncLocalStorage<any>;
+import { AsyncLocalStorage } from "async_hooks";
 //# sourceMappingURL=runtime.d.mts.map

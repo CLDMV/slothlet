@@ -30,8 +30,8 @@
  * const { enableAlsForEventEmitters } = require('@cldmv/slothlet/helpers/als-eventemitter');
  */
 
-import { AsyncResource } from "node:async_hooks";
-import { EventEmitter } from "node:events";
+import { AsyncResource } from "async_hooks";
+import { EventEmitter } from "events";
 import { sharedALS } from "../runtime/runtime.mjs";
 
 /**
@@ -206,5 +206,5 @@ export function enableAlsForEventEmitters(als = sharedALS) {
 }
 
 /**
- * @typedef {object} AsyncLocalStorage
+ * @typedef {import('async_hooks').AsyncLocalStorage} AsyncLocalStorage
  */

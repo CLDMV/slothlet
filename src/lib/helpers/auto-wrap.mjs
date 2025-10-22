@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/auto-wrap.mjs
+ *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:59:17 -07:00 (1761141557)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Helper for automatically wrapping Node.js EventEmitter instances within API modules.
  * Internal file (not exported in package.json).
  * @module @cldmv/slothlet/src/lib/helpers/auto-wrap
@@ -9,8 +22,8 @@
  * This ensures that EventEmitter instances created inside API modules preserve AsyncLocalStorage context.
  * @function autoWrapEventEmitters
  * @package
- * @param {object} nodeModule - The Node.js module to wrap (e.g., require('node:net'))
- * @returns {object} Wrapped module with auto-wrapping constructors
+ * @param {NetModule} nodeModule - The Node.js module to wrap (e.g., require('net'))
+ * @returns {NetModule} Wrapped module with auto-wrapping constructors
  *
  * @description
  * Wraps Node.js module functions that return EventEmitter instances so they automatically
@@ -19,7 +32,7 @@
  * @example
  * // Usage in API modules:
  * import { autoWrapEventEmitters } from '@cldmv/slothlet/src/lib/helpers/auto-wrap';
- * import originalNet from 'node:net';
+ * import originalNet from 'net';
  * const net = autoWrapEventEmitters(originalNet);
  * // Now net.createServer() returns wrapped instances automatically
  */
@@ -48,8 +61,9 @@ export async function autoWrapEventEmitters(nodeModule) {
 		}
 
 		return wrappedModule;
-	} catch (_) {
-		// If anything fails, return original module
+	} catch (err) {
+		// If anything fails, log the error and return original module
+		console.error("autoWrapEventEmitters error:", err);
 		return nodeModule;
 	}
 }
@@ -63,10 +77,11 @@ export async function autoWrapEventEmitters(nodeModule) {
  * const net = await getNet();
  */
 export async function getNet() {
-	const originalNet = await import("node:net");
+	const originalNet = await import("net");
 	return autoWrapEventEmitters(originalNet.default || originalNet);
 }
 
 /**
- * @typedef {object} NetModule
+ * @typedef {typeof import('net')} NetModule
+ * @typedef {import('net').Server} NetServer
  */

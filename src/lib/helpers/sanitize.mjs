@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/sanitize.mjs
+ *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:59:41 -07:00 (1761141581)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview String sanitization utilities for slothlet API property names. Internal file (not exported in package.json).
  * @module @cldmv/slothlet.helpers.sanitize
  * @memberof module:@cldmv/slothlet.helpers
@@ -125,9 +138,9 @@ function globToRegex(pattern, caseSensitive = true) {
  *
  * @example
  * // Combining preserve options with other rules
- * sanitizePathName("parse-XML-data", { 
- *   preserveAllUpper: true, 
- *   rules: { upper: ["xml"] } 
+ * sanitizePathName("parse-XML-data", {
+ *   preserveAllUpper: true,
+ *   rules: { upper: ["xml"] }
  * }); // "parseXMLData" (XML preserved by preserveAllUpper)
  *
  * @example
@@ -226,7 +239,7 @@ export function sanitizePathName(input, opts = {}) {
 			return seg;
 		}
 
-		// 4) preserveAllLower: preserve segments that are already all-lowercase  
+		// 4) preserveAllLower: preserve segments that are already all-lowercase
 		if (preserveAllLower && seg === seg.toLowerCase() && seg !== seg.toUpperCase() && /[a-z]/.test(seg)) {
 			return seg;
 		}

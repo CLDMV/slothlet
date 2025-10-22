@@ -19,5 +19,5 @@
  * enableAlsForEventEmitters(als);
  */
 export function enableAlsForEventEmitters(als?: AsyncLocalStorage): void;
-export type AsyncLocalStorage = object;
+export type AsyncLocalStorage = import("async_hooks").AsyncLocalStorage<any>;
 //# sourceMappingURL=als-eventemitter.d.mts.map

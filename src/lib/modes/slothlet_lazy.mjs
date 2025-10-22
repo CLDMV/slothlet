@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/modes/slothlet_lazy.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:00:08 -07:00 (1761141608)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Slothlet Lazy Mode - Look-ahead materialization with copy-left preservation. Internal file (not exported in package.json).
  * @module @cldmv/slothlet.modes.lazy
  * @memberof module:@cldmv/slothlet.modes

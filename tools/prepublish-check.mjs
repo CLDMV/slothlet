@@ -1,3 +1,16 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/prepublish-check.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:01:51 -07:00 (1761141711)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

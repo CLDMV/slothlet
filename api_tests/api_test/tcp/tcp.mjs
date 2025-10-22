@@ -194,5 +194,5 @@ export const tcp =
 	};
 
 /**
- * @typedef {object} NetServer
+ * @typedef {import('node:net').Server} NetServer
  */

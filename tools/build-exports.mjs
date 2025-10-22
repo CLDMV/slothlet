@@ -1,4 +1,15 @@
-#!/usr/bin/env node
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/build-exports.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:01:29 -07:00 (1761141689)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
 
 /**
  * @fileoverview Build script to automatically generate export statements for index files by scanning src/slothlet.mjs for all exports.

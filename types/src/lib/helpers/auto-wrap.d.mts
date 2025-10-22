@@ -1,4 +1,16 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/auto-wrap.mjs
+ *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:59:17 -07:00 (1761141557)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+/**
  * @fileoverview Helper for automatically wrapping Node.js EventEmitter instances within API modules.
  * Internal file (not exported in package.json).
  * @module @cldmv/slothlet/src/lib/helpers/auto-wrap
@@ -8,8 +20,8 @@
  * This ensures that EventEmitter instances created inside API modules preserve AsyncLocalStorage context.
  * @function autoWrapEventEmitters
  * @package
- * @param {object} nodeModule - The Node.js module to wrap (e.g., require('node:net'))
- * @returns {object} Wrapped module with auto-wrapping constructors
+ * @param {NetModule} nodeModule - The Node.js module to wrap (e.g., require('net'))
+ * @returns {NetModule} Wrapped module with auto-wrapping constructors
  *
  * @description
  * Wraps Node.js module functions that return EventEmitter instances so they automatically
@@ -18,11 +30,11 @@
  * @example
  * // Usage in API modules:
  * import { autoWrapEventEmitters } from '@cldmv/slothlet/src/lib/helpers/auto-wrap';
- * import originalNet from 'node:net';
+ * import originalNet from 'net';
  * const net = autoWrapEventEmitters(originalNet);
  * // Now net.createServer() returns wrapped instances automatically
  */
-export function autoWrapEventEmitters(nodeModule: object): object;
+export function autoWrapEventEmitters(nodeModule: NetModule): NetModule;
 /**
  * Lazily get the pre-wrapped net module for convenient use in API modules.
  * @function getNet
@@ -32,5 +44,6 @@ export function autoWrapEventEmitters(nodeModule: object): object;
  * const net = await getNet();
  */
 export function getNet(): Promise<NetModule>;
-export type NetModule = object;
+export type NetModule = typeof import("net");
+export type NetServer = import("net").Server;
 //# sourceMappingURL=auto-wrap.d.mts.map

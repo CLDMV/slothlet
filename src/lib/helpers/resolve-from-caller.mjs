@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/resolve-from-caller.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:59:30 -07:00 (1761141570)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Path resolution utilities for resolving paths from the caller context. Internal file (not exported in package.json).
  * @module @cldmv/slothlet.helpers.resolve-from-caller
  * @memberof module:@cldmv/slothlet.helpers
@@ -35,10 +48,9 @@
  * const configPath = resolvePathFromCaller('../config.json');
  */
 
-// resolve-from-caller.mjs
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath, pathToFileURL } from "url";
 
 /* ---------- tiny utils ---------- */
 

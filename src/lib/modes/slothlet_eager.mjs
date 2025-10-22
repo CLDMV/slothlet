@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/modes/slothlet_eager.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:59:59 -07:00 (1761141599)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Slothlet Eager Mode - Immediate module loading and API construction.
  * @module @cldmv/slothlet.modes.eager
  * @memberof module:@cldmv/slothlet.modes
