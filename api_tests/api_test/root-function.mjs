@@ -6,20 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
- *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test/root-function.mjs
- *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:49:15 -07:00 (1761144555)
+ *	@Last modified time: 2025-10-22 09:28:55 -07:00 (1761150535)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
