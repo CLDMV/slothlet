@@ -38,7 +38,7 @@ import { EventEmitter } from "node:events";
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {import('node:async_hooks').AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use
+ * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
@@ -203,3 +203,7 @@ export function enableAlsForEventEmitters(als = new AsyncLocalStorage()) {
 		return res;
 	};
 }
+
+/**
+ * @typedef {object} AsyncLocalStorage
+ */

@@ -55,8 +55,18 @@ export async function autoWrapEventEmitters(nodeModule) {
 }
 
 /**
- * Pre-wrapped net module for convenient use in API modules
- * @const {object} net
+ * Lazily get the pre-wrapped net module for convenient use in API modules.
+ * @function getNet
  * @package
+ * @returns {Promise<NetModule>} Promise resolving to the wrapped net module
+ * @example
+ * const net = await getNet();
  */
-export const net = await autoWrapEventEmitters(await import("node:net"));
+export async function getNet() {
+	const originalNet = await import("node:net");
+	return autoWrapEventEmitters(originalNet.default || originalNet);
+}
+
+/**
+ * @typedef {object} NetModule
+ */

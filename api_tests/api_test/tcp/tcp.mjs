@@ -55,7 +55,7 @@ export const tcp =
 		 * Create a test TCP server that tests context propagation in EventEmitter callbacks.
 		 * @function createTestServer
 		 * @param {number} [port=0] - Port to listen on (0 for random)
-		 * @returns {Promise<{port: number, server: import('net').Server}>} Server instance and port
+		 * @returns {Promise<{port: number, server: NetServer}>} Server instance and port
 		 */
 		async createTestServer(port = 0) {
 			const server = net.createServer();
@@ -192,3 +192,7 @@ export const tcp =
 			});
 		}
 	};
+
+/**
+ * @typedef {object} NetServer
+ */

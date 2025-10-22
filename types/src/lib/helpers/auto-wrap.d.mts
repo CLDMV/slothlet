@@ -24,9 +24,13 @@
  */
 export function autoWrapEventEmitters(nodeModule: object): object;
 /**
- * Pre-wrapped net module for convenient use in API modules
- * @const {object} net
+ * Lazily get the pre-wrapped net module for convenient use in API modules.
+ * @function getNet
  * @package
+ * @returns {Promise<NetModule>} Promise resolving to the wrapped net module
+ * @example
+ * const net = await getNet();
  */
-export const net: any;
+export function getNet(): Promise<NetModule>;
+export type NetModule = object;
 //# sourceMappingURL=auto-wrap.d.mts.map
