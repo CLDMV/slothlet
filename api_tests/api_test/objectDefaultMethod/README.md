@@ -14,13 +14,13 @@ When a filename matches its folder name (`objectDefaultMethod/objectDefaultMetho
 
 ```js
 // Call the default method
-api.objectDefaultMethod('Hello'); // 'INFO: Hello'
-api.objectDefaultMethod('Hello', 'warn'); // 'WARN: Hello'
+api.objectDefaultMethod("hello"); // 'INFO: Hello'
+api.objectDefaultMethod("Hello", "warn"); // 'WARN: Hello'
 
 // Call specific named methods
-api.objectDefaultMethod.info('Hello'); // 'INFO: Hello'
-api.objectDefaultMethod.warn('Hello'); // 'WARN: Hello' 
-api.objectDefaultMethod.error('Hello'); // 'ERROR: Hello'
+api.objectDefaultMethod.info("hello"); // 'INFO: Hello'
+api.objectDefaultMethod.warn("hello"); // 'WARN: Hello'
+api.objectDefaultMethod.error("hello"); // 'ERROR: Hello'
 ```
 
 ## Use Case

@@ -6,12 +6,12 @@
  * @alias @cldmv/slothlet/api_tests/api_test_cjs
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * }
  *
@@ -23,7 +23,7 @@
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  */
 

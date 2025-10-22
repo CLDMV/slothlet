@@ -31,9 +31,7 @@ api.advanced.selfObject.addViaSelf(2, 3); // Uses self.math.add via live binding
 The modules in this folder show how to properly import live bindings:
 
 ```js
-const { self, context, reference } = await import(
-	new URL(`../../slothlet.mjs?_slothlet=${new URL(import.meta.url).searchParams.get("_slothlet") || ""}`, import.meta.url).href
-);
+import { self, context, reference } from "@cldmv/slothlet/runtime";
 ```
 
 This pattern allows modules to access the full API context and call other endpoints dynamically.

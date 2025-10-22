@@ -15,29 +15,29 @@
  * @param {boolean|string} apiEndPointTypeOverride - API type override.
  * @returns {string} The string "cleanEndpoint".
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.util.url.cleanEndpoint('sites_list', { site: 'default' })); // "cleanEndpoint"
+ * console.log(api_test.util.url.cleanEndpoint("sites_list", { site: 'default' })); // "cleanEndpoint"
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.util.url.cleanEndpoint('sites_list', { site: 'default' })); // "cleanEndpoint"
+ *   console.log(api_test.util.url.cleanEndpoint("sites_list", { site: 'default' })); // "cleanEndpoint"
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.util.url.cleanEndpoint('sites_list', { site: 'default' })); // "cleanEndpoint"
+ *   console.log(api_test.util.url.cleanEndpoint("sites_list", { site: 'default' })); // "cleanEndpoint"
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.util.url.cleanEndpoint('sites_list', { site: 'default' })); // "cleanEndpoint"
+ * console.log(api_test.util.url.cleanEndpoint("sites_list", { site: 'default' })); // "cleanEndpoint"
  */
 export function cleanEndpoint(..._: any[]): string;
 /**
@@ -49,13 +49,13 @@ export function cleanEndpoint(..._: any[]): string;
  * @param {Object} params - Parameters object to append.
  * @returns {string} The string "buildUrlWithParams".
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.url.buildUrlWithParams("10.0.0.1", { foo: "bar" })); // "buildUrlWithParams"
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
  *   console.log(api_test.util.url.buildUrlWithParams("10.0.0.1", { foo: "bar" })); // "buildUrlWithParams"
  * }
@@ -63,13 +63,13 @@ export function cleanEndpoint(..._: any[]): string;
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
  *   console.log(api_test.util.url.buildUrlWithParams("10.0.0.1", { foo: "bar" })); // "buildUrlWithParams"
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.url.buildUrlWithParams("10.0.0.1", { foo: "bar" })); // "buildUrlWithParams"
  */

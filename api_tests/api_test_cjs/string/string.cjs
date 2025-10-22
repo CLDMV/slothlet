@@ -17,17 +17,17 @@ let _;
  * @alias module:api_test_cjs.string
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs.string.upper('abc')); // 'ABC'
- * console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+ * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
+ * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs.string.upper('abc')); // 'ABC'
- *   console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+ *   console.log(api_test_cjs.string.upper("abc")); // 'ABC'
+ *   console.log(api_test_cjs.string.reverse("abc")); // 'cba'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
@@ -35,15 +35,15 @@ let _;
  * (async () => {
  *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs.string.upper('abc')); // 'ABC'
- *   console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+ *   console.log(api_test_cjs.string.upper("abc")); // 'ABC'
+ *   console.log(api_test_cjs.string.reverse("abc")); // 'cba'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs.string.upper('abc')); // 'ABC'
- * console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+ * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
+ * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
  */
 const string = {
 	/**
@@ -53,15 +53,15 @@ const string = {
 	 * @param {string} str - String to convert to uppercase.
 	 * @returns {string} The uppercased string.
 	 * @example // ESM usage via slothlet API
-	 * import slothlet from '@cldmv/slothlet';
+	 * import slothlet from "@cldmv/slothlet";
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 * console.log(api_test_cjs.string.upper('abc')); // 'ABC'
+	 * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 	 *
 	 * @example // ESM usage via slothlet API (inside async function)
 	 * async function example() {
-	 *   const { default: slothlet } = await import('@cldmv/slothlet');
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
 	 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 *   console.log(api_test_cjs.string.upper('abc')); // 'ABC'
+	 *   console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 	 * }
 	 *
 	 * @example // CJS usage via slothlet API (top-level)
@@ -69,13 +69,13 @@ const string = {
 	 * (async () => {
 	 *   ({ slothlet } = await import("@cldmv/slothlet"));
 	 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 *   console.log(api_test_cjs.string.upper('abc')); // 'ABC'
+	 *   console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 	 * })();
 	 *
 	 * @example // CJS usage via slothlet API (inside async function)
-	 * const slothlet = require('@cldmv/slothlet');
+	 * const slothlet = require("@cldmv/slothlet");
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 * console.log(api_test_cjs.string.upper('abc')); // 'ABC'
+	 * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 	 */
 	upper(str) {
 		return str.toUpperCase();
@@ -88,15 +88,15 @@ const string = {
 	 * @param {string} str - String to reverse.
 	 * @returns {string} The reversed string.
 	 * @example // ESM usage via slothlet API
-	 * import slothlet from '@cldmv/slothlet';
+	 * import slothlet from "@cldmv/slothlet";
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 * console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+	 * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 	 *
 	 * @example // ESM usage via slothlet API (inside async function)
 	 * async function example() {
-	 *   const { default: slothlet } = await import('@cldmv/slothlet');
+	 *   const { default: slothlet } = await import("@cldmv/slothlet");
 	 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 *   console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+	 *   console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 	 * }
 	 *
 	 * @example // CJS usage via slothlet API (top-level)
@@ -104,13 +104,13 @@ const string = {
 	 * (async () => {
 	 *   ({ slothlet } = await import("@cldmv/slothlet"));
 	 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 *   console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+	 *   console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 	 * })();
 	 *
 	 * @example // CJS usage via slothlet API (inside async function)
-	 * const slothlet = require('@cldmv/slothlet');
+	 * const slothlet = require("@cldmv/slothlet");
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
-	 * console.log(api_test_cjs.string.reverse('abc')); // 'cba'
+	 * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 	 */
 	reverse(str) {
 		return str.split("").reverse().join("");

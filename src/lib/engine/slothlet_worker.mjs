@@ -1,4 +1,16 @@
-// _worker.mjs
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/engine/slothlet_worker.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:58:28 -07:00 (1761141508)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import { parentPort, workerData } from "node:worker_threads";
 import {
 	installGlobalsInCurrentRealm,

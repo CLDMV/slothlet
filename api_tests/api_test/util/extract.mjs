@@ -18,13 +18,13 @@
  * @property {Function} NVRSection - Extracts NVR sections
  * @property {Function} parseDeviceName - Parses device names
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.extract.data()); // 'data'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
  *   console.log(api_test.util.extract.data()); // 'data'
  * }
@@ -32,13 +32,13 @@
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
  *   console.log(api_test.util.extract.data()); // 'data'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.extract.data()); // 'data'
  */
@@ -51,13 +51,13 @@ export const extract =
 		 * @public
 		 * @returns {string} Data extraction result
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.data()); // 'data'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.data()); // 'data'
 		 * }
@@ -65,13 +65,13 @@ export const extract =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.data()); // 'data'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.data()); // 'data'
 		 */
@@ -84,13 +84,13 @@ export const extract =
 		 * @public
 		 * @returns {string} Section extraction result
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.section()); // 'section'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.section()); // 'section'
 		 * }
@@ -98,13 +98,13 @@ export const extract =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.section()); // 'section'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.section()); // 'section'
 		 */
@@ -117,13 +117,13 @@ export const extract =
 		 * @public
 		 * @returns {string} NVR section extraction result
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.NVRSection()); // 'NVRSection'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.NVRSection()); // 'NVRSection'
 		 * }
@@ -131,13 +131,13 @@ export const extract =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.NVRSection()); // 'NVRSection'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.NVRSection()); // 'NVRSection'
 		 */
@@ -150,13 +150,13 @@ export const extract =
 		 * @public
 		 * @returns {string} Device name parsing result
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.parseDeviceName()); // 'parseDeviceName'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.parseDeviceName()); // 'parseDeviceName'
 		 * }
@@ -164,13 +164,13 @@ export const extract =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 *   console.log(api_test.util.extract.parseDeviceName()); // 'parseDeviceName'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.extract.parseDeviceName()); // 'parseDeviceName'
 		 */

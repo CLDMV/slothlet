@@ -20,6 +20,7 @@ tmp/
 commits*
 ts-validate*
 .squashr-cache*
+reference/
 # Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 

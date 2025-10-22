@@ -13,7 +13,7 @@ This pattern shows a default function export in a nested structure:
 ## Usage
 
 ```js
-api.advanced.nest3('slothlet'); // 'Hello, slothlet!'
+api.advanced.nest3("slothlet"); // 'Hello, slothlet!'
 ```
 
 ## Use Case
