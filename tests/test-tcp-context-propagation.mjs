@@ -137,7 +137,12 @@ async function testTcpContextPropagation() {
 		const allTestsPassed = await testPromise;
 
 		// Close the server
-		await serverInfo.close();
+		try {
+			await serverInfo.close();
+		} catch (closeError) {
+			console.error("❌ Error closing server:", closeError);
+			process.exit(1);
+		}
 
 		// Final results
 		console.log("\n[FINAL RESULTS]");

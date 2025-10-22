@@ -3,7 +3,7 @@
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use
+ * @param {AsyncLocalStorage} [als=sharedALS] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context

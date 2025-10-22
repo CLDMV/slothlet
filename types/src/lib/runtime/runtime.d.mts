@@ -1,3 +1,4 @@
+export { als as sharedALS };
 export function runWithCtx(ctx: object, fn: Function, thisArg: any, args: any[]): any;
 export function getCtx(): object | null;
 export function makeWrapper(ctx: object): Function;
@@ -46,4 +47,5 @@ export const context: object;
  * console.log(reference); // Current reference data
  */
 export const reference: object;
+declare const als: any;
 //# sourceMappingURL=runtime.d.mts.map

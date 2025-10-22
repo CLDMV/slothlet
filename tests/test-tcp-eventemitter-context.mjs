@@ -105,8 +105,13 @@ async function testTcpEventEmitterContext() {
 		await testClient();
 
 		// Close server
-		await serverInfo.close();
-		console.log("  🛑 TCP server closed");
+		try {
+			await serverInfo.close();
+			console.log("  🛑 TCP server closed");
+		} catch (closeErr) {
+			console.error("  ❌ Error closing TCP server:", closeErr);
+			// Continue - don't let cleanup failures mask test results
+		}
 
 		// Test 3: Analyze EventEmitter context test results
 		console.log("\n[TEST 3] EventEmitter context propagation results:");

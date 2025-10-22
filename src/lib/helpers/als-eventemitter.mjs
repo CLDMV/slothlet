@@ -30,15 +30,16 @@
  * const { enableAlsForEventEmitters } = require('@cldmv/slothlet/helpers/als-eventemitter');
  */
 
-import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
+import { AsyncResource } from "node:async_hooks";
 import { EventEmitter } from "node:events";
+import { sharedALS } from "../runtime/runtime.mjs";
 
 /**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use
+ * @param {AsyncLocalStorage} [als=sharedALS] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
@@ -53,7 +54,7 @@ import { EventEmitter } from "node:events";
  * import { enableAlsForEventEmitters } from './als-eventemitter.mjs';
  * enableAlsForEventEmitters(als);
  */
-export function enableAlsForEventEmitters(als = new AsyncLocalStorage()) {
+export function enableAlsForEventEmitters(als = sharedALS) {
 	// Symbol flag so we don't double-patch
 	const kPatched = Symbol.for("slothlet.als.patched");
 

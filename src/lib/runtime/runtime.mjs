@@ -24,6 +24,9 @@ import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemit
 
 const als = new AsyncLocalStorage();
 
+// Export the shared ALS instance for use by helpers
+export { als as sharedALS };
+
 // Enable AsyncLocalStorage context propagation for all EventEmitter instances
 enableAlsForEventEmitters(als);
 
