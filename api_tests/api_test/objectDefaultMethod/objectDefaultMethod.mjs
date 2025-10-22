@@ -14,7 +14,7 @@
  * @property {function} warn - Named method for api.objectDefaultMethod.warn()
  * @property {function} error - Named method for api.objectDefaultMethod.error()
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.objectDefaultMethod("hello")); // calls default
  * console.log(api_test.objectDefaultMethod.info("hello")); // calls info
@@ -53,7 +53,7 @@ export const objectDefaultMethod =
 		 * @param {string} [level="info"] - Level to use ('info', 'warn', 'error').
 		 * @returns {string} Formatted message with appropriate level prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
 		 * console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
@@ -95,7 +95,7 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with INFO prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
 		 *
@@ -129,7 +129,7 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with WARN prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
 		 *
@@ -163,7 +163,7 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with ERROR prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 		 *

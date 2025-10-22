@@ -40,7 +40,7 @@
  *
  * @example
  * // Use programmatically
- * import { buildExports } from './tools/build-exports.mjs';
+ * import { buildExports } from "./tools/build-exports.mjs";
  * await buildExports();
  */
 
@@ -162,7 +162,7 @@ export { slothlet };
  *
  * @example
  * // Use programmatically
- * import { buildExports } from './tools/build-exports.mjs';
+ * import { buildExports } from "./tools/build-exports.mjs";
  * await buildExports();
  */
 async function buildExports() {

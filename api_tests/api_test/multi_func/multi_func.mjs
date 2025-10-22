@@ -18,7 +18,7 @@
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueOne prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.multiFunc.uniqueOne("test")); // 'uniqueOne: test'
  *
@@ -54,7 +54,7 @@ export function uniqueOne(msg) {
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueTwo prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.multiFunc.uniqueTwo("test")); // 'uniqueTwo: test'
  *
@@ -90,7 +90,7 @@ export function uniqueTwo(msg) {
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueThree prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.multiFunc.uniqueThree("test")); // 'uniqueThree: test'
  *
@@ -132,7 +132,7 @@ export const multi_func =
 		 * @public
 		 * @returns {string} The string "beta hello"
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
 		 *

@@ -13,7 +13,7 @@
  * @property {Function} upper - Converts string to uppercase
  * @property {Function} reverse - Reverses a string
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.string.upper("hello")); // 'HELLO'
  * console.log(api_test.string.reverse("hello")); // 'olleh'
@@ -51,7 +51,7 @@ export const string =
 		 * @param {string} str - String to convert to uppercase
 		 * @returns {string} The uppercased string
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.string.upper("World")); // 'WORLD'
 		 *
@@ -85,7 +85,7 @@ export const string =
 		 * @param {string} str - String to reverse
 		 * @returns {string} The reversed string
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.string.reverse("World")); // 'dlrow'
 		 *

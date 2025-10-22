@@ -89,11 +89,11 @@ export async function loadEsmModuleFallback(context, fileUrl, visited = new Set(
 		// Handle different import syntaxes
 		const importStr = imp.names.trim();
 		if (importStr.startsWith("* as ")) {
-			// import * as ns from 'mod';
+			// import * as ns from "mod";
 			const nsName = importStr.slice(5).trim();
 			context[nsName] = mod;
 		} else if (importStr.startsWith("{")) {
-			// import { a, b as c } from 'mod';
+			// import { a, b as c } from "mod";
 			let fields = importStr
 				.slice(1, -1)
 				.split(",")
@@ -104,8 +104,8 @@ export async function loadEsmModuleFallback(context, fileUrl, visited = new Set(
 				context[alias || orig] = mod[orig];
 			}
 		} else if (importStr) {
-			// import defaultExport from 'mod';
-			// or: import defaultExport, { a, b as c } from 'mod';
+			// import defaultExport from "mod";
+			// or: import defaultExport, { a, b as c } from "mod";
 			let parts = importStr
 				.split(/,(.+)/)
 				.map((s) => s.trim())

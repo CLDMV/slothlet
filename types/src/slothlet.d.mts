@@ -34,77 +34,77 @@ export const context: object;
 export const reference: object;
 export default slothlet;
 export type SlothletOptions = {
-	/**
-	 * - Directory to load API modules from.
-	 * - Can be absolute or relative path.
-	 * - If relative, resolved from the calling file's location.
-	 * - Defaults to "api" directory relative to caller.
-	 */
-	dir?: string;
-	/**
-	 * - Loading strategy:
-	 * - `true`: Lazy loading - modules loaded on-demand when accessed (lower initial load, proxy overhead)
-	 * - `false`: Eager loading - all modules loaded immediately (default, higher initial load, direct access)
-	 */
-	lazy?: boolean;
-	/**
-	 * - Directory traversal depth control:
-	 * - `Infinity`: Traverse all subdirectories recursively (default)
-	 * - `0`: Only load files in root directory, no subdirectories
-	 * - `1`, `2`, etc.: Limit traversal to specified depth levels
-	 */
-	apiDepth?: number;
-	/**
-	 * - Debug output control:
-	 * - `true`: Enable verbose logging for module loading, API construction, and binding operations
-	 * - `false`: Silent operation (default)
-	 * - Can be set via command line flag `--slothletdebug`, environment variable `SLOTHLET_DEBUG=true`, or options parameter
-	 * - Command line and environment settings become the default for all instances unless overridden
-	 */
-	debug?: boolean;
-	/**
-	 * - Execution environment mode:
-	 * - `"singleton"`: Single shared instance within current process (default, fastest)
-	 * - `"vm"`: Isolated VM context for security/isolation
-	 * - `"worker"`: Web Worker or Worker Thread execution
-	 * - `"fork"`: Child process execution for complete isolation
-	 */
-	mode?: string;
-	/**
-	 * - API structure and calling convention:
-	 * - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
-	 * - `"function"`: Force API to be callable as function with properties attached
-	 * - `"object"`: Force API to be plain object with method properties
-	 */
-	api_mode?: string;
-	/**
-	 * - Context data object injected into live-binding `context` reference.
-	 * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
-	 * - user sessions, environment configs, etc.
-	 */
-	context?: object;
-	/**
-	 * - Reference object merged into the API root level.
-	 * - Properties not conflicting with loaded modules are added directly to the API.
-	 * - Useful for utility functions, constants, or external service connections.
-	 */
-	reference?: object;
-	/**
-	 * - Filename sanitization options for API property names.
-	 * - Controls how file names are converted to valid JavaScript identifiers.
-	 * - Default behavior: camelCase conversion with lowerFirst=true.
-	 */
-	sanitize?: {
-		lowerFirst?: boolean;
-		preserveAllUpper?: boolean;
-		preserveAllLower?: boolean;
-		rules?: {
-			leave?: string[];
-			leaveInsensitive?: string[];
-			upper?: string[];
-			lower?: string[];
-		};
-	};
+    /**
+     * - Directory to load API modules from.
+     * - Can be absolute or relative path.
+     * - If relative, resolved from the calling file's location.
+     * - Defaults to "api" directory relative to caller.
+     */
+    dir?: string;
+    /**
+     * - Loading strategy:
+     * - `true`: Lazy loading - modules loaded on-demand when accessed (lower initial load, proxy overhead)
+     * - `false`: Eager loading - all modules loaded immediately (default, higher initial load, direct access)
+     */
+    lazy?: boolean;
+    /**
+     * - Directory traversal depth control:
+     * - `Infinity`: Traverse all subdirectories recursively (default)
+     * - `0`: Only load files in root directory, no subdirectories
+     * - `1`, `2`, etc.: Limit traversal to specified depth levels
+     */
+    apiDepth?: number;
+    /**
+     * - Debug output control:
+     * - `true`: Enable verbose logging for module loading, API construction, and binding operations
+     * - `false`: Silent operation (default)
+     * - Can be set via command line flag `--slothletdebug`, environment variable `SLOTHLET_DEBUG=true`, or options parameter
+     * - Command line and environment settings become the default for all instances unless overridden
+     */
+    debug?: boolean;
+    /**
+     * - Execution environment mode:
+     * - `"singleton"`: Single shared instance within current process (default, fastest)
+     * - `"vm"`: Isolated VM context for security/isolation
+     * - `"worker"`: Web Worker or Worker Thread execution
+     * - `"fork"`: Child process execution for complete isolation
+     */
+    mode?: string;
+    /**
+     * - API structure and calling convention:
+     * - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
+     * - `"function"`: Force API to be callable as function with properties attached
+     * - `"object"`: Force API to be plain object with method properties
+     */
+    api_mode?: string;
+    /**
+     * - Context data object injected into live-binding `context` reference.
+     * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
+     * - user sessions, environment configs, etc.
+     */
+    context?: object;
+    /**
+     * - Reference object merged into the API root level.
+     * - Properties not conflicting with loaded modules are added directly to the API.
+     * - Useful for utility functions, constants, or external service connections.
+     */
+    reference?: object;
+    /**
+     * - Filename sanitization options for API property names.
+     * - Controls how file names are converted to valid JavaScript identifiers.
+     * - Default behavior: camelCase conversion with lowerFirst=true.
+     */
+    sanitize?: {
+        lowerFirst?: boolean;
+        preserveAllUpper?: boolean;
+        preserveAllLower?: boolean;
+        rules?: {
+            leave?: string[];
+            leaveInsensitive?: string[];
+            upper?: string[];
+            lower?: string[];
+        };
+    };
 };
 /**
  * Creates a slothlet API instance with the specified configuration.

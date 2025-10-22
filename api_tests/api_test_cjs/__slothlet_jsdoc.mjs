@@ -6,7 +6,7 @@
  * @alias @cldmv/slothlet/api_tests/api_test_cjs
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  *
  * @example // ESM usage via slothlet API (inside async function)

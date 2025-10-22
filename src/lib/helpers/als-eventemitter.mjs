@@ -23,11 +23,11 @@
  *
  * @example
  * // ESM usage
- * import { enableAlsForEventEmitters } from '@cldmv/slothlet/helpers/als-eventemitter';
+ * import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
  *
  * @example
  * // CJS usage
- * const { enableAlsForEventEmitters } = require('@cldmv/slothlet/helpers/als-eventemitter');
+ * const { enableAlsForEventEmitters } = require("@cldmv/slothlet/helpers/als-eventemitter");
  */
 
 import { AsyncResource } from "node:async_hooks";
@@ -51,7 +51,7 @@ import { sharedALS } from "../runtime/runtime.mjs";
  *
  * @example
  * // Enable ALS for all EventEmitters
- * import { enableAlsForEventEmitters } from './als-eventemitter.mjs';
+ * import { enableAlsForEventEmitters } from "./als-eventemitter.mjs";
  * enableAlsForEventEmitters(als);
  */
 export function enableAlsForEventEmitters(als = sharedALS) {

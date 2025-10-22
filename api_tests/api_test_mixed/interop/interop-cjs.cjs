@@ -16,7 +16,7 @@ let self, context;
  * @alias module:api_test_mixed.interop.interopCjs
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
  * console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
  *
@@ -52,7 +52,7 @@ const interopCjs =
 		 * @param {number} b - Second number for testing.
 		 * @returns {Promise<number>} Result from cross-module call.
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 		 * console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 		 *

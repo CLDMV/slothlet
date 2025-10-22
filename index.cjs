@@ -34,7 +34,7 @@ const modPromise = import("@cldmv/slothlet/slothlet");
  *
  * @example // CJS
  * const slothlet = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: './api', context: { user: 'alice' } });
+ * const api = await slothlet({ dir: "./api", context: { user: "alice" } });
  * console.log(api.config.username); // Access configuration
  */
 async function slothlet(options = {}) {
@@ -76,6 +76,6 @@ module.exports = slothlet;
  *
  * @example // CJS named destructuring
  * const { slothlet } = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: './api' });
+ * const api = await slothlet({ dir: "./api" });
  */
 module.exports.slothlet = slothlet; // optional named alias

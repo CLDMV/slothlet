@@ -11,29 +11,29 @@
  * @param {string} name - Name parameter for alpha function.
  * @returns {string} Formatted string with alpha prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.alpha('alpha')); // 'alpha: alpha'
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: "./api_tests/api_test" });
+ * console.log(api_test.multiFunc.alpha("alpha")); // "alpha: alpha"
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
  *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.alpha('alpha')); // 'alpha: alpha'
+ *   const api_test = await slothlet({ dir: "./api_tests/api_test" });
+ *   console.log(api_test.multiFunc.alpha("alpha")); // "alpha: alpha"
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
  *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.alpha('alpha')); // 'alpha: alpha'
+ *   const api_test = await slothlet({ dir: "./api_tests/api_test" });
+ *   console.log(api_test.multiFunc.alpha("alpha")); // "alpha: alpha"
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
  * const slothlet = require("@cldmv/slothlet");
- * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.alpha('alpha')); // 'alpha: alpha'
+ * const api_test = await slothlet({ dir: "./api_tests/api_test" });
+ * console.log(api_test.multiFunc.alpha("alpha")); // "alpha: alpha"
  */
 export function alpha(name: string): string;
 //# sourceMappingURL=alpha.d.mts.map

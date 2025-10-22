@@ -22,7 +22,7 @@
  * This ensures that EventEmitter instances created inside API modules preserve AsyncLocalStorage context.
  * @function autoWrapEventEmitters
  * @package
- * @param {NetModule} nodeModule - The Node.js module to wrap (e.g., require('node:net'))
+ * @param {NetModule} nodeModule - The Node.js module to wrap (e.g., require("node:net"))
  * @returns {NetModule} Wrapped module with auto-wrapping constructors
  *
  * @description
@@ -31,8 +31,8 @@
  *
  * @example
  * // Usage in API modules:
- * import { autoWrapEventEmitters } from '@cldmv/slothlet/src/lib/helpers/auto-wrap';
- * import originalNet from 'node:net';
+ * import { autoWrapEventEmitters } from "@cldmv/slothlet/src/lib/helpers/auto-wrap";
+ * import originalNet from "node:net";
  * const net = autoWrapEventEmitters(originalNet);
  * // Now net.createServer() returns wrapped instances automatically
  */

@@ -35,7 +35,7 @@ let shutdownFn = null;
  * @param {Function} fn - Shutdown function to set
  * @returns {Function} Previously set shutdown function
  * @example
- * const prev = setShutdown(() => console.log('Shutting down'));
+ * const prev = setShutdown(() => console.log("Shutting down"));
  */
 export function setShutdown(fn) {
 	const prev = shutdownFn;

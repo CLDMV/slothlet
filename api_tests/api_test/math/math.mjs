@@ -16,7 +16,7 @@
  * @property {Function} add - Adds two numbers
  * @property {Function} multiply - Multiplies two numbers
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.math.add(2, 3)); // 5
  * console.log(api_test.math.multiply(2, 3)); // 6
@@ -55,7 +55,7 @@ export const math =
 		 * @param {number} b - Second number to add
 		 * @returns {number} The sum of a and b
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.math.add(5, 7)); // 12
 		 *
@@ -90,7 +90,7 @@ export const math =
 		 * @param {number} b - Second number to multiply
 		 * @returns {number} The product of a and b
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.math.multiply(4, 6)); // 24
 		 *

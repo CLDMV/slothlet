@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:49:40 -07:00 (1761144580)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -43,7 +43,7 @@
  * @param {string} name - Name to greet
  * @returns {string} Greeting message
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test("World")); // 'Hello, World!'
  *
@@ -80,7 +80,7 @@ export default function greet(name) {
  * @param {string} name - Name to greet loudly
  * @returns {string} Uppercase greeting message
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.rootFunctionShout("World")); // 'HELLO, WORLD!'
  *
@@ -117,7 +117,7 @@ export function rootFunctionShout(name) {
  * @param {string} name - Name to greet quietly
  * @returns {string} Lowercase greeting message
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.rootFunctionWhisper("World")); // 'hello, world.'
  *

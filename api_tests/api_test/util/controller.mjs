@@ -13,7 +13,7 @@
  * @alias module:api_test.util.controller
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.controller.getDefault()); // "getDefault"
  * console.log(api_test.util.controller.detectEndpointType()); // "detectEndpointType"
@@ -50,7 +50,7 @@ export const controller =
 		 * @public
 		 * @returns {string} The string "getDefault".
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.controller.getDefault()); // "getDefault"
 		 *
@@ -83,7 +83,7 @@ export const controller =
 		 * @public
 		 * @returns {string} The string "detectEndpointType".
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.controller.detectEndpointType()); // "detectEndpointType"
 		 *
@@ -116,7 +116,7 @@ export const controller =
 		 * @public
 		 * @returns {string} The string "detectDeviceType".
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.util.controller.detectDeviceType()); // "detectDeviceType"
 		 *

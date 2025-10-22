@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:01:51 -07:00 (1761141711)
+ *	@Last modified time: 2025-10-22 08:59:59 -07:00 (1761148799)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -36,10 +36,9 @@ try {
 		`
     //const { slothlet } = require("../${pkgFile}");
     const { slothlet } = require("${pkgName}");
-    console.log(typeof slothlet === 'function' ? 'PASS' : 'FAIL');
-  `
-	);
-
+    console.log(typeof slothlet === "function" ? "PASS" : "FAIL");
+`
+	); 
 	// Initialize npm project
 	execSync("npm init -y", { cwd: tmpDir, stdio: "inherit" });
 

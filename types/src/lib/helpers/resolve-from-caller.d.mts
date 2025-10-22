@@ -29,7 +29,7 @@
  *   const stack = getStack(findCaller);
  *   for (const frame of stack) {
  *     const filename = frame?.getFileName?.();
- *     if (filename && !filename.includes('node_modules')) {
+ *     if (filename && !filename.includes("node_modules")) {
  *       return filename; // First non-dependency file
  *     }
  *   }
@@ -40,7 +40,7 @@ export function getStack(skipFn?: Function): Array<CallSite>;
  * @function resolvePathFromCaller
  * @package
  * @internal
- * @param {string} rel - Relative path to resolve (e.g., '../config.json', './data/file.txt')
+ * @param {string} rel - Relative path to resolve (e.g., "../config.json", "./data/file.txt")
  * @returns {string} Absolute filesystem path with platform-specific separators
  * @throws {TypeError} When rel parameter is not a string
  *
@@ -61,7 +61,7 @@ export function getStack(skipFn?: Function): Array<CallSite>;
  *
  * @example
  * // From a file at /project/src/modules/math.mjs
- * const configPath = resolvePathFromCaller('../config.json');
+ * const configPath = resolvePathFromCaller("../config.json");
  * // Returns: /project/config.json (absolute filesystem path)
  *
  * @example
@@ -69,16 +69,16 @@ export function getStack(skipFn?: Function): Array<CallSite>;
  * resolvePathFromCaller("file:///absolute/path.txt");
  * // Returns: /absolute/path.txt (converted from URL)
  *
- * resolvePathFromCaller('/already/absolute/path.txt');
+ * resolvePathFromCaller("/already/absolute/path.txt");
  * // Returns: /already/absolute/path.txt (unchanged)
  *
  * @example
  * // Relative resolution from different contexts
  * // If called from /project/src/lib/utils.mjs:
- * resolvePathFromCaller('./helpers/format.js');
+ * resolvePathFromCaller("./helpers/format.js");
  * // Returns: /project/src/lib/helpers/format.js
  *
- * resolvePathFromCaller('../../config/settings.json');
+ * resolvePathFromCaller("../../config/settings.json");
  * // Returns: /project/config/settings.json
  */
 export function resolvePathFromCaller(rel: string): string;
@@ -86,7 +86,7 @@ export function resolvePathFromCaller(rel: string): string;
  * @function resolveUrlFromCaller
  * @package
  * @internal
- * @param {string} rel - Relative path to resolve (e.g., '../config.json', './data/file.txt')
+ * @param {string} rel - Relative path to resolve (e.g., "../config.json", "./data/file.txt")
  * @returns {string} Absolute file:// URL suitable for dynamic imports and URL operations
  * @throws {TypeError} When rel parameter is not a string
  *
@@ -106,7 +106,7 @@ export function resolvePathFromCaller(rel: string): string;
  *
  * @example
  * // From a file at /project/src/modules/math.mjs
- * const configUrl = resolveUrlFromCaller('../config.json');
+ * const configUrl = resolveUrlFromCaller("../config.json");
  * // Returns: file:///project/config.json (absolute file:// URL)
  *
  * @example
@@ -114,36 +114,36 @@ export function resolvePathFromCaller(rel: string): string;
  * resolveUrlFromCaller("file:///absolute/path.txt");
  * // Returns: file:///absolute/path.txt (unchanged)
  *
- * resolveUrlFromCaller('/already/absolute/path.txt');
+ * resolveUrlFromCaller("/already/absolute/path.txt");
  * // Returns: file:///already/absolute/path.txt (converted to URL)
  *
  * @example
  * // Dynamic ESM import usage
- * const modulePath = resolveUrlFromCaller('./dynamic-module.mjs');
+ * const modulePath = resolveUrlFromCaller("./dynamic-module.mjs");
  * const dynamicModule = await import(modulePath);
  * // Works seamlessly with ESM import() which expects URLs
  *
  * @example
  * // Cross-platform URL handling
- * // Unix: resolveUrlFromCaller('../config.json') → file:///project/config.json
- * // Windows: resolveUrlFromCaller('../config.json') → file:///C:/project/config.json
+ * // Unix: resolveUrlFromCaller("../config.json") → file:///project/config.json
+ * // Windows: resolveUrlFromCaller("../config.json") → file:///C:/project/config.json
  */
 export function resolveUrlFromCaller(rel: string): string;
 export function toFsPath(v: any): string | null;
 export type CallSite = {
-	getFileName: () => string | undefined;
-	getLineNumber: () => number | undefined;
-	getFunctionName: () => string | undefined;
-	getTypeName: () => string | undefined;
-	getMethodName: () => string | undefined;
-	getScriptNameOrSourceURL: () => string | undefined;
-	getColumnNumber: () => number | undefined;
-	isNative: () => boolean | undefined;
-	isEval: () => boolean | undefined;
-	isConstructor: () => boolean | undefined;
-	isToplevel: () => boolean | undefined;
-	isAsync: () => boolean | undefined;
-	isPromiseAll: () => boolean | undefined;
-	getPromiseIndex: () => number | undefined;
+    getFileName: () => string | undefined;
+    getLineNumber: () => number | undefined;
+    getFunctionName: () => string | undefined;
+    getTypeName: () => string | undefined;
+    getMethodName: () => string | undefined;
+    getScriptNameOrSourceURL: () => string | undefined;
+    getColumnNumber: () => number | undefined;
+    isNative: () => boolean | undefined;
+    isEval: () => boolean | undefined;
+    isConstructor: () => boolean | undefined;
+    isToplevel: () => boolean | undefined;
+    isAsync: () => boolean | undefined;
+    isPromiseAll: () => boolean | undefined;
+    getPromiseIndex: () => number | undefined;
 };
 //# sourceMappingURL=resolve-from-caller.d.mts.map

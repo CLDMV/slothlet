@@ -16,7 +16,7 @@ let self, context;
  * @alias module:api_test_cjs.advanced.selfObject
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
  *
@@ -52,7 +52,7 @@ const selfObject =
 		 * @param {number} b - Second number to add
 		 * @returns {number} Sum of a and b via self reference
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 *

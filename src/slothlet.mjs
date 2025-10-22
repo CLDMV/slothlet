@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:55:42 -07:00 (1761144942)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -38,13 +38,13 @@
  *
  * @example
  * // Default import (recommended)
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  *
  * // OR destructured import
- * import { slothlet } from '@cldmv/slothlet';
+ * import { slothlet } from "@cldmv/slothlet";
  *
  * // OR both (they're the same)
- * import slothlet, { slothlet as namedSlothlet } from '@cldmv/slothlet';
+ * import slothlet, { slothlet as namedSlothlet } from "@cldmv/slothlet";
  *
  * // OR dynamic import
  * const slothlet = await import("@cldmv/slothlet");
@@ -54,7 +54,7 @@
  *
  * // Usage
  * const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  * });
  *
  * @example
@@ -72,13 +72,13 @@
  * (async () => {
  *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  *   });
  * })();
  *
  * // Usage (inside async function or top-level await)
  * const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  * });
  *
  * > [!IMPORTANT]
@@ -86,30 +86,30 @@
  *
  * @example
  * // Multiple instances with ESM
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  *
- * const api1 = await slothlet({ dir: './api_tests/api_test' });
- * const api2 = await slothlet({ dir: './api_tests/api_test_mixed' });
+ * const api1 = await slothlet({ dir: "./api_tests/api_test" });
+ * const api2 = await slothlet({ dir: "./api_tests/api_test_mixed" });
  *
  * @example
  * // Multiple instances with CommonJS
  * const slothlet = require("@cldmv/slothlet");
  *
- * const api1 = await slothlet({ dir: './api_tests/api_test' });
- * const api2 = await slothlet({ dir: './api_tests/api_test_cjs' });
+ * const api1 = await slothlet({ dir: "./api_tests/api_test" });
+ * const api2 = await slothlet({ dir: "./api_tests/api_test_cjs" });
  *
  * @example
  * // Create with context and reference (direct call)
  * const api = await slothlet({
- *   dir: './api_tests/api_test',
- *   context: { user: 'alice', env: 'prod' },
- *   reference: { version: '1.0.0' }
+ *   dir: "./api_tests/api_test",
+ *   context: { user: "alice", env: "prod" },
+ *   reference: { version: "1.0.0" }
  * });
  *
  * // Access modules through bound API
  * await api.math.add(2, 3); // 5
- * api.context.user; // 'alice'
- * api.version; // '1.0.0'
+ * api.context.user; // "alice"
+ * api.version; // "1.0.0"
  *
  * @example
  * // Shutdown when done
@@ -220,7 +220,7 @@ async function slothlet(options = {}) {
  * @example
  * // Internal usage only - creates isolated instance
  * const instance = createFreshInstance();
- * instance.config.dir = './my-api';  // Independent configuration
+ * instance.config.dir = "./my-api";  // Independent configuration
  */
 function createFreshInstance() {
 	const instance = {};
@@ -1072,8 +1072,8 @@ const slothletObject = {
 	 * @internal
 	 * @example
 	 * // Safe usage - updating context only
-	 * slothlet.updateBindings({ user: 'alice' }, null, null);
-	 * context.user; // 'alice'
+	 * slothlet.updateBindings({ user: "alice" }, null, null);
+	 * context.user; // "alice"
 	 *
 	 * @example
 	 * // Potentially unsafe - manual self/reference modification

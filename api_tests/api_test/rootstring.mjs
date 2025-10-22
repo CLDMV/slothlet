@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:57:08 -07:00 (1761145028)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -24,7 +24,7 @@
  * @alias module:api_test.rootstring
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.rootstring.upper("abc")); // 'ABC'
  * console.log(api_test.rootstring.reverse("abc")); // 'cba'
@@ -62,7 +62,7 @@ export const rootstring =
 		 * @param {string} str - String to convert to uppercase
 		 * @returns {string} The uppercased string
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.rootstring.upper("hello")); // 'HELLO'
 		 *
@@ -97,7 +97,7 @@ export const rootstring =
 		 * @param {string} str - String to reverse
 		 * @returns {string} The reversed string
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 		 *

@@ -12,7 +12,7 @@
  * @public
  * @property {Function} today - Returns today's date
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.nested.date.today()); // '2025-08-15'
  *
@@ -45,7 +45,7 @@ export const date =
 		 * @public
 		 * @returns {string} Today's date in YYYY-MM-DD format
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.nested.date.today()); // '2025-08-15'
 		 *

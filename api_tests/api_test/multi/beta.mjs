@@ -10,7 +10,7 @@
  * @alias module:api_test.multi.beta
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.multi.beta.world()); // 'beta world'
  *
@@ -43,7 +43,7 @@ export const beta =
 		 * @public
 		 * @returns {string} The string 'beta world'.
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(api_test.multi.beta.world()); // 'beta world'
 		 *

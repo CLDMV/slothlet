@@ -15,7 +15,7 @@
  *
  * @example
  * // Enable ALS for all EventEmitters
- * import { enableAlsForEventEmitters } from './als-eventemitter.mjs';
+ * import { enableAlsForEventEmitters } from "./als-eventemitter.mjs";
  * enableAlsForEventEmitters(als);
  */
 export function enableAlsForEventEmitters(als?: AsyncLocalStorage): void;

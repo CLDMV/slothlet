@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 06:59:59 -07:00 (1761141599)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -38,7 +38,7 @@
  *
  * @example
  * // Basic slothlet usage with eager loading
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api = await slothlet({ dir: './api_test', lazy: false });
  *
  * // All modules are immediately loaded and available

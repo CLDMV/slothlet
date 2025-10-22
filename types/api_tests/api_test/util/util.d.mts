@@ -11,7 +11,7 @@
  * @param {*} variable - Variable parameter (currently unused).
  * @returns {string} The string "size".
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.util.size("test")); // 'size'
  *
@@ -44,7 +44,7 @@ export function size(_: any): string;
  * @param {*} variable - Variable parameter (currently unused).
  * @returns {string} The string "secondFunc".
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.util.util.secondFunc("test")); // 'secondFunc'
  *

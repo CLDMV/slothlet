@@ -17,7 +17,7 @@ let _;
  * @alias module:api_test_cjs.rootMath
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.rootMath.add(2, 3)); // 5
  * console.log(api_test_cjs.rootMath.multiply(2, 3)); // 6
@@ -56,7 +56,7 @@ const rootMath =
 		 * @param {number} b - Second number to add.
 		 * @returns {number} The sum of a and b.
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.rootMath.add(2, 3)); // 5
 		 *
@@ -92,7 +92,7 @@ const rootMath =
 		 * @param {number} b - Second number to multiply.
 		 * @returns {number} The product of a and b.
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.rootMath.multiply(2, 3)); // 6
 		 *

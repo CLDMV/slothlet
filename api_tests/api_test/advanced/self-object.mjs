@@ -13,7 +13,7 @@ import { self } from "@cldmv/slothlet/runtime";
  * @public
  *
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
  *
@@ -51,7 +51,7 @@ export const selfObject =
 		 * @returns {number} The sum of a and b, or NaN if self.math.add is not available.
 		 *
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
 		 * console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 *

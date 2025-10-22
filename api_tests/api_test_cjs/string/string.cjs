@@ -17,7 +17,7 @@ let _;
  * @alias module:api_test_cjs.string
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
  * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
@@ -53,7 +53,7 @@ const string = {
 	 * @param {string} str - String to convert to uppercase.
 	 * @returns {string} The uppercased string.
 	 * @example // ESM usage via slothlet API
-	 * import slothlet from '@cldmv/slothlet';
+	 * import slothlet from "@cldmv/slothlet";
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 	 * console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 	 *
@@ -88,7 +88,7 @@ const string = {
 	 * @param {string} str - String to reverse.
 	 * @returns {string} The reversed string.
 	 * @example // ESM usage via slothlet API
-	 * import slothlet from '@cldmv/slothlet';
+	 * import slothlet from "@cldmv/slothlet";
 	 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 	 * console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 	 *

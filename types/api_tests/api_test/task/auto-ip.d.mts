@@ -12,7 +12,7 @@
  * @async
  * @returns {Promise<string>} The string "testAutoIP".
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(await api_test.task.autoIp()); // "testAutoIP"
  *

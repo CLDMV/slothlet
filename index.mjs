@@ -30,7 +30,7 @@
  * @returns {Promise<function|object>} The bound API object with live-binding context
  *
  * @example // ESM
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api = await slothlet({ dir: './api', lazy: true });
  * const result = await api.math.add(2, 3); // 5
  *
@@ -69,7 +69,7 @@ export default async function slothlet(options = {}) {
  * @type {Function}
  *
  * @example // ESM named import
- * import { slothlet } from '@cldmv/slothlet';
+ * import { slothlet } from "@cldmv/slothlet";
  * const api = await slothlet({ dir: './api' });
  */
 // Optional named alias

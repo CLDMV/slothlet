@@ -18,7 +18,7 @@ let _;
  * @param {string} name - Name to greet.
  * @returns {string} Greeting message.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs("World")); // 'Hello, World!'
  *
@@ -55,7 +55,7 @@ function greet(name) {
  * @param {string} name - Name to shout greeting for.
  * @returns {string} Uppercased greeting message.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
  *

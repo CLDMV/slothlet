@@ -76,11 +76,11 @@ async function testTcpContextPropagation() {
 		console.log("    ServerInfo keys:", Object.keys(serverInfo));
 		console.log("    Server type:", typeof serverInfo.server);
 		console.log("    Server constructor:", serverInfo.server?.constructor?.name);
-		console.log("    Server has 'on':", typeof serverInfo.server?.on === "function");
+		console.log("    Server has \"on\":", typeof serverInfo.server?.on === "function");
 		console.log("    Server is wrapped (constructor name):", serverInfo.server?.constructor?.name === "Proxy");
-		console.log("    Server accessing 'on' method...");
+		console.log("    Server accessing \"on\" method...");
 		const serverOnMethod = serverInfo.server.on;
-		console.log("    Server 'on' method type:", typeof serverOnMethod);
+		console.log("    Server \"on\" method type:", typeof serverOnMethod);
 
 		// Test the server by connecting as a client
 		const testPromise = new Promise((resolve, reject) => {
@@ -159,8 +159,8 @@ async function testTcpContextPropagation() {
 		console.log("\n[FINAL RESULTS]");
 		if (allTestsPassed) {
 			console.log("🎉 SUCCESS: Automatic EventEmitter context propagation works!");
-			console.log('   ✅ Context preserved in server.on("connection", callback)');
-			console.log('   ✅ Context preserved in socket.on("data", callback)');
+			console.log("   ✅ Context preserved in server.on(\"connection\", callback)");
+			console.log("   ✅ Context preserved in socket.on(\"data\", callback)");
 			console.log("   ✅ API access works from within EventEmitter callbacks");
 			console.log("   ✅ No consumer code changes required!");
 		} else {
