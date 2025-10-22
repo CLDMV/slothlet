@@ -31,8 +31,8 @@
  * const { self, context, reference } = require('@cldmv/slothlet/runtime');
  */
 
-import { AsyncLocalStorage } from "async_hooks";
-import util from "util";
+import { AsyncLocalStorage } from "node:async_hooks";
+import util from "node:util";
 import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
 
 const als = new AsyncLocalStorage();
@@ -722,5 +722,5 @@ export const context = runtime_createLiveBinding("context");
 export const reference = runtime_createLiveBinding("reference");
 
 /**
- * @typedef {import('async_hooks').AsyncLocalStorage} AsyncLocalStorageType
+ * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorageType
  */

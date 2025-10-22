@@ -21,5 +21,5 @@ export function marshalArgsReplaceFunctions(value: any, registerCb: any): any;
 export function reviveArgsReplaceTokens(value: any, invokeCb: any): any;
 export function containsFunction(value: any): boolean;
 export const HAS_STM: boolean;
-import vm from "vm";
+import vm from "node:vm";
 //# sourceMappingURL=slothlet_helpers.d.mts.map

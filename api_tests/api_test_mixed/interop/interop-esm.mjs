@@ -77,10 +77,6 @@ export const interopEsm =
 			console.log("ESM Interop: Testing cross-module calls");
 			console.log(`ESM Context: User=${context.user}, Instance=${context.instanceName}`);
 
-			// console.log(new URL(import.meta.url).searchParams.get("_slothlet"));
-			// console.log(self);
-			// process.exit(0);
-
 			// Try to call CJS math via self reference
 			if (self && self.mathCjs && typeof self.mathCjs.multiply === "function") {
 				console.log("ESM -> CJS call via self reference");

@@ -63,9 +63,7 @@ api.util.url.cleanEndpoint();
 The util modules demonstrate proper live binding usage:
 
 ```js
-const { self, context, reference } = await import(
-  new URL(`../../slothlet.mjs?_slothlet=${new URL(import.meta.url).searchParams.get("_slothlet") || ""}`, import.meta.url).href
-);
+import { self, context, reference } from '@cldmv/slothlet/runtime';
 ```
 
 ## Use Case

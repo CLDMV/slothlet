@@ -133,8 +133,8 @@
 
 // Eager mode now relies on the instance context (`this`) passed from slothlet core
 // instead of importing a potentially different module instance via query params.
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 // import { runWithCtx } from "@cldmv/slothlet/runtime";
 
 /**

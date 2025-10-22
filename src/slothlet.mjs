@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:00:27 -07:00 (1761141627)
+ *	@Last modified time: 2025-10-22 07:29:06 -07:00 (1761143346)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -115,9 +115,9 @@
  * // Shutdown when done
  * await api.shutdown();
  */
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
@@ -141,17 +141,6 @@ let DEBUG = process.argv.includes("--slothletdebug")
 	: process.env.SLOTHLET_DEBUG === "1" || process.env.SLOTHLET_DEBUG === "true"
 		? true
 		: false;
-
-/**
- * The shared _slothlet parameter for live binding coordination.
- * @type {string}
- * @private
- * @internal
- */
-export let _slothlet = new URL(import.meta.url).searchParams.get("_slothlet") || "";
-
-// Set the global instance ID for CJS modules to use
-// setGlobalCjsInstanceId(_slothlet);
 
 /**
  * Live-binding reference to the current API instance.
@@ -307,7 +296,7 @@ const slothletObject = {
 					// console.log("modePath: ", modePath);
 					// console.log("modeUrl: ", modeUrl);
 					// process.exit(0);
-					// const imported = await import(modeUrl + "?_slothlet=" + _slothlet);
+
 					const imported = await import(modeUrl);
 					if (imported && typeof imported === "object") {
 						this.modes[modeName] = imported.default || imported;
@@ -321,9 +310,6 @@ const slothletObject = {
 		// Default entry is THIS module, which re-exports `slothlet`
 		// const { entry = import.meta.url, mode = "vm" } = options ?? {};
 		const { entry = import.meta.url, mode = "singleton", api_mode = "auto" } = options ?? {};
-
-		_slothlet = new URL(import.meta.url).searchParams.get("_slothlet") || "";
-		// console.log("[slothlet.mjs] create _slothlet:", _slothlet);
 
 		// self = this.boundapi;
 		// context = this.context;
@@ -431,8 +417,6 @@ const slothletObject = {
 			// apiDir = path.resolve(process.cwd(), apiDir);
 		}
 
-		// const slothletCJS = require("../index.cjs").withInstanceId(_slothlet);
-
 		if (this.loaded) return this.api;
 		if (this.config.lazy) {
 			this.api = await this.modes.lazy.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
@@ -470,8 +454,6 @@ const slothletObject = {
 		// Object.assign(this.boundapi, this.createBoundApi(l_ctxRef.context, l_ctxRef.reference) || {});
 		// this.boundapi = this.createBoundApi(l_ctxRef.context, l_ctxRef.reference);
 		const _boundapi = this.createBoundApi(l_ctxRef.reference);
-
-		// _boundapi.__slothlet = this;
 
 		mutateLiveBindingFunction(this.boundapi, _boundapi);
 
@@ -841,8 +823,7 @@ const slothletObject = {
 	 */
 	async _loadSingleModule(modulePath, rootLevel = false) {
 		const moduleUrl = pathToFileURL(modulePath).href;
-		// const moduleUrl = pathToFileURL(modulePath).href + "?_slothlet=" + _slothlet;
-		// const module = await import(moduleUrl);
+
 		// console.log("moduleUrl: ", moduleUrl);
 		const module = await import(moduleUrl);
 
@@ -851,7 +832,6 @@ const slothletObject = {
 
 		// if (this.config.debug) console.log("Loading module:", modulePath, "isCjsModule:", isCjsModuleFile);
 
-		// const module = await import(moduleUrl + "?testParam=maybe&_slothlet=" + _slothlet);
 		if (this.config.debug) console.log("module: ", module);
 		// If default export is a function, expose as callable and attach named exports as properties
 		if (typeof module.default === "function") {

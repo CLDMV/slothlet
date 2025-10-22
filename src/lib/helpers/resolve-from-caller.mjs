@@ -48,9 +48,9 @@
  * const configPath = resolvePathFromCaller('../config.json');
  */
 
-import fs from "fs";
-import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /* ---------- tiny utils ---------- */
 

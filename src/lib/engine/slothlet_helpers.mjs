@@ -11,9 +11,9 @@
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import vm from "vm";
-import fs from "fs/promises";
-import path from "path";
+import vm from "node:vm";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // import { loadEsmModuleFallback } from "./slothlet_esm.mjs";
 

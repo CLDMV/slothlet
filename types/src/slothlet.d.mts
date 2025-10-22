@@ -10,13 +10,6 @@
  */
 export function mutateLiveBindingFunction(target: Function | object, source: Function | object): void;
 /**
- * The shared _slothlet parameter for live binding coordination.
- * @type {string}
- * @private
- * @internal
- */
-export let _slothlet: string;
-/**
  * Live-binding reference to the current API instance.
  * This is updated whenever a new API instance is created.
  * Dynamically imported modules can access this at runtime.

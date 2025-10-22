@@ -54,5 +54,5 @@ export const context: object;
  */
 export const reference: object;
 export type AsyncLocalStorageType = AsyncLocalStorage<any>;
-import { AsyncLocalStorage } from "async_hooks";
+import { AsyncLocalStorage } from "node:async_hooks";
 //# sourceMappingURL=runtime.d.mts.map
