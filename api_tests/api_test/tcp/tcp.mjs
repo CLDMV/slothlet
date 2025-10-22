@@ -65,7 +65,6 @@ export const tcp =
 			console.log("    Server constructor:", server.constructor.name);
 			console.log('    Server has "on" method:', typeof server.on === "function");
 			console.log('    Server has "emit" method:', typeof server.emit === "function");
-			console.log("    Server toString contains Proxy:", server.toString().includes("Proxy"));
 
 			const contextTests = [];
 

@@ -34,10 +34,6 @@ import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
 import { EventEmitter } from "node:events";
 
 /**
- * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorage
- */
-
-/**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
  * @function enableAlsForEventEmitters
@@ -115,7 +111,6 @@ export function enableAlsForEventEmitters(als = new AsyncLocalStorage()) {
 		const runtime_wrappedListener = function (...args) {
 			return resource.runInAsyncScope(
 				() => {
-					als.enterWith(store);
 					return listener.apply(this, args);
 				},
 				this,

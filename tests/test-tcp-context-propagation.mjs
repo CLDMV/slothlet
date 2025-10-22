@@ -66,7 +66,7 @@ async function testTcpContextPropagation() {
 		console.log("    Server type:", typeof serverInfo.server);
 		console.log("    Server constructor:", serverInfo.server?.constructor?.name);
 		console.log("    Server has 'on':", typeof serverInfo.server?.on === "function");
-		console.log("    Server is wrapped:", serverInfo.server?.toString()?.includes("Proxy") || typeof serverInfo.server === "object");
+		console.log("    Server is wrapped (constructor name):", serverInfo.server?.constructor?.name === "Proxy");
 		console.log("    Server accessing 'on' method...");
 		const serverOnMethod = serverInfo.server.on;
 		console.log("    Server 'on' method type:", typeof serverOnMethod);
