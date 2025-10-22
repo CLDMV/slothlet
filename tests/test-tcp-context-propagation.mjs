@@ -1,4 +1,15 @@
-#!/usr/bin/env node
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/test-tcp-context-propagation.mjs
+ *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:54:40 -07:00 (1761144880)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
 
 /**
  * @fileoverview Test script for automatic EventEmitter context propagation using API modules.

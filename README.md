@@ -339,7 +339,7 @@ Creates and loads an API instance with the specified configuration.
 | `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                      |
 | `mode`      | `string`  | `"singleton"` | Execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                        |
 | `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports) |
-| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`                                                                                                                                                                                                                        |
+| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                        |
 | `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                      |
 | `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Control how filenames become API property names. Supports exact matches, glob patterns (`*json*`), and boundary patterns (`**url**`). Configure `lowerFirst` and `rules` for `leave`, `leaveInsensitive`, `upper`, and `lower` transformations                                                                                                                         |
 
@@ -437,28 +437,28 @@ import net from "node:net";
 
 export function createTcpServer() {
 	const server = net.createServer();
-	
+
 	// Connection handler maintains full context automatically
-	server.on('connection', (socket) => {
+	server.on("connection", (socket) => {
 		console.log(`User: ${context.user}`); // ✅ Context preserved
 		console.log(`API keys: ${Object.keys(self).length}`); // ✅ Full API access
-		
+
 		// Socket data handler also maintains context automatically
-		socket.on('data', (data) => {
+		socket.on("data", (data) => {
 			console.log(`Session: ${context.session}`); // ✅ Context preserved
 			console.log(`Processing for: ${context.user}`); // ✅ Context preserved
-			
+
 			// Full API access in nested event handlers
 			const processed = self.dataProcessor.handle(data.toString());
 			socket.write(processed);
 		});
-		
-		socket.on('error', (err) => {
+
+		socket.on("error", (err) => {
 			// Error handlers also maintain context
 			self.logger.error(`Error for user ${context.user}: ${err.message}`);
 		});
 	});
-	
+
 	return server;
 }
 
@@ -471,7 +471,7 @@ export function startServer(port = 3000) {
 
 ```javascript
 // Usage in your application
-import slothlet from '@cldmv/slothlet';
+import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
 	dir: "./api",
@@ -480,7 +480,7 @@ const api = await slothlet({
 
 // Start the server - all event handlers will have full context
 const server = api.startServer(8080);
-console.log('TCP server started with context preservation');
+console.log("TCP server started with context preservation");
 ```
 
 **Key Benefits:**
@@ -507,21 +507,21 @@ class DataProcessor {
 	constructor(config) {
 		this.config = config;
 	}
-	
+
 	process(data) {
 		// Context automatically available in all methods
 		console.log(`Processing for user: ${context.user}`); // ✅ Context preserved
 		console.log(`Request ID: ${context.requestId}`); // ✅ Context preserved
-		
+
 		// Full API access in class methods
 		const validated = self.validator.check(data);
 		return this.transform(validated);
 	}
-	
+
 	transform(data) {
 		// Context preserved in nested method calls
 		console.log(`Transforming for: ${context.user}`); // ✅ Context preserved
-		
+
 		// Call other API modules from class methods
 		return self.utils.format(data);
 	}
@@ -535,7 +535,7 @@ export function createProcessor(config) {
 
 ```javascript
 // Usage in your application
-import slothlet from '@cldmv/slothlet';
+import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
 	dir: "./api",
@@ -543,11 +543,11 @@ const api = await slothlet({
 });
 
 // Create processor instance - all methods will have full context
-const processor = api.createProcessor({ format: 'json' });
+const processor = api.createProcessor({ format: "json" });
 
 // All method calls maintain context automatically
-const result = processor.process({ data: 'test' });
-console.log('Processing completed with context preservation');
+const result = processor.process({ data: "test" });
+console.log("Processing completed with context preservation");
 ```
 
 **Key Benefits:**

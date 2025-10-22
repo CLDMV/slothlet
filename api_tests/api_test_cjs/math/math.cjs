@@ -23,7 +23,7 @@ let _;
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  *   console.log(api_test_cjs.math.add(2, 3)); // 5
  *   console.log(api_test_cjs.math.multiply(2, 3)); // 6
@@ -32,14 +32,14 @@ let _;
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  *   console.log(api_test_cjs.math.add(2, 3)); // 5
  *   console.log(api_test_cjs.math.multiply(2, 3)); // 6
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.math.add(2, 3)); // 5
  * console.log(api_test_cjs.math.multiply(2, 3)); // 6
@@ -61,7 +61,7 @@ const math =
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 *   console.log(api_test_cjs.math.add(2, 3)); // 5
 		 * }
@@ -69,13 +69,13 @@ const math =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 *   console.log(api_test_cjs.math.add(2, 3)); // 5
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.math.add(2, 3)); // 5
 		 */
@@ -96,7 +96,7 @@ const math =
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 *   console.log(api_test_cjs.math.multiply(2, 3)); // 6
 		 * }
@@ -104,13 +104,13 @@ const math =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 *   console.log(api_test_cjs.math.multiply(2, 3)); // 6
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.math.multiply(2, 3)); // 6
 		 */

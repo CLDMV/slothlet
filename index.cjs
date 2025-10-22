@@ -33,7 +33,7 @@ const modPromise = import("@cldmv/slothlet/slothlet");
  * @returns {Promise<function|object>} The bound API object with live-binding context
  *
  * @example // CJS
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api = await slothlet({ dir: './api', context: { user: 'alice' } });
  * console.log(api.config.username); // Access configuration
  */
@@ -75,7 +75,7 @@ module.exports = slothlet;
  * @type {Function}
  *
  * @example // CJS named destructuring
- * const { slothlet } = require('@cldmv/slothlet');
+ * const { slothlet } = require("@cldmv/slothlet");
  * const api = await slothlet({ dir: './api' });
  */
 module.exports.slothlet = slothlet; // optional named alias

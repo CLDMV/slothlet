@@ -19,7 +19,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
  *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
  * }
@@ -27,13 +27,13 @@ import { self, context } from "@cldmv/slothlet/runtime";
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
  *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
  * console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
  */
@@ -55,7 +55,7 @@ export const interopEsm =
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 		 *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
 		 * }
@@ -63,13 +63,13 @@ export const interopEsm =
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 		 *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 		 * console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
 		 */

@@ -63,7 +63,7 @@ api.util.url.cleanEndpoint();
 The util modules demonstrate proper live binding usage:
 
 ```js
-import { self, context, reference } from '@cldmv/slothlet/runtime';
+import { self, context, reference } from "@cldmv/slothlet/runtime";
 ```
 
 ## Use Case

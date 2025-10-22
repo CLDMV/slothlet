@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:00:15 -07:00 (1761141615)
+ *	@Last modified time: 2025-10-22 07:55:42 -07:00 (1761144942)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -24,11 +24,11 @@
  *
  * @example
  * // ESM usage (public API)
- * import { self, context, reference } from '@cldmv/slothlet/runtime';
+ * import { self, context, reference } from "@cldmv/slothlet/runtime";
  *
  * @example
  * // CJS usage (public API)
- * const { self, context, reference } = require('@cldmv/slothlet/runtime');
+ * const { self, context, reference } = require("@cldmv/slothlet/runtime");
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -98,7 +98,7 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
  * // Get current context
  * const ctx = getCtx();
  * if (ctx) {
- *   console.log('Current context:', ctx);
+ *   console.log("Current context:", ctx);
  * }
  */
 export const getCtx = () => als.getStore() || null;
@@ -474,7 +474,7 @@ function runtime_mutateLiveBinding(target, contextKey) {
  *
  * @example
  * // Create a live binding for 'self' context key
- * const selfBinding = runtime_createLiveBinding('self');
+ * const selfBinding = runtime_createLiveBinding("self");
  */
 function runtime_createLiveBinding(contextKey) {
 	// Function target gives us the *option* to be callable (self may be a function)
@@ -569,7 +569,7 @@ function runtime_createLiveBinding(contextKey) {
 				 * @function runtime_toPrimitiveHandler
 				 * @internal
 				 * @private
-				 * @param {string} hint - Primitive conversion hint ('string', 'number', or 'default')
+				 * @param {string} hint - Primitive conversion hint ("string", "number", or "default")
 				 * @returns {any} Converted primitive value
 				 *
 				 * @description
@@ -577,7 +577,7 @@ function runtime_createLiveBinding(contextKey) {
 				 *
 				 * @example
 				 * // Primitive conversion handler
-				 * const primitive = runtime_toPrimitiveHandler('string');
+				 * const primitive = runtime_toPrimitiveHandler("string");
 				 */
 				const runtime_toPrimitiveHandler = (hint) => {
 					const v = getCtx()?.[contextKey];
@@ -722,5 +722,5 @@ export const context = runtime_createLiveBinding("context");
 export const reference = runtime_createLiveBinding("reference");
 
 /**
- * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorageType
+ * @typedef {import("node:async_hooks").AsyncLocalStorage} AsyncLocalStorageType
  */

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:29:06 -07:00 (1761143346)
+ *	@Last modified time: 2025-10-22 07:55:42 -07:00 (1761144942)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -47,10 +47,10 @@
  * import slothlet, { slothlet as namedSlothlet } from '@cldmv/slothlet';
  *
  * // OR dynamic import
- * const slothlet = await import('@cldmv/slothlet');
+ * const slothlet = await import("@cldmv/slothlet");
  *
  * // OR dynamic destructured import
- * const { slothlet } = await import('@cldmv/slothlet');
+ * const { slothlet } = await import("@cldmv/slothlet");
  *
  * // Usage
  * const api = await slothlet({
@@ -59,18 +59,18 @@
  *
  * @example
  * // Default require (recommended)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  *
  * // OR destructured require
- * const { slothlet } = require('@cldmv/slothlet');
+ * const { slothlet } = require("@cldmv/slothlet");
  *
  * // OR both (they're the same)
- * const { default: slothlet, slothlet: namedSlothlet } = require('@cldmv/slothlet');
+ * const { default: slothlet, slothlet: namedSlothlet } = require("@cldmv/slothlet");
  *
  * // OR dynamic import from CJS (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api = await slothlet({
  *     dir: './api_tests/api_test'
  *   });
@@ -93,7 +93,7 @@
  *
  * @example
  * // Multiple instances with CommonJS
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  *
  * const api1 = await slothlet({ dir: './api_tests/api_test' });
  * const api2 = await slothlet({ dir: './api_tests/api_test_cjs' });
@@ -1496,7 +1496,7 @@ export default slothlet;
  *   - `"function"`: Force API to be callable as function with properties attached
  *   - `"object"`: Force API to be plain object with method properties
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
- *   - Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`. Useful for request data,
+ *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.
  * @property {object} [reference={}] - Reference object merged into the API root level.
  *   - Properties not conflicting with loaded modules are added directly to the API.

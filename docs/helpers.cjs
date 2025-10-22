@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:02:29 -07:00 (1761141749)
+ *	@Last modified time: 2025-10-22 07:49:41 -07:00 (1761144581)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1925,9 +1925,9 @@ const partials = {
 			summary: `<em>This module was automatically generated because no root jsdoc.mjs file was found.</em> It provides access to the ${baseModuleName} API components.`,
 			examples: [
 				`// ESM usage via slothlet API\nimport slothlet from '@cldmv/slothlet';\nconst ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });`,
-				`// ESM usage via slothlet API (inside async function)\nasync function example() {\n  const { default: slothlet } = await import('@cldmv/slothlet');\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n}`,
-				`// CJS usage via slothlet API (top-level)\nlet slothlet;\n(async () => {\n  ({ slothlet } = await import('@cldmv/slothlet'));\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n})();`,
-				`// CJS usage via slothlet API (inside async function)\nconst slothlet = require('@cldmv/slothlet');\nconst ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });`
+				`// ESM usage via slothlet API (inside async function)\nasync function example() {\n  const { default: slothlet } = await import("@cldmv/slothlet");\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n}`,
+				`// CJS usage via slothlet API (top-level)\nlet slothlet;\n(async () => {\n  ({ slothlet } = await import("@cldmv/slothlet"));\n  const ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });\n})();`,
+				`// CJS usage via slothlet API (inside async function)\nconst slothlet = require("@cldmv/slothlet");\nconst ${baseModuleName} = await slothlet({ dir: './${baseModuleName}' });`
 			],
 			meta: {
 				filename: "auto-generated",

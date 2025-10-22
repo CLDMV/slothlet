@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 06:59:30 -07:00 (1761141570)
+ *	@Last modified time: 2025-10-22 07:54:12 -07:00 (1761144852)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -325,7 +325,7 @@ function resolveWith(rel, makePrimary, exists, makeFallback) {
  *
  * @example
  * // Short-circuit cases
- * resolvePathFromCaller('file:///absolute/path.txt');
+ * resolvePathFromCaller("file:///absolute/path.txt");
  * // Returns: /absolute/path.txt (converted from URL)
  *
  * resolvePathFromCaller('/already/absolute/path.txt');
@@ -385,7 +385,7 @@ export function resolvePathFromCaller(rel) {
  *
  * @example
  * // Short-circuit cases
- * resolveUrlFromCaller('file:///absolute/path.txt');
+ * resolveUrlFromCaller("file:///absolute/path.txt");
  * // Returns: file:///absolute/path.txt (unchanged)
  *
  * resolveUrlFromCaller('/already/absolute/path.txt');

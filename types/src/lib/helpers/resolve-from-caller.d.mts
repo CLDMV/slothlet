@@ -66,7 +66,7 @@ export function getStack(skipFn?: Function): Array<CallSite>;
  *
  * @example
  * // Short-circuit cases
- * resolvePathFromCaller('file:///absolute/path.txt');
+ * resolvePathFromCaller("file:///absolute/path.txt");
  * // Returns: /absolute/path.txt (converted from URL)
  *
  * resolvePathFromCaller('/already/absolute/path.txt');
@@ -111,7 +111,7 @@ export function resolvePathFromCaller(rel: string): string;
  *
  * @example
  * // Short-circuit cases
- * resolveUrlFromCaller('file:///absolute/path.txt');
+ * resolveUrlFromCaller("file:///absolute/path.txt");
  * // Returns: file:///absolute/path.txt (unchanged)
  *
  * resolveUrlFromCaller('/already/absolute/path.txt');
@@ -131,19 +131,19 @@ export function resolvePathFromCaller(rel: string): string;
 export function resolveUrlFromCaller(rel: string): string;
 export function toFsPath(v: any): string | null;
 export type CallSite = {
-    getFileName: () => string | undefined;
-    getLineNumber: () => number | undefined;
-    getFunctionName: () => string | undefined;
-    getTypeName: () => string | undefined;
-    getMethodName: () => string | undefined;
-    getScriptNameOrSourceURL: () => string | undefined;
-    getColumnNumber: () => number | undefined;
-    isNative: () => boolean | undefined;
-    isEval: () => boolean | undefined;
-    isConstructor: () => boolean | undefined;
-    isToplevel: () => boolean | undefined;
-    isAsync: () => boolean | undefined;
-    isPromiseAll: () => boolean | undefined;
-    getPromiseIndex: () => number | undefined;
+	getFileName: () => string | undefined;
+	getLineNumber: () => number | undefined;
+	getFunctionName: () => string | undefined;
+	getTypeName: () => string | undefined;
+	getMethodName: () => string | undefined;
+	getScriptNameOrSourceURL: () => string | undefined;
+	getColumnNumber: () => number | undefined;
+	isNative: () => boolean | undefined;
+	isEval: () => boolean | undefined;
+	isConstructor: () => boolean | undefined;
+	isToplevel: () => boolean | undefined;
+	isAsync: () => boolean | undefined;
+	isPromiseAll: () => boolean | undefined;
+	getPromiseIndex: () => number | undefined;
 };
 //# sourceMappingURL=resolve-from-caller.d.mts.map

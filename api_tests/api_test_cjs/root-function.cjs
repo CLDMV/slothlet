@@ -20,27 +20,27 @@ let _;
  * @example // ESM usage via slothlet API
  * import slothlet from '@cldmv/slothlet';
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs('World')); // 'Hello, World!'
+ * console.log(api_test_cjs("World")); // 'Hello, World!'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs('World')); // 'Hello, World!'
+ *   console.log(api_test_cjs("World")); // 'Hello, World!'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs('World')); // 'Hello, World!'
+ *   console.log(api_test_cjs("World")); // 'Hello, World!'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs('World')); // 'Hello, World!'
+ * console.log(api_test_cjs("World")); // 'Hello, World!'
  */
 function greet(name) {
 	return `Hello, ${name}!`;
@@ -57,27 +57,27 @@ function greet(name) {
  * @example // ESM usage via slothlet API
  * import slothlet from '@cldmv/slothlet';
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs.rootFunctionShout('World')); // 'HELLO, WORLD!'
+ * console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs.rootFunctionShout('World')); // 'HELLO, WORLD!'
+ *   console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- *   console.log(api_test_cjs.rootFunctionShout('World')); // 'HELLO, WORLD!'
+ *   console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
- * console.log(api_test_cjs.rootFunctionShout('World')); // 'HELLO, WORLD!'
+ * console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
  */
 function shout(name) {
 	return `HELLO, ${name.toUpperCase()}!`;
