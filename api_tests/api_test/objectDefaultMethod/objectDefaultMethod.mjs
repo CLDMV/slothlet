@@ -14,33 +14,33 @@
  * @property {function} warn - Named method for api.objectDefaultMethod.warn()
  * @property {function} error - Named method for api.objectDefaultMethod.error()
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.objectDefaultMethod('Hello')); // calls default
- * console.log(api_test.objectDefaultMethod.info('Hello')); // calls info
+ * console.log(api_test.objectDefaultMethod("hello")); // calls default
+ * console.log(api_test.objectDefaultMethod.info("hello")); // calls info
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.objectDefaultMethod('Hello')); // calls default
- *   console.log(api_test.objectDefaultMethod.info('Hello')); // calls info
+ *   console.log(api_test.objectDefaultMethod("hello")); // calls default
+ *   console.log(api_test.objectDefaultMethod.info("hello")); // calls info
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.objectDefaultMethod('Hello')); // calls default
- *   console.log(api_test.objectDefaultMethod.info('Hello')); // calls info
+ *   console.log(api_test.objectDefaultMethod("hello")); // calls default
+ *   console.log(api_test.objectDefaultMethod.info("hello")); // calls info
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.objectDefaultMethod('Hello')); // calls default
- * console.log(api_test.objectDefaultMethod.info('Hello')); // calls info
+ * console.log(api_test.objectDefaultMethod("hello")); // calls default
+ * console.log(api_test.objectDefaultMethod.info("hello")); // calls info
  */
 export const objectDefaultMethod =
 	/** @lends objectDefaultMethod */
@@ -53,32 +53,32 @@ export const objectDefaultMethod =
 		 * @param {string} [level="info"] - Level to use ('info', 'warn', 'error').
 		 * @returns {string} Formatted message with appropriate level prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod('Hello')); // 'INFO: Hello'
+		 * console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
 		 * console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod('Hello')); // 'INFO: Hello'
+		 *   console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
 		 *   console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
 		 * }
 		 *
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod('Hello')); // 'INFO: Hello'
+		 *   console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
 		 *   console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod('Hello')); // 'INFO: Hello'
+		 * console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
 		 * console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
 		 */
 		default(message, level = "info") {
@@ -95,29 +95,29 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with INFO prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.info('Hello')); // 'INFO: Hello'
+		 * console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.info('Hello')); // 'INFO: Hello'
+		 *   console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
 		 * }
 		 *
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.info('Hello')); // 'INFO: Hello'
+		 *   console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.info('Hello')); // 'INFO: Hello'
+		 * console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
 		 */
 		info(message) {
 			return `INFO: ${message}`;
@@ -129,29 +129,29 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with WARN prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.warn('Hello')); // 'WARN: Hello'
+		 * console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.warn('Hello')); // 'WARN: Hello'
+		 *   console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
 		 * }
 		 *
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.warn('Hello')); // 'WARN: Hello'
+		 *   console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.warn('Hello')); // 'WARN: Hello'
+		 * console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
 		 */
 		warn(message) {
 			return `WARN: ${message}`;
@@ -163,29 +163,29 @@ export const objectDefaultMethod =
 		 * @param {string} message - Message to log.
 		 * @returns {string} Formatted message with ERROR prefix
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.error('Hello')); // 'ERROR: Hello'
+		 * console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.error('Hello')); // 'ERROR: Hello'
+		 *   console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 		 * }
 		 *
 		 * @example // CJS usage via slothlet API (top-level)
 		 * let slothlet;
 		 * (async () => {
-		 *   ({ slothlet } = await import('@cldmv/slothlet'));
+		 *   ({ slothlet } = await import("@cldmv/slothlet"));
 		 *   const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 *   console.log(api_test.objectDefaultMethod.error('Hello')); // 'ERROR: Hello'
+		 *   console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test = await slothlet({ dir: './api_tests/api_test' });
-		 * console.log(api_test.objectDefaultMethod.error('Hello')); // 'ERROR: Hello'
+		 * console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 		 */
 		error(message) {
 			return `ERROR: ${message}`;

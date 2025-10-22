@@ -16,29 +16,29 @@
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueOne prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueOne('test')); // 'uniqueOne: test'
+ * console.log(api_test.multiFunc.uniqueOne("test")); // 'uniqueOne: test'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueOne('test')); // 'uniqueOne: test'
+ *   console.log(api_test.multiFunc.uniqueOne("test")); // 'uniqueOne: test'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueOne('test')); // 'uniqueOne: test'
+ *   console.log(api_test.multiFunc.uniqueOne("test")); // 'uniqueOne: test'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueOne('test')); // 'uniqueOne: test'
+ * console.log(api_test.multiFunc.uniqueOne("test")); // 'uniqueOne: test'
  */
 export function uniqueOne(msg: string): string;
 /**
@@ -49,29 +49,29 @@ export function uniqueOne(msg: string): string;
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueTwo prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueTwo('test')); // 'uniqueTwo: test'
+ * console.log(api_test.multiFunc.uniqueTwo("test")); // 'uniqueTwo: test'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueTwo('test')); // 'uniqueTwo: test'
+ *   console.log(api_test.multiFunc.uniqueTwo("test")); // 'uniqueTwo: test'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueTwo('test')); // 'uniqueTwo: test'
+ *   console.log(api_test.multiFunc.uniqueTwo("test")); // 'uniqueTwo: test'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueTwo('test')); // 'uniqueTwo: test'
+ * console.log(api_test.multiFunc.uniqueTwo("test")); // 'uniqueTwo: test'
  */
 export function uniqueTwo(msg: string): string;
 /**
@@ -82,29 +82,29 @@ export function uniqueTwo(msg: string): string;
  * @param {string} msg - Message to include.
  * @returns {string} Formatted message with uniqueThree prefix.
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueThree('test')); // 'uniqueThree: test'
+ * console.log(api_test.multiFunc.uniqueThree("test")); // 'uniqueThree: test'
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueThree('test')); // 'uniqueThree: test'
+ *   console.log(api_test.multiFunc.uniqueThree("test")); // 'uniqueThree: test'
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api_test = await slothlet({ dir: './api_tests/api_test' });
- *   console.log(api_test.multiFunc.uniqueThree('test')); // 'uniqueThree: test'
+ *   console.log(api_test.multiFunc.uniqueThree("test")); // 'uniqueThree: test'
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
- * console.log(api_test.multiFunc.uniqueThree('test')); // 'uniqueThree: test'
+ * console.log(api_test.multiFunc.uniqueThree("test")); // 'uniqueThree: test'
  */
 export function uniqueThree(msg: string): string;
 export namespace multi_func {
@@ -114,13 +114,13 @@ export namespace multi_func {
      * @public
      * @returns {string} The string "beta hello"
      * @example // ESM usage via slothlet API
-     * import slothlet from '@cldmv/slothlet';
+     * import slothlet from "@cldmv/slothlet";
      * const api_test = await slothlet({ dir: './api_tests/api_test' });
      * console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
      *
      * @example // ESM usage via slothlet API (inside async function)
      * async function example() {
-     *   const { default: slothlet } = await import('@cldmv/slothlet');
+     *   const { default: slothlet } = await import("@cldmv/slothlet");
      *   const api_test = await slothlet({ dir: './api_tests/api_test' });
      *   console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
      * }
@@ -128,13 +128,13 @@ export namespace multi_func {
      * @example // CJS usage via slothlet API (top-level)
      * let slothlet;
      * (async () => {
-     *   ({ slothlet } = await import('@cldmv/slothlet'));
+     *   ({ slothlet } = await import("@cldmv/slothlet"));
      *   const api_test = await slothlet({ dir: './api_tests/api_test' });
      *   console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
      * })();
      *
      * @example // CJS usage via slothlet API (inside async function)
-     * const slothlet = require('@cldmv/slothlet');
+     * const slothlet = require("@cldmv/slothlet");
      * const api_test = await slothlet({ dir: './api_tests/api_test' });
      * console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
      */

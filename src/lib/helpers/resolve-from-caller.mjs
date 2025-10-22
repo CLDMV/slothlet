@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/resolve-from-caller.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 07:54:12 -07:00 (1761144852)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Path resolution utilities for resolving paths from the caller context. Internal file (not exported in package.json).
  * @module @cldmv/slothlet.helpers.resolve-from-caller
  * @memberof module:@cldmv/slothlet.helpers
@@ -26,16 +39,15 @@
  *
  * @example
  * // ESM (internal)
- * import { resolvePathFromCaller } from '@cldmv/slothlet/helpers/resolve-from-caller';
+ * import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
  * // Internal example using package.json exports
  *
  * @example
  * // Relative import (internal)
- * import { resolvePathFromCaller, resolveUrlFromCaller } from './resolve-from-caller.mjs';
- * const configPath = resolvePathFromCaller('../config.json');
+ * import { resolvePathFromCaller, resolveUrlFromCaller } from "./resolve-from-caller.mjs";
+ * const configPath = resolvePathFromCaller("../config.json");
  */
 
-// resolve-from-caller.mjs
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -56,18 +68,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  *
  * @example
  * // URL conversion
- * toFsPath('file:///project/config.json'); // '/project/config.json' (Unix) or 'C:\\project\\config.json' (Windows)
+ * toFsPath("file:///project/config.json"); // "/project/config.json" (Unix) or "C:\\project\\config.json" (Windows)
  *
  * @example
  * // String passthrough
- * toFsPath('/project/config.json'); // '/project/config.json'
- * toFsPath('C:\\project\\config.json'); // 'C:\\project\\config.json'
+ * toFsPath("/project/config.json"); // "/project/config.json"
+ * toFsPath("C:\\project\\config.json"); // "C:\\project\\config.json"
  *
  * @example
  * // Null-safe handling
  * toFsPath(null); // null
  * toFsPath(undefined); // null
- * toFsPath(''); // null
+ * toFsPath(""); // null
  */
 export const toFsPath = (v) => (v && String(v).startsWith("file://") ? fileURLToPath(String(v)) : v ? String(v) : null);
 
@@ -102,7 +114,7 @@ export const toFsPath = (v) => (v && String(v).startsWith("file://") ? fileURLTo
  *   const stack = getStack(findCaller);
  *   for (const frame of stack) {
  *     const filename = frame?.getFileName?.();
- *     if (filename && !filename.includes('node_modules')) {
+ *     if (filename && !filename.includes("node_modules")) {
  *       return filename; // First non-dependency file
  *     }
  *   }
@@ -254,7 +266,7 @@ function pickFallbackBaseFile() {
  * @example
  * // Usage pattern for filesystem paths:
  * resolveWith(
- *   '../config.json',
+ *   "../config.json",
  *   (base, rel) => path.resolve(path.dirname(base), rel), // makePrimary
  *   (candidate) => fs.existsSync(candidate),              // exists
  *   (base, rel) => path.resolve(path.dirname(base), rel)  // makeFallback
@@ -263,7 +275,7 @@ function pickFallbackBaseFile() {
  * @example
  * // Usage pattern for URLs:
  * resolveWith(
- *   '../config.json',
+ *   "../config.json",
  *   (base, rel) => new URL(rel, pathToFileURL(base)).href, // makePrimary
  *   (href) => fs.existsSync(fileURLToPath(href)),          // exists
  *   (base, rel) => new URL(rel, pathToFileURL(base)).href  // makeFallback
@@ -287,7 +299,7 @@ function resolveWith(rel, makePrimary, exists, makeFallback) {
  * @function resolvePathFromCaller
  * @package
  * @internal
- * @param {string} rel - Relative path to resolve (e.g., '../config.json', './data/file.txt')
+ * @param {string} rel - Relative path to resolve (e.g., "../config.json", "./data/file.txt")
  * @returns {string} Absolute filesystem path with platform-specific separators
  * @throws {TypeError} When rel parameter is not a string
  *
@@ -308,24 +320,24 @@ function resolveWith(rel, makePrimary, exists, makeFallback) {
  *
  * @example
  * // From a file at /project/src/modules/math.mjs
- * const configPath = resolvePathFromCaller('../config.json');
+ * const configPath = resolvePathFromCaller("../config.json");
  * // Returns: /project/config.json (absolute filesystem path)
  *
  * @example
  * // Short-circuit cases
- * resolvePathFromCaller('file:///absolute/path.txt');
+ * resolvePathFromCaller("file:///absolute/path.txt");
  * // Returns: /absolute/path.txt (converted from URL)
  *
- * resolvePathFromCaller('/already/absolute/path.txt');
+ * resolvePathFromCaller("/already/absolute/path.txt");
  * // Returns: /already/absolute/path.txt (unchanged)
  *
  * @example
  * // Relative resolution from different contexts
  * // If called from /project/src/lib/utils.mjs:
- * resolvePathFromCaller('./helpers/format.js');
+ * resolvePathFromCaller("./helpers/format.js");
  * // Returns: /project/src/lib/helpers/format.js
  *
- * resolvePathFromCaller('../../config/settings.json');
+ * resolvePathFromCaller("../../config/settings.json");
  * // Returns: /project/config/settings.json
  */
 export function resolvePathFromCaller(rel) {
@@ -348,7 +360,7 @@ export function resolvePathFromCaller(rel) {
  * @function resolveUrlFromCaller
  * @package
  * @internal
- * @param {string} rel - Relative path to resolve (e.g., '../config.json', './data/file.txt')
+ * @param {string} rel - Relative path to resolve (e.g., "../config.json", "./data/file.txt")
  * @returns {string} Absolute file:// URL suitable for dynamic imports and URL operations
  * @throws {TypeError} When rel parameter is not a string
  *
@@ -368,27 +380,27 @@ export function resolvePathFromCaller(rel) {
  *
  * @example
  * // From a file at /project/src/modules/math.mjs
- * const configUrl = resolveUrlFromCaller('../config.json');
+ * const configUrl = resolveUrlFromCaller("../config.json");
  * // Returns: file:///project/config.json (absolute file:// URL)
  *
  * @example
  * // Short-circuit cases
- * resolveUrlFromCaller('file:///absolute/path.txt');
+ * resolveUrlFromCaller("file:///absolute/path.txt");
  * // Returns: file:///absolute/path.txt (unchanged)
  *
- * resolveUrlFromCaller('/already/absolute/path.txt');
+ * resolveUrlFromCaller("/already/absolute/path.txt");
  * // Returns: file:///already/absolute/path.txt (converted to URL)
  *
  * @example
  * // Dynamic ESM import usage
- * const modulePath = resolveUrlFromCaller('./dynamic-module.mjs');
+ * const modulePath = resolveUrlFromCaller("./dynamic-module.mjs");
  * const dynamicModule = await import(modulePath);
  * // Works seamlessly with ESM import() which expects URLs
  *
  * @example
  * // Cross-platform URL handling
- * // Unix: resolveUrlFromCaller('../config.json') → file:///project/config.json
- * // Windows: resolveUrlFromCaller('../config.json') → file:///C:/project/config.json
+ * // Unix: resolveUrlFromCaller("../config.json") → file:///project/config.json
+ * // Windows: resolveUrlFromCaller("../config.json") → file:///C:/project/config.json
  */
 export function resolveUrlFromCaller(rel) {
 	// short-circuits

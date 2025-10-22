@@ -15,7 +15,7 @@ This is different from having separate named functions - the folder itself becom
 ## Usage
 
 ```js
-api.advanced.nest('test'); // Calls the alpha function with flattening behavior
+api.advanced.nest("test"); // Calls the alpha function with flattening behavior
 ```
 
 ## Use Case

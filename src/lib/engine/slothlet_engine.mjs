@@ -1,4 +1,16 @@
-// _engine.mjs
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/engine/slothlet_engine.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:58:52 -07:00 (1761141532)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import { Worker } from "node:worker_threads";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -23,7 +35,7 @@ let shutdownFn = null;
  * @param {Function} fn - Shutdown function to set
  * @returns {Function} Previously set shutdown function
  * @example
- * const prev = setShutdown(() => console.log('Shutting down'));
+ * const prev = setShutdown(() => console.log("Shutting down"));
  */
 export function setShutdown(fn) {
 	const prev = shutdownFn;

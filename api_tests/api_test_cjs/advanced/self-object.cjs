@@ -16,13 +16,13 @@ let self, context;
  * @alias module:api_test_cjs.advanced.selfObject
  * @public
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
  *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  *   console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
  * }
@@ -36,7 +36,7 @@ let self, context;
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
  * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
  */
@@ -52,13 +52,13 @@ const selfObject =
 		 * @param {number} b - Second number to add
 		 * @returns {number} Sum of a and b via self reference
 		 * @example // ESM usage via slothlet API
-		 * import slothlet from '@cldmv/slothlet';
+		 * import slothlet from "@cldmv/slothlet";
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 *
 		 * @example // ESM usage via slothlet API (inside async function)
 		 * async function example() {
-		 *   const { default: slothlet } = await import('@cldmv/slothlet');
+		 *   const { default: slothlet } = await import("@cldmv/slothlet");
 		 *   const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 *   console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 * }
@@ -71,7 +71,7 @@ const selfObject =
 		 * })();
 		 *
 		 * @example // CJS usage via slothlet API (inside async function)
-		 * const slothlet = require('@cldmv/slothlet');
+		 * const slothlet = require("@cldmv/slothlet");
 		 * const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 		 * console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 */

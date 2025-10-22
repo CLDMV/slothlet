@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/modes/slothlet_eager.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Slothlet Eager Mode - Immediate module loading and API construction.
  * @module @cldmv/slothlet.modes.eager
  * @memberof module:@cldmv/slothlet.modes
@@ -25,7 +38,7 @@
  *
  * @example
  * // Basic slothlet usage with eager loading
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  * const api = await slothlet({ dir: './api_test', lazy: false });
  *
  * // All modules are immediately loaded and available
@@ -120,8 +133,8 @@
 
 // Eager mode now relies on the instance context (`this`) passed from slothlet core
 // instead of importing a potentially different module instance via query params.
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 // import { runWithCtx } from "@cldmv/slothlet/runtime";
 
 /**

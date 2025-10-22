@@ -92,12 +92,11 @@ export async function runComprehensiveTests(api, isLazy, mode) {
 /**
  * Create an API instance for testing
  * @param {boolean} lazy - Whether to use lazy mode
- * @param {string} instanceId - Unique identifier for multi-instance testing
+ * @param {string} _ - Unused: unique identifier for multi-instance testing (legacy parameter)
  * @returns {Promise<object>} The created API instance
  */
-export async function createTestApi(lazy = false, instanceId = "") {
-	const queryParam = instanceId ? `?_slothlet=test_${instanceId}` : "";
-	const { slothlet } = await import(`../slothlet.mjs${queryParam}`);
+export async function createTestApi(lazy = false, _ = "") {
+	const { slothlet } = await import("../slothlet.mjs");
 
 	return await slothlet({
 		...testConfig.testConfig.baseConfig,

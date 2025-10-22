@@ -1,11 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * @fileoverview Automated TypeScript definition validation script for CI/build pipeline.
- * Validates ALL generated type definitions from the build process without manual intervention.
- * @module @cldmv/slothlet/tests/validate-typescript
- */
-
 import { execSync } from "child_process";
 import { writeFileSync, rmSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
@@ -124,7 +116,7 @@ async function main() {
 async function testSingleExport(tempDir, moduleName, testNum) {
 	const testContent = `
 // Auto-generated test for ${moduleName}
-import * as module from '${moduleName}';
+import * as module from "${moduleName}";
 
 // Basic validation - just test that import works and has valid types
 const moduleType: string = typeof module;
@@ -168,7 +160,7 @@ export { moduleType, hasExports, exportCount };
 async function testMainExport(tempDir) {
 	const testContent = `
 // Main export comprehensive test
-import slothlet from '@cldmv/slothlet';
+import slothlet from "@cldmv/slothlet";
 
 async function validateMainExport(): Promise<boolean> {
     // Test main function with all options

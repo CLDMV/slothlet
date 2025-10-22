@@ -1,4 +1,16 @@
-// helpers.mjs
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/engine/slothlet_helpers.mjs
+ *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 06:58:39 -07:00 (1761141519)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import vm from "node:vm";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -229,8 +241,8 @@ export async function loadEsmInVm2(context, fileUrl, mode = "auto") {
 				// 	console.debug("[dynamic import] spec:", spec, "ref.identifier:", ref.identifier);
 				// 	const isRel = spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("file:");
 				// 	if (!isRel) {
-				// 		// Use export * from 'pkg' for package/builtin imports
-				// 		const exportCode = `export * from '${spec}';`;
+				// 		// Use export * from "pkg" for package/builtin imports
+				// 		const exportCode = `export * from "${spec}";`;
 				// 		const exportMod = new vm.SourceTextModule(exportCode, { context });
 				// 		await exportMod.link(() => {});
 				// 		await exportMod.evaluate();
@@ -264,7 +276,7 @@ export async function loadEsmInVm2(context, fileUrl, mode = "auto") {
 				console.debug("[linker] specifier:", specifier, "referencingModule.identifier:", referencingModule.identifier);
 				const isRel = specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("file:");
 				if (!isRel) {
-					const exportCode = `export * from '${specifier}';`;
+					const exportCode = `export * from "${specifier}";`;
 					const exportMod = new vm.SourceTextModule(exportCode, { context });
 					await exportMod.link(() => {});
 					await exportMod.evaluate();
@@ -428,7 +440,7 @@ export async function bootSlothletVM(context, entryUrl, loadConfig, ctxRef) {
 				const ret = await globalThis.slothlet.load(__loadConfig, __ctxRef);
 				globalThis.self = global.self = ret;
 				const ref = __ctxRef?.reference;
-				if (ref && typeof ref === 'object') {
+				if (ref && typeof ref === "object") {
 					for (const k of Object.keys(ref)) if (!(k in globalThis.self)) {
 						try { globalThis.self[k] = global.self[k] = ref[k]; } catch {}
 					}

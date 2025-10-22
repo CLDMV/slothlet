@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/slothlet.mjs
+ *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Slothlet - Advanced module loader with lazy and eager loading capabilities
  * @module @cldmv/slothlet
  * @typicalname slothlet
@@ -25,47 +38,47 @@
  *
  * @example
  * // Default import (recommended)
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  *
  * // OR destructured import
- * import { slothlet } from '@cldmv/slothlet';
+ * import { slothlet } from "@cldmv/slothlet";
  *
  * // OR both (they're the same)
- * import slothlet, { slothlet as namedSlothlet } from '@cldmv/slothlet';
+ * import slothlet, { slothlet as namedSlothlet } from "@cldmv/slothlet";
  *
  * // OR dynamic import
- * const slothlet = await import('@cldmv/slothlet');
+ * const slothlet = await import("@cldmv/slothlet");
  *
  * // OR dynamic destructured import
- * const { slothlet } = await import('@cldmv/slothlet');
+ * const { slothlet } = await import("@cldmv/slothlet");
  *
  * // Usage
  * const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  * });
  *
  * @example
  * // Default require (recommended)
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  *
  * // OR destructured require
- * const { slothlet } = require('@cldmv/slothlet');
+ * const { slothlet } = require("@cldmv/slothlet");
  *
  * // OR both (they're the same)
- * const { default: slothlet, slothlet: namedSlothlet } = require('@cldmv/slothlet');
+ * const { default: slothlet, slothlet: namedSlothlet } = require("@cldmv/slothlet");
  *
  * // OR dynamic import from CJS (top-level)
  * let slothlet;
  * (async () => {
- *   ({ slothlet } = await import('@cldmv/slothlet'));
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
  *   const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  *   });
  * })();
  *
  * // Usage (inside async function or top-level await)
  * const api = await slothlet({
- *     dir: './api_tests/api_test'
+ *     dir: "./api_tests/api_test"
  * });
  *
  * > [!IMPORTANT]
@@ -73,38 +86,38 @@
  *
  * @example
  * // Multiple instances with ESM
- * import slothlet from '@cldmv/slothlet';
+ * import slothlet from "@cldmv/slothlet";
  *
- * const api1 = await slothlet({ dir: './api_tests/api_test' });
- * const api2 = await slothlet({ dir: './api_tests/api_test_mixed' });
+ * const api1 = await slothlet({ dir: "./api_tests/api_test" });
+ * const api2 = await slothlet({ dir: "./api_tests/api_test_mixed" });
  *
  * @example
  * // Multiple instances with CommonJS
- * const slothlet = require('@cldmv/slothlet');
+ * const slothlet = require("@cldmv/slothlet");
  *
- * const api1 = await slothlet({ dir: './api_tests/api_test' });
- * const api2 = await slothlet({ dir: './api_tests/api_test_cjs' });
+ * const api1 = await slothlet({ dir: "./api_tests/api_test" });
+ * const api2 = await slothlet({ dir: "./api_tests/api_test_cjs" });
  *
  * @example
  * // Create with context and reference (direct call)
  * const api = await slothlet({
- *   dir: './api_tests/api_test',
- *   context: { user: 'alice', env: 'prod' },
- *   reference: { version: '1.0.0' }
+ *   dir: "./api_tests/api_test",
+ *   context: { user: "alice", env: "prod" },
+ *   reference: { version: "1.0.0" }
  * });
  *
  * // Access modules through bound API
  * await api.math.add(2, 3); // 5
- * api.context.user; // 'alice'
- * api.version; // '1.0.0'
+ * api.context.user; // "alice"
+ * api.version; // "1.0.0"
  *
  * @example
  * // Shutdown when done
  * await api.shutdown();
  */
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
@@ -128,17 +141,6 @@ let DEBUG = process.argv.includes("--slothletdebug")
 	: process.env.SLOTHLET_DEBUG === "1" || process.env.SLOTHLET_DEBUG === "true"
 		? true
 		: false;
-
-/**
- * The shared _slothlet parameter for live binding coordination.
- * @type {string}
- * @private
- * @internal
- */
-export let _slothlet = new URL(import.meta.url).searchParams.get("_slothlet") || "";
-
-// Set the global instance ID for CJS modules to use
-// setGlobalCjsInstanceId(_slothlet);
 
 /**
  * Live-binding reference to the current API instance.
@@ -218,7 +220,7 @@ async function slothlet(options = {}) {
  * @example
  * // Internal usage only - creates isolated instance
  * const instance = createFreshInstance();
- * instance.config.dir = './my-api';  // Independent configuration
+ * instance.config.dir = "./my-api";  // Independent configuration
  */
 function createFreshInstance() {
 	const instance = {};
@@ -294,7 +296,7 @@ const slothletObject = {
 					// console.log("modePath: ", modePath);
 					// console.log("modeUrl: ", modeUrl);
 					// process.exit(0);
-					// const imported = await import(modeUrl + "?_slothlet=" + _slothlet);
+
 					const imported = await import(modeUrl);
 					if (imported && typeof imported === "object") {
 						this.modes[modeName] = imported.default || imported;
@@ -308,9 +310,6 @@ const slothletObject = {
 		// Default entry is THIS module, which re-exports `slothlet`
 		// const { entry = import.meta.url, mode = "vm" } = options ?? {};
 		const { entry = import.meta.url, mode = "singleton", api_mode = "auto" } = options ?? {};
-
-		_slothlet = new URL(import.meta.url).searchParams.get("_slothlet") || "";
-		// console.log("[slothlet.mjs] create _slothlet:", _slothlet);
 
 		// self = this.boundapi;
 		// context = this.context;
@@ -418,8 +417,6 @@ const slothletObject = {
 			// apiDir = path.resolve(process.cwd(), apiDir);
 		}
 
-		// const slothletCJS = require("../index.cjs").withInstanceId(_slothlet);
-
 		if (this.loaded) return this.api;
 		if (this.config.lazy) {
 			this.api = await this.modes.lazy.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
@@ -457,8 +454,6 @@ const slothletObject = {
 		// Object.assign(this.boundapi, this.createBoundApi(l_ctxRef.context, l_ctxRef.reference) || {});
 		// this.boundapi = this.createBoundApi(l_ctxRef.context, l_ctxRef.reference);
 		const _boundapi = this.createBoundApi(l_ctxRef.reference);
-
-		// _boundapi.__slothlet = this;
 
 		mutateLiveBindingFunction(this.boundapi, _boundapi);
 
@@ -828,8 +823,7 @@ const slothletObject = {
 	 */
 	async _loadSingleModule(modulePath, rootLevel = false) {
 		const moduleUrl = pathToFileURL(modulePath).href;
-		// const moduleUrl = pathToFileURL(modulePath).href + "?_slothlet=" + _slothlet;
-		// const module = await import(moduleUrl);
+
 		// console.log("moduleUrl: ", moduleUrl);
 		const module = await import(moduleUrl);
 
@@ -838,7 +832,6 @@ const slothletObject = {
 
 		// if (this.config.debug) console.log("Loading module:", modulePath, "isCjsModule:", isCjsModuleFile);
 
-		// const module = await import(moduleUrl + "?testParam=maybe&_slothlet=" + _slothlet);
 		if (this.config.debug) console.log("module: ", module);
 		// If default export is a function, expose as callable and attach named exports as properties
 		if (typeof module.default === "function") {
@@ -1079,8 +1072,8 @@ const slothletObject = {
 	 * @internal
 	 * @example
 	 * // Safe usage - updating context only
-	 * slothlet.updateBindings({ user: 'alice' }, null, null);
-	 * context.user; // 'alice'
+	 * slothlet.updateBindings({ user: "alice" }, null, null);
+	 * context.user; // "alice"
 	 *
 	 * @example
 	 * // Potentially unsafe - manual self/reference modification
@@ -1503,7 +1496,7 @@ export default slothlet;
  *   - `"function"`: Force API to be callable as function with properties attached
  *   - `"object"`: Force API to be plain object with method properties
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
- *   - Available to all loaded modules via `import { context } from '@cldmv/slothlet/runtime'`. Useful for request data,
+ *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.
  * @property {object} [reference={}] - Reference object merged into the API root level.
  *   - Properties not conflicting with loaded modules are added directly to the API.

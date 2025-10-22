@@ -6,25 +6,25 @@
  * @alias @cldmv/slothlet/api_tests/api_test_mixed
  * @package
  * @example // ESM usage via slothlet API
- * import slothlet from '@cldmv/slothlet';
- * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_mixed = await slothlet({ dir: "./api_tests/api_test_mixed" });
  *
  * @example // ESM usage via slothlet API (inside async function)
  * async function example() {
- *   const { default: slothlet } = await import('@cldmv/slothlet');
- *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_mixed = await slothlet({ dir: "./api_tests/api_test_mixed" });
  * }
  *
  * @example // CJS usage via slothlet API (top-level)
  * let slothlet;
  * (async () => {
  * 	({ slothlet } = await import("@cldmv/slothlet"));
- * 	const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
+ * 	const api_test_mixed = await slothlet({ dir: "./api_tests/api_test_mixed" });
  * })();
  *
  * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require('@cldmv/slothlet');
- * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_mixed = await slothlet({ dir: "./api_tests/api_test_mixed" });
  */
 
 // This file exists solely for JSDoc documentation purposes.
