@@ -1,7 +1,4 @@
 /**
- * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorage
- */
-/**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
  * @function enableAlsForEventEmitters
@@ -22,5 +19,4 @@
  * enableAlsForEventEmitters(als);
  */
 export function enableAlsForEventEmitters(als?: any): void;
-export type AsyncLocalStorage = any;
 //# sourceMappingURL=als-eventemitter.d.mts.map

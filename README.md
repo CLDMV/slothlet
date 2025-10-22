@@ -33,9 +33,9 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 ---
 
-## ✨ What's New in v2.0
+## ✨ What's New in v2.x
 
-### 🎯 **Complete Architectural Rewrite**
+### 🎯 **Complete Architectural Rewrite (v2.0)**
 
 v2.0 represents a ground-up rewrite with enterprise-grade features:
 
@@ -66,6 +66,13 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Function Calls**: Eager mode 1.1x faster (0.65μs vs 0.72μs) after materialization
 - **Memory**: On-demand loading scales with actual usage
 - **Predictability**: Consistent performance characteristics per mode
+
+### 🔄 **Context Propagation (v2.3)** ⭐ NEW
+
+- **EventEmitter Context Propagation**: Automatic context preservation across EventEmitter callbacks using AsyncResource patterns
+- **Class Instance Context Propagation**: Automatic context preservation across class method calls with transparent wrapping
+- **AsyncResource Integration**: Production-ready context management following Node.js best practices
+- **Zero Configuration**: Works automatically with TCP servers, HTTP servers, and any EventEmitter-based patterns
 
 ---
 
@@ -104,8 +111,6 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Copy-Left Preservation**: Materialized functions stay materialized, preserving performance gains
 - **Bubble-Up Updates**: Parent API synchronization ensures consistency across the API tree
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules in the same API
-- **EventEmitter Context Propagation**: Automatic context preservation across EventEmitter callbacks using AsyncResource patterns
-- **Class Instance Context Propagation**: Automatic context preservation across class method calls with transparent wrapping
 
 ### 🛠 **Developer Experience**
 
