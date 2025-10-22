@@ -34,11 +34,15 @@ import { AsyncLocalStorage, AsyncResource } from "node:async_hooks";
 import { EventEmitter } from "node:events";
 
 /**
+ * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorage
+ */
+
+/**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} als - The AsyncLocalStorage instance to use
+ * @param {import('node:async_hooks').AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
