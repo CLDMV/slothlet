@@ -627,6 +627,21 @@ const slothletObject = {
 
 		// MULTI-FILE CASE
 		const categoryModules = {};
+		
+		// NEW: Detect if we have multiple files with default exports in the same folder
+		const defaultExportFiles = [];
+		for (const file of moduleFiles) {
+			const moduleExt = path.extname(file.name);
+			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
+			const tempMod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			
+			if (typeof tempMod === "function" && (tempMod.__slothletDefault === true || !tempMod.name || tempMod.name === "default")) {
+				defaultExportFiles.push({ file, moduleName, mod: tempMod });
+			}
+		}
+		
+		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+		
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
@@ -651,27 +666,42 @@ const slothletObject = {
 					Object.assign(categoryModules, mod);
 				}
 			} else if (typeof mod === "function") {
-				const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
-				try {
-					Object.defineProperty(mod, "name", { value: fnName, configurable: true });
-				} catch {
-					// ignore
-				}
-
-				// Check if function name matches sanitized filename (case-insensitive)
-				// If so, prefer the original function name over the sanitized version
+				// NEW: For multiple default exports, use file name instead of function name
 				let apiKey;
-				if (fnName && fnName.toLowerCase() === moduleName.toLowerCase() && fnName !== moduleName) {
-					// Use original function name without sanitizing
-					apiKey = fnName;
+				if (hasMultipleDefaultExports && (mod.__slothletDefault === true || !mod.name || mod.name === "default")) {
+					// Use file name for default exports when multiple defaults exist
+					apiKey = moduleName;
+					try {
+						Object.defineProperty(mod, "name", { value: moduleName, configurable: true });
+					} catch {
+						// ignore
+					}
 					if (this.config.debug) {
-						console.log(`[DEBUG] Using function name '${fnName}' instead of module name '${moduleName}'`);
+						console.log(`[DEBUG] Multi-default detected: using filename '${moduleName}' for default export`);
 					}
 				} else {
-					// Use sanitized function name
-					apiKey = this._toApiKey(fnName);
-					if (this.config.debug) {
-						console.log(`[DEBUG] Using sanitized key '${apiKey}' for function '${fnName}' (module: '${moduleName}')`);
+					// Original logic for single defaults or named function exports
+					const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
+					try {
+						Object.defineProperty(mod, "name", { value: fnName, configurable: true });
+					} catch {
+						// ignore
+					}
+
+					// Check if function name matches sanitized filename (case-insensitive)
+					// If so, prefer the original function name over the sanitized version
+					if (fnName && fnName.toLowerCase() === moduleName.toLowerCase() && fnName !== moduleName) {
+						// Use original function name without sanitizing
+						apiKey = fnName;
+						if (this.config.debug) {
+							console.log(`[DEBUG] Using function name '${fnName}' instead of module name '${moduleName}'`);
+						}
+					} else {
+						// Use sanitized function name
+						apiKey = this._toApiKey(fnName);
+						if (this.config.debug) {
+							console.log(`[DEBUG] Using sanitized key '${apiKey}' for function '${fnName}' (module: '${moduleName}')`);
+						}
 					}
 				}
 
