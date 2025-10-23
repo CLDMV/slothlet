@@ -627,21 +627,26 @@ const slothletObject = {
 
 		// MULTI-FILE CASE
 		const categoryModules = {};
-		
+
 		// NEW: Detect if we have multiple files with default exports in the same folder
 		const defaultExportFiles = [];
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
 			const tempMod = await this._loadSingleModule(path.join(categoryPath, file.name));
-			
-			if (typeof tempMod === "function" && (tempMod.__slothletDefault === true || !tempMod.name || tempMod.name === "default")) {
+
+			// Check if this module has a default export by looking for __slothletDefault marker
+			// This marker is set by _loadSingleModule when it encounters an actual export default
+			if (tempMod && tempMod.__slothletDefault === true) {
 				defaultExportFiles.push({ file, moduleName, mod: tempMod });
+				if (this.config.debug) {
+					console.log(`[DEBUG] Found default export in ${file.name}`);
+				}
 			}
 		}
-		
+
 		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
-		
+
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
@@ -668,7 +673,7 @@ const slothletObject = {
 			} else if (typeof mod === "function") {
 				// NEW: For multiple default exports, use file name instead of function name
 				let apiKey;
-				if (hasMultipleDefaultExports && (mod.__slothletDefault === true || !mod.name || mod.name === "default")) {
+				if (hasMultipleDefaultExports && mod.__slothletDefault === true) {
 					// Use file name for default exports when multiple defaults exist
 					apiKey = moduleName;
 					try {
@@ -824,6 +829,7 @@ const slothletObject = {
 				}
 			}
 		}
+
 		return categoryModules;
 	},
 

@@ -264,22 +264,87 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 	let rootDefaultFunction = null;
 
 	if (rootLevel) {
-		for (const entry of entries) {
-			if (this._shouldIncludeFile(entry)) {
-				const ext = path.extname(entry.name);
-				const fileName = path.basename(entry.name, ext);
-				const apiKey = this._toApiKey(fileName);
-				const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
-				if (mod && typeof mod.default === "function") {
-					if (!rootDefaultFunction) rootDefaultFunction = mod.default;
+		// NEW: Detect multiple default exports for multi-default handling
+		const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
+		const defaultExportFiles = [];
+
+		// First pass: detect default exports
+		for (const entry of moduleFiles) {
+			const ext = path.extname(entry.name);
+			const fileName = path.basename(entry.name, ext);
+			const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
+
+			if (this.config.debug) {
+				console.log(`[DEBUG] First pass - ${fileName}: hasDefault=${mod && "default" in mod}`);
+			}
+
+			if (mod && "default" in mod) {
+				defaultExportFiles.push({ entry, fileName, mod });
+				if (this.config.debug) {
+					console.log(`[DEBUG] Added ${fileName} to defaultExportFiles`);
+				}
+			}
+		}
+		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+
+		if (this.config.debug) {
+			console.log(
+				`[DEBUG] Detection result: ${defaultExportFiles.length} default exports found, hasMultipleDefaultExports=${hasMultipleDefaultExports}`
+			);
+			console.log(
+				`[DEBUG] Default export files:`,
+				defaultExportFiles.map((f) => f.fileName)
+			);
+		}
+
+		// Second pass: process files with multi-default awareness
+		for (const entry of moduleFiles) {
+			const ext = path.extname(entry.name);
+			const fileName = path.basename(entry.name, ext);
+			const apiKey = this._toApiKey(fileName);
+			const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
+
+			if (mod && typeof mod.default === "function") {
+				if (hasMultipleDefaultExports) {
+					// Multi-default case: use filename as API key
+					api[apiKey] = mod.default;
+
+					// Also add named exports to the function
+					for (const [key, value] of Object.entries(mod)) {
+						if (key !== "default") {
+							api[apiKey][key] = value;
+						}
+					}
+
+					if (this.config.debug) {
+						console.log(`[DEBUG] Multi-default in eager mode: using filename '${apiKey}' for default export`);
+					}
+				} else {
+					// Traditional single default case: becomes root API
+					// BUT only if we don't have multiple defaults
+					if (this.config.debug) {
+						console.log(
+							`[DEBUG] Processing traditional default: hasMultipleDefaultExports=${hasMultipleDefaultExports}, rootDefaultFunction=${!!rootDefaultFunction}`
+						);
+					}
+					if (!hasMultipleDefaultExports && !rootDefaultFunction) {
+						rootDefaultFunction = mod.default;
+						if (this.config.debug) {
+							console.log(`[DEBUG] Set rootDefaultFunction to:`, mod.default.name);
+						}
+					} else {
+						if (this.config.debug) {
+							console.log(`[DEBUG] Skipped setting rootDefaultFunction due to multi-default scenario`);
+						}
+					}
 					for (const [key, value] of Object.entries(mod)) {
 						if (key !== "default") api[key] = value;
 					}
-				} else {
-					api[apiKey] = mod;
-					for (const [key, value] of Object.entries(mod)) {
-						rootNamedExports[key] = value;
-					}
+				}
+			} else {
+				api[apiKey] = mod;
+				for (const [key, value] of Object.entries(mod)) {
+					rootNamedExports[key] = value;
 				}
 			}
 		}
@@ -293,11 +358,21 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 	}
 
 	let finalApi;
+	if (this.config.debug) {
+		console.log(`[DEBUG] Final assembly: rootDefaultFunction=${!!rootDefaultFunction}`);
+		console.log(`[DEBUG] API object keys before final assembly:`, Object.keys(api));
+	}
 	if (rootDefaultFunction) {
 		Object.assign(rootDefaultFunction, api);
 		finalApi = rootDefaultFunction;
+		if (this.config.debug) {
+			console.log(`[DEBUG] Applied root contributor pattern - final API is function`);
+		}
 	} else {
 		finalApi = api;
+		if (this.config.debug) {
+			console.log(`[DEBUG] No root function - final API is object`);
+		}
 	}
 
 	// Wrap all functions with runWithCtx to match lazy mode performance

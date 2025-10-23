@@ -193,20 +193,57 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 
 	// Load root-level files eagerly (same behavior as eager mode)
 	if (rootLevel) {
-		for (const entry of entries) {
-			if (instance._shouldIncludeFile(entry)) {
-				const ext = path.extname(entry.name);
-				const fileName = path.basename(entry.name, ext);
-				const apiKey = instance._toApiKey(fileName);
-				const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-				if (mod && typeof mod.default === "function") {
-					if (!rootDefaultFn) rootDefaultFn = mod.default;
+		// NEW: Detect multiple default exports for multi-default handling
+		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
+		const defaultExportFiles = [];
+
+		// First pass: detect default exports
+		for (const entry of moduleFiles) {
+			const ext = path.extname(entry.name);
+			const fileName = path.basename(entry.name, ext);
+			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+
+			if (mod && "default" in mod) {
+				defaultExportFiles.push({ entry, fileName, mod });
+			}
+		}
+
+		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+
+		// Second pass: process files with multi-default awareness
+		for (const entry of moduleFiles) {
+			const ext = path.extname(entry.name);
+			const fileName = path.basename(entry.name, ext);
+			const apiKey = instance._toApiKey(fileName);
+			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+
+			if (mod && typeof mod.default === "function") {
+				if (hasMultipleDefaultExports) {
+					// Multi-default case: use filename as API key
+					api[apiKey] = mod.default;
+
+					// Also add named exports to the function
+					for (const [key, value] of Object.entries(mod)) {
+						if (key !== "default") {
+							api[apiKey][key] = value;
+						}
+					}
+
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Multi-default in lazy mode: using filename '${apiKey}' for default export`);
+					}
+				} else {
+					// Traditional single default case: becomes root API
+					// BUT only if we don't have multiple defaults
+					if (!hasMultipleDefaultExports && !rootDefaultFn) {
+						rootDefaultFn = mod.default;
+					}
 					for (const [k, v] of Object.entries(mod)) {
 						if (k !== "default") api[k] = v;
 					}
-				} else {
-					api[apiKey] = mod;
 				}
+			} else {
+				api[apiKey] = mod;
 			}
 		}
 	}
