@@ -348,6 +348,23 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{ section: "multi.alpha.hello", calls: [{ path: ["multi", "alpha", "hello"], args: [] }] },
 		{ section: "multi.beta.world", calls: [{ path: ["multi", "beta", "world"], args: [] }] },
 
+		// multi_defaults
+		{ section: "multi_defaults.key", calls: [{ path: ["multi_defaults", "key"], args: ["ENTER"] }] },
+		{ section: "multi_defaults.power", calls: [{ path: ["multi_defaults", "power"], args: [] }] },
+		{ section: "multi_defaults.volume", calls: [{ path: ["multi_defaults", "volume"], args: [50] }] },
+		{
+			section: "multi_defaults.key.press",
+			calls: [{ path: ["multi_defaults", "key", "press"], args: ["ESC"] }]
+		},
+		{
+			section: "multi_defaults.power.on",
+			calls: [{ path: ["multi_defaults", "power", "on"], args: [] }]
+		},
+		{
+			section: "multi_defaults.volume.up",
+			calls: [{ path: ["multi_defaults", "volume", "up"], args: [] }]
+		},
+
 		// nested.date
 		{ section: "nested.date.today", calls: [{ path: ["nested", "date", "today"], args: [] }] },
 
