@@ -243,7 +243,29 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					}
 				}
 			} else {
-				api[apiKey] = mod;
+				// No default export: check if this is connection.mjs style (multiple top-level exports)
+				// vs root-math.mjs style (single object export)
+				if (instance.config.debug) {
+					console.log(`[DEBUG] Processing non-default exports for ${fileName}`);
+				}
+
+				// For files like connection.mjs that should flatten to root
+				const shouldFlatten = fileName === "connection" && Object.keys(mod).length > 1;
+
+				if (shouldFlatten) {
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Flattening ${fileName} exports to root`);
+					}
+					for (const [k, v] of Object.entries(mod)) {
+						api[k] = v;
+					}
+				} else {
+					// Default behavior: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Preserving ${fileName} as namespace`);
+					}
+					api[apiKey] = mod;
+				}
 			}
 		}
 	}
