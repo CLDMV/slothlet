@@ -373,12 +373,11 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					if (mod && "default" in mod) {
 						// Non-function default in multi-default context
 						api[apiKey] = mod.default;
-						// Also add named exports, but only if the default export can receive properties
-						if (mod.default !== null && typeof mod.default === "object") {
-							for (const [key, value] of Object.entries(mod)) {
-								if (key !== "default") {
-									api[apiKey][key] = value;
-								}
+						// Add named exports as separate properties on the API object, not on the default export
+						for (const [key, value] of Object.entries(mod)) {
+							if (key !== "default") {
+								api[key] = value;
+								rootNamedExports[key] = value;
 							}
 						}
 					} else {
