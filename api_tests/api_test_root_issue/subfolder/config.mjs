@@ -231,7 +231,7 @@ export const config = {
 	 * @returns {Object} Manufacturer configuration
 	 */
 	createManufacturerConfig(manufacturer, options = {}) {
-		const baseConfig = this.get();
+		const baseConfig = this.getConfig();
 
 		return this.merge(
 			{

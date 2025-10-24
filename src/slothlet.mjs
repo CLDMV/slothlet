@@ -656,7 +656,9 @@ const slothletObject = {
 				}
 
 				if (!isSelfReferential) {
-					defaultExportFiles.push({ file, moduleName, mod: rawMod });
+					// Load processed module only for non-self-referential defaults
+					const processedMod = await this._loadSingleModule(path.join(categoryPath, file.name));
+					defaultExportFiles.push({ file, moduleName, mod: processedMod });
 					if (this.config.debug) {
 						console.log(`[DEBUG] Found default export in ${file.name} (non-self-referential)`);
 					}
@@ -686,7 +688,15 @@ const slothletObject = {
 				console.log("[DEBUG] selfReferentialFiles has config?", selfReferentialFiles.has(moduleName));
 			}
 
-			const mod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			// Check if we already loaded this module during first pass (for non-self-referential defaults)
+			let mod = null;
+			const existingDefault = defaultExportFiles.find(def => def.moduleName === moduleName);
+			if (existingDefault) {
+				mod = existingDefault.mod; // Reuse already loaded module
+			} else {
+				// Load processed module only if not already loaded
+				mod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			}
 
 			if (this.config.debug && moduleName === "config") {
 				console.log("[DEBUG] Config mod type:", typeof mod);
