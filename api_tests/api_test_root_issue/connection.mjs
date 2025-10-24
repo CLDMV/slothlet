@@ -6,16 +6,25 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 13:28:30 -07:00 (1761251310)
+ *	@Last modified time: 2025-10-23 17:39:48 -07:00 (1761266388)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { context, self } from "@cldmv/slothlet/runtime";
+// Test file for connection.mjs flattening behavior
+// These functions should flatten to api.connect, api.disconnect, api.isConnected
 
-export async function connect(host, options = {}) {}
+export async function connect(host, _ = {}) {
+	// Mock implementation for testing
+	console.log(`Connecting to ${host}...`);
+	return Promise.resolve(true);
+}
 
-export async function disconnect(options = {}) {}
+export async function disconnect(_ = {}) {
+	// Mock implementation for testing
+	console.log("Disconnecting...");
+	return Promise.resolve(true);
+}
 
 /**
  * Check if currently connected to the TV.
@@ -39,10 +48,6 @@ export async function disconnect(options = {}) {}
  * const connected = isConnected();
  */
 export function isConnected() {
-	const connectionAPI = getConnectionAPI();
-	if (!connectionAPI?.isConnected) {
-		return false;
-	}
-
-	return connectionAPI.isConnected();
+	// Mock implementation for testing - returns false by default
+	return false;
 }
