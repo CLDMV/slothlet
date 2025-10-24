@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 11:14:09 -07:00 (1761243249)
+ *	@Last modified time: 2025-10-24 11:30:58 -07:00 (1761330658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -112,7 +112,19 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 3, visited = 
 						results.push(...inspectApiStructure(value, newPath, depth + 1, maxDepth, visited));
 					}
 				} catch (_) {
-					results.push(`${indent}${chalk.yellow(key)}: ${chalk.red("[error accessing]")}`);
+					// Try to detect if this is a lazy folder by checking the descriptor
+					try {
+						const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+						if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
+							results.push(`${indent}${chalk.yellow(key)}: ${chalk.blue("function (lazy folder)")}`);
+							results.push(`${indent}  ${chalk.gray("Name:")} ${chalk.cyan(descriptor.value.name)}`);
+							results.push(`${indent}  ${chalk.gray("[Access a property to trigger materialization]")}`);
+						} else {
+							results.push(`${indent}${chalk.yellow(key)}: ${chalk.red("[error accessing]")}`);
+						}
+					} catch {
+						results.push(`${indent}${chalk.yellow(key)}: ${chalk.red("[error accessing]")}`);
+					}
 				}
 			}
 		}
@@ -124,6 +136,78 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 3, visited = 
 	}
 
 	return results;
+}
+
+/**
+ * Force materialization of lazy folders by directly accessing their properties.
+ * @param {any} api - The API object to materialize
+ * @returns {Promise<void>}
+ */
+async function forceMaterializeLazyFolders(api) {
+	if (!api || typeof api !== "object") return;
+
+	console.log(chalk.gray("  Searching for lazy folders..."));
+
+	// Get all property names and look for lazy folders
+	const keys = Object.getOwnPropertyNames(api);
+
+	for (const key of keys) {
+		if (key.startsWith("__") || key === "shutdown" || key === "describe") {
+			continue;
+		}
+
+		try {
+			// Check if property descriptor indicates a lazy folder
+			const descriptor = Object.getOwnPropertyDescriptor(api, key);
+			if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
+				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
+
+				try {
+					const lazyProxy = descriptor.value;
+
+					// Method 1: Try to use the _materialize method if available
+					if (typeof lazyProxy._materialize === "function") {
+						console.log(chalk.gray(`    Using _materialize() method...`));
+						const materialized = await lazyProxy._materialize();
+						if (materialized && typeof materialized === "object") {
+							// Replace the lazy proxy with the materialized object
+							api[key] = materialized;
+							console.log(
+								chalk.green(`  ✅ Successfully materialized ${key} using _materialize() with keys: ${Object.keys(materialized).join(", ")}`)
+							);
+							continue;
+						}
+					}
+
+					// Method 2: Force materialization by accessing the property multiple ways
+					console.log(chalk.gray(`    Trying property access...`));
+					let result = api[key].config;
+					if (!result) {
+						result = api[key].subfolder || api[key].index || api[key].main;
+					}
+
+					// Method 3: Wait for any pending materialization
+					if (!result) {
+						await new Promise((resolve) => setTimeout(resolve, 100)); // Give lazy proxy time
+						result = api[key].config;
+					}
+
+					// Check if it's now materialized
+					const newValue = api[key];
+					if (typeof newValue === "object" && newValue !== null) {
+						console.log(chalk.green(`  ✅ Successfully materialized ${key} to object with keys: ${Object.keys(newValue).join(", ")}`));
+					} else {
+						console.log(chalk.yellow(`  ⚠️ ${key} still appears to be a function after access attempts`));
+					}
+				} catch (error) {
+					console.log(chalk.yellow(`  ⚠️ Could not materialize ${key}: ${error.message}`));
+				}
+			}
+		} catch (_) {
+			// Skip properties we can't examine
+			continue;
+		}
+	}
 }
 
 /**
@@ -144,9 +228,16 @@ async function inspectApi(apiName, options = {}) {
 		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
 		// Load the API
-		const api = await slothlet({ dir: apiPath });
+		const api = await slothlet({ dir: apiPath, lazy: true });
 
-		console.log(chalk.green("✅ API loaded successfully\n"));
+		console.log(chalk.green("✅ API loaded successfully"));
+
+		// Force materialization of lazy folders by accessing them
+		await forceMaterializeLazyFolders(api);
+
+		console.log(chalk.green("✅ Lazy folders materialized\n"));
+
+		console.log(api);
 
 		// Display basic info
 		console.log(chalk.bold("API Type:"), typeof api);
@@ -197,9 +288,10 @@ async function inspectApi(apiName, options = {}) {
  * @param {any} obj - Object to search
  * @param {string} [basePath="api"] - Base path for display
  * @param {WeakSet} [visited=new WeakSet()] - Visited objects to prevent cycles
+ * @param {boolean} [skipSelf=false] - Skip adding the object itself as callable (to avoid duplicates)
  * @returns {string[]} Array of callable paths
  */
-function findCallablePaths(obj, basePath = "api", visited = new WeakSet()) {
+function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false) {
 	const paths = [];
 
 	if (!obj || visited.has(obj)) return paths;
@@ -208,8 +300,8 @@ function findCallablePaths(obj, basePath = "api", visited = new WeakSet()) {
 		visited.add(obj);
 	}
 
-	// If the object itself is callable, add it
-	if (typeof obj === "function") {
+	// If the object itself is callable, add it (unless skipSelf is true)
+	if (typeof obj === "function" && !skipSelf) {
 		paths.push(`${basePath}()`);
 	}
 
@@ -223,8 +315,8 @@ function findCallablePaths(obj, basePath = "api", visited = new WeakSet()) {
 			if (typeof value === "function") {
 				paths.push(`${newPath}()`);
 
-				// Check for properties on functions
-				const subPaths = findCallablePaths(value, newPath, visited);
+				// Check for properties on functions (but skip adding the function itself again)
+				const subPaths = findCallablePaths(value, newPath, visited, true);
 				paths.push(...subPaths);
 			} else if (value && typeof value === "object") {
 				const subPaths = findCallablePaths(value, newPath, visited);
