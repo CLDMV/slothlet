@@ -197,28 +197,81 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
 		const defaultExportFiles = [];
 
-		// First pass: detect default exports
+		// First pass: detect default exports (excluding self-referential defaults)
+		const selfReferentialFiles = new Set(); // Track self-referential files
+		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
 			const fileName = path.basename(entry.name, ext);
-			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
 
-			if (mod && "default" in mod) {
-				defaultExportFiles.push({ entry, fileName, mod });
+			if (instance.config.debug) {
+				console.log(`[DEBUG] First pass processing: ${fileName}`);
+			}
+
+			// Load raw module first and cache it
+			const modulePath = path.resolve(dir, entry.name);
+			const rawMod = await import(`file://${modulePath.replace(/\\/g, "/")}`);
+			rawModuleCache.set(entry.name, rawMod);
+
+			if (instance.config.debug && fileName === "config") {
+				console.log(`[DEBUG] First pass - raw config keys:`, Object.keys(rawMod || {}));
+				console.log(`[DEBUG] First pass - raw config has default:`, rawMod && "default" in rawMod);
+			}
+
+			if (rawMod && "default" in rawMod) {
+				// Check if default export is self-referential (points to a named export)
+				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
+
+				// Debug self-referential detection
+				if (instance.config.debug && fileName === "config") {
+					console.log(`[DEBUG] First pass - ${fileName} self-referential check:`);
+					console.log(`[DEBUG] - rawMod.default === rawMod.config: ${rawMod.default === rawMod.config}`);
+					console.log(`[DEBUG] - isSelfReferential result: ${isSelfReferential}`);
+				}
+
+				if (!isSelfReferential) {
+					// Load processed module only for non-self-referential defaults
+					const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+					defaultExportFiles.push({ entry, fileName, mod });
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
+					}
+				} else {
+					selfReferentialFiles.add(fileName); // Remember this file is self-referential
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Skipped ${fileName} - self-referential default export`);
+					}
+				}
 			}
 		}
 
 		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
 
 		// Second pass: process files with multi-default awareness
+		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
+
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
 			const fileName = path.basename(entry.name, ext);
 			const apiKey = instance._toApiKey(fileName);
-			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+
+			// Check if we already loaded this module during first pass (for non-self-referential defaults)
+			let mod = null;
+			const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
+			if (existingDefault) {
+				mod = existingDefault.mod; // Reuse already loaded module
+			} else {
+				// Load processed module only if not already loaded
+				mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+				processedModuleCache.set(entry.name, mod);
+			}
+
+			// Check if this file was identified as self-referential in the first pass
+			const isSelfReferential = selfReferentialFiles.has(fileName);
 
 			if (mod && typeof mod.default === "function") {
-				if (hasMultipleDefaultExports) {
+				if (hasMultipleDefaultExports && !isSelfReferential) {
 					// Multi-default case: use filename as API key
 					api[apiKey] = mod.default;
 
@@ -232,6 +285,12 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					if (instance.config.debug) {
 						console.log(`[DEBUG] Multi-default in lazy mode: using filename '${apiKey}' for default export`);
 					}
+				} else if (isSelfReferential) {
+					// Self-referential case: treat as namespace (preserve both named and default)
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Self-referential default export: preserving ${fileName} as namespace`);
+					}
+					api[apiKey] = mod;
 				} else {
 					// Traditional single default case: becomes root API
 					// BUT only if we don't have multiple defaults
@@ -243,19 +302,28 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					}
 				}
 			} else {
-				// No default export: In multi-default scenarios, files without defaults should flatten to root
+				// No default export OR self-referential default: In multi-default scenarios, files without defaults should flatten to root
 				// In single/no default scenarios, preserve as namespace (traditional behavior)
 				if (instance.config.debug) {
 					console.log(`[DEBUG] Processing non-default exports for ${fileName}`);
 				}
 
-				if (hasMultipleDefaultExports) {
+				if (isSelfReferential) {
+					// Self-referential case: use the named export directly (since default === named)
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Self-referential: preserving ${fileName} as namespace`);
+					}
+					// For self-referential exports, use the named export directly to avoid nesting
+					api[apiKey] = mod[apiKey] || mod;
+				} else if (hasMultipleDefaultExports) {
 					// Multi-default context: flatten non-default files to root level
 					if (instance.config.debug) {
 						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
 					}
 					for (const [k, v] of Object.entries(mod)) {
-						api[k] = v;
+						if (k !== "default") {
+							api[k] = v;
+						}
 					}
 				} else {
 					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)

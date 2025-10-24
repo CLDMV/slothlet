@@ -628,35 +628,80 @@ const slothletObject = {
 		// MULTI-FILE CASE
 		const categoryModules = {};
 
-		// NEW: Detect if we have multiple files with default exports in the same folder
+		// NEW: Detect if we have multiple files with default exports in the same folder (excluding self-referential defaults)
 		const defaultExportFiles = [];
+		const selfReferentialFiles = new Set(); // Track self-referential files
+		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+
+		// First pass: Load raw modules and detect self-referential exports
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
-			const tempMod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			const moduleFilePath = path.resolve(categoryPath, file.name);
 
-			// Check if this module has a default export by looking for __slothletDefault marker
-			// This marker is set by _loadSingleModule when it encounters an actual export default
-			if (tempMod && tempMod.__slothletDefault === true) {
-				defaultExportFiles.push({ file, moduleName, mod: tempMod });
+			// Load raw module once and cache it
+			const rawMod = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
+			rawModuleCache.set(file.name, rawMod);
+
+			// Check if this module has a default export by looking at the raw module
+			if (rawMod && "default" in rawMod) {
+				// Check if default export is self-referential (points to a named export)
+				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
+
 				if (this.config.debug) {
-					console.log(`[DEBUG] Found default export in ${file.name}`);
+					console.log(`[DEBUG] _buildCategory: Checking ${file.name} in ${categoryPath}`);
+					console.log(`[DEBUG]   - moduleName: ${moduleName}`);
+					console.log(`[DEBUG]   - has default: ${rawMod && "default" in rawMod}`);
+					console.log(`[DEBUG]   - isSelfReferential: ${isSelfReferential}`);
+				}
+
+				if (!isSelfReferential) {
+					// Load processed module only for non-self-referential defaults
+					const processedMod = await this._loadSingleModule(path.join(categoryPath, file.name));
+					defaultExportFiles.push({ file, moduleName, mod: processedMod });
+					if (this.config.debug) {
+						console.log(`[DEBUG] Found default export in ${file.name} (non-self-referential)`);
+					}
+				} else {
+					selfReferentialFiles.add(moduleName); // Remember this file is self-referential
+					if (this.config.debug) {
+						console.log(`[DEBUG] Skipped ${file.name} - self-referential default export`);
+					}
 				}
 			}
 		}
 
 		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
 
+		if (this.config.debug) {
+			console.log(`[DEBUG] selfReferentialFiles Set:`, Array.from(selfReferentialFiles));
+			console.log(`[DEBUG] hasMultipleDefaultExports:`, hasMultipleDefaultExports);
+		}
+
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
 
 			// Debug: Log file processing
-			// if (this.config.debug && file.name.includes("auto-ip")) {
-			// 	console.log("[DEBUG] Processing file:", file.name, "moduleName:", moduleName);
-			// }
+			if (this.config.debug && moduleName === "config") {
+				console.log("[DEBUG] Processing config file:", file.name, "moduleName:", moduleName);
+				console.log("[DEBUG] selfReferentialFiles has config?", selfReferentialFiles.has(moduleName));
+			}
 
-			const mod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			// Check if we already loaded this module during first pass (for non-self-referential defaults)
+			let mod = null;
+			const existingDefault = defaultExportFiles.find(def => def.moduleName === moduleName);
+			if (existingDefault) {
+				mod = existingDefault.mod; // Reuse already loaded module
+			} else {
+				// Load processed module only if not already loaded
+				mod = await this._loadSingleModule(path.join(categoryPath, file.name));
+			}
+
+			if (this.config.debug && moduleName === "config") {
+				console.log("[DEBUG] Config mod type:", typeof mod);
+				console.log("[DEBUG] Config mod keys:", Object.keys(mod));
+			}
 			if (moduleName === categoryName && mod && typeof mod === "object") {
 				if (
 					Object.prototype.hasOwnProperty.call(mod, categoryName) &&
@@ -671,9 +716,12 @@ const slothletObject = {
 					Object.assign(categoryModules, mod);
 				}
 			} else if (typeof mod === "function") {
+				// Check if this file was identified as self-referential in the first pass
+				const isSelfReferential = selfReferentialFiles.has(moduleName);
+
 				// NEW: For multiple default exports, use file name instead of function name
 				let apiKey;
-				if (hasMultipleDefaultExports && mod.__slothletDefault === true) {
+				if (hasMultipleDefaultExports && mod.__slothletDefault === true && !isSelfReferential) {
 					// Use file name for default exports when multiple defaults exist
 					apiKey = moduleName;
 					try {
@@ -684,6 +732,14 @@ const slothletObject = {
 					if (this.config.debug) {
 						console.log(`[DEBUG] Multi-default detected: using filename '${moduleName}' for default export`);
 					}
+				} else if (selfReferentialFiles.has(moduleName)) {
+					// Self-referential case: use the named export directly to avoid nesting
+					if (this.config.debug) {
+						console.log(`[DEBUG] Self-referential default export: treating ${moduleName} as namespace`);
+					}
+					// For self-referential exports, use the named export directly
+					categoryModules[moduleName] = mod[moduleName] || mod;
+					continue; // Skip function processing logic
 				} else {
 					// Original logic for single defaults or named function exports
 					const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
@@ -760,6 +816,12 @@ const slothletObject = {
 				if (hasPreferredName) {
 					Object.assign(categoryModules, modWithPreferredNames);
 					// console.log("[DEBUG] Applied preferred names to categoryModules");
+				} else if (selfReferentialFiles.has(moduleName)) {
+					// Self-referential case: use the named export directly to avoid nesting
+					if (this.config.debug) {
+						console.log(`[DEBUG] Self-referential object: treating ${moduleName} as namespace`);
+					}
+					categoryModules[moduleName] = mod[moduleName] || mod;
 				} else {
 					categoryModules[this._toApiKey(moduleName)] = mod;
 					// if (moduleName.includes("autoI") || moduleName === "auto-ip") {
