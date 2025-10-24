@@ -374,7 +374,7 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 						// Non-function default in multi-default context
 						api[apiKey] = mod.default;
 						// Also add named exports, but only if the default export can receive properties
-						if (mod.default && typeof mod.default === "object" && mod.default !== null) {
+						if (mod.default !== null && typeof mod.default === "object") {
 							for (const [key, value] of Object.entries(mod)) {
 								if (key !== "default") {
 									api[apiKey][key] = value;
