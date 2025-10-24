@@ -631,14 +631,17 @@ const slothletObject = {
 		// NEW: Detect if we have multiple files with default exports in the same folder (excluding self-referential defaults)
 		const defaultExportFiles = [];
 		const selfReferentialFiles = new Set(); // Track self-referential files
+		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+
+		// First pass: Load raw modules and detect self-referential exports
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
 			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
-			const tempMod = await this._loadSingleModule(path.join(categoryPath, file.name));
-
-			// For self-referential detection, use raw module import to see actual exports
 			const moduleFilePath = path.resolve(categoryPath, file.name);
+
+			// Load raw module once and cache it
 			const rawMod = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
+			rawModuleCache.set(file.name, rawMod);
 
 			// Check if this module has a default export by looking at the raw module
 			if (rawMod && "default" in rawMod) {
@@ -653,7 +656,7 @@ const slothletObject = {
 				}
 
 				if (!isSelfReferential) {
-					defaultExportFiles.push({ file, moduleName, mod: tempMod });
+					defaultExportFiles.push({ file, moduleName, mod: rawMod });
 					if (this.config.debug) {
 						console.log(`[DEBUG] Found default export in ${file.name} (non-self-referential)`);
 					}

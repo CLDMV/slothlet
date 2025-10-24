@@ -199,6 +199,8 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 
 		// First pass: detect default exports (excluding self-referential defaults)
 		const selfReferentialFiles = new Set(); // Track self-referential files
+		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
 			const fileName = path.basename(entry.name, ext);
@@ -207,12 +209,10 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 				console.log(`[DEBUG] First pass processing: ${fileName}`);
 			}
 
-			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-
-			// For self-referential detection, we need to use raw module import to see the actual exports
-			// before slothlet's processing strips them
+			// Load raw module first and cache it
 			const modulePath = path.resolve(dir, entry.name);
 			const rawMod = await import(`file://${modulePath.replace(/\\/g, "/")}`);
+			rawModuleCache.set(entry.name, rawMod);
 
 			if (instance.config.debug && fileName === "config") {
 				console.log(`[DEBUG] First pass - raw config keys:`, Object.keys(rawMod || {}));
@@ -231,6 +231,8 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 				}
 
 				if (!isSelfReferential) {
+					// Load processed module only for non-self-referential defaults
+					const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
 					defaultExportFiles.push({ entry, fileName, mod });
 					if (instance.config.debug) {
 						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
@@ -247,11 +249,23 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
 
 		// Second pass: process files with multi-default awareness
+		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
+
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
 			const fileName = path.basename(entry.name, ext);
 			const apiKey = instance._toApiKey(fileName);
-			const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+
+			// Check if we already loaded this module during first pass (for non-self-referential defaults)
+			let mod = null;
+			const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
+			if (existingDefault) {
+				mod = existingDefault.mod; // Reuse already loaded module
+			} else {
+				// Load processed module only if not already loaded
+				mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+				processedModuleCache.set(entry.name, mod);
+			}
 
 			// Check if this file was identified as self-referential in the first pass
 			const isSelfReferential = selfReferentialFiles.has(fileName);
