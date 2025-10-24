@@ -120,16 +120,28 @@ export const config = {
 		if (typeof keyOrConfig === "string") {
 			// Handle dot notation for single key update
 			configUpdate = {};
-			const keys = keyOrConfig.split(".");
-			let current = configUpdate;
+		const keys = keyOrConfig.split(".");
+		let current = configUpdate;
 
-			for (let i = 0; i < keys.length - 1; i++) {
-				current[keys[i]] = {};
-				current = current[keys[i]];
+		// Prevent prototype pollution by blocking dangerous keys
+		const FORBIDDEN_KEYS = ["__proto__", "constructor", "prototype"];
+		
+		for (let i = 0; i < keys.length - 1; i++) {
+			const key = keys[i];
+			if (FORBIDDEN_KEYS.includes(key)) {
+				// Silently ignore forbidden keys to prevent prototype pollution
+				return;
 			}
-			current[keys[keys.length - 1]] = value;
-
-			// For simple keys, also set at root level
+			current[key] = {};
+			current = current[key];
+		}
+		
+		const finalKey = keys[keys.length - 1];
+		if (FORBIDDEN_KEYS.includes(finalKey)) {
+			// Silently ignore forbidden keys to prevent prototype pollution
+			return;
+		}
+		current[finalKey] = value;			// For simple keys, also set at root level
 			if (keys.length === 1) {
 				configUpdate[keyOrConfig] = value;
 			} else {
