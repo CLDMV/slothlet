@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:00:08 -07:00 (1761141608)
+ *	@Last modified time: 2025-10-23 17:39:30 -07:00 (1761266370)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -243,7 +243,27 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					}
 				}
 			} else {
-				api[apiKey] = mod;
+				// No default export: In multi-default scenarios, files without defaults should flatten to root
+				// In single/no default scenarios, preserve as namespace (traditional behavior)
+				if (instance.config.debug) {
+					console.log(`[DEBUG] Processing non-default exports for ${fileName}`);
+				}
+
+				if (hasMultipleDefaultExports) {
+					// Multi-default context: flatten non-default files to root level
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
+					}
+					for (const [k, v] of Object.entries(mod)) {
+						api[k] = v;
+					}
+				} else {
+					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
+					}
+					api[apiKey] = mod;
+				}
 			}
 		}
 	}
