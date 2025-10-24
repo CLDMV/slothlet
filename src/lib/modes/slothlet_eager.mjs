@@ -370,22 +370,24 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					if (this.config.debug) {
 						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
 					}
-					if (mod && "default" in mod) {
-						// Non-function default in multi-default context
-						api[apiKey] = mod.default;
-						// Add named exports as separate properties on the API object, not on the default export
-						for (const [key, value] of Object.entries(mod)) {
+					// Helper function to add named exports to API and rootNamedExports
+					const eager_addNamedExportsToApi = (exports, api, rootNamedExports) => {
+						for (const [key, value] of Object.entries(exports)) {
 							if (key !== "default") {
 								api[key] = value;
 								rootNamedExports[key] = value;
 							}
 						}
+					};
+
+					if (mod && "default" in mod) {
+						// Non-function default in multi-default context
+						api[apiKey] = mod.default;
+						// Add named exports as separate properties on the API object, not on the default export
+						eager_addNamedExportsToApi(mod, api, rootNamedExports);
 					} else {
 						// No default export: flatten all exports to root
-						for (const [key, value] of Object.entries(mod)) {
-							api[key] = value;
-							rootNamedExports[key] = value;
-						}
+						eager_addNamedExportsToApi(mod, api, rootNamedExports);
 					}
 				} else {
 					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
