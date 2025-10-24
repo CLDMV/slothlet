@@ -1,5 +1,17 @@
-export function connect(host: any, options?: {}): Promise<void>;
-export function disconnect(options?: {}): Promise<void>;
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_root_issue/connection.mjs
+ *	@Date: 2025-10-23 13:27:27 -07:00 (1761251247)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-23 17:39:48 -07:00 (1761266388)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+export function connect(host: any, _?: {}): Promise<boolean>;
+export function disconnect(_?: {}): Promise<boolean>;
 /**
  * Check if currently connected to the TV.
  * @public
