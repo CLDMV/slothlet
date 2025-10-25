@@ -96,7 +96,7 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 ### 🔧 **Smart API Management**
 
 - **Callable Interface**: Use `slothlet(options)` for direct API creation
-- **Automatic Flattening**: Single-file modules become direct API properties (`math/math.mjs` → `api.math`)
+- **Smart Flattening**: Intelligent rules create clean APIs (`math/math.mjs` → `api.math`, `connection.mjs` → `api.connect()`)
 - **Intelligent Naming**: Dash-separated names convert automatically (`root-math.mjs` → `api.rootMath`)
 - **Function Name Preservation**: Maintains original capitalization (`auto-ip.mjs` with `autoIP` → `api.autoIP`)
 - **Hybrid Exports**: Support for callable APIs with methods, default + named exports, and mixed patterns
@@ -621,12 +621,12 @@ rootstring.mjs    → api.rootstring
 config.mjs        → api.config
 ```
 
-### Single-File Modules
+### Filename-Folder Matching Modules
 
 ```text
-math/math.mjs     → api.math (automatic flattening)
-string/string.mjs → api.string
-util/util.cjs     → api.util (CJS support)
+math/math.mjs     → api.math (filename matches folder)
+string/string.mjs → api.string (filename matches folder)
+util/util.cjs     → api.util (CJS support with filename matching)
 ```
 
 ### Multi-File Modules
@@ -693,6 +693,127 @@ task/auto-ip.mjs (exports autoIP) → api.task.autoIP (preserves function name)
 util/parseJSON.mjs               → api.util.parseJSON (preserves JSON casing)
 api/getHTTPStatus.mjs            → api.api.getHTTPStatus (preserves HTTP casing)
 ```
+
+## 🏗️ API Flattening Rules
+
+Slothlet uses intelligent flattening rules to create clean, intuitive API structures. Understanding these rules helps you organize your modules for the best developer experience:
+
+### 1. **Filename-Folder Matching** (Single Named Export)
+
+**When:** A file exports a single named export that matches the sanitized filename  
+**Why:** Avoids redundant nesting (`api.math.math.add()` → `api.math.add()`)  
+**Reasoning:** When file purpose matches folder purpose, eliminate the duplicate layer
+
+```text
+math/math.mjs (exports { math: {...} })     → api.math (flattened)
+string/string.mjs (exports { string: {...} }) → api.string (flattened)
+util/util.mjs (exports { util: {...} })     → api.util (flattened)
+```
+
+### 2. **No Default Export + Only Named Exports** ⭐ NEW
+
+**When:** A file has **no default export** and **only named exports**  
+**Why:** The file acts as a pure function collection, not a module with a main export  
+**Reasoning:** If there's no "main thing" (default export), treat all functions as equals at the root level
+
+```text
+connection.mjs (exports { connect, disconnect, isConnected })
+  → api.connect(), api.disconnect(), api.isConnected()
+  Because: No default export = no main "connection" object needed
+
+app.mjs (exports { getAllApps, getCurrentApp, setApp })
+  → api.getAllApps(), api.getCurrentApp(), api.setApp()
+  Because: No default export = these are standalone utility functions
+
+state.mjs (exports { cloneState, emitLog, reset, update })
+  → api.cloneState(), api.emitLog(), api.reset(), api.update()
+  Because: No default export = treat as individual state utilities
+```
+
+### 3. **Has Default Export** (Namespace Preservation)
+
+**When:** A file has a default export (with or without named exports)  
+**Why:** The default export indicates there's a "main thing" that should be the namespace  
+**Reasoning:** Default export signals intentional module structure that should be preserved
+
+```text
+config.mjs (exports default + named exports) → api.config.*
+  Because: Default export indicates a main config object with methods
+
+input.mjs (exports default + named exports)  → api.input.*
+  Because: Default export indicates a main input handler with utilities
+
+volume.mjs (exports default + named exports) → api.volume.*
+  Because: Default export indicates a main volume controller with methods
+```
+
+### 4. **Root-Level Special Cases**
+
+**When:** Files are at the root directory level (not in subfolders)  
+**Why:** Prevents accidental API pollution and maintains clear root structure  
+**Reasoning:** Root files are explicitly placed there and should maintain their intended naming
+
+```text
+root-math.mjs   → api.rootMath (namespace preserved)
+  Because: Explicitly named "root-math" = keep as intended namespace
+
+rootstring.mjs  → api.rootstring (namespace preserved)
+  Because: Root-level placement = developer wants this specific API structure
+
+config.mjs      → api.config (namespace preserved)
+  Because: Root config file = keep as clear config namespace, don't flatten
+```
+
+### 5. **Self-Referential Prevention**
+
+**When:** A file would create circular/redundant nesting (`api.config.config`)  
+**Why:** Prevents infinite nesting and maintains clean API structure  
+**Reasoning:** When file/folder names match, assume they represent the same logical concept
+
+```text
+config/config.mjs → api.config (prevented: api.config.config.config...)
+  Because: config.mjs in config/ folder = same concept, use folder name only
+```
+
+### 🎯 Flattening Decision Tree
+
+```mermaid
+flowchart TD
+    FILE[Module File] --> ROOT{Root Level?}
+
+    ROOT -->|Yes| PRESERVE[Preserve Namespace<br/>api.rootMath, api.config]
+
+    ROOT -->|No| SELFREFER{Self-Referential?}
+    SELFREFER -->|Yes| NAMESPACE[Use Namespace<br/>api.config]
+
+    SELFREFER -->|No| HASDEFAULT{Has Default Export?}
+    HASDEFAULT -->|Yes| NAMESPACE
+
+    HASDEFAULT -->|No| NAMEDONLY{Only Named Exports?}
+    NAMEDONLY -->|Yes| FLATTEN[Flatten All Named Exports<br/>api.connect(), api.disconnect()]
+
+    NAMEDONLY -->|No| SINGLENAMED{Single Named Export<br/>Matching Filename?}
+    SINGLENAMED -->|Yes| FLATTENSINGLE[Flatten Single Export<br/>api.math]
+    SINGLENAMED -->|No| NAMESPACE
+
+    style FLATTEN fill:#e1f5fe
+    style FLATTENSINGLE fill:#e8f5e8
+    style NAMESPACE fill:#fff3e0
+    style PRESERVE fill:#fce4ec
+```
+
+### 🚀 Benefits of Smart Flattening
+
+- **Cleaner APIs**: `api.connect()` instead of `api.connection.connect()`  
+  _Why it matters:_ Reduces typing, improves readability, and matches how you'd naturally call connection functions
+- **Intuitive Structure**: File organization matches API usage patterns  
+  _Why it matters:_ Files with only utility functions flatten (no main export = no namespace needed), while files with main exports preserve their intended structure
+- **Flexible Organization**: Mix flattened and nested patterns as needed  
+  _Why it matters:_ You can organize files by purpose (`connection.mjs` for utilities, `config.mjs` for main objects) and slothlet automatically creates the right API structure
+- **Developer Intent Respected**: Export structure signals your architectural intentions  
+  _Why it matters:_ Default exports = "this is a main thing with methods", named exports only = "these are utility functions"
+- **Backward Compatibility**: Existing APIs continue to work as expected  
+  _Why it matters:_ The rules are additive - existing filename-matching and default export patterns still work exactly the same
 
 ## 🔀 How Slothlet Works: Loading Modes Explained
 
@@ -764,7 +885,7 @@ flowchart TD
         ALWAYS1 ~~~ ALWAYS2
 
 		ALWAYS0@{ shape: rounded, label: "🔗 Live Bindings ALS<br/>Per-instance context isolation" }
-		ALWAYS1@{ shape: rounded, label: "🏷️ Smart Naming & Flattening<br/>math/math.mjs → api.math" }
+		ALWAYS1@{ shape: rounded, label: "🏷️ Smart Naming & Flattening<br/>Multiple rules for clean APIs" }
 		ALWAYS2@{ shape: rounded, label: "🔄 Mixed Module Support<br/>Seamlessly mix .mjs and .cjs" }
     end
 

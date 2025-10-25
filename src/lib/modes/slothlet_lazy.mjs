@@ -321,15 +321,24 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					if (instance.config.debug) {
 						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
 					}
-					
+
 					// Check for auto-flattening: if module has single named export matching filename, use it directly
-					const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
 						// Auto-flatten: module exports single named export matching filename
 						if (instance.config.debug) {
 							console.log(`[DEBUG] Auto-flattening: ${fileName} exports single named export ${apiKey}`);
 						}
 						api[apiKey] = mod[apiKey];
+					} else if (!mod.default && moduleKeys.length > 0) {
+						// Auto-flatten: module has no default export, only named exports → flatten to root
+						if (instance.config.debug) {
+							console.log(`[DEBUG] Auto-flattening: ${fileName} has no default, flattening named exports to root: ${moduleKeys.join(", ")}`);
+						}
+						// Flatten all named exports directly to api root
+						for (const key of moduleKeys) {
+							api[key] = mod[key];
+						}
 					} else {
 						// Regular namespace preservation
 						api[apiKey] = mod;

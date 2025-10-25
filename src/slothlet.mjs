@@ -627,14 +627,14 @@ const slothletObject = {
 			if (moduleName === categoryName && mod && typeof mod === "object" && !mod.default && currentDepth > 0) {
 				return { ...mod };
 			}
-			
+
 			// Check for auto-flattening: if module has single named export matching filename, use it directly
-			const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+			const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 				// Auto-flatten: module exports single named export matching filename
 				return { [moduleName]: mod[moduleName] };
 			}
-			
+
 			return { [moduleName]: mod };
 		}
 
@@ -837,7 +837,7 @@ const slothletObject = {
 					categoryModules[moduleName] = mod[moduleName] || mod;
 				} else {
 					// Check for auto-flattening: if module has single named export matching filename, use it directly
-					const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 					const apiKey = this._toApiKey(moduleName);
 					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
 						// Auto-flatten: module exports single named export matching filename
@@ -845,6 +845,15 @@ const slothletObject = {
 							console.log(`[DEBUG] Auto-flattening: ${moduleName} exports single named export ${apiKey}`);
 						}
 						categoryModules[apiKey] = mod[apiKey];
+					} else if (!mod.default && moduleKeys.length > 0) {
+						// Auto-flatten: module has no default export, only named exports → flatten to category
+						if (this.config.debug) {
+							console.log(`[DEBUG] Auto-flattening: ${moduleName} has no default, flattening named exports to category: ${moduleKeys.join(", ")}`);
+						}
+						// Flatten all named exports directly to category
+						for (const key of moduleKeys) {
+							categoryModules[key] = mod[key];
+						}
 					} else {
 						categoryModules[apiKey] = mod;
 					}
@@ -951,11 +960,11 @@ const slothletObject = {
 
 		// For CJS files, unwrap Node.js's automatic default wrapper if needed
 		let module = rawModule;
-		
+
 		if (modulePath.endsWith(".cjs") && "default" in rawModule) {
 			// Check if the CJS module explicitly exported a 'default' property
 			const hasExplicitDefault = typeof rawModule.default === "object" && rawModule.default !== null && "default" in rawModule.default;
-			
+
 			if (!hasExplicitDefault) {
 				// This is Node.js wrapping module.exports in 'default'
 				// Simply unwrap it - use the original module.exports content
