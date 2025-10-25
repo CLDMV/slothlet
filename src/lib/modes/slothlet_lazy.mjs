@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:30 -07:00 (1761266370)
+ *	@Last modified time: 2025-10-24 17:11:52 -07:00 (1761351112)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -315,22 +315,25 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					}
 					// For self-referential exports, use the named export directly to avoid nesting
 					api[apiKey] = mod[apiKey] || mod;
-				} else if (hasMultipleDefaultExports) {
-					// Multi-default context: flatten non-default files to root level
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
-					}
-					for (const [k, v] of Object.entries(mod)) {
-						if (k !== "default") {
-							api[k] = v;
-						}
-					}
 				} else {
-					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
+					// Traditional context: preserve as namespace (for root-math.cjs, rootstring.mjs, etc.)
+					// Don't flatten root-level files - they should maintain their namespace structure
 					if (instance.config.debug) {
 						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
 					}
-					api[apiKey] = mod;
+					
+					// Check for auto-flattening: if module has single named export matching filename, use it directly
+					const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+						// Auto-flatten: module exports single named export matching filename
+						if (instance.config.debug) {
+							console.log(`[DEBUG] Auto-flattening: ${fileName} exports single named export ${apiKey}`);
+						}
+						api[apiKey] = mod[apiKey];
+					} else {
+						// Regular namespace preservation
+						api[apiKey] = mod;
+					}
 				}
 			}
 		}

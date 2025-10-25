@@ -578,7 +578,8 @@ const slothletObject = {
 			// }
 
 			// Flatten if file matches folder name and exports a function (named)
-			if (moduleName === categoryName && typeof mod === "function") {
+			// BUT NOT for root-level files (currentDepth === 0)
+			if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
 				try {
 					Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
 				} catch {
@@ -588,7 +589,8 @@ const slothletObject = {
 			}
 
 			// NEW: Flatten if function name matches folder name (case-insensitive) and prefer function name
-			if (functionNameMatchesFolder) {
+			// BUT NOT for root-level files (currentDepth === 0)
+			if (functionNameMatchesFolder && currentDepth > 0) {
 				try {
 					// Use the original function name instead of sanitized folder name
 					Object.defineProperty(mod, "name", { value: mod.name, configurable: true });
@@ -608,9 +610,11 @@ const slothletObject = {
 
 			// ALSO flatten if this was a default function export (tracked by internal flag)
 			// even when the filename differs from the folder name (e.g. folder nest3 / singlefile.mjs)
+			// BUT NOT for root-level files (currentDepth === 0)
 			if (
 				typeof mod === "function" &&
-				(!mod.name || mod.name === "default" || mod.__slothletDefault === true) // explicitly marked default export function
+				(!mod.name || mod.name === "default" || mod.__slothletDefault === true) && // explicitly marked default export function
+				currentDepth > 0
 			) {
 				try {
 					Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
@@ -619,9 +623,18 @@ const slothletObject = {
 				}
 				return mod;
 			}
-			if (moduleName === categoryName && mod && typeof mod === "object" && !mod.default) {
+			// Only flatten objects if not at root level (currentDepth > 0)
+			if (moduleName === categoryName && mod && typeof mod === "object" && !mod.default && currentDepth > 0) {
 				return { ...mod };
 			}
+			
+			// Check for auto-flattening: if module has single named export matching filename, use it directly
+			const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
+				// Auto-flatten: module exports single named export matching filename
+				return { [moduleName]: mod[moduleName] };
+			}
+			
 			return { [moduleName]: mod };
 		}
 
@@ -690,7 +703,7 @@ const slothletObject = {
 
 			// Check if we already loaded this module during first pass (for non-self-referential defaults)
 			let mod = null;
-			const existingDefault = defaultExportFiles.find(def => def.moduleName === moduleName);
+			const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
 			if (existingDefault) {
 				mod = existingDefault.mod; // Reuse already loaded module
 			} else {
@@ -823,7 +836,18 @@ const slothletObject = {
 					}
 					categoryModules[moduleName] = mod[moduleName] || mod;
 				} else {
-					categoryModules[this._toApiKey(moduleName)] = mod;
+					// Check for auto-flattening: if module has single named export matching filename, use it directly
+					const moduleKeys = Object.keys(mod).filter(k => k !== "default");
+					const apiKey = this._toApiKey(moduleName);
+					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+						// Auto-flatten: module exports single named export matching filename
+						if (this.config.debug) {
+							console.log(`[DEBUG] Auto-flattening: ${moduleName} exports single named export ${apiKey}`);
+						}
+						categoryModules[apiKey] = mod[apiKey];
+					} else {
+						categoryModules[apiKey] = mod;
+					}
 					// if (moduleName.includes("autoI") || moduleName === "auto-ip") {
 					// 	console.log("[DEBUG] No preferred name found, using default:", this._toApiKey(moduleName));
 					// }
@@ -923,12 +947,22 @@ const slothletObject = {
 		const moduleUrl = pathToFileURL(modulePath).href;
 
 		// console.log("moduleUrl: ", moduleUrl);
-		const module = await import(moduleUrl);
+		const rawModule = await import(moduleUrl);
 
-		// Detect if this is a CJS module by file extension
-		// const isCjsModuleFile = isCjsModule(modulePath);
-
-		// if (this.config.debug) console.log("Loading module:", modulePath, "isCjsModule:", isCjsModuleFile);
+		// For CJS files, unwrap Node.js's automatic default wrapper if needed
+		let module = rawModule;
+		
+		if (modulePath.endsWith(".cjs") && "default" in rawModule) {
+			// Check if the CJS module explicitly exported a 'default' property
+			const hasExplicitDefault = typeof rawModule.default === "object" && rawModule.default !== null && "default" in rawModule.default;
+			
+			if (!hasExplicitDefault) {
+				// This is Node.js wrapping module.exports in 'default'
+				// Simply unwrap it - use the original module.exports content
+				module = { ...rawModule };
+				module.default = rawModule.default;
+			}
+		}
 
 		if (this.config.debug) console.log("module: ", module);
 		// If default export is a function, expose as callable and attach named exports as properties
@@ -1051,32 +1085,16 @@ const slothletObject = {
 
 			return obj;
 		}
-		// If only named exports and no default, expose the export directly
+		// If only named exports and no default, create module object with named exports
 		const namedExports = Object.entries(module).filter(([k]) => k !== "default");
 		if (this.config.debug) console.log("namedExports: ", namedExports);
 		if (namedExports.length === 1 && !module.default) {
-			if (typeof namedExports[0][1] === "object") {
-				// Flatten single object export
-				if (this.config.debug) console.log("namedExports[0][1] === object: ", namedExports[0][1]);
-				const obj = { ...namedExports[0][1] };
-
-				// Wrap CJS functions in the object
-				// if (isCjsModuleFile) {
-				// 	for (const [key, value] of Object.entries(obj)) {
-				// 		if (typeof value === "function") {
-				// 			obj[key] = this._wrapCjsFunction(value);
-				// 		}
-				// 	}
-				// }
-
-				return obj;
-			}
 			if (typeof namedExports[0][1] === "function") {
 				if (this.config.debug) console.log("namedExports[0][1] === function: ", namedExports[0][1]);
-				// Return single function export directly, wrapped if CJS
-				// return isCjsModuleFile ? this._wrapCjsFunction(namedExports[0][1]) : namedExports[0][1];
+				// Return single function export directly
 				return namedExports[0][1];
 			}
+			// For single object exports, don't flatten - let the upper level handle the API key assignment
 		}
 		const apiExport = {};
 		for (const [exportName, exportValue] of namedExports) {
