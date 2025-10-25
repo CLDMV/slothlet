@@ -197,9 +197,10 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
 		const defaultExportFiles = [];
 
-		// First pass: detect default exports (excluding self-referential defaults)
+		// First pass: detect default exports (including self-referential defaults for counting)
 		const selfReferentialFiles = new Set(); // Track self-referential files
 		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+		let totalDefaultExports = 0;
 
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
@@ -220,6 +221,8 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 			}
 
 			if (rawMod && "default" in rawMod) {
+				totalDefaultExports++; // Count all defaults for multi-default detection
+
 				// Check if default export is self-referential (points to a named export)
 				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
 
@@ -240,13 +243,13 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 				} else {
 					selfReferentialFiles.add(fileName); // Remember this file is self-referential
 					if (instance.config.debug) {
-						console.log(`[DEBUG] Skipped ${fileName} - self-referential default export`);
+						console.log(`[DEBUG] Self-referential ${fileName} - counted toward multi-default but preserved as namespace`);
 					}
 				}
 			}
 		}
 
-		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+		const hasMultipleDefaultExports = totalDefaultExports > 1;
 
 		// Second pass: process files with multi-default awareness
 		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
@@ -315,6 +318,18 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					}
 					// For self-referential exports, use the named export directly to avoid nesting
 					api[apiKey] = mod[apiKey] || mod;
+				} else if (hasMultipleDefaultExports && !mod.default) {
+					// Multi-default context: flatten modules WITHOUT default exports to root
+					if (instance.config.debug) {
+						console.log(`[DEBUG] Multi-default context: flattening ${fileName} (no default export) to root`);
+					}
+					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+					for (const key of moduleKeys) {
+						api[key] = mod[key];
+						if (instance.config.debug) {
+							console.log(`[DEBUG] Multi-default context: flattened ${fileName}.${key} to api.${key}`);
+						}
+					}
 				} else {
 					// Traditional context: preserve as namespace (for root-math.cjs, rootstring.mjs, etc.)
 					// Don't flatten root-level files - they should maintain their namespace structure
@@ -330,10 +345,17 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 							console.log(`[DEBUG] Auto-flattening: ${fileName} exports single named export ${apiKey}`);
 						}
 						api[apiKey] = mod[apiKey];
-					} else if (!mod.default && moduleKeys.length > 0) {
+					} else if (
+						!mod.default &&
+						moduleKeys.length > 0 &&
+						(hasMultipleDefaultExports || (!hasMultipleDefaultExports && moduleFiles.length === 1))
+					) {
 						// Auto-flatten: module has no default export, only named exports → flatten to root
+						// Two cases: 1) Multiple defaults context (flatten non-defaults), 2) Single-file context
 						if (instance.config.debug) {
-							console.log(`[DEBUG] Auto-flattening: ${fileName} has no default, flattening named exports to root: ${moduleKeys.join(", ")}`);
+							console.log(
+								`[DEBUG] Auto-flattening: ${fileName} has no default, flattening named exports to root: ${moduleKeys.join(", ")}`
+							);
 						}
 						// Flatten all named exports directly to api root
 						for (const key of moduleKeys) {

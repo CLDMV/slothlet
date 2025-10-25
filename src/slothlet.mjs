@@ -588,6 +588,15 @@ const slothletObject = {
 				return mod;
 			}
 
+			// NEW: Auto-flatten single-file folders where filename matches folder name and exports object
+			// BUT NOT for root-level files (currentDepth === 0)
+			if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
+				if (this.config.debug) {
+					console.log(`[DEBUG] Single-file auto-flattening: ${categoryName}/${moduleFiles[0].name} -> flatten object contents`);
+				}
+				return mod;
+			}
+
 			// NEW: Flatten if function name matches folder name (case-insensitive) and prefer function name
 			// BUT NOT for root-level files (currentDepth === 0)
 			if (functionNameMatchesFolder && currentDepth > 0) {
@@ -623,16 +632,11 @@ const slothletObject = {
 				}
 				return mod;
 			}
-			// Only flatten objects if not at root level (currentDepth > 0)
-			if (moduleName === categoryName && mod && typeof mod === "object" && !mod.default && currentDepth > 0) {
-				return { ...mod };
-			}
-
 			// Check for auto-flattening: if module has single named export matching filename, use it directly
 			const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 				// Auto-flatten: module exports single named export matching filename
-				return { [moduleName]: mod[moduleName] };
+				return mod[moduleName];
 			}
 
 			return { [moduleName]: mod };
@@ -845,10 +849,12 @@ const slothletObject = {
 							console.log(`[DEBUG] Auto-flattening: ${moduleName} exports single named export ${apiKey}`);
 						}
 						categoryModules[apiKey] = mod[apiKey];
-					} else if (!mod.default && moduleKeys.length > 0) {
-						// Auto-flatten: module has no default export, only named exports → flatten to category
+					} else if (!mod.default && moduleKeys.length > 0 && moduleName === categoryName) {
+						// Auto-flatten: module filename matches folder name and has no default → flatten to category
 						if (this.config.debug) {
-							console.log(`[DEBUG] Auto-flattening: ${moduleName} has no default, flattening named exports to category: ${moduleKeys.join(", ")}`);
+							console.log(
+								`[DEBUG] Auto-flattening: ${moduleName} matches folder name, flattening named exports to category: ${moduleKeys.join(", ")}`
+							);
 						}
 						// Flatten all named exports directly to category
 						for (const key of moduleKeys) {
@@ -967,9 +973,8 @@ const slothletObject = {
 
 			if (!hasExplicitDefault) {
 				// This is Node.js wrapping module.exports in 'default'
-				// Simply unwrap it - use the original module.exports content
-				module = { ...rawModule };
-				module.default = rawModule.default;
+				// Strip the wrapper and use the original module.exports content directly
+				module = rawModule.default;
 			}
 		}
 
@@ -1097,14 +1102,7 @@ const slothletObject = {
 		// If only named exports and no default, create module object with named exports
 		const namedExports = Object.entries(module).filter(([k]) => k !== "default");
 		if (this.config.debug) console.log("namedExports: ", namedExports);
-		if (namedExports.length === 1 && !module.default) {
-			if (typeof namedExports[0][1] === "function") {
-				if (this.config.debug) console.log("namedExports[0][1] === function: ", namedExports[0][1]);
-				// Return single function export directly
-				return namedExports[0][1];
-			}
-			// For single object exports, don't flatten - let the upper level handle the API key assignment
-		}
+		// Always preserve object structure - let the upper level handle API key assignment
 		const apiExport = {};
 		for (const [exportName, exportValue] of namedExports) {
 			// Wrap CJS functions
