@@ -154,6 +154,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
+import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 
 /**
  * @function create
@@ -198,7 +199,7 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		const defaultExportFiles = [];
 
 		// Use shared multi-default detection utility
-		const { multidefault_analyzeModules } = await import("../helpers/multidefault.mjs");
+		const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
 		const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
 
 		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
@@ -242,100 +243,24 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 			// Check if this file was identified as self-referential in the first pass
 			const isSelfReferential = selfReferentialFiles.has(fileName);
 
-			if (mod && typeof mod.default === "function") {
-				if (hasMultipleDefaultExports && !isSelfReferential) {
-					// Multi-default case: use filename as API key
-					api[apiKey] = mod.default;
-
-					// Also add named exports to the function
-					for (const [key, value] of Object.entries(mod)) {
-						if (key !== "default") {
-							api[apiKey][key] = value;
-						}
-					}
-
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Multi-default in lazy mode: using filename '${apiKey}' for default export`);
-					}
-				} else if (isSelfReferential) {
-					// Self-referential case: treat as namespace (preserve both named and default)
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Self-referential default export: preserving ${fileName} as namespace`);
-					}
-					api[apiKey] = mod;
-				} else {
-					// Traditional single default case: becomes root API
-					// BUT only if we don't have multiple defaults
-					if (!hasMultipleDefaultExports && !rootDefaultFn) {
-						rootDefaultFn = mod.default;
-					}
-					for (const [k, v] of Object.entries(mod)) {
-						if (k !== "default") api[k] = v;
-					}
+			// Use centralized API builder for module processing
+			processModuleForAPI({
+				mod,
+				fileName,
+				apiKey,
+				hasMultipleDefaultExports,
+				isSelfReferential,
+				api,
+				getRootDefault: () => rootDefaultFn,
+				setRootDefault: (fn) => {
+					rootDefaultFn = fn;
+				},
+				context: {
+					debug: instance.config.debug,
+					mode: "root",
+					totalModules: moduleFiles.length
 				}
-			} else {
-				// No default export OR self-referential default: In multi-default scenarios, files without defaults should flatten to root
-				// In single/no default scenarios, preserve as namespace (traditional behavior)
-				if (instance.config.debug) {
-					console.log(`[DEBUG] Processing non-default exports for ${fileName}`);
-				}
-
-				if (isSelfReferential) {
-					// Self-referential case: use the named export directly (since default === named)
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Self-referential: preserving ${fileName} as namespace`);
-					}
-					// For self-referential exports, use the named export directly to avoid nesting
-					api[apiKey] = mod[apiKey] || mod;
-				} else if (hasMultipleDefaultExports && !mod.default) {
-					// Multi-default context: flatten modules WITHOUT default exports to root
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Multi-default context: flattening ${fileName} (no default export) to root`);
-					}
-					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-					for (const key of moduleKeys) {
-						api[key] = mod[key];
-						if (instance.config.debug) {
-							console.log(`[DEBUG] Multi-default context: flattened ${fileName}.${key} to api.${key}`);
-						}
-					}
-				} else {
-					// Traditional context: preserve as namespace (for root-math.cjs, rootstring.mjs, etc.)
-					// Don't flatten root-level files - they should maintain their namespace structure
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
-					}
-
-					// Check for auto-flattening: if module has single named export matching filename, use it directly
-					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
-						// Auto-flatten: module exports single named export matching filename
-						if (instance.config.debug) {
-							console.log(`[DEBUG] Auto-flattening: ${fileName} exports single named export ${apiKey}`);
-						}
-						api[apiKey] = mod[apiKey];
-					} else if (
-						!mod.default &&
-						moduleKeys.length > 0 &&
-						(hasMultipleDefaultExports || (!hasMultipleDefaultExports && moduleFiles.length === 1))
-					) {
-						// Auto-flatten: module has no default export, only named exports → flatten to root
-						// Two cases: 1) Multiple defaults context (flatten non-defaults), 2) Single-file context
-						if (instance.config.debug) {
-							console.log(
-								`[DEBUG] Auto-flattening: ${fileName} has no default, flattening named exports to root: ${moduleKeys.join(", ")}`
-							);
-						}
-						// Flatten all named exports directly to api root
-						for (const key of moduleKeys) {
-							api[key] = mod[key];
-						}
-					} else {
-						// Regular namespace preservation
-						api[apiKey] = mod;
-					}
-				}
-			}
+			});
 		}
 	}
 

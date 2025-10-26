@@ -121,6 +121,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
+import { processModuleForAPI, loadAndProcessModule, getCategoryBuildingDecisions } from "@cldmv/slothlet/helpers/api_builder";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -522,12 +523,11 @@ const slothletObject = {
 	},
 
 	/**
-	 * Unified category builder supporting eager and lazy strategies.
+	 * Unified category builder supporting eager and lazy strategies using centralized decision logic.
 	 * When mode === 'eager' it recursively materializes subdirectories.
 	 * When mode === 'lazy' it delegates subdirectory handling to the provided subdirHandler
 	 * without loading their contents (allowing proxy creation by caller).
-	 * Shared responsibilities: file scanning, single-file flattening, export merging,
-	 * upward flattening heuristics, function naming.
+	 * Now uses centralized decision functions for consistent API structure logic.
 	 *
 	 * @async
 	 * @param {string} categoryPath
@@ -677,7 +677,7 @@ const slothletObject = {
 		const categoryModules = {};
 
 		// Use shared multi-default detection utility
-		const { multidefault_analyzeModules } = await import("./lib/helpers/multidefault.mjs");
+		const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
 		const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, this.config.debug);
 
 		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
@@ -994,157 +994,134 @@ const slothletObject = {
 	 * @async
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} modulePath
+	 * @param {boolean} [rootLevel=false] - Whether this is a root-level module
 	 * @returns {Promise<object>}
 	 * @private
 	 * @internal
 	 */
 	async _loadSingleModule(modulePath, rootLevel = false) {
-		const moduleUrl = pathToFileURL(modulePath).href;
+		// Use centralized module loading logic
+		return await loadAndProcessModule(modulePath, {
+			rootLevel,
+			debug: this.config.debug,
+			instance: this
+		});
+	},
 
-		// console.log("moduleUrl: ", moduleUrl);
-		const rawModule = await import(moduleUrl);
+	/**
+	 * Enhanced category builder using centralized decision logic.
+	 * This is a test version that uses the decision functions to maintain the same behavior
+	 * but with centralized logic that both eager and lazy modes can benefit from.
+	 * @async
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} categoryPath
+	 * @param {object} [options]
+	 * @param {number} [options.currentDepth=0]
+	 * @param {number} [options.maxDepth=Infinity]
+	 * @param {'eager'|'lazy'} [options.mode='eager']
+	 * @param {Function} [options.subdirHandler] - (ctx) => node; only used in lazy mode
+	 * @returns {Promise<function|object>}
+	 * @private
+	 * @internal
+	 */
+	async _buildCategoryEnhanced(categoryPath, options = {}) {
+		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
-		// For CJS files, unwrap Node.js's automatic default wrapper if needed
-		let module = rawModule;
+		// Get centralized building decisions
+		const decisions = await getCategoryBuildingDecisions(categoryPath, {
+			instance: this,
+			currentDepth,
+			maxDepth,
+			debug: this.config.debug
+		});
 
-		if (modulePath.endsWith(".cjs") && "default" in rawModule) {
-			// Always unwrap CJS files - Node.js wraps module.exports in a 'default' property
-			// Whether the original module.exports had explicit defaults or not, we need to unwrap
-			module = rawModule.default;
-		}
+		const { processingStrategy, categoryName, processedModules, subDirectories } = decisions;
 
-		if (this.config.debug) console.log("module: ", module);
-		// If default export is a function, expose as callable and attach named exports as properties
-		if (typeof module.default === "function") {
-			let fn;
-			if (rootLevel) {
-				fn = module;
-			} else {
-				fn = module.default;
-				// Mark as originating from a default export so category flatten logic can detect
-				try {
-					Object.defineProperty(fn, "__slothletDefault", { value: true, enumerable: false });
-				} catch {
-					// ignore
-				}
+		// SINGLE FILE CASE - use the same logic as original but with decisions
+		if (processingStrategy === "single-file" && processedModules.length === 1) {
+			const { processedModule, flattening } = processedModules[0];
 
-				// Wrap CJS functions with instance context
-				// if (isCjsModuleFile) {
-				// 	if (this.config.debug) console.log("Wrapping CJS default function");
-				// 	fn = this._wrapCjsFunction(fn);
-				// }
-
-				for (const [exportName, exportValue] of Object.entries(module)) {
-					if (exportName !== "default") {
-						// Wrap CJS functions
-						// if (isCjsModuleFile && typeof exportValue === "function") {
-						// 	if (this.config.debug) console.log("Wrapping CJS named export:", exportName);
-						// 	fn[this._toApiKey(exportName)] = this._wrapCjsFunction(exportValue);
-						// } else {
-						fn[this._toApiKey(exportName)] = exportValue;
-						// }
+			if (flattening.shouldFlatten) {
+				// Apply the flattening decision
+				if (typeof processedModule === "function") {
+					try {
+						Object.defineProperty(processedModule, "name", { value: flattening.apiKey, configurable: true });
+					} catch {
+						// ignore
 					}
 				}
-				if (this.config.debug) console.log("fn: ", fn);
+				return processedModule;
 			}
-			return fn;
+
+			// No flattening - return as namespace
+			return { [flattening.apiKey]: processedModule };
 		}
 
-		const moduleExports = Object.entries(module);
-		// If there are no exports, throw a clear error
-		if (!moduleExports.length) {
-			throw new Error(
-				`slothlet: No exports found in module '${modulePath}'. The file is empty or does not export any function/object/variable.`
-			);
+		// MULTI-FILE CASE - use processed modules from decisions
+		const categoryModules = {};
+
+		for (const { processedModule, flattening } of processedModules) {
+			categoryModules[flattening.apiKey] = processedModule;
 		}
-		if (this.config.debug) console.log("moduleExports: ", moduleExports);
 
-		// Handle both module.default and moduleExports[0][1] for callable and object default exports
-		const defaultExportObj =
-			typeof module.default === "object" && module.default !== null
-				? module.default
-				: typeof moduleExports[0][1] === "object" && typeof moduleExports[0][1].default === "function" && moduleExports[0][1] !== null
-					? moduleExports[0][1]
-					: null;
-		let objectName = null;
-		if (typeof module.default === "function" && module.default.name) {
-			objectName = module.default.name;
-		} else if (moduleExports[0] && moduleExports[0][0] !== "default") {
-			objectName = moduleExports[0][0];
-		}
-		// const defaultExportFn =
-		// 	typeof module.default === "function" ? module.default : typeof moduleExports[0][1] === "function" ? moduleExports[0][1] : null;
+		// SUBDIRECTORIES - handle the same as original
+		for (const { dirEntry: subDirEntry, apiKey: key } of subDirectories) {
+			const subDirPath = path.join(categoryPath, subDirEntry.name);
+			let subModule;
 
-		if (this.config.debug) console.log("defaultExportObj: ", defaultExportObj);
-		if (this.config.debug) console.log("objectName: ", objectName);
-
-		if (defaultExportObj && typeof defaultExportObj.default === "function") {
-			if (this.config.debug) console.log("DEFAULT FUNCTION FOUND FOR: ", module);
-			/**
-			 * Wraps an object with a callable default property as a function.
-			 * @param {...any} args - Arguments to pass to the default function.
-			 * @returns {any}
-			 * @private
-			 * @internal
-			 * @example
-			 * api(...args); // calls default
-			 */
-			const callableApi = {
-				[objectName]: function (...args) {
-					return defaultExportObj.default.apply(defaultExportObj, args);
-				}
-			}[objectName];
-			for (const [methodName, method] of Object.entries(defaultExportObj)) {
-				if (methodName === "default") continue;
-				callableApi[methodName] = method;
+			if (mode === "lazy" && typeof subdirHandler === "function") {
+				subModule = subdirHandler({
+					subDirEntry,
+					subDirPath,
+					key,
+					categoryModules,
+					currentDepth,
+					maxDepth
+				});
+			} else {
+				// Recursive call using enhanced version
+				subModule = await this._buildCategoryEnhanced(subDirPath, {
+					currentDepth: currentDepth + 1,
+					maxDepth,
+					mode: "eager"
+				});
 			}
-			// for (const [exportName, exportValue] of Object.entries(module)) {
-			// 	if (exportName !== "default" && exportValue !== callableApi) {
-			// 		callableApi[exportName] = exportValue;
-			// 	}
-			// }
-			if (this.config.debug) console.log("callableApi", callableApi);
-			return callableApi;
-		} else if (defaultExportObj) {
-			if (this.config.debug) console.log("DEFAULT FOUND FOR: ", module);
 
-			const obj = { ...defaultExportObj };
+			// Apply function name preference logic
+			if (
+				typeof subModule === "function" &&
+				subModule.name &&
+				subModule.name.toLowerCase() === key.toLowerCase() &&
+				subModule.name !== key
+			) {
+				categoryModules[subModule.name] = subModule;
+			} else {
+				categoryModules[key] = subModule;
+			}
+		}
 
-			// Wrap CJS functions in the default export object
-			// if (isCjsModuleFile) {
-			// 	if (this.config.debug) console.log("Wrapping CJS functions in default export object");
-			// 	for (const [key, value] of Object.entries(obj)) {
-			// 		if (typeof value === "function") {
-			// 			if (this.config.debug) console.log(`Wrapping CJS function: ${key}`);
-			// 			obj[key] = this._wrapCjsFunction(value);
-			// 		}
-			// 	}
-			// }
-
-			for (const [exportName, exportValue] of Object.entries(module)) {
-				if (exportName !== "default" && exportValue !== obj) {
-					// Skip named exports that exist in the default export (they're already wrapped)
-					// if (isCjsModuleFile && exportName in defaultExportObj) {
-					// 	if (this.config.debug) console.log(`Skipping named export '${exportName}' - already wrapped in default export`);
-					// 	continue;
-					// }
-					obj[this._toApiKey(exportName)] = exportValue;
+		// UPWARD FLATTENING - same logic as original
+		const keys = Object.keys(categoryModules);
+		if (keys.length === 1) {
+			const singleKey = keys[0];
+			if (singleKey === categoryName) {
+				const single = categoryModules[singleKey];
+				if (typeof single === "function") {
+					if (single.name !== categoryName) {
+						try {
+							Object.defineProperty(single, "name", { value: categoryName, configurable: true });
+						} catch {
+							// ignore
+						}
+					}
+					return single;
+				} else if (single && typeof single === "object" && !Array.isArray(single)) {
+					return single;
 				}
 			}
+		}
 
-			return obj;
-		}
-		// If only named exports and no default, create module object with named exports
-		const namedExports = Object.entries(module).filter(([k]) => k !== "default");
-		if (this.config.debug) console.log("namedExports: ", namedExports);
-		// Always preserve object structure - let the upper level handle API key assignment
-		const apiExport = {};
-		for (const [exportName, exportValue] of namedExports) {
-			// Wrap CJS functions
-			// apiExport[exportName] = isCjsModuleFile && typeof exportValue === "function" ? this._wrapCjsFunction(exportValue) : exportValue;
-			apiExport[this._toApiKey(exportName)] = exportValue;
-		}
-		return apiExport;
+		return categoryModules;
 	},
 
 	/**
