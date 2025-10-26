@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:37 -07:00 (1761266377)
+ *	@Last modified time: 2025-10-25 21:53:10 -07:00 (1761454390)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -594,7 +594,38 @@ const slothletObject = {
 				if (this.config.debug) {
 					console.log(`[DEBUG] Single-file auto-flattening: ${categoryName}/${moduleFiles[0].name} -> flatten object contents`);
 				}
+				// Check if module exports single named export matching filename, and flatten it
+				const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+				if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
+					// Return the contents of the named export directly (flatten it)
+					return mod[moduleName];
+				}
 				return mod;
+			}
+
+			// NEW: Auto-flatten single-file folders to parent level (eliminate intermediate filename namespace)
+			// This handles cases like nest4/singlefile.mjs -> api.nest4.beta() instead of api.nest4.singlefile.beta()
+			// BUT NOT for root-level files (currentDepth === 0)
+			// BUT ONLY when the filename doesn't match a meaningful namespace (avoid double-flattening)
+			if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
+				const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+				const fileName = moduleFiles[0].name.replace(/\.(mjs|cjs|js)$/, "");
+
+				// Only flatten if filename is generic/meaningless (like "singlefile", "index")
+				// Don't flatten if filename represents a meaningful namespace (like "self-object" -> "selfObject")
+				const isGenericFilename = ["singlefile", "index", "main", "default"].includes(fileName.toLowerCase());
+
+				// If single file has single export AND filename is generic, flatten to parent level
+				if (moduleKeys.length === 1 && isGenericFilename) {
+					if (this.config.debug) {
+						console.log(
+							`[DEBUG] Single-file parent-level auto-flattening: ${categoryName}/${moduleFiles[0].name} -> flatten to parent level`
+						);
+					}
+					const exportValue = mod[moduleKeys[0]];
+					// Return an object with the export name as key, promoting it to parent level
+					return { [moduleKeys[0]]: exportValue };
+				}
 			}
 
 			// NEW: Flatten if function name matches folder name (case-insensitive) and prefer function name
@@ -645,59 +676,27 @@ const slothletObject = {
 		// MULTI-FILE CASE
 		const categoryModules = {};
 
-		// NEW: Detect if we have multiple files with default exports in the same folder
+		// Use shared multi-default detection utility
+		const { multidefault_analyzeModules } = await import("./lib/helpers/multidefault.mjs");
+		const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, this.config.debug);
+
+		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
+
+		// Convert analysis results to match existing structure
 		const defaultExportFiles = [];
-		const selfReferentialFiles = new Set(); // Track self-referential files
-		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
-		let totalDefaultExports = 0; // Count ALL defaults (including self-referential)
-
-		// First pass: Load raw modules and detect self-referential exports
-		for (const file of moduleFiles) {
-			const moduleExt = path.extname(file.name);
-			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
-			const moduleFilePath = path.resolve(categoryPath, file.name);
-
-			// Load raw module once and cache it
-			const rawMod = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
-			rawModuleCache.set(file.name, rawMod);
-
-			// Check if this module has a default export by looking at the raw module
-			if (rawMod && "default" in rawMod) {
-				totalDefaultExports++; // Count all defaults for multi-default context
-				
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
-
-				if (this.config.debug) {
-					console.log(`[DEBUG] _buildCategory: Checking ${file.name} in ${categoryPath}`);
-					console.log(`[DEBUG]   - moduleName: ${moduleName}`);
-					console.log(`[DEBUG]   - has default: ${rawMod && "default" in rawMod}`);
-					console.log(`[DEBUG]   - isSelfReferential: ${isSelfReferential}`);
-				}
-
-				if (!isSelfReferential) {
-					// Load processed module only for non-self-referential defaults
-					const processedMod = await this._loadSingleModule(path.join(categoryPath, file.name));
-					defaultExportFiles.push({ file, moduleName, mod: processedMod });
-					if (this.config.debug) {
-						console.log(`[DEBUG] Found default export in ${file.name} (non-self-referential)`);
-					}
-				} else {
-					selfReferentialFiles.add(moduleName); // Remember this file is self-referential
-					if (this.config.debug) {
-						console.log(`[DEBUG] Skipped ${file.name} - self-referential default export`);
-					}
-				}
+		for (const { fileName } of analysisDefaults) {
+			const file = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+			if (file) {
+				const processedMod = await this._loadSingleModule(path.join(categoryPath, file.name));
+				defaultExportFiles.push({ file, moduleName: this._toApiKey(fileName), mod: processedMod });
 			}
 		}
 
-		// Multi-default context: triggered when there are multiple files with defaults (including self-referential)
-		const hasMultipleDefaultExports = totalDefaultExports > 1;
-
 		if (this.config.debug) {
-			console.log(`[DEBUG] selfReferentialFiles Set:`, Array.from(selfReferentialFiles));
-			console.log(`[DEBUG] totalDefaultExports:`, totalDefaultExports);
-			console.log(`[DEBUG] hasMultipleDefaultExports:`, hasMultipleDefaultExports);
+			console.log(`[DEBUG] _buildCategory: Using shared multidefault utility results`);
+			console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
+			console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
+			console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
 		}
 
 		for (const file of moduleFiles) {
@@ -848,7 +847,30 @@ const slothletObject = {
 					// Check for auto-flattening: if module has single named export matching filename, use it directly
 					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 					const apiKey = this._toApiKey(moduleName);
-					
+
+					// NEW: Single default export flattening (regardless of filename matching)
+					// ONLY when there's a single default export in the folder (not multiple defaults)
+					if (this.config.debug) {
+						console.log(
+							`[DEBUG] Checking single default flattening for ${moduleName}: hasMultipleDefaultExports=${hasMultipleDefaultExports}, hasDefault=${!!mod.default}, defaultIsObject=${mod.default && typeof mod.default === "object"}`
+						);
+					}
+					if (!hasMultipleDefaultExports && mod.default && typeof mod.default === "object") {
+						// Flatten the default export and merge named exports
+						const flattened = { ...mod.default };
+						// Add any named exports to the flattened default
+						for (const [key, value] of Object.entries(mod)) {
+							if (key !== "default") {
+								flattened[key] = value;
+							}
+						}
+						if (this.config.debug) {
+							console.log(`[DEBUG] Single default export flattening: ${categoryName}/${file.name} -> flatten default contents`);
+						}
+						categoryModules[apiKey] = flattened;
+						continue; // Skip other processing for this module
+					}
+
 					// NEW: Multi-default auto-flattening for subfolders
 					if (hasMultipleDefaultExports && !mod.default && moduleKeys.length > 0) {
 						// Multi-default context: flatten modules WITHOUT default exports to category
@@ -986,14 +1008,9 @@ const slothletObject = {
 		let module = rawModule;
 
 		if (modulePath.endsWith(".cjs") && "default" in rawModule) {
-			// Check if the CJS module explicitly exported a 'default' property
-			const hasExplicitDefault = typeof rawModule.default === "object" && rawModule.default !== null && "default" in rawModule.default;
-
-			if (!hasExplicitDefault) {
-				// This is Node.js wrapping module.exports in 'default'
-				// Strip the wrapper and use the original module.exports content directly
-				module = rawModule.default;
-			}
+			// Always unwrap CJS files - Node.js wraps module.exports in a 'default' property
+			// Whether the original module.exports had explicit defaults or not, we need to unwrap
+			module = rawModule.default;
 		}
 
 		if (this.config.debug) console.log("module: ", module);

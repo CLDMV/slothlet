@@ -275,9 +275,10 @@ async function inspectApi(apiName, options = {}) {
 			}
 		}
 
-		// Show shutdown method if available
+		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
-			console.log(chalk.yellow("\n💡 Remember to call api.shutdown() when done"));
+			await api.shutdown();
+			console.log(chalk.green("✅ API instance shutdown cleanly"));
 		}
 	} catch (error) {
 		console.error(chalk.red("❌ Error loading API:"), error.message);

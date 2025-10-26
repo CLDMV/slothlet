@@ -197,59 +197,28 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
 		const defaultExportFiles = [];
 
-		// First pass: detect default exports (including self-referential defaults for counting)
-		const selfReferentialFiles = new Set(); // Track self-referential files
-		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
-		let totalDefaultExports = 0;
+		// Use shared multi-default detection utility
+		const { multidefault_analyzeModules } = await import("../helpers/multidefault.mjs");
+		const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
 
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
+		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
-			if (instance.config.debug) {
-				console.log(`[DEBUG] First pass processing: ${fileName}`);
-			}
-
-			// Load raw module first and cache it
-			const modulePath = path.resolve(dir, entry.name);
-			const rawMod = await import(`file://${modulePath.replace(/\\/g, "/")}`);
-			rawModuleCache.set(entry.name, rawMod);
-
-			if (instance.config.debug && fileName === "config") {
-				console.log(`[DEBUG] First pass - raw config keys:`, Object.keys(rawMod || {}));
-				console.log(`[DEBUG] First pass - raw config has default:`, rawMod && "default" in rawMod);
-			}
-
-			if (rawMod && "default" in rawMod) {
-				totalDefaultExports++; // Count all defaults for multi-default detection
-
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
-
-				// Debug self-referential detection
-				if (instance.config.debug && fileName === "config") {
-					console.log(`[DEBUG] First pass - ${fileName} self-referential check:`);
-					console.log(`[DEBUG] - rawMod.default === rawMod.config: ${rawMod.default === rawMod.config}`);
-					console.log(`[DEBUG] - isSelfReferential result: ${isSelfReferential}`);
-				}
-
-				if (!isSelfReferential) {
-					// Load processed module only for non-self-referential defaults
-					const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-					defaultExportFiles.push({ entry, fileName, mod });
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
-					}
-				} else {
-					selfReferentialFiles.add(fileName); // Remember this file is self-referential
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Self-referential ${fileName} - counted toward multi-default but preserved as namespace`);
-					}
-				}
+		// Convert analysis results to match existing structure
+		defaultExportFiles.length = 0; // Clear existing array
+		for (const { fileName } of analysisDefaults) {
+			const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+			if (entry) {
+				const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
+				defaultExportFiles.push({ entry, fileName, mod });
 			}
 		}
 
-		const hasMultipleDefaultExports = totalDefaultExports > 1;
+		if (instance.config.debug) {
+			console.log(`[DEBUG] Lazy mode: Using shared multidefault utility results`);
+			console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
+			console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
+			console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
+		}
 
 		// Second pass: process files with multi-default awareness
 		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads

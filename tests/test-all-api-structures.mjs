@@ -75,7 +75,18 @@ async function runInspection(folderName, lazy) {
 			stderr += data.toString();
 		});
 
+		// Add timeout to prevent hanging
+		const timeout = setTimeout(() => {
+			childProcess.kill();
+			resolve({
+				success: false,
+				output: stdout,
+				error: "Process timeout after 30 seconds"
+			});
+		}, 30000);
+
 		childProcess.on("close", (code) => {
+			clearTimeout(timeout); // Clear the timeout when process completes
 			if (code === 0) {
 				resolve({ success: true, output: stdout });
 			} else {
@@ -86,16 +97,6 @@ async function runInspection(folderName, lazy) {
 				});
 			}
 		});
-
-		// Add timeout to prevent hanging
-		setTimeout(() => {
-			childProcess.kill();
-			resolve({
-				success: false,
-				output: stdout,
-				error: "Process timeout after 30 seconds"
-			});
-		}, 30000);
 	});
 }
 

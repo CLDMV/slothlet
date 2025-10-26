@@ -36,5 +36,5 @@
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(await api_test.task.autoIp()); // "testAutoIP"
  */
-export function autoIP(): Promise<string>;
+export default function autoIP(): Promise<string>;
 //# sourceMappingURL=auto-ip.d.mts.map

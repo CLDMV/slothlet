@@ -136,6 +136,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 // import { runWithCtx } from "@cldmv/slothlet/runtime";
+import { processModule } from "../helpers/module_processor.mjs";
 
 /**
  * @function eager_wrapWithRunCtx
@@ -267,48 +268,24 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 		// NEW: Detect multiple default exports for multi-default handling
 		const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
 		const defaultExportFiles = [];
-		const selfReferentialFiles = new Set(); // Store self-referential detection results
+		// Use shared multi-default detection utility
+		const { multidefault_analyzeModules } = await import("../helpers/multidefault.mjs");
+		const analysis = await multidefault_analyzeModules(moduleFiles, dir, this.config.debug);
 
-		// First pass: detect default exports (including self-referential defaults for counting)
-		// Use raw module import like lazy mode does for proper default export detection
-		let totalDefaultExports = 0;
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
+		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
-			// Load raw module first (like lazy mode does)
-			const modulePath = path.resolve(dir, entry.name);
-			const rawMod = await import(`file://${modulePath.replace(/\\/g, "/")}`);
-
-			if (this.config.debug) {
-				console.log(`[DEBUG] First pass - ${fileName}: hasDefault=${rawMod && "default" in rawMod}`);
-			}
-
-			if (rawMod && "default" in rawMod) {
-				totalDefaultExports++; // Count all defaults for multi-default detection
-
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
-
-				if (isSelfReferential) {
-					// Store self-referential result for second pass
-					selfReferentialFiles.add(fileName);
-					if (this.config.debug) {
-						console.log(`[DEBUG] Self-referential ${fileName} - counted toward multi-default but preserved as namespace`);
-					}
-				} else {
-					// Load processed module only for non-self-referential defaults
-					const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
-					defaultExportFiles.push({ entry, fileName, mod });
-					if (this.config.debug) {
-						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
-					}
-				}
+		// Convert analysis results to match existing structure
+		defaultExportFiles.length = 0; // Clear existing array
+		for (const { fileName } of analysisDefaults) {
+			const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+			if (entry) {
+				const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
+				defaultExportFiles.push({ entry, fileName, mod });
 			}
 		}
-		const hasMultipleDefaultExports = totalDefaultExports > 1;
 
 		if (this.config.debug) {
+			console.log(`[DEBUG] Eager mode: Using shared multidefault utility results`);
 			console.log(
 				`[DEBUG] Detection result: ${totalDefaultExports} total defaults (${defaultExportFiles.length} non-self-referential + ${selfReferentialFiles.size} self-referential), hasMultipleDefaultExports=${hasMultipleDefaultExports}`
 			);
@@ -325,16 +302,13 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 			const apiKey = this._toApiKey(fileName);
 			const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
 
-			// Load raw module for detection purposes
-			const rawMod = await import(`file://${path.join(dir, entry.name).replace(/\\/g, "/")}`);
-
 			// Use stored self-referential detection result from first pass
 			const isSelfReferential = selfReferentialFiles.has(fileName);
 
-			if (mod && typeof rawMod.default === "function") {
+			if (mod && typeof mod.default === "function") {
 				if (hasMultipleDefaultExports && !isSelfReferential) {
 					// Multi-default case: use filename as API key
-					api[apiKey] = rawMod.default;
+					api[apiKey] = mod.default;
 
 					// Also add named exports to the function
 					for (const [key, value] of Object.entries(mod)) {
@@ -361,9 +335,9 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 						);
 					}
 					if (!hasMultipleDefaultExports && !rootDefaultFunction) {
-						rootDefaultFunction = rawMod.default;
+						rootDefaultFunction = mod.default;
 						if (this.config.debug) {
-							console.log(`[DEBUG] Set rootDefaultFunction to:`, rawMod.default.name);
+							console.log(`[DEBUG] Set rootDefaultFunction to:`, mod.default.name);
 						}
 					}
 					// Only add named exports to root level in traditional single-default case
@@ -384,14 +358,21 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 					if (this.config.debug) {
 						console.log(`[DEBUG] Self-referential ${fileName}: preserving as namespace`);
 					}
-					api[apiKey] = rawMod.default; // Use the default export as the namespace
+					// For self-referential exports, use the named export directly to avoid nesting
+					api[apiKey] = mod[apiKey] || mod;
 				} else if (hasMultipleDefaultExports && mod.default) {
 					// Multi-default context: preserve modules WITH default exports as namespaces
 					if (this.config.debug) {
 						console.log(`[DEBUG] Multi-default context: preserving ${fileName} as namespace (has default export)`);
 					}
-					// In multi-default context, preserve modules with defaults as namespaces (don't flatten)
-					api[apiKey] = mod;
+					// In multi-default context, flatten the default export and add named exports
+					api[apiKey] = mod.default;
+					// Add named exports to the default
+					for (const [key, value] of Object.entries(mod)) {
+						if (key !== "default") {
+							api[apiKey][key] = value;
+						}
+					}
 					if (this.config.debug) {
 						console.log(`[DEBUG] Multi-default context: preserved ${fileName} as namespace ${apiKey}`);
 					}

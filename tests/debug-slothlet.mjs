@@ -447,8 +447,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["advanced", "nest3"], args: ["slothlet"] }]
 		},
 		{
-			section: "advanced.nest",
-			calls: [{ path: ["advanced", "nest"], args: ["slothlet"] }]
+			section: "advanced.nest.alpha",
+			calls: [{ path: ["advanced", "nest", "alpha"], args: ["slothlet"] }]
 		},
 		{
 			section: "advanced.nest2.alpha.hello",
@@ -459,8 +459,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["advanced", "nest2", "beta", "world"], args: [] }]
 		},
 		{
-			section: "advanced.nest4.singlefile",
-			calls: [{ path: ["advanced", "nest4", "singlefile"], args: ["singlefile"] }]
+			section: "advanced.nest4.beta",
+			calls: [{ path: ["advanced", "nest4", "beta"], args: ["singlefile"] }]
 		},
 
 		// exportDefault
