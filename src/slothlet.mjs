@@ -645,10 +645,11 @@ const slothletObject = {
 		// MULTI-FILE CASE
 		const categoryModules = {};
 
-		// NEW: Detect if we have multiple files with default exports in the same folder (excluding self-referential defaults)
+		// NEW: Detect if we have multiple files with default exports in the same folder
 		const defaultExportFiles = [];
 		const selfReferentialFiles = new Set(); // Track self-referential files
 		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+		let totalDefaultExports = 0; // Count ALL defaults (including self-referential)
 
 		// First pass: Load raw modules and detect self-referential exports
 		for (const file of moduleFiles) {
@@ -662,6 +663,8 @@ const slothletObject = {
 
 			// Check if this module has a default export by looking at the raw module
 			if (rawMod && "default" in rawMod) {
+				totalDefaultExports++; // Count all defaults for multi-default context
+				
 				// Check if default export is self-referential (points to a named export)
 				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
 
@@ -688,10 +691,12 @@ const slothletObject = {
 			}
 		}
 
-		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+		// Multi-default context: triggered when there are multiple files with defaults (including self-referential)
+		const hasMultipleDefaultExports = totalDefaultExports > 1;
 
 		if (this.config.debug) {
 			console.log(`[DEBUG] selfReferentialFiles Set:`, Array.from(selfReferentialFiles));
+			console.log(`[DEBUG] totalDefaultExports:`, totalDefaultExports);
 			console.log(`[DEBUG] hasMultipleDefaultExports:`, hasMultipleDefaultExports);
 		}
 
@@ -843,7 +848,20 @@ const slothletObject = {
 					// Check for auto-flattening: if module has single named export matching filename, use it directly
 					const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
 					const apiKey = this._toApiKey(moduleName);
-					if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+					
+					// NEW: Multi-default auto-flattening for subfolders
+					if (hasMultipleDefaultExports && !mod.default && moduleKeys.length > 0) {
+						// Multi-default context: flatten modules WITHOUT default exports to category
+						if (this.config.debug) {
+							console.log(`[DEBUG] Multi-default context: flattening ${moduleName} (no default export) to category`);
+						}
+						for (const key of moduleKeys) {
+							categoryModules[key] = mod[key];
+							if (this.config.debug) {
+								console.log(`[DEBUG] Multi-default context: flattened ${moduleName}.${key} to category.${key}`);
+							}
+						}
+					} else if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
 						// Auto-flatten: module exports single named export matching filename
 						if (this.config.debug) {
 							console.log(`[DEBUG] Auto-flattening: ${moduleName} exports single named export ${apiKey}`);

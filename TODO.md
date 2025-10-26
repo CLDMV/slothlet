@@ -23,14 +23,14 @@
 - **Status**: ✅ FIXED - Both eager and lazy modes now work correctly at root level
 - **Files**: `src/lib/modes/slothlet_lazy.mjs` ✅
 
-### 1.1. 🚨 **URGENT: Fix Subfolder Multi-Default Auto-Flattening**
+### 1.1. ✅ **COMPLETED: Fix Subfolder Multi-Default Auto-Flattening**
 
-- **Issue**: Subfolders in BOTH modes are not applying multi-default auto-flattening logic
-- **Current State**: Files without defaults in subfolders (e.g., connection files) preserve namespaces instead of flattening
-- **Expected**: Files without defaults should flatten exports to parent when multiple defaults exist in subfolder
-- **Impact**: Inconsistent behavior between root-level and subfolder processing
-- **Files**: Both `src/lib/modes/slothlet_eager.mjs` and `src/lib/modes/slothlet_lazy.mjs` subfolder logic
-- **Priority**: HIGH - Core functionality missing in subfolders
+- **Issue**: Subfolders in BOTH modes were not applying multi-default auto-flattening logic
+- **Solution**: Fixed `_buildCategory` method in `src/slothlet.mjs` to count ALL defaults (including self-referential) for multi-default context detection
+- **Result**: Files without defaults now properly flatten in subfolders when multiple defaults exist
+- **Impact**: Consistent behavior between root-level and subfolder processing in both eager and lazy modes
+- **Files**: `src/slothlet.mjs` (lines 650-698) ✅
+- **Priority**: ✅ COMPLETED - Core functionality now works correctly in subfolders
 
 ### 2. 🔄 **Performance: Eliminate Redundant Module Loading**
 
@@ -68,15 +68,15 @@
 
 ## Implementation Plan
 
-### Phase 1: Fix Multi-Default Auto-Flattening (IMMEDIATE)
+### Phase 1: Fix Multi-Default Auto-Flattening (COMPLETED ✅)
 
 - [x] ✅ Apply multi-default detection logic to lazy mode
 - [x] ✅ Ensure self-referential counting matches eager mode
 - [x] ✅ Add debug output for lazy mode multi-default processing
 - [x] ✅ Test TV API with lazy mode to verify flattening
-- [ ] **CRITICAL**: Fix subfolder multi-default auto-flattening in both modes (`_buildCategory` recursive calls)
-- [ ] Test subfolder scenarios (e.g., `api_tests/api_tv_test/subfolder/connection.mjs` should flatten)
-- [ ] Ensure consistency between root and subfolder behavior
+- [x] ✅ **CRITICAL**: Fix subfolder multi-default auto-flattening in both modes (`_buildCategory` method)
+- [x] ✅ Test subfolder scenarios (e.g., `api_tests/api_tv_test/subfolder/connection.mjs` now flattens to `api.subfolder.connect()`)
+- [x] ✅ Ensure consistency between root and subfolder behavior
 
 ### Phase 2: Module Caching Strategy (SHORT TERM)
 
@@ -160,9 +160,9 @@ export class ModuleProcessor {
 - [x] ✅ Lazy mode TV API test shows flattened exports: `api.connect()`, `api.getAllApps()`
 - [x] ✅ No `api.connection.*` or `api.app.*` namespaces in lazy mode
 - [x] ✅ Lazy and eager modes produce identical API structures (at root level)
-- [ ] **NEW**: Subfolders also apply multi-default auto-flattening logic
-- [ ] **NEW**: Subfolder connection files flatten properly (e.g., `api.subfolder.connect()` not `api.subfolder.connection.connect()`)
-- [ ] **NEW**: Both modes handle subfolders identically
+- [x] ✅ **NEW**: Subfolders also apply multi-default auto-flattening logic
+- [x] ✅ **NEW**: Subfolder connection files flatten properly (e.g., `api.subfolder.connect()` not `api.subfolder.connection.connect()`)
+- [x] ✅ **NEW**: Both modes handle subfolders identically
 
 ### ✅ **Phase 2 Complete When**:
 
