@@ -69,3 +69,5 @@ export async function keyUp(_ = {}) {
 export async function keyDown(_ = {}) {
 	return { success: true, key: "volumeDown" };
 }
+
+export default set;
