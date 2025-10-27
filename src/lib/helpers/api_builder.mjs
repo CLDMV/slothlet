@@ -152,7 +152,7 @@ export async function analyzeModule(modulePath, options = {}) {
  * @package
  * @param {object} analysis - Results from analyzeModule
  * @param {object} options - Processing options
- * @param {object} [options.instance] - Slothlet instance for accessing _toApiKey method
+ * @param {object} [options.instance] - Slothlet instance for accessing _toapiPathKey method
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @returns {object} Processed module ready for API integration
  * @example
@@ -166,7 +166,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 	const { processedModule, isFunction, hasDefault, shouldWrapAsCallable, namedExports } = analysis;
 
 	if (!instance) {
-		throw new Error("processModuleFromAnalysis requires instance parameter for _toApiKey access");
+		throw new Error("processModuleFromAnalysis requires instance parameter for _toapiPathKey access");
 	}
 
 	// Handle function default exports - extract and enhance the function
@@ -190,7 +190,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 		// Attach named exports as properties
 		for (const [exportName, exportValue] of Object.entries(processedModule)) {
 			if (exportName !== "default") {
-				fn[instance._toApiKey(exportName)] = exportValue;
+				fn[instance._toapiPathKey(exportName)] = exportValue;
 			}
 		}
 		return fn;
@@ -249,7 +249,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 		// Add named exports
 		for (const [exportName, exportValue] of Object.entries(processedModule)) {
 			if (exportName !== "default" && exportValue !== obj) {
-				obj[instance._toApiKey(exportName)] = exportValue;
+				obj[instance._toapiPathKey(exportName)] = exportValue;
 			}
 		}
 
@@ -260,7 +260,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 	if (namedExports.length > 0) {
 		const apiExport = {};
 		for (const [exportName, exportValue] of namedExports) {
-			apiExport[instance._toApiKey(exportName)] = exportValue;
+			apiExport[instance._toapiPathKey(exportName)] = exportValue;
 		}
 		return apiExport;
 	}
@@ -304,13 +304,13 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 export async function analyzeDirectoryStructure(categoryPath, options = {}) {
 	const { instance, currentDepth = 0, debug = false } = options;
 
-	if (!instance || typeof instance._toApiKey !== "function") {
+	if (!instance || typeof instance._toapiPathKey !== "function") {
 		throw new Error("analyzeDirectoryStructure requires a valid slothlet instance");
 	}
 
 	const files = await fs.readdir(categoryPath, { withFileTypes: true });
 	const moduleFiles = files.filter((f) => instance._shouldIncludeFile(f));
-	const categoryName = instance._toApiKey(path.basename(categoryPath));
+	const categoryName = instance._toapiPathKey(path.basename(categoryPath));
 	const subDirs = files.filter((e) => e.isDirectory() && !e.name.startsWith("."));
 
 	// Determine processing strategy
@@ -377,10 +377,10 @@ export async function analyzeDirectoryStructure(categoryPath, options = {}) {
  *   categoryName: string,
  *   shouldFlattenSingle: boolean,
  *   processedModules: Array<{file: import('fs').Dirent, moduleName: string, processedModule: any, flattening: object}>,
- *   subDirectories: Array<{dirEntry: import('fs').Dirent, apiKey: string}>,
+ *   subDirectories: Array<{dirEntry: import('fs').Dirent, apiPathKey: string}>,
  *   multiDefaultAnalysis: object,
  *   flatteningDecisions: object,
- *   upwardFlatteningCandidate: {shouldFlatten: boolean, apiKey: string}
+ *   upwardFlatteningCandidate: {shouldFlatten: boolean, apiPathKey: string}
  * }>} Complete category building information
  * @example
  * // Get category building decisions
@@ -408,7 +408,7 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
 	if (processingStrategy !== "empty") {
 		for (const file of moduleFiles) {
 			const moduleExt = path.extname(file.name);
-			const moduleName = instance._toApiKey(path.basename(file.name, moduleExt));
+			const moduleName = instance._toapiPathKey(path.basename(file.name, moduleExt));
 			const modulePath = path.join(categoryPath, file.name);
 
 			// Load and process the module using centralized logic
@@ -424,7 +424,7 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
 			// Get flattening decisions for this module
 			const flatteningInfo = {
 				shouldFlatten: false,
-				apiKey: moduleName,
+				apiPathKey: moduleName,
 				reason: "default"
 			};
 
@@ -440,11 +440,11 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
 
 				if (functionNameMatchesFolder && currentDepth > 0) {
 					flatteningInfo.shouldFlatten = true;
-					flatteningInfo.apiKey = processedModule.name;
+					flatteningInfo.apiPathKey = processedModule.name;
 					flatteningInfo.reason = "function name matches folder";
 				} else if (moduleNameMatchesCategory) {
 					flatteningInfo.shouldFlatten = true;
-					flatteningInfo.apiKey = categoryName;
+					flatteningInfo.apiPathKey = categoryName;
 					flatteningInfo.reason = "module name matches category";
 				}
 			}
@@ -461,18 +461,18 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
 	// Process subdirectories
 	for (const subDirEntry of subDirs) {
 		if (currentDepth < maxDepth) {
-			const apiKey = instance._toApiKey(subDirEntry.name);
-			subDirectories.push({ dirEntry: subDirEntry, apiKey });
+			const apiPathKey = instance._toapiPathKey(subDirEntry.name);
+			subDirectories.push({ dirEntry: subDirEntry, apiPathKey });
 		}
 	}
 
 	// Determine upward flattening candidate
-	const upwardFlatteningCandidate = { shouldFlatten: false, apiKey: null };
+	const upwardFlatteningCandidate = { shouldFlatten: false, apiPathKey: null };
 	if (processedModules.length === 1 && subDirectories.length === 0) {
 		const single = processedModules[0];
 		if (single.moduleName === categoryName) {
 			upwardFlatteningCandidate.shouldFlatten = true;
-			upwardFlatteningCandidate.apiKey = single.moduleName;
+			upwardFlatteningCandidate.apiPathKey = single.moduleName;
 		}
 	}
 
@@ -506,7 +506,7 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
  * @param {object} options - Flattening analysis options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key for the module
+ * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist in the container
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
  * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export
@@ -535,7 +535,7 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
  * // Internal usage - single named export matching filename
  * const decision = getFlatteningDecision({
  *   mod: { math: { add: fn, multiply: fn } },
- *   fileName: "math", apiKey: "math",
+ *   fileName: "math", apiPathKey: "math",
  *   hasMultipleDefaultExports: false, isSelfReferential: false
  * });
  * // Returns: { shouldFlatten: true, useAutoFlattening: true, reason: "auto-flatten single named export" }
@@ -544,7 +544,7 @@ export function getFlatteningDecision(options) {
 	const {
 		mod,
 		fileName,
-		apiKey,
+		apiPathKey,
 		hasMultipleDefaultExports,
 		isSelfReferential,
 		moduleHasDefault = !!mod.default,
@@ -592,7 +592,7 @@ export function getFlatteningDecision(options) {
 	}
 
 	// Rule 3: Auto-flattening - single named export matching filename
-	if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+	if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 		return {
 			shouldFlatten: true,
 			flattenToRoot: false,
@@ -648,7 +648,7 @@ export function getFlatteningDecision(options) {
  * @param {object} options - Module processing options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key for the module
+ * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
  * @param {object} options.api - Target API object to modify (could be root api or categoryModules)
@@ -678,7 +678,7 @@ export function getFlatteningDecision(options) {
  * @example
  * // Internal usage for root-level processing
  * const result = processModuleForAPI({
- *   mod, fileName, apiKey, hasMultipleDefaultExports, isSelfReferential, api,
+ *   mod, fileName, apiPathKey, hasMultipleDefaultExports, isSelfReferential, api,
  *   getRootDefault: () => rootDefaultFunction,
  *   setRootDefault: (fn) => { rootDefaultFunction = fn; },
  *   context: { debug: true, mode: "root", totalModules: 3 }
@@ -688,7 +688,7 @@ export function processModuleForAPI(options) {
 	const {
 		mod,
 		fileName,
-		apiKey,
+		apiPathKey,
 		hasMultipleDefaultExports,
 		isSelfReferential,
 		api,
@@ -718,7 +718,7 @@ export function processModuleForAPI(options) {
 
 		if (hasMultipleDefaultExports && !isSelfReferential) {
 			// Multi-default case: use filename as API key
-			apiAssignments[apiKey] = mod;
+			apiAssignments[apiPathKey] = mod;
 			namespaced = true;
 
 			// Named exports are already attached as properties by processModuleFromAnalysis
@@ -726,12 +726,12 @@ export function processModuleForAPI(options) {
 
 			if (debug) {
 				console.log(
-					`[DEBUG] ${mode}: Multi-default function - using filename '${apiKey}' for default export, mod type: ${typeof mod}, function name: ${defaultFunction?.name}`
+					`[DEBUG] ${mode}: Multi-default function - using filename '${apiPathKey}' for default export, mod type: ${typeof mod}, function name: ${defaultFunction?.name}`
 				);
 			}
 		} else if (isSelfReferential) {
 			// Self-referential case: preserve as namespace (both named and default)
-			apiAssignments[apiKey] = mod;
+			apiAssignments[apiPathKey] = mod;
 			namespaced = true;
 
 			if (debug) {
@@ -758,7 +758,7 @@ export function processModuleForAPI(options) {
 				// No need to process them separately
 			} else {
 				// In subfolder context or when root already exists, treat as namespace
-				apiAssignments[apiKey] = mod;
+				apiAssignments[apiPathKey] = mod;
 				namespaced = true;
 
 				// Named exports are already attached as properties by processModuleFromAnalysis
@@ -777,7 +777,7 @@ export function processModuleForAPI(options) {
 		const decision = getFlatteningDecision({
 			mod,
 			fileName,
-			apiKey,
+			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential,
 			categoryName,
@@ -792,7 +792,7 @@ export function processModuleForAPI(options) {
 		if (decision.useAutoFlattening) {
 			// Auto-flatten: use the single named export directly
 			const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-			apiAssignments[apiKey] = mod[moduleKeys[0]];
+			apiAssignments[apiPathKey] = mod[moduleKeys[0]];
 			flattened = true;
 		} else if (decision.flattenToRoot || decision.flattenToCategory) {
 			// Flatten: merge all named exports into target
@@ -806,11 +806,11 @@ export function processModuleForAPI(options) {
 			flattened = true;
 		} else if (isSelfReferential) {
 			// Self-referential case: use the named export directly to avoid nesting
-			apiAssignments[apiKey] = mod[apiKey] || mod;
+			apiAssignments[apiPathKey] = mod[apiPathKey] || mod;
 			namespaced = true;
 		} else {
 			// Traditional: preserve as namespace
-			apiAssignments[apiKey] = mod;
+			apiAssignments[apiPathKey] = mod;
 			namespaced = true;
 		}
 	}
@@ -840,9 +840,9 @@ export function processModuleForAPI(options) {
  * @param {object} options - Name preference options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key
+ * @param {string} options.apiPathKey - Sanitized API key
  * @param {object} options.categoryModules - Target category modules object
- * @param {function} options.toApiKey - Function to sanitize names to API keys
+ * @param {function} options.toapiPathKey - Function to sanitize names to API keys
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @returns {{hasPreferredName: boolean, preferredKey: string}} Name preference result
  *
@@ -855,16 +855,16 @@ export function processModuleForAPI(options) {
  * // Internal usage in _buildCategory
  * const preference = applyFunctionNamePreference({
  *   mod: { autoIP: function autoIP() {} },
- *   fileName: "auto-ip", apiKey: "autoIp",
- *   categoryModules, toApiKey: this._toApiKey, debug: true
+ *   fileName: "auto-ip", apiPathKey: "autoIp",
+ *   categoryModules, toapiPathKey: this._toapiPathKey, debug: true
  * });
  * // Returns: { hasPreferredName: true, preferredKey: "autoIP" }
  */
 export function applyFunctionNamePreference(options) {
-	const { mod, fileName, apiKey, categoryModules, toApiKey, debug = false } = options;
+	const { mod, fileName, apiPathKey, categoryModules, toapiPathKey, debug = false } = options;
 
 	let hasPreferredName = false;
-	let preferredKey = apiKey;
+	let preferredKey = apiPathKey;
 
 	// Check if any export function names should be preferred over sanitized filename
 	for (const [, exportValue] of Object.entries(mod)) {
@@ -873,25 +873,25 @@ export function applyFunctionNamePreference(options) {
 			const filenameLower = fileName.toLowerCase();
 
 			// Check if function name semantically matches filename but has different casing
-			if (functionNameLower === filenameLower && exportValue.name !== apiKey) {
+			if (functionNameLower === filenameLower && exportValue.name !== apiPathKey) {
 				// Use original function name as the preferred API key
 				preferredKey = exportValue.name;
 				hasPreferredName = true;
 
 				if (debug) {
-					console.log(`[DEBUG] Using function name preference: ${exportValue.name} instead of ${apiKey} for ${fileName}`);
+					console.log(`[DEBUG] Using function name preference: ${exportValue.name} instead of ${apiPathKey} for ${fileName}`);
 				}
 				break;
 			}
 
 			// Also check if sanitized function name matches sanitized filename
-			const sanitizedFunctionName = toApiKey(exportValue.name);
-			if (sanitizedFunctionName.toLowerCase() === apiKey.toLowerCase() && exportValue.name !== apiKey) {
+			const sanitizedFunctionName = toapiPathKey(exportValue.name);
+			if (sanitizedFunctionName.toLowerCase() === apiPathKey.toLowerCase() && exportValue.name !== apiPathKey) {
 				preferredKey = exportValue.name;
 				hasPreferredName = true;
 
 				if (debug) {
-					console.log(`[DEBUG] Using function name preference: ${exportValue.name} instead of ${apiKey} for ${fileName}`);
+					console.log(`[DEBUG] Using function name preference: ${exportValue.name} instead of ${apiPathKey} for ${fileName}`);
 				}
 				break;
 			}
@@ -941,7 +941,7 @@ export function applyFunctionNamePreference(options) {
 export async function buildCategoryStructure(categoryPath, options = {}) {
 	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler, instance } = options;
 
-	if (!instance || typeof instance._toApiKey !== "function" || typeof instance._shouldIncludeFile !== "function") {
+	if (!instance || typeof instance._toapiPathKey !== "function" || typeof instance._shouldIncludeFile !== "function") {
 		throw new Error("buildCategoryStructure requires a valid slothlet instance");
 	}
 
@@ -953,13 +953,13 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 
 	const files = await fs.readdir(categoryPath, { withFileTypes: true });
 	const moduleFiles = files.filter((f) => instance._shouldIncludeFile(f));
-	const categoryName = instance._toApiKey(path.basename(categoryPath));
+	const categoryName = instance._toapiPathKey(path.basename(categoryPath));
 	const subDirs = files.filter((e) => e.isDirectory() && !e.name.startsWith("."));
 
 	// SINGLE FILE CASE - Special flattening rules
 	if (moduleFiles.length === 1 && subDirs.length === 0) {
 		const moduleExt = path.extname(moduleFiles[0].name);
-		const moduleName = instance._toApiKey(path.basename(moduleFiles[0].name, moduleExt));
+		const moduleName = instance._toapiPathKey(path.basename(moduleFiles[0].name, moduleExt));
 
 		// Analyze the module using centralized function
 		const analysis = await analyzeModule(path.join(categoryPath, moduleFiles[0].name), {
@@ -976,8 +976,8 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		const functionNameMatchesFilename =
 			typeof mod === "function" &&
 			mod.name &&
-			instance._toApiKey(mod.name).toLowerCase() === instance._toApiKey(moduleName).toLowerCase() &&
-			mod.name !== instance._toApiKey(moduleName);
+			instance._toapiPathKey(mod.name).toLowerCase() === instance._toapiPathKey(moduleName).toLowerCase() &&
+			mod.name !== instance._toapiPathKey(moduleName);
 
 		// Auto-flattening rules for single files
 
@@ -1097,7 +1097,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toApiKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
 		}
 	}
 
@@ -1111,9 +1111,9 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 	// Process each module file
 	for (const file of moduleFiles) {
 		const moduleExt = path.extname(file.name);
-		const moduleName = instance._toApiKey(path.basename(file.name, moduleExt));
+		const moduleName = instance._toapiPathKey(path.basename(file.name, moduleExt));
 		const fileName = path.basename(file.name, moduleExt);
-		const apiKey = instance._toApiKey(fileName);
+		const apiPathKey = instance._toapiPathKey(fileName);
 
 		if (debug && moduleName === "config") {
 			console.log(`[DEBUG] Processing config file: ${file.name}, moduleName: ${moduleName}`);
@@ -1140,7 +1140,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		processModuleForAPI({
 			mod,
 			fileName,
-			apiKey,
+			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential: selfReferentialFiles.has(moduleName),
 			api: categoryModules,
@@ -1158,7 +1158,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 	// Process subdirectories
 	for (const subDirEntry of subDirs) {
 		if (currentDepth < maxDepth) {
-			const key = instance._toApiKey(subDirEntry.name);
+			const key = instance._toapiPathKey(subDirEntry.name);
 			const subDirPath = path.join(categoryPath, subDirEntry.name);
 			let subModule;
 
@@ -1259,7 +1259,7 @@ export async function buildRootAPI(dir, options = {}) {
 		for (const entry of moduleFiles) {
 			const ext = path.extname(entry.name);
 			const fileName = path.basename(entry.name, ext);
-			const apiKey = instance._toApiKey(fileName);
+			const apiPathKey = instance._toapiPathKey(fileName);
 
 			const analysis = await analyzeModule(path.join(dir, entry.name), {
 				debug,
@@ -1274,7 +1274,7 @@ export async function buildRootAPI(dir, options = {}) {
 			processModuleForAPI({
 				mod,
 				fileName,
-				apiKey,
+				apiPathKey,
 				hasMultipleDefaultExports,
 				isSelfReferential: selfReferentialFiles.has(fileName),
 				api,
@@ -1298,10 +1298,10 @@ export async function buildRootAPI(dir, options = {}) {
 
 			if (lazy) {
 				// Lazy mode: use existing _loadCategory method (will be replaced later)
-				api[instance._toApiKey(entry.name)] = await instance._loadCategory(categoryPath, 0, maxDepth);
+				api[instance._toapiPathKey(entry.name)] = await instance._loadCategory(categoryPath, 0, maxDepth);
 			} else {
 				// Eager mode: use new centralized category builder
-				api[instance._toApiKey(entry.name)] = await buildCategoryStructure(categoryPath, {
+				api[instance._toapiPathKey(entry.name)] = await buildCategoryStructure(categoryPath, {
 					currentDepth: 1,
 					maxDepth,
 					mode: "eager",
@@ -1350,7 +1350,7 @@ export async function buildRootAPI(dir, options = {}) {
  * @param {number} [options.maxDepth=Infinity] - Maximum nesting depth
  * @param {string} [options.mode="eager"] - Loading mode ("eager" or "lazy")
  * @param {Function} [options.subdirHandler] - Handler for subdirectories (lazy mode)
- * @param {object} options.instance - Slothlet instance with _toApiKey, _shouldIncludeFile, config
+ * @param {object} options.instance - Slothlet instance with _toapiPathKey, _shouldIncludeFile, config
  * @returns {Promise<object>} Category building decisions and data
  *
  * @example // ESM usage
@@ -1371,8 +1371,8 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 	const { instance } = options;
 
-	if (!instance || typeof instance._toApiKey !== "function") {
-		throw new Error("buildCategoryDecisions requires instance parameter with _toApiKey method");
+	if (!instance || typeof instance._toapiPathKey !== "function") {
+		throw new Error("buildCategoryDecisions requires instance parameter with _toapiPathKey method");
 	}
 
 	const debug = instance.config?.debug || false;
@@ -1387,7 +1387,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 	const files = await fs.readdir(categoryPath, { withFileTypes: true });
 	const moduleFiles = files.filter((f) => instance._shouldIncludeFile(f));
-	const categoryName = instance._toApiKey(path.basename(categoryPath));
+	const categoryName = instance._toapiPathKey(path.basename(categoryPath));
 	const subDirs = files.filter((e) => e.isDirectory() && !e.name.startsWith("."));
 
 	const decisions = {
@@ -1417,7 +1417,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		decisions.type = "single-file";
 		const moduleFile = moduleFiles[0];
 		const moduleExt = path.extname(moduleFile.name);
-		const moduleName = instance._toApiKey(path.basename(moduleFile.name, moduleExt));
+		const moduleName = instance._toapiPathKey(path.basename(moduleFile.name, moduleExt));
 
 		decisions.singleFile = {
 			file: moduleFile,
@@ -1444,8 +1444,8 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		const functionNameMatchesFilename =
 			typeof mod === "function" &&
 			mod.name &&
-			instance._toApiKey(mod.name).toLowerCase() === instance._toApiKey(moduleName).toLowerCase() &&
-			mod.name !== instance._toApiKey(moduleName);
+			instance._toapiPathKey(mod.name).toLowerCase() === instance._toapiPathKey(moduleName).toLowerCase() &&
+			mod.name !== instance._toapiPathKey(moduleName);
 
 		// Flatten if file matches folder name and exports a function (named)
 		// BUT NOT for root-level files (currentDepth === 0)
@@ -1604,7 +1604,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toApiKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
 		}
 	}
 
@@ -1618,7 +1618,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 	// Process each module file and determine decisions
 	for (const file of moduleFiles) {
 		const moduleExt = path.extname(file.name);
-		const moduleName = instance._toApiKey(path.basename(file.name, moduleExt));
+		const moduleName = instance._toapiPathKey(path.basename(file.name, moduleExt));
 
 		// Check if we already loaded this module during first pass (for non-self-referential defaults)
 		let mod = null;
@@ -1642,7 +1642,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 			moduleName,
 			mod,
 			type: null, // "function" | "object" | "self-referential"
-			apiKey: null,
+			apiPathKey: null,
 			shouldFlatten: false,
 			flattenType: null,
 			specialHandling: null
@@ -1659,11 +1659,11 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 			if (hasMultipleDefaultExports && mod.__slothletDefault === true && !isSelfReferential) {
 				// Use file name for default exports when multiple defaults exist
-				moduleDecision.apiKey = moduleName;
+				moduleDecision.apiPathKey = moduleName;
 				moduleDecision.specialHandling = "multi-default-filename";
 				if (debug) {
 					console.log(
-						`[DEBUG] Multi-default function case: ${moduleName} => ${moduleDecision.apiKey} (hasMultiple=${hasMultipleDefaultExports}, __slothletDefault=${mod.__slothletDefault}, isSelfRef=${isSelfReferential})`
+						`[DEBUG] Multi-default function case: ${moduleName} => ${moduleDecision.apiPathKey} (hasMultiple=${hasMultipleDefaultExports}, __slothletDefault=${mod.__slothletDefault}, isSelfRef=${isSelfReferential})`
 					);
 				}
 			} else if (selfReferentialFiles.has(moduleName)) {
@@ -1683,11 +1683,11 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				// If so, prefer the original function name over the sanitized version
 				if (fnName && fnName.toLowerCase() === moduleName.toLowerCase() && fnName !== moduleName) {
 					// Use original function name without sanitizing
-					moduleDecision.apiKey = fnName;
+					moduleDecision.apiPathKey = fnName;
 					moduleDecision.specialHandling = "prefer-function-name";
 				} else {
 					// Use sanitized function name
-					moduleDecision.apiKey = instance._toApiKey(fnName);
+					moduleDecision.apiPathKey = instance._toapiPathKey(fnName);
 				}
 			}
 		} else {
@@ -1701,14 +1701,14 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				if (
 					typeof exportValue === "function" &&
 					exportValue.name &&
-					instance._toApiKey(exportValue.name).toLowerCase() === instance._toApiKey(moduleName).toLowerCase() &&
-					exportValue.name !== instance._toApiKey(moduleName)
+					instance._toapiPathKey(exportValue.name).toLowerCase() === instance._toapiPathKey(moduleName).toLowerCase() &&
+					exportValue.name !== instance._toapiPathKey(moduleName)
 				) {
 					// Use the original function name instead of sanitized filename
 					modWithPreferredNames[exportValue.name] = exportValue;
 					hasPreferredName = true;
 				} else {
-					modWithPreferredNames[instance._toApiKey(exportName)] = exportValue;
+					modWithPreferredNames[instance._toapiPathKey(exportName)] = exportValue;
 				}
 			}
 
@@ -1722,30 +1722,30 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 			} else {
 				// Check for various flattening scenarios
 				const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-				const apiKey = instance._toApiKey(moduleName);
+				const apiPathKey = instance._toapiPathKey(moduleName);
 
 				// Single default export flattening (regardless of filename matching)
 				// ONLY when there's a single default export in the folder (not multiple defaults)
 				if (!hasMultipleDefaultExports && mod.default && typeof mod.default === "object") {
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "single-default-object";
-					moduleDecision.apiKey = apiKey;
+					moduleDecision.apiPathKey = apiPathKey;
 				} else if (hasMultipleDefaultExports && !mod.default && moduleKeys.length > 0) {
 					// Multi-default context: flatten modules WITHOUT default exports to category
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "multi-default-no-default";
-				} else if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+				} else if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 					// Auto-flatten: module exports single named export matching filename
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "single-named-export-match";
-					moduleDecision.apiKey = apiKey;
+					moduleDecision.apiPathKey = apiPathKey;
 				} else if (!mod.default && moduleKeys.length > 0 && moduleName === categoryName) {
 					// Auto-flatten: module filename matches folder name and has no default → flatten to category
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "category-name-match-flatten";
 				} else {
 					// Standard object export
-					moduleDecision.apiKey = apiKey;
+					moduleDecision.apiPathKey = apiPathKey;
 				}
 			}
 		}
@@ -1759,7 +1759,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		const subDirDecision = {
 			name: subDir.name,
 			path: subDirPath,
-			apiKey: instance._toApiKey(subDir.name),
+			apiPathKey: instance._toapiPathKey(subDir.name),
 			shouldRecurse: currentDepth < maxDepth
 		};
 		decisions.subdirectoryDecisions.push(subDirDecision);

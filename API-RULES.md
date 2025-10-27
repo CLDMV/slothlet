@@ -405,7 +405,7 @@ api.task.autoIP(); // → "testAutoIP" (preserves IP capitalization)
 
 #### Rule 9: Auto-Flattening (Single Named Export Matching Filename)
 
-**Condition**: `moduleKeys.length === 1 && moduleKeys[0] === apiKey`
+**Condition**: `moduleKeys.length === 1 && moduleKeys[0] === apiPathKey`
 
 **Description**: When a module has exactly one named export that matches the sanitized filename, auto-flatten by promoting the export contents directly.
 

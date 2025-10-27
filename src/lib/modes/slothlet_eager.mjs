@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:33 -07:00 (1761266373)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -293,7 +293,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const entry of moduleFiles) {
 		const ext = path.extname(entry.name);
 		const fileName = path.basename(entry.name, ext);
-		const apiKey = this._toApiKey(fileName);
+		const apiPathKey = this._toapiPathKey(fileName);
 		const mod = await this._loadSingleModule(path.join(dir, entry.name));
 
 		// Use stored self-referential detection result from first pass
@@ -302,7 +302,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 		processModuleForAPI({
 			mod,
 			fileName,
-			apiKey,
+			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential,
 			api,
@@ -321,7 +321,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const entry of entries) {
 		if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
 			const categoryPath = path.join(dir, entry.name);
-			api[this._toApiKey(entry.name)] = await this._loadCategory(categoryPath, currentDepth + 1, maxDepth);
+			api[this._toapiPathKey(entry.name)] = await this._loadCategory(categoryPath, currentDepth + 1, maxDepth);
 		}
 	}
 

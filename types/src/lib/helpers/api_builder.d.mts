@@ -27,20 +27,23 @@
  * // Eager mode: use analysis.processedModule directly
  * // Lazy mode: create proxy based on analysis.isFunction, analysis.exports, etc.
  */
-export function analyzeModule(modulePath: string, options?: {
-    debug?: boolean;
-    instance?: object;
-}): Promise<{
-    rawModule: object;
-    processedModule: object;
-    isFunction: boolean;
-    hasDefault: boolean;
-    isCjs: boolean;
-    exports: Array<[string, any]>;
-    defaultExportType: "function" | "object" | null;
-    shouldWrapAsCallable: boolean;
-    namedExports: object;
-    metadata: object;
+export function analyzeModule(
+	modulePath: string,
+	options?: {
+		debug?: boolean;
+		instance?: object;
+	}
+): Promise<{
+	rawModule: object;
+	processedModule: object;
+	isFunction: boolean;
+	hasDefault: boolean;
+	isCjs: boolean;
+	exports: Array<[string, any]>;
+	defaultExportType: "function" | "object" | null;
+	shouldWrapAsCallable: boolean;
+	namedExports: object;
+	metadata: object;
 }>;
 /**
  * Processes module analysis results into a final module object using slothlet's established patterns.
@@ -50,7 +53,7 @@ export function analyzeModule(modulePath: string, options?: {
  * @package
  * @param {object} analysis - Results from analyzeModule
  * @param {object} options - Processing options
- * @param {object} [options.instance] - Slothlet instance for accessing _toApiKey method
+ * @param {object} [options.instance] - Slothlet instance for accessing _toapiPathKey method
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @returns {object} Processed module ready for API integration
  * @example
@@ -59,10 +62,13 @@ export function analyzeModule(modulePath: string, options?: {
  * const processed = processModuleFromAnalysis(analysis, { instance });
  * // Both modes can use 'processed' but integrate it differently
  */
-export function processModuleFromAnalysis(analysis: object, options?: {
-    instance?: object;
-    debug?: boolean;
-}): object;
+export function processModuleFromAnalysis(
+	analysis: object,
+	options?: {
+		instance?: object;
+		debug?: boolean;
+	}
+): object;
 /**
  * Analyzes a directory and returns structural decisions that both eager and lazy modes can use.
  * This provides the decision-making logic for directory handling without implementing the actual
@@ -95,20 +101,23 @@ export function processModuleFromAnalysis(analysis: object, options?: {
  *   // Both modes: handle as multi-file (but differently)
  * }
  */
-export function analyzeDirectoryStructure(categoryPath: string, options?: {
-    instance: object;
-    currentDepth?: number;
-    maxDepth?: number;
-    debug?: boolean;
-}): Promise<{
-    isSingleFile: boolean;
-    shouldAutoFlatten: boolean;
-    categoryName: string;
-    moduleFiles: Array<import("fs").Dirent>;
-    subDirs: Array<import("fs").Dirent>;
-    multiDefaultAnalysis: object;
-    processingStrategy: "single-file" | "multi-file" | "empty";
-    flatteningHints: object;
+export function analyzeDirectoryStructure(
+	categoryPath: string,
+	options?: {
+		instance: object;
+		currentDepth?: number;
+		maxDepth?: number;
+		debug?: boolean;
+	}
+): Promise<{
+	isSingleFile: boolean;
+	shouldAutoFlatten: boolean;
+	categoryName: string;
+	moduleFiles: Array<import("fs").Dirent>;
+	subDirs: Array<import("fs").Dirent>;
+	multiDefaultAnalysis: object;
+	processingStrategy: "single-file" | "multi-file" | "empty";
+	flatteningHints: object;
 }>;
 /**
  * Returns category building decisions and processed modules that both eager and lazy modes can use.
@@ -128,10 +137,10 @@ export function analyzeDirectoryStructure(categoryPath: string, options?: {
  *   categoryName: string,
  *   shouldFlattenSingle: boolean,
  *   processedModules: Array<{file: import('fs').Dirent, moduleName: string, processedModule: any, flattening: object}>,
- *   subDirectories: Array<{dirEntry: import('fs').Dirent, apiKey: string}>,
+ *   subDirectories: Array<{dirEntry: import('fs').Dirent, apiPathKey: string}>,
  *   multiDefaultAnalysis: object,
  *   flatteningDecisions: object,
- *   upwardFlatteningCandidate: {shouldFlatten: boolean, apiKey: string}
+ *   upwardFlatteningCandidate: {shouldFlatten: boolean, apiPathKey: string}
  * }>} Complete category building information
  * @example
  * // Get category building decisions
@@ -142,31 +151,34 @@ export function analyzeDirectoryStructure(categoryPath: string, options?: {
  *   // Lazy: create proxy based on decisions.processedModules[0].flattening
  * }
  */
-export function getCategoryBuildingDecisions(categoryPath: string, options?: {
-    instance: object;
-    currentDepth?: number;
-    maxDepth?: number;
-    debug?: boolean;
-}): Promise<{
-    processingStrategy: "single-file" | "multi-file" | "empty";
-    categoryName: string;
-    shouldFlattenSingle: boolean;
-    processedModules: Array<{
-        file: import("fs").Dirent;
-        moduleName: string;
-        processedModule: any;
-        flattening: object;
-    }>;
-    subDirectories: Array<{
-        dirEntry: import("fs").Dirent;
-        apiKey: string;
-    }>;
-    multiDefaultAnalysis: object;
-    flatteningDecisions: object;
-    upwardFlatteningCandidate: {
-        shouldFlatten: boolean;
-        apiKey: string;
-    };
+export function getCategoryBuildingDecisions(
+	categoryPath: string,
+	options?: {
+		instance: object;
+		currentDepth?: number;
+		maxDepth?: number;
+		debug?: boolean;
+	}
+): Promise<{
+	processingStrategy: "single-file" | "multi-file" | "empty";
+	categoryName: string;
+	shouldFlattenSingle: boolean;
+	processedModules: Array<{
+		file: import("fs").Dirent;
+		moduleName: string;
+		processedModule: any;
+		flattening: object;
+	}>;
+	subDirectories: Array<{
+		dirEntry: import("fs").Dirent;
+		apiPathKey: string;
+	}>;
+	multiDefaultAnalysis: object;
+	flatteningDecisions: object;
+	upwardFlatteningCandidate: {
+		shouldFlatten: boolean;
+		apiPathKey: string;
+	};
 }>;
 /**
  * Auto-flattening decision logic that determines whether a module should be flattened
@@ -177,7 +189,7 @@ export function getCategoryBuildingDecisions(categoryPath: string, options?: {
  * @param {object} options - Flattening analysis options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key for the module
+ * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist in the container
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
  * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export
@@ -206,28 +218,28 @@ export function getCategoryBuildingDecisions(categoryPath: string, options?: {
  * // Internal usage - single named export matching filename
  * const decision = getFlatteningDecision({
  *   mod: { math: { add: fn, multiply: fn } },
- *   fileName: "math", apiKey: "math",
+ *   fileName: "math", apiPathKey: "math",
  *   hasMultipleDefaultExports: false, isSelfReferential: false
  * });
  * // Returns: { shouldFlatten: true, useAutoFlattening: true, reason: "auto-flatten single named export" }
  */
 export function getFlatteningDecision(options: {
-    mod: object;
-    fileName: string;
-    apiKey: string;
-    hasMultipleDefaultExports: boolean;
-    isSelfReferential: boolean;
-    moduleHasDefault?: boolean;
-    categoryName?: string;
-    totalModules?: number;
-    debug?: boolean;
+	mod: object;
+	fileName: string;
+	apiPathKey: string;
+	hasMultipleDefaultExports: boolean;
+	isSelfReferential: boolean;
+	moduleHasDefault?: boolean;
+	categoryName?: string;
+	totalModules?: number;
+	debug?: boolean;
 }): {
-    shouldFlatten: boolean;
-    flattenToRoot: boolean;
-    flattenToCategory: boolean;
-    preserveAsNamespace: boolean;
-    useAutoFlattening: boolean;
-    reason: string;
+	shouldFlatten: boolean;
+	flattenToRoot: boolean;
+	flattenToCategory: boolean;
+	preserveAsNamespace: boolean;
+	useAutoFlattening: boolean;
+	reason: string;
 };
 /**
  * Processes a single module and applies it to the target API object based on flattening decisions.
@@ -237,7 +249,7 @@ export function getFlatteningDecision(options: {
  * @param {object} options - Module processing options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key for the module
+ * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
  * @param {object} options.api - Target API object to modify (could be root api or categoryModules)
@@ -267,33 +279,33 @@ export function getFlatteningDecision(options: {
  * @example
  * // Internal usage for root-level processing
  * const result = processModuleForAPI({
- *   mod, fileName, apiKey, hasMultipleDefaultExports, isSelfReferential, api,
+ *   mod, fileName, apiPathKey, hasMultipleDefaultExports, isSelfReferential, api,
  *   getRootDefault: () => rootDefaultFunction,
  *   setRootDefault: (fn) => { rootDefaultFunction = fn; },
  *   context: { debug: true, mode: "root", totalModules: 3 }
  * });
  */
 export function processModuleForAPI(options: {
-    mod: object;
-    fileName: string;
-    apiKey: string;
-    hasMultipleDefaultExports: boolean;
-    isSelfReferential: boolean;
-    api: object;
-    getRootDefault?: Function;
-    setRootDefault?: Function;
-    context?: {
-        debug?: boolean;
-        mode?: string;
-        categoryName?: string;
-        totalModules?: number;
-    };
+	mod: object;
+	fileName: string;
+	apiPathKey: string;
+	hasMultipleDefaultExports: boolean;
+	isSelfReferential: boolean;
+	api: object;
+	getRootDefault?: Function;
+	setRootDefault?: Function;
+	context?: {
+		debug?: boolean;
+		mode?: string;
+		categoryName?: string;
+		totalModules?: number;
+	};
 }): {
-    processed: boolean;
-    rootDefaultSet: boolean;
-    flattened: boolean;
-    namespaced: boolean;
-    apiAssignments: Record<string, any>;
+	processed: boolean;
+	rootDefaultSet: boolean;
+	flattened: boolean;
+	namespaced: boolean;
+	apiAssignments: Record<string, any>;
 };
 /**
  * Handles function name preference logic for better API naming.
@@ -303,9 +315,9 @@ export function processModuleForAPI(options: {
  * @param {object} options - Name preference options
  * @param {object} options.mod - The loaded module object
  * @param {string} options.fileName - Original filename (without extension)
- * @param {string} options.apiKey - Sanitized API key
+ * @param {string} options.apiPathKey - Sanitized API key
  * @param {object} options.categoryModules - Target category modules object
- * @param {function} options.toApiKey - Function to sanitize names to API keys
+ * @param {function} options.toapiPathKey - Function to sanitize names to API keys
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @returns {{hasPreferredName: boolean, preferredKey: string}} Name preference result
  *
@@ -318,21 +330,21 @@ export function processModuleForAPI(options: {
  * // Internal usage in _buildCategory
  * const preference = applyFunctionNamePreference({
  *   mod: { autoIP: function autoIP() {} },
- *   fileName: "auto-ip", apiKey: "autoIp",
- *   categoryModules, toApiKey: this._toApiKey, debug: true
+ *   fileName: "auto-ip", apiPathKey: "autoIp",
+ *   categoryModules, toapiPathKey: this._toapiPathKey, debug: true
  * });
  * // Returns: { hasPreferredName: true, preferredKey: "autoIP" }
  */
 export function applyFunctionNamePreference(options: {
-    mod: object;
-    fileName: string;
-    apiKey: string;
-    categoryModules: object;
-    toApiKey: Function;
-    debug?: boolean;
+	mod: object;
+	fileName: string;
+	apiPathKey: string;
+	categoryModules: object;
+	toapiPathKey: Function;
+	debug?: boolean;
 }): {
-    hasPreferredName: boolean;
-    preferredKey: string;
+	hasPreferredName: boolean;
+	preferredKey: string;
 };
 /**
  * Comprehensive category/directory building function that replaces _buildCategory.
@@ -366,13 +378,16 @@ export function applyFunctionNamePreference(options: {
  *   currentDepth: 0, maxDepth: 3, mode: "eager", instance: slothletInstance
  * });
  */
-export function buildCategoryStructure(categoryPath: string, options?: {
-    currentDepth?: number;
-    maxDepth?: number;
-    mode?: string;
-    subdirHandler?: Function;
-    instance: object;
-}): Promise<object>;
+export function buildCategoryStructure(
+	categoryPath: string,
+	options?: {
+		currentDepth?: number;
+		maxDepth?: number;
+		mode?: string;
+		subdirHandler?: Function;
+		instance: object;
+	}
+): Promise<object>;
 /**
  * Comprehensive root API building function that replaces eager/lazy create methods.
  * Handles complete root-level API construction with mode-specific optimizations.
@@ -402,11 +417,14 @@ export function buildCategoryStructure(categoryPath: string, options?: {
  *   lazy: false, maxDepth: 3, instance: slothletInstance
  * });
  */
-export function buildRootAPI(dir: string, options?: {
-    lazy?: boolean;
-    maxDepth?: number;
-    instance: object;
-}): Promise<object | Function>;
+export function buildRootAPI(
+	dir: string,
+	options?: {
+		lazy?: boolean;
+		maxDepth?: number;
+		instance: object;
+	}
+): Promise<object | Function>;
 /**
  * Centralized category building decisions - contains ALL logic for directory/category processing.
  * This function analyzes a directory and returns decisions about how to structure the API,
@@ -419,7 +437,7 @@ export function buildRootAPI(dir: string, options?: {
  * @param {number} [options.maxDepth=Infinity] - Maximum nesting depth
  * @param {string} [options.mode="eager"] - Loading mode ("eager" or "lazy")
  * @param {Function} [options.subdirHandler] - Handler for subdirectories (lazy mode)
- * @param {object} options.instance - Slothlet instance with _toApiKey, _shouldIncludeFile, config
+ * @param {object} options.instance - Slothlet instance with _toapiPathKey, _shouldIncludeFile, config
  * @returns {Promise<object>} Category building decisions and data
  *
  * @example // ESM usage
@@ -436,11 +454,14 @@ export function buildRootAPI(dir: string, options?: {
  *   instance: slothletInstance
  * });
  */
-export function buildCategoryDecisions(categoryPath: string, options?: {
-    currentDepth?: number;
-    maxDepth?: number;
-    mode?: string;
-    subdirHandler?: Function;
-    instance: object;
-}): Promise<object>;
+export function buildCategoryDecisions(
+	categoryPath: string,
+	options?: {
+		currentDepth?: number;
+		maxDepth?: number;
+		mode?: string;
+		subdirHandler?: Function;
+		instance: object;
+	}
+): Promise<object>;
 //# sourceMappingURL=api_builder.d.mts.map

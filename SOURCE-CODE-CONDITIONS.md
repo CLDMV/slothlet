@@ -49,7 +49,7 @@
 ### C04: Auto-Flatten Single Named Export
 
 **Line**: 593  
-**Condition**: `if (moduleKeys.length === 1 && moduleKeys[0] === apiKey)`  
+**Condition**: `if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey)`  
 **Description**: When module exports single named export matching filename, use the export directly  
 **Result**: Returns `shouldFlatten: true, useAutoFlattening: true`
 
@@ -94,14 +94,14 @@
 **Line**: 716  
 **Condition**: `if (hasMultipleDefaultExports && !isSelfReferential)`  
 **Description**: In multi-default context, function defaults use filename as API key to avoid conflicts  
-**Result**: `apiAssignments[apiKey] = mod, namespaced = true`
+**Result**: `apiAssignments[apiPathKey] = mod, namespaced = true`
 
 #### C08b: Self-Referential Function
 
 **Line**: 728  
 **Condition**: `else if (isSelfReferential)`  
 **Description**: Self-referential function exports preserve as namespace  
-**Result**: `apiAssignments[apiKey] = mod, namespaced = true`
+**Result**: `apiAssignments[apiPathKey] = mod, namespaced = true`
 
 #### C08c: Traditional Default Function
 
@@ -115,7 +115,7 @@
 **Line**: 758  
 **Condition**: `else` (when C08c doesn't apply)  
 **Description**: In subfolder context or when root already exists, treat function as namespace  
-**Result**: `apiAssignments[apiKey] = mod, namespaced = true`
+**Result**: `apiAssignments[apiPathKey] = mod, namespaced = true`
 
 ### C09: Non-Function Modules
 
@@ -128,7 +128,7 @@
 **Line**: 782  
 **Condition**: `if (decision.useAutoFlattening)`  
 **Description**: Apply auto-flattening decision from getFlatteningDecision()  
-**Result**: `apiAssignments[apiKey] = mod[moduleKeys[0]], flattened = true`
+**Result**: `apiAssignments[apiPathKey] = mod[moduleKeys[0]], flattened = true`
 
 #### C09b: Flatten To Root/Category
 
@@ -142,14 +142,14 @@
 **Line**: 797  
 **Condition**: `else if (isSelfReferential)`  
 **Description**: Self-referential non-function exports use direct property access  
-**Result**: `apiAssignments[apiKey] = mod[apiKey] || mod, namespaced = true`
+**Result**: `apiAssignments[apiPathKey] = mod[apiPathKey] || mod, namespaced = true`
 
 #### C09d: Traditional Namespace
 
 **Line**: 801  
 **Condition**: `else`  
 **Description**: Default behavior preserves module as namespace  
-**Result**: `apiAssignments[apiKey] = mod, namespaced = true`
+**Result**: `apiAssignments[apiPathKey] = mod, namespaced = true`
 
 ---
 
@@ -287,7 +287,7 @@
 #### C20c: Single Named Export Match
 
 **Line**: 1731  
-**Condition**: `else if (moduleKeys.length === 1 && moduleKeys[0] === apiKey)`  
+**Condition**: `else if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey)`  
 **Description**: Auto-flatten when module exports single named export matching filename  
 **Result**: `moduleDecision.shouldFlatten = true, flattenType = "single-named-export-match"`
 
@@ -303,7 +303,7 @@
 **Line**: 1740  
 **Condition**: `else`  
 **Description**: Standard object export without special flattening  
-**Result**: `moduleDecision.apiKey = apiKey`
+**Result**: `moduleDecision.apiPathKey = apiPathKey`
 
 ---
 
@@ -338,7 +338,7 @@
 ### C24: Multi-Default Single Named Export
 
 **Line**: 200  
-**Condition**: `if (moduleKeys.length === 1 && moduleKeys[0] === apiKey)`  
+**Condition**: `if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey)`  
 **Description**: Single named export matching filename in multi-default context  
 **Result**: Returns `shouldFlatten: true, flattenToRoot: false`
 

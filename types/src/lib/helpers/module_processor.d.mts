@@ -9,7 +9,7 @@
  * @param {object} options - Processing configuration
  * @param {object} options.mod - The loaded and unwrapped module
  * @param {string} options.fileName - The base filename (without extension)
- * @param {string} options.apiKey - The sanitized API key for this module
+ * @param {string} options.apiPathKey - The sanitized API key for this module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multi-default context is active
  * @param {boolean} options.isSelfReferential - Whether this module's default is self-referential
  * @param {object} options.api - The API object to modify
@@ -27,29 +27,29 @@
  * }} Processing result metadata
  * @example // Internal usage in slothlet modes
  * const result = processModule({
- *   mod, fileName, apiKey, hasMultipleDefaultExports, isSelfReferential,
+ *   mod, fileName, apiPathKey, hasMultipleDefaultExports, isSelfReferential,
  *   api, getRootDefault: () => rootFn, setRootDefault: (fn) => { rootFn = fn; },
  *   context: { debug: true, mode: "eager" }
  * });
  */
 export function processModule(options: {
-    mod: object;
-    fileName: string;
-    apiKey: string;
-    hasMultipleDefaultExports: boolean;
-    isSelfReferential: boolean;
-    api: object;
-    getRootDefault: Function | null;
-    setRootDefault: Function;
-    context: {
-        debug?: boolean;
-        mode?: string;
-        moduleFiles?: Array<object>;
-    };
+	mod: object;
+	fileName: string;
+	apiPathKey: string;
+	hasMultipleDefaultExports: boolean;
+	isSelfReferential: boolean;
+	api: object;
+	getRootDefault: Function | null;
+	setRootDefault: Function;
+	context: {
+		debug?: boolean;
+		mode?: string;
+		moduleFiles?: Array<object>;
+	};
 }): {
-    processed: boolean;
-    rootDefaultSet: boolean;
-    flattened: boolean;
-    namespaced: boolean;
+	processed: boolean;
+	rootDefaultSet: boolean;
+	flattened: boolean;
+	namespaced: boolean;
 };
 //# sourceMappingURL=module_processor.d.mts.map

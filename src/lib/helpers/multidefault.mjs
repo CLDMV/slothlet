@@ -133,7 +133,7 @@ function multidefault_isSelfReferential(rawModule) {
  * @param {boolean} options.moduleHasDefault - Whether current module has default export
  * @param {boolean} options.isSelfReferential - Whether current module is self-referential
  * @param {Array<string>} options.moduleKeys - Named export keys from the module
- * @param {string} options.apiKey - API key for the module
+ * @param {string} options.apiPathKey - API key for the module
  * @param {number} options.totalModuleCount - Total number of modules in directory
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @returns {{
@@ -148,15 +148,23 @@ function multidefault_isSelfReferential(rawModule) {
  *   moduleHasDefault: false,
  *   isSelfReferential: false,
  *   moduleKeys: ["add", "subtract"],
- *   apiKey: "math",
+ *   apiPathKey: "math",
  *   totalModuleCount: 3
  * });
  */
 function multidefault_getFlatteningDecision(options) {
-	const { hasMultipleDefaultExports, moduleHasDefault, isSelfReferential, moduleKeys, apiKey, totalModuleCount, debug = false } = options;
+	const {
+		hasMultipleDefaultExports,
+		moduleHasDefault,
+		isSelfReferential,
+		moduleKeys,
+		apiPathKey,
+		totalModuleCount,
+		debug = false
+	} = options;
 
 	if (debug) {
-		console.log(`[DEBUG] multidefault_getFlatteningDecision: Analyzing flattening for ${apiKey}`);
+		console.log(`[DEBUG] multidefault_getFlatteningDecision: Analyzing flattening for ${apiPathKey}`);
 		console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
 		console.log(`[DEBUG]   - moduleHasDefault: ${moduleHasDefault}`);
 		console.log(`[DEBUG]   - isSelfReferential: ${isSelfReferential}`);
@@ -197,7 +205,7 @@ function multidefault_getFlatteningDecision(options) {
 
 	// Traditional context (no multi-defaults)
 	// Check for auto-flattening: if module has single named export matching filename, use it directly
-	if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+	if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 		return {
 			shouldFlatten: true,
 			flattenToRoot: false,

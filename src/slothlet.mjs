@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-25 21:53:10 -07:00 (1761454390)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -330,7 +330,7 @@ const slothletObject = {
 			this.context = context;
 			this.reference = reference;
 
-			// Store sanitize options in config for use by _toApiKey
+			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
 				this.config.sanitize = sanitize;
 			}
@@ -520,9 +520,9 @@ const slothletObject = {
 	 * @private
 	 * @internal
 	 * @example
-	 * _toApiKey('root-math') // 'rootMath'
+	 * _toapiPathKey('root-math') // 'rootMath'
 	 */
-	_toApiKey(name) {
+	_toapiPathKey(name) {
 		return sanitizePathName(name, this.config.sanitize || {});
 		// return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
 	},
@@ -613,7 +613,7 @@ const slothletObject = {
 
 		// Process each module based on centralized decisions
 		for (const moduleDecision of processedModules) {
-			const { moduleName, mod, type, apiKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
+			const { moduleName, mod, type, apiPathKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
 			// Handle different module types based on centralized decisions
 			if (specialHandling === "category-merge") {
 				// Module filename matches category name - merge logic
@@ -624,7 +624,7 @@ const slothletObject = {
 				) {
 					Object.assign(categoryModules, mod[categoryName]);
 					for (const [key, value] of Object.entries(mod)) {
-						if (key !== categoryName) categoryModules[this._toApiKey(key)] = value;
+						if (key !== categoryName) categoryModules[this._toapiPathKey(key)] = value;
 					}
 				} else {
 					Object.assign(categoryModules, mod);
@@ -639,10 +639,10 @@ const slothletObject = {
 					}
 					categoryModules[moduleName] = mod;
 				} else if (specialHandling === "prefer-function-name") {
-					categoryModules[apiKey] = mod;
+					categoryModules[apiPathKey] = mod;
 				} else {
 					// Standard function processing
-					categoryModules[apiKey] = mod;
+					categoryModules[apiPathKey] = mod;
 				}
 			} else if (type === "self-referential") {
 				// Self-referential case: use the named export directly to avoid nesting
@@ -662,7 +662,7 @@ const slothletObject = {
 									flattened[key] = value;
 								}
 							}
-							categoryModules[apiKey] = flattened;
+							categoryModules[apiPathKey] = flattened;
 							break;
 						}
 						case "multi-default-no-default": {
@@ -675,7 +675,7 @@ const slothletObject = {
 						}
 						case "single-named-export-match":
 							// Auto-flatten: module exports single named export matching filename
-							categoryModules[apiKey] = mod[apiKey];
+							categoryModules[apiPathKey] = mod[apiPathKey];
 							break;
 						case "category-name-match-flatten": {
 							// Auto-flatten: module filename matches folder name and has no default → flatten to category
@@ -688,7 +688,7 @@ const slothletObject = {
 					}
 				} else {
 					// Standard object export
-					categoryModules[apiKey] = mod;
+					categoryModules[apiPathKey] = mod;
 				}
 			}
 		}
@@ -696,14 +696,14 @@ const slothletObject = {
 		// SUBDIRECTORIES - handle based on centralized decisions
 		for (const subDirDecision of subdirectoryDecisions) {
 			if (subDirDecision.shouldRecurse) {
-				const { name, path: subDirPath, apiKey } = subDirDecision;
+				const { name, path: subDirPath, apiPathKey } = subDirDecision;
 				let subModule;
 
 				if (mode === "lazy" && typeof subdirHandler === "function") {
 					subModule = subdirHandler({
 						subDirEntry: { name },
 						subDirPath,
-						key: apiKey,
+						key: apiPathKey,
 						categoryModules,
 						currentDepth,
 						maxDepth
@@ -721,13 +721,13 @@ const slothletObject = {
 				if (
 					typeof subModule === "function" &&
 					subModule.name &&
-					subModule.name.toLowerCase() === apiKey.toLowerCase() &&
-					subModule.name !== apiKey
+					subModule.name.toLowerCase() === apiPathKey.toLowerCase() &&
+					subModule.name !== apiPathKey
 				) {
 					// Use the original function name as the key
 					categoryModules[subModule.name] = subModule;
 				} else {
-					categoryModules[apiKey] = subModule;
+					categoryModules[apiPathKey] = subModule;
 				}
 			}
 		}
@@ -829,7 +829,7 @@ const slothletObject = {
 				// Apply the flattening decision
 				if (typeof processedModule === "function") {
 					try {
-						Object.defineProperty(processedModule, "name", { value: flattening.apiKey, configurable: true });
+						Object.defineProperty(processedModule, "name", { value: flattening.apiPathKey, configurable: true });
 					} catch {
 						// ignore
 					}
@@ -838,18 +838,18 @@ const slothletObject = {
 			}
 
 			// No flattening - return as namespace
-			return { [flattening.apiKey]: processedModule };
+			return { [flattening.apiPathKey]: processedModule };
 		}
 
 		// MULTI-FILE CASE - use processed modules from decisions
 		const categoryModules = {};
 
 		for (const { processedModule, flattening } of processedModules) {
-			categoryModules[flattening.apiKey] = processedModule;
+			categoryModules[flattening.apiPathKey] = processedModule;
 		}
 
 		// SUBDIRECTORIES - handle the same as original
-		for (const { dirEntry: subDirEntry, apiKey: key } of subDirectories) {
+		for (const { dirEntry: subDirEntry, apiPathKey: key } of subDirectories) {
 			const subDirPath = path.join(categoryPath, subDirEntry.name);
 			let subModule;
 

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 09:04:06 -07:00 (1761581046)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -226,7 +226,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const entry of moduleFiles) {
 		const ext = path.extname(entry.name);
 		const fileName = path.basename(entry.name, ext);
-		const apiKey = instance._toApiKey(fileName);
+		const apiPathKey = instance._toapiPathKey(fileName);
 
 		// Check if we already loaded this module during first pass (for non-self-referential defaults)
 		let mod = null;
@@ -246,7 +246,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 		processModuleForAPI({
 			mod,
 			fileName,
-			apiKey,
+			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential,
 			api,
@@ -271,7 +271,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	// Attach directory proxies
 	for (const entry of entries) {
 		if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
-			const key = instance._toApiKey(entry.name);
+			const key = instance._toapiPathKey(entry.name);
 			const subDirPath = path.join(dir, entry.name);
 			const parent = api;
 			const depth = 1; // top-level directory depth for bubble-up

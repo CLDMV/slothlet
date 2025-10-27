@@ -340,11 +340,11 @@ if (hasMultipleDefaultExports && !moduleHasDefault) {
 
 #### **4. Auto-Flatten Single Named Export**
 
-**Exact Conditions**: `moduleKeys.length === 1` AND `moduleKeys[0] === apiKey`
+**Exact Conditions**: `moduleKeys.length === 1` AND `moduleKeys[0] === apiPathKey`
 **Action**: `shouldFlatten = true`, `useAutoFlattening = true`
 
 ```javascript
-if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	return {
 		shouldFlatten: true,
 		useAutoFlattening: true,
@@ -386,7 +386,7 @@ if (totalModules === 1 && !moduleHasDefault && moduleKeys.length > 0) {
 
 #### **7. Function Name Preservation**
 
-**Exact Conditions**: `typeof mod === "function"` AND `mod.name` AND `instance._toApiKey(mod.name).toLowerCase() === instance._toApiKey(moduleName).toLowerCase()` AND `mod.name !== instance._toApiKey(moduleName)`
+**Exact Conditions**: `typeof mod === "function"` AND `mod.name` AND `instance._toapiPathKey(mod.name).toLowerCase() === instance._toapiPathKey(moduleName).toLowerCase()` AND `mod.name !== instance._toapiPathKey(moduleName)`
 **Action**: `preferredName = mod.name` (preserve original capitalization)
 
 ```javascript
@@ -562,7 +562,7 @@ if (rootDefaultFn) {
 // Only root processing attaches subdirectories as API properties
 for (const entry of entries) {
   if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
-    const key = instance._toApiKey(entry.name);
+    const key = instance._toapiPathKey(entry.name);
     const subDirPath = path.join(dir, entry.name);
 
     // Lazy mode: creates proxy for deferred loading

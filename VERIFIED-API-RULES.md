@@ -129,7 +129,7 @@ api.config.secure; // → true
 // When no default function detected, preserve as namespace (named exports become object)
 else {
     // Traditional: preserve as namespace
-    apiAssignments[apiKey] = mod;
+    apiAssignments[apiPathKey] = mod;
     namespaced = true;
 }
 ```
@@ -258,7 +258,7 @@ if (mode === "root" && getRootDefault && setRootDefault && !hasMultipleDefaultEx
 	// Named exports are already attached as properties
 } else {
 	// Subfolder context: Create namespaced callable
-	apiAssignments[apiKey] = mod;
+	apiAssignments[apiPathKey] = mod;
 }
 ```
 
@@ -397,13 +397,13 @@ if (isSelfReferential) {
 
 // C08b: processModuleForAPI() function exports - line 728
 else if (isSelfReferential) {
-	apiAssignments[apiKey] = mod;
+	apiAssignments[apiPathKey] = mod;
 	namespaced = true;
 }
 
 // C09c: processModuleForAPI() non-function exports - line 797
 else if (isSelfReferential) {
-	apiAssignments[apiKey] = mod[apiKey] || mod;
+	apiAssignments[apiPathKey] = mod[apiPathKey] || mod;
 	namespaced = true;
 }
 
@@ -474,7 +474,7 @@ node -e "(async () => { const slothlet = await import('./index.mjs'); const api 
 
 ```javascript
 // C04: getFlatteningDecision() - line 593
-if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	return {
 		shouldFlatten: true,
 		useAutoFlattening: true,
@@ -488,13 +488,13 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 }
 
 // C20c: buildCategoryDecisions() multi-file - line 1731
-else if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+else if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	moduleDecision.shouldFlatten = true;
 	moduleDecision.flattenType = "single-named-export-match";
 }
 
 // C24: multidefault_getFlatteningDecision() - line 200
-if (moduleKeys.length === 1 && moduleKeys[0] === apiKey) {
+if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	return {
 		shouldFlatten: true,
 		reason: "single named export matching filename"
@@ -643,7 +643,7 @@ if (hasPreferredName) {
 // Function name preference logic checks:
 const functionNameLower = exportValue.name.toLowerCase();
 const filenameLower = fileName.toLowerCase();
-if (functionNameLower === filenameLower && exportValue.name !== apiKey) {
+if (functionNameLower === filenameLower && exportValue.name !== apiPathKey) {
 	preferredKey = exportValue.name; // Use original function name
 }
 ```
