@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/api_builder.mjs
+ *	@Date: 2025-10-27 10:18:09 -07:00 (1761585489)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-27 11:12:34 -07:00 (1761588754)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Centralized API decision-making system for slothlet. Internal file (not exported in package.json).
  * @module @cldmv/slothlet/src/lib/helpers/api_builder
  * @internal
