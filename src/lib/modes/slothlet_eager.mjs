@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
+ *	@Last modified time: 2025-10-27 11:04:06 -07:00 (1761588246)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -135,6 +135,8 @@
 // instead of importing a potentially different module instance via query params.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
+import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 
 /**
  * @function eager_wrapWithRunCtx
@@ -253,8 +255,6 @@ function eager_wrapWithRunCtx(obj, instance) {
  * // Otherwise: api is object with module properties
  */
 export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
-	// TEMPORARY: Revert to working logic to identify differences with buildRootAPI
-	const { processModuleForAPI } = await import("@cldmv/slothlet/helpers/api_builder");
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	const api = {};
 	let rootDefaultFunction = null;
@@ -263,7 +263,6 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
 	const defaultExportFiles = [];
 	// Use shared multi-default detection utility
-	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
 	const analysis = await multidefault_analyzeModules(moduleFiles, dir, this.config.debug);
 
 	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
@@ -294,7 +293,11 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 		const ext = path.extname(entry.name);
 		const fileName = path.basename(entry.name, ext);
 		const apiPathKey = this._toapiPathKey(fileName);
-		const mod = await this._loadSingleModule(path.join(dir, entry.name));
+
+		// Load and process module using uniform _loadSingleModule with analysis data
+		const moduleResult = await this._loadSingleModule(path.join(dir, entry.name), true);
+		const mod = moduleResult.mod;
+		const analysis = moduleResult.analysis;
 
 		// Use stored self-referential detection result from first pass
 		const isSelfReferential = selfReferentialFiles.has(fileName);
@@ -314,7 +317,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				debug: this.config.debug,
 				mode: "root",
 				totalModules: moduleFiles.length
-			}
+			},
+			originalAnalysis: analysis
 		});
 	}
 

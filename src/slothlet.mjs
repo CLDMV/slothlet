@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
+ *	@Last modified time: 2025-10-27 11:21:30 -07:00 (1761589290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -121,12 +121,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
-import {
-	processModuleForAPI,
-	analyzeModule,
-	processModuleFromAnalysis,
-	getCategoryBuildingDecisions
-} from "@cldmv/slothlet/helpers/api_builder";
+import { analyzeModule, processModuleFromAnalysis, getCategoryBuildingDecisions } from "@cldmv/slothlet/helpers/api_builder";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -775,21 +770,36 @@ const slothletObject = {
 	 * Loads a single module file and returns its exports (flattened if needed).
 	 * @async
 	 * @memberof module:@cldmv/slothlet
-	 * @param {string} modulePath
-	 * @returns {Promise<object>}
+	 * @param {string} modulePath - Absolute path to the module file to load
+	 * @param {boolean} [returnAnalysis=false] - When true, returns both processed module and original analysis data.
+	 *   Required for multi-default export handling where flattening decisions need access to original
+	 *   analysis results (hasDefault, namedExportsCount, etc.) before processModuleFromAnalysis
+	 *   modifies the module structure by attaching named exports to default exports.
+	 * @returns {Promise<object|{mod: object, analysis: object}>}
+	 *   When returnAnalysis=false: Returns processed module exports only (legacy behavior).
+	 *   When returnAnalysis=true: Returns {mod: processedModule, analysis: originalAnalysis}
+	 *   where analysis contains unmodified module metadata for accurate flattening decisions.
 	 * @private
 	 * @internal
 	 */
-	async _loadSingleModule(modulePath) {
+	async _loadSingleModule(modulePath, returnAnalysis = false) {
 		// Use centralized module loading logic
 		const analysis = await analyzeModule(modulePath, {
 			debug: this.config.debug,
 			instance: this
 		});
-		return processModuleFromAnalysis(analysis, {
+		const processedModule = processModuleFromAnalysis(analysis, {
 			debug: this.config.debug,
 			instance: this
 		});
+
+		// Return both analysis and processed module when requested for multi-default handling
+		if (returnAnalysis) {
+			return { mod: processedModule, analysis };
+		}
+
+		// Legacy behavior: return only processed module
+		return processedModule;
 	},
 
 	/**

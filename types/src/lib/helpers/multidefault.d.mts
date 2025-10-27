@@ -18,21 +18,17 @@
  *   // Handle multi-default context
  * }
  */
-export function multidefault_analyzeModules(
-	moduleFiles: Array<{
-		name: string;
-	}>,
-	baseDir: string,
-	debug?: boolean
-): Promise<{
-	totalDefaultExports: number;
-	hasMultipleDefaultExports: boolean;
-	selfReferentialFiles: Set<string>;
-	rawModuleCache: Map<string, object>;
-	defaultExportFiles: Array<{
-		fileName: string;
-		rawModule: object;
-	}>;
+export function multidefault_analyzeModules(moduleFiles: Array<{
+    name: string;
+}>, baseDir: string, debug?: boolean): Promise<{
+    totalDefaultExports: number;
+    hasMultipleDefaultExports: boolean;
+    selfReferentialFiles: Set<string>;
+    rawModuleCache: Map<string, object>;
+    defaultExportFiles: Array<{
+        fileName: string;
+        rawModule: object;
+    }>;
 }>;
 /**
  * Checks if a raw module's default export is self-referential (points to a named export).
@@ -73,17 +69,17 @@ export function multidefault_isSelfReferential(rawModule: object): boolean;
  * });
  */
 export function multidefault_getFlatteningDecision(options: {
-	hasMultipleDefaultExports: boolean;
-	moduleHasDefault: boolean;
-	isSelfReferential: boolean;
-	moduleKeys: Array<string>;
-	apiPathKey: string;
-	totalModuleCount: number;
-	debug?: boolean;
+    hasMultipleDefaultExports: boolean;
+    moduleHasDefault: boolean;
+    isSelfReferential: boolean;
+    moduleKeys: Array<string>;
+    apiPathKey: string;
+    totalModuleCount: number;
+    debug?: boolean;
 }): {
-	shouldFlatten: boolean;
-	flattenToRoot: boolean;
-	preserveAsNamespace: boolean;
-	reason: string;
+    shouldFlatten: boolean;
+    flattenToRoot: boolean;
+    preserveAsNamespace: boolean;
+    reason: string;
 };
 //# sourceMappingURL=multidefault.d.mts.map
