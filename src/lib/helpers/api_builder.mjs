@@ -1120,7 +1120,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod, analysis });
 		}
 	}
 
@@ -1149,11 +1149,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
 		if (existingDefault) {
 			mod = existingDefault.mod; // Reuse already loaded module
-			// Need to re-analyze for originalAnalysis data
-			analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				debug,
-				instance
-			});
+			analysis = existingDefault.analysis; // Reuse stored analysis data
 		} else {
 			analysis = await analyzeModule(path.join(categoryPath, file.name), {
 				debug,
@@ -1634,7 +1630,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod, analysis });
 		}
 	}
 
