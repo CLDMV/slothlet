@@ -484,8 +484,11 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["utilities", "helpers", "parse"], args: ['{"test":true}'] }]
 		},
 
-		// empty folder test (Rule 5 verification)
-		{ section: "empty (empty folder)", calls: [{ path: ["empty"], args: [] }] }
+		// empty folder test (Rule 5 verification - should create empty object)
+		{
+			section: "empty (empty folder/object)",
+			calls: [{ path: ["empty"], args: [], isObject: true }]
+		}
 	];
 
 	let testCounter = 0;
@@ -497,7 +500,14 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			// Auto-generate label from path and args
 			const pathStr = call.path.join(".");
 			const argsStr = call.args.map((a) => JSON.stringify(a)).join(", ");
-			const label = `bound${pathStr ? "." + pathStr : ""}(${argsStr})`;
+			let label;
+			if (call.isObject) {
+				// Object access - no parentheses
+				label = `bound${pathStr ? "." + pathStr : ""}`;
+			} else {
+				// Function call - with parentheses and args
+				label = `bound${pathStr ? "." + pathStr : ""}(${argsStr})`;
+			}
 
 			// Single-shot property access for correct Proxy getter behavior
 			let fn;
@@ -532,7 +542,11 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 				};
 
 				let result;
-				if (typeof fn === "function") {
+				if (call.isObject) {
+					// Object access - just return the object/property, don't call it
+					console.log("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
+					result = fn;
+				} else if (typeof fn === "function") {
 					console.log("[DEBUG_SCRIPT] About to call function with args:", call.args);
 					if (awaitCalls) {
 						result = await fn(...call.args);
@@ -547,14 +561,19 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 					// Fallback to eval for dynamic property/function chains
 					const objName = "bound";
 					const pathStr = call.path.join(".");
-					const argsStr = call.args.map((a) => JSON.stringify(a)).join(",");
-					const evalStr = `${objName}${pathStr ? "." + pathStr : ""}(${argsStr})`;
-					// console.log("evalStr: ", evalStr);
-					// process.exit(0);
-					if (awaitCalls) {
-						result = await eval(evalStr);
-					} else {
+					if (call.isObject) {
+						// Just access the property, don't call it
+						const evalStr = `${objName}${pathStr ? "." + pathStr : ""}`;
 						result = eval(evalStr);
+					} else {
+						// Call the function
+						const argsStr = call.args.map((a) => JSON.stringify(a)).join(",");
+						const evalStr = `${objName}${pathStr ? "." + pathStr : ""}(${argsStr})`;
+						if (awaitCalls) {
+							result = await eval(evalStr);
+						} else {
+							result = eval(evalStr);
+						}
 					}
 				}
 

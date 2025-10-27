@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-24 17:11:52 -07:00 (1761351112)
+ *	@Last modified time: 2025-10-27 09:04:06 -07:00 (1761581046)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -152,6 +152,7 @@
  *
  */
 import fs from "node:fs/promises";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
@@ -274,6 +275,33 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 			const subDirPath = path.join(dir, entry.name);
 			const parent = api;
 			const depth = 1; // top-level directory depth for bubble-up
+
+			// Check if the folder is empty and add empty object immediately (Rule 5)
+			try {
+				const subEntries = readdirSync(subDirPath, { withFileTypes: true });
+				const hasFiles = subEntries.some(
+					(subEntry) =>
+						subEntry.isFile() &&
+						!subEntry.name.startsWith(".") &&
+						(subEntry.name.endsWith(".mjs") || subEntry.name.endsWith(".cjs") || subEntry.name.endsWith(".js"))
+				);
+				const hasSubdirs = subEntries.some((subEntry) => subEntry.isDirectory() && !subEntry.name.startsWith("."));
+
+				// If no modules and no subdirectories, add empty object immediately
+				if (!hasFiles && !hasSubdirs) {
+					if (instance?.config?.debug) {
+						console.log(`[lazy][debug] empty folder detected during traversal: ${subDirPath} -> adding {}`);
+					}
+					parent[key] = {};
+					continue; // Skip creating lazy proxy
+				}
+			} catch (error) {
+				// If we can't read the directory, fall back to lazy proxy
+				if (instance?.config?.debug) {
+					console.log(`[lazy][debug] error reading directory ${subDirPath}: ${error.message}, creating lazy proxy`);
+				}
+			}
+
 			const proxy = createFolderProxy({
 				subDirPath,
 				key,
