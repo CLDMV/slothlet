@@ -1,11 +1,24 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/adb.mjs
+ *	@Date: 2025-10-27 10:20:49 -07:00 (1761585649)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-27 11:05:54 -07:00 (1761588354)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * ADB API module for Android TV Remote - Dummy implementation for testing.
  * Provides direct ADB client access and common ADB operations.
  * @module adb
  */
 
 // Slothlet runtime imports for live bindings
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self } from "@cldmv/slothlet/runtime";
 
 // Dummy ADB client state
 let adbClient = { connected: false };

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
+ *	@Last modified time: 2025-10-27 11:04:23 -07:00 (1761588263)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -155,7 +155,8 @@ import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
-import { processModuleForAPI, analyzeModule, processModuleFromAnalysis } from "@cldmv/slothlet/helpers/api_builder";
+import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
+import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 
 /**
  * @function create
@@ -198,7 +199,6 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const defaultExportFiles = [];
 
 	// Use shared multi-default detection utility
-	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
 	const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
 
 	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
@@ -208,16 +208,10 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const { fileName } of analysisDefaults) {
 		const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
 		if (entry) {
-			// Load and process module, retaining analysis data
-			const modulePath = path.join(dir, entry.name);
-			const moduleAnalysis = await analyzeModule(modulePath, {
-				debug: instance.config.debug,
-				instance
-			});
-			const mod = processModuleFromAnalysis(moduleAnalysis, {
-				debug: instance.config.debug,
-				instance
-			});
+			// Load and process module using uniform _loadSingleModule with analysis data
+			const moduleResult = await instance._loadSingleModule(path.join(dir, entry.name), true);
+			const mod = moduleResult.mod;
+			const moduleAnalysis = moduleResult.analysis;
 			defaultExportFiles.push({ entry, fileName, mod, analysis: moduleAnalysis });
 		}
 	}
@@ -245,16 +239,10 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 			mod = existingDefault.mod; // Reuse already loaded module
 			analysis = existingDefault.analysis; // Reuse analysis if available
 		} else {
-			// Load and process module, retaining analysis data
-			const modulePath = path.join(dir, entry.name);
-			analysis = await analyzeModule(modulePath, {
-				debug: instance.config.debug,
-				instance
-			});
-			mod = processModuleFromAnalysis(analysis, {
-				debug: instance.config.debug,
-				instance
-			});
+			// Load and process module using uniform _loadSingleModule with analysis data
+			const moduleResult = await instance._loadSingleModule(path.join(dir, entry.name), true);
+			mod = moduleResult.mod;
+			analysis = moduleResult.analysis;
 			processedModuleCache.set(entry.name, mod);
 		}
 

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
+ *	@Last modified time: 2025-10-27 11:05:45 -07:00 (1761588345)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -121,12 +121,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
-import {
-	processModuleForAPI,
-	analyzeModule,
-	processModuleFromAnalysis,
-	getCategoryBuildingDecisions
-} from "@cldmv/slothlet/helpers/api_builder";
+import { analyzeModule, processModuleFromAnalysis, getCategoryBuildingDecisions } from "@cldmv/slothlet/helpers/api_builder";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -780,16 +775,24 @@ const slothletObject = {
 	 * @private
 	 * @internal
 	 */
-	async _loadSingleModule(modulePath) {
+	async _loadSingleModule(modulePath, returnAnalysis = false) {
 		// Use centralized module loading logic
 		const analysis = await analyzeModule(modulePath, {
 			debug: this.config.debug,
 			instance: this
 		});
-		return processModuleFromAnalysis(analysis, {
+		const processedModule = processModuleFromAnalysis(analysis, {
 			debug: this.config.debug,
 			instance: this
 		});
+
+		// Return both analysis and processed module when requested for multi-default handling
+		if (returnAnalysis) {
+			return { mod: processedModule, analysis };
+		}
+
+		// Legacy behavior: return only processed module
+		return processedModule;
 	},
 
 	/**
