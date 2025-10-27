@@ -180,7 +180,9 @@ export function getCategoryBuildingDecisions(categoryPath: string, options?: {
  * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist in the container
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
- * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export
+ * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export.
+ *   Should use originalAnalysis.hasDefault when available for accuracy, as !!mod.default
+ *   may be inaccurate after processModuleFromAnalysis modifies module structure.
  * @param {string} [options.categoryName] - Container/category name for context
  * @param {number} [options.totalModules=1] - Total number of modules in container
  * @param {boolean} [options.debug=false] - Enable debug logging

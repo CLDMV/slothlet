@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 11:05:45 -07:00 (1761588345)
+ *	@Last modified time: 2025-10-27 11:21:30 -07:00 (1761589290)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -770,8 +770,15 @@ const slothletObject = {
 	 * Loads a single module file and returns its exports (flattened if needed).
 	 * @async
 	 * @memberof module:@cldmv/slothlet
-	 * @param {string} modulePath
-	 * @returns {Promise<object>}
+	 * @param {string} modulePath - Absolute path to the module file to load
+	 * @param {boolean} [returnAnalysis=false] - When true, returns both processed module and original analysis data.
+	 *   Required for multi-default export handling where flattening decisions need access to original
+	 *   analysis results (hasDefault, namedExportsCount, etc.) before processModuleFromAnalysis
+	 *   modifies the module structure by attaching named exports to default exports.
+	 * @returns {Promise<object|{mod: object, analysis: object}>}
+	 *   When returnAnalysis=false: Returns processed module exports only (legacy behavior).
+	 *   When returnAnalysis=true: Returns {mod: processedModule, analysis: originalAnalysis}
+	 *   where analysis contains unmodified module metadata for accurate flattening decisions.
 	 * @private
 	 * @internal
 	 */

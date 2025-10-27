@@ -522,7 +522,9 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
  * @param {string} options.apiPathKey - Sanitized API key for the module
  * @param {boolean} options.hasMultipleDefaultExports - Whether multiple default exports exist in the container
  * @param {boolean} options.isSelfReferential - Whether this is a self-referential export
- * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export
+ * @param {boolean} [options.moduleHasDefault] - Whether this specific module has a default export.
+ *   Should use originalAnalysis.hasDefault when available for accuracy, as !!mod.default
+ *   may be inaccurate after processModuleFromAnalysis modifies module structure.
  * @param {string} [options.categoryName] - Container/category name for context
  * @param {number} [options.totalModules=1] - Total number of modules in container
  * @param {boolean} [options.debug=false] - Enable debug logging
@@ -560,6 +562,8 @@ export function getFlatteningDecision(options) {
 		apiPathKey,
 		hasMultipleDefaultExports,
 		isSelfReferential,
+		// Legacy fallback: !!mod.default may be inaccurate after processModuleFromAnalysis
+		// attaches named exports to default exports. Callers should pass explicit analysis data.
 		moduleHasDefault = !!mod.default,
 		categoryName,
 		totalModules = 1
@@ -795,6 +799,9 @@ export function processModuleForAPI(options) {
 			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential,
+			// Prefer original analysis data when available for accurate flattening decisions.
+			// Fallback to !!mod.default only for legacy callers (buildCategoryStructure) that 
+			// haven't been updated to use uniform _loadSingleModule approach yet.
 			moduleHasDefault: originalAnalysis ? originalAnalysis.hasDefault : !!mod.default,
 			categoryName,
 			totalModules,
