@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-21 14:32:16 -07:00 (1761082336)
+ *	@Last modified time: 2025-10-27 08:09:40 -07:00 (1761577780)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -447,8 +447,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["advanced", "nest3"], args: ["slothlet"] }]
 		},
 		{
-			section: "advanced.nest",
-			calls: [{ path: ["advanced", "nest"], args: ["slothlet"] }]
+			section: "advanced.nest.alpha",
+			calls: [{ path: ["advanced", "nest", "alpha"], args: ["slothlet"] }]
 		},
 		{
 			section: "advanced.nest2.alpha.hello",
@@ -459,8 +459,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["advanced", "nest2", "beta", "world"], args: [] }]
 		},
 		{
-			section: "advanced.nest4.singlefile",
-			calls: [{ path: ["advanced", "nest4", "singlefile"], args: ["singlefile"] }]
+			section: "advanced.nest4.beta",
+			calls: [{ path: ["advanced", "nest4", "beta"], args: ["singlefile"] }]
 		},
 
 		// exportDefault
@@ -476,11 +476,23 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "tcp.testContext",
 			calls: [{ path: ["tcp", "testContext"], args: [] }]
+		},
+
+		// utilities.helpers (Rule 11 test case - single file with named exports)
+		{
+			section: "utilities.helpers.parse",
+			calls: [{ path: ["utilities", "helpers", "parse"], args: ['{"test":true}'] }]
+		},
+
+		// empty folder test (Rule 5 verification - should create empty object)
+		{
+			section: "empty (empty folder/object)",
+			calls: [{ path: ["empty"], args: [], isObject: true }]
 		}
 	];
 
 	let testCounter = 0;
-	const testBeforeOutput = 37;
+	const testBeforeOutput = 40;
 
 	for (const test of tests) {
 		console.log(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
@@ -488,7 +500,14 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			// Auto-generate label from path and args
 			const pathStr = call.path.join(".");
 			const argsStr = call.args.map((a) => JSON.stringify(a)).join(", ");
-			const label = `bound${pathStr ? "." + pathStr : ""}(${argsStr})`;
+			let label;
+			if (call.isObject) {
+				// Object access - no parentheses
+				label = `bound${pathStr ? "." + pathStr : ""}`;
+			} else {
+				// Function call - with parentheses and args
+				label = `bound${pathStr ? "." + pathStr : ""}(${argsStr})`;
+			}
 
 			// Single-shot property access for correct Proxy getter behavior
 			let fn;
@@ -523,25 +542,38 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 				};
 
 				let result;
-				if (typeof fn === "function") {
+				if (call.isObject) {
+					// Object access - just return the object/property, don't call it
+					console.log("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
+					result = fn;
+				} else if (typeof fn === "function") {
 					console.log("[DEBUG_SCRIPT] About to call function with args:", call.args);
 					if (awaitCalls) {
 						result = await fn(...call.args);
 					} else {
 						result = fn(...call.args);
 					}
+				} else if (typeof fn === "object" && fn !== null) {
+					// Handle objects - don't try to call them, just return the object
+					console.log("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
+					result = fn;
 				} else {
 					// Fallback to eval for dynamic property/function chains
 					const objName = "bound";
 					const pathStr = call.path.join(".");
-					const argsStr = call.args.map((a) => JSON.stringify(a)).join(",");
-					const evalStr = `${objName}${pathStr ? "." + pathStr : ""}(${argsStr})`;
-					// console.log("evalStr: ", evalStr);
-					// process.exit(0);
-					if (awaitCalls) {
-						result = await eval(evalStr);
-					} else {
+					if (call.isObject) {
+						// Just access the property, don't call it
+						const evalStr = `${objName}${pathStr ? "." + pathStr : ""}`;
 						result = eval(evalStr);
+					} else {
+						// Call the function
+						const argsStr = call.args.map((a) => JSON.stringify(a)).join(",");
+						const evalStr = `${objName}${pathStr ? "." + pathStr : ""}(${argsStr})`;
+						if (awaitCalls) {
+							result = await eval(evalStr);
+						} else {
+							result = eval(evalStr);
+						}
 					}
 				}
 

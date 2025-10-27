@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-24 11:30:58 -07:00 (1761330658)
+ *	@Last modified time: 2025-10-24 14:51:51 -07:00 (1761342711)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -27,11 +27,11 @@ import { pathToFileURL } from "url";
  * @param {any} obj - Object to inspect
  * @param {string} [path=""] - Current path for display
  * @param {number} [depth=0] - Current recursion depth
- * @param {number} [maxDepth=3] - Maximum depth to traverse
+ * @param {number} [maxDepth=8] - Maximum depth to traverse
  * @param {WeakSet} [visited=new WeakSet()] - Visited objects to prevent cycles
  * @returns {string[]} Array of formatted strings describing the structure
  */
-function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 3, visited = new WeakSet()) {
+function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = new WeakSet()) {
 	const indent = "  ".repeat(depth);
 	const results = [];
 
@@ -179,18 +179,19 @@ async function forceMaterializeLazyFolders(api) {
 						}
 					}
 
-					// Method 2: Force materialization by accessing the property multiple ways
-					console.log(chalk.gray(`    Trying property access...`));
-					let result = api[key].config;
-					if (!result) {
-						result = api[key].subfolder || api[key].index || api[key].main;
+					// Method 2: Force materialization by accessing ANY property to trigger proxy
+					console.log(chalk.gray(`    Trying property access to trigger materialization...`));
+					try {
+						// Access a non-existent property to trigger the proxy handler without side effects
+						const _ = api[key].__force_materialization__;
+						// Also try accessing common property patterns
+						api[key].config || api[key].index || api[key].main || api[key].alpha || api[key].test;
+					} catch {
+						// Property access might throw, but it should still trigger materialization
 					}
 
 					// Method 3: Wait for any pending materialization
-					if (!result) {
-						await new Promise((resolve) => setTimeout(resolve, 100)); // Give lazy proxy time
-						result = api[key].config;
-					}
+					await new Promise((resolve) => setTimeout(resolve, 50)); // Give lazy proxy time
 
 					// Check if it's now materialized
 					const newValue = api[key];
@@ -214,28 +215,31 @@ async function forceMaterializeLazyFolders(api) {
  * Main inspection function that loads an API and displays its structure.
  * @param {string} apiName - Name of the API folder in api_tests (e.g., "api_test", "api_test_cjs")
  * @param {object} [options] - Options for display
- * @param {number} [options.maxDepth=3] - Maximum depth to traverse
+ * @param {number} [options.maxDepth=8] - Maximum depth to traverse
  * @param {boolean} [options.showMethods=false] - Whether to show available methods for functions
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 3 } = options;
+	const { maxDepth = 8, lazy = true } = options;
 
-	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} ===\n`));
+	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${lazy ? "lazy" : "eager"} mode) ===\n`));
 
 	try {
 		const apiPath = `./api_tests/${apiName}`;
 		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
 		// Load the API
-		const api = await slothlet({ dir: apiPath, lazy: true });
+		const api = await slothlet({ dir: apiPath, lazy: lazy });
 
 		console.log(chalk.green("✅ API loaded successfully"));
 
-		// Force materialization of lazy folders by accessing them
-		await forceMaterializeLazyFolders(api);
-
-		console.log(chalk.green("✅ Lazy folders materialized\n"));
+		// Force materialization of lazy folders if in lazy mode
+		if (lazy) {
+			await forceMaterializeLazyFolders(api);
+			console.log(chalk.green("✅ Lazy folders materialized\n"));
+		} else {
+			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
+		}
 
 		console.log(api);
 
@@ -262,7 +266,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Show callable paths
 		console.log(chalk.bold("\nCallable Paths:"));
-		const callablePaths = findCallablePaths(api);
+		const callablePaths = await findCallablePaths(api, "api", new WeakSet(), false, 0, maxDepth);
 		if (callablePaths.length === 0) {
 			console.log(chalk.gray("  No callable functions found"));
 		} else {
@@ -271,9 +275,10 @@ async function inspectApi(apiName, options = {}) {
 			}
 		}
 
-		// Show shutdown method if available
+		// Shutdown the API instance to clean up resources
 		if (typeof api.shutdown === "function") {
-			console.log(chalk.yellow("\n💡 Remember to call api.shutdown() when done"));
+			await api.shutdown();
+			console.log(chalk.green("✅ API instance shutdown cleanly"));
 		}
 	} catch (error) {
 		console.error(chalk.red("❌ Error loading API:"), error.message);
@@ -284,30 +289,88 @@ async function inspectApi(apiName, options = {}) {
 }
 
 /**
- * Find all callable paths in an API structure.
- * @param {any} obj - Object to search
- * @param {string} [basePath="api"] - Base path for display
- * @param {WeakSet} [visited=new WeakSet()] - Visited objects to prevent cycles
- * @param {boolean} [skipSelf=false] - Skip adding the object itself as callable (to avoid duplicates)
- * @returns {string[]} Array of callable paths
+ * Recursively materializes lazy proxy structures by calling their _materialize methods.
+ * @param {any} obj - Object to materialize
+ * @param {WeakSet} [visited] - Visited objects tracker to prevent infinite recursion
+ * @returns {Promise<void>}
  */
-function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false) {
+async function materializeLazyStructure(obj, visited = new WeakSet()) {
+	// Avoid infinite recursion
+	if (!obj || visited.has(obj)) return;
+
+	// Only process objects and functions
+	if (typeof obj !== "object" && typeof obj !== "function") return;
+
+	visited.add(obj);
+
+	// Check if this is a lazy proxy with a _materialize method
+	if (typeof obj === "function" && obj._materialize && typeof obj._materialize === "function") {
+		try {
+			await obj._materialize();
+			// After materialization, get the materialized value and recurse into it
+			const materialized = obj.__materialized;
+			if (materialized && materialized !== obj) {
+				await materializeLazyStructure(materialized, visited);
+			}
+		} catch (_) {
+			// Silently ignore materialization errors
+		}
+	}
+
+	// Recursively materialize all properties
+	if (obj && (typeof obj === "object" || typeof obj === "function")) {
+		// Use Object.getOwnPropertyNames to get all properties including non-enumerable ones
+		const propNames = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+		for (const prop of propNames) {
+			try {
+				const value = obj[prop];
+				if (value && (typeof value === "object" || typeof value === "function")) {
+					await materializeLazyStructure(value, visited);
+				}
+			} catch {
+				// Ignore property access errors (getters that throw, etc.)
+			}
+		}
+	}
+}
+
+/**
+ * Finds all callable paths in an API object structure.
+ * @param {any} obj - Object to traverse
+ * @param {string} [basePath="api"] - Base path string
+ * @param {WeakSet} [visited] - Visited objects tracker
+ * @param {boolean} [skipSelf=false] - Skip adding the object itself as callable (to avoid duplicates)
+ * @param {number} [depth=0] - Current depth
+ * @param {number} [maxDepth=8] - Maximum depth to traverse
+ * @returns {Promise<string[]>} Array of callable paths
+ */
+async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false, depth = 0, maxDepth = 8) {
 	const paths = [];
 
-	if (!obj || visited.has(obj)) return paths;
+	// Stop if too deep or if we've already processed this object (but only for non-functions or deep objects)
+	if (!obj || depth > maxDepth) return paths;
 
-	if (typeof obj === "object") {
+	// Only prevent revisiting for objects/functions at deeper levels to avoid infinite recursion
+	if ((typeof obj === "object" || typeof obj === "function") && depth > 1 && visited.has(obj)) return paths;
+
+	// Add to visited set (for both objects and functions to prevent cycles)
+	if ((typeof obj === "object" || typeof obj === "function") && obj !== null) {
 		visited.add(obj);
 	}
+
+	// Force materialization of lazy proxies using the exposed _materialize method
+	await materializeLazyStructure(obj);
 
 	// If the object itself is callable, add it (unless skipSelf is true)
 	if (typeof obj === "function" && !skipSelf) {
 		paths.push(`${basePath}()`);
 	}
 
-	// Search properties
-	if (obj && typeof obj === "object") {
-		for (const [key, value] of Object.entries(obj)) {
+	// Search properties (works for both objects and functions since functions can have properties)
+	if (obj && (typeof obj === "object" || typeof obj === "function")) {
+		const entries = Object.entries(obj);
+
+		for (const [key, value] of entries) {
 			if (key.startsWith("_") || key === "shutdown") continue;
 
 			const newPath = `${basePath}.${key}`;
@@ -316,10 +379,10 @@ function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipS
 				paths.push(`${newPath}()`);
 
 				// Check for properties on functions (but skip adding the function itself again)
-				const subPaths = findCallablePaths(value, newPath, visited, true);
+				const subPaths = await findCallablePaths(value, newPath, visited, true, depth + 1, maxDepth);
 				paths.push(...subPaths);
 			} else if (value && typeof value === "object") {
-				const subPaths = findCallablePaths(value, newPath, visited);
+				const subPaths = await findCallablePaths(value, newPath, visited, false, depth + 1, maxDepth);
 				paths.push(...subPaths);
 			}
 		}
@@ -340,16 +403,18 @@ async function main() {
 		console.log("  node tools/inspect-api-structure.mjs <api-name> [options]");
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
-		console.log("  node tools/inspect-api-structure.mjs api_test_cjs");
-		console.log("  node tools/inspect-api-structure.mjs api_test_mixed");
+		console.log("  node tools/inspect-api-structure.mjs api_test_cjs --eager");
+		console.log("  node tools/inspect-api-structure.mjs api_test_mixed --lazy");
 		console.log("\nOptions:");
 		console.log("  --depth <n>     Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods  Show available methods for functions");
+		console.log("  --lazy          Use lazy loading mode (default)");
+		console.log("  --eager         Use eager loading mode");
 		return;
 	}
 
 	const apiName = args[0];
-	const options = {};
+	const options = { lazy: true }; // Default to lazy mode
 
 	// Parse options
 	for (let i = 1; i < args.length; i++) {
@@ -358,6 +423,10 @@ async function main() {
 			i++; // Skip next arg
 		} else if (args[i] === "--show-methods") {
 			options.showMethods = true;
+		} else if (args[i] === "--lazy") {
+			options.lazy = true;
+		} else if (args[i] === "--eager") {
+			options.lazy = false;
 		}
 	}
 

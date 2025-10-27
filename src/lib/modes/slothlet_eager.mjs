@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:33 -07:00 (1761266373)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -135,7 +135,6 @@
 // instead of importing a potentially different module instance via query params.
 import fs from "node:fs/promises";
 import path from "node:path";
-// import { runWithCtx } from "@cldmv/slothlet/runtime";
 
 /**
  * @function eager_wrapWithRunCtx
@@ -233,7 +232,6 @@ function eager_wrapWithRunCtx(obj, instance) {
  * @alias module:@cldmv/slothlet.modes.eager.create
  * @memberof module:@cldmv/slothlet.modes.eager
  * @param {string} dir - Directory to load
- * @param {boolean} [rootLevel=true] - Is this the root level?
  * @param {number} [maxDepth=Infinity] - Maximum depth to traverse
  * @param {number} [currentDepth=0] - Current traversal depth
  * @returns {Promise<object>} Complete API object with all modules loaded
@@ -245,168 +243,85 @@ function eager_wrapWithRunCtx(obj, instance) {
  *
  * @example
  * // Internal usage - called by slothlet core
- * const api = await create('./api_test', true, 3, 0);
+ * const api = await create('./api_test', 3, 0);
  * // Returns: { math: { add: [Function], multiply: [Function] }, ... }
  *
  * @example
  * // Root-level processing with function exports
- * const api = await create('./api_test', true);
+ * const api = await create('./api_test');
  * // If root has default function: api becomes that function with properties
  * // Otherwise: api is object with module properties
  */
-export async function create(dir, rootLevel = true, maxDepth = Infinity, currentDepth = 0) {
-	// const instance = this; // bound slothlet instance
+export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
+	// TEMPORARY: Revert to working logic to identify differences with buildRootAPI
+	const { processModuleForAPI } = await import("@cldmv/slothlet/helpers/api_builder");
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	const api = {};
-	// const rootFunctions = [];
-	const rootNamedExports = {};
-	// let rootFunctionKey = null;
 	let rootDefaultFunction = null;
 
-	if (rootLevel) {
-		// NEW: Detect multiple default exports for multi-default handling
-		const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
-		const defaultExportFiles = [];
+	// NEW: Detect multiple default exports for multi-default handling
+	const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
+	const defaultExportFiles = [];
+	// Use shared multi-default detection utility
+	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
+	const analysis = await multidefault_analyzeModules(moduleFiles, dir, this.config.debug);
 
-		// First pass: detect default exports (excluding self-referential defaults)
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
-			const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
+	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
-			if (this.config.debug) {
-				console.log(`[DEBUG] First pass - ${fileName}: hasDefault=${mod && "default" in mod}`);
-			}
-
-			if (mod && "default" in mod) {
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(mod).some(([key, value]) => key !== "default" && value === mod.default);
-
-				if (!isSelfReferential) {
-					defaultExportFiles.push({ entry, fileName, mod });
-					if (this.config.debug) {
-						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
-					}
-				} else {
-					if (this.config.debug) {
-						console.log(`[DEBUG] Skipped ${fileName} - self-referential default export`);
-					}
-				}
-			}
+	// Convert analysis results to match existing structure
+	defaultExportFiles.length = 0; // Clear existing array
+	for (const { fileName } of analysisDefaults) {
+		const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+		if (entry) {
+			const mod = await this._loadSingleModule(path.join(dir, entry.name));
+			defaultExportFiles.push({ entry, fileName, mod });
 		}
-		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+	}
 
-		if (this.config.debug) {
-			console.log(
-				`[DEBUG] Detection result: ${defaultExportFiles.length} default exports found, hasMultipleDefaultExports=${hasMultipleDefaultExports}`
-			);
-			console.log(
-				`[DEBUG] Default export files:`,
-				defaultExportFiles.map((f) => f.fileName)
-			);
-		}
+	if (this.config.debug) {
+		console.log(`[DEBUG] Eager mode: Using shared multidefault utility results`);
+		console.log(
+			`[DEBUG] Detection result: ${totalDefaultExports} total defaults (${defaultExportFiles.length} non-self-referential + ${selfReferentialFiles.size} self-referential), hasMultipleDefaultExports=${hasMultipleDefaultExports}`
+		);
+		console.log(
+			`[DEBUG] Default export files:`,
+			defaultExportFiles.map((f) => f.fileName)
+		);
+	}
 
-		// Second pass: process files with multi-default awareness
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
-			const apiKey = this._toApiKey(fileName);
-			const mod = await this._loadSingleModule(path.join(dir, entry.name), true);
+	// Second pass: process files with multi-default awareness
+	for (const entry of moduleFiles) {
+		const ext = path.extname(entry.name);
+		const fileName = path.basename(entry.name, ext);
+		const apiPathKey = this._toapiPathKey(fileName);
+		const mod = await this._loadSingleModule(path.join(dir, entry.name));
 
-			// Check if this is a self-referential default (default export points to a named export)
-			const isSelfReferential =
-				mod && "default" in mod && Object.entries(mod).some(([key, value]) => key !== "default" && value === mod.default);
+		// Use stored self-referential detection result from first pass
+		const isSelfReferential = selfReferentialFiles.has(fileName);
 
-			if (mod && typeof mod.default === "function") {
-				if (hasMultipleDefaultExports && !isSelfReferential) {
-					// Multi-default case: use filename as API key
-					api[apiKey] = mod.default;
-
-					// Also add named exports to the function
-					for (const [key, value] of Object.entries(mod)) {
-						if (key !== "default") {
-							api[apiKey][key] = value;
-						}
-					}
-
-					if (this.config.debug) {
-						console.log(`[DEBUG] Multi-default in eager mode: using filename '${apiKey}' for default export`);
-					}
-				} else {
-					// Traditional single default case OR self-referential case: becomes root API
-					if (this.config.debug) {
-						console.log(
-							`[DEBUG] Processing traditional default: hasMultipleDefaultExports=${hasMultipleDefaultExports}, isSelfReferential=${isSelfReferential}, rootDefaultFunction=${!!rootDefaultFunction}`
-						);
-					}
-					if ((!hasMultipleDefaultExports || isSelfReferential) && !rootDefaultFunction) {
-						rootDefaultFunction = mod.default;
-						if (this.config.debug) {
-							console.log(`[DEBUG] Set rootDefaultFunction to:`, mod.default.name);
-						}
-					} else {
-						if (this.config.debug) {
-							console.log(`[DEBUG] Skipped setting rootDefaultFunction due to multi-default scenario`);
-						}
-					}
-					for (const [key, value] of Object.entries(mod)) {
-						if (key !== "default") api[key] = value;
-					}
-				}
-			} else {
-				// Handle non-function defaults and modules with only named exports
-				if (this.config.debug) {
-					console.log(`[DEBUG] Processing non-function or named-only exports for ${fileName}`);
-				}
-
-				if (isSelfReferential) {
-					// Self-referential case: treat as namespace (don't flatten)
-					if (this.config.debug) {
-						console.log(`[DEBUG] Self-referential ${fileName}: preserving as namespace`);
-					}
-					api[apiKey] = mod.default; // Use the default export as the namespace
-				} else if (hasMultipleDefaultExports) {
-					// Multi-default context: flatten non-default files to root level
-					if (this.config.debug) {
-						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
-					}
-					// Helper function to add named exports to API and rootNamedExports
-					const eager_addNamedExportsToApi = (exports, api, rootNamedExports) => {
-						for (const [key, value] of Object.entries(exports)) {
-							if (key !== "default") {
-								api[key] = value;
-								rootNamedExports[key] = value;
-							}
-						}
-					};
-
-					if (mod && "default" in mod) {
-						// Non-function default in multi-default context
-						api[apiKey] = mod.default;
-						// Add named exports as separate properties on the API object, not on the default export
-						eager_addNamedExportsToApi(mod, api, rootNamedExports);
-					} else {
-						// No default export: flatten all exports to root
-						eager_addNamedExportsToApi(mod, api, rootNamedExports);
-					}
-				} else {
-					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
-					if (this.config.debug) {
-						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
-					}
-					api[apiKey] = mod;
-					for (const [key, value] of Object.entries(mod)) {
-						rootNamedExports[key] = value;
-					}
-				}
+		processModuleForAPI({
+			mod,
+			fileName,
+			apiPathKey,
+			hasMultipleDefaultExports,
+			isSelfReferential,
+			api,
+			getRootDefault: () => rootDefaultFunction,
+			setRootDefault: (fn) => {
+				rootDefaultFunction = fn;
+			},
+			context: {
+				debug: this.config.debug,
+				mode: "root",
+				totalModules: moduleFiles.length
 			}
-		}
+		});
 	}
 
 	for (const entry of entries) {
 		if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
 			const categoryPath = path.join(dir, entry.name);
-			api[this._toApiKey(entry.name)] = await this._loadCategory(categoryPath, currentDepth + 1, maxDepth);
+			api[this._toapiPathKey(entry.name)] = await this._loadCategory(categoryPath, currentDepth + 1, maxDepth);
 		}
 	}
 
@@ -427,10 +342,6 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 			console.log(`[DEBUG] No root function - final API is object`);
 		}
 	}
-
-	// Wrap all functions with runWithCtx to match lazy mode performance
-	// This uses dynamic context lookup like lazy mode does
-	// finalApi = eager_wrapWithRunCtx(finalApi, instance);
 
 	return finalApi;
 }

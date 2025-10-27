@@ -41,7 +41,6 @@
  * @alias module:@cldmv/slothlet.modes.eager.create
  * @memberof module:@cldmv/slothlet.modes.eager
  * @param {string} dir - Directory to load
- * @param {boolean} [rootLevel=true] - Is this the root level?
  * @param {number} [maxDepth=Infinity] - Maximum depth to traverse
  * @param {number} [currentDepth=0] - Current traversal depth
  * @returns {Promise<object>} Complete API object with all modules loaded
@@ -53,14 +52,14 @@
  *
  * @example
  * // Internal usage - called by slothlet core
- * const api = await create('./api_test', true, 3, 0);
+ * const api = await create('./api_test', 3, 0);
  * // Returns: { math: { add: [Function], multiply: [Function] }, ... }
  *
  * @example
  * // Root-level processing with function exports
- * const api = await create('./api_test', true);
+ * const api = await create('./api_test');
  * // If root has default function: api becomes that function with properties
  * // Otherwise: api is object with module properties
  */
-export function create(dir: string, rootLevel?: boolean, maxDepth?: number, currentDepth?: number): Promise<object>;
+export function create(dir: string, maxDepth?: number, currentDepth?: number): Promise<object>;
 //# sourceMappingURL=slothlet_eager.d.mts.map

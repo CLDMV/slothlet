@@ -40,6 +40,6 @@
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(await api_test.task.autoIp()); // "testAutoIP"
  */
-export async function autoIP() {
+export default async function autoIP() {
 	return "testAutoIP";
 }

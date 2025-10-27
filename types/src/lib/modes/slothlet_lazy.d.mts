@@ -6,7 +6,6 @@
  * @alias module:@cldmv/slothlet.modes.lazy.create
  * @memberof module:@cldmv/slothlet.modes.lazy
  * @param {string} dir - Root directory
- * @param {boolean} [rootLevel=true] - Root level flag
  * @param {number} [maxDepth=Infinity] - Maximum depth to traverse
  * @param {number} [currentDepth=0] - Current depth (for internal recursion only)
  * @returns {Promise<function|object>} Root API object or function (if default export)
@@ -19,14 +18,14 @@
  *
  * @example
  * // Internal usage - called by slothlet core
- * const api = await create('./api_test', true, 3, 0);
+ * const api = await create('./api_test', 3, 0);
  * // Returns: { math: [Function: lazyFolder_math], ... } (lazy proxies)
  *
  * @example
  * // Root-level processing with function exports
- * const api = await create('./api_test', true);
+ * const api = await create('./api_test');
  * // If root has default function: api becomes that function with properties
  * // Otherwise: api is object with lazy proxy properties
  */
-export function create(dir: string, rootLevel?: boolean, maxDepth?: number, currentDepth?: number): Promise<Function | object>;
+export function create(dir: string, maxDepth?: number, currentDepth?: number): Promise<Function | object>;
 //# sourceMappingURL=slothlet_lazy.d.mts.map

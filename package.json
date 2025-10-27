@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.4.3",
+	"version": "2.5.0",
 	"moduleVersions": {
 		"lazy": "1.3.0",
 		"eager": "1.3.0"
@@ -53,6 +53,7 @@
 	},
 	"types": "./types/index.d.mts",
 	"scripts": {
+		"precommit": "node tools/precommit-validation.mjs",
 		"publish:manual": "npm publish --access public",
 		"test": "node tests/test-conditional.mjs",
 		"test:pre-build": "node tests/test-conditional.mjs",
