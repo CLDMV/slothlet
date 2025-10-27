@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:30 -07:00 (1761266370)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -152,8 +152,10 @@
  *
  */
 import fs from "node:fs/promises";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
+import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 
 /**
  * @function create
@@ -163,7 +165,6 @@ import { runWithCtx } from "@cldmv/slothlet/runtime";
  * @alias module:@cldmv/slothlet.modes.lazy.create
  * @memberof module:@cldmv/slothlet.modes.lazy
  * @param {string} dir - Root directory
- * @param {boolean} [rootLevel=true] - Root level flag
  * @param {number} [maxDepth=Infinity] - Maximum depth to traverse
  * @param {number} [currentDepth=0] - Current depth (for internal recursion only)
  * @returns {Promise<function|object>} Root API object or function (if default export)
@@ -176,164 +177,89 @@ import { runWithCtx } from "@cldmv/slothlet/runtime";
  *
  * @example
  * // Internal usage - called by slothlet core
- * const api = await create('./api_test', true, 3, 0);
+ * const api = await create('./api_test', 3, 0);
  * // Returns: { math: [Function: lazyFolder_math], ... } (lazy proxies)
  *
  * @example
  * // Root-level processing with function exports
- * const api = await create('./api_test', true);
+ * const api = await create('./api_test');
  * // If root has default function: api becomes that function with properties
  * // Otherwise: api is object with lazy proxy properties
  */
-export async function create(dir, rootLevel = true, maxDepth = Infinity, currentDepth = 0) {
+export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const instance = this; // bound slothlet instance
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	let api = {};
 	let rootDefaultFn = null;
 
 	// Load root-level files eagerly (same behavior as eager mode)
-	if (rootLevel) {
-		// NEW: Detect multiple default exports for multi-default handling
-		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
-		const defaultExportFiles = [];
+	// NEW: Detect multiple default exports for multi-default handling
+	const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
+	const defaultExportFiles = [];
 
-		// First pass: detect default exports (excluding self-referential defaults)
-		const selfReferentialFiles = new Set(); // Track self-referential files
-		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
+	// Use shared multi-default detection utility
+	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
+	const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
 
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
+	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
-			if (instance.config.debug) {
-				console.log(`[DEBUG] First pass processing: ${fileName}`);
-			}
+	// Convert analysis results to match existing structure
+	defaultExportFiles.length = 0; // Clear existing array
+	for (const { fileName } of analysisDefaults) {
+		const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+		if (entry) {
+			const mod = await instance._loadSingleModule(path.join(dir, entry.name));
+			defaultExportFiles.push({ entry, fileName, mod });
+		}
+	}
 
-			// Load raw module first and cache it
-			const modulePath = path.resolve(dir, entry.name);
-			const rawMod = await import(`file://${modulePath.replace(/\\/g, "/")}`);
-			rawModuleCache.set(entry.name, rawMod);
+	if (instance.config.debug) {
+		console.log(`[DEBUG] Lazy mode: Using shared multidefault utility results`);
+		console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
+		console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
+		console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
+	}
 
-			if (instance.config.debug && fileName === "config") {
-				console.log(`[DEBUG] First pass - raw config keys:`, Object.keys(rawMod || {}));
-				console.log(`[DEBUG] First pass - raw config has default:`, rawMod && "default" in rawMod);
-			}
+	// Second pass: process files with multi-default awareness
+	const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
 
-			if (rawMod && "default" in rawMod) {
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
+	for (const entry of moduleFiles) {
+		const ext = path.extname(entry.name);
+		const fileName = path.basename(entry.name, ext);
+		const apiPathKey = instance._toapiPathKey(fileName);
 
-				// Debug self-referential detection
-				if (instance.config.debug && fileName === "config") {
-					console.log(`[DEBUG] First pass - ${fileName} self-referential check:`);
-					console.log(`[DEBUG] - rawMod.default === rawMod.config: ${rawMod.default === rawMod.config}`);
-					console.log(`[DEBUG] - isSelfReferential result: ${isSelfReferential}`);
-				}
-
-				if (!isSelfReferential) {
-					// Load processed module only for non-self-referential defaults
-					const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-					defaultExportFiles.push({ entry, fileName, mod });
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Added ${fileName} to defaultExportFiles (non-self-referential)`);
-					}
-				} else {
-					selfReferentialFiles.add(fileName); // Remember this file is self-referential
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Skipped ${fileName} - self-referential default export`);
-					}
-				}
-			}
+		// Check if we already loaded this module during first pass (for non-self-referential defaults)
+		let mod = null;
+		const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
+		if (existingDefault) {
+			mod = existingDefault.mod; // Reuse already loaded module
+		} else {
+			// Load processed module only if not already loaded
+			mod = await instance._loadSingleModule(path.join(dir, entry.name));
+			processedModuleCache.set(entry.name, mod);
 		}
 
-		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
+		// Check if this file was identified as self-referential in the first pass
+		const isSelfReferential = selfReferentialFiles.has(fileName);
 
-		// Second pass: process files with multi-default awareness
-		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
-
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
-			const apiKey = instance._toApiKey(fileName);
-
-			// Check if we already loaded this module during first pass (for non-self-referential defaults)
-			let mod = null;
-			const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
-			if (existingDefault) {
-				mod = existingDefault.mod; // Reuse already loaded module
-			} else {
-				// Load processed module only if not already loaded
-				mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-				processedModuleCache.set(entry.name, mod);
+		// Use centralized API builder for module processing
+		processModuleForAPI({
+			mod,
+			fileName,
+			apiPathKey,
+			hasMultipleDefaultExports,
+			isSelfReferential,
+			api,
+			getRootDefault: () => rootDefaultFn,
+			setRootDefault: (fn) => {
+				rootDefaultFn = fn;
+			},
+			context: {
+				debug: instance.config.debug,
+				mode: "root",
+				totalModules: moduleFiles.length
 			}
-
-			// Check if this file was identified as self-referential in the first pass
-			const isSelfReferential = selfReferentialFiles.has(fileName);
-
-			if (mod && typeof mod.default === "function") {
-				if (hasMultipleDefaultExports && !isSelfReferential) {
-					// Multi-default case: use filename as API key
-					api[apiKey] = mod.default;
-
-					// Also add named exports to the function
-					for (const [key, value] of Object.entries(mod)) {
-						if (key !== "default") {
-							api[apiKey][key] = value;
-						}
-					}
-
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Multi-default in lazy mode: using filename '${apiKey}' for default export`);
-					}
-				} else if (isSelfReferential) {
-					// Self-referential case: treat as namespace (preserve both named and default)
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Self-referential default export: preserving ${fileName} as namespace`);
-					}
-					api[apiKey] = mod;
-				} else {
-					// Traditional single default case: becomes root API
-					// BUT only if we don't have multiple defaults
-					if (!hasMultipleDefaultExports && !rootDefaultFn) {
-						rootDefaultFn = mod.default;
-					}
-					for (const [k, v] of Object.entries(mod)) {
-						if (k !== "default") api[k] = v;
-					}
-				}
-			} else {
-				// No default export OR self-referential default: In multi-default scenarios, files without defaults should flatten to root
-				// In single/no default scenarios, preserve as namespace (traditional behavior)
-				if (instance.config.debug) {
-					console.log(`[DEBUG] Processing non-default exports for ${fileName}`);
-				}
-
-				if (isSelfReferential) {
-					// Self-referential case: use the named export directly (since default === named)
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Self-referential: preserving ${fileName} as namespace`);
-					}
-					// For self-referential exports, use the named export directly to avoid nesting
-					api[apiKey] = mod[apiKey] || mod;
-				} else if (hasMultipleDefaultExports) {
-					// Multi-default context: flatten non-default files to root level
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Multi-default context: flattening ${fileName} exports to root`);
-					}
-					for (const [k, v] of Object.entries(mod)) {
-						if (k !== "default") {
-							api[k] = v;
-						}
-					}
-				} else {
-					// Traditional context: preserve as namespace (for root-math.mjs, rootstring.mjs, etc.)
-					if (instance.config.debug) {
-						console.log(`[DEBUG] Traditional context: preserving ${fileName} as namespace`);
-					}
-					api[apiKey] = mod;
-				}
-			}
-		}
+		});
 	}
 
 	// Convert api to callable function if root default function present
@@ -345,10 +271,37 @@ export async function create(dir, rootLevel = true, maxDepth = Infinity, current
 	// Attach directory proxies
 	for (const entry of entries) {
 		if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
-			const key = instance._toApiKey(entry.name);
+			const key = instance._toapiPathKey(entry.name);
 			const subDirPath = path.join(dir, entry.name);
 			const parent = api;
 			const depth = 1; // top-level directory depth for bubble-up
+
+			// Check if the folder is empty and add empty object immediately (Rule 5)
+			try {
+				const subEntries = readdirSync(subDirPath, { withFileTypes: true });
+				const hasFiles = subEntries.some(
+					(subEntry) =>
+						subEntry.isFile() &&
+						!subEntry.name.startsWith(".") &&
+						(subEntry.name.endsWith(".mjs") || subEntry.name.endsWith(".cjs") || subEntry.name.endsWith(".js"))
+				);
+				const hasSubdirs = subEntries.some((subEntry) => subEntry.isDirectory() && !subEntry.name.startsWith("."));
+
+				// If no modules and no subdirectories, add empty object immediately
+				if (!hasFiles && !hasSubdirs) {
+					if (instance?.config?.debug) {
+						console.log(`[lazy][debug] empty folder detected during traversal: ${subDirPath} -> adding {}`);
+					}
+					parent[key] = {};
+					continue; // Skip creating lazy proxy
+				}
+			} catch (error) {
+				// If we can't read the directory, fall back to lazy proxy
+				if (instance?.config?.debug) {
+					console.log(`[lazy][debug] error reading directory ${subDirPath}: ${error.message}, creating lazy proxy`);
+				}
+			}
+
 			const proxy = createFolderProxy({
 				subDirPath,
 				key,

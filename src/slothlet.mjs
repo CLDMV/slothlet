@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 17:39:37 -07:00 (1761266377)
+ *	@Last modified time: 2025-10-27 09:23:23 -07:00 (1761582203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -121,6 +121,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
+import {
+	processModuleForAPI,
+	analyzeModule,
+	processModuleFromAnalysis,
+	getCategoryBuildingDecisions
+} from "@cldmv/slothlet/helpers/api_builder";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -324,7 +330,7 @@ const slothletObject = {
 			this.context = context;
 			this.reference = reference;
 
-			// Store sanitize options in config for use by _toApiKey
+			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
 				this.config.sanitize = sanitize;
 			}
@@ -419,9 +425,9 @@ const slothletObject = {
 
 		if (this.loaded) return this.api;
 		if (this.config.lazy) {
-			this.api = await this.modes.lazy.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
+			this.api = await this.modes.lazy.create.call(this, apiDir, this.config.apiDepth || Infinity, 0);
 		} else {
-			this.api = await this.modes.eager.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
+			this.api = await this.modes.eager.create.call(this, apiDir, this.config.apiDepth || Infinity, 0);
 		}
 		if (this.config.debug) console.log(this.api);
 
@@ -514,20 +520,19 @@ const slothletObject = {
 	 * @private
 	 * @internal
 	 * @example
-	 * _toApiKey('root-math') // 'rootMath'
+	 * _toapiPathKey('root-math') // 'rootMath'
 	 */
-	_toApiKey(name) {
+	_toapiPathKey(name) {
 		return sanitizePathName(name, this.config.sanitize || {});
 		// return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
 	},
 
 	/**
-	 * Unified category builder supporting eager and lazy strategies.
+	 * Unified category builder supporting eager and lazy strategies using centralized decision logic.
 	 * When mode === 'eager' it recursively materializes subdirectories.
 	 * When mode === 'lazy' it delegates subdirectory handling to the provided subdirHandler
 	 * without loading their contents (allowing proxy creation by caller).
-	 * Shared responsibilities: file scanning, single-file flattening, export merging,
-	 * upward flattening heuristics, function naming.
+	 * Now uses centralized decision functions for consistent API structure logic.
 	 *
 	 * @async
 	 * @param {string} categoryPath
@@ -543,166 +548,75 @@ const slothletObject = {
 	async _buildCategory(categoryPath, options = {}) {
 		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
-		// Debug: Log when _buildCategory is called
-		if (this.config.debug) {
-			console.log(`[DEBUG] _buildCategory called with path: ${categoryPath}, mode: ${mode}`);
-		}
-
-		const files = await fs.readdir(categoryPath, { withFileTypes: true });
-		const moduleFiles = files.filter((f) => this._shouldIncludeFile(f));
-		const categoryName = this._toApiKey(path.basename(categoryPath));
-		const subDirs = files.filter((e) => e.isDirectory() && !e.name.startsWith("."));
+		// Use centralized category building decisions
+		const { buildCategoryDecisions } = await import("@cldmv/slothlet/helpers/api_builder");
+		const decisions = await buildCategoryDecisions(categoryPath, {
+			currentDepth,
+			maxDepth,
+			mode,
+			subdirHandler,
+			instance: this
+		});
 
 		// SINGLE FILE CASE
-		if (moduleFiles.length === 1 && subDirs.length === 0) {
-			const moduleExt = path.extname(moduleFiles[0].name);
-			const moduleName = this._toApiKey(path.basename(moduleFiles[0].name, moduleExt));
-			const mod = await this._loadSingleModule(path.join(categoryPath, moduleFiles[0].name));
+		if (decisions.type === "single-file") {
+			const { singleFile } = decisions;
+			const { mod, moduleName } = singleFile;
 
-			// Check if function name matches sanitized folder name (case-insensitive)
-			const functionNameMatchesFolder = typeof mod === "function" && mod.name && mod.name.toLowerCase() === categoryName.toLowerCase();
+			// Handle flattening based on centralized decisions
+			if (decisions.shouldFlatten) {
+				switch (decisions.flattenType) {
+					case "function-folder-match":
+					case "default-function":
+						try {
+							Object.defineProperty(mod, "name", { value: decisions.preferredName, configurable: true });
+						} catch {
+							// ignore
+						}
+						return mod;
 
-			// NEW: Check if function name matches sanitized filename (case-insensitive) for single files
-			const functionNameMatchesFilename =
-				typeof mod === "function" &&
-				mod.name &&
-				this._toApiKey(mod.name).toLowerCase() === this._toApiKey(moduleName).toLowerCase() &&
-				mod.name !== this._toApiKey(moduleName);
+					case "default-export-flatten":
+						// Return the module directly - it already has the default object contents spread with named exports
+						return mod;
 
-			// Debug: Log single file processing for auto-ip
-			// if (this.config.debug && (moduleName.includes("autoI") || moduleName === "auto-ip")) {
-			// 	console.log("[DEBUG] Single file processing:", moduleFiles[0].name);
-			// 	console.log("[DEBUG] moduleName:", moduleName, "functionName:", mod.name);
-			// 	console.log("[DEBUG] functionNameMatchesFolder:", functionNameMatchesFolder);
-			// 	console.log("[DEBUG] functionNameMatchesFilename:", functionNameMatchesFilename);
-			// }
+					case "object-auto-flatten":
+						// Return the contents of the named export directly (flatten it)
+						return mod[decisions.preferredName];
 
-			// Flatten if file matches folder name and exports a function (named)
-			if (moduleName === categoryName && typeof mod === "function") {
-				try {
-					Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
-				} catch {
-					// ignore
+					case "parent-level-flatten": {
+						// Return an object with the export name as key, promoting it to parent level
+						const exportValue = mod[Object.keys(mod).filter((k) => k !== "default")[0]];
+						return { [decisions.preferredName]: exportValue };
+					}
+
+					case "filename-folder-match-flatten":
+						// Return the module directly to avoid double nesting (e.g., nest/nest.mjs -> nest.alpha, not nest.nest.alpha)
+						return mod;
 				}
-				return mod;
 			}
 
-			// NEW: Flatten if function name matches folder name (case-insensitive) and prefer function name
-			if (functionNameMatchesFolder) {
-				try {
-					// Use the original function name instead of sanitized folder name
-					Object.defineProperty(mod, "name", { value: mod.name, configurable: true });
-				} catch {
-					// ignore
-				}
-				return mod;
+			// Handle preferred name without flattening
+			if (decisions.preferredName && decisions.preferredName !== moduleName) {
+				return { [decisions.preferredName]: mod };
 			}
 
-			// NEW: Use function name instead of sanitized filename when they match (case-insensitive)
-			if (functionNameMatchesFilename) {
-				// if (this.config.debug) {
-				// 	console.log("[DEBUG] Using function name:", mod.name, "instead of sanitized filename:", moduleName);
-				// }
-				return { [mod.name]: mod };
-			}
-
-			// ALSO flatten if this was a default function export (tracked by internal flag)
-			// even when the filename differs from the folder name (e.g. folder nest3 / singlefile.mjs)
-			if (
-				typeof mod === "function" &&
-				(!mod.name || mod.name === "default" || mod.__slothletDefault === true) // explicitly marked default export function
-			) {
-				try {
-					Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
-				} catch {
-					// ignore
-				}
-				return mod;
-			}
-			if (moduleName === categoryName && mod && typeof mod === "object" && !mod.default) {
-				return { ...mod };
+			// Default case: return as namespace
+			if (this.config.debug && moduleName === "nest") {
+				console.log(`[DEBUG] Single-file default case for nest: moduleName="${moduleName}" mod keys=[${Object.keys(mod)}]`);
 			}
 			return { [moduleName]: mod };
 		}
 
 		// MULTI-FILE CASE
 		const categoryModules = {};
+		const { categoryName, processedModules, subdirectoryDecisions } = decisions;
 
-		// NEW: Detect if we have multiple files with default exports in the same folder (excluding self-referential defaults)
-		const defaultExportFiles = [];
-		const selfReferentialFiles = new Set(); // Track self-referential files
-		const rawModuleCache = new Map(); // Cache raw modules to avoid duplicate imports
-
-		// First pass: Load raw modules and detect self-referential exports
-		for (const file of moduleFiles) {
-			const moduleExt = path.extname(file.name);
-			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
-			const moduleFilePath = path.resolve(categoryPath, file.name);
-
-			// Load raw module once and cache it
-			const rawMod = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
-			rawModuleCache.set(file.name, rawMod);
-
-			// Check if this module has a default export by looking at the raw module
-			if (rawMod && "default" in rawMod) {
-				// Check if default export is self-referential (points to a named export)
-				const isSelfReferential = Object.entries(rawMod).some(([key, value]) => key !== "default" && value === rawMod.default);
-
-				if (this.config.debug) {
-					console.log(`[DEBUG] _buildCategory: Checking ${file.name} in ${categoryPath}`);
-					console.log(`[DEBUG]   - moduleName: ${moduleName}`);
-					console.log(`[DEBUG]   - has default: ${rawMod && "default" in rawMod}`);
-					console.log(`[DEBUG]   - isSelfReferential: ${isSelfReferential}`);
-				}
-
-				if (!isSelfReferential) {
-					// Load processed module only for non-self-referential defaults
-					const processedMod = await this._loadSingleModule(path.join(categoryPath, file.name));
-					defaultExportFiles.push({ file, moduleName, mod: processedMod });
-					if (this.config.debug) {
-						console.log(`[DEBUG] Found default export in ${file.name} (non-self-referential)`);
-					}
-				} else {
-					selfReferentialFiles.add(moduleName); // Remember this file is self-referential
-					if (this.config.debug) {
-						console.log(`[DEBUG] Skipped ${file.name} - self-referential default export`);
-					}
-				}
-			}
-		}
-
-		const hasMultipleDefaultExports = defaultExportFiles.length > 1;
-
-		if (this.config.debug) {
-			console.log(`[DEBUG] selfReferentialFiles Set:`, Array.from(selfReferentialFiles));
-			console.log(`[DEBUG] hasMultipleDefaultExports:`, hasMultipleDefaultExports);
-		}
-
-		for (const file of moduleFiles) {
-			const moduleExt = path.extname(file.name);
-			const moduleName = this._toApiKey(path.basename(file.name, moduleExt));
-
-			// Debug: Log file processing
-			if (this.config.debug && moduleName === "config") {
-				console.log("[DEBUG] Processing config file:", file.name, "moduleName:", moduleName);
-				console.log("[DEBUG] selfReferentialFiles has config?", selfReferentialFiles.has(moduleName));
-			}
-
-			// Check if we already loaded this module during first pass (for non-self-referential defaults)
-			let mod = null;
-			const existingDefault = defaultExportFiles.find(def => def.moduleName === moduleName);
-			if (existingDefault) {
-				mod = existingDefault.mod; // Reuse already loaded module
-			} else {
-				// Load processed module only if not already loaded
-				mod = await this._loadSingleModule(path.join(categoryPath, file.name));
-			}
-
-			if (this.config.debug && moduleName === "config") {
-				console.log("[DEBUG] Config mod type:", typeof mod);
-				console.log("[DEBUG] Config mod keys:", Object.keys(mod));
-			}
-			if (moduleName === categoryName && mod && typeof mod === "object") {
+		// Process each module based on centralized decisions
+		for (const moduleDecision of processedModules) {
+			const { moduleName, mod, type, apiPathKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
+			// Handle different module types based on centralized decisions
+			if (specialHandling === "category-merge") {
+				// Module filename matches category name - merge logic
 				if (
 					Object.prototype.hasOwnProperty.call(mod, categoryName) &&
 					typeof mod[categoryName] === "object" &&
@@ -710,139 +624,86 @@ const slothletObject = {
 				) {
 					Object.assign(categoryModules, mod[categoryName]);
 					for (const [key, value] of Object.entries(mod)) {
-						if (key !== categoryName) categoryModules[this._toApiKey(key)] = value;
+						if (key !== categoryName) categoryModules[this._toapiPathKey(key)] = value;
 					}
 				} else {
 					Object.assign(categoryModules, mod);
 				}
-			} else if (typeof mod === "function") {
-				// Check if this file was identified as self-referential in the first pass
-				const isSelfReferential = selfReferentialFiles.has(moduleName);
-
-				// NEW: For multiple default exports, use file name instead of function name
-				let apiKey;
-				if (hasMultipleDefaultExports && mod.__slothletDefault === true && !isSelfReferential) {
-					// Use file name for default exports when multiple defaults exist
-					apiKey = moduleName;
+			} else if (type === "function") {
+				// Function handling with appropriate naming
+				if (specialHandling === "multi-default-filename") {
 					try {
 						Object.defineProperty(mod, "name", { value: moduleName, configurable: true });
 					} catch {
 						// ignore
 					}
-					if (this.config.debug) {
-						console.log(`[DEBUG] Multi-default detected: using filename '${moduleName}' for default export`);
-					}
-				} else if (selfReferentialFiles.has(moduleName)) {
-					// Self-referential case: use the named export directly to avoid nesting
-					if (this.config.debug) {
-						console.log(`[DEBUG] Self-referential default export: treating ${moduleName} as namespace`);
-					}
-					// For self-referential exports, use the named export directly
-					categoryModules[moduleName] = mod[moduleName] || mod;
-					continue; // Skip function processing logic
+					categoryModules[moduleName] = mod;
+				} else if (specialHandling === "prefer-function-name") {
+					categoryModules[apiPathKey] = mod;
 				} else {
-					// Original logic for single defaults or named function exports
-					const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
-					try {
-						Object.defineProperty(mod, "name", { value: fnName, configurable: true });
-					} catch {
-						// ignore
-					}
-
-					// Check if function name matches sanitized filename (case-insensitive)
-					// If so, prefer the original function name over the sanitized version
-					if (fnName && fnName.toLowerCase() === moduleName.toLowerCase() && fnName !== moduleName) {
-						// Use original function name without sanitizing
-						apiKey = fnName;
-						if (this.config.debug) {
-							console.log(`[DEBUG] Using function name '${fnName}' instead of module name '${moduleName}'`);
-						}
-					} else {
-						// Use sanitized function name
-						apiKey = this._toApiKey(fnName);
-						if (this.config.debug) {
-							console.log(`[DEBUG] Using sanitized key '${apiKey}' for function '${fnName}' (module: '${moduleName}')`);
-						}
-					}
+					// Standard function processing
+					categoryModules[apiPathKey] = mod;
 				}
-
-				categoryModules[apiKey] = mod;
-			} else {
-				// Handle named exports - check if any export function names match filename
-				let hasPreferredName = false;
-				const modWithPreferredNames = {};
-
-				// Debug: Log the module structure for auto-ip related files
-				// if (this.config.debug && (moduleName.includes("autoI") || moduleName === "auto-ip")) {
-				// 	console.log("[DEBUG] Processing module:", moduleName, "exports:", Object.keys(mod));
-				// 	for (const [exportName, exportValue] of Object.entries(mod)) {
-				// 		if (typeof exportValue === "function") {
-				// 			console.log(
-				// 				"[DEBUG] Function export:",
-				// 				exportName,
-				// 				"function name:",
-				// 				exportValue.name,
-				// 				"filename lower:",
-				// 				moduleName.toLowerCase(),
-				// 				"function lower:",
-				// 				exportValue.name?.toLowerCase(),
-				// 				"matches filename:",
-				// 				exportValue.name?.toLowerCase() === moduleName.toLowerCase(),
-				// 				"different casing:",
-				// 				exportValue.name !== moduleName
-				// 			);
-				// 		}
-				// 	}
-				// }
-
-				for (const [exportName, exportValue] of Object.entries(mod)) {
-					if (
-						typeof exportValue === "function" &&
-						exportValue.name &&
-						this._toApiKey(exportValue.name).toLowerCase() === this._toApiKey(moduleName).toLowerCase() &&
-						exportValue.name !== this._toApiKey(moduleName)
-					) {
-						// Use the original function name instead of sanitized filename
-						modWithPreferredNames[exportValue.name] = exportValue;
-						hasPreferredName = true;
-						if (this.config.debug) {
-							console.log("[DEBUG] Using preferred name:", exportValue.name, "instead of:", this._toApiKey(moduleName));
+			} else if (type === "self-referential") {
+				// Self-referential case: use the named export directly to avoid nesting
+				categoryModules[moduleName] = mod[moduleName] || mod;
+			} else if (type === "object") {
+				// Object/named exports handling
+				if (specialHandling === "preferred-export-names") {
+					Object.assign(categoryModules, processedExports);
+				} else if (shouldFlatten) {
+					switch (flattenType) {
+						case "single-default-object": {
+							// Flatten the default export and merge named exports
+							const flattened = { ...mod.default };
+							// Add any named exports to the flattened default
+							for (const [key, value] of Object.entries(mod)) {
+								if (key !== "default") {
+									flattened[key] = value;
+								}
+							}
+							categoryModules[apiPathKey] = flattened;
+							break;
 						}
-					} else {
-						modWithPreferredNames[this._toApiKey(exportName)] = exportValue;
+						case "multi-default-no-default": {
+							// Multi-default context: flatten modules WITHOUT default exports to category
+							const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+							for (const key of moduleKeys) {
+								categoryModules[key] = mod[key];
+							}
+							break;
+						}
+						case "single-named-export-match":
+							// Auto-flatten: module exports single named export matching filename
+							categoryModules[apiPathKey] = mod[apiPathKey];
+							break;
+						case "category-name-match-flatten": {
+							// Auto-flatten: module filename matches folder name and has no default → flatten to category
+							const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+							for (const key of moduleKeys) {
+								categoryModules[key] = mod[key];
+							}
+							break;
+						}
 					}
-				}
-
-				if (hasPreferredName) {
-					Object.assign(categoryModules, modWithPreferredNames);
-					// console.log("[DEBUG] Applied preferred names to categoryModules");
-				} else if (selfReferentialFiles.has(moduleName)) {
-					// Self-referential case: use the named export directly to avoid nesting
-					if (this.config.debug) {
-						console.log(`[DEBUG] Self-referential object: treating ${moduleName} as namespace`);
-					}
-					categoryModules[moduleName] = mod[moduleName] || mod;
 				} else {
-					categoryModules[this._toApiKey(moduleName)] = mod;
-					// if (moduleName.includes("autoI") || moduleName === "auto-ip") {
-					// 	console.log("[DEBUG] No preferred name found, using default:", this._toApiKey(moduleName));
-					// }
+					// Standard object export
+					categoryModules[apiPathKey] = mod;
 				}
 			}
 		}
 
-		// SUBDIRECTORIES
-		for (const subDirEntry of subDirs) {
-			if (currentDepth < maxDepth) {
-				const key = this._toApiKey(subDirEntry.name);
-				const subDirPath = path.join(categoryPath, subDirEntry.name);
+		// SUBDIRECTORIES - handle based on centralized decisions
+		for (const subDirDecision of subdirectoryDecisions) {
+			if (subDirDecision.shouldRecurse) {
+				const { name, path: subDirPath, apiPathKey } = subDirDecision;
 				let subModule;
 
 				if (mode === "lazy" && typeof subdirHandler === "function") {
 					subModule = subdirHandler({
-						subDirEntry,
+						subDirEntry: { name },
 						subDirPath,
-						key,
+						key: apiPathKey,
 						categoryModules,
 						currentDepth,
 						maxDepth
@@ -860,13 +721,13 @@ const slothletObject = {
 				if (
 					typeof subModule === "function" &&
 					subModule.name &&
-					subModule.name.toLowerCase() === key.toLowerCase() &&
-					subModule.name !== key
+					subModule.name.toLowerCase() === apiPathKey.toLowerCase() &&
+					subModule.name !== apiPathKey
 				) {
 					// Use the original function name as the key
 					categoryModules[subModule.name] = subModule;
 				} else {
-					categoryModules[key] = subModule;
+					categoryModules[apiPathKey] = subModule;
 				}
 			}
 		}
@@ -919,172 +780,132 @@ const slothletObject = {
 	 * @private
 	 * @internal
 	 */
-	async _loadSingleModule(modulePath, rootLevel = false) {
-		const moduleUrl = pathToFileURL(modulePath).href;
+	async _loadSingleModule(modulePath) {
+		// Use centralized module loading logic
+		const analysis = await analyzeModule(modulePath, {
+			debug: this.config.debug,
+			instance: this
+		});
+		return processModuleFromAnalysis(analysis, {
+			debug: this.config.debug,
+			instance: this
+		});
+	},
 
-		// console.log("moduleUrl: ", moduleUrl);
-		const module = await import(moduleUrl);
+	/**
+	 * Enhanced category builder using centralized decision logic.
+	 * This is a test version that uses the decision functions to maintain the same behavior
+	 * but with centralized logic that both eager and lazy modes can benefit from.
+	 * @async
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} categoryPath
+	 * @param {object} [options]
+	 * @param {number} [options.currentDepth=0]
+	 * @param {number} [options.maxDepth=Infinity]
+	 * @param {'eager'|'lazy'} [options.mode='eager']
+	 * @param {Function} [options.subdirHandler] - (ctx) => node; only used in lazy mode
+	 * @returns {Promise<function|object>}
+	 * @private
+	 * @internal
+	 */
+	async _buildCategoryEnhanced(categoryPath, options = {}) {
+		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
-		// Detect if this is a CJS module by file extension
-		// const isCjsModuleFile = isCjsModule(modulePath);
+		// Get centralized building decisions
+		const decisions = await getCategoryBuildingDecisions(categoryPath, {
+			instance: this,
+			currentDepth,
+			maxDepth,
+			debug: this.config.debug
+		});
 
-		// if (this.config.debug) console.log("Loading module:", modulePath, "isCjsModule:", isCjsModuleFile);
+		const { processingStrategy, categoryName, processedModules, subDirectories } = decisions;
 
-		if (this.config.debug) console.log("module: ", module);
-		// If default export is a function, expose as callable and attach named exports as properties
-		if (typeof module.default === "function") {
-			let fn;
-			if (rootLevel) {
-				fn = module;
-			} else {
-				fn = module.default;
-				// Mark as originating from a default export so category flatten logic can detect
-				try {
-					Object.defineProperty(fn, "__slothletDefault", { value: true, enumerable: false });
-				} catch {
-					// ignore
-				}
+		// SINGLE FILE CASE - use the same logic as original but with decisions
+		if (processingStrategy === "single-file" && processedModules.length === 1) {
+			const { processedModule, flattening } = processedModules[0];
 
-				// Wrap CJS functions with instance context
-				// if (isCjsModuleFile) {
-				// 	if (this.config.debug) console.log("Wrapping CJS default function");
-				// 	fn = this._wrapCjsFunction(fn);
-				// }
-
-				for (const [exportName, exportValue] of Object.entries(module)) {
-					if (exportName !== "default") {
-						// Wrap CJS functions
-						// if (isCjsModuleFile && typeof exportValue === "function") {
-						// 	if (this.config.debug) console.log("Wrapping CJS named export:", exportName);
-						// 	fn[this._toApiKey(exportName)] = this._wrapCjsFunction(exportValue);
-						// } else {
-						fn[this._toApiKey(exportName)] = exportValue;
-						// }
+			if (flattening.shouldFlatten) {
+				// Apply the flattening decision
+				if (typeof processedModule === "function") {
+					try {
+						Object.defineProperty(processedModule, "name", { value: flattening.apiPathKey, configurable: true });
+					} catch {
+						// ignore
 					}
 				}
-				if (this.config.debug) console.log("fn: ", fn);
+				return processedModule;
 			}
-			return fn;
+
+			// No flattening - return as namespace
+			return { [flattening.apiPathKey]: processedModule };
 		}
 
-		const moduleExports = Object.entries(module);
-		// If there are no exports, throw a clear error
-		if (!moduleExports.length) {
-			throw new Error(
-				`slothlet: No exports found in module '${modulePath}'. The file is empty or does not export any function/object/variable.`
-			);
+		// MULTI-FILE CASE - use processed modules from decisions
+		const categoryModules = {};
+
+		for (const { processedModule, flattening } of processedModules) {
+			categoryModules[flattening.apiPathKey] = processedModule;
 		}
-		if (this.config.debug) console.log("moduleExports: ", moduleExports);
 
-		// Handle both module.default and moduleExports[0][1] for callable and object default exports
-		const defaultExportObj =
-			typeof module.default === "object" && module.default !== null
-				? module.default
-				: typeof moduleExports[0][1] === "object" && typeof moduleExports[0][1].default === "function" && moduleExports[0][1] !== null
-					? moduleExports[0][1]
-					: null;
-		let objectName = null;
-		if (typeof module.default === "function" && module.default.name) {
-			objectName = module.default.name;
-		} else if (moduleExports[0] && moduleExports[0][0] !== "default") {
-			objectName = moduleExports[0][0];
-		}
-		// const defaultExportFn =
-		// 	typeof module.default === "function" ? module.default : typeof moduleExports[0][1] === "function" ? moduleExports[0][1] : null;
+		// SUBDIRECTORIES - handle the same as original
+		for (const { dirEntry: subDirEntry, apiPathKey: key } of subDirectories) {
+			const subDirPath = path.join(categoryPath, subDirEntry.name);
+			let subModule;
 
-		if (this.config.debug) console.log("defaultExportObj: ", defaultExportObj);
-		if (this.config.debug) console.log("objectName: ", objectName);
-
-		if (defaultExportObj && typeof defaultExportObj.default === "function") {
-			if (this.config.debug) console.log("DEFAULT FUNCTION FOUND FOR: ", module);
-			/**
-			 * Wraps an object with a callable default property as a function.
-			 * @param {...any} args - Arguments to pass to the default function.
-			 * @returns {any}
-			 * @private
-			 * @internal
-			 * @example
-			 * api(...args); // calls default
-			 */
-			const callableApi = {
-				[objectName]: function (...args) {
-					return defaultExportObj.default.apply(defaultExportObj, args);
-				}
-			}[objectName];
-			for (const [methodName, method] of Object.entries(defaultExportObj)) {
-				if (methodName === "default") continue;
-				callableApi[methodName] = method;
+			if (mode === "lazy" && typeof subdirHandler === "function") {
+				subModule = subdirHandler({
+					subDirEntry,
+					subDirPath,
+					key,
+					categoryModules,
+					currentDepth,
+					maxDepth
+				});
+			} else {
+				// Recursive call using enhanced version
+				subModule = await this._buildCategoryEnhanced(subDirPath, {
+					currentDepth: currentDepth + 1,
+					maxDepth,
+					mode: "eager"
+				});
 			}
-			// for (const [exportName, exportValue] of Object.entries(module)) {
-			// 	if (exportName !== "default" && exportValue !== callableApi) {
-			// 		callableApi[exportName] = exportValue;
-			// 	}
-			// }
-			if (this.config.debug) console.log("callableApi", callableApi);
-			return callableApi;
-		} else if (defaultExportObj) {
-			if (this.config.debug) console.log("DEFAULT FOUND FOR: ", module);
 
-			const obj = { ...defaultExportObj };
+			// Apply function name preference logic
+			if (
+				typeof subModule === "function" &&
+				subModule.name &&
+				subModule.name.toLowerCase() === key.toLowerCase() &&
+				subModule.name !== key
+			) {
+				categoryModules[subModule.name] = subModule;
+			} else {
+				categoryModules[key] = subModule;
+			}
+		}
 
-			// Wrap CJS functions in the default export object
-			// if (isCjsModuleFile) {
-			// 	if (this.config.debug) console.log("Wrapping CJS functions in default export object");
-			// 	for (const [key, value] of Object.entries(obj)) {
-			// 		if (typeof value === "function") {
-			// 			if (this.config.debug) console.log(`Wrapping CJS function: ${key}`);
-			// 			obj[key] = this._wrapCjsFunction(value);
-			// 		}
-			// 	}
-			// }
-
-			for (const [exportName, exportValue] of Object.entries(module)) {
-				if (exportName !== "default" && exportValue !== obj) {
-					// Skip named exports that exist in the default export (they're already wrapped)
-					// if (isCjsModuleFile && exportName in defaultExportObj) {
-					// 	if (this.config.debug) console.log(`Skipping named export '${exportName}' - already wrapped in default export`);
-					// 	continue;
-					// }
-					obj[this._toApiKey(exportName)] = exportValue;
+		// UPWARD FLATTENING - same logic as original
+		const keys = Object.keys(categoryModules);
+		if (keys.length === 1) {
+			const singleKey = keys[0];
+			if (singleKey === categoryName) {
+				const single = categoryModules[singleKey];
+				if (typeof single === "function") {
+					if (single.name !== categoryName) {
+						try {
+							Object.defineProperty(single, "name", { value: categoryName, configurable: true });
+						} catch {
+							// ignore
+						}
+					}
+					return single;
+				} else if (single && typeof single === "object" && !Array.isArray(single)) {
+					return single;
 				}
 			}
-
-			return obj;
 		}
-		// If only named exports and no default, expose the export directly
-		const namedExports = Object.entries(module).filter(([k]) => k !== "default");
-		if (this.config.debug) console.log("namedExports: ", namedExports);
-		if (namedExports.length === 1 && !module.default) {
-			if (typeof namedExports[0][1] === "object") {
-				// Flatten single object export
-				if (this.config.debug) console.log("namedExports[0][1] === object: ", namedExports[0][1]);
-				const obj = { ...namedExports[0][1] };
 
-				// Wrap CJS functions in the object
-				// if (isCjsModuleFile) {
-				// 	for (const [key, value] of Object.entries(obj)) {
-				// 		if (typeof value === "function") {
-				// 			obj[key] = this._wrapCjsFunction(value);
-				// 		}
-				// 	}
-				// }
-
-				return obj;
-			}
-			if (typeof namedExports[0][1] === "function") {
-				if (this.config.debug) console.log("namedExports[0][1] === function: ", namedExports[0][1]);
-				// Return single function export directly, wrapped if CJS
-				// return isCjsModuleFile ? this._wrapCjsFunction(namedExports[0][1]) : namedExports[0][1];
-				return namedExports[0][1];
-			}
-		}
-		const apiExport = {};
-		for (const [exportName, exportValue] of namedExports) {
-			// Wrap CJS functions
-			// apiExport[exportName] = isCjsModuleFile && typeof exportValue === "function" ? this._wrapCjsFunction(exportValue) : exportValue;
-			apiExport[this._toApiKey(exportName)] = exportValue;
-		}
-		return apiExport;
+		return categoryModules;
 	},
 
 	/**

@@ -1,23 +1,23 @@
 # nest Example
 
-This folder demonstrates the **filename-folder flattening** behavior of slothlet.
+This folder demonstrates **single-file folder structure** with named exports in slothlet.
 
-## Flattening Pattern
+## Folder Structure
 
-When a filename matches its folder name (`nest/nest.mjs`), the exports from that file are flattened to the folder level:
+This folder contains a single file with named exports that create an object namespace:
 
 - **File**: `nest/nest.mjs`
 - **Export**: `export function alpha(name)`
-- **API Path**: `api.advanced.nest()` (function is flattened and becomes callable at folder level)
+- **API Path**: `api.advanced.nest.alpha()` (creates object with alpha method)
 
-This is different from having separate named functions - the folder itself becomes callable because the filename matches the folder name.
+The file exports are organized under the folder name as an object, providing a clear namespace for related functions.
 
 ## Usage
 
 ```js
-api.advanced.nest("test"); // Calls the alpha function with flattening behavior
+api.advanced.nest.alpha("test"); // Calls the alpha function: "alpha: test"
 ```
 
 ## Use Case
 
-This pattern is useful when you want a folder to represent a single logical operation while keeping the code organized in a appropriately named file. The filename-folder matching tells slothlet to flatten the exports up one level, making the API cleaner and more intuitive.
+This pattern is useful when you want a folder to represent a collection of related functions under a single namespace. The folder name becomes an object containing all the exported functions from the single file.

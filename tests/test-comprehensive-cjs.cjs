@@ -173,6 +173,91 @@ async function testContextIsolation() {
 	}
 }
 
+async function testExplicitDefaults() {
+	console.log("🧪 Testing Explicit CJS Default Exports...\n");
+
+	try {
+		console.log("🔧 Creating CJS instance with explicit defaults...");
+		const api = await slothlet({
+			dir: "../api_tests/api_test_cjs",
+			contextData: { user: "explicit_test" }
+		});
+
+		console.log("✅ CJS API created successfully");
+		console.log(
+			"API methods:",
+			Object.keys(api).filter((k) => k !== "describe" && k !== "shutdown")
+		);
+
+		// Test explicit default exports with different naming patterns
+		console.log("\n🔍 Testing explicit CJS default exports:");
+
+		// Test underscore folder (explicit_defaults - should NOT be sanitized)
+		console.log("\n📁 Testing underscore folder (explicit_defaults):");
+		console.log("Checking that explicit_defaults is available...");
+		if (!api.explicit_defaults) {
+			throw new Error("explicit_defaults namespace not found - CJS explicit default failed");
+		}
+
+		console.log("Testing explicit_defaults.explicitDefault.multiply(3, 4) - should be flattened:");
+		const multiplyResult1 = api.explicit_defaults.explicitDefault.multiply(3, 4);
+		console.log("Result:", multiplyResult1);
+		if (multiplyResult1 !== 12) {
+			throw new Error(`Expected 12, got ${multiplyResult1}`);
+		}
+
+		console.log("Testing explicit_defaults.explicitDefault.divide(12, 3) - should be flattened:");
+		const divideResult1 = api.explicit_defaults.explicitDefault.divide(12, 3);
+		console.log("Result:", divideResult1);
+		if (divideResult1 !== 4) {
+			throw new Error(`Expected 4, got ${divideResult1}`);
+		}
+
+		console.log("Testing explicit_defaults.explicitDefault.getCalculatorName():");
+		const nameResult1 = api.explicit_defaults.explicitDefault.getCalculatorName();
+		console.log("Result:", nameResult1);
+		if (nameResult1 !== "Explicit Default Calculator") {
+			throw new Error(`Expected "Explicit Default Calculator", got "${nameResult1}"`);
+		}
+
+		// Test hyphen folder (explicit-default - should be sanitized to explicitDefault)
+		console.log("\n📁 Testing hyphen folder (explicit-default -> explicitDefault):");
+		console.log("Checking that explicitDefault is available...");
+		if (!api.explicitDefault) {
+			throw new Error("explicitDefault namespace not found - sanitization failed");
+		}
+
+		console.log("Testing explicitDefault.multiply(5, 6) - flattened explicit default:");
+		const multiplyResult2 = api.explicitDefault.multiply(5, 6);
+		console.log("Result:", multiplyResult2);
+		if (multiplyResult2 !== 30) {
+			throw new Error(`Expected 30, got ${multiplyResult2}`);
+		}
+
+		console.log("Testing explicitDefault.divide(20, 4) - flattened explicit default:");
+		const divideResult2 = api.explicitDefault.divide(20, 4);
+		console.log("Result:", divideResult2);
+		if (divideResult2 !== 5) {
+			throw new Error(`Expected 5, got ${divideResult2}`);
+		}
+
+		console.log("Testing explicitDefault.getCalculatorName() - flattened explicit default:");
+		const nameResult2 = api.explicitDefault.getCalculatorName();
+		console.log("Result:", nameResult2);
+		if (nameResult2 !== "Hyphenated Default Calculator") {
+			throw new Error(`Expected "Hyphenated Default Calculator", got "${nameResult2}"`);
+		}
+
+		await api.shutdown();
+
+		console.log("\n✅ Explicit CJS defaults test completed successfully!\n");
+	} catch (error) {
+		console.error("❌ Explicit defaults test failed:", error.message);
+		console.error(error.stack);
+		throw error; // Re-throw to be caught by runAllTests
+	}
+}
+
 async function runAllTests() {
 	console.log("🚀 Starting Comprehensive CJS Live Bindings Test Suite\n");
 	console.log("============================================================");
@@ -197,6 +282,13 @@ async function runAllTests() {
 		await testContextIsolation();
 	} catch (error) {
 		console.error("❌ testContextIsolation failed:", error.message);
+		hasErrors = true;
+	}
+
+	try {
+		await testExplicitDefaults();
+	} catch (error) {
+		console.error("❌ testExplicitDefaults failed:", error.message);
 		hasErrors = true;
 	}
 
