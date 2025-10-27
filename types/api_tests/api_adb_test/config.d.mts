@@ -40,18 +40,6 @@ export function set(key: string | any, value?: any): void;
  */
 export function merge(configObject: any, deep?: boolean): any;
 /**
- * Gets default configuration values.
- * @param {string} [key] - Specific default key to get, or undefined for all defaults
- * @returns {any} Default configuration value(s)
- * @example
- * // Get all defaults
- * const defaults = api.config.defaults();
- *
- * // Get specific default
- * const defaultPort = api.config.defaults('port');
- */
-export function defaults(key?: string): any;
-/**
  * Resets configuration to defaults.
  * @param {string|string[]} [keys] - Specific keys to reset, or undefined to reset all
  * @returns {Object} Updated configuration
@@ -83,16 +71,16 @@ export function validate(configToValidate?: any): any;
  * console.log('Config created:', snapshot.timestamp);
  */
 export function snapshot(): any;
-export default config;
-declare namespace config {
-    export { get };
-    export { set };
-    export { merge };
-    export { defaults };
-    export { reset };
-    export { validate };
-    export { snapshot };
-    export { defaultAPI as default };
+export namespace defaults {
+    function get(key: any): any;
+    function getAll(): any;
+    function restore(key: any): any;
+    function isDefault(key: any): any;
+    function customized(): any;
+    function resetAll(): any;
 }
-declare const defaultAPI: any;
+export default activeConfig;
+declare namespace activeConfig {
+    let host: string;
+}
 //# sourceMappingURL=config.d.mts.map
