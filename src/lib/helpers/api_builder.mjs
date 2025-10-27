@@ -615,17 +615,19 @@ export function getFlatteningDecision(options) {
 		};
 	}
 
-	// Rule 5: Single file context - flatten if no default and has named exports
-	if (totalModules === 1 && !moduleHasDefault && moduleKeys.length > 0) {
-		return {
-			shouldFlatten: true,
-			flattenToRoot: true,
-			flattenToCategory: true,
-			preserveAsNamespace: false,
-			useAutoFlattening: false,
-			reason: "single file context with named exports only"
-		};
-	}
+	// Rule 11: Single file context - flatten if no default and has named exports
+	// COMMENTED OUT: This rule reduces API path flexibility. If users want flattening,
+	// they can use other rules like naming the file to match the folder.
+	// if (totalModules === 1 && !moduleHasDefault && moduleKeys.length > 0) {
+	// 	return {
+	// 		shouldFlatten: true,
+	// 		flattenToRoot: true,
+	// 		flattenToCategory: true,
+	// 		preserveAsNamespace: false,
+	// 		useAutoFlattening: false,
+	// 		reason: "single file context with named exports only"
+	// 	};
+	// }
 
 	// Default: preserve as namespace
 	return {

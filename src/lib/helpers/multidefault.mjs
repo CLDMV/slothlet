@@ -208,14 +208,15 @@ function multidefault_getFlatteningDecision(options) {
 
 	// Auto-flatten: module has no default export, only named exports → flatten to root
 	// Two cases: 1) Multiple defaults context (already handled above), 2) Single-file context
-	if (!moduleHasDefault && moduleKeys.length > 0 && totalModuleCount === 1) {
-		return {
-			shouldFlatten: true,
-			flattenToRoot: true,
-			preserveAsNamespace: false,
-			reason: "single file with no default, only named exports"
-		};
-	}
+	// COMMENTED OUT: Rule 11 - reduces API path flexibility
+	// if (!moduleHasDefault && moduleKeys.length > 0 && totalModuleCount === 1) {
+	// 	return {
+	// 		shouldFlatten: true,
+	// 		flattenToRoot: true,
+	// 		preserveAsNamespace: false,
+	// 		reason: "single file with no default, only named exports"
+	// 	};
+	// }
 
 	// Default case: preserve as namespace
 	return {

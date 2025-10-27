@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-21 14:32:16 -07:00 (1761082336)
+ *	@Last modified time: 2025-10-27 08:09:40 -07:00 (1761577780)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -478,12 +478,18 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			calls: [{ path: ["tcp", "testContext"], args: [] }]
 		},
 
+		// utilities.helpers (Rule 11 test case - single file with named exports)
+		{
+			section: "utilities.helpers.parse",
+			calls: [{ path: ["utilities", "helpers", "parse"], args: ['{"test":true}'] }]
+		},
+
 		// empty folder test (Rule 5 verification)
 		{ section: "empty (empty folder)", calls: [{ path: ["empty"], args: [] }] }
 	];
 
 	let testCounter = 0;
-	const testBeforeOutput = 37;
+	const testBeforeOutput = 40;
 
 	for (const test of tests) {
 		console.log(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
