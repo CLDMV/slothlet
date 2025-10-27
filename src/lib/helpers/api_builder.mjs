@@ -1661,9 +1661,11 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				// Use file name for default exports when multiple defaults exist
 				moduleDecision.apiKey = moduleName;
 				moduleDecision.specialHandling = "multi-default-filename";
-				console.log(
-					`[DEBUG] Multi-default function case: ${moduleName} => ${moduleDecision.apiKey} (hasMultiple=${hasMultipleDefaultExports}, __slothletDefault=${mod.__slothletDefault}, isSelfRef=${isSelfReferential})`
-				);
+				if (debug) {
+					console.log(
+						`[DEBUG] Multi-default function case: ${moduleName} => ${moduleDecision.apiKey} (hasMultiple=${hasMultipleDefaultExports}, __slothletDefault=${mod.__slothletDefault}, isSelfRef=${isSelfReferential})`
+					);
+				}
 			} else if (selfReferentialFiles.has(moduleName)) {
 				// Self-referential case: use the named export directly to avoid nesting
 				moduleDecision.type = "self-referential";
@@ -1671,9 +1673,11 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 			} else {
 				// Original logic for single defaults or named function exports
 				const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
-				console.log(
-					`[DEBUG] Standard function case: ${moduleName}, fnName=${fnName}, mod.__slothletDefault=${mod.__slothletDefault}, hasMultiple=${hasMultipleDefaultExports}`
-				);
+				if (debug) {
+					console.log(
+						`[DEBUG] Standard function case: ${moduleName}, fnName=${fnName}, mod.__slothletDefault=${mod.__slothletDefault}, hasMultiple=${hasMultipleDefaultExports}`
+					);
+				}
 
 				// Check if function name matches sanitized filename (case-insensitive)
 				// If so, prefer the original function name over the sanitized version
