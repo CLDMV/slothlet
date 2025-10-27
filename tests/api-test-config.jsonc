@@ -336,10 +336,10 @@
 					// 	"label": "api.advanced.nest3(\"slothlet\")"
 					// },
 					{
-						"path": ["advanced", "nest"],
+						"path": ["advanced", "nest", "alpha"],
 						"args": ["slothlet"],
 						"expected": "alpha: slothlet",
-						"label": "api.advanced.nest(\"slothlet\")"
+						"label": "api.advanced.nest.alpha(\"slothlet\")"
 					},
 					{
 						"path": ["advanced", "nest2", "alpha", "hello"],

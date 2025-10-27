@@ -378,7 +378,7 @@ api.config.host; // → "https://slothlet" ✅ VERIFIED
 
 ```bash
 node -e "const slothlet = await import('./index.mjs'); const api = await slothlet.default({ dir: './api_tests/api_test' }); console.log('api.config.host:', api.config.host); console.log('api.config.config exists:', 'config' in api.config);"
-# Expected output: 
+# Expected output:
 # api.config.host: https://slothlet
 # api.config.config exists: false
 ```
@@ -466,7 +466,7 @@ api.math.multiply(2, 3); // → 6 ✅ VERIFIED
 ```bash
 node -e "(async () => { const slothlet = await import('./index.mjs'); const api = await slothlet.default({ dir: './api_tests/api_test' }); console.log('math.add(2,3):', api.math.add(2, 3)); console.log('math.math exists:', 'math' in api.math); })()"
 # Expected output:
-# math.add(2,3): 5  
+# math.add(2,3): 5
 # math.math exists: false
 ```
 
@@ -560,7 +560,7 @@ api.math.add(2, 3); // → 5 ✅ VERIFIED with api_tests/api_test
 
 ```javascript
 // File: folder/file.mjs (object name doesn't match filename)
-// Need to find example - no current test case available  
+// Need to find example - no current test case available
 // ⚠️ PATTERN C NEEDS TEST CASE
 ```
 
@@ -584,7 +584,7 @@ if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0
 	return mod; // Return function directly
 }
 
-// C11a: Single named export match - line 1000  
+// C11a: Single named export match - line 1000
 if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 	return mod[moduleName]; // Return export contents directly
 }
@@ -616,7 +616,7 @@ if (typeof mod === "function" && mod.__slothletDefault === true && currentDepth 
 **Verified Examples**:
 
 ```javascript
-// File: api_tests/api_test/task/auto-ip.mjs exports function "autoIP" 
+// File: api_tests/api_test/task/auto-ip.mjs exports function "autoIP"
 // Sanitized filename: "autoIp", Function name: "autoIP"
 // Result: Use "autoIP" instead of "autoIp" (preserves IP capitalization)
 api.task.autoIP(); // → "testAutoIP" ✅ VERIFIED with api_tests/api_test
@@ -688,7 +688,7 @@ api.advanced.nest4.beta("test"); // → "Hello, test!" ✅ VERIFIED with api_tes
 // C12: Parent-level flattening detection - line 1018
 if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
 	const isGenericFilename = ["singlefile", "index", "main", "default"].includes(fileName.toLowerCase());
-	
+
 	// C12a: Generic filename single export promotion - line 1026
 	if (moduleKeys.length === 1 && isGenericFilename) {
 		const exportValue = mod[moduleKeys[0]];
@@ -715,44 +715,44 @@ node tests/debug-slothlet.mjs
 
 ### Source Code Condition Mapping to Rules
 
-| Condition | Location | Rule(s) | Description |
-|-----------|----------|---------|-------------|
-| C01 | getFlatteningDecision:558 | Rule 6 | Self-referential check |
-| C02 | getFlatteningDecision:570 | Rule 5 | Multi-default WITH default |
-| C03 | getFlatteningDecision:580 | Rule 5 | Multi-default WITHOUT default |
-| C04 | getFlatteningDecision:593 | Rule 7 | Auto-flatten single named export |
-| C05 | getFlatteningDecision:605 | Rule 1 | Filename matches container |
-| C07 | getFlatteningDecision:629 | Rule 2 | Default namespace preservation |
-| C08a | processModuleForAPI:716 | Rule 5 | Multi-default function handling |
-| C08b | processModuleForAPI:728 | Rule 6 | Self-referential function |
-| C08c | processModuleForAPI:748 | Rule 4 | Root function setting |
-| C08d | processModuleForAPI:758 | Rule 4 | Function as namespace |
-| C09a | processModuleForAPI:782 | Rule 7 | Apply auto-flattening |
-| C09b | processModuleForAPI:786 | Rules 1,5 | Flatten to root/category |
-| C09c | processModuleForAPI:797 | Rule 6 | Self-referential non-function |
-| C09d | processModuleForAPI:801 | Rule 2 | Traditional namespace |
-| C10 | buildCategoryStructure:984 | Rule 8 | Single-file function folder match |
-| C11a | buildCategoryStructure:1000 | Rules 7,8 | Single named export match |
-| C11b | buildCategoryStructure:1009 | Rule 8 | Multiple exports (default spread) |
-| C11c | buildCategoryStructure:fallback | Rule 8 | Folder match fallback |
-| C12 | buildCategoryStructure:1018 | Rule 10 | Parent-level flattening |
-| C12a | buildCategoryStructure:1026 | Rule 10 | Generic filename promotion |
-| C13 | buildCategoryStructure:1039 | Rule 8 | Function name matches folder |
-| C14 | buildCategoryStructure:1049 | Rule 9 | Function name matches filename |
-| C15 | buildCategoryStructure:1053 | Rule 8 | Default function export |
-| C16 | buildCategoryStructure:1063 | Rule 7 | Auto-flatten (second instance) |
-| C18 | buildCategoryDecisions:1709 | Rule 9 | Preferred export names |
-| C19 | buildCategoryDecisions:1712 | Rule 6 | Self-referential multi-file |
-| C20a | buildCategoryDecisions:1723 | Rule 4 | Single default object |
-| C20b | buildCategoryDecisions:1727 | Rule 5 | Multi-default no default |
-| C20c | buildCategoryDecisions:1731 | Rule 7 | Single named export match |
-| C20d | buildCategoryDecisions:1736 | Rule 1 | Category name match flatten |
-| C20e | buildCategoryDecisions:1740 | Rule 2 | Standard object export |
-| C21 | multidefault:168 | Rule 6 | Multi-default self-referential |
-| C22 | multidefault:179 | Rule 5 | Multi-default with default |
-| C23 | multidefault:186 | Rule 5 | Multi-default without default |
-| C24 | multidefault:200 | Rule 7 | Multi-default single named export |
-| C26 | multidefault:220+ | Rule 2 | Multi-default default fallback |
+| Condition | Location                        | Rule(s)   | Description                       |
+| --------- | ------------------------------- | --------- | --------------------------------- |
+| C01       | getFlatteningDecision:558       | Rule 6    | Self-referential check            |
+| C02       | getFlatteningDecision:570       | Rule 5    | Multi-default WITH default        |
+| C03       | getFlatteningDecision:580       | Rule 5    | Multi-default WITHOUT default     |
+| C04       | getFlatteningDecision:593       | Rule 7    | Auto-flatten single named export  |
+| C05       | getFlatteningDecision:605       | Rule 1    | Filename matches container        |
+| C07       | getFlatteningDecision:629       | Rule 2    | Default namespace preservation    |
+| C08a      | processModuleForAPI:716         | Rule 5    | Multi-default function handling   |
+| C08b      | processModuleForAPI:728         | Rule 6    | Self-referential function         |
+| C08c      | processModuleForAPI:748         | Rule 4    | Root function setting             |
+| C08d      | processModuleForAPI:758         | Rule 4    | Function as namespace             |
+| C09a      | processModuleForAPI:782         | Rule 7    | Apply auto-flattening             |
+| C09b      | processModuleForAPI:786         | Rules 1,5 | Flatten to root/category          |
+| C09c      | processModuleForAPI:797         | Rule 6    | Self-referential non-function     |
+| C09d      | processModuleForAPI:801         | Rule 2    | Traditional namespace             |
+| C10       | buildCategoryStructure:984      | Rule 8    | Single-file function folder match |
+| C11a      | buildCategoryStructure:1000     | Rules 7,8 | Single named export match         |
+| C11b      | buildCategoryStructure:1009     | Rule 8    | Multiple exports (default spread) |
+| C11c      | buildCategoryStructure:fallback | Rule 8    | Folder match fallback             |
+| C12       | buildCategoryStructure:1018     | Rule 10   | Parent-level flattening           |
+| C12a      | buildCategoryStructure:1026     | Rule 10   | Generic filename promotion        |
+| C13       | buildCategoryStructure:1039     | Rule 8    | Function name matches folder      |
+| C14       | buildCategoryStructure:1049     | Rule 9    | Function name matches filename    |
+| C15       | buildCategoryStructure:1053     | Rule 8    | Default function export           |
+| C16       | buildCategoryStructure:1063     | Rule 7    | Auto-flatten (second instance)    |
+| C18       | buildCategoryDecisions:1709     | Rule 9    | Preferred export names            |
+| C19       | buildCategoryDecisions:1712     | Rule 6    | Self-referential multi-file       |
+| C20a      | buildCategoryDecisions:1723     | Rule 4    | Single default object             |
+| C20b      | buildCategoryDecisions:1727     | Rule 5    | Multi-default no default          |
+| C20c      | buildCategoryDecisions:1731     | Rule 7    | Single named export match         |
+| C20d      | buildCategoryDecisions:1736     | Rule 1    | Category name match flatten       |
+| C20e      | buildCategoryDecisions:1740     | Rule 2    | Standard object export            |
+| C21       | multidefault:168                | Rule 6    | Multi-default self-referential    |
+| C22       | multidefault:179                | Rule 5    | Multi-default with default        |
+| C23       | multidefault:186                | Rule 5    | Multi-default without default     |
+| C24       | multidefault:200                | Rule 7    | Multi-default single named export |
+| C26       | multidefault:220+               | Rule 2    | Multi-default default fallback    |
 
 **Total Coverage**: 23 source code conditions mapped to 10 comprehensive rules
 
