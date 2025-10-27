@@ -681,7 +681,8 @@ export function getFlatteningDecision(options) {
  *   mod, fileName, apiPathKey, hasMultipleDefaultExports, isSelfReferential, api,
  *   getRootDefault: () => rootDefaultFunction,
  *   setRootDefault: (fn) => { rootDefaultFunction = fn; },
- *   context: { debug: true, mode: "root", totalModules: 3 }
+ *   context: { debug: true, mode: "root", totalModules: 3 },
+ *   originalAnalysis: { hasDefault: true, namedExportsCount: 2 }
  * });
  */
 export function processModuleForAPI(options) {
@@ -694,7 +695,8 @@ export function processModuleForAPI(options) {
 		api,
 		getRootDefault,
 		setRootDefault,
-		context = {}
+		context = {},
+		originalAnalysis = null
 	} = options;
 
 	const { debug = false, mode = "unknown", categoryName, totalModules = 1 } = context;
@@ -780,6 +782,7 @@ export function processModuleForAPI(options) {
 			apiPathKey,
 			hasMultipleDefaultExports,
 			isSelfReferential,
+			moduleHasDefault: originalAnalysis ? originalAnalysis.hasDefault : !!mod.default,
 			categoryName,
 			totalModules,
 			debug

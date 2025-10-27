@@ -254,7 +254,7 @@ function eager_wrapWithRunCtx(obj, instance) {
  */
 export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	// TEMPORARY: Revert to working logic to identify differences with buildRootAPI
-	const { processModuleForAPI } = await import("@cldmv/slothlet/helpers/api_builder");
+	const { processModuleForAPI, analyzeModule, processModuleFromAnalysis } = await import("@cldmv/slothlet/helpers/api_builder");
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	const api = {};
 	let rootDefaultFunction = null;
@@ -294,7 +294,17 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 		const ext = path.extname(entry.name);
 		const fileName = path.basename(entry.name, ext);
 		const apiPathKey = this._toapiPathKey(fileName);
-		const mod = await this._loadSingleModule(path.join(dir, entry.name));
+
+		// Load and process module, retaining analysis data to fix multi-default bug
+		const modulePath = path.join(dir, entry.name);
+		const analysis = await analyzeModule(modulePath, {
+			debug: this.config.debug,
+			instance: this
+		});
+		const mod = processModuleFromAnalysis(analysis, {
+			debug: this.config.debug,
+			instance: this
+		});
 
 		// Use stored self-referential detection result from first pass
 		const isSelfReferential = selfReferentialFiles.has(fileName);
@@ -314,7 +324,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				debug: this.config.debug,
 				mode: "root",
 				totalModules: moduleFiles.length
-			}
+			},
+			originalAnalysis: analysis
 		});
 	}
 

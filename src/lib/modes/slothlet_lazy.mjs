@@ -155,7 +155,7 @@ import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
-import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
+import { processModuleForAPI, analyzeModule, processModuleFromAnalysis } from "@cldmv/slothlet/helpers/api_builder";
 
 /**
  * @function create
@@ -208,8 +208,17 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const { fileName } of analysisDefaults) {
 		const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
 		if (entry) {
-			const mod = await instance._loadSingleModule(path.join(dir, entry.name));
-			defaultExportFiles.push({ entry, fileName, mod });
+			// Load and process module, retaining analysis data
+			const modulePath = path.join(dir, entry.name);
+			const moduleAnalysis = await analyzeModule(modulePath, {
+				debug: instance.config.debug,
+				instance
+			});
+			const mod = processModuleFromAnalysis(moduleAnalysis, {
+				debug: instance.config.debug,
+				instance
+			});
+			defaultExportFiles.push({ entry, fileName, mod, analysis: moduleAnalysis });
 		}
 	}
 
@@ -230,12 +239,22 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 
 		// Check if we already loaded this module during first pass (for non-self-referential defaults)
 		let mod = null;
+		let analysis = null;
 		const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
 		if (existingDefault) {
 			mod = existingDefault.mod; // Reuse already loaded module
+			analysis = existingDefault.analysis; // Reuse analysis if available
 		} else {
-			// Load processed module only if not already loaded
-			mod = await instance._loadSingleModule(path.join(dir, entry.name));
+			// Load and process module, retaining analysis data
+			const modulePath = path.join(dir, entry.name);
+			analysis = await analyzeModule(modulePath, {
+				debug: instance.config.debug,
+				instance
+			});
+			mod = processModuleFromAnalysis(analysis, {
+				debug: instance.config.debug,
+				instance
+			});
 			processedModuleCache.set(entry.name, mod);
 		}
 
@@ -258,7 +277,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				debug: instance.config.debug,
 				mode: "root",
 				totalModules: moduleFiles.length
-			}
+			},
+			originalAnalysis: analysis
 		});
 	}
 
