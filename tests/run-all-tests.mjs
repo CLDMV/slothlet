@@ -140,12 +140,14 @@ async function runAllTests() {
 				console.log(`✅ ${file} passed (${result.duration}ms)`);
 			} else {
 				console.log(`❌ ${file} failed (${result.duration}ms) - Exit code: ${result.exitCode}`);
-				// Show first few lines of output for context
-				const lines = result.output.split("\n").slice(0, 5);
-				lines.forEach((line) => console.log(`   ${line}`));
-				if (result.output.split("\n").length > 5) {
-					console.log(`   ... (${result.output.split("\n").length - 5} more lines)`);
+				// Show last 20 lines of output for debugging
+				const lines = result.output.split("\n");
+				const totalLines = lines.length;
+				const lastLines = lines.slice(-20);
+				if (totalLines > 20) {
+					console.log(`   ... (${totalLines - 20} lines omitted, showing last 20 lines)`);
 				}
+				lastLines.forEach((line) => console.log(`   ${line}`));
 			}
 			console.log("");
 		}
