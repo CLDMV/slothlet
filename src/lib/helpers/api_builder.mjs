@@ -20,7 +20,7 @@
  *
  * @example
  * // Get module processing decisions
- * const moduleResult = await processModuleDecisions(modulePath, { rootLevel: false, instance });
+ * const moduleResult = await processModuleDecisions(modulePath, { instance });
  * // Both modes use moduleResult.processedModule but apply differently
  *
  * @example
@@ -51,7 +51,6 @@ import { pathToFileURL } from "node:url";
  * @package
  * @param {string} modulePath - Absolute path to the module file
  * @param {object} options - Analysis options
- * @param {boolean} [options.rootLevel=false] - Whether this is a root-level module
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @param {object} [options.instance] - Slothlet instance for accessing config and methods
  * @returns {Promise<{
@@ -68,12 +67,12 @@ import { pathToFileURL } from "node:url";
  * }>} Module analysis results
  * @example
  * // Analyze a module file
- * const analysis = await analyzeModule("./api/math.mjs", { rootLevel: false, instance });
+ * const analysis = await analyzeModule("./api/math.mjs", { instance });
  * // Eager mode: use analysis.processedModule directly
  * // Lazy mode: create proxy based on analysis.isFunction, analysis.exports, etc.
  */
 export async function analyzeModule(modulePath, options = {}) {
-	const { rootLevel = false, debug = false, instance } = options;
+	const { debug = false } = options;
 
 	const moduleUrl = pathToFileURL(modulePath).href;
 	const rawModule = await import(moduleUrl);
@@ -141,7 +140,7 @@ export async function analyzeModule(modulePath, options = {}) {
 		defaultExportType,
 		shouldWrapAsCallable,
 		namedExports,
-		metadata: { rootLevel, modulePath }
+		metadata: { modulePath }
 	};
 }
 
@@ -164,31 +163,34 @@ export async function analyzeModule(modulePath, options = {}) {
  */
 export function processModuleFromAnalysis(analysis, options = {}) {
 	const { instance, debug = false } = options;
-	const { processedModule, isFunction, hasDefault, shouldWrapAsCallable, namedExports, metadata } = analysis;
+	const { processedModule, isFunction, hasDefault, shouldWrapAsCallable, namedExports } = analysis;
 
 	if (!instance) {
 		throw new Error("processModuleFromAnalysis requires instance parameter for _toApiKey access");
 	}
 
-	// Handle function default exports
+	// Handle function default exports - extract and enhance the function
 	if (isFunction) {
-		let fn;
-		if (metadata.rootLevel) {
-			fn = processedModule;
-		} else {
-			fn = processedModule.default;
-			// Mark as originating from default export
-			try {
-				Object.defineProperty(fn, "__slothletDefault", { value: true, enumerable: false });
-			} catch {
-				// ignore
-			}
+		let fn = processedModule.default;
 
-			// Attach named exports as properties
-			for (const [exportName, exportValue] of Object.entries(processedModule)) {
-				if (exportName !== "default") {
-					fn[instance._toApiKey(exportName)] = exportValue;
-				}
+		// Mark as default export for multi-default processing
+		if (hasDefault) {
+			try {
+				Object.defineProperty(fn, "__slothletDefault", {
+					value: true,
+					writable: false,
+					enumerable: false,
+					configurable: true
+				});
+			} catch {
+				// Ignore if property cannot be set
+			}
+		}
+
+		// Attach named exports as properties
+		for (const [exportName, exportValue] of Object.entries(processedModule)) {
+			if (exportName !== "default") {
+				fn[instance._toApiKey(exportName)] = exportValue;
 			}
 		}
 		return fn;
@@ -300,7 +302,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
  * }
  */
 export async function analyzeDirectoryStructure(categoryPath, options = {}) {
-	const { instance, currentDepth = 0, maxDepth = Infinity, debug = false } = options;
+	const { instance, currentDepth = 0, debug = false } = options;
 
 	if (!instance || typeof instance._toApiKey !== "function") {
 		throw new Error("analyzeDirectoryStructure requires a valid slothlet instance");
@@ -411,12 +413,10 @@ export async function getCategoryBuildingDecisions(categoryPath, options = {}) {
 
 			// Load and process the module using centralized logic
 			const analysis = await analyzeModule(modulePath, {
-				rootLevel: false,
 				debug,
 				instance
 			});
 			const processedModule = processModuleFromAnalysis(analysis, {
-				rootLevel: false,
 				debug,
 				instance
 			});
@@ -549,8 +549,7 @@ export function getFlatteningDecision(options) {
 		isSelfReferential,
 		moduleHasDefault = !!mod.default,
 		categoryName,
-		totalModules = 1,
-		debug = false
+		totalModules = 1
 	} = options;
 
 	const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
@@ -705,23 +704,28 @@ export function processModuleForAPI(options) {
 	const apiAssignments = {};
 
 	// Handle function default exports
-	if (mod && typeof mod.default === "function") {
+	// For direct default function exports, the module IS the function (no .default property)
+	// For named default exports, check mod.default
+	const hasDefaultFunction = (mod && typeof mod.default === "function") || (mod && typeof mod === "function" && !mod.default);
+
+	// Get the actual function reference
+	const defaultFunction = mod?.default || (typeof mod === "function" ? mod : null);
+
+	if (hasDefaultFunction) {
 		processed = true;
 
 		if (hasMultipleDefaultExports && !isSelfReferential) {
 			// Multi-default case: use filename as API key
-			apiAssignments[apiKey] = mod.default;
+			apiAssignments[apiKey] = mod;
 			namespaced = true;
 
-			// Add named exports to the function
-			for (const [key, value] of Object.entries(mod)) {
-				if (key !== "default") {
-					apiAssignments[apiKey][key] = value;
-				}
-			}
+			// Named exports are already attached as properties by processModuleFromAnalysis
+			// No need to process them separately
 
 			if (debug) {
-				console.log(`[DEBUG] ${mode}: Multi-default function - using filename '${apiKey}' for default export`);
+				console.log(
+					`[DEBUG] ${mode}: Multi-default function - using filename '${apiKey}' for default export, mod type: ${typeof mod}, function name: ${defaultFunction?.name}`
+				);
 			}
 		} else if (isSelfReferential) {
 			// Self-referential case: preserve as namespace (both named and default)
@@ -741,30 +745,22 @@ export function processModuleForAPI(options) {
 
 			// Only set as root function if we're in root context and no root function exists
 			if (mode === "root" && getRootDefault && setRootDefault && !hasMultipleDefaultExports && !getRootDefault()) {
-				setRootDefault(mod.default);
+				setRootDefault(defaultFunction);
 				rootDefaultSet = true;
 
 				if (debug) {
-					console.log(`[DEBUG] ${mode}: Set rootDefaultFunction to:`, mod.default.name);
+					console.log(`[DEBUG] ${mode}: Set rootDefaultFunction to:`, defaultFunction.name);
 				}
 
-				// Add named exports to root level in traditional single-default case
-				for (const [key, value] of Object.entries(mod)) {
-					if (key !== "default") {
-						apiAssignments[key] = value;
-					}
-				}
+				// Named exports are already attached as properties by processModuleFromAnalysis
+				// No need to process them separately
 			} else {
 				// In subfolder context or when root already exists, treat as namespace
-				apiAssignments[apiKey] = mod.default;
+				apiAssignments[apiKey] = mod;
 				namespaced = true;
 
-				// Add named exports to the function
-				for (const [key, value] of Object.entries(mod)) {
-					if (key !== "default") {
-						apiAssignments[apiKey][key] = value;
-					}
-				}
+				// Named exports are already attached as properties by processModuleFromAnalysis
+				// No need to process them separately
 			}
 		}
 	} else {
@@ -819,6 +815,9 @@ export function processModuleForAPI(options) {
 
 	// Apply assignments to target API
 	for (const [key, value] of Object.entries(apiAssignments)) {
+		if (debug && key && typeof value === "function" && value.name) {
+			console.log(`[DEBUG] ${mode}: Assigning key '${key}' to function '${value.name}'`);
+		}
 		api[key] = value;
 	}
 
@@ -866,7 +865,7 @@ export function applyFunctionNamePreference(options) {
 	let preferredKey = apiKey;
 
 	// Check if any export function names should be preferred over sanitized filename
-	for (const [exportName, exportValue] of Object.entries(mod)) {
+	for (const [, exportValue] of Object.entries(mod)) {
 		if (typeof exportValue === "function" && exportValue.name) {
 			const functionNameLower = exportValue.name.toLowerCase();
 			const filenameLower = fileName.toLowerCase();
@@ -962,7 +961,6 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 
 		// Analyze the module using centralized function
 		const analysis = await analyzeModule(path.join(categoryPath, moduleFiles[0].name), {
-			rootLevel: false,
 			debug,
 			instance
 		});
@@ -1090,12 +1088,10 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		const file = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
 		if (file) {
 			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				rootLevel: false,
 				debug,
 				instance
 			});
 			const processedMod = processModuleFromAnalysis(analysis, {
-				rootLevel: false,
 				debug,
 				instance
 			});
@@ -1129,12 +1125,10 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 			mod = existingDefault.mod; // Reuse already loaded module
 		} else {
 			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				rootLevel: false,
 				debug,
 				instance
 			});
 			mod = processModuleFromAnalysis(analysis, {
-				rootLevel: false,
 				debug,
 				instance
 			});
@@ -1266,12 +1260,10 @@ export async function buildRootAPI(dir, options = {}) {
 			const apiKey = instance._toApiKey(fileName);
 
 			const analysis = await analyzeModule(path.join(dir, entry.name), {
-				rootLevel: true,
 				debug,
 				instance
 			});
 			const mod = processModuleFromAnalysis(analysis, {
-				rootLevel: true,
 				debug,
 				instance
 			});
@@ -1433,12 +1425,10 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 		// Load and process the module
 		const analysis = await analyzeModule(path.join(categoryPath, moduleFile.name), {
-			rootLevel: false,
 			debug,
 			instance
 		});
 		const mod = processModuleFromAnalysis(analysis, {
-			rootLevel: false,
 			debug,
 			instance
 		});
@@ -1587,6 +1577,9 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 	// MULTI-FILE CASE
 	decisions.type = "multi-file";
+	if (debug) {
+		console.log(`[DEBUG] buildCategoryDecisions: Processing multi-file case for ${categoryPath}`);
+	}
 
 	// Use shared multi-default detection utility
 	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
@@ -1602,12 +1595,10 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		const file = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
 		if (file) {
 			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				rootLevel: false,
 				debug,
 				instance
 			});
 			const processedMod = processModuleFromAnalysis(analysis, {
-				rootLevel: false,
 				debug,
 				instance
 			});
@@ -1635,12 +1626,10 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		} else {
 			// Load processed module only if not already loaded
 			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				rootLevel: false,
 				debug,
 				instance
 			});
 			mod = processModuleFromAnalysis(analysis, {
-				rootLevel: false,
 				debug,
 				instance
 			});
@@ -1670,6 +1659,9 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				// Use file name for default exports when multiple defaults exist
 				moduleDecision.apiKey = moduleName;
 				moduleDecision.specialHandling = "multi-default-filename";
+				console.log(
+					`[DEBUG] Multi-default function case: ${moduleName} => ${moduleDecision.apiKey} (hasMultiple=${hasMultipleDefaultExports}, __slothletDefault=${mod.__slothletDefault}, isSelfRef=${isSelfReferential})`
+				);
 			} else if (selfReferentialFiles.has(moduleName)) {
 				// Self-referential case: use the named export directly to avoid nesting
 				moduleDecision.type = "self-referential";
@@ -1677,6 +1669,9 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 			} else {
 				// Original logic for single defaults or named function exports
 				const fnName = mod.name && mod.name !== "default" ? mod.name : moduleName;
+				console.log(
+					`[DEBUG] Standard function case: ${moduleName}, fnName=${fnName}, mod.__slothletDefault=${mod.__slothletDefault}, hasMultiple=${hasMultipleDefaultExports}`
+				);
 
 				// Check if function name matches sanitized filename (case-insensitive)
 				// If so, prefer the original function name over the sanitized version

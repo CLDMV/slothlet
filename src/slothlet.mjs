@@ -425,9 +425,9 @@ const slothletObject = {
 
 		if (this.loaded) return this.api;
 		if (this.config.lazy) {
-			this.api = await this.modes.lazy.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
+			this.api = await this.modes.lazy.create.call(this, apiDir, this.config.apiDepth || Infinity, 0);
 		} else {
-			this.api = await this.modes.eager.create.call(this, apiDir, true, this.config.apiDepth || Infinity, 0);
+			this.api = await this.modes.eager.create.call(this, apiDir, this.config.apiDepth || Infinity, 0);
 		}
 		if (this.config.debug) console.log(this.api);
 
@@ -614,7 +614,6 @@ const slothletObject = {
 		// Process each module based on centralized decisions
 		for (const moduleDecision of processedModules) {
 			const { moduleName, mod, type, apiKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
-
 			// Handle different module types based on centralized decisions
 			if (specialHandling === "category-merge") {
 				// Module filename matches category name - merge logic
@@ -777,20 +776,17 @@ const slothletObject = {
 	 * @async
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} modulePath
-	 * @param {boolean} [rootLevel=false] - Whether this is a root-level module
 	 * @returns {Promise<object>}
 	 * @private
 	 * @internal
 	 */
-	async _loadSingleModule(modulePath, rootLevel = false) {
+	async _loadSingleModule(modulePath) {
 		// Use centralized module loading logic
 		const analysis = await analyzeModule(modulePath, {
-			rootLevel,
 			debug: this.config.debug,
 			instance: this
 		});
 		return processModuleFromAnalysis(analysis, {
-			rootLevel,
 			debug: this.config.debug,
 			instance: this
 		});

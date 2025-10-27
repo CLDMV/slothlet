@@ -164,7 +164,6 @@ import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
  * @alias module:@cldmv/slothlet.modes.lazy.create
  * @memberof module:@cldmv/slothlet.modes.lazy
  * @param {string} dir - Root directory
- * @param {boolean} [rootLevel=true] - Root level flag
  * @param {number} [maxDepth=Infinity] - Maximum depth to traverse
  * @param {number} [currentDepth=0] - Current depth (for internal recursion only)
  * @returns {Promise<function|object>} Root API object or function (if default export)
@@ -177,91 +176,89 @@ import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
  *
  * @example
  * // Internal usage - called by slothlet core
- * const api = await create('./api_test', true, 3, 0);
+ * const api = await create('./api_test', 3, 0);
  * // Returns: { math: [Function: lazyFolder_math], ... } (lazy proxies)
  *
  * @example
  * // Root-level processing with function exports
- * const api = await create('./api_test', true);
+ * const api = await create('./api_test');
  * // If root has default function: api becomes that function with properties
  * // Otherwise: api is object with lazy proxy properties
  */
-export async function create(dir, rootLevel = true, maxDepth = Infinity, currentDepth = 0) {
+export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const instance = this; // bound slothlet instance
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	let api = {};
 	let rootDefaultFn = null;
 
 	// Load root-level files eagerly (same behavior as eager mode)
-	if (rootLevel) {
-		// NEW: Detect multiple default exports for multi-default handling
-		const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
-		const defaultExportFiles = [];
+	// NEW: Detect multiple default exports for multi-default handling
+	const moduleFiles = entries.filter((e) => instance._shouldIncludeFile(e));
+	const defaultExportFiles = [];
 
-		// Use shared multi-default detection utility
-		const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
-		const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
+	// Use shared multi-default detection utility
+	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
+	const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
 
-		const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
+	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
-		// Convert analysis results to match existing structure
-		defaultExportFiles.length = 0; // Clear existing array
-		for (const { fileName } of analysisDefaults) {
-			const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
-			if (entry) {
-				const mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-				defaultExportFiles.push({ entry, fileName, mod });
+	// Convert analysis results to match existing structure
+	defaultExportFiles.length = 0; // Clear existing array
+	for (const { fileName } of analysisDefaults) {
+		const entry = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
+		if (entry) {
+			const mod = await instance._loadSingleModule(path.join(dir, entry.name));
+			defaultExportFiles.push({ entry, fileName, mod });
+		}
+	}
+
+	if (instance.config.debug) {
+		console.log(`[DEBUG] Lazy mode: Using shared multidefault utility results`);
+		console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
+		console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
+		console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
+	}
+
+	// Second pass: process files with multi-default awareness
+	const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
+
+	for (const entry of moduleFiles) {
+		const ext = path.extname(entry.name);
+		const fileName = path.basename(entry.name, ext);
+		const apiKey = instance._toApiKey(fileName);
+
+		// Check if we already loaded this module during first pass (for non-self-referential defaults)
+		let mod = null;
+		const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
+		if (existingDefault) {
+			mod = existingDefault.mod; // Reuse already loaded module
+		} else {
+			// Load processed module only if not already loaded
+			mod = await instance._loadSingleModule(path.join(dir, entry.name));
+			processedModuleCache.set(entry.name, mod);
+		}
+
+		// Check if this file was identified as self-referential in the first pass
+		const isSelfReferential = selfReferentialFiles.has(fileName);
+
+		// Use centralized API builder for module processing
+		processModuleForAPI({
+			mod,
+			fileName,
+			apiKey,
+			hasMultipleDefaultExports,
+			isSelfReferential,
+			api,
+			getRootDefault: () => rootDefaultFn,
+			setRootDefault: (fn) => {
+				rootDefaultFn = fn;
+			},
+			context: {
+				debug: instance.config.debug,
+				mode: "root",
+				totalModules: moduleFiles.length
 			}
-		}
-
-		if (instance.config.debug) {
-			console.log(`[DEBUG] Lazy mode: Using shared multidefault utility results`);
-			console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
-			console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
-			console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
-		}
-
-		// Second pass: process files with multi-default awareness
-		const processedModuleCache = new Map(); // Cache processed modules to avoid duplicate loads
-
-		for (const entry of moduleFiles) {
-			const ext = path.extname(entry.name);
-			const fileName = path.basename(entry.name, ext);
-			const apiKey = instance._toApiKey(fileName);
-
-			// Check if we already loaded this module during first pass (for non-self-referential defaults)
-			let mod = null;
-			const existingDefault = defaultExportFiles.find((def) => def.fileName === fileName);
-			if (existingDefault) {
-				mod = existingDefault.mod; // Reuse already loaded module
-			} else {
-				// Load processed module only if not already loaded
-				mod = await instance._loadSingleModule(path.join(dir, entry.name), true);
-				processedModuleCache.set(entry.name, mod);
-			}
-
-			// Check if this file was identified as self-referential in the first pass
-			const isSelfReferential = selfReferentialFiles.has(fileName);
-
-			// Use centralized API builder for module processing
-			processModuleForAPI({
-				mod,
-				fileName,
-				apiKey,
-				hasMultipleDefaultExports,
-				isSelfReferential,
-				api,
-				getRootDefault: () => rootDefaultFn,
-				setRootDefault: (fn) => {
-					rootDefaultFn = fn;
-				},
-				context: {
-					debug: instance.config.debug,
-					mode: "root",
-					totalModules: moduleFiles.length
-				}
-			});
-		}
+		});
 	}
 
 	// Convert api to callable function if root default function present
