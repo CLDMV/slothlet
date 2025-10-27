@@ -61,4 +61,5 @@ export function keyDown(_?: {}): Promise<{
     success: boolean;
     key: string;
 }>;
+export default set;
 //# sourceMappingURL=volume.d.mts.map
