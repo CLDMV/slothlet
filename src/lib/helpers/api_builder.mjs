@@ -800,7 +800,7 @@ export function processModuleForAPI(options) {
 			hasMultipleDefaultExports,
 			isSelfReferential,
 			// Prefer original analysis data when available for accurate flattening decisions.
-			// Fallback to !!mod.default only for legacy callers (buildCategoryStructure) that 
+			// Fallback to !!mod.default only for legacy callers (buildCategoryStructure) that
 			// haven't been updated to use uniform _loadSingleModule approach yet.
 			moduleHasDefault: originalAnalysis ? originalAnalysis.hasDefault : !!mod.default,
 			categoryName,
@@ -1120,7 +1120,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod, analysis });
 		}
 	}
 
@@ -1145,11 +1145,13 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 
 		// Check if we already loaded this module during first pass
 		let mod = null;
+		let analysis = null;
 		const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
 		if (existingDefault) {
 			mod = existingDefault.mod; // Reuse already loaded module
+			analysis = existingDefault.analysis; // Reuse stored analysis data
 		} else {
-			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
+			analysis = await analyzeModule(path.join(categoryPath, file.name), {
 				debug,
 				instance
 			});
@@ -1174,7 +1176,8 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 				mode: "category",
 				categoryName,
 				totalModules: moduleFiles.length
-			}
+			},
+			originalAnalysis: analysis
 		});
 	}
 
@@ -1627,7 +1630,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 				debug,
 				instance
 			});
-			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod });
+			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod, analysis });
 		}
 	}
 
