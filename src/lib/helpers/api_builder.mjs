@@ -257,9 +257,9 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 
 	// Handle object default exports
 	if (hasDefault && typeof processedModule.default === "object") {
-		const obj = { ...processedModule.default };
+		const obj = processedModule.default; // Use original default object directly, don't copy
 
-		// Add named exports
+		// Add named exports to the original default object
 		for (const [exportName, exportValue] of Object.entries(processedModule)) {
 			if (exportName !== "default" && exportValue !== obj) {
 				obj[instance._toapiPathKey(exportName)] = exportValue;

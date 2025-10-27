@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/config.mjs
+ *	@Date: 2025-10-25 19:38:08 -07:00 (1761446288)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-10-27 14:28:24 -07:00 (1761600504)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * Configuration data system API module for Android TV Remote.
  * Provides configuration management with get, set, merge, and defaults operations.
  * @module config
@@ -6,10 +19,11 @@
 
 // Slothlet runtime imports for live bindings
 import { self, context, reference } from "@cldmv/slothlet/runtime";
-import { createDefaultsAPI } from "./utils/defaults.mjs";
 
 // Internal active configuration state
-let activeConfig = {};
+let activeConfig = {
+	host: "test-device2"
+};
 
 /**
  * Gets configuration values.
@@ -24,25 +38,11 @@ let activeConfig = {};
  */
 export function get(key) {
 	if (key) {
-		return activeConfig[key] !== undefined ? activeConfig[key] : context[key];
+		return activeConfig[key] !== undefined ? activeConfig[key] : null;
 	}
 
-	// Return entire config by merging defaults with active config
-	return {
-		...context.configDefaults,
-		...activeConfig,
-		// Include current runtime values
-		host: context.host,
-		ip: context.ip,
-		port: context.port,
-		quiet: context.quiet,
-		inputDevice: context.inputDevice,
-		maintainConnection: context.maintainConnection,
-		heartbeatInterval: context.heartbeatInterval,
-		connectionCheckInterval: context.connectionCheckInterval,
-		autoDisconnect: context.autoDisconnect,
-		disconnectTimeout: context.disconnectTimeout
-	};
+	// Return active config - defaults accessible via remote.utils.defaults
+	return { ...activeConfig };
 }
 
 /**
@@ -126,27 +126,6 @@ export function merge(configObject, deep = false) {
 }
 
 /**
- * Gets default configuration values.
- * @param {string} [key] - Specific default key to get, or undefined for all defaults
- * @returns {any} Default configuration value(s)
- * @example
- * // Get all defaults
- * const defaults = api.config.defaults();
- *
- * // Get specific default
- * const defaultPort = api.config.defaults('port');
- */
-export function defaults(key) {
-	const configDefaults = context.configDefaults || {};
-
-	if (key) {
-		return configDefaults[key];
-	}
-
-	return { ...configDefaults };
-}
-
-/**
  * Resets configuration to defaults.
  * @param {string|string[]} [keys] - Specific keys to reset, or undefined to reset all
  * @returns {Object} Updated configuration
@@ -159,26 +138,16 @@ export function defaults(key) {
  * api.config.reset('host');
  */
 export function reset(keys) {
-	const configDefaults = context.configDefaults || {};
-
+	// For now, just clear the active config
+	// TODO: Use defaults system properly
 	if (keys) {
 		const keysArray = Array.isArray(keys) ? keys : [keys];
 		keysArray.forEach((key) => {
-			if (configDefaults.hasOwnProperty(key)) {
-				activeConfig[key] = configDefaults[key];
-				if (context.hasOwnProperty(key)) {
-					context[key] = configDefaults[key];
-				}
-			}
+			delete activeConfig[key];
 		});
 	} else {
 		// Reset all
-		activeConfig = { ...configDefaults };
-		Object.keys(configDefaults).forEach((key) => {
-			if (context.hasOwnProperty(key)) {
-				context[key] = configDefaults[key];
-			}
-		});
+		activeConfig = {};
 	}
 
 	return get();
@@ -232,7 +201,6 @@ export function snapshot() {
 	return {
 		timestamp: new Date().toISOString(),
 		active: get(),
-		defaults: defaults(),
 		validation: validate()
 	};
 }
@@ -242,23 +210,42 @@ if (context.providedConfig) {
 	activeConfig = { ...context.providedConfig };
 }
 
-// Create defaults API for this data system
-const defaultAPI = createDefaultsAPI(
-	"config",
-	() => get(), // getCurrentValues function
-	(values) => set(values) // setValues function
-);
+// Cached defaults API instance - created once when first accessed
+let cachedDefaultsAPI = null;
 
-// Default export object
-const config = {
-	get,
-	set,
-	merge,
-	defaults,
-	reset,
-	validate,
-	snapshot,
-	default: defaultAPI
+function getDefaultsAPI() {
+	if (!cachedDefaultsAPI) {
+		cachedDefaultsAPI = self.utils.defaults.createDefaultsAPI(
+			"config",
+			() => get(),
+			(values) => set(values)
+		);
+	}
+	return cachedDefaultsAPI;
+}
+
+// Defaults API - methods access cached instance
+const defaultsAPI = {
+	get: (key) => getDefaultsAPI().get(key),
+	getAll: () => getDefaultsAPI().getAll(),
+	restore: (key) => getDefaultsAPI().restore(key),
+	isDefault: (key) => getDefaultsAPI().isDefault(key),
+	customized: () => getDefaultsAPI().customized(),
+	resetAll: () => getDefaultsAPI().resetAll()
 };
 
-export default config;
+export const defaults = defaultsAPI;
+
+// Default export object
+// const config = {
+// 	get,
+// 	set,
+// 	merge,
+// 	reset,
+// 	validate,
+// 	snapshot,
+// 	defaults: defaultsAPI
+// };
+
+export default activeConfig;
+// export default config;
