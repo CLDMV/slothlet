@@ -62,10 +62,10 @@ async function testFunctionNamePreservation() {
 				errors.push(`${name}: math.multiply name should be "multiply", got "${api.math?.multiply?.name}"`);
 			}
 
-            // Test 4: Function name preference (function name over sanitized filename)
-            if (api.task?.autoIP?.name !== "autoIP") {
-                errors.push(`${name}: task.autoIP name should be "autoIP" (function name preference), got "${api.task?.autoIP?.name}"`);
-            }			// Test 5: Multi-defaults should use function names, not filenames
+			// Test 4: Function name preference (function name over sanitized filename)
+			if (api.task?.autoIP?.name !== "autoIP") {
+				errors.push(`${name}: task.autoIP name should be "autoIP" (function name preference), got "${api.task?.autoIP?.name}"`);
+			} // Test 5: Multi-defaults should use function names, not filenames
 			if (api.multi_defaults?.key?.name !== "key") {
 				errors.push(`${name}: multi_defaults.key name should be "key" (function name), got "${api.multi_defaults?.key?.name}"`);
 			}

@@ -476,7 +476,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "tcp.testContext",
 			calls: [{ path: ["tcp", "testContext"], args: [] }]
-		}
+		},
+
+		// empty folder test (Rule 5 verification)
+		{ section: "empty (empty folder)", calls: [{ path: ["empty"], args: [] }] }
 	];
 
 	let testCounter = 0;
@@ -530,6 +533,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 					} else {
 						result = fn(...call.args);
 					}
+				} else if (typeof fn === "object" && fn !== null) {
+					// Handle objects - don't try to call them, just return the object
+					console.log("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
+					result = fn;
 				} else {
 					// Fallback to eval for dynamic property/function chains
 					const objName = "bound";
