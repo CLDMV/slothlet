@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_tv_test/utils/lifecycle.mjs
+ *	@Filename: /api_tests/api_tv_test/lifecycle.mjs
  *	@Date: 2025-10-30 09:25:21 -07:00 (1761841521)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>

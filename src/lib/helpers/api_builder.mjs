@@ -1652,9 +1652,8 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
 		if (existingDefault) {
 			mod = existingDefault.mod; // Reuse already loaded module
-			// Note: For existing defaults, we don't have the analysis data preserved,
-			// but these are already handled as defaults in the first pass
-			analysis = { hasDefault: true }; // Safe assumption since they were in defaultExportFiles
+			// Use preserved analysis data from existingDefault
+			analysis = existingDefault.analysis;
 		} else {
 			// Load processed module only if not already loaded
 			analysis = await analyzeModule(path.join(categoryPath, file.name), {
