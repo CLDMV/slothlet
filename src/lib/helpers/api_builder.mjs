@@ -1648,12 +1648,15 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 		// Check if we already loaded this module during first pass (for non-self-referential defaults)
 		let mod = null;
+		let analysis = null;
 		const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
 		if (existingDefault) {
 			mod = existingDefault.mod; // Reuse already loaded module
+			// Use preserved analysis data from existingDefault
+			analysis = existingDefault.analysis;
 		} else {
 			// Load processed module only if not already loaded
-			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
+			analysis = await analyzeModule(path.join(categoryPath, file.name), {
 				debug,
 				instance
 			});
@@ -1752,11 +1755,11 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 
 				// Single default export flattening (regardless of filename matching)
 				// ONLY when there's a single default export in the folder (not multiple defaults)
-				if (!hasMultipleDefaultExports && mod.default && typeof mod.default === "object") {
+				if (!hasMultipleDefaultExports && analysis.hasDefault && analysis.defaultExportType === "object") {
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "single-default-object";
 					moduleDecision.apiPathKey = apiPathKey;
-				} else if (hasMultipleDefaultExports && !mod.default && moduleKeys.length > 0) {
+				} else if (hasMultipleDefaultExports && !analysis.hasDefault && moduleKeys.length > 0) {
 					// Multi-default context: flatten modules WITHOUT default exports to category
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "multi-default-no-default";
@@ -1765,7 +1768,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "single-named-export-match";
 					moduleDecision.apiPathKey = apiPathKey;
-				} else if (!mod.default && moduleKeys.length > 0 && moduleName === categoryName) {
+				} else if (!analysis.hasDefault && moduleKeys.length > 0 && moduleName === categoryName) {
 					// Auto-flatten: module filename matches folder name and has no default → flatten to category
 					moduleDecision.shouldFlatten = true;
 					moduleDecision.flattenType = "category-name-match-flatten";
