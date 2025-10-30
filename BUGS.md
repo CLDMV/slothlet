@@ -2,60 +2,74 @@
 
 This document tracks identified bugs in the slothlet codebase.
 
-## Bug #1: Empty Folders Wrapped as Lazy Functions
+## Bug #1: Subfolder Multi-Default Export Flattening
 
-**Status**: 🐛 **IDENTIFIED - NOT FIXED**
+**Status**: ✅ **FIXED**
 
-**Description**: In lazy mode, empty folders are incorrectly wrapped as lazy functions instead of being resolved immediately to empty objects.
+**Description**: Subfolder modules with both `export default {}` and named exports incorrectly flatten their named exports to the parent folder level instead of preserving the module namespace.
 
 **Expected Behavior**:
 
-- Empty folders should resolve to `{}` in both EAGER and LAZY modes
-- No difference in behavior between modes for empty folders
+- Subfolder modules with `export default {}` + named exports should create namespaced API structure
+- Example: `utils/lifecycle.mjs` should create `api.utils.lifecycle.callAll()`
+- Root-level modules with identical structure work correctly
 
-**Current Behavior**:
+**Fixed Behavior**:
 
-- **EAGER Mode**: `empty: {}` (correct)
-- **LAZY Mode**: `empty: [Function: lazyFolder_empty]` (incorrect - should be `{}`)
+- **Root modules**: `lifecycle.mjs` correctly creates `api.lifecycle.callAll()` ✅
+- **Subfolder modules**: `utils/lifecycle.mjs` now correctly creates `api.utils.lifecycle.callAll()` ✅
 
 **Impact**:
 
-- Inconsistent API behavior between modes
-- Empty folders require function call in lazy mode: `await api.empty()` vs direct access `api.empty`
-- Breaks API consistency expectations
+- Inconsistent API structure between root and subfolder modules
+- Loss of module namespace organization in subfolders
+- Potential naming conflicts when multiple subfolder modules export same function names
+- Breaks expected file-to-API mapping conventions
 
 **Root Cause**:
-Lazy mode treats all folders as potential lazy-loadable modules, even when they contain no files. The empty folder detection (`processingStrategy = "empty"`) happens during analysis but lazy mode still wraps it as a function.
+The issue was in `buildCategoryDecisions()` in `src/lib/helpers/api_builder.mjs`. The function was checking `!mod.default` to determine flattening behavior, but `processModuleFromAnalysis()` removes the `.default` property from processed modules with object default exports (like `export default {}`). This caused modules with `export default {}` + named exports to be incorrectly identified as having no default export and flattened inappropriately.
 
-**Source Code Location**:
+**Fix Applied**:
 
-- **Detection**: `src/lib/helpers/api_builder.mjs` lines 318-319 (correctly identifies empty folders)
-- **Bug Location**: Lazy mode folder processing (likely in lazy mode generation logic)
+- **File**: `src/lib/helpers/api_builder.mjs`
+- **Change**: Updated `buildCategoryDecisions()` to use `!analysis.hasDefault` instead of `!mod.default`
+- **Lines**: 1758, 1762, 1770 - All `mod.default` checks replaced with `analysis.hasDefault` from original module analysis
 
 **Test Verification**:
 
 ```bash
-node tests/debug-slothlet.mjs
-# EAGER: empty: {} (correct)
-# LAZY:  empty: [Function: lazyFolder_empty] (bug - should be {})
+node tools/inspect-api-structure.mjs api_tv_test
+# Verify fix:
+# ✅ api.lifecycle.callAll() (root module - correct)
+# ✅ api.utils.lifecycle.callAll() (subfolder module - now fixed)
 ```
 
-**Test Case**:
+**Test Case Structure**:
 
-- Create empty folder: `api_tests/api_test/empty/` (no .mjs files)
-- Load API in both modes
-- Compare `api.empty` behavior
+Both files have identical export structure:
+
+```javascript
+export async function callAll() {
+	/* ... */
+}
+export function getModules() {
+	/* ... */
+}
+export const methods = {
+	/* ... */
+};
+export default {};
+```
 
 **Reproduction Steps**:
 
-1. Create empty folder in API test directory
-2. Load slothlet in lazy mode
-3. Observe `api.empty` is a function instead of empty object
-4. Compare with eager mode where `api.empty` is correctly `{}`
+1. Create root-level module with `export default {}` + named exports → Works correctly
+2. Create identical module in subfolder → Named exports flatten incorrectly to parent level
+3. Use inspect tool to observe API structure differences
 
-**Fix Required**:
-Lazy mode should check `processingStrategy === "empty"` and immediately resolve to `{}` instead of wrapping as lazy function.
+**Resolution**:
+Fixed by updating `buildCategoryDecisions()` to use original module analysis data (`analysis.hasDefault`) instead of checking the processed module's `.default` property. This ensures consistent behavior between root and subfolder modules with identical export patterns.
 
 ---
 
-_Last updated: October 26, 2025_
+_Last updated: October 30, 2025_

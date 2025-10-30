@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-24 17:46:26 -07:00 (1761353186)
+ *	@Last modified time: 2025-10-30 11:07:19 -07:00 (1761847639)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -33,6 +33,7 @@ async function main() {
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
 		{ name: "Build Distribution", command: "npm", args: ["run", "build:dist"] },
+		{ name: "Node ViTest Suite", command: "npm", args: ["run", "test:unit"] },
 		{ name: "Build TypeScript Types", command: "npm", args: ["run", "build:types"] },
 		{ name: "Validate TypeScript", command: "npm", args: ["run", "test:types"] }
 	];
