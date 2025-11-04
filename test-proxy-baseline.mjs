@@ -1,0 +1,202 @@
+/**
+ * Baseline Test: Proxy Behavior Validation for Release 2.5.5
+ *
+ * This test validates that custom proxy objects work identically in both
+ * lazy and eager modes after the proxy handling fixes.
+ *
+ * Test Case: LGTVControllers proxy with array-style access and named exports
+ * - lg[0] should work (array-style access via proxy get handler)
+ * - lg.clearCache should work (named export function)
+ * - Both should work identically in lazy and eager modes
+ */
+
+import slothlet from "@cldmv/slothlet";
+import { performance } from "perf_hooks";
+
+console.log("🧪 Baseline Test: Proxy Behavior Validation");
+console.log("=".repeat(60));
+
+/**
+ * Test the LGTVControllers proxy functionality
+ */
+async function testProxyBehavior(mode, api) {
+	console.log(`\n📱 Testing ${mode.toUpperCase()} mode:`);
+	console.log("-".repeat(40));
+
+	const results = {
+		mode,
+		arrayAccess: { success: false, error: null, result: null },
+		namedExport: { success: false, error: null, result: null },
+		proxyType: null,
+		proxyProperties: []
+	};
+
+	try {
+		// Test proxy type and structure
+		results.proxyType = typeof api.devices.lg;
+		results.proxyProperties = Object.getOwnPropertyNames(api.devices.lg);
+
+		console.log(`  📊 Proxy type: ${results.proxyType}`);
+		console.log(`  📊 Proxy properties: [${results.proxyProperties.join(", ")}]`);
+
+		// Test 1: Array-style access (custom proxy behavior)
+		try {
+			console.log(`  🔍 Testing lg[0] (array-style access)...`);
+			const startTime = performance.now();
+			const controller0 = api.devices.lg[0];
+			const endTime = performance.now();
+
+			results.arrayAccess.success = true;
+			results.arrayAccess.result = controller0;
+
+			console.log(`  ✅ lg[0] = ${JSON.stringify(controller0)}`);
+			console.log(`  ⏱️  Execution time: ${(endTime - startTime).toFixed(3)}ms`);
+		} catch (error) {
+			results.arrayAccess.error = error.message;
+			console.log(`  ❌ lg[0] failed: ${error.message}`);
+		}
+
+		// Test 2: Named export function (standard property access)
+		try {
+			console.log(`  🔍 Testing lg.getStatus('tv1') (named export)...`);
+			const startTime = performance.now();
+			const statusResult = await api.devices.lg.getStatus("tv1");
+			const endTime = performance.now();
+
+			results.namedExport.success = true;
+			results.namedExport.result = statusResult;
+
+			console.log(`  ✅ lg.getStatus('tv1') = ${JSON.stringify(statusResult)}`);
+			console.log(`  ⏱️  Execution time: ${(endTime - startTime).toFixed(3)}ms`);
+		} catch (error) {
+			results.namedExport.error = error.message;
+			console.log(`  ❌ lg.getStatus('tv1') failed: ${error.message}`);
+		}
+	} catch (error) {
+		console.log(`  💥 General error in ${mode} mode: ${error.message}`);
+		results.generalError = error.message;
+	}
+
+	return results;
+}
+
+/**
+ * Main test execution
+ */
+async function runBaselineTest() {
+	const testDir = "./api_tests/api_tv_test";
+
+	console.log(`📁 Test directory: ${testDir}`);
+	console.log(`🎯 Target: api.devices.lg (LGTVControllers proxy)`);
+
+	let lazyResults, eagerResults;
+
+	// Test 1: Lazy Mode
+	try {
+		console.log(`\n🚀 Loading API in LAZY mode...`);
+		const lazyStartTime = performance.now();
+		const lazyApi = await slothlet({ dir: testDir, eager: false });
+		const lazyLoadTime = performance.now() - lazyStartTime;
+
+		console.log(`⚡ Lazy mode load time: ${lazyLoadTime.toFixed(3)}ms`);
+		lazyResults = await testProxyBehavior("lazy", lazyApi);
+	} catch (error) {
+		console.log(`💥 Failed to load lazy API: ${error.message}`);
+		lazyResults = { mode: "lazy", loadError: error.message };
+	}
+
+	// Test 2: Eager Mode
+	try {
+		console.log(`\n🚀 Loading API in EAGER mode...`);
+		const eagerStartTime = performance.now();
+		const eagerApi = await slothlet({ dir: testDir, eager: true });
+		const eagerLoadTime = performance.now() - eagerStartTime;
+
+		console.log(`⚡ Eager mode load time: ${eagerLoadTime.toFixed(3)}ms`);
+		eagerResults = await testProxyBehavior("eager", eagerApi);
+	} catch (error) {
+		console.log(`💥 Failed to load eager API: ${error.message}`);
+		eagerResults = { mode: "eager", loadError: error.message };
+	}
+
+	// Compare Results
+	console.log(`\n📊 COMPARISON RESULTS`);
+	console.log("=".repeat(60));
+
+	const comparison = {
+		bothLoaded: !lazyResults.loadError && !eagerResults.loadError,
+		arrayAccessMatch: false,
+		namedExportMatch: false,
+		behaviorIdentical: false
+	};
+
+	if (comparison.bothLoaded) {
+		// Compare array access results
+		comparison.arrayAccessMatch =
+			lazyResults.arrayAccess.success === eagerResults.arrayAccess.success &&
+			JSON.stringify(lazyResults.arrayAccess.result) === JSON.stringify(eagerResults.arrayAccess.result);
+
+		// Compare named export results (deep comparison for objects)
+		comparison.namedExportMatch =
+			lazyResults.namedExport.success === eagerResults.namedExport.success &&
+			JSON.stringify(lazyResults.namedExport.result) === JSON.stringify(eagerResults.namedExport.result);
+
+		comparison.behaviorIdentical = comparison.arrayAccessMatch && comparison.namedExportMatch;
+
+		console.log(`🔍 Array access (lg[0]):`);
+		console.log(`  Lazy:  ${lazyResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(lazyResults.arrayAccess.result)}`);
+		console.log(`  Eager: ${eagerResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(eagerResults.arrayAccess.result)}`);
+		console.log(`  Match: ${comparison.arrayAccessMatch ? "✅" : "❌"}`);
+
+		console.log(`\n🔍 Named export (lg.getStatus('tv1')):`);
+		console.log(`  Lazy:  ${lazyResults.namedExport.success ? "✅" : "❌"} ${JSON.stringify(lazyResults.namedExport.result)}`);
+		console.log(`  Eager: ${eagerResults.namedExport.success ? "✅" : "❌"} ${JSON.stringify(eagerResults.namedExport.result)}`);
+		console.log(`  Match: ${comparison.namedExportMatch ? "✅" : "❌"}`);
+
+		console.log(`\n🎯 OVERALL RESULT: ${comparison.behaviorIdentical ? "✅ IDENTICAL BEHAVIOR" : "❌ BEHAVIOR MISMATCH"}`);
+
+		if (!comparison.behaviorIdentical) {
+			console.log(`\n🔧 DEBUGGING INFO:`);
+			console.log(`Lazy proxy type: ${lazyResults.proxyType}, properties: [${lazyResults.proxyProperties.join(", ")}]`);
+			console.log(`Eager proxy type: ${eagerResults.proxyType}, properties: [${eagerResults.proxyProperties.join(", ")}]`);
+
+			if (!comparison.arrayAccessMatch && lazyResults.arrayAccess.error) {
+				console.log(`Lazy array access error: ${lazyResults.arrayAccess.error}`);
+			}
+			if (!comparison.arrayAccessMatch && eagerResults.arrayAccess.error) {
+				console.log(`Eager array access error: ${eagerResults.arrayAccess.error}`);
+			}
+		}
+	} else {
+		console.log(`❌ Could not compare - loading failed`);
+		if (lazyResults.loadError) console.log(`  Lazy error: ${lazyResults.loadError}`);
+		if (eagerResults.loadError) console.log(`  Eager error: ${eagerResults.loadError}`);
+	}
+
+	// Final Summary
+	console.log(`\n🏁 BASELINE TEST SUMMARY`);
+	console.log("=".repeat(60));
+	console.log(`✨ Proxy fix status: ${comparison.behaviorIdentical ? "WORKING" : "NEEDS ATTENTION"}`);
+	console.log(`📈 Ready for release: ${comparison.behaviorIdentical ? "YES" : "NO"}`);
+
+	if (comparison.behaviorIdentical) {
+		console.log(`🎉 Success! Both modes handle the LGTVControllers proxy identically.`);
+		console.log(`🚀 The proxy behavior fix is working correctly for release 2.5.5.`);
+	} else {
+		console.log(`⚠️  Warning: Proxy behavior differs between modes.`);
+		console.log(`🔧 Additional investigation required before release.`);
+	}
+
+	return comparison;
+}
+
+// Execute the baseline test
+runBaselineTest()
+	.then((results) => {
+		process.exit(results.behaviorIdentical ? 0 : 1);
+	})
+	.catch((error) => {
+		console.error(`💥 Test execution failed: ${error.message}`);
+		console.error(error.stack);
+		process.exit(1);
+	});

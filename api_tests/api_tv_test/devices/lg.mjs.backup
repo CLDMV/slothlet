@@ -1,0 +1,1763 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/lg.mjs
+ *	@Date: 2025-10-16 11:38:56 -07:00 (1760639936)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-11-04 12:10:16 -08:00 (1762287016)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @file api/devices/lg.mjs - LG TV control using @cldmv/tv-control
+ * @description Device control module for LG TVs using the TV control package
+ */
+
+import { context, self } from "@cldmv/slothlet/runtime";
+
+/**
+ * TV Controller class for individual TV operations
+ * Enables array-style access like lg[0].power.on()
+ */
+class TVController {
+	constructor(tvId) {
+		this.tvId = tvId;
+		this.power = {
+			on: () => power.on(this.tvId),
+			off: () => power.off(this.tvId)
+		};
+		this.volume = {
+			set: (level) => volume.set(this.tvId, level),
+			up: (step = 1) => volume.up(this.tvId, step),
+			down: (step = 1) => volume.down(this.tvId, step),
+			mute: (state = true) => volume.mute(this.tvId, state),
+			pseudoMute: (state = true) => volume.pseudoMute(this.tvId, state)
+		};
+		this.input = {
+			set: (source) => input.set(this.tvId, source)
+		};
+		this.apps = {
+			launch: (appId) => apps.launch(this.tvId, appId),
+			close: (appId) => apps.close(this.tvId, appId),
+			list: () => apps.list(this.tvId),
+			current: () => apps.current(this.tvId)
+		};
+		this.remote = {
+			sendKey: (keyCode) => remote.sendKey(this.tvId, keyCode),
+			sendButton: (buttonName) => remote.sendButton(this.tvId, buttonName),
+			navigate: (direction) => remote.navigate(this.tvId, direction)
+		};
+	}
+}
+
+/**
+ * Initializes LG TV controllers
+ * @param {Array<Object>} tvConfigs - Array of TV configurations
+ * @returns {Promise<Object>} Object with TV instances keyed by ID
+ */
+export async function initialize(tvConfigs) {
+	const tvs = {};
+
+	for (const config of tvConfigs) {
+		if (!config.enabled) {
+			self.event.emit("device.lg.info", {
+				tvId: config.id,
+				message: "TV disabled in configuration",
+				action: "skip"
+			});
+			continue;
+		}
+
+		try {
+			self.event.emit("device.lg.info", {
+				tvId: config.id,
+				message: `Initializing LG TV: ${config.id} (${config.host}:${config.port})`,
+				action: "initialize",
+				host: config.host,
+				port: config.port
+			});
+
+			const tvInstance = await TVControl.create({
+				manufacturer: "lg",
+				host: config.host,
+				port: config.port,
+				lg: {
+					keycode: config.keycode
+				},
+				timeout: 5000, // 5 second timeout
+				maxVolume: config.maxVolume || 100, // Maximum volume limit
+				defaultVolume: config.defaultVolume || 15, // Default volume for parameter-less calls
+				defaultInput: config.defaultInput || "HDMI1" // Default input for parameter-less calls
+			});
+
+			// Set up event handlers for this TV instance
+			setupLGEventHandlers(tvInstance, config.id);
+
+			tvs[config.id] = tvInstance;
+
+			// Update initial state
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === config.id);
+				if (tvState) {
+					tvState.initialized = true;
+					tvState.lastSeen = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId: config.id,
+				message: `TV ${config.id} initialized successfully`,
+				action: "initialize"
+			});
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId: config.id,
+				message: `Failed to initialize TV ${config.id}`,
+				error: error.message,
+				action: "initialize"
+			});
+
+			// Update error state if state management is available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === config.id);
+				if (tvState) {
+					tvState.initialized = false;
+					tvState.connected = false;
+					tvState.ready = false;
+					tvState.errorCount++;
+					tvState.lastError = error.message;
+				}
+			}
+		}
+	}
+
+	return tvs;
+}
+
+/**
+ * Sets up event handlers for LG TV device lifecycle events
+ * @param {TVControl} tvInstance - TV control instance
+ * @param {string} tvId - TV identifier
+ */
+function setupLGEventHandlers(tvInstance, tvId) {
+	// Handle initialized event (when device object is created and state is ready)
+	tvInstance.on("initialized", (state) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.initialized = true;
+				// Update initial state from TV
+				if (state.volume !== undefined) tvState.volume = state.volume;
+				if (state.power !== undefined) tvState.power = state.power;
+				if (state.muted !== undefined) tvState.muted = state.muted;
+				if (state.input !== undefined) tvState.input = state.input;
+				if (state.channel !== undefined) tvState.channel = state.channel;
+				if (state.currentApp !== undefined) tvState.currentApp = state.currentApp;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.success", {
+			tvId,
+			message: `TV ${tvId} initialized with complete state`,
+			action: "initialized",
+			state
+		});
+	});
+
+	// Handle connected event (TCP connection established)
+	tvInstance.on("connected", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.connected = true;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.success", {
+			tvId,
+			message: `TV ${tvId} connected`,
+			action: "connected",
+			data
+		});
+	});
+
+	// Handle ready event (device ready for commands)
+	tvInstance.on("ready", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.ready = true;
+				tvState.connected = true;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.success", {
+			tvId,
+			message: `TV ${tvId} ready for commands`,
+			action: "ready",
+			data
+		});
+	});
+
+	// Handle disconnected event (connection lost)
+	tvInstance.on("disconnected", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.connected = false;
+				tvState.ready = false;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.error", {
+			tvId,
+			message: `TV ${tvId} disconnected`,
+			action: "disconnected",
+			data
+		});
+	});
+
+	// Handle specific state change events
+	tvInstance.on("volume.change", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.volume = data.volume;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} volume changed to ${data.volume}`,
+			action: "volume.change",
+			volume: data.volume,
+			data
+		});
+	});
+
+	tvInstance.on("input.change", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.input = data.input;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} input changed to ${data.input}`,
+			action: "input.change",
+			input: data.input,
+			data
+		});
+	});
+
+	tvInstance.on("power.on", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.power = "on";
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.success", {
+			tvId,
+			message: `TV ${tvId} powered on`,
+			action: "power.on",
+			data
+		});
+	});
+
+	tvInstance.on("power.off", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.power = "off";
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} powered off`,
+			action: "power.off",
+			data
+		});
+	});
+
+	tvInstance.on("mute.on", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.muted = true;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} muted`,
+			action: "mute.on",
+			data
+		});
+	});
+
+	tvInstance.on("mute.off", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.muted = false;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} unmuted`,
+			action: "mute.off",
+			data
+		});
+	});
+
+	tvInstance.on("app.change", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.currentApp = data.appId || data.appName;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} app changed to ${data.appId || data.appName || "unknown"}`,
+			action: "app.change",
+			appId: data.appId,
+			appName: data.appName,
+			data
+		});
+	});
+
+	tvInstance.on("channel.change", (data) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.channel = data.channel;
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.info", {
+			tvId,
+			message: `TV ${tvId} channel changed to ${data.channel}`,
+			action: "channel.change",
+			channel: data.channel,
+			data
+		});
+	});
+
+	// Handle errors
+	tvInstance.on("error", (error) => {
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				tvState.errorCount++;
+				tvState.lastError = error.message || error.toString();
+				tvState.lastSeen = Date.now();
+			}
+		}
+
+		self.event.emit("device.lg.error", {
+			tvId,
+			message: `TV ${tvId} error: ${error.message || error.toString()}`,
+			action: "error",
+			error: error.message || error.toString(),
+			source: error.source || "unknown"
+		});
+	});
+
+	// Handle log events for debugging and monitoring
+	tvInstance.on("log", (event) => {
+		// Filter to only important log events to avoid spam
+		if (event.level === "error" || event.level === "warn") {
+			self.event.emit("device.lg.debug", {
+				tvId,
+				message: `TV ${tvId} [${event.level}] ${event.source}: ${event.message}`,
+				action: "log",
+				level: event.level,
+				source: event.source,
+				logMessage: event.message,
+				data: event.data
+			});
+		}
+	});
+
+	// Handle queue events for command monitoring
+	tvInstance.on("active", () => {
+		self.event.emit("device.lg.debug", {
+			tvId,
+			message: `TV ${tvId} command queue active`,
+			action: "queue.active"
+		});
+	});
+
+	tvInstance.on("idle", () => {
+		self.event.emit("device.lg.debug", {
+			tvId,
+			message: `TV ${tvId} command queue idle`,
+			action: "queue.idle"
+		});
+	});
+
+	tvInstance.on("completed", (data) => {
+		self.event.emit("device.lg.debug", {
+			tvId,
+			message: `TV ${tvId} command completed successfully`,
+			action: "queue.completed",
+			job: data.job,
+			result: data.result
+		});
+	});
+
+	tvInstance.on("failed", (data) => {
+		self.event.emit("device.lg.error", {
+			tvId,
+			message: `TV ${tvId} command failed`,
+			action: "queue.failed",
+			job: data.job,
+			error: data.error
+		});
+	});
+}
+
+/**
+ * Power control object for TV operations
+ */
+export const power = {
+	/**
+	 * Powers on a specific TV
+	 * @param {string} tvId - TV identifier (tv1, tv2, etc.)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async on(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "power.on"
+			});
+			return { success: false, tvId, command: "power.on", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.power.on();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.power = "on";
+					tvState.lastCommand = "power.on";
+					tvState.lastCommandTime = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} power ON command sent (${responseTime}ms)`,
+				action: "power.on",
+				responseTime
+			});
+			return { success: true, tvId, command: "power.on", responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to power on TV ${tvId}`,
+				error: error.message,
+				action: "power.on"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.errorCount++;
+					tvState.lastError = error.message;
+				}
+			}
+
+			return { success: false, tvId, command: "power.on", error: error.message };
+		}
+	},
+
+	/**
+	 * Powers off a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @returns {Promise<Object>} Command result
+	 */
+	async off(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "power.off"
+			});
+			return { success: false, tvId, command: "power.off", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.power.off();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.power = "off";
+					tvState.lastCommand = "power.off";
+					tvState.lastCommandTime = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} power OFF command sent (${responseTime}ms)`,
+				action: "power.off",
+				responseTime
+			});
+			return { success: true, tvId, command: "power.off", responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to power off TV ${tvId}`,
+				error: error.message,
+				action: "power.off"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.errorCount++;
+					tvState.lastError = error.message;
+				}
+			}
+
+			return { success: false, tvId, command: "power.off", error: error.message };
+		}
+	}
+};
+
+/**
+ * Volume control object for TV operations
+ */
+export const volume = {
+	/**
+	 * Sets volume on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {number} level - Volume level (0-100)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async set(tvId, level) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "volume.set"
+			});
+			return { success: false, tvId, command: "volume.set", error: "TV not found or not initialized" };
+		}
+
+		const normalizedVolume = Math.max(0, Math.min(100, level));
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.volume.set(normalizedVolume);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.volume = normalizedVolume;
+					tvState.lastCommand = "volume.set";
+					tvState.lastCommandTime = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} volume set to ${normalizedVolume} (${responseTime}ms)`,
+				action: "volume.set",
+				volume: normalizedVolume,
+				responseTime
+			});
+			return { success: true, tvId, command: "volume.set", volume: normalizedVolume, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to set volume on TV ${tvId}`,
+				error: error.message,
+				action: "volume.set"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.errorCount++;
+					tvState.lastError = error.message;
+				}
+			}
+
+			return { success: false, tvId, command: "volume.set", error: error.message };
+		}
+	},
+
+	/**
+	 * Increases volume on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {number} step - Volume step increase (default: 1)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async up(tvId, step = 1) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "volume.up"
+			});
+			return { success: false, tvId, command: "volume.up", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.volume.up();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available (approximate new volume)
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					const currentVolume = tvState.volume || 0;
+					const newVolume = Math.min(100, currentVolume + step);
+					tvState.volume = newVolume;
+					tvState.lastCommand = "volume.up";
+					tvState.lastCommandTime = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} volume up +${step} (${responseTime}ms)`,
+				action: "volume.up",
+				step,
+				responseTime
+			});
+			return { success: true, tvId, command: "volume.up", step, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to increase volume on TV ${tvId}`,
+				error: error.message,
+				action: "volume.up"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.errorCount++;
+					tvState.lastError = error.message;
+				}
+			}
+
+			return { success: false, tvId, command: "volume.up", error: error.message };
+		}
+	},
+
+	/**
+	 * Decreases volume on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {number} step - Volume step decrease (default: 1)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async down(tvId, step = 1) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				message: `TV ${tvId} not found or not initialized`,
+				action: "volume.down",
+				tvId: tvId,
+				step: step
+			});
+			return { success: false, error: `TV ${tvId} not found or not initialized` };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.volume.down();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available (approximate new volume)
+			if (self.state && self.state.tvStates) {
+				const tvState = self.state.tvStates.getTVState(tvId);
+				if (tvState) {
+					const currentVolume = tvState.state.volume || 0;
+					const newVolume = Math.max(0, currentVolume - step);
+					tvState.updateVolumeState(newVolume);
+					tvState.recordCommand("volume.down", result, responseTime);
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				message: "TV volume down",
+				tvId,
+				step,
+				responseTime,
+				command: "volume.down",
+				action: "volume.down"
+			});
+			return { success: true, tvId, command: "volume.down", step, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				message: "Failed to decrease volume on TV",
+				tvId,
+				error: error.message,
+				command: "volume.down",
+				action: "volume.down.error",
+				details: error
+			});
+
+			// Record error in state if available
+			if (self.state && self.state.tvStates) {
+				const tvState = self.state.tvStates.getTVState(tvId);
+				if (tvState) {
+					tvState.recordError(error.message, "volume.down");
+				}
+			}
+
+			return { success: false, error: error.message };
+		}
+	},
+
+	/**
+	 * Controls mute state of a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {boolean} state - True to mute, false to unmute
+	 * @returns {Promise<Object>} Command result
+	 */
+	async mute(tvId, state = true) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				message: `TV ${tvId} not found or not initialized`,
+				action: state ? "volume.mute" : "volume.unmute",
+				tvId
+			});
+			return { success: false, tvId, command: state ? "volume.mute" : "volume.unmute", error: "TV not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = state ? await tvs[tvId].api.volume.mute() : await tvs[tvId].api.volume.unmute();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs && self.state.tvs[tvId]) {
+				self.state.tvs[tvId].muted = state;
+				self.state.tvs[tvId].lastCommand = state ? "volume.mute" : "volume.unmute";
+				self.state.tvs[tvId].lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.lg.success", {
+				message: `TV ${tvId} ${state ? "muted" : "unmuted"} (${responseTime}ms)`,
+				action: state ? "volume.mute" : "volume.unmute",
+				tvId,
+				muted: state,
+				responseTime
+			});
+			return { success: true, tvId, command: state ? "volume.mute" : "volume.unmute", muted: state, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				message: `Failed to ${state ? "mute" : "unmute"} TV ${tvId}`,
+				action: state ? "volume.mute" : "volume.unmute",
+				tvId,
+				error: error.message,
+				details: error
+			});
+			return { success: false, tvId, command: state ? "volume.mute" : "volume.unmute", error: error.message };
+		}
+	},
+
+	/**
+	 * Controls pseudo mute state - sets volume to 0 and remembers previous volume
+	 * @param {string} tvId - TV identifier
+	 * @param {boolean} state - True to pseudo mute, false to restore volume
+	 * @returns {Promise<Object>} Command result
+	 */
+	async pseudoMute(tvId, state = true) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				message: `TV ${tvId} not found or not initialized`,
+				action: state ? "volume.pseudoMute" : "volume.pseudoUnmute",
+				tvId
+			});
+			return { success: false, tvId, command: state ? "volume.pseudoMute" : "volume.pseudoUnmute", error: "TV not initialized" };
+		}
+
+		try {
+			let targetVolume;
+			let currentVolume;
+
+			if (state) {
+				// Pseudo mute - store current volume and set to 0
+				currentVolume = self.state?.tvs?.[tvId]?.volume || 50; // Default fallback
+				targetVolume = 0;
+			} else {
+				// Pseudo unmute - restore stored volume
+				targetVolume = self.state?.tvs?.[tvId]?.pseudoMuteVolume || 50; // Default fallback
+			}
+
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.volume.set(targetVolume);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs && self.state.tvs[tvId]) {
+				if (state) {
+					// Store current volume for restoration
+					self.state.tvs[tvId].pseudoMuteVolume = currentVolume;
+					self.state.tvs[tvId].volume = 0;
+					self.state.tvs[tvId].pseudoMuted = true;
+				} else {
+					// Restore volume
+					self.state.tvs[tvId].volume = targetVolume;
+					self.state.tvs[tvId].pseudoMuted = false;
+				}
+				self.state.tvs[tvId].lastCommand = state ? "volume.pseudoMute" : "volume.pseudoUnmute";
+				self.state.tvs[tvId].lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.lg.success", {
+				message: state
+					? `TV ${tvId} pseudo muted (volume 0, stored: ${currentVolume}) (${responseTime}ms)`
+					: `TV ${tvId} pseudo unmuted (restored volume: ${targetVolume}) (${responseTime}ms)`,
+				action: state ? "volume.pseudoMute" : "volume.pseudoUnmute",
+				tvId,
+				pseudoMuted: state,
+				volume: targetVolume,
+				storedVolume: state ? currentVolume : undefined,
+				responseTime
+			});
+
+			return {
+				success: true,
+				tvId,
+				command: state ? "volume.pseudoMute" : "volume.pseudoUnmute",
+				pseudoMuted: state,
+				volume: targetVolume,
+				storedVolume: state ? currentVolume : targetVolume,
+				responseTime
+			};
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				message: `Failed to ${state ? "pseudo mute" : "pseudo unmute"} TV ${tvId}`,
+				action: state ? "volume.pseudoMute" : "volume.pseudoUnmute",
+				tvId,
+				error: error.message,
+				details: error
+			});
+			return { success: false, tvId, command: state ? "volume.pseudoMute" : "volume.pseudoUnmute", error: error.message };
+		}
+	}
+};
+
+/**
+ * Input control object for TV operations
+ */
+export const input = {
+	/**
+	 * Sets input source on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} inputSource - Input source (HDMI1, HDMI2, etc.)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async set(tvId, inputSource) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				message: `TV ${tvId} not found or not initialized`,
+				action: "input.set",
+				tvId: tvId,
+				inputSource: inputSource
+			});
+			return { success: false, error: `TV ${tvId} not found or not initialized` };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.input.setInput(inputSource);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvStates) {
+				const tvState = self.state.tvStates.getTVState(tvId);
+				if (tvState) {
+					tvState.updateInputState(inputSource);
+					tvState.recordCommand("input.set", result, responseTime);
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				message: "TV input set",
+				tvId,
+				inputSource,
+				responseTime,
+				command: "input.set",
+				action: "input.set"
+			});
+			return { success: true, tvId, command: "input.set", input: inputSource, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				message: "Failed to set input on TV",
+				tvId,
+				inputSource,
+				error: error.message,
+				command: "input.set",
+				action: "input.set.error",
+				details: error
+			});
+
+			// Record error in state if available
+			if (self.state && self.state.tvStates) {
+				const tvState = self.state.tvStates.getTVState(tvId);
+				if (tvState) {
+					tvState.recordError(error.message, "input.set");
+				}
+			}
+
+			return { success: false, error: error.message };
+		}
+	}
+};
+
+/**
+ * Executes a command on multiple TVs in parallel
+ * @param {Array<string>} tvIds - Array of TV identifiers
+ * @param {string} commandPath - Command path to execute ('power.on', 'power.off', 'volume.up', etc.)
+ * @param {...*} args - Additional arguments for the command
+ * @returns {Promise<Array<Object>>} Array of command results
+ */
+export async function executeOnMultiple(tvIds, commandPath, ...args) {
+	const validCommands = {
+		"power.on": power.on,
+		"power.off": power.off,
+		"volume.set": volume.set,
+		"volume.up": volume.up,
+		"volume.down": volume.down,
+		"volume.mute": volume.mute,
+		"volume.unmute": volume.unmute,
+		"volume.pseudoMute": volume.pseudoMute,
+		"volume.pseudoUnmute": volume.pseudoUnmute,
+		"input.set": input.set,
+		"apps.launch": apps.launch,
+		"apps.close": apps.close,
+		"apps.list": apps.list,
+		"apps.current": apps.current,
+		"remote.sendKey": remote.sendKey,
+		"remote.sendButton": remote.sendButton,
+		"remote.navigate": remote.navigate
+	};
+
+	if (!validCommands[commandPath]) {
+		const errorMessage = `Invalid command: ${commandPath}. Valid commands: ${Object.keys(validCommands).join(", ")}`;
+		self.event.emit("device.lg.error", {
+			message: errorMessage,
+			action: "execute.multiple",
+			commandPath: commandPath,
+			validCommands: Object.keys(validCommands)
+		});
+		return { success: false, error: errorMessage };
+	}
+
+	self.event.emit("device.lg.info", {
+		message: "Executing command on multiple TVs",
+		commandPath,
+		tvIds,
+		tvCount: tvIds.length,
+		action: "execute.multiple"
+	});
+
+	const results = [];
+	const promises = tvIds.map(async (tvId) => {
+		try {
+			const result = await validCommands[commandPath](tvId, ...args);
+			results.push(result);
+			return result;
+		} catch (error) {
+			const errorResult = { success: false, tvId, error: error.message, command: commandPath };
+			results.push(errorResult);
+			return errorResult;
+		}
+	});
+
+	await Promise.allSettled(promises);
+
+	const successCount = results.filter((r) => r.success).length;
+	self.event.emit("device.lg.success", {
+		message: "Command completed on multiple TVs",
+		commandPath,
+		successCount,
+		totalCount: tvIds.length,
+		action: "execute.multiple.complete"
+	});
+
+	return results;
+}
+
+/**
+ * Gets status information for TVs
+ * @param {string|Array<string>|null} tvIds - TV ID(s) to get status for, or null for all TVs (default: null)
+ * @param {boolean} fetch - Whether to fetch fresh status from devices (default: false)
+ * @returns {Object} Status information for specified TVs
+ */
+export function status(tvIds = null, fetch = false) {
+	const tvs = self.state?.lg?.instances || {};
+	const statuses = {};
+
+	// Determine which TVs to get status for
+	let targetTvIds;
+	if (tvIds === null) {
+		// Get all TVs
+		targetTvIds = Object.keys(tvs);
+	} else if (typeof tvIds === "string") {
+		// Single TV ID
+		targetTvIds = [tvIds];
+	} else if (Array.isArray(tvIds)) {
+		// Array of TV IDs
+		targetTvIds = tvIds;
+	} else {
+		// Invalid input, default to all
+		targetTvIds = Object.keys(tvs);
+	}
+
+	for (const tvId of targetTvIds) {
+		const tvInstance = tvs[tvId];
+		statuses[tvId] = {
+			initialized: tvInstance !== null,
+			connected: tvInstance !== null,
+			lastSeen: tvInstance ? Date.now() : null
+		};
+
+		// Add state information if state management is available
+		if (self.state && self.state.tvs) {
+			const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+			if (tvState) {
+				statuses[tvId] = {
+					...statuses[tvId],
+					...tvState
+				};
+			}
+		}
+	}
+
+	return statuses;
+}
+
+/**
+ * Reconnects to a specific TV
+ * @param {string} tvId - TV identifier to reconnect
+ * @param {Object} config - TV configuration for reconnection
+ * @returns {Promise<boolean>} True if reconnection was successful
+ */
+export async function reconnectTV(tvId, config) {
+	self.event.emit("device.lg.info", {
+		message: "Reconnecting TV",
+		tvId,
+		action: "reconnect.start"
+	});
+
+	try {
+		const tvs = self.state?.lg?.instances || {};
+
+		// Close existing connection if any
+		if (tvs[tvId] && tvs[tvId].disconnect) {
+			await tvs[tvId].disconnect();
+		}
+
+		// Create new connection
+		const tvInstance = await TVControl.create({
+			manufacturer: "lg",
+			host: config.host,
+			port: config.port,
+			keycode: config.keycode,
+			timeout: 5000
+		});
+
+		// Update the state with new instance
+		if (self.state?.lg?.instances) {
+			self.state.lg.instances[tvId] = tvInstance;
+		}
+
+		// Update state if available
+		if (self.state && self.state.tvStates) {
+			const tvState = self.state.tvStates.getTVState(tvId);
+			if (tvState) {
+				tvState.updateConnectionState(true);
+				tvState.resetErrors();
+			}
+		}
+
+		self.event.emit("device.lg.success", {
+			message: "TV reconnected successfully",
+			tvId,
+			action: "reconnect.success"
+		});
+		return true;
+	} catch (error) {
+		self.event.emit("device.lg.error", {
+			message: "Failed to reconnect TV",
+			tvId,
+			error: error.message,
+			action: "reconnect.error",
+			details: error
+		});
+
+		// Update state to null on failure
+		if (self.state?.lg?.instances) {
+			self.state.lg.instances[tvId] = null;
+		}
+
+		// Update error state if available
+		if (self.state && self.state.tvStates) {
+			const tvState = self.state.tvStates.getTVState(tvId);
+			if (tvState) {
+				tvState.updateConnectionState(false);
+				tvState.recordError(error.message, "reconnect");
+			}
+		}
+
+		return false;
+	}
+}
+
+/**
+ * App control object for TV operations
+ */
+export const apps = {
+	/**
+	 * Launch an app on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} appId - Application ID or name to launch
+	 * @returns {Promise<Object>} Command result
+	 */
+	async launch(tvId, appId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "apps.launch"
+			});
+			return { success: false, tvId, command: "apps.launch", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.app(appId);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState) {
+					tvState.currentApp = appId;
+					tvState.lastCommand = "apps.launch";
+					tvState.lastCommandTime = Date.now();
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} launched app: ${appId} (${responseTime}ms)`,
+				action: "apps.launch",
+				appId,
+				responseTime
+			});
+			return { success: true, tvId, command: "apps.launch", appId, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to launch app ${appId} on TV ${tvId}`,
+				error: error.message,
+				action: "apps.launch"
+			});
+			return { success: false, tvId, command: "apps.launch", error: error.message };
+		}
+	},
+
+	/**
+	 * Close an app on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} appId - Application ID to close
+	 * @returns {Promise<Object>} Command result
+	 */
+	async close(tvId, appId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "apps.close"
+			});
+			return { success: false, tvId, command: "apps.close", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			// Note: @cldmv/tv-control doesn't have closeApp, send HOME key to exit app
+			const result = await tvs[tvId].api.key("HOME");
+			const responseTime = Date.now() - startTime;
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} sent HOME key to exit app (${responseTime}ms)`,
+				action: "apps.close",
+				appId,
+				responseTime
+			});
+			return { success: true, tvId, command: "apps.close", appId, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to close app ${appId} on TV ${tvId}`,
+				error: error.message,
+				action: "apps.close"
+			});
+			return { success: false, tvId, command: "apps.close", error: error.message };
+		}
+	},
+
+	/**
+	 * Get list of available apps on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @returns {Promise<Object>} Command result with app list
+	 */
+	async list(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "apps.list"
+			});
+			return { success: false, tvId, command: "apps.list", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.app.getAllApps();
+			const responseTime = Date.now() - startTime;
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} app list retrieved (${result?.length || 0} apps) (${responseTime}ms)`,
+				action: "apps.list",
+				appCount: result?.length || 0,
+				responseTime
+			});
+			return { success: true, tvId, command: "apps.list", apps: result, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to get app list from TV ${tvId}`,
+				error: error.message,
+				action: "apps.list"
+			});
+			return { success: false, tvId, command: "apps.list", error: error.message };
+		}
+	},
+
+	/**
+	 * Get current running app on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @returns {Promise<Object>} Command result with current app info
+	 */
+	async current(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "apps.current"
+			});
+			return { success: false, tvId, command: "apps.current", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.app.retrieveCurrentApp();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.tvs) {
+				const tvState = self.state.tvs.find((tv) => tv.id === tvId);
+				if (tvState && result) {
+					tvState.currentApp = result.appId || result.id || result.name;
+				}
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} current app: ${result?.appId || result?.name || "unknown"} (${responseTime}ms)`,
+				action: "apps.current",
+				currentApp: result,
+				responseTime
+			});
+			return { success: true, tvId, command: "apps.current", currentApp: result, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to get current app from TV ${tvId}`,
+				error: error.message,
+				action: "apps.current"
+			});
+			return { success: false, tvId, command: "apps.current", error: error.message };
+		}
+	}
+};
+
+/**
+ * Remote control object for TV operations
+ */
+export const remote = {
+	/**
+	 * Send a raw keycode to a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string|number} keyCode - Raw keycode to send
+	 * @returns {Promise<Object>} Command result
+	 */
+	async sendKey(tvId, keyCode) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "remote.sendKey"
+			});
+			return { success: false, tvId, command: "remote.sendKey", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.key(keyCode);
+			const responseTime = Date.now() - startTime;
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} sent keycode: ${keyCode} (${responseTime}ms)`,
+				action: "remote.sendKey",
+				keyCode,
+				responseTime
+			});
+			return { success: true, tvId, command: "remote.sendKey", keyCode, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to send keycode ${keyCode} to TV ${tvId}`,
+				error: error.message,
+				action: "remote.sendKey"
+			});
+			return { success: false, tvId, command: "remote.sendKey", error: error.message };
+		}
+	},
+
+	/**
+	 * Send a button press to a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} buttonName - Button name (HOME, BACK, UP, DOWN, LEFT, RIGHT, OK, etc.)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async sendButton(tvId, buttonName) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "remote.sendButton"
+			});
+			return { success: false, tvId, command: "remote.sendButton", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.key(buttonName);
+			const responseTime = Date.now() - startTime;
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} pressed button: ${buttonName} (${responseTime}ms)`,
+				action: "remote.sendButton",
+				buttonName,
+				responseTime
+			});
+			return { success: true, tvId, command: "remote.sendButton", buttonName, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to send button ${buttonName} to TV ${tvId}`,
+				error: error.message,
+				action: "remote.sendButton"
+			});
+			return { success: false, tvId, command: "remote.sendButton", error: error.message };
+		}
+	},
+
+	/**
+	 * Navigate in a direction on a specific TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} direction - Navigation direction (up, down, left, right, ok, back, home)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async navigate(tvId, direction) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `TV ${tvId} not found or not initialized`,
+				action: "remote.navigate"
+			});
+			return { success: false, tvId, command: "remote.navigate", error: "TV not found or not initialized" };
+		}
+
+		const validDirections = ["up", "down", "left", "right", "ok", "back", "home"];
+		if (!validDirections.includes(direction.toLowerCase())) {
+			const errorMessage = `Invalid direction: ${direction}. Valid directions: ${validDirections.join(", ")}`;
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: errorMessage,
+				action: "remote.navigate",
+				validDirections
+			});
+			return { success: false, tvId, command: "remote.navigate", error: errorMessage };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await tvs[tvId].api.key(direction.toUpperCase());
+			const responseTime = Date.now() - startTime;
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} navigated: ${direction} (${responseTime}ms)`,
+				action: "remote.navigate",
+				direction,
+				responseTime
+			});
+			return { success: true, tvId, command: "remote.navigate", direction, responseTime };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to navigate ${direction} on TV ${tvId}`,
+				error: error.message,
+				action: "remote.navigate"
+			});
+			return { success: false, tvId, command: "remote.navigate", error: error.message };
+		}
+	}
+};
+
+/**
+ * TV Configuration management
+ */
+export const config = {
+	/**
+	 * Set maximum volume for a TV
+	 * @param {string} tvId - TV identifier
+	 * @param {number} maxVolume - Maximum volume (0-100)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async setMaxVolume(tvId, maxVolume) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "config.setMaxVolume", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const normalizedMax = Math.max(0, Math.min(100, maxVolume));
+			await tvs[tvId].api.volume.setMaxVolume(normalizedMax);
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} max volume set to ${normalizedMax}`,
+				action: "config.setMaxVolume",
+				maxVolume: normalizedMax
+			});
+			return { success: true, tvId, command: "config.setMaxVolume", maxVolume: normalizedMax };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to set max volume on TV ${tvId}`,
+				error: error.message,
+				action: "config.setMaxVolume"
+			});
+			return { success: false, tvId, command: "config.setMaxVolume", error: error.message };
+		}
+	},
+
+	/**
+	 * Set default volume for a TV
+	 * @param {string} tvId - TV identifier
+	 * @param {number} defaultVolume - Default volume (0-100)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async setDefaultVolume(tvId, defaultVolume) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "config.setDefaultVolume", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const normalizedDefault = Math.max(0, Math.min(100, defaultVolume));
+			tvs[tvId].api.config.set("defaultVolume", normalizedDefault);
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} default volume set to ${normalizedDefault}`,
+				action: "config.setDefaultVolume",
+				defaultVolume: normalizedDefault
+			});
+			return { success: true, tvId, command: "config.setDefaultVolume", defaultVolume: normalizedDefault };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to set default volume on TV ${tvId}`,
+				error: error.message,
+				action: "config.setDefaultVolume"
+			});
+			return { success: false, tvId, command: "config.setDefaultVolume", error: error.message };
+		}
+	},
+
+	/**
+	 * Set default input for a TV
+	 * @param {string} tvId - TV identifier
+	 * @param {string} defaultInput - Default input (HDMI1, HDMI2, etc.)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async setDefaultInput(tvId, defaultInput) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "config.setDefaultInput", error: "TV not found or not initialized" };
+		}
+
+		try {
+			tvs[tvId].api.config.set("defaultInput", defaultInput);
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} default input set to ${defaultInput}`,
+				action: "config.setDefaultInput",
+				defaultInput
+			});
+			return { success: true, tvId, command: "config.setDefaultInput", defaultInput };
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to set default input on TV ${tvId}`,
+				error: error.message,
+				action: "config.setDefaultInput"
+			});
+			return { success: false, tvId, command: "config.setDefaultInput", error: error.message };
+		}
+	},
+
+	/**
+	 * Get current TV configuration
+	 * @param {string} tvId - TV identifier
+	 * @returns {Object} TV configuration
+	 */
+	getConfig(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "config.getConfig", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const config = tvs[tvId].api.config.get();
+			return { success: true, tvId, command: "config.getConfig", config };
+		} catch (error) {
+			return { success: false, tvId, command: "config.getConfig", error: error.message };
+		}
+	}
+};
+
+/**
+ * Utility functions for TV management
+ */
+export const utils = {
+	/**
+	 * Reset TV to default settings (default input and volume)
+	 * @param {string} tvId - TV identifier
+	 * @returns {Promise<Object>} Command result
+	 */
+	async resetToDefaults(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "utils.resetToDefaults", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const tv = tvs[tvId];
+			const config = tv.api.config.get();
+
+			// Set to default input if configured
+			if (config.defaultInput) {
+				await tv.api.input.setInput(config.defaultInput);
+			}
+
+			// Set to default volume if configured
+			if (config.defaultVolume !== undefined) {
+				await tv.api.volume.set(config.defaultVolume);
+			}
+
+			self.event.emit("device.lg.success", {
+				tvId,
+				message: `TV ${tvId} reset to defaults`,
+				action: "utils.resetToDefaults",
+				defaultInput: config.defaultInput,
+				defaultVolume: config.defaultVolume
+			});
+
+			return {
+				success: true,
+				tvId,
+				command: "utils.resetToDefaults",
+				defaultInput: config.defaultInput,
+				defaultVolume: config.defaultVolume
+			};
+		} catch (error) {
+			self.event.emit("device.lg.error", {
+				tvId,
+				message: `Failed to reset TV ${tvId} to defaults`,
+				error: error.message,
+				action: "utils.resetToDefaults"
+			});
+			return { success: false, tvId, command: "utils.resetToDefaults", error: error.message };
+		}
+	},
+
+	/**
+	 * Get TV status and configuration summary
+	 * @param {string} tvId - TV identifier
+	 * @returns {Promise<Object>} TV status
+	 */
+	async getStatus(tvId) {
+		const tvs = self.state?.lg?.instances || {};
+		if (!tvs[tvId]) {
+			return { success: false, tvId, command: "utils.getStatus", error: "TV not found or not initialized" };
+		}
+
+		try {
+			const tv = tvs[tvId];
+			const state = await tv.api.state.getSnapshot();
+			const config = tv.api.config.get();
+
+			return {
+				success: true,
+				tvId,
+				command: "utils.getStatus",
+				state,
+				config,
+				connected: tv.isConnected()
+			};
+		} catch (error) {
+			return { success: false, tvId, command: "utils.getStatus", error: error.message };
+		}
+	}
+};
+
+/**
+ * TV Controller instance cache to prevent creating new instances on every access
+ */
+const tvControllerCache = new Map();
+
+/**
+ * Get or create a cached TV Controller instance
+ * @param {string} tvId - TV identifier
+ * @returns {TVController} Cached or new TV controller instance
+ */
+function getTVController(tvId) {
+	if (!tvControllerCache.has(tvId)) {
+		tvControllerCache.set(tvId, new TVController(tvId));
+	}
+	return tvControllerCache.get(tvId);
+}
+
+/**
+ * Clear TV controller cache (useful for cleanup or reset)
+ */
+function clearTVControllerCache() {
+	tvControllerCache.clear();
+}
+
+/**
+ * Combined LG TV Controller object (Slothlet-compatible)
+ * Provides both named exports (lg.power.on, lg.volume.set) and array-style access (lg[0], lg.tv1)
+ * Uses caching to ensure consistent instances: lg[0] === lg[0]
+ * Note: Uses property descriptors instead of Proxy due to Slothlet's property enumeration
+ */
+const LGTVControllers = new Proxy(
+	{},
+	{
+		get(target, prop) {
+			console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+
+			// ✅ FIRST: Check if property exists on target (Slothlet-attached named exports)
+			if (prop in target) {
+				console.log(`📋 Found property "${String(prop)}" in target`);
+				return target[prop];
+			}
+
+			// ✅ THEN: Handle custom proxy logic for TV access
+			// Handle numeric indices (0, 1, 2, 3 -> tv1, tv2, tv3, tv4)
+			if (typeof prop === "string" && /^\d+$/.test(prop)) {
+				const index = parseInt(prop);
+				const tvId = `tv${index + 1}`; // Convert 0->tv1, 1->tv2, etc.
+				console.log(`🎯 Creating TVController for index ${index} → ${tvId}`);
+				return getTVController(tvId);
+			}
+
+			// Handle direct TV IDs (tv1, tv2, etc.)
+			if (typeof prop === "string" && prop.startsWith("tv")) {
+				console.log(`🎯 Creating TVController for TV ID: ${prop}`);
+				return getTVController(prop);
+			}
+
+			// Return undefined for invalid properties
+			console.log(`❓ Property "${String(prop)}" not found`);
+			return undefined;
+		}
+	}
+);
+
+export default LGTVControllers;

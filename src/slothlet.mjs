@@ -609,6 +609,17 @@ const slothletObject = {
 		// Process each module based on centralized decisions
 		for (const moduleDecision of processedModules) {
 			const { moduleName, mod, type, apiPathKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
+			if (this.config.debug && apiPathKey === 'lg') {
+				console.log(`[DEBUG] 🎯 Processing lg module decision:`);
+				console.log(`[DEBUG] 🎯   moduleName: ${moduleName}`);
+				console.log(`[DEBUG] 🎯   type: ${type}`);
+				console.log(`[DEBUG] 🎯   apiPathKey: ${apiPathKey}`);
+				console.log(`[DEBUG] 🎯   shouldFlatten: ${shouldFlatten}`);
+				console.log(`[DEBUG] 🎯   flattenType: ${flattenType}`);
+				console.log(`[DEBUG] 🎯   specialHandling: ${specialHandling}`);
+				console.log(`[DEBUG] 🎯   mod type: ${typeof mod}`);
+				console.log(`[DEBUG] 🎯   mod constructor: ${mod.constructor?.name}`);
+			}
 			// Handle different module types based on centralized decisions
 			if (specialHandling === "category-merge") {
 				// Module filename matches category name - merge logic
@@ -650,13 +661,79 @@ const slothletObject = {
 					switch (flattenType) {
 						case "single-default-object": {
 							// Flatten the default export and merge named exports
-							const flattened = { ...mod.default };
-							// Add any named exports to the flattened default
-							for (const [key, value] of Object.entries(mod)) {
-								if (key !== "default") {
-									flattened[key] = value;
-								}
+							// Special handling for Proxy objects: don't use spread operator which breaks custom handlers
+							let flattened;
+							
+							// Check if mod.default is likely a Proxy with custom behavior
+							const defaultExport = mod.default;
+							const hasNamedExports = Object.keys(mod).some(k => k !== "default");
+							
+							if (this.config.debug && apiPathKey === 'lg') {
+								console.log(`[DEBUG] 🔧 Before flattening lg:`);
+								console.log(`[DEBUG] 🔧   mod keys: ${Object.keys(mod)}`);
+								console.log(`[DEBUG] 🔧   mod.default: ${defaultExport}`);
+								console.log(`[DEBUG] 🔧   defaultExport type: ${typeof defaultExport}`);
+								console.log(`[DEBUG] 🔧   hasNamedExports: ${hasNamedExports}`);
 							}
+							
+							if (hasNamedExports && defaultExport && typeof defaultExport === "object") {
+								// Test if this might be a Proxy by checking for custom behavior
+								// Try accessing a numeric index - this should only work for custom Proxies
+								let mightBeProxy = false;
+								let testNumeric;
+								try {
+									testNumeric = defaultExport[0];
+									// If accessing [0] returns something other than undefined, it's likely a custom proxy
+									mightBeProxy = testNumeric !== undefined;
+								} catch (_) {
+									// If numeric access throws, also might be a proxy
+									mightBeProxy = true;
+								}
+								
+								if (this.config.debug && apiPathKey === 'lg') {
+									console.log(`[DEBUG] 🔧 Proxy detection in flattening:`);
+									console.log(`[DEBUG] 🔧   testNumeric: ${testNumeric}`);
+									console.log(`[DEBUG] 🔧   mightBeProxy: ${mightBeProxy}`);
+									console.log(`[DEBUG] 🔧   defaultExport[0]: ${defaultExport[0]}`);
+									console.log(`[DEBUG] 🔧   defaultExport constructor: ${defaultExport.constructor?.name}`);
+								}
+								
+								if (mightBeProxy) {
+									// Preserve potential Proxy object and just add named exports
+									flattened = defaultExport;
+									// Add named exports directly to the proxy/object
+									for (const [key, value] of Object.entries(mod)) {
+										if (key !== "default") {
+											try {
+												flattened[key] = value;
+											} catch (e) {
+												// If we can't assign (restrictive proxy), create wrapper
+												console.warn(`Could not assign ${key} to proxy object:`, e.message);
+											}
+										}
+									}
+								} else {
+									// Regular object, use spread operator as before
+									flattened = { ...defaultExport };
+									for (const [key, value] of Object.entries(mod)) {
+										if (key !== "default") {
+											flattened[key] = value;
+										}
+									}
+								}
+							} else {
+								// No named exports or not an object, use as-is
+								flattened = defaultExport;
+							}
+							
+							if (this.config.debug && apiPathKey === 'lg') {
+								console.log(`[DEBUG] 🔧 Flattened lg result:`);
+								console.log(`[DEBUG] 🔧   flattened type: ${typeof flattened}`);
+								console.log(`[DEBUG] 🔧   flattened constructor: ${flattened?.constructor?.name}`);
+								console.log(`[DEBUG] 🔧   flattened[0]: ${flattened?.[0]}`);
+								console.log(`[DEBUG] 🔧   flattened.clearCache: ${flattened?.clearCache}`);
+							}
+							
 							categoryModules[apiPathKey] = flattened;
 							break;
 						}
@@ -683,7 +760,21 @@ const slothletObject = {
 					}
 				} else {
 					// Standard object export
+					if (this.config.debug && apiPathKey === 'lg') {
+						console.log(`[DEBUG] 🎯 Assigning lg module:`);
+						console.log(`[DEBUG] 🎯   mod type: ${typeof mod}`);
+						console.log(`[DEBUG] 🎯   mod constructor: ${mod.constructor?.name}`);
+						console.log(`[DEBUG] 🎯   mod[0]: ${mod[0]}`);
+						console.log(`[DEBUG] 🎯   mod.clearCache: ${mod.clearCache}`);
+					}
 					categoryModules[apiPathKey] = mod;
+					if (this.config.debug && apiPathKey === 'lg') {
+						console.log(`[DEBUG] 🎯 After assignment:`);
+						console.log(`[DEBUG] 🎯   categoryModules.lg type: ${typeof categoryModules.lg}`);
+						console.log(`[DEBUG] 🎯   categoryModules.lg constructor: ${categoryModules.lg.constructor?.name}`);
+						console.log(`[DEBUG] 🎯   categoryModules.lg[0]: ${categoryModules.lg[0]}`);
+						console.log(`[DEBUG] 🎯   categoryModules.lg.clearCache: ${categoryModules.lg.clearCache}`);
+					}
 				}
 			}
 		}
@@ -748,6 +839,13 @@ const slothletObject = {
 			}
 		}
 
+		if (this.config.debug && categoryModules.lg) {
+			console.log(`[DEBUG] 🏁 _buildCategory returning with lg:`);
+			console.log(`[DEBUG] 🏁   categoryModules.lg type: ${typeof categoryModules.lg}`);
+			console.log(`[DEBUG] 🏁   categoryModules.lg constructor: ${categoryModules.lg.constructor?.name}`);
+			console.log(`[DEBUG] 🏁   categoryModules.lg[0]: ${categoryModules.lg[0]}`);
+			console.log(`[DEBUG] 🏁   categoryModules.lg.clearCache: ${categoryModules.lg.clearCache}`);
+		}
 		return categoryModules;
 	},
 

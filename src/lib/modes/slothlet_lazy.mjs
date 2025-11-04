@@ -357,6 +357,41 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	if (!parent || !key) return;
 	if (parent[key] !== placeholder) return; // parent changed meanwhile – respect existing
 
+	// Check if the materialized value is a custom Proxy object
+	// For Proxy objects with custom handlers, we want to preserve the lazy proxy's delegation
+	// rather than replacing it entirely
+	let isCustomProxy = false;
+	if (value && typeof value === "object") {
+		try {
+			// Test if this appears to be a Proxy with custom get handlers
+			// by checking if it behaves differently than a normal object
+			const testKey = "__slothlet_proxy_test_" + Math.random();
+			const directAccess = value[testKey];
+			
+			// If accessing a non-existent property returns something other than undefined,
+			// or if the object has no own properties but responds to property access,
+			// it's likely a Proxy with custom behavior
+			const hasNoOwnProps = Object.getOwnPropertyNames(value).length === 0;
+			const respondsToAccess = directAccess !== undefined || hasNoOwnProps;
+			
+			if (respondsToAccess && hasNoOwnProps) {
+				isCustomProxy = true;
+			}
+		} catch {
+			// If property access throws, it might be a Proxy with restrictive handlers
+			// In this case, we should also preserve the lazy proxy delegation
+			isCustomProxy = true;
+		}
+	}
+
+	// For custom Proxy objects, don't replace the placeholder - let the lazy proxy continue delegating
+	if (isCustomProxy) {
+		if (instance?.config?.debug) {
+			console.log(`[lazy][materialize] detected custom Proxy for ${key}, preserving lazy proxy delegation (${typeof value})`);
+		}
+		return;
+	}
+
 	// Check if materialized value is a function with a preferred name
 	let finalKey = key;
 	if (typeof value === "function" && value.name && value.name.toLowerCase() === key.toLowerCase() && value.name !== key) {
