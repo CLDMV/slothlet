@@ -258,7 +258,7 @@ async function runBaselineTest() {
 
 // Execute the baseline test
 runBaselineTest()
-	.then((_) => {
+	.then(() => {
 		if (failCount > 0) {
 			console.log(`\n❌ ${failCount} test(s) failed!`);
 			process.exit(1);

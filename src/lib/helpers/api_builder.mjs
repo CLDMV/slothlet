@@ -283,8 +283,11 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				const proxyWithStructure = obj; // The proxy with named exports already attached
 
 				// Add self-reference as default for flattening logic.
-				// This is intentional: some API flattening code expects .default to point to the root object.
+				// This circular reference is required so that API flattening logic can always access the root object via .default,
+				// even when the object is a Proxy with named exports attached. Without this, flattening would break for certain
+				// module structures where flattening expects obj.default to exist and point to the root.
 				// WARNING: This creates a circular reference, which can break JSON serialization.
+				// The custom toJSON method below is provided to avoid serialization errors.
 				proxyWithStructure.default = obj;
 
 				// Prevent JSON.stringify from failing due to circular reference
@@ -299,8 +302,8 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 								const type = typeof val;
 
 								// Primitive types are always serializable
-								if (type !== "object" || val === null || val === undefined) {
-									return type === "string" || type === "number" || type === "boolean" || val === null || val === undefined;
+								if (type !== "object" || val === null) {
+									return type === "string" || type === "number" || type === "boolean" || type === "undefined" || val === null;
 								}
 
 								// Common serializable object types
