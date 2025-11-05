@@ -53,6 +53,33 @@ import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
 
 // ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Helper function to check if a value is likely serializable without calling JSON.stringify.
+ * Used by toJSON methods to avoid expensive serialization attempts on complex objects.
+ *
+ * @internal
+ * @private
+ * @param {*} val - The value to check for serializability
+ * @returns {boolean} True if the value is likely serializable, false otherwise
+ */
+function isLikelySerializable(val) {
+	const type = typeof val;
+
+	// Primitive types are always serializable
+	if (type !== "object" || val === null) {
+		return type === "string" || type === "number" || type === "boolean" || type === "undefined" || val === null;
+	}
+
+	// Common serializable object types
+	return (
+		Array.isArray(val) || val instanceof Date || val instanceof RegExp || val.constructor === Object || typeof val.toJSON === "function" // Objects with custom toJSON method
+	);
+}
+
+// ============================================================================
 // CORE DECISION-MAKING FUNCTIONS - Used by both eager and lazy modes
 // ============================================================================
 
@@ -303,25 +330,6 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 						value: function () {
 							// Return a structured object with proxy properties (excluding .default to avoid circular reference)
 							const serializable = {};
-
-							// Helper function to check if a value is likely serializable without calling JSON.stringify
-							const isLikelySerializable = (val) => {
-								const type = typeof val;
-
-								// Primitive types are always serializable
-								if (type !== "object" || val === null) {
-									return type === "string" || type === "number" || type === "boolean" || type === "undefined" || val === null;
-								}
-
-								// Common serializable object types
-								return (
-									Array.isArray(val) ||
-									val instanceof Date ||
-									val instanceof RegExp ||
-									val.constructor === Object ||
-									typeof val.toJSON === "function" // Objects with custom toJSON method
-								);
-							};
 
 							for (const [key, value] of Object.entries(this)) {
 								if (key === "default") {
