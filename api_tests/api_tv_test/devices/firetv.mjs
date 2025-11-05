@@ -57,36 +57,49 @@ export async function sendKey(deviceId = "default", keyCode) {
 }
 
 /**
- * Common remote control keys
+ * Common remote control keys - constants for external use
+ * @namespace
+ * @public
  */
 export const REMOTE_KEYS = {
 	// Power
-	POWER: "POWER",
-	SLEEP: "SLEEP",
+	/** @public */ POWER: "POWER",
+	/** @public */ SLEEP: "SLEEP",
 
 	// Navigation
-	HOME: "HOME",
-	BACK: "BACK",
-	MENU: "MENU",
-	UP: "DPAD_UP",
-	DOWN: "DPAD_DOWN",
-	LEFT: "DPAD_LEFT",
-	RIGHT: "DPAD_RIGHT",
-	CENTER: "DPAD_CENTER",
-	SELECT: "DPAD_CENTER",
+	/** @public */ HOME: "HOME",
+	/** @public */ BACK: "BACK",
+	/** @public */ MENU: "MENU",
+	/** @public */ UP: "DPAD_UP",
+	/** @public */ DOWN: "DPAD_DOWN",
+	/** @public */ LEFT: "DPAD_LEFT",
+	/** @public */ RIGHT: "DPAD_RIGHT",
+	/** @public */ CENTER: "DPAD_CENTER",
+	/** @public */ SELECT: "DPAD_CENTER",
 
 	// Volume
-	VOLUME_UP: "VOLUME_UP",
-	VOLUME_DOWN: "VOLUME_DOWN",
-	MUTE: "VOLUME_MUTE",
+	/** @public */ VOLUME_UP: "VOLUME_UP",
+	/** @public */ VOLUME_DOWN: "VOLUME_DOWN",
+	/** @public */ MUTE: "VOLUME_MUTE",
 
 	// Playback
-	PLAY: "MEDIA_PLAY",
-	PAUSE: "MEDIA_PAUSE",
-	PLAY_PAUSE: "MEDIA_PLAY_PAUSE",
-	STOP: "MEDIA_STOP",
-	NEXT: "MEDIA_NEXT",
-	PREVIOUS: "MEDIA_PREVIOUS",
-	FAST_FORWARD: "MEDIA_FAST_FORWARD",
-	REWIND: "MEDIA_REWIND"
+	/** @public */ PLAY: "MEDIA_PLAY",
+	/** @public */ PAUSE: "MEDIA_PAUSE",
+	/** @public */ PLAY_PAUSE: "MEDIA_PLAY_PAUSE",
+	/** @public */ STOP: "MEDIA_STOP",
+	/** @public */ NEXT: "MEDIA_NEXT",
+	/** @public */ PREVIOUS: "MEDIA_PREVIOUS",
+	/** @public */ FAST_FORWARD: "MEDIA_FAST_FORWARD",
+	/** @public */ REWIND: "MEDIA_REWIND"
 };
+
+/**
+ * Helper function to validate remote key constants (demonstrates usage)
+ * @param {string} key - Key to validate
+ * @returns {boolean} True if key is valid
+ * @example
+ * isValidRemoteKey(REMOTE_KEYS.POWER); // true
+ */
+export function isValidRemoteKey(key) {
+	return Object.values(REMOTE_KEYS).includes(key);
+}

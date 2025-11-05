@@ -268,13 +268,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 		if (namedExportsToAdd.length > 0) {
 			// Use Node.js built-in util.types.isProxy() for reliable proxy detection
 			// Available in Node.js 10+ (we require 16+)
-			let isCustomProxy = false;
-			try {
-				isCustomProxy = utilTypes.isProxy(obj);
-			} catch {
-				// Fallback: assume not a proxy if util.types is unavailable
-				isCustomProxy = false;
-			}
+			const isCustomProxy = !!(utilTypes?.isProxy?.(obj) ?? false);
 
 			if (isCustomProxy) {
 				// For Proxy objects, add named exports directly to the proxy
@@ -287,7 +281,23 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				// For proxy objects, return a structure that preserves the default export pattern
 				// This ensures flattening code can find obj.default correctly
 				const proxyWithStructure = obj; // The proxy with named exports already attached
-				proxyWithStructure.default = obj; // Add self-reference as default
+				
+				// Add self-reference as default for flattening logic.
+				// This is intentional: some API flattening code expects .default to point to the root object.
+				// WARNING: This creates a circular reference, which can break JSON serialization.
+				proxyWithStructure.default = obj;
+				
+				// Prevent JSON.stringify from failing due to circular reference
+				if (!proxyWithStructure.toJSON) {
+					Object.defineProperty(proxyWithStructure, "toJSON", {
+						value: function() {
+							return "[Circular slothlet API proxy: .default = self]";
+						},
+						writable: false,
+						enumerable: false,
+						configurable: true
+					});
+				}
 
 				// Also add named exports as top-level properties for compatibility
 				for (const [exportName, exportValue] of namedExportsToAdd) {

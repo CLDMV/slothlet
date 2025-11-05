@@ -27,6 +27,14 @@ export function powerOff(deviceId?: string): Promise<boolean>;
  * @returns {Promise<boolean>} Success status
  */
 export function sendKey(deviceId: string, keyCode: string): Promise<boolean>;
+/**
+ * Helper function to validate remote key constants (demonstrates usage)
+ * @param {string} key - Key to validate
+ * @returns {boolean} True if key is valid
+ * @example
+ * isValidRemoteKey(REMOTE_KEYS.POWER); // true
+ */
+export function isValidRemoteKey(key: string): boolean;
 export namespace REMOTE_KEYS {
     let POWER: string;
     let SLEEP: string;

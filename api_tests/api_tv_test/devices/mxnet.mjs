@@ -79,12 +79,25 @@ export async function getStatus(deviceId = "default") {
 }
 
 /**
- * Common MXNet commands
+ * Common MXNet commands - constants for external use
+ * @namespace
+ * @public
  */
 export const COMMANDS = {
-	POWER_ON: "power.on",
-	POWER_OFF: "power.off",
-	STATUS: "status",
-	REBOOT: "reboot",
-	RESET: "reset"
+	/** @public */ POWER_ON: "power.on",
+	/** @public */ POWER_OFF: "power.off",
+	/** @public */ STATUS: "status",
+	/** @public */ REBOOT: "reboot",
+	/** @public */ RESET: "reset"
 };
+
+/**
+ * Helper function to validate command constants (demonstrates usage)
+ * @param {string} command - Command to validate
+ * @returns {boolean} True if command is valid
+ * @example
+ * isValidCommand(COMMANDS.POWER_ON); // true
+ */
+export function isValidCommand(command) {
+	return Object.values(COMMANDS).includes(command);
+}

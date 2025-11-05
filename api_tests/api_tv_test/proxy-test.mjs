@@ -55,4 +55,8 @@ const LGTVControllers = new Proxy(
 
 console.log("🏗️ LGTVControllers proxy created during module initialization");
 
+/**
+ * Default export of LGTVControllers proxy for pure proxy testing.
+ * @default
+ */
 export default LGTVControllers;

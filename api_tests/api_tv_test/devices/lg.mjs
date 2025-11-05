@@ -143,4 +143,8 @@ const LGTVControllers = new Proxy(
 	}
 );
 
+/**
+ * Default export of LGTVControllers proxy.
+ * @default
+ */
 export default LGTVControllers;

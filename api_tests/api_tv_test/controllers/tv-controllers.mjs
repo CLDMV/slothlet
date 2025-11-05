@@ -74,4 +74,8 @@ const SubfolderControllers = new Proxy(
 
 console.log("🏗️ SubfolderControllers proxy created during module initialization");
 
+/**
+ * Default export of SubfolderControllers proxy.
+ * @default
+ */
 export default SubfolderControllers;

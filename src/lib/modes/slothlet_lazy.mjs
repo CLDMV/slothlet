@@ -362,7 +362,7 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	// For Proxy objects with custom handlers, we want to preserve the lazy proxy's delegation
 	// rather than replacing it entirely
 	// Use Node.js built-in proxy detection for reliable detection
-	const isCustomProxy = value && typeof value === "object" && utilTypes?.isProxy?.(value);
+	const isCustomProxy = value && typeof value === "object" && (utilTypes?.isProxy?.(value) ?? false);
 
 	// For custom Proxy objects, don't replace the placeholder - let the lazy proxy continue delegating
 	if (isCustomProxy) {

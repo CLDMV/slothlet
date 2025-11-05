@@ -33,6 +33,14 @@ export function sendCommand(deviceId: string, command: string): Promise<any>;
  * @returns {Promise<Object>} Device status
  */
 export function getStatus(deviceId?: string): Promise<any>;
+/**
+ * Helper function to validate command constants (demonstrates usage)
+ * @param {string} command - Command to validate
+ * @returns {boolean} True if command is valid
+ * @example
+ * isValidCommand(COMMANDS.POWER_ON); // true
+ */
+export function isValidCommand(command: string): boolean;
 export namespace COMMANDS {
     let POWER_ON: string;
     let POWER_OFF: string;
