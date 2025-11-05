@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-04 13:33:29 -08:00 (1762292009)
+ *	@Last modified time: 2025-11-04 15:24:53 -08:00 (1762298693)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -49,6 +49,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
 
 // ============================================================================
@@ -90,22 +91,12 @@ export async function analyzeModule(modulePath, options = {}) {
 	const moduleUrl = pathToFileURL(modulePath).href;
 	const rawModule = await import(moduleUrl);
 
-	if (debug && modulePath.includes("lg.mjs")) {
-		console.log(`[DEBUG] 📥 analyzeModule rawModule.default type: ${typeof rawModule.default}`);
-		console.log(`[DEBUG] 📥 analyzeModule rawModule.default[0]:`, rawModule.default[0]);
-	}
-
 	// CJS unwrapping detection and handling
 	let processedModule = rawModule;
 	const isCjs = modulePath.endsWith(".cjs") && "default" in rawModule;
 
 	if (isCjs) {
 		processedModule = rawModule.default;
-	}
-
-	if (debug && modulePath.includes("lg.mjs")) {
-		console.log(`[DEBUG] 📥 analyzeModule processedModule.default type: ${typeof processedModule.default}`);
-		console.log(`[DEBUG] 📥 analyzeModule processedModule.default[0]:`, processedModule.default[0]);
 	}
 
 	const hasDefault = !!processedModule.default;
@@ -275,54 +266,14 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 		);
 
 		if (namedExportsToAdd.length > 0) {
-			// Check if this is a Proxy object by testing for custom behavior
+			// Use Node.js built-in util.types.isProxy() for reliable proxy detection
+			// Available in Node.js 10+ (we require 16+)
 			let isCustomProxy = false;
 			try {
-				// More reliable Proxy detection: test for behaviors that indicate custom get/set handlers
-
-				// Test 1: Check if object has no own enumerable properties but responds to random access
-				const ownProps = Object.getOwnPropertyNames(obj);
-				const hasVeryFewOwnProps = ownProps.length <= 1; // Allow for constructor or similar
-
-				// Test 2: Access a property that should not exist on a normal object
-				const nonExistentKey = "__test_nonexistent_" + Math.random();
-				const beforeValue = obj[nonExistentKey];
-
-				// Test 3: Set a property and see if it behaves normally
-				const testKey = "__test_set_" + Math.random();
-				obj[testKey] = "test_value";
-				const afterSetValue = obj[testKey];
-
-				// Test 4: Delete the property and check if it's really gone
-				const deleteResult = delete obj[testKey];
-				const afterDeleteValue = obj[testKey];
-
-				// Analysis:
-				// - Normal object: beforeValue=undefined, afterSetValue="test_value", deleteResult=true, afterDeleteValue=undefined
-				// - Custom Proxy: might return unexpected values or behave differently
-
-				const normalObjectBehavior =
-					beforeValue === undefined && afterSetValue === "test_value" && deleteResult === true && afterDeleteValue === undefined;
-
-				// If it doesn't behave like a normal object, it's likely a custom Proxy
-				isCustomProxy = !normalObjectBehavior || hasVeryFewOwnProps;
-
-				if (debug) {
-					console.log(`[DEBUG] Proxy detection for lg module:`);
-					console.log(`[DEBUG]   - hasVeryFewOwnProps: ${hasVeryFewOwnProps} (${ownProps.length} props: ${ownProps.join(", ")})`);
-					console.log(`[DEBUG]   - beforeValue: ${beforeValue}`);
-					console.log(`[DEBUG]   - afterSetValue: ${afterSetValue}`);
-					console.log(`[DEBUG]   - deleteResult: ${deleteResult}`);
-					console.log(`[DEBUG]   - afterDeleteValue: ${afterDeleteValue}`);
-					console.log(`[DEBUG]   - normalObjectBehavior: ${normalObjectBehavior}`);
-					console.log(`[DEBUG]   - isCustomProxy: ${isCustomProxy}`);
-				}
-			} catch (error) {
-				// If property operations throw, it's likely a restrictive Proxy
-				isCustomProxy = true;
-				if (debug) {
-					console.log(`[DEBUG] Proxy detection caught error: ${error.message}`);
-				}
+				isCustomProxy = utilTypes.isProxy(obj);
+			} catch {
+				// Fallback: assume not a proxy if util.types is unavailable
+				isCustomProxy = false;
 			}
 
 			if (isCustomProxy) {
@@ -333,19 +284,11 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 					obj[apiKey] = exportValue;
 				}
 
-				if (debug) {
-					console.log(`[DEBUG] 🔧 Added named exports directly to custom Proxy object`);
-					console.log(
-						`[DEBUG] 🔧 Added properties:`,
-						namedExportsToAdd.map(([name]) => instance._toapiPathKey(name))
-					);
-				}
-
 				// For proxy objects, return a structure that preserves the default export pattern
 				// This ensures flattening code can find obj.default correctly
 				const proxyWithStructure = obj; // The proxy with named exports already attached
 				proxyWithStructure.default = obj; // Add self-reference as default
-				
+
 				// Also add named exports as top-level properties for compatibility
 				for (const [exportName, exportValue] of namedExportsToAdd) {
 					const apiKey = instance._toapiPathKey(exportName);
@@ -1238,11 +1181,6 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		const fileName = path.basename(file.name, moduleExt);
 		const apiPathKey = instance._toapiPathKey(fileName);
 
-		if (debug && moduleName === "config") {
-			console.log(`[DEBUG] Processing config file: ${file.name}, moduleName: ${moduleName}`);
-			console.log(`[DEBUG] selfReferentialFiles has config? ${selfReferentialFiles.has(moduleName)}`);
-		}
-
 		// Check if we already loaded this module during first pass
 		let mod = null;
 		let analysis = null;
@@ -1695,11 +1633,6 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		// Default case: return as namespace
 		decisions.shouldFlatten = false;
 		decisions.preferredName = moduleName;
-		if (debug && moduleName === "nest") {
-			console.log(
-				`[DEBUG] buildCategoryDecisions single-file default: moduleName="${moduleName}" shouldFlatten=false preferredName="${decisions.preferredName}"`
-			);
-		}
 		return decisions;
 	}
 

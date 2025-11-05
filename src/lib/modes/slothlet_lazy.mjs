@@ -154,6 +154,7 @@
 import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
@@ -360,29 +361,8 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	// Check if the materialized value is a custom Proxy object
 	// For Proxy objects with custom handlers, we want to preserve the lazy proxy's delegation
 	// rather than replacing it entirely
-	let isCustomProxy = false;
-	if (value && typeof value === "object") {
-		try {
-			// Test if this appears to be a Proxy with custom get handlers
-			// by checking if it behaves differently than a normal object
-			const testKey = "__slothlet_proxy_test_" + Math.random();
-			const directAccess = value[testKey];
-			
-			// If accessing a non-existent property returns something other than undefined,
-			// or if the object has no own properties but responds to property access,
-			// it's likely a Proxy with custom behavior
-			const hasNoOwnProps = Object.getOwnPropertyNames(value).length === 0;
-			const respondsToAccess = directAccess !== undefined || hasNoOwnProps;
-			
-			if (respondsToAccess && hasNoOwnProps) {
-				isCustomProxy = true;
-			}
-		} catch {
-			// If property access throws, it might be a Proxy with restrictive handlers
-			// In this case, we should also preserve the lazy proxy delegation
-			isCustomProxy = true;
-		}
-	}
+	// Use Node.js built-in proxy detection for reliable detection
+	const isCustomProxy = value && typeof value === "object" && utilTypes?.isProxy?.(value);
 
 	// For custom Proxy objects, don't replace the placeholder - let the lazy proxy continue delegating
 	if (isCustomProxy) {

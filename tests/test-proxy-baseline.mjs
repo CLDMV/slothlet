@@ -8,6 +8,7 @@
  * - lg[0] should work (array-style access via proxy get handler)
  * - lg.clearCache should work (named export function)
  * - Both should work identically in lazy and eager modes
+ * - Null values are treated as test failures
  */
 
 import slothlet from "@cldmv/slothlet";
@@ -15,6 +16,22 @@ import { performance } from "perf_hooks";
 
 console.log("🧪 Baseline Test: Proxy Behavior Validation");
 console.log("=".repeat(60));
+
+let passCount = 0;
+let failCount = 0;
+
+/**
+ * Record a test result and update counters
+ */
+function recordTest(testName, passed, message = "") {
+	if (passed) {
+		passCount++;
+		console.log(`✅ PASS: ${testName}${message ? ` - ${message}` : ""}`);
+	} else {
+		failCount++;
+		console.log(`❌ FAIL: ${testName}${message ? ` - ${message}` : ""}`);
+	}
+}
 
 /**
  * Test the LGTVControllers proxy functionality
@@ -32,6 +49,15 @@ async function testProxyBehavior(mode, api) {
 	};
 
 	try {
+		// Test proxy existence (null check)
+		const proxyExists = api.devices.lg !== null && api.devices.lg !== undefined;
+		recordTest(`${mode} proxy existence`, proxyExists, proxyExists ? "proxy object found" : "proxy is null/undefined");
+
+		if (!proxyExists) {
+			results.generalError = "Proxy object is null or undefined";
+			return results;
+		}
+
 		// Test proxy type and structure
 		results.proxyType = typeof api.devices.lg;
 		results.proxyProperties = Object.getOwnPropertyNames(api.devices.lg);
@@ -46,14 +72,22 @@ async function testProxyBehavior(mode, api) {
 			const controller0 = api.devices.lg[0];
 			const endTime = performance.now();
 
-			results.arrayAccess.success = true;
+			// Check for null result (explicit failure)
+			const isValidResult = controller0 !== null && controller0 !== undefined;
+			results.arrayAccess.success = isValidResult;
 			results.arrayAccess.result = controller0;
 
-			console.log(`  ✅ lg[0] = ${JSON.stringify(controller0)}`);
+			recordTest(
+				`${mode} lg[0] array access`,
+				isValidResult,
+				isValidResult ? `result: ${JSON.stringify(controller0)}` : "returned null/undefined"
+			);
+
+			console.log(`  📊 lg[0] = ${JSON.stringify(controller0)}`);
 			console.log(`  ⏱️  Execution time: ${(endTime - startTime).toFixed(3)}ms`);
 		} catch (error) {
 			results.arrayAccess.error = error.message;
-			console.log(`  ❌ lg[0] failed: ${error.message}`);
+			recordTest(`${mode} lg[0] array access`, false, `threw error: ${error.message}`);
 		}
 
 		// Test 2: Named export function (standard property access)
@@ -63,18 +97,27 @@ async function testProxyBehavior(mode, api) {
 			const statusResult = await api.devices.lg.getStatus("tv1");
 			const endTime = performance.now();
 
-			results.namedExport.success = true;
+			// Check for null result (explicit failure)
+			const isValidResult = statusResult !== null && statusResult !== undefined;
+			results.namedExport.success = isValidResult;
 			results.namedExport.result = statusResult;
 
-			console.log(`  ✅ lg.getStatus('tv1') = ${JSON.stringify(statusResult)}`);
+			recordTest(
+				`${mode} lg.getStatus() method call`,
+				isValidResult,
+				isValidResult ? `result: ${JSON.stringify(statusResult)}` : "returned null/undefined"
+			);
+
+			console.log(`  📊 lg.getStatus('tv1') = ${JSON.stringify(statusResult)}`);
 			console.log(`  ⏱️  Execution time: ${(endTime - startTime).toFixed(3)}ms`);
 		} catch (error) {
 			results.namedExport.error = error.message;
-			console.log(`  ❌ lg.getStatus('tv1') failed: ${error.message}`);
+			recordTest(`${mode} lg.getStatus() method call`, false, `threw error: ${error.message}`);
 		}
 	} catch (error) {
 		console.log(`  💥 General error in ${mode} mode: ${error.message}`);
 		results.generalError = error.message;
+		recordTest(`${mode} general proxy access`, false, `general error: ${error.message}`);
 	}
 
 	return results;
@@ -143,6 +186,25 @@ async function runBaselineTest() {
 
 		comparison.behaviorIdentical = comparison.arrayAccessMatch && comparison.namedExportMatch;
 
+		// Record comparison test results
+		recordTest(
+			"lazy vs eager array access match",
+			comparison.arrayAccessMatch,
+			comparison.arrayAccessMatch ? "both modes return same results" : "different results between modes"
+		);
+
+		recordTest(
+			"lazy vs eager named export match",
+			comparison.namedExportMatch,
+			comparison.namedExportMatch ? "both modes return same results" : "different results between modes"
+		);
+
+		recordTest(
+			"overall behavior identical",
+			comparison.behaviorIdentical,
+			comparison.behaviorIdentical ? "proxy behavior is identical between modes" : "proxy behavior differs between modes"
+		);
+
 		console.log(`🔍 Array access (lg[0]):`);
 		console.log(`  Lazy:  ${lazyResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(lazyResults.arrayAccess.result)}`);
 		console.log(`  Eager: ${eagerResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(eagerResults.arrayAccess.result)}`);
@@ -168,6 +230,7 @@ async function runBaselineTest() {
 			}
 		}
 	} else {
+		recordTest("both modes loaded successfully", false, "one or both modes failed to load");
 		console.log(`❌ Could not compare - loading failed`);
 		if (lazyResults.loadError) console.log(`  Lazy error: ${lazyResults.loadError}`);
 		if (eagerResults.loadError) console.log(`  Eager error: ${eagerResults.loadError}`);
@@ -176,6 +239,9 @@ async function runBaselineTest() {
 	// Final Summary
 	console.log(`\n🏁 BASELINE TEST SUMMARY`);
 	console.log("=".repeat(60));
+	console.log(`✅ Passed: ${passCount}`);
+	console.log(`❌ Failed: ${failCount}`);
+	console.log(`📊 Total: ${passCount + failCount}`);
 	console.log(`✨ Proxy fix status: ${comparison.behaviorIdentical ? "WORKING" : "NEEDS ATTENTION"}`);
 	console.log(`📈 Ready for release: ${comparison.behaviorIdentical ? "YES" : "NO"}`);
 
@@ -192,8 +258,14 @@ async function runBaselineTest() {
 
 // Execute the baseline test
 runBaselineTest()
-	.then((results) => {
-		process.exit(results.behaviorIdentical ? 0 : 1);
+	.then((_) => {
+		if (failCount > 0) {
+			console.log(`\n❌ ${failCount} test(s) failed!`);
+			process.exit(1);
+		} else {
+			console.log(`\n✅ All tests passed!`);
+			process.exit(0);
+		}
 	})
 	.catch((error) => {
 		console.error(`💥 Test execution failed: ${error.message}`);
