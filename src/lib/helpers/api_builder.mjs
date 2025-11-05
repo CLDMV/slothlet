@@ -281,17 +281,39 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				// For proxy objects, return a structure that preserves the default export pattern
 				// This ensures flattening code can find obj.default correctly
 				const proxyWithStructure = obj; // The proxy with named exports already attached
-				
+
 				// Add self-reference as default for flattening logic.
 				// This is intentional: some API flattening code expects .default to point to the root object.
 				// WARNING: This creates a circular reference, which can break JSON serialization.
 				proxyWithStructure.default = obj;
-				
+
 				// Prevent JSON.stringify from failing due to circular reference
 				if (!proxyWithStructure.toJSON) {
 					Object.defineProperty(proxyWithStructure, "toJSON", {
-						value: function() {
-							return "[Circular slothlet API proxy: .default = self]";
+						value: function () {
+							// Return a structured object with proxy properties (excluding .default to avoid circular reference)
+							const serializable = {};
+							for (const [key, value] of Object.entries(this)) {
+								if (key !== "default" && typeof value !== "function") {
+									try {
+										// Test if the value is serializable
+										JSON.stringify(value);
+										serializable[key] = value;
+									} catch {
+										// Skip non-serializable values
+										serializable[key] = "[Non-serializable value]";
+									}
+								} else if (key !== "default" && typeof value === "function") {
+									serializable[key] = "[Function]";
+								}
+							}
+							// Add metadata about the circular reference
+							serializable._slothlet_proxy_info = {
+								type: "proxy",
+								circular_reference: "Property .default points to this object (excluded from serialization)",
+								warning: "This is a slothlet API proxy with circular .default reference"
+							};
+							return serializable;
 						},
 						writable: false,
 						enumerable: false,
