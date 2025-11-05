@@ -674,7 +674,9 @@ const slothletObject = {
 												// Track assignment failure
 												assignmentFailed = true;
 												failedAssignments.push([key, value]);
-												console.warn(`Could not assign ${key} to proxy object:`, e.message);
+												if (this.config?.debug) {
+													console.warn(`Could not assign ${key} to proxy object:`, e.message);
+												}
 											}
 										}
 									}

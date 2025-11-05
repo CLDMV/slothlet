@@ -282,12 +282,19 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				// This ensures flattening code can find obj.default correctly
 				const proxyWithStructure = obj; // The proxy with named exports already attached
 
-				// Add self-reference as default for flattening logic.
-				// This circular reference is required so that API flattening logic can always access the root object via .default,
-				// even when the object is a Proxy with named exports attached. Without this, flattening would break for certain
-				// module structures where flattening expects obj.default to exist and point to the root.
-				// WARNING: This creates a circular reference, which can break JSON serialization.
-				// The custom toJSON method below is provided to avoid serialization errors.
+				// NECESSARY CODE SMELL: Add self-reference as default for flattening logic compatibility.
+				// This circular reference (.default = self) is required for backward compatibility with existing
+				// flattening logic that expects obj.default to exist and point to the root object when processing
+				// Proxy objects with named exports. The flattening code checks for obj.default to determine
+				// if it should flatten the object structure or preserve the proxy wrapper.
+				//
+				// ALTERNATIVES CONSIDERED:
+				// 1. Update flattening logic to not require .default - would be a breaking change
+				// 2. Use a symbol instead of .default - would break existing consumer code expecting .default
+				// 3. Clone object without circular reference - would break Proxy behavior and method binding
+				//
+				// WARNING: This creates a circular reference, which breaks JSON.stringify() without mitigation.
+				// The custom toJSON method below prevents serialization errors by excluding the circular .default.
 				proxyWithStructure.default = obj;
 
 				// Prevent JSON.stringify from failing due to circular reference
