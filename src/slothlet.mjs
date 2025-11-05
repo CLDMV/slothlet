@@ -683,6 +683,14 @@ const slothletObject = {
 
 									// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
 									if (assignmentFailed) {
+										// DOUBLE-PROXY LAYER JUSTIFICATION:
+										// This creates a wrapper around the original proxy because direct property assignment
+										// failed (e.g., LGTVControllers proxy with custom setters that reject certain properties).
+										// The double-proxy approach is necessary because:
+										// 1. We can't modify the original proxy's behavior without breaking its intended functionality
+										// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
+										// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
+										// 4. Performance impact is minimal since this only occurs when assignment fails, not in normal operation
 										// Convert array to Map for O(1) lookup performance instead of O(n) find operations
 										const failedMap = new Map(failedAssignments);
 										const originalProxy = flattened;

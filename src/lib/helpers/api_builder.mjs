@@ -75,7 +75,7 @@ function isLikelySerializable(val) {
 
 	// Common serializable object types
 	return (
-		Array.isArray(val) || val instanceof Date || val instanceof RegExp || val.constructor === Object || typeof val.toJSON === "function" // Objects with custom toJSON method
+		Array.isArray(val) || val instanceof Date || val instanceof RegExp || val?.constructor === Object || typeof val.toJSON === "function" // Objects with custom toJSON method
 	);
 }
 
@@ -328,7 +328,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				//
 				// WARNING: This creates a circular reference, which breaks JSON.stringify() without mitigation.
 				// The custom toJSON method below prevents serialization errors by excluding the circular .default.
-				proxyWithStructure.default = obj;
+				proxyWithStructure.default = obj; // Circular reference for backward compatibility
 
 				// Prevent JSON.stringify from failing due to circular reference
 				if (!proxyWithStructure.toJSON) {
