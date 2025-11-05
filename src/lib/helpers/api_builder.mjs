@@ -268,7 +268,7 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 		if (namedExportsToAdd.length > 0) {
 			// Use Node.js built-in util.types.isProxy() for reliable proxy detection
 			// Available in Node.js 10+ (we require 16+)
-			const isCustomProxy = !!(utilTypes?.isProxy?.(obj) ?? false);
+			const isCustomProxy = utilTypes?.isProxy?.(obj) ?? false;
 
 			if (isCustomProxy) {
 				// For Proxy objects, add named exports directly to the proxy
@@ -293,20 +293,43 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 						value: function () {
 							// Return a structured object with proxy properties (excluding .default to avoid circular reference)
 							const serializable = {};
+
+							// Helper function to check if a value is likely serializable without calling JSON.stringify
+							const isLikelySerializable = (val) => {
+								const type = typeof val;
+								return (
+									type === "string" ||
+									type === "number" ||
+									type === "boolean" ||
+									val === null ||
+									val === undefined ||
+									(type === "object" && val !== null && val.constructor === Object) ||
+									Array.isArray(val)
+								);
+							};
+
 							for (const [key, value] of Object.entries(this)) {
-								if (key !== "default" && typeof value !== "function") {
+								if (key === "default") {
+									// Skip circular reference
+									continue;
+								}
+
+								if (typeof value === "function") {
+									serializable[key] = "[Function]";
+								} else if (isLikelySerializable(value)) {
+									// For likely serializable values, include them directly
+									serializable[key] = value;
+								} else {
+									// For complex objects, test serialization only when needed
 									try {
-										// Test if the value is serializable
 										JSON.stringify(value);
 										serializable[key] = value;
 									} catch {
-										// Skip non-serializable values
 										serializable[key] = "[Non-serializable value]";
 									}
-								} else if (key !== "default" && typeof value === "function") {
-									serializable[key] = "[Function]";
 								}
 							}
+
 							// Add metadata about the circular reference
 							serializable._slothlet_proxy_info = {
 								type: "proxy",
