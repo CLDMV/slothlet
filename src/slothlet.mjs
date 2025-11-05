@@ -662,16 +662,53 @@ const slothletObject = {
 								if (isProxy) {
 									// Preserve Proxy object and add named exports
 									flattened = defaultExport;
-									// Add named exports directly to the proxy
+									let assignmentFailed = false;
+									const failedAssignments = [];
+
+									// Try to add named exports directly to the proxy
 									for (const [key, value] of Object.entries(mod)) {
 										if (key !== "default") {
 											try {
 												flattened[key] = value;
 											} catch (e) {
-												// If we can't assign (restrictive proxy), create wrapper
+												// Track assignment failure
+												assignmentFailed = true;
+												failedAssignments.push([key, value]);
 												console.warn(`Could not assign ${key} to proxy object:`, e.message);
 											}
 										}
+									}
+
+									// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
+									if (assignmentFailed) {
+										const originalProxy = flattened;
+										flattened = new Proxy(originalProxy, {
+											get(target, prop, receiver) {
+												// Check failed assignments first
+												const failed = failedAssignments.find(([k]) => k === prop);
+												if (failed) return failed[1];
+
+												// Fallback to original proxy
+												return Reflect.get(target, prop, receiver);
+											},
+											has(target, prop) {
+												// Include failed assignments in has checks
+												if (failedAssignments.some(([k]) => k === prop)) return true;
+												return Reflect.has(target, prop);
+											},
+											ownKeys(target) {
+												const originalKeys = Reflect.ownKeys(target);
+												const failedKeys = failedAssignments.map(([k]) => k);
+												return [...new Set([...originalKeys, ...failedKeys])];
+											},
+											getOwnPropertyDescriptor(target, prop) {
+												const failed = failedAssignments.find(([k]) => k === prop);
+												if (failed) {
+													return { configurable: true, enumerable: true, value: failed[1] };
+												}
+												return Reflect.getOwnPropertyDescriptor(target, prop);
+											}
+										});
 									}
 								} else {
 									// Regular object, use spread operator

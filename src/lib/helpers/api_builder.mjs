@@ -297,14 +297,19 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 							// Helper function to check if a value is likely serializable without calling JSON.stringify
 							const isLikelySerializable = (val) => {
 								const type = typeof val;
+
+								// Primitive types are always serializable
+								if (type !== "object" || val === null || val === undefined) {
+									return type === "string" || type === "number" || type === "boolean" || val === null || val === undefined;
+								}
+
+								// Common serializable object types
 								return (
-									type === "string" ||
-									type === "number" ||
-									type === "boolean" ||
-									val === null ||
-									val === undefined ||
-									(type === "object" && val !== null && val.constructor === Object) ||
-									Array.isArray(val)
+									Array.isArray(val) ||
+									val instanceof Date ||
+									val instanceof RegExp ||
+									val.constructor === Object ||
+									typeof val.toJSON === "function" // Objects with custom toJSON method
 								);
 							};
 
