@@ -271,14 +271,14 @@ runBaselineTest()
 	.then(() => {
 		if (failCount > 0) {
 			console.log(`\n❌ ${failCount} test(s) failed!`);
-			process.exitCode = 1;
+			process.exit(1);
 		} else {
 			console.log(`\n✅ All tests passed!`);
-			process.exitCode = 0;
+			process.exit(0);
 		}
 	})
 	.catch((error) => {
 		console.error(`💥 Test execution failed: ${error.message}`);
 		console.error(error.stack);
-		process.exitCode = 1;
+		process.exit(1);
 	});

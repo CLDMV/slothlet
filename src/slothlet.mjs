@@ -663,7 +663,8 @@ const slothletObject = {
 									// Preserve Proxy object and add named exports
 									flattened = defaultExport;
 									let assignmentFailed = false;
-									const failedAssignments = [];
+									// Use Map from the start to avoid array-to-Map conversion overhead
+									const failedMap = new Map();
 
 									// Try to add named exports directly to the proxy
 									for (const [key, value] of Object.entries(mod)) {
@@ -673,7 +674,7 @@ const slothletObject = {
 											} catch (e) {
 												// Track assignment failure
 												assignmentFailed = true;
-												failedAssignments.push([key, value]);
+												failedMap.set(key, value);
 												if (this.config?.debug) {
 													console.warn(`Could not assign ${key} to proxy object:`, e.message);
 												}
@@ -691,8 +692,6 @@ const slothletObject = {
 										// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
 										// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
 										// 4. Performance impact is minimal since this only occurs when assignment fails, not in normal operation
-										// Convert array to Map for O(1) lookup performance instead of O(n) find operations
-										const failedMap = new Map(failedAssignments);
 										const originalProxy = flattened;
 										flattened = new Proxy(originalProxy, {
 											get(target, prop, receiver) {
