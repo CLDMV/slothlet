@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-04 15:24:33 -08:00 (1762298673)
+ *	@Last modified time: 2025-11-04 20:45:25 -08:00 (1762317925)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -676,7 +676,10 @@ const slothletObject = {
 												assignmentFailed = true;
 												failedMap.set(key, value);
 												if (this.config?.debug) {
-													console.warn(`Could not assign ${key} to proxy object:`, e.message);
+													console.warn(
+														`Could not assign '${key}' to proxy object in module '${moduleName}' at '${categoryPath}':`,
+														e.message
+													);
 												}
 											}
 										}
