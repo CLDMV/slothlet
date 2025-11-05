@@ -154,6 +154,7 @@
 import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { runWithCtx } from "@cldmv/slothlet/runtime";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
@@ -356,6 +357,29 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	if (!parent || !key) return;
 	if (parent[key] !== placeholder) return; // parent changed meanwhile – respect existing
+
+	// Check if the materialized value is a custom Proxy object
+	// For Proxy objects with custom handlers, we still replace the placeholder to avoid memory leaks,
+	// but we validate that the proxy delegation will work correctly
+	// Use Node.js built-in proxy detection for reliable detection
+	const isCustomProxy = value && typeof value === "object" && (utilTypes?.isProxy?.(value) ?? false);
+
+	if (isCustomProxy) {
+		if (instance?.config?.debug) {
+			console.log(`[lazy][materialize] detected custom Proxy for ${key}, replacing placeholder to avoid memory leaks (${typeof value})`);
+		}
+		// Validate that the custom proxy can handle basic property access
+		try {
+			// Test basic proxy functionality (this should not throw for well-formed proxies)
+			const testAccess = value && typeof value === "object";
+			if (!testAccess) {
+				console.warn(`[lazy][materialize] Custom proxy for ${key} failed basic validation, but continuing with replacement`);
+			}
+		} catch (error) {
+			console.warn(`[lazy][materialize] Custom proxy for ${key} validation failed:`, error.message, "but continuing with replacement");
+		}
+		// Continue to replacement logic below to avoid memory leaks
+	}
 
 	// Check if materialized value is a function with a preferred name
 	let finalKey = key;

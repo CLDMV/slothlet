@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 11:21:30 -07:00 (1761589290)
+ *	@Last modified time: 2025-11-04 20:45:25 -08:00 (1762317925)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -117,6 +117,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
@@ -596,9 +597,6 @@ const slothletObject = {
 			}
 
 			// Default case: return as namespace
-			if (this.config.debug && moduleName === "nest") {
-				console.log(`[DEBUG] Single-file default case for nest: moduleName="${moduleName}" mod keys=[${Object.keys(mod)}]`);
-			}
 			return { [moduleName]: mod };
 		}
 
@@ -650,13 +648,94 @@ const slothletObject = {
 					switch (flattenType) {
 						case "single-default-object": {
 							// Flatten the default export and merge named exports
-							const flattened = { ...mod.default };
-							// Add any named exports to the flattened default
-							for (const [key, value] of Object.entries(mod)) {
-								if (key !== "default") {
-									flattened[key] = value;
+							// Special handling for Proxy objects: don't use spread operator which breaks custom handlers
+							let flattened;
+
+							// Check if mod.default is likely a Proxy with custom behavior
+							const defaultExport = mod.default;
+							const hasNamedExports = Object.keys(mod).some((k) => k !== "default");
+
+							if (hasNamedExports && defaultExport && typeof defaultExport === "object") {
+								// Use Node.js built-in proxy detection for reliable detection
+								const isProxy = utilTypes?.isProxy?.(defaultExport) ?? false;
+
+								if (isProxy) {
+									// Preserve Proxy object and add named exports
+									flattened = defaultExport;
+									let assignmentFailed = false;
+									// Use Map from the start to avoid array-to-Map conversion overhead
+									const failedMap = new Map();
+
+									// Try to add named exports directly to the proxy
+									for (const [key, value] of Object.entries(mod)) {
+										if (key !== "default") {
+											try {
+												flattened[key] = value;
+											} catch (e) {
+												// Track assignment failure
+												assignmentFailed = true;
+												failedMap.set(key, value);
+												if (this.config?.debug) {
+													console.warn(
+														`Could not assign '${key}' to proxy object in module '${moduleName}' at '${categoryPath}':`,
+														e.message
+													);
+												}
+											}
+										}
+									}
+
+									// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
+									if (assignmentFailed) {
+										// DOUBLE-PROXY LAYER JUSTIFICATION:
+										// This creates a wrapper around the original proxy because direct property assignment
+										// failed (e.g., LGTVControllers proxy with custom setters that reject certain properties).
+										// The double-proxy approach is necessary because:
+										// 1. We can't modify the original proxy's behavior without breaking its intended functionality
+										// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
+										// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
+										// 4. Performance impact is minimal since this only occurs when assignment fails, not in normal operation
+										const originalProxy = flattened;
+										flattened = new Proxy(originalProxy, {
+											get(target, prop, receiver) {
+												// Check failed assignments first
+												if (failedMap.has(prop)) return failedMap.get(prop);
+
+												// Fallback to original proxy
+												return Reflect.get(target, prop, receiver);
+											},
+											has(target, prop) {
+												// Include failed assignments in has checks
+												if (failedMap.has(prop)) return true;
+												return Reflect.has(target, prop);
+											},
+											ownKeys(target) {
+												const originalKeys = Reflect.ownKeys(target);
+												const failedKeys = Array.from(failedMap.keys());
+												return [...new Set([...originalKeys, ...failedKeys])];
+											},
+											getOwnPropertyDescriptor(target, prop) {
+												if (failedMap.has(prop)) {
+													return { configurable: true, enumerable: true, value: failedMap.get(prop) };
+												}
+												return Reflect.getOwnPropertyDescriptor(target, prop);
+											}
+										});
+									}
+								} else {
+									// Regular object, use spread operator
+									flattened = { ...defaultExport };
+									for (const [key, value] of Object.entries(mod)) {
+										if (key !== "default") {
+											flattened[key] = value;
+										}
+									}
 								}
+							} else {
+								// No named exports or not an object, use as-is
+								flattened = defaultExport;
 							}
+
 							categoryModules[apiPathKey] = flattened;
 							break;
 						}

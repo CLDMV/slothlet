@@ -1,0 +1,716 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/firetv.mjs
+ *	@Date: 2025-10-16 11:40:48 -07:00 (1760640048)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-11-04 12:10:40 -08:00 (1762287040)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @file api/devices/firetv.mjs - Fire TV control (stripped for testing)
+ * @description Minimal device control module for testing slothlet proxy behavior
+ */
+
+/**
+ * Initializes Fire TV/Android TV controller (mock)
+ * @param {Object} config - Android TV configuration
+ * @returns {Promise<Object|null>} Mock device instance or null if disabled
+ */
+export async function initialize(config) {
+	if (!config.enabled) {
+		console.log("Fire TV device disabled in configuration, skipping");
+		return null;
+	}
+
+	console.log(`Mock: Initializing Fire TV device: ${config.host}:${config.port}`);
+	
+	// Return mock device
+	return {
+		host: config.host,
+		port: config.port,
+		connected: true,
+		type: "firetv"
+	};
+}
+
+/**
+ * Powers on Fire TV device (mock)
+ * @param {string} deviceId - Device identifier
+ * @returns {Promise<boolean>} Success status
+ */
+export async function powerOn(deviceId) {
+	console.log(`Mock: Powering on Fire TV device: ${deviceId}`);
+	return true;
+}
+
+/**
+ * Powers off Fire TV device (mock)
+ * @param {string} deviceId - Device identifier
+ * @returns {Promise<boolean>} Success status
+ */
+export async function powerOff(deviceId) {
+	console.log(`Mock: Powering off Fire TV device: ${deviceId}`);
+	return true;
+}
+
+/**
+ * Sends key to Fire TV device (mock)
+ * @param {string} deviceId - Device identifier
+ * @param {string} keyCode - Key to send
+ * @returns {Promise<boolean>} Success status
+ */
+export async function sendKey(deviceId, keyCode) {
+	console.log(`Mock: Sending key ${keyCode} to Fire TV device: ${deviceId}`);
+	return true;
+}
+
+/**
+ * Common remote control keys
+ */
+export const REMOTE_KEYS = {
+	// Handle initialized event (when device object is created)
+	device.on("initialized", (data) => {
+		if (self.state && self.state.firetv) {
+			self.state.firetv.initialized = true;
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.info", {
+			message: "Fire TV device initialized",
+			action: "initialized",
+			data
+		});
+	});
+
+	// Handle connected event (ADB connection established)
+	device.on("connected", (data) => {
+		if (self.state && self.state.firetv) {
+			self.state.firetv.connected = true;
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: "Fire TV device connected",
+			action: "connected",
+			data
+		});
+	});
+
+	// Handle ready event (device ready for commands)
+	device.on("ready", (data) => {
+		if (self.state && self.state.firetv) {
+			self.state.firetv.ready = true;
+			self.state.firetv.connected = true;
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: "Fire TV device ready for commands",
+			action: "ready",
+			data
+		});
+	});
+
+	// Handle disconnected event (connection lost)
+	device.on("disconnected", (data) => {
+		if (self.state && self.state.firetv) {
+			self.state.firetv.connected = false;
+			self.state.firetv.ready = false;
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device disconnected",
+			action: "disconnected",
+			data
+		});
+	});
+
+	// Handle state changes (pseudo-state for Fire TV since ADB doesn't provide real state)
+	device.on("state", (data) => {
+		if (self.state && self.state.firetv) {
+			// Fire TV doesn't provide real state, so we track pseudo-state
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.info", {
+			message: "Fire TV pseudo-state updated",
+			action: "state.update",
+			data
+		});
+	});
+
+	// Handle errors
+	device.on("error", (error) => {
+		if (self.state && self.state.firetv) {
+			self.state.firetv.errorCount++;
+			self.state.firetv.lastError = error.message || error.toString();
+			self.state.firetv.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device error",
+			action: "error",
+			error: error.message || error.toString()
+		});
+	});
+}
+
+/**
+ * Key operations for Fire TV
+ */
+export const key = {
+	/**
+	 * Sends a key to the Android TV device
+	 * @param {string} keyCode - Key code to send (e.g., 'POWER', 'HOME', 'BACK')
+	 * @returns {Promise<Object>} Command result
+	 */
+	async send(keyCode) {
+		const device = self.state?.firetv?.instance;
+		if (!device) {
+			self.event.emit("device.firetv.error", {
+				message: "Fire TV device not initialized",
+				action: "key.send"
+			});
+			return { success: false, command: "key.send", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await device.sendKey(keyCode);
+			const responseTime = Date.now() - startTime;
+
+			// Update state based on key sent
+			if (self.state && self.state.firetv) {
+				if (keyCode === "POWER") {
+					self.state.firetv.power = "on"; // Assume power key turns on
+				}
+				self.state.firetv.lastCommand = `key.send:${keyCode}`;
+				self.state.firetv.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.firetv.success", {
+				message: `Fire TV key '${keyCode}' sent (${responseTime}ms)`,
+				action: "key.send",
+				key: keyCode,
+				responseTime
+			});
+			return { success: true, command: "key.send", key: keyCode, responseTime, result };
+		} catch (error) {
+			self.event.emit("device.firetv.error", {
+				message: `Failed to send key '${keyCode}' to Fire TV`,
+				action: "key.send",
+				key: keyCode,
+				error: error.message,
+				details: error
+			});
+			return { success: false, command: "key.send", error: error.message };
+		}
+	}
+};
+
+/**
+ * Power control for Fire TV
+ */
+export const power = {
+	/**
+	 * Powers on the Fire TV device
+	 * @returns {Promise<Object>} Command result
+	 */
+	async on() {
+		return await key.send("POWER");
+	},
+
+	/**
+	 * Powers off the Fire TV device (standby)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async off() {
+		return await key.send("POWER");
+	}
+};
+
+/**
+ * Navigation shortcuts for Fire TV
+ */
+export const navigation = {
+	/**
+	 * Goes to home screen
+	 * @returns {Promise<Object>} Command result
+	 */
+	async home() {
+		return await key.send("HOME");
+	},
+
+	/**
+	 * Goes back
+	 * @returns {Promise<Object>} Command result
+	 */
+	async back() {
+		return await key.send("BACK");
+	},
+
+	/**
+	 * Opens menu
+	 * @returns {Promise<Object>} Command result
+	 */
+	async menu() {
+		return await key.send("MENU");
+	}
+};
+
+/**
+ * Sends text input to Android TV device
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @param {string} text - Text to send
+ * @returns {Promise<Object>} Command result
+ */
+export async function sendText(device, text) {
+	if (!device) {
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device not initialized",
+			action: "sendText"
+		});
+		return { success: false, command: "sendText", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.sendText(text);
+		const responseTime = Date.now() - startTime;
+
+		// Record command in state if available
+		if (self.state && self.state.firetv) {
+			self.state.firetv.lastCommand = "sendText";
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: `Fire TV text '${text}' sent (${responseTime}ms)`,
+			action: "sendText",
+			text,
+			responseTime
+		});
+		return { success: true, command: "sendText", text, responseTime, result };
+	} catch (error) {
+		self.event.emit("device.firetv.error", {
+			message: `Failed to send text '${text}' to Fire TV`,
+			action: "sendText",
+			text,
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "sendText", error: error.message };
+	}
+}
+
+/**
+ * Launches an app on Fire TV
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @param {string} packageName - App package name (e.g., 'com.netflix.ninja')
+ * @returns {Promise<Object>} Command result
+ */
+export async function launchApp(device, packageName) {
+	if (!device) {
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device not initialized",
+			action: "launchApp"
+		});
+		return { success: false, command: "launchApp", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.launchApp(packageName);
+		const responseTime = Date.now() - startTime;
+
+		// Update current app state if available
+		if (self.state && self.state.firetv) {
+			self.state.firetv.currentApp = packageName;
+			self.state.firetv.lastCommand = "launchApp";
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: `Fire TV app '${packageName}' launched (${responseTime}ms)`,
+			action: "launchApp",
+			packageName,
+			responseTime
+		});
+		return { success: true, command: "launchApp", packageName, responseTime, result };
+	} catch (error) {
+		self.event.emit("device.firetv.error", {
+			message: `Failed to launch app '${packageName}' on Fire TV`,
+			action: "launchApp",
+			packageName,
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "launchApp", error: error.message };
+	}
+}
+
+/**
+ * Gets the current running app on Fire TV
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @returns {Promise<Object>} Current app information
+ */
+export async function getCurrentApp(device) {
+	if (!device) {
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device not initialized",
+			action: "getCurrentApp"
+		});
+		return { success: false, command: "getCurrentApp", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.getCurrentApp();
+		const responseTime = Date.now() - startTime;
+
+		// Update current app state if available
+		if (self.state && self.state.firetv && result) {
+			self.state.firetv.currentApp = result.package || "unknown";
+			self.state.firetv.lastCommand = "getCurrentApp";
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.info", {
+			message: `Fire TV current app retrieved (${responseTime}ms)`,
+			action: "getCurrentApp",
+			responseTime,
+			app: result
+		});
+		return { success: true, command: "getCurrentApp", responseTime, app: result };
+	} catch (error) {
+		self.event.emit("device.firetv.error", {
+			message: "Failed to get current app from Fire TV",
+			action: "getCurrentApp",
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "getCurrentApp", error: error.message };
+	}
+}
+
+/**
+ * Gets device information from Fire TV
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @returns {Promise<Object>} Device information
+ */
+export async function getDeviceInfo(device) {
+	if (!device) {
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device not initialized",
+			action: "getDeviceInfo"
+		});
+		return { success: false, command: "getDeviceInfo", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.getDeviceInfo();
+		const responseTime = Date.now() - startTime;
+
+		// Update device info in state if available
+		if (self.state && self.state.firetv && result) {
+			self.state.firetv.androidVersion = result.androidVersion;
+			self.state.firetv.deviceModel = result.model;
+			self.state.firetv.serialNumber = result.serial;
+			self.state.firetv.lastCommand = "getDeviceInfo";
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.info", {
+			message: `Fire TV device info retrieved (${responseTime}ms)`,
+			action: "getDeviceInfo",
+			responseTime,
+			deviceInfo: result
+		});
+		return { success: true, command: "getDeviceInfo", responseTime, deviceInfo: result };
+	} catch (error) {
+		self.event.emit("device.firetv.error", {
+			message: "Failed to get device info from Fire TV",
+			action: "getDeviceInfo",
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "getDeviceInfo", error: error.message };
+	}
+}
+
+/**
+ * Executes a shell command on Fire TV
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @param {string} command - Shell command to execute
+ * @returns {Promise<Object>} Command result
+ */
+export async function executeShellCommand(device, command) {
+	if (!device) {
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV device not initialized",
+			action: "executeShellCommand"
+		});
+		return { success: false, command: "shell", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.shell(command);
+		const responseTime = Date.now() - startTime;
+
+		// Record command in state if available
+		if (self.state && self.state.firetv) {
+			self.state.firetv.lastCommand = `shell:${command}`;
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.info", {
+			message: `Fire TV shell command '${command}' executed (${responseTime}ms)`,
+			action: "executeShellCommand",
+			command,
+			responseTime
+		});
+		return { success: true, command: "shell", shellCommand: command, responseTime, result };
+	} catch (error) {
+		self.event.emit("device.firetv.error", {
+			message: `Failed to execute shell command '${command}' on Fire TV`,
+			action: "executeShellCommand",
+			command,
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "shell", error: error.message };
+	}
+}
+
+/**
+ * Reconnects to Fire TV device
+ * @param {AndroidTVRemote} device - Android TV device instance to reconnect
+ * @param {Object} config - Fire TV configuration for reconnection
+ * @returns {Promise<AndroidTVRemote>} Reconnected device instance
+ */
+export async function reconnect(device, config) {
+	self.event.emit("device.firetv.info", {
+		message: "Reconnecting Fire TV device...",
+		action: "reconnect"
+	});
+
+	try {
+		// Disconnect existing connection if any
+		if (device && device.disconnect) {
+			await device.disconnect();
+		}
+
+		// Create new connection
+		const newDevice = await createRemote({
+			ip: config.host,
+			port: config.port,
+			timeout: config.timeout || 5000
+		});
+
+		// Update state if available
+		if (self.state && self.state.firetv) {
+			self.state.firetv.connected = true;
+			self.state.firetv.adbConnected = true;
+			self.state.firetv.instance = newDevice;
+			self.state.firetv.lastCommand = "reconnect";
+			self.state.firetv.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: "Fire TV device reconnected successfully",
+			action: "reconnect"
+		});
+		return newDevice;
+	} catch (error) {
+		// Update error state if available
+		if (self.state && self.state.firetv) {
+			self.state.firetv.connected = false;
+			self.state.firetv.adbConnected = false;
+		}
+
+		self.event.emit("device.firetv.error", {
+			message: "Failed to reconnect Fire TV device",
+			action: "reconnect",
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "reconnect", error: error.message };
+	}
+}
+
+/**
+ * Gets current device status including state information
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @returns {Object} Complete device status
+ */
+export function getDeviceStatus(device) {
+	const status = {
+		initialized: device !== null,
+		connected: device !== null,
+		lastSeen: device ? Date.now() : null
+	};
+
+	// Add state information if state management is available
+	if (self.state && self.state.firetv) {
+		status.state = self.state.firetv;
+	}
+
+	return status;
+}
+
+/**
+ * Performs a health check on the Fire TV device
+ * @param {AndroidTVRemote} device - Android TV device instance
+ * @returns {Promise<Object>} Health check result
+ */
+export async function healthCheck(device) {
+	self.event.emit("device.firetv.info", {
+		message: "Performing Fire TV device health check...",
+		action: "healthCheck"
+	});
+
+	const healthResult = {
+		timestamp: new Date().toISOString(),
+		overall: "unknown",
+		checks: {}
+	};
+
+	try {
+		// Check basic connectivity
+		healthResult.checks.connectivity = {
+			status: device ? "pass" : "fail",
+			message: device ? "Device initialized" : "Device not initialized"
+		};
+
+		if (device) {
+			// Try to get device info to verify ADB communication
+			try {
+				const deviceInfoResult = await getDeviceInfo(device);
+				healthResult.checks.adbCommunication = {
+					status: deviceInfoResult.success ? "pass" : "fail",
+					message: deviceInfoResult.success ? "ADB communication working" : "ADB communication failed",
+					responseTime: deviceInfoResult.responseTime
+				};
+			} catch (error) {
+				healthResult.checks.adbCommunication = {
+					status: "fail",
+					message: `ADB communication failed: ${error.message}`
+				};
+			}
+
+			// Try to get current app to verify app queries work
+			try {
+				const currentAppResult = await getCurrentApp(device);
+				healthResult.checks.appQueries = {
+					status: currentAppResult.success ? "pass" : "fail",
+					message: currentAppResult.success ? "App queries working" : "App queries failed",
+					currentApp: currentAppResult.app?.package || "unknown"
+				};
+			} catch (error) {
+				healthResult.checks.appQueries = {
+					status: "fail",
+					message: `App queries failed: ${error.message}`
+				};
+			}
+
+			// Check state management health if available
+			if (self.state && self.state.firetv) {
+				healthResult.checks.stateHealth = {
+					status: "pass",
+					message: "State management available",
+					details: self.state.firetv
+				};
+			}
+		}
+
+		// Determine overall health
+		const allChecks = Object.values(healthResult.checks);
+		const failedChecks = allChecks.filter((check) => check.status === "fail");
+
+		if (failedChecks.length === 0) {
+			healthResult.overall = "healthy";
+		} else if (failedChecks.length < allChecks.length) {
+			healthResult.overall = "degraded";
+		} else {
+			healthResult.overall = "unhealthy";
+		}
+
+		self.event.emit("device.firetv.success", {
+			message: `Fire TV health check completed: ${healthResult.overall}`,
+			action: "healthCheck",
+			overall: healthResult.overall
+		});
+		return healthResult;
+	} catch (error) {
+		healthResult.overall = "error";
+		healthResult.error = error.message;
+
+		self.event.emit("device.firetv.error", {
+			message: "Fire TV health check failed",
+			action: "healthCheck",
+			error: error.message,
+			details: error
+		});
+		return healthResult;
+	}
+}
+
+/**
+ * Common Fire TV apps with their package names
+ */
+export const COMMON_APPS = {
+	netflix: "com.netflix.ninja",
+	prime: "com.amazon.avod.thirdpartyclient",
+	youtube: "com.google.android.youtube.tv",
+	hulu: "com.hulu.plus",
+	disney: "com.disney.disneyplus",
+	spotify: "com.spotify.tv.android",
+	plex: "com.plexapp.android",
+	kodi: "org.xbmc.kodi",
+	twitch: "tv.twitch.android.app",
+	settings: "com.android.tv.settings",
+	launcher: "com.amazon.tv.launcher"
+};
+
+/**
+ * Common remote control keys
+ */
+export const REMOTE_KEYS = {
+	// Power
+	POWER: "POWER",
+	SLEEP: "SLEEP",
+
+	// Navigation
+	HOME: "HOME",
+	BACK: "BACK",
+	MENU: "MENU",
+	UP: "DPAD_UP",
+	DOWN: "DPAD_DOWN",
+	LEFT: "DPAD_LEFT",
+	RIGHT: "DPAD_RIGHT",
+	CENTER: "DPAD_CENTER",
+	SELECT: "DPAD_CENTER",
+
+	// Volume
+	VOLUME_UP: "VOLUME_UP",
+	VOLUME_DOWN: "VOLUME_DOWN",
+	MUTE: "VOLUME_MUTE",
+
+	// Playback
+	PLAY: "MEDIA_PLAY",
+	PAUSE: "MEDIA_PAUSE",
+	PLAY_PAUSE: "MEDIA_PLAY_PAUSE",
+	STOP: "MEDIA_STOP",
+	NEXT: "MEDIA_NEXT",
+	PREVIOUS: "MEDIA_PREVIOUS",
+	FAST_FORWARD: "MEDIA_FAST_FORWARD",
+	REWIND: "MEDIA_REWIND"
+};
