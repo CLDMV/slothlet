@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 11:12:34 -07:00 (1761588754)
+ *	@Last modified time: 2025-11-04 15:24:53 -08:00 (1762298693)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -49,7 +49,35 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Helper function to check if a value is likely serializable without calling JSON.stringify.
+ * Used by toJSON methods to avoid expensive serialization attempts on complex objects.
+ *
+ * @internal
+ * @private
+ * @param {*} val - The value to check for serializability
+ * @returns {boolean} True if the value is likely serializable, false otherwise
+ */
+function isLikelySerializable(val) {
+	const type = typeof val;
+
+	// Primitive types are always serializable
+	if (type !== "object" || val === null) {
+		return type === "string" || type === "number" || type === "boolean" || type === "undefined";
+	}
+
+	// Common serializable object types
+	return (
+		Array.isArray(val) || val instanceof Date || val instanceof RegExp || val?.constructor === Object || typeof val.toJSON === "function" // Objects with custom toJSON method
+	);
+}
 
 // ============================================================================
 // CORE DECISION-MAKING FUNCTIONS - Used by both eager and lazy modes
@@ -259,10 +287,116 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 	if (hasDefault && typeof processedModule.default === "object") {
 		const obj = processedModule.default; // Use original default object directly, don't copy
 
-		// Add named exports to the original default object
-		for (const [exportName, exportValue] of Object.entries(processedModule)) {
-			if (exportName !== "default" && exportValue !== obj) {
-				obj[instance._toapiPathKey(exportName)] = exportValue;
+		// Check if we have named exports to add
+		const namedExportsToAdd = Object.entries(processedModule).filter(
+			([exportName, exportValue]) => exportName !== "default" && exportValue !== obj
+		);
+
+		if (namedExportsToAdd.length > 0) {
+			// Use Node.js built-in util.types.isProxy() for reliable proxy detection
+			// Available in Node.js 10+ (we require 16+)
+			const isCustomProxy = utilTypes?.isProxy?.(obj) ?? false;
+
+			if (isCustomProxy) {
+				// For Proxy objects, add named exports directly to the proxy
+				// Since we confirmed the proxy allows property assignment, this should work
+				for (const [exportName, exportValue] of namedExportsToAdd) {
+					const apiKey = instance._toapiPathKey(exportName);
+					obj[apiKey] = exportValue;
+				}
+
+				// For proxy objects, return a structure that preserves the default export pattern
+				// This ensures flattening code can find obj.default correctly
+				const proxyWithStructure = obj; // The proxy with named exports already attached
+
+				// NECESSARY CODE SMELL: Add self-reference as default for flattening logic compatibility.
+				// This circular reference (.default = self) is required for backward compatibility with existing
+				// flattening logic that expects obj.default to exist and point to the root object when processing
+				// Proxy objects with named exports. The flattening code checks for obj.default to determine
+				// if it should flatten the object structure or preserve the proxy wrapper.
+				//
+				// FUNCTIONAL REQUIREMENT: Without this circular reference, flattening breaks in scenarios like:
+				// - LGTVControllers proxy: api.devices.lg() works but api.devices.lg.getStatus() fails
+				// - Mixed export modules: Functions with attached methods lose their callable nature
+				// - Auto-flattening: math/math.mjs becomes api.math.math instead of api.math
+				// The flattening logic needs obj.default === obj to detect proxy wrappers vs plain objects.
+				//
+				// ALTERNATIVES CONSIDERED:
+				// 1. Update flattening logic to not require .default - would be a breaking change
+				// 2. Use a symbol instead of .default - would break existing consumer code expecting .default
+				// 3. Clone object without circular reference - would break Proxy behavior and method binding
+				//
+				// WARNING: This creates a circular reference, which breaks JSON.stringify() without mitigation.
+				// The custom toJSON method below prevents serialization errors by excluding the circular .default.
+				proxyWithStructure.default = obj; // Circular reference for backward compatibility
+
+				// Prevent JSON.stringify from failing due to circular reference
+				if (!proxyWithStructure.toJSON) {
+					Object.defineProperty(proxyWithStructure, "toJSON", {
+						value: function () {
+							// Return a structured object with proxy properties (excluding .default to avoid circular reference)
+							const serializable = {};
+
+							// Use Reflect.ownKeys to capture all properties on Proxy objects (enumerable and non-enumerable)
+							for (const key of Reflect.ownKeys(this)) {
+								// Only process enumerable string properties (skip symbols and non-enumerable properties)
+								if (typeof key !== "string") continue;
+
+								const descriptor = Reflect.getOwnPropertyDescriptor(this, key);
+								if (!descriptor || !descriptor.enumerable) continue;
+
+								if (key === "default") {
+									// Skip circular reference
+									continue;
+								}
+
+								const value = this[key];
+								if (typeof value === "function") {
+									serializable[key] = "[Function]";
+								} else if (isLikelySerializable(value)) {
+									// For likely serializable values, include them directly
+									serializable[key] = value;
+								} else {
+									// For complex objects, test serialization only when needed
+									try {
+										JSON.stringify(value);
+										serializable[key] = value;
+									} catch {
+										serializable[key] = "[Non-serializable value]";
+									}
+								}
+							}
+
+							// Add metadata about the circular reference
+							serializable._slothlet_proxy_info = {
+								type: "proxy",
+								circular_reference: "Property .default points to this object (excluded from serialization)",
+								warning: "This is a slothlet API proxy with circular .default reference"
+							};
+							return serializable;
+						},
+						writable: false,
+						enumerable: false,
+						configurable: true
+					});
+				}
+
+				// Also add named exports as top-level properties for compatibility
+				for (const [exportName, exportValue] of namedExportsToAdd) {
+					const apiKey = instance._toapiPathKey(exportName);
+					if (!(apiKey in proxyWithStructure)) {
+						proxyWithStructure[apiKey] = exportValue;
+					}
+				}
+
+				return proxyWithStructure;
+			} else {
+				// For regular objects, add named exports directly (existing behavior)
+				for (const [exportName, exportValue] of namedExportsToAdd) {
+					obj[instance._toapiPathKey(exportName)] = exportValue;
+				}
+
+				return obj;
 			}
 		}
 
@@ -566,6 +700,7 @@ export function getFlatteningDecision(options) {
 		// attaches named exports to default exports. Callers should pass explicit analysis data.
 		moduleHasDefault = !!mod.default,
 		categoryName,
+		// eslint-disable-next-line no-unused-vars
 		totalModules = 1
 	} = options;
 
@@ -1138,11 +1273,6 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		const fileName = path.basename(file.name, moduleExt);
 		const apiPathKey = instance._toapiPathKey(fileName);
 
-		if (debug && moduleName === "config") {
-			console.log(`[DEBUG] Processing config file: ${file.name}, moduleName: ${moduleName}`);
-			console.log(`[DEBUG] selfReferentialFiles has config? ${selfReferentialFiles.has(moduleName)}`);
-		}
-
 		// Check if we already loaded this module during first pass
 		let mod = null;
 		let analysis = null;
@@ -1595,11 +1725,6 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 		// Default case: return as namespace
 		decisions.shouldFlatten = false;
 		decisions.preferredName = moduleName;
-		if (debug && moduleName === "nest") {
-			console.log(
-				`[DEBUG] buildCategoryDecisions single-file default: moduleName="${moduleName}" shouldFlatten=false preferredName="${decisions.preferredName}"`
-			);
-		}
 		return decisions;
 	}
 

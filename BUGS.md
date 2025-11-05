@@ -2,74 +2,99 @@
 
 This document tracks identified bugs in the slothlet codebase.
 
-## Bug #1: Subfolder Multi-Default Export Flattening
+## Bug #1: Lazy Mode Custom Proxy Detection
 
 **Status**: ✅ **FIXED**
 
-**Description**: Subfolder modules with both `export default {}` and named exports incorrectly flatten their named exports to the parent folder level instead of preserving the module namespace.
+**Description**: The lazy mode was using error-prone custom proxy detection logic instead of the reliable Node.js built-in `util.types.isProxy()` method that was already being used in other parts of the codebase.
+
+**Symptoms**:
+
+- Empty folders were incorrectly identified as custom Proxy objects in lazy mode
+- Inconsistent behavior between eager and lazy modes for empty folder handling
+- Precommit validation failures due to `nested.empty` showing as `function` in lazy mode vs `{}` in eager mode
+- Potential false positives/negatives in proxy detection affecting custom proxy objects like LGTVControllers
 
 **Expected Behavior**:
 
-- Subfolder modules with `export default {}` + named exports should create namespaced API structure
-- Example: `utils/lifecycle.mjs` should create `api.utils.lifecycle.callAll()`
-- Root-level modules with identical structure work correctly
-
-**Fixed Behavior**:
-
-- **Root modules**: `lifecycle.mjs` correctly creates `api.lifecycle.callAll()` ✅
-- **Subfolder modules**: `utils/lifecycle.mjs` now correctly creates `api.utils.lifecycle.callAll()` ✅
-
-**Impact**:
-
-- Inconsistent API structure between root and subfolder modules
-- Loss of module namespace organization in subfolders
-- Potential naming conflicts when multiple subfolder modules export same function names
-- Breaks expected file-to-API mapping conventions
+- Empty folders should consistently return `{}` (empty object) in both eager and lazy modes
+- Custom Proxy objects (like LGTVControllers with array access `lg[0]`) should be properly detected and preserve their behavior
+- Both modes should use the same reliable proxy detection method
 
 **Root Cause**:
-The issue was in `buildCategoryDecisions()` in `src/lib/helpers/api_builder.mjs`. The function was checking `!mod.default` to determine flattening behavior, but `processModuleFromAnalysis()` removes the `.default` property from processed modules with object default exports (like `export default {}`). This caused modules with `export default {}` + named exports to be incorrectly identified as having no default export and flattened inappropriately.
+
+The lazy mode (`src/lib/modes/slothlet_lazy.mjs`) was using custom proxy detection logic that tested random property access:
+
+```javascript
+// Error-prone custom detection (BEFORE)
+const testKey = "__slothlet_proxy_test_" + Math.random();
+const directAccess = value[testKey];
+const hasNoOwnProps = Object.getOwnPropertyNames(value).length === 0;
+const respondsToAccess = directAccess !== undefined || hasNoOwnProps;
+
+if (respondsToAccess && hasNoOwnProps) {
+	isCustomProxy = true; // ❌ Empty objects incorrectly identified as proxies
+}
+```
+
+Meanwhile, `slothlet.mjs` and `api_builder.mjs` were correctly using:
+
+```javascript
+// Reliable Node.js built-in (CORRECT)
+const isProxy = utilTypes?.isProxy?.(defaultExport) ?? false;
+```
 
 **Fix Applied**:
 
-- **File**: `src/lib/helpers/api_builder.mjs`
-- **Change**: Updated `buildCategoryDecisions()` to use `!analysis.hasDefault` instead of `!mod.default`
-- **Lines**: 1758, 1762, 1770 - All `mod.default` checks replaced with `analysis.hasDefault` from original module analysis
+1. **Added proper import** to lazy mode:
+
+   ```javascript
+   import { types as utilTypes } from "node:util";
+   ```
+
+2. **Replaced custom proxy detection** with reliable built-in:
+
+   ```javascript
+   // Replaced error-prone custom logic with:
+   const isCustomProxy = value && typeof value === "object" && utilTypes?.isProxy?.(value);
+   ```
+
+3. **Files Modified**:
+   - `src/lib/modes/slothlet_lazy.mjs` - Lines 157 (import) and 363-383 (detection logic)
+
+**Impact Before Fix**:
+
+- Empty folders in nested directories (`nested/empty`) returned `function` in lazy mode instead of `{}`
+- Precommit validation failed due to inconsistent empty folder handling between modes
+- Potential reliability issues with custom proxy object detection
+
+**Impact After Fix**:
+
+- ✅ Consistent empty folder handling: both modes return `{}` for empty directories
+- ✅ Reliable proxy detection using Node.js built-in method across entire codebase
+- ✅ Precommit validation passes with consistent behavior between modes
+- ✅ Custom proxy objects (LGTVControllers) maintain proper behavior in both modes
 
 **Test Verification**:
 
 ```bash
-node tools/inspect-api-structure.mjs api_tv_test
-# Verify fix:
-# ✅ api.lifecycle.callAll() (root module - correct)
-# ✅ api.utils.lifecycle.callAll() (subfolder module - now fixed)
+# Test empty folder consistency
+node -e "import slothlet from './index.mjs'; const api = await slothlet({ dir: './api_tests/api_test' }); console.log('nested.empty type before access:', typeof api.nested.empty); console.log('nested.empty after access:', api.nested.empty);"
+# Result: nested.empty type before access: object, nested.empty after access: {}
+
+# Test proxy behavior preservation
+node -e "import slothlet from './index.mjs'; const api = await slothlet({ dir: './api_tests/api_tv_test', lazy: true }); console.log('lg[0]:', api.devices.lg[0]); console.log('lg.clearCache:', typeof api.devices.lg.clearCache);"
+# Result: Custom proxy behavior preserved correctly
+
+# Precommit validation
+npm run precommit
+# Result: All 6 validation steps pass ✅
 ```
 
-**Test Case Structure**:
+**Lesson Learned**:
 
-Both files have identical export structure:
-
-```javascript
-export async function callAll() {
-	/* ... */
-}
-export function getModules() {
-	/* ... */
-}
-export const methods = {
-	/* ... */
-};
-export default {};
-```
-
-**Reproduction Steps**:
-
-1. Create root-level module with `export default {}` + named exports → Works correctly
-2. Create identical module in subfolder → Named exports flatten incorrectly to parent level
-3. Use inspect tool to observe API structure differences
-
-**Resolution**:
-Fixed by updating `buildCategoryDecisions()` to use original module analysis data (`analysis.hasDefault`) instead of checking the processed module's `.default` property. This ensures consistent behavior between root and subfolder modules with identical export patterns.
+Always use Node.js built-in utilities for standard detection operations rather than implementing custom logic. The `util.types.isProxy()` method provides definitive proxy detection that's reliable across all Node.js environments and edge cases.
 
 ---
 
-_Last updated: October 30, 2025_
+_Last updated: November 4, 2025_
