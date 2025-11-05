@@ -34,6 +34,16 @@ function recordTest(testName, passed, message = "") {
 }
 
 /**
+ * Helper function to format test result comparisons with consistent emoji and JSON output
+ */
+function formatResultComparison(name, lazyResult, eagerResult, match) {
+	console.log(`🔍 ${name}:`);
+	console.log(`  Lazy:  ${lazyResult.success ? "✅" : "❌"} ${JSON.stringify(lazyResult.result)}`);
+	console.log(`  Eager: ${eagerResult.success ? "✅" : "❌"} ${JSON.stringify(eagerResult.result)}`);
+	console.log(`  Match: ${match ? "✅" : "❌"}`);
+}
+
+/**
  * Test the LGTVControllers proxy functionality
  */
 async function testProxyBehavior(mode, api) {
@@ -205,15 +215,15 @@ async function runBaselineTest() {
 			comparison.behaviorIdentical ? "proxy behavior is identical between modes" : "proxy behavior differs between modes"
 		);
 
-		console.log(`🔍 Array access (lg[0]):`);
-		console.log(`  Lazy:  ${lazyResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(lazyResults.arrayAccess.result)}`);
-		console.log(`  Eager: ${eagerResults.arrayAccess.success ? "✅" : "❌"} ${JSON.stringify(eagerResults.arrayAccess.result)}`);
-		console.log(`  Match: ${comparison.arrayAccessMatch ? "✅" : "❌"}`);
+		formatResultComparison("Array access (lg[0])", lazyResults.arrayAccess, eagerResults.arrayAccess, comparison.arrayAccessMatch);
 
-		console.log(`\n🔍 Named export (lg.getStatus('tv1')):`);
-		console.log(`  Lazy:  ${lazyResults.namedExport.success ? "✅" : "❌"} ${JSON.stringify(lazyResults.namedExport.result)}`);
-		console.log(`  Eager: ${eagerResults.namedExport.success ? "✅" : "❌"} ${JSON.stringify(eagerResults.namedExport.result)}`);
-		console.log(`  Match: ${comparison.namedExportMatch ? "✅" : "❌"}`);
+		console.log("");
+		formatResultComparison(
+			"Named export (lg.getStatus('tv1'))",
+			lazyResults.namedExport,
+			eagerResults.namedExport,
+			comparison.namedExportMatch
+		);
 
 		console.log(`\n🎯 OVERALL RESULT: ${comparison.behaviorIdentical ? "✅ IDENTICAL BEHAVIOR" : "❌ BEHAVIOR MISMATCH"}`);
 

@@ -683,30 +683,30 @@ const slothletObject = {
 
 									// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
 									if (assignmentFailed) {
+										// Convert array to Map for O(1) lookup performance instead of O(n) find operations
+										const failedMap = new Map(failedAssignments);
 										const originalProxy = flattened;
 										flattened = new Proxy(originalProxy, {
 											get(target, prop, receiver) {
 												// Check failed assignments first
-												const failed = failedAssignments.find(([k]) => k === prop);
-												if (failed) return failed[1];
+												if (failedMap.has(prop)) return failedMap.get(prop);
 
 												// Fallback to original proxy
 												return Reflect.get(target, prop, receiver);
 											},
 											has(target, prop) {
 												// Include failed assignments in has checks
-												if (failedAssignments.some(([k]) => k === prop)) return true;
+												if (failedMap.has(prop)) return true;
 												return Reflect.has(target, prop);
 											},
 											ownKeys(target) {
 												const originalKeys = Reflect.ownKeys(target);
-												const failedKeys = failedAssignments.map(([k]) => k);
+												const failedKeys = Array.from(failedMap.keys());
 												return [...new Set([...originalKeys, ...failedKeys])];
 											},
 											getOwnPropertyDescriptor(target, prop) {
-												const failed = failedAssignments.find(([k]) => k === prop);
-												if (failed) {
-													return { configurable: true, enumerable: true, value: failed[1] };
+												if (failedMap.has(prop)) {
+													return { configurable: true, enumerable: true, value: failedMap.get(prop) };
 												}
 												return Reflect.getOwnPropertyDescriptor(target, prop);
 											}

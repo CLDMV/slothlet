@@ -70,7 +70,7 @@ function isLikelySerializable(val) {
 
 	// Primitive types are always serializable
 	if (type !== "object" || val === null) {
-		return type === "string" || type === "number" || type === "boolean" || type === "undefined" || val === null;
+		return type === "string" || type === "number" || type === "boolean" || type === "undefined";
 	}
 
 	// Common serializable object types
@@ -315,6 +315,12 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 				// Proxy objects with named exports. The flattening code checks for obj.default to determine
 				// if it should flatten the object structure or preserve the proxy wrapper.
 				//
+				// FUNCTIONAL REQUIREMENT: Without this circular reference, flattening breaks in scenarios like:
+				// - LGTVControllers proxy: api.devices.lg() works but api.devices.lg.getStatus() fails
+				// - Mixed export modules: Functions with attached methods lose their callable nature
+				// - Auto-flattening: math/math.mjs becomes api.math.math instead of api.math
+				// The flattening logic needs obj.default === obj to detect proxy wrappers vs plain objects.
+				//
 				// ALTERNATIVES CONSIDERED:
 				// 1. Update flattening logic to not require .default - would be a breaking change
 				// 2. Use a symbol instead of .default - would break existing consumer code expecting .default
@@ -331,12 +337,20 @@ export function processModuleFromAnalysis(analysis, options = {}) {
 							// Return a structured object with proxy properties (excluding .default to avoid circular reference)
 							const serializable = {};
 
-							for (const [key, value] of Object.entries(this)) {
+							// Use Reflect.ownKeys to capture all properties on Proxy objects (enumerable and non-enumerable)
+							for (const key of Reflect.ownKeys(this)) {
+								// Only process enumerable string properties (skip symbols and non-enumerable properties)
+								if (typeof key !== "string") continue;
+
+								const descriptor = Reflect.getOwnPropertyDescriptor(this, key);
+								if (!descriptor || !descriptor.enumerable) continue;
+
 								if (key === "default") {
 									// Skip circular reference
 									continue;
 								}
 
+								const value = this[key];
 								if (typeof value === "function") {
 									serializable[key] = "[Function]";
 								} else if (isLikelySerializable(value)) {
