@@ -20,7 +20,7 @@
  */
 export function multidefault_analyzeModules(moduleFiles: Array<{
     name: string;
-}>, baseDir: string, debug?: boolean): Promise<{
+}>, baseDir: string, debug?: boolean, instance?: any): Promise<{
     totalDefaultExports: number;
     hasMultipleDefaultExports: boolean;
     selfReferentialFiles: Set<string>;
