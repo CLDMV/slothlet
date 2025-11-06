@@ -47,7 +47,8 @@ async function multidefault_analyzeModules(moduleFiles, baseDir, options = {}) {
 		// Create instance-isolated import URL for cache busting between slothlet instances
 		let importUrl = `file://${moduleFilePath.replace(/\\/g, "/")}`;
 		if (instance && instance.instanceId) {
-			importUrl += `?slothlet_instance=${instance.instanceId}`;
+			const separator = importUrl.includes("?") ? "&" : "?";
+			importUrl = `${importUrl}${separator}slothlet_instance=${instance.instanceId}`;
 		}
 
 		// Load raw module once and cache it
