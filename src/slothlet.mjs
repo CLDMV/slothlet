@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-04 20:45:25 -08:00 (1762317925)
+ *	@Last modified time: 2025-11-05 19:24:36 -08:00 (1762399476)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -276,7 +276,7 @@ const slothletObject = {
 		}
 
 		// Generate unique instance ID for cache isolation between different slothlet instances
-		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {

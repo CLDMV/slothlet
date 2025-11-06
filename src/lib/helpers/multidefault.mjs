@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/multidefault.mjs
+ *	@Date: 2025-11-05 18:00:27 -08:00 (1762394427)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-11-05 19:24:55 -08:00 (1762399495)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Multi-default detection utilities for slothlet. Internal file (not exported in package.json).
  * @module @cldmv/slothlet/src/lib/helpers/multidefault
  */
