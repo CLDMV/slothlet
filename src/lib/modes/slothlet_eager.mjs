@@ -263,7 +263,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const moduleFiles = entries.filter((e) => this._shouldIncludeFile(e));
 	const defaultExportFiles = [];
 	// Use shared multi-default detection utility
-	const analysis = await multidefault_analyzeModules(moduleFiles, dir, this.config.debug);
+	const analysis = await multidefault_analyzeModules(moduleFiles, dir, { debug: this.config.debug, instance: this });
 
 	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 

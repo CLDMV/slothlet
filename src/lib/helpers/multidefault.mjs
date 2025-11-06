@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/multidefault.mjs
+ *	@Date: 2025-11-05 18:00:27 -08:00 (1762394427)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-11-05 19:24:55 -08:00 (1762399495)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Multi-default detection utilities for slothlet. Internal file (not exported in package.json).
  * @module @cldmv/slothlet/src/lib/helpers/multidefault
  */
@@ -11,7 +24,9 @@ import path from "path";
  * @private
  * @param {Array<{name: string}>} moduleFiles - Array of module file objects with name property
  * @param {string} baseDir - Base directory path containing the modules
- * @param {boolean} [debug=false] - Enable debug logging
+ * @param {object} [options={}] - Configuration options
+ * @param {boolean} [options.debug=false] - Enable debug logging
+ * @param {object|null} [options.instance=null] - Slothlet instance for cache isolation
  * @returns {Promise<{
  *   totalDefaultExports: number,
  *   hasMultipleDefaultExports: boolean,
@@ -20,12 +35,13 @@ import path from "path";
  *   defaultExportFiles: Array<{fileName: string, rawModule: object}>
  * }>} Analysis results
  * @example // Internal usage in slothlet modes
- * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, config.debug);
+ * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug: config.debug, instance });
  * if (analysis.hasMultipleDefaultExports) {
  *   // Handle multi-default context
  * }
  */
-async function multidefault_analyzeModules(moduleFiles, baseDir, debug = false) {
+async function multidefault_analyzeModules(moduleFiles, baseDir, options = {}) {
+	const { debug = false, instance = null } = options;
 	const selfReferentialFiles = new Set();
 	const rawModuleCache = new Map();
 	const defaultExportFiles = [];
@@ -41,8 +57,15 @@ async function multidefault_analyzeModules(moduleFiles, baseDir, debug = false) 
 		const fileName = path.basename(file.name, moduleExt);
 		const moduleFilePath = path.resolve(baseDir, file.name);
 
+		// Create instance-isolated import URL for cache busting between slothlet instances
+		let importUrl = `file://${moduleFilePath.replace(/\\/g, "/")}`;
+		if (instance && instance.instanceId) {
+			const separator = importUrl.includes("?") ? "&" : "?";
+			importUrl = `${importUrl}${separator}slothlet_instance=${instance.instanceId}`;
+		}
+
 		// Load raw module once and cache it
-		const rawImport = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
+		const rawImport = await import(importUrl);
 
 		// Unwrap CJS modules (Node.js wraps them in { default: actualModule })
 		const isCjsFile = moduleExt === ".cjs";
