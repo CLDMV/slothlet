@@ -4,7 +4,9 @@
  * @private
  * @param {Array<{name: string}>} moduleFiles - Array of module file objects with name property
  * @param {string} baseDir - Base directory path containing the modules
- * @param {boolean} [debug=false] - Enable debug logging
+ * @param {object} [options={}] - Configuration options
+ * @param {boolean} [options.debug=false] - Enable debug logging
+ * @param {object|null} [options.instance=null] - Slothlet instance for cache isolation
  * @returns {Promise<{
  *   totalDefaultExports: number,
  *   hasMultipleDefaultExports: boolean,
@@ -13,14 +15,17 @@
  *   defaultExportFiles: Array<{fileName: string, rawModule: object}>
  * }>} Analysis results
  * @example // Internal usage in slothlet modes
- * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, config.debug);
+ * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug: config.debug, instance });
  * if (analysis.hasMultipleDefaultExports) {
  *   // Handle multi-default context
  * }
  */
 export function multidefault_analyzeModules(moduleFiles: Array<{
     name: string;
-}>, baseDir: string, debug?: boolean): Promise<{
+}>, baseDir: string, options?: {
+    debug?: boolean;
+    instance?: object | null;
+}): Promise<{
     totalDefaultExports: number;
     hasMultipleDefaultExports: boolean;
     selfReferentialFiles: Set<string>;

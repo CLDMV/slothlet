@@ -454,7 +454,18 @@ function runtime_mutateLiveBinding(target, contextKey) {
 			if (key !== "_impl") delete target[key];
 		}
 		for (const [key, value] of Object.entries(source)) {
-			target[key] = value;
+			try {
+				target[key] = value;
+			} catch (error) {
+				// Skip read-only properties like function 'name', 'length', etc.
+				// This commonly occurs when reference object contains 'name' property
+				// and target is a function (live binding target)
+				if (error instanceof TypeError && error.message.includes("read only")) {
+					continue;
+				}
+				// Re-throw other errors
+				throw error;
+			}
 		}
 		if (typeof source._impl === "function") {
 			target._impl = source._impl;

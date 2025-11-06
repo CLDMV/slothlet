@@ -51,6 +51,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
+import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -113,10 +114,18 @@ function isLikelySerializable(val) {
  * // Lazy mode: create proxy based on analysis.isFunction, analysis.exports, etc.
  */
 export async function analyzeModule(modulePath, options = {}) {
-	const { debug = false } = options;
+	const { debug = false, instance = null } = options;
 
 	const moduleUrl = pathToFileURL(modulePath).href;
-	const rawModule = await import(moduleUrl);
+
+	// Add instance-based cache busting to isolate imports between different slothlet instances
+	let importUrl = moduleUrl;
+	if (instance && instance.instanceId) {
+		const separator = moduleUrl.includes("?") ? "&" : "?";
+		importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+	}
+
+	const rawModule = await import(importUrl);
 
 	// CJS unwrapping detection and handling
 	let processedModule = rawModule;
@@ -473,8 +482,7 @@ export async function analyzeDirectoryStructure(categoryPath, options = {}) {
 	// For multi-file cases, analyze multi-default context
 	let multiDefaultAnalysis = null;
 	if (processingStrategy === "multi-file") {
-		const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
-		multiDefaultAnalysis = await multidefault_analyzeModules(moduleFiles, categoryPath, debug);
+		multiDefaultAnalysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug, instance });
 	}
 
 	// Determine auto-flattening hints
@@ -1238,8 +1246,7 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 	const categoryModules = {};
 
 	// Use shared multi-default detection utility
-	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
-	const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, debug);
+	const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug, instance });
 	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 
 	// Convert analysis results to match existing structure
@@ -1407,8 +1414,7 @@ export async function buildRootAPI(dir, options = {}) {
 
 	if (moduleFiles.length > 0) {
 		// Multi-default detection for root files
-		const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
-		const analysis = await multidefault_analyzeModules(moduleFiles, dir, debug);
+		const analysis = await multidefault_analyzeModules(moduleFiles, dir, { debug, instance });
 		const { hasMultipleDefaultExports, selfReferentialFiles } = analysis;
 
 		// Process each root-level module
@@ -1537,9 +1543,6 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 	if (debug) {
 		console.log(`[DEBUG] buildCategoryDecisions called with path: ${categoryPath}, mode: ${mode}`);
 	}
-
-	const fs = await import("fs/promises");
-	const path = await import("path");
 
 	const files = await fs.readdir(categoryPath, { withFileTypes: true });
 	const moduleFiles = files.filter((f) => instance._shouldIncludeFile(f));
@@ -1735,8 +1738,7 @@ export async function buildCategoryDecisions(categoryPath, options = {}) {
 	}
 
 	// Use shared multi-default detection utility
-	const { multidefault_analyzeModules } = await import("@cldmv/slothlet/helpers/multidefault");
-	const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, debug);
+	const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug, instance });
 
 	decisions.multifileAnalysis = analysis;
 
