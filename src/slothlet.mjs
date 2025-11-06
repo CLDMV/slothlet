@@ -253,6 +253,7 @@ const slothletObject = {
 	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null },
 	_dispose: null,
 	_boundAPIShutdown: null,
+	instanceId: null, // Unique instance identifier for cache isolation
 
 	/**
 	 * Creates and initializes a slothlet API instance.
@@ -268,6 +269,9 @@ const slothletObject = {
 			console.warn("[slothlet] create: API already loaded, returning existing instance.");
 			return this.boundapi;
 		}
+
+		// Generate unique instance ID for cache isolation between different slothlet instances
+		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {

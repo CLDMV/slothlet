@@ -200,7 +200,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const defaultExportFiles = [];
 
 	// Use shared multi-default detection utility
-	const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug);
+	const analysis = await multidefault_analyzeModules(moduleFiles, dir, instance.config.debug, instance);
 
 	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
 

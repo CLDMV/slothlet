@@ -25,7 +25,7 @@ import path from "path";
  *   // Handle multi-default context
  * }
  */
-async function multidefault_analyzeModules(moduleFiles, baseDir, debug = false) {
+async function multidefault_analyzeModules(moduleFiles, baseDir, debug = false, instance = null) {
 	const selfReferentialFiles = new Set();
 	const rawModuleCache = new Map();
 	const defaultExportFiles = [];
@@ -41,8 +41,14 @@ async function multidefault_analyzeModules(moduleFiles, baseDir, debug = false) 
 		const fileName = path.basename(file.name, moduleExt);
 		const moduleFilePath = path.resolve(baseDir, file.name);
 
+		// Create instance-isolated import URL for cache busting between slothlet instances
+		let importUrl = `file://${moduleFilePath.replace(/\\/g, "/")}`;
+		if (instance && instance.instanceId) {
+			importUrl += `?slothlet_instance=${instance.instanceId}`;
+		}
+
 		// Load raw module once and cache it
-		const rawImport = await import(`file://${moduleFilePath.replace(/\\/g, "/")}`);
+		const rawImport = await import(importUrl);
 
 		// Unwrap CJS modules (Node.js wraps them in { default: actualModule })
 		const isCjsFile = moduleExt === ".cjs";
