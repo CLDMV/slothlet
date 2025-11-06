@@ -129,6 +129,111 @@ node tests/test-tv-config-isolation.mjs
 
 When building frameworks that create multiple instances, consider Node.js module caching behavior. For stateful modules that should be isolated between instances, implement cache busting using query parameters or other techniques to ensure proper isolation while maintaining performance benefits within each instance.
 
+## Bug #2: TypeError on Reference Object with Read-Only Properties
+
+**Status**: ✅ **FIXED** (November 5, 2025)
+
+**Description**: When passing a `reference` object to slothlet containing properties with names that match read-only function properties (like `name`, `length`, `prototype`), the runtime live binding system would throw a `TypeError` when trying to assign those properties to the function target.
+
+**Symptoms**:
+
+- `TypeError: Cannot assign to read only property 'name' of function` when reference object contains `name` property
+- Similar errors for other read-only function properties like `length` and `prototype`
+- Crash during slothlet initialization when using common reference properties
+
+**Expected Behavior**:
+
+- Reference object properties should be successfully assigned to the API root level
+- Read-only properties should be gracefully handled without throwing errors
+- All valid reference properties should be accessible on the final API object
+
+**Root Cause**:
+
+The `runtime_mutateLiveBinding` function in `src/lib/runtime/runtime.mjs` was attempting to directly assign all reference object properties to a function target without handling read-only properties:
+
+```javascript
+// BEFORE: No error handling for read-only properties
+for (const [key, value] of Object.entries(source)) {
+	target[key] = value; // ❌ Throws TypeError for read-only properties like 'name'
+}
+```
+
+**Fix Applied**:
+
+Added proper error handling to gracefully skip read-only properties while preserving the assignment for valid properties:
+
+```javascript
+// AFTER: Graceful handling of read-only properties
+for (const [key, value] of Object.entries(source)) {
+	try {
+		target[key] = value;
+	} catch (error) {
+		// Skip read-only properties like function 'name', 'length', etc.
+		// This commonly occurs when reference object contains 'name' property
+		// and target is a function (live binding target)
+		if (error instanceof TypeError && error.message.includes("read only")) {
+			continue;
+		}
+		// Re-throw other errors
+		throw error;
+	}
+}
+```
+
+**Test Case Created**:
+
+Created test at `tests/test-reference-readonly-properties.mjs`:
+
+```javascript
+// This should NOT throw an error after the fix
+const api = await slothlet({
+	dir: "./api_tests/api_tv_test",
+	reference: {
+		version: "2.5.6",
+		name: "test-package" // Previously caused TypeError
+	}
+});
+
+// Verify properties are accessible
+console.log(api.version); // "2.5.6"
+console.log(api.name); // "test-package"
+```
+
+**Impact Before Fix**:
+
+```javascript
+// BEFORE (TypeError crash):
+const api = await slothlet({
+	reference: {
+		version: packageJson.version,
+		name: packageJson.name // ❌ TypeError: Cannot assign to read only property 'name'
+	}
+});
+```
+
+**Impact After Fix**:
+
+```javascript
+// AFTER (works perfectly):
+const api = await slothlet({
+	reference: {
+		version: packageJson.version,
+		name: packageJson.name // ✅ Works without errors
+	}
+});
+console.log(api.version); // Accessible
+console.log(api.name); // Accessible
+```
+
+**Files Modified**:
+
+- `src/lib/runtime/runtime.mjs` - Added error handling for read-only property assignment
+- `tests/test-reference-readonly-properties.mjs` - Added comprehensive test case
+
+**Lesson Learned**:
+
+When dynamically assigning properties to function objects, always handle potential `TypeError` exceptions for read-only properties. JavaScript functions have several read-only properties (`name`, `length`, `prototype`) that cannot be overwritten, and attempting to do so will throw an error in strict mode or when using `Object.assign()` patterns.
+
 ---
 
 _Last updated: November 5, 2025_
