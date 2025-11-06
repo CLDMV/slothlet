@@ -4,7 +4,9 @@
  * @private
  * @param {Array<{name: string}>} moduleFiles - Array of module file objects with name property
  * @param {string} baseDir - Base directory path containing the modules
- * @param {boolean} [debug=false] - Enable debug logging
+ * @param {object} [options={}] - Configuration options
+ * @param {boolean} [options.debug=false] - Enable debug logging
+ * @param {object|null} [options.instance=null] - Slothlet instance for cache isolation
  * @returns {Promise<{
  *   totalDefaultExports: number,
  *   hasMultipleDefaultExports: boolean,
@@ -13,22 +15,29 @@
  *   defaultExportFiles: Array<{fileName: string, rawModule: object}>
  * }>} Analysis results
  * @example // Internal usage in slothlet modes
- * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, config.debug);
+ * const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug: config.debug, instance });
  * if (analysis.hasMultipleDefaultExports) {
  *   // Handle multi-default context
  * }
  */
-export function multidefault_analyzeModules(moduleFiles: Array<{
-    name: string;
-}>, baseDir: string, debug?: boolean, instance?: any): Promise<{
-    totalDefaultExports: number;
-    hasMultipleDefaultExports: boolean;
-    selfReferentialFiles: Set<string>;
-    rawModuleCache: Map<string, object>;
-    defaultExportFiles: Array<{
-        fileName: string;
-        rawModule: object;
-    }>;
+export function multidefault_analyzeModules(
+	moduleFiles: Array<{
+		name: string;
+	}>,
+	baseDir: string,
+	options?: {
+		debug?: boolean;
+		instance?: object | null;
+	}
+): Promise<{
+	totalDefaultExports: number;
+	hasMultipleDefaultExports: boolean;
+	selfReferentialFiles: Set<string>;
+	rawModuleCache: Map<string, object>;
+	defaultExportFiles: Array<{
+		fileName: string;
+		rawModule: object;
+	}>;
 }>;
 /**
  * Checks if a raw module's default export is self-referential (points to a named export).
@@ -69,17 +78,17 @@ export function multidefault_isSelfReferential(rawModule: object): boolean;
  * });
  */
 export function multidefault_getFlatteningDecision(options: {
-    hasMultipleDefaultExports: boolean;
-    moduleHasDefault: boolean;
-    isSelfReferential: boolean;
-    moduleKeys: Array<string>;
-    apiPathKey: string;
-    totalModuleCount: number;
-    debug?: boolean;
+	hasMultipleDefaultExports: boolean;
+	moduleHasDefault: boolean;
+	isSelfReferential: boolean;
+	moduleKeys: Array<string>;
+	apiPathKey: string;
+	totalModuleCount: number;
+	debug?: boolean;
 }): {
-    shouldFlatten: boolean;
-    flattenToRoot: boolean;
-    preserveAsNamespace: boolean;
-    reason: string;
+	shouldFlatten: boolean;
+	flattenToRoot: boolean;
+	preserveAsNamespace: boolean;
+	reason: string;
 };
 //# sourceMappingURL=multidefault.d.mts.map

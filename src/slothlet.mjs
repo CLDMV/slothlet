@@ -122,7 +122,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
-import { analyzeModule, processModuleFromAnalysis, getCategoryBuildingDecisions } from "@cldmv/slothlet/helpers/api_builder";
+import {
+	analyzeModule,
+	processModuleFromAnalysis,
+	getCategoryBuildingDecisions,
+	buildCategoryDecisions
+} from "@cldmv/slothlet/helpers/api_builder";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -271,7 +276,7 @@ const slothletObject = {
 		}
 
 		// Generate unique instance ID for cache isolation between different slothlet instances
-		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {
@@ -549,7 +554,6 @@ const slothletObject = {
 		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
 		// Use centralized category building decisions
-		const { buildCategoryDecisions } = await import("@cldmv/slothlet/helpers/api_builder");
 		const decisions = await buildCategoryDecisions(categoryPath, {
 			currentDepth,
 			maxDepth,
