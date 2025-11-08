@@ -40,7 +40,9 @@ export function verifyRuntime() {
 	try {
 		const contextData = context || {};
 		results.contextTest.data = contextData;
-		results.contextTest.available = typeof contextData === "object" && contextData !== null;
+		// Context can be an object OR a function (live binding proxy) - check if it has data
+		results.contextTest.available =
+			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && !!contextData.user;
 		results.contextTest.hasUserData = !!contextData.user;
 		results.contextTest.userData = contextData.user;
 

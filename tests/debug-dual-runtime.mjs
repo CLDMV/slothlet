@@ -215,12 +215,36 @@ async function runDualRuntimeTest(config, label) {
 		const isLazy = config.lazy === true;
 		const testResults = await testLiveBindings(api, label, isLazy);
 
+		// Check if all critical tests passed
+		const selfCrossCallOK = testResults.selfCrossCall.success;
+		const contextTestOK = testResults.contextTest.success;
+
+		// Verify runtime detection is correct
+		const expectedRuntime = config.runtime;
+		const detectedRuntime = testResults.contextTest.result?.verification?.runtimeType;
+		const runtimeDetectionOK = detectedRuntime === expectedRuntime;
+
+		const allTestsPass = selfCrossCallOK && contextTestOK && runtimeDetectionOK;
+
+		if (!allTestsPass) {
+			console.log(chalk.redBright(`❌ ${label} - Critical tests failed:`));
+			if (!selfCrossCallOK) {
+				console.log(chalk.red(`   ❌ Self cross-call: ${testResults.selfCrossCall.error || "failed"}`));
+			}
+			if (!contextTestOK) {
+				console.log(chalk.red(`   ❌ Context test: ${testResults.contextTest.error || "failed"}`));
+			}
+			if (!runtimeDetectionOK) {
+				console.log(chalk.red(`   ❌ Runtime detection: expected "${expectedRuntime}", got "${detectedRuntime}"`));
+			}
+		}
+
 		return {
 			config,
 			label,
 			api,
 			testResults,
-			success: true
+			success: allTestsPass
 		};
 	} catch (error) {
 		console.log(chalk.redBright(`❌ Failed to create ${label} instance: ${error.message}`));
@@ -354,9 +378,83 @@ function compareResults(allResults) {
 	// Compare and analyze results
 	compareResults(allResults);
 
+	// Collect and display all errors prominently before summary
+	const allErrors = [];
+	allResults.forEach((result) => {
+		const configLabel = `${result.config.lazy ? "LAZY" : "EAGER"} + ${result.config.runtime.toUpperCase()}`;
+
+		if (result.error) {
+			allErrors.push(`${configLabel}: Fatal Error - ${result.error}`);
+		}
+
+		if (result.testResults) {
+			if (!result.testResults.selfCrossCall.success && result.testResults.selfCrossCall.error) {
+				allErrors.push(`${configLabel}: Self Cross-Call Error - ${result.testResults.selfCrossCall.error}`);
+			}
+
+			if (!result.testResults.contextTest.success && result.testResults.contextTest.error) {
+				allErrors.push(`${configLabel}: Context Test Error - ${result.testResults.contextTest.error}`);
+			}
+		}
+	});
+
+	// Display collected errors prominently
+	if (allErrors.length > 0) {
+		console.log(chalk.redBright.bold("\n🚨 ALL ERRORS COLLECTED:"));
+		allErrors.forEach((error, index) => {
+			console.log(chalk.red(`   ${index + 1}. ${error}`));
+		});
+	} else {
+		console.log(chalk.greenBright.bold("\n✅ NO ERRORS DETECTED"));
+	}
+
 	// Final summary
 	const successCount = allResults.filter((r) => r.success).length;
 	const totalTests = allResults.length;
+
+	console.log(chalk.yellowBright.bold("\n📋 DETAILED RESULTS SUMMARY:"));
+
+	allResults.forEach((result) => {
+		const mode = result.config.lazy ? "LAZY" : "EAGER";
+		const runtime = result.config.runtime.toUpperCase();
+		const status = result.success ? "✅" : "❌";
+
+		console.log(chalk.cyan(`\n${status} ${mode} + ${runtime}:`));
+
+		if (result.error) {
+			console.log(chalk.red(`   💥 Fatal Error: ${result.error}`));
+			return;
+		}
+
+		if (result.testResults) {
+			// Self cross-call test
+			const selfStatus = result.testResults.selfCrossCall.success ? "✅" : "❌";
+			const selfDetail = result.testResults.selfCrossCall.success
+				? `working (${result.testResults.selfCrossCall.result})`
+				: `failed (${result.testResults.selfCrossCall.error})`;
+			console.log(chalk.gray(`   ${selfStatus} Self cross-call: ${selfDetail}`));
+
+			// Context test
+			const contextStatus = result.testResults.contextTest.success ? "✅" : "❌";
+			const contextDetail = result.testResults.contextTest.success
+				? "working"
+				: `failed (${result.testResults.contextTest.error || "context not available"})`;
+			console.log(chalk.gray(`   ${contextStatus} Context test: ${contextDetail}`));
+
+			// Runtime detection test
+			const expectedRuntime = result.config.runtime;
+			const detectedRuntime =
+				result.testResults.contextTest.result?.verification?.runtimeType ||
+				result.testResults.contextTest.result?.runtimeType ||
+				"undefined";
+			const runtimeMatch = detectedRuntime === expectedRuntime;
+			const runtimeStatus = runtimeMatch ? "✅" : "❌";
+			const runtimeDetail = runtimeMatch
+				? `correct (${detectedRuntime})`
+				: `wrong (expected "${expectedRuntime}", got "${detectedRuntime}")`;
+			console.log(chalk.gray(`   ${runtimeStatus} Runtime detection: ${runtimeDetail}`));
+		}
+	});
 
 	if (successCount === totalTests) {
 		console.log(chalk.greenBright.bold(`\n🎉 All ${totalTests} dual-runtime configurations passed!`));

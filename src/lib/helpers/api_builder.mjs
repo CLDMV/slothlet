@@ -124,7 +124,10 @@ export async function analyzeModule(modulePath, options = {}) {
 	if (instance && instance.instanceId) {
 		const separator = moduleUrl.includes("?") ? "&" : "?";
 		importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
-		// NEW LINE: This is where we add instance ID to import URLs for stack trace detection
+		// Add runtime type to URL for stack trace detection by runtime dispatcher
+		const runtimeType = instance.config?.runtime || "asynclocalstorage";
+		importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
+		// NEW LINE: This is where we add instance ID and runtime type to import URLs for stack trace detection
 
 		// CRITICAL: Set active instance BEFORE importing so that any top-level
 		// require/import statements in the module can detect the correct instance

@@ -128,6 +128,8 @@ import {
 	getCategoryBuildingDecisions,
 	buildCategoryDecisions
 } from "@cldmv/slothlet/helpers/api_builder";
+import { setActiveRuntimeType } from "./lib/runtime/runtime.mjs";
+import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -427,9 +429,12 @@ const slothletObject = {
 				this.runtime = await import("./lib/runtime/runtime-experimental.mjs");
 			} else {
 				// Default to AsyncLocalStorage runtime (original master branch implementation)
-				this.runtime = await import("./lib/runtime/runtime.mjs");
+				this.runtime = await import("./lib/runtime/runtime-asynclocalstorage.mjs");
 			}
 		}
+
+		// Set the active runtime type globally for dispatcher detection
+		setActiveRuntimeType(this.config.runtime);
 
 		// console.log("this.config", this.config);
 		// process.exit(0);
@@ -1122,8 +1127,21 @@ const slothletObject = {
 		// updateBindings(newContext, newReference, newSelf);
 
 		mutateLiveBindingFunction(self, newSelf);
-		Object.assign(context, newContext || {});
+
+		// Include runtime type in context for dispatcher detection
+		const contextWithRuntime = {
+			...newContext,
+			runtimeType: this.config.runtime || "asynclocalstorage"
+		};
+		Object.assign(context, contextWithRuntime || {});
 		Object.assign(reference, newReference || {});
+
+		// Register instance data for experimental runtime
+		if (this.instanceId) {
+			updateInstanceData(this.instanceId, "self", newSelf);
+			updateInstanceData(this.instanceId, "context", contextWithRuntime);
+			updateInstanceData(this.instanceId, "reference", newReference);
+		}
 
 		this.safeDefine(this.boundapi, "__ctx", {
 			self: this.boundapi,
@@ -1439,6 +1457,15 @@ const slothletObject = {
 				this.reference = {};
 				this._dispose = null;
 				this._boundAPIShutdown = null;
+
+				// Reset to default runtime type when shutting down
+				setActiveRuntimeType("asynclocalstorage");
+
+				// Clean up instance data for experimental runtime
+				if (this.instanceId) {
+					await cleanupInstance(this.instanceId);
+				}
+
 				if (apiError || internalError) throw apiError || internalError;
 			}
 		} finally {
