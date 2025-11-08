@@ -52,6 +52,7 @@ import path from "node:path";
 import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
+import { setActiveInstance } from "@cldmv/slothlet/helpers/instance-manager";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -123,6 +124,11 @@ export async function analyzeModule(modulePath, options = {}) {
 	if (instance && instance.instanceId) {
 		const separator = moduleUrl.includes("?") ? "&" : "?";
 		importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+		// NEW LINE: This is where we add instance ID to import URLs for stack trace detection
+
+		// CRITICAL: Set active instance BEFORE importing so that any top-level
+		// require/import statements in the module can detect the correct instance
+		setActiveInstance(instance.instanceId);
 	}
 
 	const rawModule = await import(importUrl);

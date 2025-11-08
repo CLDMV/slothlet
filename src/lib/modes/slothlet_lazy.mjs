@@ -642,6 +642,7 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				 * const result = await lazy_propertyAccessor(arg1, arg2);
 				 */
 				function lazy_propertyAccessor(...args) {
+					if (!inFlight) inFlight = _materialize();
 					return inFlight.then(
 						/**
 						 * @function lazy_handleResolvedValue

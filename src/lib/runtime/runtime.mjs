@@ -733,5 +733,14 @@ export const context = runtime_createLiveBinding("context");
 export const reference = runtime_createLiveBinding("reference");
 
 /**
+ * Instance ID for compatibility with experimental runtime.
+ * AsyncLocalStorage runtime doesn't use instance IDs, so this always returns undefined.
+ * @type {undefined}
+ * @export module:@cldmv/slothlet/runtime
+ * @public
+ */
+export const instanceId = undefined;
+
+/**
  * @typedef {import("node:async_hooks").AsyncLocalStorage} AsyncLocalStorageType
  */

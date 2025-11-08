@@ -415,6 +415,22 @@ const slothletObject = {
 	 */
 	async load(config = {}, ctxRef = { context: null, reference: null }) {
 		this.config = { ...this.config, ...config };
+
+		// Add runtime config with default to AsyncLocalStorage for backward compatibility
+		if (!this.config.runtime) {
+			this.config.runtime = "asynclocalstorage";
+		}
+
+		// Import appropriate runtime module based on config
+		if (!this.runtime) {
+			if (this.config.runtime === "experimental") {
+				this.runtime = await import("./lib/runtime/runtime-experimental.mjs");
+			} else {
+				// Default to AsyncLocalStorage runtime (original master branch implementation)
+				this.runtime = await import("./lib/runtime/runtime.mjs");
+			}
+		}
+
 		// console.log("this.config", this.config);
 		// process.exit(0);
 		let apiDir = this.config.dir || "api";
