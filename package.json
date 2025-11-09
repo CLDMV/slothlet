@@ -34,6 +34,22 @@
 			"types": "./types/dist/lib/runtime/runtime.d.mts",
 			"import": "./dist/lib/runtime/runtime.mjs"
 		},
+		"./runtime/async": {
+			"development": {
+				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+			},
+			"types": "./types/dist/lib/runtime/runtime-asynclocalstorage.d.mts",
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+		},
+		"./runtime/live": {
+			"development": {
+				"types": "./types/src/lib/runtime/runtime-experimental.d.mts",
+				"import": "./src/lib/runtime/runtime-experimental.mjs"
+			},
+			"types": "./types/dist/lib/runtime/runtime-experimental.d.mts",
+			"import": "./dist/lib/runtime/runtime-experimental.mjs"
+		},
 		"./helpers/*": {
 			"development": {
 				"types": "./types/src/lib/helpers/*.d.mts",

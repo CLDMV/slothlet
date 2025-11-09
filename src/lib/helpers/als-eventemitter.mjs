@@ -32,7 +32,10 @@
 
 import { AsyncResource } from "node:async_hooks";
 import { EventEmitter } from "node:events";
-import { sharedALS } from "../runtime/runtime.mjs";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+// Define a default ALS instance to avoid circular imports
+const defaultALS = new AsyncLocalStorage();
 
 /**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
@@ -54,7 +57,7 @@ import { sharedALS } from "../runtime/runtime.mjs";
  * import { enableAlsForEventEmitters } from "./als-eventemitter.mjs";
  * enableAlsForEventEmitters(als);
  */
-export function enableAlsForEventEmitters(als = sharedALS) {
+export function enableAlsForEventEmitters(als = defaultALS) {
 	// Symbol flag so we don't double-patch
 	const kPatched = Symbol.for("slothlet.als.patched");
 

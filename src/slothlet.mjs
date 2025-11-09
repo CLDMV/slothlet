@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-05 19:24:36 -08:00 (1762399476)
+ *	@Last modified time: 2025-11-09 09:25:38 -08:00 (1762709138)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -128,7 +128,6 @@ import {
 	getCategoryBuildingDecisions,
 	buildCategoryDecisions
 } from "@cldmv/slothlet/helpers/api_builder";
-import { setActiveRuntimeType } from "./lib/runtime/runtime.mjs";
 import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
@@ -278,7 +277,10 @@ const slothletObject = {
 		}
 
 		// Generate unique instance ID for cache isolation between different slothlet instances
-		this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
+		// Use options parameter to get the correct runtime and lazy settings
+		const runtimeType = (options.runtime || this.config.runtime || "asynclocalstorage") === "asynclocalstorage" ? "async" : "live";
+		const loadingMode = options.lazy !== undefined ? (options.lazy ? "lazy" : "eager") : this.config.lazy ? "lazy" : "eager";
+		this.instanceId = `slothlet_${runtimeType}_${loadingMode}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {
@@ -422,19 +424,15 @@ const slothletObject = {
 		if (!this.config.runtime) {
 			this.config.runtime = "asynclocalstorage";
 		}
-
 		// Import appropriate runtime module based on config
 		if (!this.runtime) {
 			if (this.config.runtime === "experimental") {
-				this.runtime = await import("./lib/runtime/runtime-experimental.mjs");
+				this.runtime = await import("@cldmv/slothlet/runtime/live");
 			} else {
 				// Default to AsyncLocalStorage runtime (original master branch implementation)
-				this.runtime = await import("./lib/runtime/runtime-asynclocalstorage.mjs");
+				this.runtime = await import("@cldmv/slothlet/runtime/async");
 			}
 		}
-
-		// Set the active runtime type globally for dispatcher detection
-		setActiveRuntimeType(this.config.runtime);
 
 		// console.log("this.config", this.config);
 		// process.exit(0);
@@ -1141,6 +1139,7 @@ const slothletObject = {
 			updateInstanceData(this.instanceId, "self", newSelf);
 			updateInstanceData(this.instanceId, "context", contextWithRuntime);
 			updateInstanceData(this.instanceId, "reference", newReference);
+			updateInstanceData(this.instanceId, "config", this.config);
 		}
 
 		this.safeDefine(this.boundapi, "__ctx", {
@@ -1458,8 +1457,7 @@ const slothletObject = {
 				this._dispose = null;
 				this._boundAPIShutdown = null;
 
-				// Reset to default runtime type when shutting down
-				setActiveRuntimeType("asynclocalstorage");
+				// Runtime cleanup handled by individual runtime modules
 
 				// Clean up instance data for experimental runtime
 				if (this.instanceId) {

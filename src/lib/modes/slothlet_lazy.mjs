@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 11:04:23 -07:00 (1761588263)
+ *	@Last modified time: 2025-11-09 09:25:38 -08:00 (1762709138)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -155,7 +155,6 @@ import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { types as utilTypes } from "node:util";
-import { runWithCtx } from "@cldmv/slothlet/runtime";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 
@@ -190,6 +189,11 @@ import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefaul
  */
 export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const instance = this; // bound slothlet instance
+
+	// Import the correct runtime based on instance config
+	const runtimePath = instance.config.runtime === "experimental" ? "@cldmv/slothlet/runtime/live" : "@cldmv/slothlet/runtime/async";
+	const { runWithCtx } = await import(runtimePath);
+
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	let api = {};
 	let rootDefaultFn = null;
@@ -318,7 +322,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				instance,
 				depth,
 				maxDepth,
-				pathParts: [key]
+				pathParts: [key],
+				runWithCtx
 			});
 			parent[key] = proxy;
 		}
@@ -445,7 +450,7 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
  * const result = await proxy.add(2, 3); // Materializes math folder and calls add
  * console.log(result); // 5
  */
-function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts }) {
+function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts, runWithCtx }) {
 	let materialized = null;
 	let inFlight = null;
 
@@ -494,7 +499,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 						instance,
 						depth: cd + 1,
 						maxDepth: md,
-						pathParts: [...pathParts, nestedKey]
+						pathParts: [...pathParts, nestedKey],
+						runWithCtx
 					})
 			});
 			materialized = value;

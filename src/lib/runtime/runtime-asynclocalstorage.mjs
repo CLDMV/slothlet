@@ -1,4 +1,4 @@
-/**
+﻿/**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/runtime/runtime.mjs
  *	@Date: 2025-10-21 16:20:59 -07:00 (1761088859)
@@ -398,7 +398,7 @@ export const makeWrapper = (ctx) => {
  * @param {string} contextKey - The key to read from the current context
  *
  * @description
- * Mutate a live-binding (object or function‑with‑methods) to match current ctx[contextKey].
+ * Mutate a live-binding (object or functionΓÇæwithΓÇæmethods) to match current ctx[contextKey].
  *
  * @example
  * // Mutate target to match current context value
@@ -450,11 +450,8 @@ function runtime_mutateLiveBinding(target, contextKey) {
 		}
 	} else if (typeof source === "object" && source !== null) {
 		// Reset and shallow-copy object props
-		// When target is a function, preserve built-in function properties
 		for (const key of Object.keys(target)) {
-			if (key !== "_impl" && key !== "length" && key !== "name" && key !== "prototype") {
-				delete target[key];
-			}
+			if (key !== "_impl") delete target[key];
 		}
 		for (const [key, value] of Object.entries(source)) {
 			try {
@@ -620,7 +617,7 @@ function runtime_createLiveBinding(contextKey) {
 			runtime_syncWithContext();
 			target[prop] = value;
 
-			// Reflect writes into the current context object when it’s object-like
+			// Reflect writes into the current context object when itΓÇÖs object-like
 			const ctx = getCtx();
 			if (ctx && ctx[contextKey] && typeof ctx[contextKey] === "object") {
 				ctx[contextKey][prop] = value;
@@ -640,17 +637,11 @@ function runtime_createLiveBinding(contextKey) {
 
 		getOwnPropertyDescriptor(target, prop) {
 			runtime_syncWithContext();
-			const descriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-			// For prototype property on functions, ensure we return undefined if it doesn't exist
-			// This prevents the proxy invariant violation
-			if (prop === "prototype" && !descriptor) {
-				return undefined;
-			}
-			return descriptor;
+			return Object.getOwnPropertyDescriptor(target, prop);
 		}
 	});
 
-	// Some tools inspect the underlying *target* directly — add hooks there as well
+	// Some tools inspect the underlying *target* directly ΓÇö add hooks there as well
 	/**
 	 * @function runtime_inspectHandler
 	 * @internal

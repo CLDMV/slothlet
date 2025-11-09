@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-04 15:24:53 -08:00 (1762298693)
+ *	@Last modified time: 2025-11-09 09:25:37 -08:00 (1762709137)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -119,19 +119,22 @@ export async function analyzeModule(modulePath, options = {}) {
 
 	const moduleUrl = pathToFileURL(modulePath).href;
 
-	// Add instance-based cache busting to isolate imports between different slothlet instances
+	// Add instance-based cache busting only for experimental runtime
 	let importUrl = moduleUrl;
 	if (instance && instance.instanceId) {
-		const separator = moduleUrl.includes("?") ? "&" : "?";
-		importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
-		// Add runtime type to URL for stack trace detection by runtime dispatcher
 		const runtimeType = instance.config?.runtime || "asynclocalstorage";
-		importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
-		// NEW LINE: This is where we add instance ID and runtime type to import URLs for stack trace detection
 
-		// CRITICAL: Set active instance BEFORE importing so that any top-level
-		// require/import statements in the module can detect the correct instance
-		setActiveInstance(instance.instanceId);
+		// Only add URL parameters for experimental runtime (needs stack trace detection)
+		if (runtimeType === "experimental") {
+			const separator = moduleUrl.includes("?") ? "&" : "?";
+			importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+			importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
+
+			// Set active instance for experimental runtime
+			setActiveInstance(instance.instanceId);
+		}
+		// AsyncLocalStorage runtime doesn't need URL parameters or setActiveInstance
+		// It uses als.run() for context isolation
 	}
 
 	const rawModule = await import(importUrl);

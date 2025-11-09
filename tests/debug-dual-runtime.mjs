@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-07 12:00:00 -07:00 (1730924400)
+ *	@Last modified time: 2025-11-09 09:25:40 -08:00 (1762709140)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,9 +19,10 @@ import slothlet from "@cldmv/slothlet";
  * @param {object} api - The loaded slothlet API
  * @param {string} testLabel - Label for the test (e.g., "EAGER + AsyncLocalStorage")
  * @param {boolean} isLazy - Whether this is lazy mode (needs await)
+ * @param {object} contextData - The expected context data for verification
  * @returns {Promise<object>} Test results
  */
-async function testLiveBindings(api, testLabel, isLazy = false) {
+async function testLiveBindings(api, testLabel, isLazy = false, contextData = null) {
 	console.log(chalk.blueBright(`\n===== LIVE BINDINGS TEST: ${testLabel} =====`));
 
 	// Dump API structure for debugging
@@ -105,6 +106,8 @@ async function testLiveBindings(api, testLabel, isLazy = false) {
 	} catch (error) {
 		results.selfCrossCall.error = error.message;
 		console.log(chalk.redBright(`❌ Self cross-call error: ${error.message}`));
+		console.log(chalk.gray(`   Full stack trace:`));
+		console.log(chalk.gray(error.stack));
 	}
 
 	// Test 2: Comprehensive Runtime Test
@@ -123,6 +126,8 @@ async function testLiveBindings(api, testLabel, isLazy = false) {
 			);
 			console.log(chalk.gray(`     Context available: ${runtimeResult.verification.contextTest.available}`));
 			console.log(chalk.gray(`     Context user: ${runtimeResult.verification.contextTest.userData}`));
+			console.log(chalk.gray(`     Expected context user: ${contextData.user}`));
+			console.log(chalk.gray(`     Context match: ${runtimeResult.verification.contextTest.userData === contextData.user ? "✅" : "❌"}`));
 			console.log(chalk.gray(`     Isolation ID: ${runtimeResult.isolation.isolationId}`));
 			console.log(chalk.gray(`     Cross-call success: ${runtimeResult.crossCall.success} (${runtimeResult.crossCall.actual})`));
 
@@ -164,6 +169,8 @@ async function testLiveBindings(api, testLabel, isLazy = false) {
 	} catch (error) {
 		results.contextTest.error = error.message;
 		console.log(chalk.redBright(`❌ Comprehensive runtime test error: ${error.message}`));
+		console.log(chalk.gray(`   Full stack trace:`));
+		console.log(chalk.gray(error.stack));
 	}
 
 	// Test 3: Basic API functionality
@@ -180,6 +187,8 @@ async function testLiveBindings(api, testLabel, isLazy = false) {
 		}
 	} catch (error) {
 		console.log(chalk.yellowBright(`⚠️  Basic API test warning: ${error.message}`));
+		console.log(chalk.gray(`   Full stack trace:`));
+		console.log(chalk.gray(error.stack));
 	}
 
 	return results;
@@ -197,32 +206,42 @@ async function runDualRuntimeTest(config, label) {
 
 	try {
 		// Create slothlet instance with UNIQUE context for isolation testing
-		const uniqueId = `${config.runtime}_${config.lazy ? "lazy" : "eager"}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		const runtimeShort = config.runtime === "asynclocalstorage" ? "async" : "live";
+		const uniqueId = `${runtimeShort}_${config.lazy ? "lazy" : "eager"}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		const contextData = {
+			user: `user-${uniqueId}`,
+			testMode: true,
+			runtimeTestId: uniqueId,
+			expectedRuntime: runtimeShort,
+			timestamp: Date.now()
+		};
+
 		const api = await slothlet({
 			dir: "./api_tests/api_test",
-			context: {
-				user: `user-${uniqueId}`,
-				testMode: true,
-				runtimeTestId: uniqueId,
-				expectedRuntime: config.runtime,
-				timestamp: Date.now()
-			},
+			context: contextData,
 			lazy: config.lazy,
 			runtime: config.runtime
 		});
 
+		// Display instance ID and context information for verification
+		const { detectCurrentInstanceId } = await import("../src/lib/helpers/instance-manager.mjs");
+		const instanceId = detectCurrentInstanceId();
+		console.log(chalk.gray(`   Instance ID: ${instanceId || "null"}`));
+		console.log(chalk.gray(`   Context User: ${contextData.user}`));
+		console.log(chalk.gray(`   Runtime Test ID: ${contextData.runtimeTestId}`));
+
 		// Test live bindings
 		const isLazy = config.lazy === true;
-		const testResults = await testLiveBindings(api, label, isLazy);
+		const testResults = await testLiveBindings(api, label, isLazy, contextData);
 
 		// Check if all critical tests passed
 		const selfCrossCallOK = testResults.selfCrossCall.success;
 		const contextTestOK = testResults.contextTest.success;
 
-		// Verify runtime detection is correct
-		const expectedRuntime = config.runtime;
+		// Verify runtime detection is correct - compare using short names
+		const expectedRuntimeShort = config.runtime === "asynclocalstorage" ? "async" : "live";
 		const detectedRuntime = testResults.contextTest.result?.verification?.runtimeType;
-		const runtimeDetectionOK = detectedRuntime === expectedRuntime;
+		const runtimeDetectionOK = detectedRuntime === expectedRuntimeShort;
 
 		const allTestsPass = selfCrossCallOK && contextTestOK && runtimeDetectionOK;
 
@@ -235,7 +254,7 @@ async function runDualRuntimeTest(config, label) {
 				console.log(chalk.red(`   ❌ Context test: ${testResults.contextTest.error || "failed"}`));
 			}
 			if (!runtimeDetectionOK) {
-				console.log(chalk.red(`   ❌ Runtime detection: expected "${expectedRuntime}", got "${detectedRuntime}"`));
+				console.log(chalk.red(`   ❌ Runtime detection: expected "${expectedRuntimeShort}", got "${detectedRuntime}"`));
 			}
 		}
 
@@ -244,7 +263,9 @@ async function runDualRuntimeTest(config, label) {
 			label,
 			api,
 			testResults,
-			success: allTestsPass
+			success: allTestsPass,
+			instanceId,
+			contextData
 		};
 	} catch (error) {
 		console.log(chalk.redBright(`❌ Failed to create ${label} instance: ${error.message}`));
@@ -272,7 +293,9 @@ async function runDualRuntimeTest(config, label) {
 			api: null,
 			testResults: null,
 			success: false,
-			error: error.message
+			error: error.message,
+			instanceId: null,
+			contextData: null
 		};
 	}
 }
@@ -371,6 +394,8 @@ function compareResults(allResults) {
 				await result.api.shutdown();
 			} catch (error) {
 				console.log(chalk.yellowBright(`⚠️  Shutdown warning for ${fullLabel}: ${error.message}`));
+				console.log(chalk.gray(`   Full stack trace:`));
+				console.log(chalk.gray(error.stack));
 			}
 		}
 	}
@@ -419,7 +444,16 @@ function compareResults(allResults) {
 		const runtime = result.config.runtime.toUpperCase();
 		const status = result.success ? "✅" : "❌";
 
-		console.log(chalk.cyan(`\n${status} ${mode} + ${runtime}:`));
+		const instanceIdText = result.instanceId ? result.instanceId : "null";
+		const contextUserText = result.contextData ? result.contextData.user.split("_").slice(-2).join("_") : "unknown";
+		const contextRuntimeMode = result.contextData
+			? `${result.contextData.expectedRuntime}_${result.config.lazy ? "lazy" : "eager"}`
+			: "unknown";
+
+		console.log(
+			chalk.cyan(`\n${status} ${mode} + ${runtime}:`) +
+				chalk.gray(` [ID:${instanceIdText}] [Context:${contextRuntimeMode}_${contextUserText}]`)
+		);
 
 		if (result.error) {
 			console.log(chalk.red(`   💥 Fatal Error: ${result.error}`));
@@ -442,16 +476,16 @@ function compareResults(allResults) {
 			console.log(chalk.gray(`   ${contextStatus} Context test: ${contextDetail}`));
 
 			// Runtime detection test
-			const expectedRuntime = result.config.runtime;
+			const expectedRuntimeShort = result.config.runtime === "asynclocalstorage" ? "async" : "live";
 			const detectedRuntime =
 				result.testResults.contextTest.result?.verification?.runtimeType ||
 				result.testResults.contextTest.result?.runtimeType ||
 				"undefined";
-			const runtimeMatch = detectedRuntime === expectedRuntime;
+			const runtimeMatch = detectedRuntime === expectedRuntimeShort;
 			const runtimeStatus = runtimeMatch ? "✅" : "❌";
 			const runtimeDetail = runtimeMatch
 				? `correct (${detectedRuntime})`
-				: `wrong (expected "${expectedRuntime}", got "${detectedRuntime}")`;
+				: `wrong (expected "${expectedRuntimeShort}", got "${detectedRuntime}")`;
 			console.log(chalk.gray(`   ${runtimeStatus} Runtime detection: ${runtimeDetail}`));
 		}
 	});

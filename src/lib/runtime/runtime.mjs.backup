@@ -1,0 +1,193 @@
+/**
+ * @Project: @cldmv/slothlet
+ * @Filename: /src/lib/runtime/runtime.mjs
+ * @Author: Nate Hyson <CLDMV>
+ * @Email: <Shinrai@users.noreply.github.com>
+ * @Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Runtime live bindings that detect and delegate to the correct implementation.
+ * @module @cldmv/slothlet/runtime
+ * @public
+ * @description
+ * This module provides the live bindings (self, context, reference) that dynamically
+ * detect which runtime is being used and delegate to the correct implementation.
+ */
+
+// Global runtime detection - this will be set by the first runtime module that loads
+let detectedRuntime = null;
+
+/**
+ * Auto-detect which runtime is active by checking what's available.
+ * @returns {object} The detected runtime module
+ * @internal
+ */
+async function detectRuntime() {
+	if (detectedRuntime) {
+		return detectedRuntime;
+	}
+
+	// Try to detect by checking if instance manager exists (experimental runtime)
+	try {
+		const instanceManager = await import("./helpers/instance-manager.mjs");
+		if (instanceManager && instanceManager.detectCurrentInstanceId) {
+			// Experimental runtime is available
+			detectedRuntime = await import("./runtime-experimental.mjs");
+			return detectedRuntime;
+		}
+	} catch {
+		// Fall through to AsyncLocalStorage
+	}
+
+	// Default to AsyncLocalStorage runtime
+	detectedRuntime = await import("./runtime-asynclocalstorage.mjs");
+	return detectedRuntime;
+}
+
+// Export runtime functions that delegate to the appropriate implementation
+
+/**
+ * Execute a function with the provided context.
+ * @param {object} ctx - The context object
+ * @param {Function} fn - The function to execute
+ * @param {any} thisArg - The this argument
+ * @param {Array} args - The function arguments
+ * @returns {any} The function result
+ * @public
+ */
+export function runWithCtx(ctx, fn, thisArg, args) {
+	return getCurrentRuntime().runWithCtx(ctx, fn, thisArg, args);
+}
+
+/**
+ * Create a wrapper function that applies context to any value.
+ * @param {object} ctx - The context to bind
+ * @returns {Function} A wrapper function
+ * @public
+ */
+export function makeWrapper(ctx) {
+	return getCurrentRuntime().makeWrapper(ctx);
+}
+
+/**
+ * Get the current context.
+ * @returns {object|null} The current context or null
+ * @package
+ */
+export function getCtx() {
+	const runtime = getCurrentRuntime();
+	return runtime.getCtx ? runtime.getCtx() : runtime.getContext?.() || null;
+}
+
+// Simple direct re-exports that delegate to the active runtime
+// These are the live bindings that consumers import
+
+/**
+ * Live-binding reference to the current API instance.
+ * @type {object}
+ * @public
+ */
+export function getSelf() {
+	return getCurrentRuntime().self;
+}
+
+/**
+ * For direct access (maintains backward compatibility)
+ * @type {object}
+ * @public
+ */
+export const self = getCurrentRuntime().self;
+
+/**
+ * Live-binding reference for contextual data.
+ * @type {object}
+ * @public
+ */
+export const context = new Proxy(
+	{},
+	{
+		get(target, prop, receiver) {
+			return Reflect.get(getCurrentRuntime().context, prop, receiver);
+		},
+		set(target, prop, value, receiver) {
+			return Reflect.set(getCurrentRuntime().context, prop, value, receiver);
+		},
+		ownKeys(_) {
+			return Reflect.ownKeys(getCurrentRuntime().context);
+		},
+		has(target, prop) {
+			return Reflect.has(getCurrentRuntime().context, prop);
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			return Reflect.getOwnPropertyDescriptor(getCurrentRuntime().context, prop);
+		}
+	}
+);
+
+/**
+ * Live-binding reference for reference data.
+ * @type {object}
+ * @public
+ */
+export const reference = new Proxy(
+	{},
+	{
+		get(target, prop, receiver) {
+			return Reflect.get(getCurrentRuntime().reference, prop, receiver);
+		},
+		set(target, prop, value, receiver) {
+			return Reflect.set(getCurrentRuntime().reference, prop, value, receiver);
+		},
+		ownKeys(_) {
+			return Reflect.ownKeys(getCurrentRuntime().reference);
+		},
+		has(target, prop) {
+			return Reflect.has(getCurrentRuntime().reference, prop);
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			return Reflect.getOwnPropertyDescriptor(getCurrentRuntime().reference, prop);
+		}
+	}
+);
+
+// Export any additional runtime-specific functions
+export const sharedALS = new Proxy(
+	{},
+	{
+		get(target, prop, receiver) {
+			const runtime = getCurrentRuntime();
+			if (runtime.sharedALS) {
+				return Reflect.get(runtime.sharedALS, prop, receiver);
+			}
+			return undefined;
+		}
+	}
+);
+
+/**
+ * Get the instance ID from the current runtime.
+ * @returns {string|object} Instance ID from experimental runtime or simple string for AsyncLocalStorage
+ * @public
+ */
+export function getInstanceId() {
+	const runtime = getCurrentRuntime();
+	return runtime.instanceId || "asynclocalstorage-runtime";
+}
+
+// Re-export instanceId as a getter that delegates to the current runtime
+// This avoids the proxy overhead while still providing dynamic behavior
+export const instanceId = {
+	get valueOf() {
+		const runtime = getCurrentRuntime();
+		return runtime.instanceId?.valueOf || (() => "asynclocalstorage-runtime");
+	},
+	get toString() {
+		const runtime = getCurrentRuntime();
+		return runtime.instanceId?.toString || (() => "asynclocalstorage-runtime");
+	},
+	[Symbol.toPrimitive]() {
+		const runtime = getCurrentRuntime();
+		return runtime.instanceId?.[Symbol.toPrimitive]?.() || "asynclocalstorage-runtime";
+	}
+};

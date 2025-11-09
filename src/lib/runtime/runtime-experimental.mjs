@@ -1,4 +1,4 @@
-/**
+﻿/**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/runtime/runtime.mjs
  *	@Date: 2025-11-05 19:45:00 -08:00 (1762400700)
@@ -45,29 +45,29 @@ import {
  */
 function getCurrentInstanceContext() {
 	// Debug the stack trace to see if runtime import has instance ID
-	if (process.env.DEBUG_RUNTIME) {
-		const stack = new Error().stack;
-		console.log("[RUNTIME DEBUG] Full stack trace:");
-		console.log(stack);
-		console.log("[RUNTIME DEBUG] Looking for slothlet_instance in stack...");
-		const instanceMatch = stack.match(/slothlet_instance=([^&\s)]+)/g);
-		console.log("[RUNTIME DEBUG] All slothlet_instance matches:", instanceMatch);
-	}
+	// if (process.env.DEBUG_RUNTIME) {
+	//	const stack = new Error().stack;
+	//	console.log("[RUNTIME DEBUG] Full stack trace:");
+	//	console.log(stack);
+	//	console.log("[RUNTIME DEBUG] Looking for slothlet_instance in stack...");
+	//	const instanceMatch = stack.match(/slothlet_instance=([^&\s)]+)/g);
+	//	console.log("[RUNTIME DEBUG] All slothlet_instance matches:", instanceMatch);
+	// }
 
 	// Try instance detection first using existing function
 	const instanceId = detectCurrentInstanceId();
 
 	// Add debugging to see what's happening
-	if (process.env.DEBUG_RUNTIME) {
-		console.log("[RUNTIME DEBUG] Detected instance ID:", instanceId);
-		if (instanceId) {
-			const instanceData = getInstanceData(instanceId);
-			console.log("[RUNTIME DEBUG] Instance data found:", !!instanceData);
-			if (instanceData) {
-				console.log("[RUNTIME DEBUG] Instance data keys:", Object.keys(instanceData));
-			}
-		}
-	}
+	// if (process.env.DEBUG_RUNTIME) {
+	//	console.log("[RUNTIME DEBUG] Detected instance ID:", instanceId);
+	//	if (instanceId) {
+	//		const instanceData = getInstanceData(instanceId);
+	//		console.log("[RUNTIME DEBUG] Instance data found:", !!instanceData);
+	//		if (instanceData) {
+	//			console.log("[RUNTIME DEBUG] Instance data keys:", Object.keys(instanceData));
+	//		}
+	//	}
+	// }
 
 	if (instanceId) {
 		const instanceData = getInstanceData(instanceId);
@@ -76,9 +76,9 @@ function getCurrentInstanceContext() {
 		}
 	}
 
-	if (process.env.DEBUG_RUNTIME) {
-		console.log("[RUNTIME DEBUG] No context found");
-	}
+	// if (process.env.DEBUG_RUNTIME) {
+	//	console.log("[RUNTIME DEBUG] No context found");
+	// }
 	return null;
 }
 
@@ -109,8 +109,10 @@ export const self = new Proxy(
 		},
 
 		ownKeys(_) {
-			console.log("[RUNTIME DEBUG] ownKeys called - dumping stack trace:");
-			console.log(new Error().stack);
+			// if (process.env.DEBUG_RUNTIME) {
+			//	console.log("[RUNTIME DEBUG] ownKeys called - dumping stack trace:");
+			//	console.log(new Error().stack);
+			// }
 			const ctx = getCurrentInstanceContext();
 			if (ctx && ctx.self) {
 				return Reflect.ownKeys(ctx.self);

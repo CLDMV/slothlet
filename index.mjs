@@ -37,28 +37,27 @@
  */
 export default async function slothlet(options = {}) {
 	// Dynamic imports after environment check
-	const [runtime, mod] = await Promise.all([import("@cldmv/slothlet/runtime"), import("@cldmv/slothlet/slothlet")]);
+	// Dynamic imports after environment check
+	const mod = await import("@cldmv/slothlet/slothlet");
 
-	const { makeWrapper } = runtime;
 	const build = mod.slothlet ?? mod.default;
 
 	const api = await build(options);
+
+	// Use the same runtime selection logic as slothlet.mjs
+	let runtimeModule;
+	if (options.runtime === "experimental") {
+		runtimeModule = await import("@cldmv/slothlet/runtime/live");
+	} else {
+		// Default to AsyncLocalStorage runtime (original master branch implementation)
+		runtimeModule = await import("@cldmv/slothlet/runtime/async");
+	}
+	const { makeWrapper } = runtimeModule;
 
 	// Prefer an explicit instance context the internal attached to the API (api.__ctx),
 	// else fall back to module-level pieces if you expose them.
 	const ctx = api?.__ctx ?? { self: mod.self, context: mod.context, reference: mod.reference };
 
-	// console.log("[DEBUG index.mjs] Context setup:", {
-	// 	hasApiCtx: !!api?.__ctx,
-	// 	ctxSelfType: typeof ctx.self,
-	// 	ctxSelfKeys: Object.keys(ctx.self || {}),
-	// 	ctxContextType: typeof ctx.context,
-	// 	ctxContextKeys: Object.keys(ctx.context || {}),
-	// 	ctxReferenceType: typeof ctx.reference,
-	// 	ctxReferenceKeys: Object.keys(ctx.reference || {}),
-	// 	fallbackToMod: !api?.__ctx
-	// });
-	// return api;
 	return makeWrapper(ctx)(api);
 }
 

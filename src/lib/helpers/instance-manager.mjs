@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @fileoverview Instance-specific runtime manager for slothlet.
  * @module @cldmv/slothlet/helpers/instance-manager
  * @internal
@@ -119,7 +119,7 @@ export function detectCurrentInstanceId() {
 		}
 	}
 
-	console.log(`[DETECT DEBUG] No instance found`);
+	// console.log(`[DETECT DEBUG] No instance found`);
 	return null;
 }
 
