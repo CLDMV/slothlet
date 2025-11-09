@@ -206,7 +206,7 @@ async function runDualRuntimeTest(config, label) {
 
 	try {
 		// Create slothlet instance with UNIQUE context for isolation testing
-		const runtimeShort = config.runtime === "asynclocalstorage" ? "async" : "live";
+		const runtimeShort = config.runtime; // Already normalized to "async" or "live"
 		const uniqueId = `${runtimeShort}_${config.lazy ? "lazy" : "eager"}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 		const contextData = {
 			user: `user-${uniqueId}`,
@@ -238,10 +238,10 @@ async function runDualRuntimeTest(config, label) {
 		const selfCrossCallOK = testResults.selfCrossCall.success;
 		const contextTestOK = testResults.contextTest.success;
 
-		// Verify runtime detection is correct - compare using short names
-		const expectedRuntimeShort = config.runtime === "asynclocalstorage" ? "async" : "live";
+		// Verify runtime detection is correct - both should be normalized already
+		const expectedRuntime = config.runtime; // Already normalized to "async" or "live"
 		const detectedRuntime = testResults.contextTest.result?.verification?.runtimeType;
-		const runtimeDetectionOK = detectedRuntime === expectedRuntimeShort;
+		const runtimeDetectionOK = detectedRuntime === expectedRuntime;
 
 		const allTestsPass = selfCrossCallOK && contextTestOK && runtimeDetectionOK;
 
@@ -254,7 +254,7 @@ async function runDualRuntimeTest(config, label) {
 				console.log(chalk.red(`   ❌ Context test: ${testResults.contextTest.error || "failed"}`));
 			}
 			if (!runtimeDetectionOK) {
-				console.log(chalk.red(`   ❌ Runtime detection: expected "${expectedRuntimeShort}", got "${detectedRuntime}"`));
+				console.log(chalk.red(`   ❌ Runtime detection: expected "${expectedRuntime}", got "${detectedRuntime}"`));
 			}
 		}
 
@@ -367,14 +367,14 @@ function compareResults(allResults) {
 // Main execution
 (async () => {
 	console.log(chalk.yellowBright.bold("\n===== DUAL-RUNTIME LIVE BINDINGS TEST ====="));
-	console.log(chalk.cyanBright("Testing AsyncLocalStorage vs Experimental runtime with EAGER/LAZY modes...\n"));
+	console.log(chalk.cyanBright("Testing AsyncLocalStorage vs Live Bindings runtime with EAGER/LAZY modes...\n"));
 
 	const testConfigurations = [
 		// api_test - comprehensive dual-runtime testing
-		{ lazy: false, runtime: "asynclocalstorage" },
-		{ lazy: false, runtime: "experimental" },
-		{ lazy: true, runtime: "asynclocalstorage" },
-		{ lazy: true, runtime: "experimental" }
+		{ lazy: false, runtime: "async" },
+		{ lazy: false, runtime: "live" },
+		{ lazy: true, runtime: "async" },
+		{ lazy: true, runtime: "live" }
 	];
 
 	const allResults = [];
@@ -382,7 +382,7 @@ function compareResults(allResults) {
 	// Run all test configurations
 	for (const config of testConfigurations) {
 		const modeLabel = config.lazy ? "LAZY" : "EAGER";
-		const runtimeLabel = config.runtime === "experimental" ? "Experimental" : "AsyncLocalStorage";
+		const runtimeLabel = config.runtime === "live" ? "Live Bindings" : "AsyncLocalStorage";
 		const fullLabel = `${modeLabel} + ${runtimeLabel}`;
 
 		const result = await runDualRuntimeTest(config, fullLabel);
@@ -476,16 +476,16 @@ function compareResults(allResults) {
 			console.log(chalk.gray(`   ${contextStatus} Context test: ${contextDetail}`));
 
 			// Runtime detection test
-			const expectedRuntimeShort = result.config.runtime === "asynclocalstorage" ? "async" : "live";
+			const expectedRuntime = result.config.runtime; // Already normalized to "async" or "live"
 			const detectedRuntime =
 				result.testResults.contextTest.result?.verification?.runtimeType ||
 				result.testResults.contextTest.result?.runtimeType ||
 				"undefined";
-			const runtimeMatch = detectedRuntime === expectedRuntimeShort;
+			const runtimeMatch = detectedRuntime === expectedRuntime;
 			const runtimeStatus = runtimeMatch ? "✅" : "❌";
 			const runtimeDetail = runtimeMatch
 				? `correct (${detectedRuntime})`
-				: `wrong (expected "${expectedRuntimeShort}", got "${detectedRuntime}")`;
+				: `wrong (expected "${expectedRuntime}", got "${detectedRuntime}")`;
 			console.log(chalk.gray(`   ${runtimeStatus} Runtime detection: ${runtimeDetail}`));
 		}
 	});

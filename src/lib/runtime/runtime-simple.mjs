@@ -14,14 +14,14 @@
 
 // Import both runtime implementations
 import * as alsRuntime from "./runtime-asynclocalstorage.mjs";
-import * as expRuntime from "./runtime-experimental.mjs";
+import * as liveBindingsRuntime from "./runtime-livebindings.mjs";
 
 // Global runtime type setting from slothlet.mjs
 let activeRuntimeType = "asynclocalstorage";
 
 /**
  * Set the active runtime type.
- * @param {string} runtimeType - Either "asynclocalstorage" or "experimental"
+ * @param {string} runtimeType - Either "asynclocalstorage" or "livebindings"
  * @package
  */
 export function setActiveRuntimeType(runtimeType) {
@@ -34,7 +34,7 @@ export function setActiveRuntimeType(runtimeType) {
  * @internal
  */
 function getCurrentRuntime() {
-	return activeRuntimeType === "experimental" ? expRuntime : alsRuntime;
+	return activeRuntimeType === "livebindings" ? liveBindingsRuntime : alsRuntime;
 }
 
 // Re-export all functions from both runtimes
@@ -49,6 +49,6 @@ export const self = getCurrentRuntime().self;
 export const context = getCurrentRuntime().context;
 export const reference = getCurrentRuntime().reference;
 
-// Re-export optional exports (experimental runtime only)
+// Re-export optional exports (live bindings runtime only)
 export const instanceId = getCurrentRuntime().instanceId || "asynclocalstorage-runtime";
 export const sharedALS = getCurrentRuntime().sharedALS;

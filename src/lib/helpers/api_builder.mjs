@@ -119,18 +119,18 @@ export async function analyzeModule(modulePath, options = {}) {
 
 	const moduleUrl = pathToFileURL(modulePath).href;
 
-	// Add instance-based cache busting only for experimental runtime
+	// Add instance-based cache busting only for live bindings runtime
 	let importUrl = moduleUrl;
 	if (instance && instance.instanceId) {
-		const runtimeType = instance.config?.runtime || "asynclocalstorage";
+		const runtimeType = instance.config?.runtime || "async";
 
-		// Only add URL parameters for experimental runtime (needs stack trace detection)
-		if (runtimeType === "experimental") {
+		// Only add URL parameters for live bindings runtime (needs stack trace detection)
+		if (runtimeType === "live") {
 			const separator = moduleUrl.includes("?") ? "&" : "?";
 			importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
 			importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
 
-			// Set active instance for experimental runtime
+			// Set active instance for live bindings runtime
 			setActiveInstance(instance.instanceId);
 		}
 		// AsyncLocalStorage runtime doesn't need URL parameters or setActiveInstance

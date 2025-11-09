@@ -3,6 +3,35 @@
  * @module @cldmv/slothlet
  */
 
+/**
+ * Normalize runtime input to internal standard format.
+ * @function normalizeRuntimeType
+ * @param {string} runtime - Input runtime type (various formats accepted)
+ * @returns {string} Normalized runtime type ("async" or "live")
+ * @internal
+ * @private
+ */
+function normalizeRuntimeType(runtime) {
+	if (!runtime || typeof runtime !== "string") {
+		return "async"; // Default to AsyncLocalStorage
+	}
+
+	const normalized = runtime.toLowerCase().trim();
+
+	// AsyncLocalStorage runtime variants
+	if (normalized === "async" || normalized === "asynclocal" || normalized === "asynclocalstorage") {
+		return "async";
+	}
+
+	// Live bindings runtime variants
+	if (normalized === "live" || normalized === "livebindings" || normalized === "experimental") {
+		return "live";
+	}
+
+	// Default to async for unknown values
+	return "async";
+}
+
 // Development environment check (must happen before slothlet imports)
 (async () => {
 	try {
@@ -45,8 +74,9 @@ export default async function slothlet(options = {}) {
 	const api = await build(options);
 
 	// Use the same runtime selection logic as slothlet.mjs
+	const normalizedRuntime = normalizeRuntimeType(options.runtime);
 	let runtimeModule;
-	if (options.runtime === "experimental") {
+	if (normalizedRuntime === "live") {
 		runtimeModule = await import("@cldmv/slothlet/runtime/live");
 	} else {
 		// Default to AsyncLocalStorage runtime (original master branch implementation)

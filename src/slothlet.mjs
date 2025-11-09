@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 09:25:38 -08:00 (1762709138)
+ *	@Last modified time: 2025-11-09 10:38:09 -08:00 (1762713489)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -131,6 +131,35 @@ import {
 import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
+
+/**
+ * Normalize runtime input to internal standard format.
+ * @function normalizeRuntimeType
+ * @param {string} runtime - Input runtime type (various formats accepted)
+ * @returns {string} Normalized runtime type ("async" or "live")
+ * @internal
+ * @private
+ */
+function normalizeRuntimeType(runtime) {
+	if (!runtime || typeof runtime !== "string") {
+		return "async"; // Default to AsyncLocalStorage
+	}
+
+	const normalized = runtime.toLowerCase().trim();
+
+	// AsyncLocalStorage runtime variants
+	if (normalized === "async" || normalized === "asynclocal" || normalized === "asynclocalstorage") {
+		return "async";
+	}
+
+	// Live bindings runtime variants
+	if (normalized === "live" || normalized === "livebindings" || normalized === "experimental") {
+		return "live";
+	}
+
+	// Default to async for unknown values
+	return "async";
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -278,7 +307,7 @@ const slothletObject = {
 
 		// Generate unique instance ID for cache isolation between different slothlet instances
 		// Use options parameter to get the correct runtime and lazy settings
-		const runtimeType = (options.runtime || this.config.runtime || "asynclocalstorage") === "asynclocalstorage" ? "async" : "live";
+		const runtimeType = normalizeRuntimeType(options.runtime || "async");
 		const loadingMode = options.lazy !== undefined ? (options.lazy ? "lazy" : "eager") : this.config.lazy ? "lazy" : "eager";
 		this.instanceId = `slothlet_${runtimeType}_${loadingMode}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
 
@@ -420,13 +449,11 @@ const slothletObject = {
 	async load(config = {}, ctxRef = { context: null, reference: null }) {
 		this.config = { ...this.config, ...config };
 
-		// Add runtime config with default to AsyncLocalStorage for backward compatibility
-		if (!this.config.runtime) {
-			this.config.runtime = "asynclocalstorage";
-		}
-		// Import appropriate runtime module based on config
+		// Normalize runtime input to internal format (async/live)
+		this.config.runtime = normalizeRuntimeType(this.config.runtime);
+		// Import appropriate runtime module based on normalized config
 		if (!this.runtime) {
-			if (this.config.runtime === "experimental") {
+			if (this.config.runtime === "live") {
 				this.runtime = await import("@cldmv/slothlet/runtime/live");
 			} else {
 				// Default to AsyncLocalStorage runtime (original master branch implementation)
@@ -1129,12 +1156,12 @@ const slothletObject = {
 		// Include runtime type in context for dispatcher detection
 		const contextWithRuntime = {
 			...newContext,
-			runtimeType: this.config.runtime || "asynclocalstorage"
+			runtimeType: this.config.runtime // Already normalized to "async" or "live"
 		};
 		Object.assign(context, contextWithRuntime || {});
 		Object.assign(reference, newReference || {});
 
-		// Register instance data for experimental runtime
+		// Register instance data for live bindings runtime
 		if (this.instanceId) {
 			updateInstanceData(this.instanceId, "self", newSelf);
 			updateInstanceData(this.instanceId, "context", contextWithRuntime);
@@ -1459,7 +1486,7 @@ const slothletObject = {
 
 				// Runtime cleanup handled by individual runtime modules
 
-				// Clean up instance data for experimental runtime
+				// Clean up instance data for live bindings runtime
 				if (this.instanceId) {
 					await cleanupInstance(this.instanceId);
 				}

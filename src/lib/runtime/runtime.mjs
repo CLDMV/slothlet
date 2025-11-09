@@ -16,11 +16,11 @@ import { detectCurrentInstanceId, getInstanceData } from "../helpers/instance-ma
 
 // Pre-load both runtimes at module load time
 const asyncRuntime = await import("./runtime-asynclocalstorage.mjs");
-const experimentalRuntime = await import("./runtime-experimental.mjs");
+const liveBindingsRuntime = await import("./runtime-livebindings.mjs");
 
 // Detect runtime type from instance configuration (called on each access)
 function detectRuntimeType() {
-	// Get current instance ID from stack traces (same method as experimental runtime)
+	// Get current instance ID from stack traces (same method as live bindings runtime)
 	const instanceId = detectCurrentInstanceId();
 
 	if (instanceId) {
@@ -30,14 +30,14 @@ function detectRuntimeType() {
 		}
 	}
 
-	// Default to asynclocalstorage for backward compatibility
-	return "asynclocalstorage";
+	// Default to async for backward compatibility
+	return "async";
 }
 
 // Get the appropriate runtime based on instance configuration
 function getCurrentRuntime() {
 	const runtimeType = detectRuntimeType();
-	return runtimeType === "experimental" ? experimentalRuntime : asyncRuntime;
+	return runtimeType === "live" ? liveBindingsRuntime : asyncRuntime;
 }
 
 // Export proxies that dynamically select the correct runtime
@@ -112,7 +112,7 @@ export function getCtx() {
 
 export const instanceId = (() => {
 	const runtimeType = detectRuntimeType();
-	if (runtimeType === "asynclocalstorage") {
+	if (runtimeType === "async") {
 		return null;
 	}
 	const runtime = getCurrentRuntime();

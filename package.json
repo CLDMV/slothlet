@@ -44,11 +44,11 @@
 		},
 		"./runtime/live": {
 			"development": {
-				"types": "./types/src/lib/runtime/runtime-experimental.d.mts",
-				"import": "./src/lib/runtime/runtime-experimental.mjs"
+				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src/lib/runtime/runtime-livebindings.mjs"
 			},
-			"types": "./types/dist/lib/runtime/runtime-experimental.d.mts",
-			"import": "./dist/lib/runtime/runtime-experimental.mjs"
+			"types": "./types/dist/lib/runtime/runtime-livebindings.d.mts",
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
 			"development": {

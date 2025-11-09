@@ -191,7 +191,7 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const instance = this; // bound slothlet instance
 
 	// Import the correct runtime based on instance config
-	const runtimePath = instance.config.runtime === "experimental" ? "@cldmv/slothlet/runtime/live" : "@cldmv/slothlet/runtime/async";
+	const runtimePath = instance.config.runtime === "live" ? "@cldmv/slothlet/runtime/live" : "@cldmv/slothlet/runtime/async";
 	const { runWithCtx } = await import(runtimePath);
 
 	const entries = await fs.readdir(dir, { withFileTypes: true });

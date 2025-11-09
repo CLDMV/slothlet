@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Test Experimental runtime detection with proper context setup
+ * Test Live Bindings runtime detection with proper context setup
  */
 
 import slothlet from "@cldmv/slothlet";
 
-async function testExperimentalRuntime() {
-	console.log("🚀 Testing Experimental Runtime Detection");
+async function testLiveBindingsRuntime() {
+	console.log("🚀 Testing Live Bindings Runtime Detection");
 
-	// Create slothlet instance with Experimental runtime and context data
+	// Create slothlet instance with Live Bindings runtime and context data
 	const api = await slothlet({
 		dir: "./api_tests/api_test",
-		runtime: "experimental",
+		runtime: "live",
 		context: {
-			user: "test-user-experimental",
-			testId: "experimental-test-456"
+			user: "test-user-livebindings",
+			testId: "livebindings-test-456"
 		}
 	});
 
@@ -34,4 +34,4 @@ async function testExperimentalRuntime() {
 	return result;
 }
 
-testExperimentalRuntime().catch(console.error);
+testLiveBindingsRuntime().catch(console.error);

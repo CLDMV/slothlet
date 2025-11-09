@@ -14,7 +14,7 @@
 
 // Import both runtime implementations
 import * as alsRuntime from "./runtime-asynclocalstorage.mjs";
-import * as expRuntime from "./runtime-experimental.mjs";
+import * as liveBindingsRuntime from "./runtime-livebindings.mjs";
 
 // Global runtime type setting
 let activeRuntimeType = "asynclocalstorage";
@@ -24,7 +24,7 @@ export function setActiveRuntimeType(runtimeType) {
 }
 
 function getCurrentRuntime() {
-	return activeRuntimeType === "experimental" ? expRuntime : alsRuntime;
+	return activeRuntimeType === "livebindings" ? liveBindingsRuntime : alsRuntime;
 }
 
 // Function exports - these can be dynamic

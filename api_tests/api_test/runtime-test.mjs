@@ -1,5 +1,5 @@
 /**
- * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Experimental runtime behavior.
+ * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Live Bindings runtime behavior.
  * This module provides comprehensive tests to verify runtime isolation, context management, and live bindings.
  */
 
@@ -99,7 +99,7 @@ export function verifyRuntime() {
 			if (context && context.expectedRuntime) {
 				results.runtimeType = context.expectedRuntime;
 			} else {
-				// Use heuristics: active instance ID means experimental runtime
+				// Use heuristics: active instance ID means live bindings runtime
 				const hasActiveInstance = hasInstanceId && instanceIdValue !== "dispatcher-runtime" && !instanceIdValue.includes("unknown");
 
 				if (hasActiveInstance) {

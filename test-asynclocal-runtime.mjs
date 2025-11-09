@@ -12,7 +12,7 @@ async function testAsyncLocalStorageRuntime() {
 	// Create slothlet instance with AsyncLocalStorage runtime and context data
 	const api = await slothlet({
 		dir: "./api_tests/api_test",
-		runtime: "asynclocalstorage",
+		runtime: "async",
 		context: {
 			user: "test-user-asynclocalstorage",
 			testId: "asynclocalstorage-test-123"
