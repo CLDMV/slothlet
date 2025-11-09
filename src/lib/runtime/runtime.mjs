@@ -42,55 +42,154 @@ function getCurrentRuntime() {
 
 // Export proxies that dynamically select the correct runtime
 export const self = new Proxy(
-	{},
+	function runtime_selfProxy() {}, // Use function target to match AsyncLocalStorage runtime
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
 			return runtime.self[prop];
 		},
-		ownKeys() {
+		ownKeys(target) {
 			const runtime = getCurrentRuntime();
-			return Reflect.ownKeys(runtime.self);
+			const runtimeKeys = Reflect.ownKeys(runtime.self);
+			const targetKeys = Reflect.ownKeys(target);
+
+			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
+			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
+			return Array.from(allKeys);
 		},
 		has(_, prop) {
 			const runtime = getCurrentRuntime();
 			return prop in runtime.self;
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			const runtime = getCurrentRuntime();
+			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+
+			// If no descriptor from runtime, check if it exists on our proxy target
+			if (!descriptor) {
+				return Reflect.getOwnPropertyDescriptor(target, prop);
+			}
+
+			// If descriptor exists but property doesn't exist on our target,
+			// and descriptor is non-configurable, we need to handle this carefully
+			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
+				// For non-configurable properties that don't exist on target,
+				// we need to return undefined or Node.js will throw
+				return undefined;
+			}
+
+			return descriptor;
+		},
+		getPrototypeOf() {
+			const runtime = getCurrentRuntime();
+			return Reflect.getPrototypeOf(runtime.self);
+		},
+		isExtensible() {
+			const runtime = getCurrentRuntime();
+			return Reflect.isExtensible(runtime.self);
 		}
 	}
 );
 
 export const context = new Proxy(
-	{},
+	{}, // Use object target since context should be an object, not a function
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
 			return runtime.context[prop];
 		},
-		ownKeys() {
+		ownKeys(target) {
 			const runtime = getCurrentRuntime();
-			return Reflect.ownKeys(runtime.context);
+			const runtimeKeys = Reflect.ownKeys(runtime.context);
+			const targetKeys = Reflect.ownKeys(target);
+
+			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
+			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
+			return Array.from(allKeys);
 		},
 		has(_, prop) {
 			const runtime = getCurrentRuntime();
 			return prop in runtime.context;
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			const runtime = getCurrentRuntime();
+			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.context, prop);
+
+			// If no descriptor from runtime, check if it exists on our proxy target
+			if (!descriptor) {
+				return Reflect.getOwnPropertyDescriptor(target, prop);
+			}
+
+			// If descriptor exists but property doesn't exist on our target,
+			// and descriptor is non-configurable, we need to handle this carefully
+			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
+				// For non-configurable properties that don't exist on target,
+				// we need to return undefined or Node.js will throw
+				return undefined;
+			}
+
+			return descriptor;
+		},
+		getPrototypeOf() {
+			const runtime = getCurrentRuntime();
+			return Reflect.getPrototypeOf(runtime.context);
+		},
+		isExtensible() {
+			const runtime = getCurrentRuntime();
+			return Reflect.isExtensible(runtime.context);
 		}
 	}
 );
 
 export const reference = new Proxy(
-	{},
+	{}, // Use object target since reference should be an object, not a function
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
 			return runtime.reference[prop];
 		},
-		ownKeys() {
+		ownKeys(target) {
 			const runtime = getCurrentRuntime();
-			return Reflect.ownKeys(runtime.reference);
+			const runtimeKeys = Reflect.ownKeys(runtime.reference);
+			const targetKeys = Reflect.ownKeys(target);
+
+			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
+			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
+			return Array.from(allKeys);
 		},
 		has(_, prop) {
 			const runtime = getCurrentRuntime();
 			return prop in runtime.reference;
+		},
+		getOwnPropertyDescriptor(target, prop) {
+			const runtime = getCurrentRuntime();
+			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.reference, prop);
+
+			// If no descriptor from runtime, check if it exists on our proxy target
+			if (!descriptor) {
+				return Reflect.getOwnPropertyDescriptor(target, prop);
+			}
+
+			// If descriptor exists but property doesn't exist on our target,
+			// and descriptor is non-configurable, we need to handle this carefully
+			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
+			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
+				// For non-configurable properties that don't exist on target,
+				// we need to return undefined or Node.js will throw
+				return undefined;
+			}
+
+			return descriptor;
+		},
+		getPrototypeOf() {
+			const runtime = getCurrentRuntime();
+			return Reflect.getPrototypeOf(runtime.reference);
+		},
+		isExtensible() {
+			const runtime = getCurrentRuntime();
+			return Reflect.isExtensible(runtime.reference);
 		}
 	}
 );

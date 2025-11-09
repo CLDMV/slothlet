@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-21 16:26:51 -07:00 (1761089211)
+ *	@Last modified time: 2025-11-09 13:57:16 -08:00 (1762725436)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -42,7 +42,7 @@ const defaultALS = new AsyncLocalStorage();
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} [als=sharedALS] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
+ * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
@@ -207,7 +207,3 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 		return res;
 	};
 }
-
-/**
- * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorage
- */

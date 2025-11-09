@@ -20,6 +20,23 @@ The previous attempt created an overcomplicated "proxy dispatcher" system that:
 - Used complex proxy chains that made debugging difficult
 - Violated the principle of keeping working code working
 
+## CURRENT STATUS (2024-11-09)
+
+**CONFIRMED**: The current release/2.6.0 implementation is using the WRONG approach:
+
+- ❌ Created runtime dispatcher at `src/lib/runtime/runtime.mjs`
+- ❌ Proxy chains break `self` access in TCP modules
+- ❌ Always falls back to AsyncLocalStorage runtime even when `runtime: 'live'` is specified
+- ❌ Runtime detection shows "async" when "live" was requested
+
+**EVIDENCE**:
+
+- Master branch: TCP module works (Self: true, Context: true)
+- Experiment branch: TCP module works (Self: true, Context: true)
+- Release/2.6.0: TCP module broken (Self: false, Context: true)
+
+**ROOT CAUSE**: Instead of simple runtime selection in slothlet.mjs, we implemented a proxy dispatcher system that violates the MERGE.md specification.
+
 ## CORRECT APPROACH
 
 ### Simple Runtime Selection Strategy
