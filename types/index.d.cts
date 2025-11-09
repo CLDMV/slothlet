@@ -1,21 +1,8 @@
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /index.cjs
- *	@Date: 2025-11-09 11:15:17 -08:00 (1762715717)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 14:43:17 -08:00 (1762728197)
- *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
+export = slothlet;
 /**
  * @fileoverview CommonJS entry point for @cldmv/slothlet - imports ESM implementation for single source of truth.
  * @module @cldmv/slothlet
  */
-
 /**
  * CommonJS entry that dynamically imports the ESM implementation.
  * This ensures single source of truth in index.mjs while maintaining CJS compatibility.
@@ -47,26 +34,18 @@
  * const { slothlet } = require("@cldmv/slothlet");
  * const api = await slothlet({ dir: "./api" });
  */
-async function slothlet(options = {}) {
-	// Dynamic import of ESM entry point - single source of truth
-	const { default: esmSlothlet } = await import("./index.mjs");
-	return esmSlothlet(options);
+declare function slothlet(options?: {
+    dir?: string;
+    lazy?: boolean;
+    apiDepth?: number;
+    debug?: boolean;
+    mode?: string;
+    api_mode?: string;
+    runtime?: string;
+    context?: object;
+    reference?: object;
+}): Promise<Function | object>;
+declare namespace slothlet {
+    export { slothlet };
 }
-
-/**
- * CommonJS default export of the slothlet function.
- * @public
- */
-module.exports = slothlet;
-
-/**
- * Named export alias for the slothlet function.
- * Provides the same functionality as the default export.
- * @public
- * @type {Function}
- *
- * @example // CJS named destructuring
- * const { slothlet } = require("@cldmv/slothlet");
- * const api = await slothlet({ dir: "./api" });
- */
-module.exports.slothlet = slothlet; // optional named alias
+//# sourceMappingURL=index.d.cts.map
