@@ -1,0 +1,4122 @@
+{
+  "timestamp": "2025-11-09T22:55:02.813Z",
+  "projectRoot": "P:\\Dropbox\\Sync\\Documents\\CLDMV\\node\\slothlet",
+  "functionAnalysis": {
+    "summary": {
+      "totalFiles": 20,
+      "totalFunctions": 167,
+      "totalExports": 96,
+      "totalImports": 0,
+      "orphanedFunctions": 17,
+      "unusedImports": 0
+    },
+    "orphanedFunctions": [
+      {
+        "name": "dispose",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_engine.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "dispose",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_engine.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "dispose",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_engine.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "describe",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_engine.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "importModuleDynamically",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_esm.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "importModuleDynamically",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\engine\\slothlet_helpers.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_wrappedListener",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\helpers\\als-eventemitter.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_removeWrapper",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\helpers\\als-eventemitter.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "toFsPath",
+        "type": "function",
+        "exported": true,
+        "filePath": "src\\lib\\helpers\\resolve-from-caller.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_runInALS",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_contextPreservingMethod",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "wrappedMethod",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_forwardToSource",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_toPrimitiveHandler",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_inspectHandler",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "runtime_toJSONHandler",
+        "type": "function",
+        "exported": false,
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "reason": "Not called and not exported"
+      },
+      {
+        "name": "instanceId",
+        "type": "function",
+        "exported": true,
+        "filePath": "src\\lib\\runtime\\runtime.mjs",
+        "reason": "Not called and not exported"
+      }
+    ],
+    "unusedImports": [],
+    "functionsByFile": {
+      "src\\lib\\engine\\slothlet_child.mjs": [],
+      "src\\lib\\engine\\slothlet_engine.mjs": [
+        {
+          "name": "setShutdown",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "createEngine",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "backendVm",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "backendWorker",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "registerCb",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "marshalArgs",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "backendFork",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "makeFn",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "revive",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "makeFacade",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "buildCallableFromDescribe",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "makeFacade2",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "dispose",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "rpc",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "dispose",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "rpc",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "dispose",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "fn",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "build",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "build",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "describe",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "call",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "batch",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "call",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "batch",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "call",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "batch",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "get",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "apply",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "apply",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "get",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "ownKeys",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getOwnPropertyDescriptor",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "get",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "apply",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\engine\\slothlet_esm.mjs": [
+        {
+          "name": "loadEsmModuleFallback",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "inComment",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "isEsmFile",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "importModuleDynamically",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\engine\\slothlet_helpers.mjs": [
+        {
+          "name": "normalizeContext",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "installGlobalsInCurrentRealm",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "extendSelfWithReference",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "installPortalForSelf",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "get",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "asUrl",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "isPlainObject",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "guessName",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "makeNodeishContext",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "loadEsmInVm2",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "loadEsmInVm",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "init",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "installContextGlobalsVM",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "bootSlothletVM",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "marshalArgsReplaceFunctions",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "walk",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "reviveArgsReplaceTokens",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "walk",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "containsFunction",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "link",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "importModuleDynamically",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\engine\\slothlet_worker.mjs": [
+        {
+          "name": "invokeCb",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "serialize",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "value",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\helpers\\als-eventemitter.mjs": [
+        {
+          "name": "enableAlsForEventEmitters",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "runtime_ensureMap",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_wrapListener",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_installWrapper",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_createRemoveWrapper",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_wrappedListener",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_removeWrapper",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\helpers\\api_builder.mjs": [
+        {
+          "name": "isLikelySerializable",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "analyzeModule",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "processModuleFromAnalysis",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "analyzeDirectoryStructure",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCategoryBuildingDecisions",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getFlatteningDecision",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "processModuleForAPI",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "applyFunctionNamePreference",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "buildCategoryStructure",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "buildRootAPI",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "buildCategoryDecisions",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "value",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "setRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "setRootDefault",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\helpers\\auto-wrap.mjs": [
+        {
+          "name": "autoWrapEventEmitters",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getNet",
+          "type": "function",
+          "exported": true
+        }
+      ],
+      "src\\lib\\helpers\\instance-manager.mjs": [
+        {
+          "name": "getInstanceData",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "updateInstanceData",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "cleanupInstance",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "setActiveInstance",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCurrentActiveInstanceId",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "detectCurrentInstanceId",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getAllInstanceIds",
+          "type": "function",
+          "exported": true
+        }
+      ],
+      "src\\lib\\helpers\\multidefault.mjs": [
+        {
+          "name": "multidefault_analyzeModules",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\helpers\\resolve-from-caller.mjs": [
+        {
+          "name": "resolveUrlFromCaller",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "toFsPath",
+          "type": "function",
+          "exported": true
+        }
+      ],
+      "src\\lib\\helpers\\sanitize.mjs": [
+        {
+          "name": "globToRegex",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "sanitizePathName",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "segmentMatchesPreSplitPattern",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "applyRule",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\modes\\slothlet_eager.mjs": [
+        {
+          "name": "create",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "setRootDefault",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\modes\\slothlet_lazy.mjs": [
+        {
+          "name": "create",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "replacePlaceholder",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "createFolderProxy",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "_materialize",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_invoke",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_lazyTarget",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_propertyAccessor",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_handleResolvedValue",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_deepPropertyAccessor",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_handleDeepResolvedValue",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "lazy_materializeCategory",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "setRootDefault",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "subdirHandler",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\runtime\\runtime-asynclocalstorage.mjs": [
+        {
+          "name": "runtime_shouldWrapMethod",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_isClassInstance",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_wrapClassInstance",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_mutateLiveBinding",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_createLiveBinding",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_liveBindingTarget",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runWithCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "runtime_runInALS",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "runtime_contextPreservingMethod",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "makeWrapper",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "wrap",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "wrappedMethod",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_forwardToSource",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_syncWithContext",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_renderSnapshot",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_toPrimitiveHandler",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_inspectHandler",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_toJSONHandler",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\runtime\\runtime-livebindings.mjs": [
+        {
+          "name": "getCurrentInstanceContext",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runWithCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "makeWrapper",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "wrapperFunction",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getContext",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "setContext",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "value",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\runtime\\runtime-new.mjs": [
+        {
+          "name": "setActiveRuntimeType",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCurrentRuntime",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runWithCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "makeWrapper",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCtx",
+          "type": "function",
+          "exported": true
+        }
+      ],
+      "src\\lib\\runtime\\runtime-simple.mjs": [
+        {
+          "name": "setActiveRuntimeType",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCurrentRuntime",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runWithCtx",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "makeWrapper",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getCtx",
+          "type": "function",
+          "exported": false
+        }
+      ],
+      "src\\lib\\runtime\\runtime.mjs": [
+        {
+          "name": "detectRuntimeType",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "getCurrentRuntime",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runtime_selfProxy",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "runWithCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "makeWrapper",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "getCtx",
+          "type": "function",
+          "exported": true
+        },
+        {
+          "name": "instanceId",
+          "type": "function",
+          "exported": true
+        }
+      ],
+      "src\\slothlet.mjs": [
+        {
+          "name": "normalizeRuntimeType",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "slothlet",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "createFreshInstance",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "resolveAll",
+          "type": "function",
+          "exported": false
+        },
+        {
+          "name": "mutateLiveBindingFunction",
+          "type": "function",
+          "exported": true
+        }
+      ]
+    },
+    "allDependencies": [],
+    "analyses": [
+      {
+        "filePath": "src\\lib\\engine\\slothlet_child.mjs",
+        "functions": [],
+        "exports": [],
+        "imports": [],
+        "calls": [
+          "on",
+          "async",
+          "installGlobalsInCurrentRealm",
+          "import",
+          "load",
+          "extendSelfWithReference",
+          "installPortalForSelf",
+          "send",
+          "call",
+          "send",
+          "batch",
+          "send",
+          "send",
+          "exit",
+          "send",
+          "String"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\engine\\slothlet_engine.mjs",
+        "functions": [
+          {
+            "name": "setShutdown",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "createEngine",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "backendVm",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "backendWorker",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "registerCb",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "marshalArgs",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "backendFork",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "makeFn",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "revive",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "makeFacade",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "buildCallableFromDescribe",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "makeFacade2",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "dispose",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "rpc",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "dispose",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "rpc",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "dispose",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "fn",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "build",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "build",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "describe",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "call",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "batch",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "call",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "batch",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "call",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "batch",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "get",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "apply",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "apply",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "get",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "ownKeys",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getOwnPropertyDescriptor",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "get",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "apply",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "setShutdown",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "makeFacade2",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "setShutdown",
+          "createEngine",
+          "backendWorker",
+          "backendVm",
+          "backendWorker",
+          "backendFork",
+          "backendVm",
+          "makeNodeishContext",
+          "installContextGlobalsVM",
+          "bootSlothletVM",
+          "asUrl",
+          "runInContext",
+          "runInContext",
+          "makeFacade",
+          "resolve",
+          "call",
+          "resolve",
+          "batch",
+          "async",
+          "defineProperty",
+          "backendWorker",
+          "URL",
+          "Map",
+          "Map",
+          "Worker",
+          "asUrl",
+          "normalizeContext",
+          "on",
+          "get",
+          "postMessage",
+          "resolve",
+          "then",
+          "fn",
+          "then",
+          "postMessage",
+          "postMessage",
+          "String",
+          "get",
+          "delete",
+          "resolve",
+          "reject",
+          "registerCb",
+          "set",
+          "marshalArgs",
+          "marshalArgsReplaceFunctions",
+          "set",
+          "isArray",
+          "marshalArgs",
+          "postMessage",
+          "makeFacade",
+          "rpc",
+          "rpc",
+          "async",
+          "rpc",
+          "terminate",
+          "defineProperty",
+          "backendFork",
+          "fileURLToPath",
+          "URL",
+          "Map",
+          "fork",
+          "on",
+          "get",
+          "delete",
+          "resolve",
+          "reject",
+          "set",
+          "send",
+          "rpc",
+          "asUrl",
+          "normalizeContext",
+          "makeFacade",
+          "rpc",
+          "rpc",
+          "async",
+          "rpc",
+          "defineProperty",
+          "makeFn",
+          "function",
+          "defineProperty",
+          "revive",
+          "makeFn",
+          "entries",
+          "revive",
+          "isArray",
+          "map",
+          "entries",
+          "revive",
+          "makeFacade",
+          "Proxy",
+          "function",
+          "async",
+          "call",
+          "revive",
+          "build",
+          "concat",
+          "String",
+          "call",
+          "build",
+          "buildCallableFromDescribe",
+          "entries",
+          "buildCallableFromDescribe",
+          "concat",
+          "String",
+          "Proxy",
+          "function",
+          "call",
+          "function",
+          "stylize",
+          "keys",
+          "map",
+          "join",
+          "buildCallableFromDescribe",
+          "String",
+          "concat",
+          "String",
+          "keys",
+          "isArray",
+          "map",
+          "buildCallableFromDescribe",
+          "concat",
+          "String",
+          "entries",
+          "buildCallableFromDescribe",
+          "concat",
+          "String",
+          "makeFacade2",
+          "async",
+          "call",
+          "buildCallableFromDescribe",
+          "Proxy",
+          "function",
+          "return",
+          "resolve",
+          "then",
+          "then",
+          "build",
+          "concat",
+          "String",
+          "call",
+          "build"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\engine\\slothlet_esm.mjs",
+        "functions": [
+          {
+            "name": "loadEsmModuleFallback",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "inComment",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "isEsmFile",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "importModuleDynamically",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "Set",
+          "loadEsmModuleFallback",
+          "Set",
+          "import",
+          "async",
+          "import",
+          "startsWith",
+          "slice",
+          "startsWith",
+          "has",
+          "test",
+          "import",
+          "has",
+          "add",
+          "readFile",
+          "fileURLToPath",
+          "exec",
+          "push",
+          "exec",
+          "indexOf",
+          "push",
+          "inComment",
+          "some",
+          "exec",
+          "inComment",
+          "push",
+          "startsWith",
+          "startsWith",
+          "URL",
+          "loadEsmModuleFallback",
+          "import",
+          "trim",
+          "startsWith",
+          "slice",
+          "trim",
+          "startsWith",
+          "slice",
+          "split",
+          "map",
+          "trim",
+          "filter",
+          "split",
+          "map",
+          "trim",
+          "split",
+          "map",
+          "trim",
+          "filter",
+          "startsWith",
+          "slice",
+          "split",
+          "map",
+          "trim",
+          "filter",
+          "split",
+          "map",
+          "trim",
+          "startsWith",
+          "slice",
+          "has",
+          "test",
+          "import",
+          "startsWith",
+          "URL",
+          "loadEsmModuleFallback",
+          "URL",
+          "startsWith",
+          "loadEsmModuleFallback",
+          "replace",
+          "replace",
+          "replace",
+          "replace",
+          "replace",
+          "replace",
+          "stringify",
+          "Set",
+          "exec",
+          "inComment",
+          "add",
+          "exec",
+          "inComment",
+          "has",
+          "push",
+          "exec",
+          "inComment",
+          "entries",
+          "basename",
+          "extname",
+          "import",
+          "Script",
+          "async",
+          "import",
+          "runInContext",
+          "keys",
+          "isEsmFile",
+          "extname",
+          "fileURLToPath",
+          "toLowerCase",
+          "readFile",
+          "fileURLToPath",
+          "test"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\engine\\slothlet_helpers.mjs",
+        "functions": [
+          {
+            "name": "normalizeContext",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "installGlobalsInCurrentRealm",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "extendSelfWithReference",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "installPortalForSelf",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "get",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "asUrl",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "isPlainObject",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "guessName",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "makeNodeishContext",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "loadEsmInVm2",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "loadEsmInVm",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "init",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "installContextGlobalsVM",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "bootSlothletVM",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "marshalArgsReplaceFunctions",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "walk",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "reviveArgsReplaceTokens",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "walk",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "containsFunction",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "link",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "importModuleDynamically",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "normalizeContext",
+            "type": "default"
+          },
+          {
+            "name": "installGlobalsInCurrentRealm",
+            "type": "default"
+          },
+          {
+            "name": "extendSelfWithReference",
+            "type": "default"
+          },
+          {
+            "name": "installPortalForSelf",
+            "type": "default"
+          },
+          {
+            "name": "asUrl",
+            "type": "default"
+          },
+          {
+            "name": "isPlainObject",
+            "type": "default"
+          },
+          {
+            "name": "guessName",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "makeNodeishContext",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "installContextGlobalsVM",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "marshalArgsReplaceFunctions",
+            "type": "default"
+          },
+          {
+            "name": "reviveArgsReplaceTokens",
+            "type": "default"
+          },
+          {
+            "name": "containsFunction",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "normalizeContext",
+          "isPlainObject",
+          "isArray",
+          "guessName",
+          "isArray",
+          "isPlainObject",
+          "installGlobalsInCurrentRealm",
+          "freeze",
+          "keys",
+          "extendSelfWithReference",
+          "keys",
+          "installPortalForSelf",
+          "get",
+          "call",
+          "get",
+          "slice",
+          "TypeError",
+          "apply",
+          "batch",
+          "map",
+          "call",
+          "asUrl",
+          "startsWith",
+          "pathToFileURL",
+          "resolve",
+          "String",
+          "isPlainObject",
+          "getPrototypeOf",
+          "guessName",
+          "isPlainObject",
+          "toLowerCase",
+          "slice",
+          "makeNodeishContext",
+          "createContext",
+          "loadEsmInVm2",
+          "debug",
+          "readFile",
+          "fileURLToPath",
+          "debug",
+          "extname",
+          "fileURLToPath",
+          "toLowerCase",
+          "test",
+          "test",
+          "endsWith",
+          "debug",
+          "debug",
+          "debug",
+          "Script",
+          "runInContext",
+          "keys",
+          "debug",
+          "error",
+          "debug",
+          "SourceTextModule",
+          "initializeImportMeta",
+          "evaluate",
+          "debug",
+          "debug",
+          "error",
+          "loadEsmInVm",
+          "Map",
+          "has",
+          "get",
+          "readFile",
+          "fileURLToPath",
+          "async",
+          "startsWith",
+          "startsWith",
+          "startsWith",
+          "startsWith",
+          "URL",
+          "loadEsmInVm",
+          "import",
+          "SyntheticModule",
+          "keys",
+          "init",
+          "keys",
+          "setExport",
+          "async",
+          "link",
+          "evaluate",
+          "SourceTextModule",
+          "initializeImportMeta",
+          "set",
+          "link",
+          "installContextGlobalsVM",
+          "normalizeContext",
+          "runInContext",
+          "bootSlothletVM",
+          "loadEsmInVm",
+          "evaluate",
+          "log",
+          "log",
+          "log",
+          "log",
+          "runInContext",
+          "marshalArgsReplaceFunctions",
+          "walk",
+          "registerCb",
+          "isArray",
+          "map",
+          "keys",
+          "walk",
+          "walk",
+          "reviveArgsReplaceTokens",
+          "walk",
+          "return",
+          "invokeCb",
+          "isArray",
+          "map",
+          "keys",
+          "walk",
+          "walk",
+          "containsFunction",
+          "isArray",
+          "some",
+          "values",
+          "some"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\engine\\slothlet_worker.mjs",
+        "functions": [
+          {
+            "name": "invokeCb",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "serialize",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "value",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [],
+        "imports": [],
+        "calls": [
+          "async",
+          "installGlobalsInCurrentRealm",
+          "import",
+          "load",
+          "defineProperty",
+          "async",
+          "postMessage",
+          "setImmediate",
+          "exit",
+          "extendSelfWithReference",
+          "installPortalForSelf",
+          "Map",
+          "on",
+          "async",
+          "get",
+          "delete",
+          "resolve",
+          "reject",
+          "invokeCb",
+          "set",
+          "postMessage",
+          "isArray",
+          "serialize",
+          "keys",
+          "serialize",
+          "isArray",
+          "map",
+          "entries",
+          "serialize",
+          "postMessage",
+          "serialize",
+          "reviveArgsReplaceTokens",
+          "isArray",
+          "target",
+          "default",
+          "TypeError",
+          "postMessage",
+          "isArray",
+          "map",
+          "reviveArgsReplaceTokens",
+          "batch",
+          "postMessage",
+          "postMessage",
+          "postMessage",
+          "String",
+          "postMessage",
+          "String"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\als-eventemitter.mjs",
+        "functions": [
+          {
+            "name": "enableAlsForEventEmitters",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "runtime_ensureMap",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_wrapListener",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_installWrapper",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_createRemoveWrapper",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_wrappedListener",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_removeWrapper",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "enableAlsForEventEmitters",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "AsyncLocalStorage",
+          "enableAlsForEventEmitters",
+          "Symbol",
+          "runtime_ensureMap",
+          "WeakMap",
+          "runtime_wrapListener",
+          "getStore",
+          "AsyncResource",
+          "function",
+          "runInAsyncScope",
+          "apply",
+          "runtime_installWrapper",
+          "function",
+          "runtime_ensureMap",
+          "runtime_wrapListener",
+          "set",
+          "call",
+          "runtime_installWrapper",
+          "runtime_installWrapper",
+          "runtime_installWrapper",
+          "runtime_installWrapper",
+          "runtime_installWrapper",
+          "runtime_createRemoveWrapper",
+          "function",
+          "runtime_ensureMap",
+          "get",
+          "delete",
+          "call",
+          "runtime_createRemoveWrapper",
+          "runtime_createRemoveWrapper",
+          "function",
+          "call",
+          "WeakMap"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\api_builder.mjs",
+        "functions": [
+          {
+            "name": "isLikelySerializable",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "analyzeModule",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "processModuleFromAnalysis",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "analyzeDirectoryStructure",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCategoryBuildingDecisions",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getFlatteningDecision",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "processModuleForAPI",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "applyFunctionNamePreference",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "buildCategoryStructure",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "buildRootAPI",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "buildCategoryDecisions",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "value",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "setRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "setRootDefault",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "processModuleFromAnalysis",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "getFlatteningDecision",
+            "type": "default"
+          },
+          {
+            "name": "processModuleForAPI",
+            "type": "default"
+          },
+          {
+            "name": "applyFunctionNamePreference",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "isLikelySerializable",
+          "return",
+          "isArray",
+          "analyzeModule",
+          "pathToFileURL",
+          "includes",
+          "setActiveInstance",
+          "import",
+          "endsWith",
+          "entries",
+          "entries",
+          "filter",
+          "log",
+          "processModuleFromAnalysis",
+          "defineProperty",
+          "entries",
+          "_toapiPathKey",
+          "function",
+          "apply",
+          "entries",
+          "log",
+          "entries",
+          "filter",
+          "_toapiPathKey",
+          "defineProperty",
+          "function",
+          "ownKeys",
+          "getOwnPropertyDescriptor",
+          "isLikelySerializable",
+          "stringify",
+          "_toapiPathKey",
+          "_toapiPathKey",
+          "_toapiPathKey",
+          "analyzeDirectoryStructure",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "_toapiPathKey",
+          "basename",
+          "filter",
+          "isDirectory",
+          "startsWith",
+          "multidefault_analyzeModules",
+          "Set",
+          "log",
+          "getCategoryBuildingDecisions",
+          "analyzeDirectoryStructure",
+          "extname",
+          "_toapiPathKey",
+          "basename",
+          "join",
+          "analyzeModule",
+          "processModuleFromAnalysis",
+          "toLowerCase",
+          "toLowerCase",
+          "push",
+          "_toapiPathKey",
+          "push",
+          "log",
+          "getFlatteningDecision",
+          "keys",
+          "filter",
+          "processModuleForAPI",
+          "log",
+          "log",
+          "log",
+          "getRootDefault",
+          "setRootDefault",
+          "log",
+          "log",
+          "getFlatteningDecision",
+          "log",
+          "keys",
+          "filter",
+          "keys",
+          "filter",
+          "log",
+          "entries",
+          "log",
+          "applyFunctionNamePreference",
+          "entries",
+          "toLowerCase",
+          "toLowerCase",
+          "log",
+          "toapiPathKey",
+          "toLowerCase",
+          "toLowerCase",
+          "log",
+          "buildCategoryStructure",
+          "log",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "_toapiPathKey",
+          "basename",
+          "filter",
+          "isDirectory",
+          "startsWith",
+          "extname",
+          "_toapiPathKey",
+          "basename",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "toLowerCase",
+          "toLowerCase",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "defineProperty",
+          "isArray",
+          "log",
+          "keys",
+          "filter",
+          "log",
+          "isArray",
+          "keys",
+          "filter",
+          "replace",
+          "includes",
+          "toLowerCase",
+          "log",
+          "defineProperty",
+          "defineProperty",
+          "keys",
+          "filter",
+          "multidefault_analyzeModules",
+          "find",
+          "basename",
+          "extname",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "push",
+          "_toapiPathKey",
+          "log",
+          "log",
+          "log",
+          "log",
+          "extname",
+          "_toapiPathKey",
+          "basename",
+          "basename",
+          "_toapiPathKey",
+          "find",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "processModuleForAPI",
+          "has",
+          "_toapiPathKey",
+          "join",
+          "subdirHandler",
+          "buildCategoryStructure",
+          "toLowerCase",
+          "toLowerCase",
+          "buildRootAPI",
+          "log",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "multidefault_analyzeModules",
+          "extname",
+          "basename",
+          "_toapiPathKey",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "processModuleForAPI",
+          "has",
+          "isDirectory",
+          "startsWith",
+          "join",
+          "_toapiPathKey",
+          "_loadCategory",
+          "_toapiPathKey",
+          "buildCategoryStructure",
+          "log",
+          "log",
+          "keys",
+          "assign",
+          "log",
+          "log",
+          "buildCategoryDecisions",
+          "log",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "_toapiPathKey",
+          "basename",
+          "filter",
+          "isDirectory",
+          "startsWith",
+          "extname",
+          "_toapiPathKey",
+          "basename",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "toLowerCase",
+          "toLowerCase",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "log",
+          "isArray",
+          "keys",
+          "filter",
+          "log",
+          "log",
+          "replace",
+          "log",
+          "isArray",
+          "keys",
+          "filter",
+          "replace",
+          "includes",
+          "toLowerCase",
+          "log",
+          "keys",
+          "filter",
+          "log",
+          "multidefault_analyzeModules",
+          "find",
+          "basename",
+          "extname",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "push",
+          "_toapiPathKey",
+          "log",
+          "log",
+          "log",
+          "log",
+          "extname",
+          "_toapiPathKey",
+          "basename",
+          "find",
+          "analyzeModule",
+          "join",
+          "processModuleFromAnalysis",
+          "has",
+          "log",
+          "has",
+          "log",
+          "toLowerCase",
+          "toLowerCase",
+          "_toapiPathKey",
+          "entries",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "toLowerCase",
+          "_toapiPathKey",
+          "_toapiPathKey",
+          "has",
+          "keys",
+          "filter",
+          "_toapiPathKey",
+          "push",
+          "join",
+          "_toapiPathKey",
+          "push"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\auto-wrap.mjs",
+        "functions": [
+          {
+            "name": "autoWrapEventEmitters",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getNet",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "autoWrapEventEmitters",
+          "import",
+          "import",
+          "makeWrapper",
+          "function",
+          "apply",
+          "wrapper",
+          "error",
+          "getNet",
+          "import",
+          "autoWrapEventEmitters"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\instance-manager.mjs",
+        "functions": [
+          {
+            "name": "getInstanceData",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "updateInstanceData",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "cleanupInstance",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "setActiveInstance",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCurrentActiveInstanceId",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "detectCurrentInstanceId",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getAllInstanceIds",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "getInstanceData",
+            "type": "default"
+          },
+          {
+            "name": "updateInstanceData",
+            "type": "default"
+          },
+          {
+            "name": "async",
+            "type": "default"
+          },
+          {
+            "name": "setActiveInstance",
+            "type": "default"
+          },
+          {
+            "name": "getCurrentActiveInstanceId",
+            "type": "default"
+          },
+          {
+            "name": "detectCurrentInstanceId",
+            "type": "default"
+          },
+          {
+            "name": "getAllInstanceIds",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "Map",
+          "getInstanceData",
+          "get",
+          "updateInstanceData",
+          "get",
+          "set",
+          "cleanupInstance",
+          "delete",
+          "setActiveInstance",
+          "getCurrentActiveInstanceId",
+          "detectCurrentInstanceId",
+          "has",
+          "match",
+          "replace",
+          "has",
+          "getAllInstanceIds",
+          "from",
+          "keys"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\multidefault.mjs",
+        "functions": [
+          {
+            "name": "multidefault_analyzeModules",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "in",
+            "type": "default"
+          },
+          {
+            "name": "multidefault_analyzeModules",
+            "type": "named"
+          },
+          {
+            "name": "multidefault_isSelfReferential",
+            "type": "named"
+          },
+          {
+            "name": "multidefault_getFlatteningDecision",
+            "type": "named"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "multidefault_analyzeModules",
+          "Set",
+          "Map",
+          "log",
+          "extname",
+          "basename",
+          "resolve",
+          "join"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\resolve-from-caller.mjs",
+        "functions": [
+          {
+            "name": "resolveUrlFromCaller",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "toFsPath",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "resolveUrlFromCaller",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "String",
+          "startsWith",
+          "isAbsolute",
+          "resolveWith",
+          "resolve",
+          "dirname",
+          "existsSync",
+          "resolve",
+          "dirname",
+          "resolveUrlFromCaller",
+          "isAbsolute",
+          "pathToFileURL",
+          "resolveWith",
+          "URL",
+          "pathToFileURL",
+          "existsSync",
+          "fileURLToPath",
+          "URL",
+          "pathToFileURL"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\helpers\\sanitize.mjs",
+        "functions": [
+          {
+            "name": "globToRegex",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "sanitizePathName",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "segmentMatchesPreSplitPattern",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "applyRule",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "sanitizePathName",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "globToRegex",
+          "startsWith",
+          "endsWith",
+          "slice",
+          "replace",
+          "RegExp",
+          "replace",
+          "replace",
+          "replace",
+          "RegExp",
+          "sanitizePathName",
+          "map",
+          "String",
+          "map",
+          "String",
+          "map",
+          "String",
+          "map",
+          "String",
+          "String",
+          "trim",
+          "split",
+          "filter",
+          "test",
+          "replace",
+          "shift",
+          "includes",
+          "includes",
+          "globToRegex",
+          "test",
+          "split",
+          "filter",
+          "replace",
+          "toLowerCase",
+          "toLowerCase",
+          "toLowerCase",
+          "toLowerCase",
+          "segmentMatchesPreSplitPattern",
+          "segmentMatchesPreSplitPattern",
+          "toUpperCase",
+          "toLowerCase",
+          "test",
+          "toLowerCase",
+          "toUpperCase",
+          "test",
+          "segmentMatchesPreSplitPattern",
+          "toUpperCase",
+          "segmentMatchesPreSplitPattern",
+          "toLowerCase",
+          "includes",
+          "includes",
+          "segmentMatchesPreSplitPattern",
+          "startsWith",
+          "endsWith",
+          "slice",
+          "RegExp",
+          "replace",
+          "matchAll",
+          "substring",
+          "toUpperCase",
+          "substring",
+          "split",
+          "filter",
+          "RegExp",
+          "replace",
+          "replace",
+          "toUpperCase",
+          "includes",
+          "includes",
+          "segmentMatchesPreSplitPattern",
+          "startsWith",
+          "endsWith",
+          "slice",
+          "RegExp",
+          "replace",
+          "matchAll",
+          "substring",
+          "toLowerCase",
+          "substring",
+          "split",
+          "filter",
+          "RegExp",
+          "replace",
+          "replace",
+          "toLowerCase",
+          "includes",
+          "includes",
+          "toLowerCase",
+          "toLowerCase",
+          "toUpperCase",
+          "includes",
+          "includes",
+          "toLowerCase",
+          "toLowerCase",
+          "toLowerCase",
+          "toLowerCase",
+          "slice",
+          "toUpperCase",
+          "slice",
+          "map",
+          "applyRule",
+          "replace",
+          "join",
+          "replace",
+          "test"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\modes\\slothlet_eager.mjs",
+        "functions": [
+          {
+            "name": "create",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "setRootDefault",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "async",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "create",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "multidefault_analyzeModules",
+          "find",
+          "basename",
+          "extname",
+          "_loadSingleModule",
+          "join",
+          "push",
+          "log",
+          "log",
+          "log",
+          "map",
+          "extname",
+          "basename",
+          "_toapiPathKey",
+          "_loadSingleModule",
+          "join",
+          "has",
+          "processModuleForAPI",
+          "isDirectory",
+          "startsWith",
+          "join",
+          "_toapiPathKey",
+          "_loadCategory",
+          "log",
+          "log",
+          "keys",
+          "assign",
+          "log",
+          "log"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\modes\\slothlet_lazy.mjs",
+        "functions": [
+          {
+            "name": "create",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "replacePlaceholder",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "createFolderProxy",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "_materialize",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_invoke",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_lazyTarget",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_propertyAccessor",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_handleResolvedValue",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_deepPropertyAccessor",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_handleDeepResolvedValue",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "lazy_materializeCategory",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "setRootDefault",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "subdirHandler",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "async",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "create",
+          "import",
+          "readdir",
+          "filter",
+          "_shouldIncludeFile",
+          "multidefault_analyzeModules",
+          "find",
+          "basename",
+          "extname",
+          "_loadSingleModule",
+          "join",
+          "push",
+          "log",
+          "log",
+          "log",
+          "log",
+          "Map",
+          "extname",
+          "basename",
+          "_toapiPathKey",
+          "find",
+          "_loadSingleModule",
+          "join",
+          "set",
+          "has",
+          "processModuleForAPI",
+          "assign",
+          "isDirectory",
+          "startsWith",
+          "_toapiPathKey",
+          "join",
+          "readdirSync",
+          "some",
+          "isFile",
+          "startsWith",
+          "endsWith",
+          "endsWith",
+          "endsWith",
+          "some",
+          "isDirectory",
+          "startsWith",
+          "log",
+          "log",
+          "createFolderProxy",
+          "replacePlaceholder",
+          "log",
+          "warn",
+          "warn",
+          "toLowerCase",
+          "toLowerCase",
+          "defineProperty",
+          "log",
+          "updateBoundApiProperty",
+          "createFolderProxy",
+          "_materialize",
+          "async",
+          "_buildCategory",
+          "createFolderProxy",
+          "keys",
+          "log",
+          "replacePlaceholder",
+          "keys",
+          "log",
+          "lazy_materializeCategory",
+          "lazy_invoke",
+          "_materialize",
+          "runWithCtx",
+          "apply",
+          "lazy_lazyTarget",
+          "lazy_invoke",
+          "defineProperty",
+          "defineProperty",
+          "defineProperty",
+          "defineProperty",
+          "Proxy",
+          "apply",
+          "lazy_invoke",
+          "get",
+          "_materialize",
+          "Proxy",
+          "lazy_propertyAccessor",
+          "_materialize",
+          "then",
+          "lazy_handleResolvedValue",
+          "runWithCtx",
+          "apply",
+          "get",
+          "Proxy",
+          "lazy_deepPropertyAccessor",
+          "apply",
+          "runWithCtx",
+          "apply",
+          "_materialize",
+          "then",
+          "lazy_handleDeepResolvedValue",
+          "runWithCtx",
+          "apply",
+          "has",
+          "ownKeys",
+          "ownKeys",
+          "ownKeys",
+          "from",
+          "Set",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "functions": [
+          {
+            "name": "runtime_shouldWrapMethod",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_isClassInstance",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_wrapClassInstance",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_mutateLiveBinding",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_createLiveBinding",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_liveBindingTarget",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runWithCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "runtime_runInALS",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "runtime_contextPreservingMethod",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "makeWrapper",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "wrap",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "wrappedMethod",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_forwardToSource",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_syncWithContext",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_renderSnapshot",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_toPrimitiveHandler",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_inspectHandler",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_toJSONHandler",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "AsyncLocalStorage",
+          "AsyncLocalStorage",
+          "enableAlsForEventEmitters",
+          "apply",
+          "run",
+          "getStore",
+          "Set",
+          "Set",
+          "runtime_shouldWrapMethod",
+          "return",
+          "startsWith",
+          "runtime_isClassInstance",
+          "has",
+          "runtime_wrapClassInstance",
+          "has",
+          "get",
+          "Map",
+          "Proxy",
+          "get",
+          "has",
+          "get",
+          "get",
+          "runtime_shouldWrapMethod",
+          "function",
+          "runWithCtx",
+          "wrapFn",
+          "set",
+          "wrapFn",
+          "set",
+          "has",
+          "delete",
+          "set",
+          "set",
+          "WeakMap",
+          "WeakMap",
+          "WeakMap",
+          "has",
+          "get",
+          "Proxy",
+          "apply",
+          "runWithCtx",
+          "runtime_isClassInstance",
+          "runtime_wrapClassInstance",
+          "construct",
+          "runWithCtx",
+          "runtime_isClassInstance",
+          "runtime_wrapClassInstance",
+          "get",
+          "get",
+          "has",
+          "isPromise",
+          "get",
+          "Map",
+          "set",
+          "has",
+          "get",
+          "function",
+          "map",
+          "function",
+          "runWithCtx",
+          "apply",
+          "wrap",
+          "set",
+          "wrap",
+          "set",
+          "get",
+          "has",
+          "delete",
+          "set",
+          "deleteProperty",
+          "get",
+          "has",
+          "delete",
+          "deleteProperty",
+          "set",
+          "runtime_mutateLiveBinding",
+          "getCtx",
+          "keys",
+          "source",
+          "keys",
+          "getOwnPropertyNames",
+          "keys",
+          "entries",
+          "includes",
+          "runtime_createLiveBinding",
+          "runtime_liveBindingTarget",
+          "runtime_mutateLiveBinding",
+          "keys",
+          "Proxy",
+          "apply",
+          "getCtx",
+          "apply",
+          "construct",
+          "getCtx",
+          "construct",
+          "TypeError",
+          "get",
+          "getCtx",
+          "String",
+          "runtime_syncWithContext",
+          "set",
+          "runtime_syncWithContext",
+          "getCtx",
+          "has",
+          "runtime_syncWithContext",
+          "ownKeys",
+          "runtime_syncWithContext",
+          "ownKeys",
+          "getOwnPropertyDescriptor",
+          "runtime_syncWithContext",
+          "getOwnPropertyDescriptor",
+          "runtime_renderSnapshot",
+          "getCtx",
+          "getCtx",
+          "defineProperty",
+          "defineProperty",
+          "runtime_createLiveBinding",
+          "runtime_createLiveBinding",
+          "runtime_createLiveBinding"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\runtime\\runtime-livebindings.mjs",
+        "functions": [
+          {
+            "name": "getCurrentInstanceContext",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runWithCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "makeWrapper",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "wrapperFunction",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getContext",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "setContext",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "value",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "runWithCtx",
+            "type": "default"
+          },
+          {
+            "name": "makeWrapper",
+            "type": "default"
+          },
+          {
+            "name": "getContext",
+            "type": "default"
+          },
+          {
+            "name": "setContext",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "getCurrentInstanceContext",
+          "detectCurrentInstanceId",
+          "getInstanceData",
+          "Proxy",
+          "get",
+          "getCurrentInstanceContext",
+          "set",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "has",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "Proxy",
+          "get",
+          "getCurrentInstanceContext",
+          "set",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "has",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "Proxy",
+          "get",
+          "getCurrentInstanceContext",
+          "set",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "getCurrentInstanceContext",
+          "ownKeys",
+          "has",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "getCurrentInstanceContext",
+          "getOwnPropertyDescriptor",
+          "Proxy",
+          "get",
+          "detectCurrentInstanceId",
+          "return",
+          "detectCurrentInstanceId",
+          "ownKeys",
+          "has",
+          "getOwnPropertyDescriptor",
+          "detectCurrentInstanceId",
+          "runWithCtx",
+          "getCurrentActiveInstanceId",
+          "setActiveInstance",
+          "apply",
+          "setActiveInstance",
+          "makeWrapper",
+          "wrapperFunction",
+          "getContext",
+          "getCurrentInstanceContext",
+          "setContext",
+          "getCurrentInstanceContext",
+          "assign"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\runtime\\runtime-new.mjs",
+        "functions": [
+          {
+            "name": "setActiveRuntimeType",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCurrentRuntime",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runWithCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "makeWrapper",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCtx",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "setActiveRuntimeType",
+            "type": "default"
+          },
+          {
+            "name": "runWithCtx",
+            "type": "default"
+          },
+          {
+            "name": "makeWrapper",
+            "type": "default"
+          },
+          {
+            "name": "getCtx",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "setActiveRuntimeType",
+          "getCurrentRuntime",
+          "runWithCtx",
+          "getCurrentRuntime",
+          "runWithCtx",
+          "makeWrapper",
+          "getCurrentRuntime",
+          "makeWrapper",
+          "getCtx",
+          "getCurrentRuntime",
+          "getCtx",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\runtime\\runtime-simple.mjs",
+        "functions": [
+          {
+            "name": "setActiveRuntimeType",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCurrentRuntime",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runWithCtx",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "makeWrapper",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getCtx",
+            "type": "function",
+            "exported": false
+          }
+        ],
+        "exports": [
+          {
+            "name": "setActiveRuntimeType",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "setActiveRuntimeType",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "runWithCtx",
+          "getCurrentRuntime",
+          "makeWrapper",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCtx",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime",
+          "getCurrentRuntime"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\lib\\runtime\\runtime.mjs",
+        "functions": [
+          {
+            "name": "detectRuntimeType",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "getCurrentRuntime",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runtime_selfProxy",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "runWithCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "makeWrapper",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "getCtx",
+            "type": "function",
+            "exported": true
+          },
+          {
+            "name": "instanceId",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "runWithCtx",
+            "type": "default"
+          },
+          {
+            "name": "makeWrapper",
+            "type": "default"
+          },
+          {
+            "name": "getCtx",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "import",
+          "import",
+          "detectRuntimeType",
+          "detectCurrentInstanceId",
+          "getInstanceData",
+          "getCurrentRuntime",
+          "detectRuntimeType",
+          "Proxy",
+          "runtime_selfProxy",
+          "get",
+          "getCurrentRuntime",
+          "ownKeys",
+          "getCurrentRuntime",
+          "ownKeys",
+          "ownKeys",
+          "Set",
+          "from",
+          "has",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getPrototypeOf",
+          "getCurrentRuntime",
+          "getPrototypeOf",
+          "isExtensible",
+          "getCurrentRuntime",
+          "isExtensible",
+          "Proxy",
+          "get",
+          "getCurrentRuntime",
+          "ownKeys",
+          "getCurrentRuntime",
+          "ownKeys",
+          "ownKeys",
+          "Set",
+          "from",
+          "has",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getPrototypeOf",
+          "getCurrentRuntime",
+          "getPrototypeOf",
+          "isExtensible",
+          "getCurrentRuntime",
+          "isExtensible",
+          "Proxy",
+          "get",
+          "getCurrentRuntime",
+          "ownKeys",
+          "getCurrentRuntime",
+          "ownKeys",
+          "ownKeys",
+          "Set",
+          "from",
+          "has",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getCurrentRuntime",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getOwnPropertyDescriptor",
+          "getPrototypeOf",
+          "getCurrentRuntime",
+          "getPrototypeOf",
+          "isExtensible",
+          "getCurrentRuntime",
+          "isExtensible",
+          "runWithCtx",
+          "getCurrentRuntime",
+          "runWithCtx",
+          "makeWrapper",
+          "getCurrentRuntime",
+          "makeWrapper",
+          "getCtx",
+          "getCurrentRuntime",
+          "return",
+          "detectRuntimeType",
+          "getCurrentRuntime",
+          "getCurrentRuntime"
+        ],
+        "dependencies": {}
+      },
+      {
+        "filePath": "src\\slothlet.mjs",
+        "functions": [
+          {
+            "name": "normalizeRuntimeType",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "slothlet",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "createFreshInstance",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "resolveAll",
+            "type": "function",
+            "exported": false
+          },
+          {
+            "name": "mutateLiveBindingFunction",
+            "type": "function",
+            "exported": true
+          }
+        ],
+        "exports": [
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "const",
+            "type": "default"
+          },
+          {
+            "name": "mutateLiveBindingFunction",
+            "type": "default"
+          },
+          {
+            "name": "slothlet",
+            "type": "default"
+          },
+          {
+            "name": "slothlet",
+            "type": "named"
+          }
+        ],
+        "imports": [],
+        "calls": [
+          "normalizeRuntimeType",
+          "toLowerCase",
+          "trim",
+          "fileURLToPath",
+          "dirname",
+          "includes",
+          "slothlet",
+          "createFreshInstance",
+          "keys",
+          "startsWith",
+          "entries",
+          "defineProperty",
+          "bind",
+          "defineProperty",
+          "defineProperty",
+          "create",
+          "createFreshInstance",
+          "entries",
+          "create",
+          "warn",
+          "normalizeRuntimeType",
+          "join",
+          "readdir",
+          "filter",
+          "isFile",
+          "map",
+          "join",
+          "parse",
+          "replace",
+          "includes",
+          "pathToFileURL",
+          "import",
+          "error",
+          "function",
+          "_impl",
+          "bind",
+          "load",
+          "import",
+          "createEngine",
+          "defineProperty",
+          "load",
+          "normalizeRuntimeType",
+          "import",
+          "import",
+          "isAbsolute",
+          "resolvePathFromCaller",
+          "call",
+          "call",
+          "log",
+          "log",
+          "function",
+          "_impl",
+          "bind",
+          "createBoundApi",
+          "mutateLiveBindingFunction",
+          "updateBindings",
+          "_toapiPathKey",
+          "sanitizePathName",
+          "_buildCategory",
+          "buildCategoryDecisions",
+          "defineProperty",
+          "keys",
+          "filter",
+          "call",
+          "assign",
+          "entries",
+          "_toapiPathKey",
+          "assign",
+          "defineProperty",
+          "assign",
+          "keys",
+          "some",
+          "Map",
+          "entries",
+          "set",
+          "warn",
+          "Proxy",
+          "get",
+          "has",
+          "get",
+          "get",
+          "has",
+          "has",
+          "has",
+          "ownKeys",
+          "ownKeys",
+          "from",
+          "keys",
+          "Set",
+          "getOwnPropertyDescriptor",
+          "has",
+          "get",
+          "getOwnPropertyDescriptor",
+          "entries",
+          "keys",
+          "filter",
+          "keys",
+          "filter",
+          "subdirHandler",
+          "_buildCategory",
+          "toLowerCase",
+          "toLowerCase",
+          "keys",
+          "defineProperty",
+          "isArray",
+          "_loadCategory",
+          "_buildCategory",
+          "_loadSingleModule",
+          "analyzeModule",
+          "processModuleFromAnalysis",
+          "_buildCategoryEnhanced",
+          "getCategoryBuildingDecisions",
+          "defineProperty",
+          "join",
+          "subdirHandler",
+          "_buildCategoryEnhanced",
+          "toLowerCase",
+          "toLowerCase",
+          "keys",
+          "defineProperty",
+          "isArray",
+          "_shouldIncludeFile",
+          "isFile",
+          "endsWith",
+          "endsWith",
+          "endsWith",
+          "startsWith",
+          "startsWith",
+          "updateBoundApiProperty",
+          "defineProperty",
+          "defineProperty",
+          "mutateLiveBindingFunction",
+          "log",
+          "log",
+          "log",
+          "keys",
+          "warn",
+          "updateBindings",
+          "keys",
+          "keys",
+          "keys",
+          "mutateLiveBindingFunction",
+          "assign",
+          "assign",
+          "updateInstanceData",
+          "updateInstanceData",
+          "updateInstanceData",
+          "updateInstanceData",
+          "safeDefine",
+          "createBoundApi",
+          "entries",
+          "safeDefine",
+          "function",
+          "ownKeys",
+          "resolveAll",
+          "ownKeys",
+          "all",
+          "map",
+          "async",
+          "value",
+          "isArray",
+          "resolveAll",
+          "isArray",
+          "resolveAll",
+          "resolveAll",
+          "toString",
+          "indexOf",
+          "toString",
+          "bind",
+          "toString",
+          "getOwnPropertyDescriptor",
+          "defineProperty",
+          "bind",
+          "warn",
+          "safeDefine",
+          "getOwnPropertyDescriptor",
+          "defineProperty",
+          "defineProperty",
+          "warn",
+          "isLoaded",
+          "getApi",
+          "getBoundApi",
+          "shutdown",
+          "warn",
+          "race",
+          "call",
+          "setTimeout",
+          "reject",
+          "disposeFn",
+          "cleanupInstance",
+          "mutateLiveBindingFunction",
+          "source",
+          "keys",
+          "getOwnPropertyNames",
+          "keys",
+          "entries"
+        ],
+        "dependencies": {}
+      }
+    ]
+  },
+  "entryPointAnalysis": {
+    "mjsFile": {
+      "path": "P:\\Dropbox\\Sync\\Documents\\CLDMV\\node\\slothlet\\index.mjs",
+      "lines": 106,
+      "hasNormalizeRuntime": true,
+      "hasRuntimeSelection": true,
+      "importPattern": {
+        "dynamicImports": [
+          "@cldmv/slothlet/devcheck",
+          "@cldmv/slothlet/slothlet",
+          "@cldmv/slothlet/runtime/live",
+          "@cldmv/slothlet/runtime/async"
+        ],
+        "staticImports": [
+          "@cldmv/slothlet",
+          "@cldmv/slothlet"
+        ],
+        "requires": []
+      },
+      "exports": {
+        "defaultExport": "slothlet",
+        "namedExports": [
+          "slothlet"
+        ]
+      }
+    },
+    "cjsFile": {
+      "path": "P:\\Dropbox\\Sync\\Documents\\CLDMV\\node\\slothlet\\index.cjs",
+      "lines": 73,
+      "hasNormalizeRuntime": false,
+      "hasRuntimeSelection": true,
+      "importPattern": {
+        "dynamicImports": [
+          "./index.mjs"
+        ],
+        "staticImports": [],
+        "requires": [
+          "@cldmv/slothlet",
+          "@cldmv/slothlet",
+          "@cldmv/slothlet",
+          "@cldmv/slothlet"
+        ]
+      },
+      "exports": {
+        "defaultExport": "slothlet",
+        "namedExports": [
+          "slothlet"
+        ]
+      },
+      "isRequireESM": true
+    },
+    "differences": [],
+    "consolidationOptions": [
+      {
+        "name": "CJS imports ESM (requireESM pattern)",
+        "description": "index.cjs uses createRequire or dynamic import to load index.mjs",
+        "benefits": [
+          "Single source of truth in index.mjs",
+          "Eliminates code duplication",
+          "Easier maintenance",
+          "Consistent behavior between entry points"
+        ],
+        "drawbacks": [
+          "Slightly more complex CJS entry point",
+          "Requires Node.js 12+ for createRequire",
+          "May have small performance overhead"
+        ],
+        "implementation": "Use createRequire() or dynamic import() in index.cjs to load index.mjs",
+        "example": "\n// index.cjs (simplified)\nconst { createRequire } = require('module');\nconst require = createRequire(import.meta.url);\n\nmodule.exports = async function(...args) {\n  const { default: esmEntry } = await import('./index.mjs');\n  return esmEntry(...args);\n};"
+      },
+      {
+        "name": "Shared core module",
+        "description": "Both index.mjs and index.cjs import from a shared core implementation",
+        "benefits": [
+          "Explicit separation of entry logic and core logic",
+          "Native module system usage for each entry point",
+          "Clear architecture"
+        ],
+        "drawbacks": [
+          "Additional file to maintain",
+          "More complex project structure"
+        ],
+        "implementation": "Create src/slothlet-core.mjs with shared logic",
+        "example": "\n// src/slothlet-core.mjs\nexport async function createSlothletInstance(options) { /* core logic */ }\n\n// index.mjs\nimport { createSlothletInstance } from './src/slothlet-core.mjs';\nexport default createSlothletInstance;\n\n// index.cjs  \nconst { createSlothletInstance } = require('./src/slothlet-core.mjs');\nmodule.exports = createSlothletInstance;"
+      },
+      {
+        "name": "Keep separate but synchronized",
+        "description": "Maintain both files but ensure they're functionally identical",
+        "benefits": [
+          "No architectural changes needed",
+          "Native module system usage",
+          "Clear entry points"
+        ],
+        "drawbacks": [
+          "Ongoing maintenance burden",
+          "Risk of divergence",
+          "Code duplication"
+        ],
+        "implementation": "Add tooling to verify both entry points produce identical results",
+        "example": "\n// Add to package.json scripts:\n\"test:entry-points\": \"node tests/verify-entry-point-equivalence.mjs\""
+      }
+    ],
+    "isConsolidated": true
+  },
+  "recommendations": [
+    {
+      "category": "Code Cleanup",
+      "priority": "Medium",
+      "title": "Remove orphaned functions",
+      "description": "Found 17 functions that are defined but never called or exported",
+      "impact": "Reduces bundle size and improves maintainability",
+      "files": [
+        "src\\lib\\engine\\slothlet_engine.mjs",
+        "src\\lib\\engine\\slothlet_engine.mjs",
+        "src\\lib\\engine\\slothlet_engine.mjs",
+        "src\\lib\\engine\\slothlet_engine.mjs",
+        "src\\lib\\engine\\slothlet_esm.mjs",
+        "src\\lib\\engine\\slothlet_helpers.mjs",
+        "src\\lib\\helpers\\als-eventemitter.mjs",
+        "src\\lib\\helpers\\als-eventemitter.mjs",
+        "src\\lib\\helpers\\resolve-from-caller.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime.mjs"
+      ],
+      "action": "Review and remove unused function definitions"
+    },
+    {
+      "category": "Code Cleanup",
+      "priority": "Medium",
+      "title": "Review auto-wrap helper redundancy",
+      "description": "auto-wrap.mjs helper may be redundant with built-in EventEmitter patching",
+      "impact": "Reduces complexity and potential conflicts",
+      "files": [
+        "src\\lib\\helpers\\als-eventemitter.mjs",
+        "src\\lib\\helpers\\auto-wrap.mjs",
+        "src\\lib\\runtime\\runtime-asynclocalstorage.mjs",
+        "src\\lib\\runtime\\runtime-livebindings.mjs",
+        "src\\lib\\runtime\\runtime-new.mjs",
+        "src\\lib\\runtime\\runtime-simple.mjs",
+        "src\\lib\\runtime\\runtime.mjs"
+      ],
+      "action": "Analyze if auto-wrap functionality is already covered by als-eventemitter.mjs"
+    }
+  ]
+}

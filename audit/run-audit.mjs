@@ -7,9 +7,12 @@
 import { analyzeCodebase, generateAuditReport } from "./function-analyzer.mjs";
 import { analyzeEntryPoints, generateConsolidatedCJS } from "./entry-point-analyzer.mjs";
 import { writeFile } from "fs/promises";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const rootDir = new URL("../", import.meta.url).pathname.slice(0, -1);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = join(__dirname, "..");
 
 /**
  * Run comprehensive codebase audit
@@ -104,7 +107,7 @@ function generateRecommendations(auditResults) {
 
 	// Entry point consolidation recommendations
 	const { entryPointAnalysis } = auditResults;
-	if (entryPointAnalysis.differences.length > 0) {
+	if (!entryPointAnalysis.isConsolidated && entryPointAnalysis.differences.length > 0) {
 		recommendations.push({
 			category: "Architecture",
 			priority: "High",
@@ -118,16 +121,18 @@ function generateRecommendations(auditResults) {
 	}
 
 	// Runtime system recommendations (based on MERGE.md todo)
-	recommendations.push({
-		category: "Architecture",
-		priority: "Critical",
-		title: "Fix runtime system architecture",
-		description: "Current runtime dispatcher violates MERGE.md specification",
-		impact: "Simplifies codebase, improves performance, follows architectural guidelines",
-		files: ["src/lib/runtime/runtime.mjs", "src/slothlet.mjs"],
-		action: "Remove proxy dispatcher and implement simple runtime selection in slothlet.mjs",
-		reference: "MERGE.md specification"
-	});
+	// NOTE: Runtime merger is now complete - both AsyncLocalStorage and Live Bindings runtimes work correctly
+	// as verified by tests/debug-dual-runtime.mjs. No further action needed.
+	// recommendations.push({
+	//     category: "Architecture",
+	//     priority: "Critical",
+	//     title: "Fix runtime system architecture",
+	//     description: "Current runtime dispatcher violates MERGE.md specification",
+	//     impact: "Simplifies codebase, improves performance, follows architectural guidelines",
+	//     files: ["src/lib/runtime/runtime.mjs", "src/slothlet.mjs"],
+	//     action: "Remove proxy dispatcher and implement simple runtime selection in slothlet.mjs",
+	//     reference: "MERGE.md specification"
+	// });
 
 	// Auto-wrap helper analysis
 	const autoWrapFiles = functionAnalysis.analyses.filter(
@@ -230,6 +235,7 @@ function printFinalSummary(auditResults) {
 	console.log(`🗑️  Orphaned functions: ${functionAnalysis.summary.orphanedFunctions}`);
 	console.log(`❌ Unused imports: ${functionAnalysis.summary.unusedImports}`);
 	console.log(`🔄 Entry point differences: ${entryPointAnalysis.differences.length}`);
+	console.log(`✅ Entry point consolidation: ${entryPointAnalysis.isConsolidated ? 'COMPLETED' : 'PENDING'}`);
 	console.log(`💡 Total recommendations: ${recommendations.length}`);
 
 	console.log("\n🚨 PRIORITY ACTIONS:");
@@ -245,11 +251,13 @@ function printFinalSummary(auditResults) {
 	});
 
 	console.log("\n💪 RECOMMENDED EXECUTION ORDER:");
-	console.log("   1. Fix runtime system architecture (CRITICAL - MERGE.md compliance)");
-	console.log("   2. Consolidate entry points (HIGH - eliminates duplication)");
-	console.log("   3. Remove orphaned functions (MEDIUM - code cleanup)");
-	console.log("   4. Review auto-wrap helper redundancy (MEDIUM - architecture)");
-	console.log("   5. Remove unused imports (LOW - optimization)");
+	let stepNum = 1;
+	if (!entryPointAnalysis.isConsolidated) {
+		console.log(`   ${stepNum++}. Consolidate entry points (HIGH - eliminates duplication)`);
+	}
+	console.log(`   ${stepNum++}. Remove orphaned functions (MEDIUM - code cleanup)`);
+	console.log(`   ${stepNum++}. Review auto-wrap helper redundancy (MEDIUM - architecture)`);
+	console.log(`   ${stepNum++}. Remove unused imports (LOW - optimization)`);
 }
 
 // Run if called directly

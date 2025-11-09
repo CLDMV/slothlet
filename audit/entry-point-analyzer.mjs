@@ -5,9 +5,12 @@
  */
 
 import { readFile, writeFile } from "fs/promises";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const rootDir = new URL("../", import.meta.url).pathname.slice(0, -1);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = join(__dirname, "..");
 
 /**
  * Analyze differences between index.mjs and index.cjs
@@ -38,23 +41,30 @@ async function analyzeEntryPoints() {
 			hasNormalizeRuntime: cjsContent.includes("normalizeRuntimeType"),
 			hasRuntimeSelection: cjsContent.includes("options.runtime"),
 			importPattern: extractImportPattern(cjsContent),
-			exports: extractExports(cjsContent, "cjs")
+			exports: extractExports(cjsContent, "cjs"),
+			isRequireESM: cjsContent.includes('import("./index.mjs")') || cjsContent.includes("import('./index.mjs')")
 		},
 		differences: [],
-		consolidationOptions: []
+		consolidationOptions: [],
+		isConsolidated: false
 	};
 
-	// Identify differences
-	if (analysis.mjsFile.hasNormalizeRuntime !== analysis.cjsFile.hasNormalizeRuntime) {
-		analysis.differences.push("normalizeRuntimeType function presence differs");
-	}
+	// Check if requireESM pattern is implemented
+	analysis.isConsolidated = analysis.cjsFile.isRequireESM;
 
-	if (analysis.mjsFile.hasRuntimeSelection !== analysis.cjsFile.hasRuntimeSelection) {
-		analysis.differences.push("Runtime selection logic differs");
-	}
+	// Identify differences (only if not consolidated)
+	if (!analysis.isConsolidated) {
+		if (analysis.mjsFile.hasNormalizeRuntime !== analysis.cjsFile.hasNormalizeRuntime) {
+			analysis.differences.push("normalizeRuntimeType function presence differs");
+		}
 
-	if (JSON.stringify(analysis.mjsFile.importPattern) !== JSON.stringify(analysis.cjsFile.importPattern)) {
-		analysis.differences.push("Import patterns differ");
+		if (analysis.mjsFile.hasRuntimeSelection !== analysis.cjsFile.hasRuntimeSelection) {
+			analysis.differences.push("Runtime selection logic differs");
+		}
+
+		if (JSON.stringify(analysis.mjsFile.importPattern) !== JSON.stringify(analysis.cjsFile.importPattern)) {
+			analysis.differences.push("Import patterns differ");
+		}
 	}
 
 	// Generate consolidation recommendations
@@ -282,19 +292,25 @@ async function main() {
 		console.log(`📁 index.cjs: ${analysis.cjsFile.lines} lines`);
 		console.log(`🔄 Differences found: ${analysis.differences.length}`);
 		console.log(`💡 Consolidation options: ${analysis.consolidationOptions.length}`);
+		console.log(`✅ Consolidation status: ${analysis.isConsolidated ? 'COMPLETED' : 'PENDING'}`);
 
-		if (analysis.differences.length > 0) {
+		if (analysis.isConsolidated) {
+			console.log("\n✅ ENTRY POINTS ARE CONSOLIDATED!");
+			console.log("   index.cjs uses requireESM pattern to import index.mjs");
+			console.log("   Single source of truth maintained in index.mjs");
+			console.log("   No further consolidation needed.");
+		} else if (analysis.differences.length > 0) {
 			console.log("\n🔄 DIFFERENCES:");
 			analysis.differences.forEach((diff) => {
 				console.log(`   - ${diff}`);
 			});
-		}
 
-		console.log("\n💡 CONSOLIDATION OPTIONS:");
-		analysis.consolidationOptions.forEach((option, index) => {
-			console.log(`   ${index + 1}. ${option.name}`);
-			console.log(`      ${option.description}`);
-		});
+			console.log("\n💡 CONSOLIDATION OPTIONS:");
+			analysis.consolidationOptions.forEach((option, index) => {
+				console.log(`   ${index + 1}. ${option.name}`);
+				console.log(`      ${option.description}`);
+			});
+		}
 
 		console.log(`\n📄 Detailed analysis: ${reportPath}`);
 		console.log(`📄 CJS consolidation example: ${examplePath}`);

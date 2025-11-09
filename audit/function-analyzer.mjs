@@ -5,10 +5,12 @@
  */
 
 import { readdir, readFile, stat } from "fs/promises";
-import { join, relative, extname } from "path";
-import { pathToFileURL } from "url";
+import { join, relative, extname, dirname } from "path";
+import { pathToFileURL, fileURLToPath } from "url";
 
-const rootDir = new URL("../", import.meta.url).pathname.slice(0, -1); // Remove trailing slash
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = join(__dirname, "..");
 const srcDir = join(rootDir, "src");
 
 /**
