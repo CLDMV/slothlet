@@ -16,7 +16,7 @@ async function testMultiInstanceIsolation() {
 		console.log("\n📦 Creating eager API...");
 		const eagerApi = await slothlet({
 			dir: "./api_tests/api_test",
-			lazy: false, // Eager mode
+			mode: "eager", // New syntax for eager mode
 			debug: false
 		});
 
@@ -24,7 +24,7 @@ async function testMultiInstanceIsolation() {
 		console.log("📦 Creating lazy API...");
 		const lazyApi = await slothlet({
 			dir: "./api_tests/api_test",
-			lazy: true, // Lazy mode
+			mode: "lazy", // New syntax for lazy mode
 			debug: false
 		});
 

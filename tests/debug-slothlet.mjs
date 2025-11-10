@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 08:09:40 -07:00 (1761577780)
+ *	@Last modified time: 2025-11-09 22:10:15 -08:00 (1762755015)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -482,6 +482,44 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "utilities.helpers.parse",
 			calls: [{ path: ["utilities", "helpers", "parse"], args: ['{"test":true}'] }]
+		},
+
+		// Rule 8 Pattern B: Mixed Export Flattening (C10)
+		{
+			section: "mixed (default)",
+			calls: [{ path: ["mixed"], args: ["test message"] }]
+		},
+		{
+			section: "mixed.mixedNamed",
+			calls: [{ path: ["mixed", "mixedNamed"], args: ["test value"] }]
+		},
+		{
+			section: "mixed.mixedAnother",
+			calls: [{ path: ["mixed", "mixedAnother"], args: [5] }]
+		},
+
+		// Rule 8 Pattern C: Non-matching Object Export (C13)
+		{
+			section: "singletest.helper.utilities.format",
+			calls: [{ path: ["singletest", "helper", "utilities", "format"], args: ["test input"] }]
+		},
+		{
+			section: "singletest.helper.utilities.parse",
+			calls: [{ path: ["singletest", "helper", "utilities", "parse"], args: ["test value"] }]
+		},
+
+		// Rule 9: Additional Function Name Preference Tests (actual API paths)
+		{
+			section: "task.parseJSON",
+			calls: [{ path: ["task", "parseJSON"], args: ['{"key": "value"}'] }]
+		},
+		{
+			section: "util.getHTTPStatus",
+			calls: [{ path: ["util", "getHTTPStatus"], args: [200] }]
+		},
+		{
+			section: "util.XMLParser",
+			calls: [{ path: ["util", "XMLParser"], args: ["<root><item>test</item></root>"] }]
 		},
 
 		// empty folder test (Rule 5 verification - should create empty object)

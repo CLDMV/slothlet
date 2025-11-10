@@ -42,11 +42,27 @@ export type SlothletOptions = {
      */
     dir?: string;
     /**
-     * - Loading strategy:
+     * - Loading strategy (legacy option):
      * - `true`: Lazy loading - modules loaded on-demand when accessed (lower initial load, proxy overhead)
      * - `false`: Eager loading - all modules loaded immediately (default, higher initial load, direct access)
      */
     lazy?: boolean;
+    /**
+     * - Loading mode (alternative to lazy option):
+     * - `"lazy"`: Lazy loading - modules loaded on-demand when accessed (same as lazy: true)
+     * - `"eager"`: Eager loading - all modules loaded immediately (same as lazy: false)
+     * - `"singleton"`, `"vm"`, `"worker"`, `"fork"`: Execution engine mode (legacy, use engine option instead)
+     * - Takes precedence over lazy option when both are provided
+     */
+    mode?: string;
+    /**
+     * - Execution environment mode:
+     * - `"singleton"`: Single shared instance within current process (default, fastest)
+     * - `"vm"`: Isolated VM context for security/isolation
+     * - `"worker"`: Web Worker or Worker Thread execution
+     * - `"fork"`: Child process execution for complete isolation
+     */
+    engine?: string;
     /**
      * - Directory traversal depth control:
      * - `Infinity`: Traverse all subdirectories recursively (default)
@@ -62,14 +78,6 @@ export type SlothletOptions = {
      * - Command line and environment settings become the default for all instances unless overridden
      */
     debug?: boolean;
-    /**
-     * - Execution environment mode:
-     * - `"singleton"`: Single shared instance within current process (default, fastest)
-     * - `"vm"`: Isolated VM context for security/isolation
-     * - `"worker"`: Web Worker or Worker Thread execution
-     * - `"fork"`: Child process execution for complete isolation
-     */
-    mode?: string;
     /**
      * - API structure and calling convention:
      * - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)

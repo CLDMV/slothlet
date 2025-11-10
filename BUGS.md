@@ -1,66 +1,72 @@
 # Slothlet Bugs
 
-This document tracks identified bugs in the slothlet codebase.
+This document tracks identified bugs fixed in the current release.
 
-## Bug #1: Module Cache Isolation Between Slothlet Instances
+## Bug #1: Lazy Loading Deep Nested Path Materialization Failure
 
-**Status**: ✅ **FIXED** (November 5, 2025)
+**Status**: ✅ **FIXED** (November 9, 2025)
 
-**Description**: Multiple slothlet instances were sharing the same imported module objects due to Node.js module caching, causing configuration and state to be shared between different slothlet instances when they should have been isolated.
+**Description**: Deep nested property access (4 levels) in lazy loading mode failed to materialize properly, causing "is not a function" errors when accessing the deepest nested API paths. The issue affected existing 4-level deep paths in master including `api.util.controller.getDefault()`, `api.util.extract.NVRSection()`, and `api.util.extract.parseDeviceName()`, as well as newly added test paths like `api.singletest.helper.utilities.format()`.
 
 **Symptoms**:
 
-- Configuration updates in one slothlet instance affected all other instances
-- Shared state between different slothlet instances loading the same API directory
-- Instance IDs were identical across different slothlet instances
-- Cross-contamination of instance-specific values and settings
-- Breaking the fundamental expectation of instance isolation
+- 4-level deep function calls like `api.util.controller.getDefault()` failed with "is not a function"
+- Lazy folder proxies remained as `[Function: lazyFolder_*]` instead of materializing to proper object structures
+- The issue occurred specifically in lazy mode but not in eager mode
+- Shallow paths (1-3 levels) worked correctly, only the deepest 4-level nesting failed
 
 **Expected Behavior**:
 
-- Each slothlet instance should have its own isolated copy of imported modules
-- Configuration updates in one instance should not affect other instances
-- Instance-specific state should remain isolated between different slothlet instances
-- Each instance should maintain its own unique identity and configuration
+- Deep nested paths should materialize automatically when accessed in lazy mode
+- `api.singletest.helper.utilities.format("input")` should work identically in both eager and lazy modes
+- Folder proxies should materialize to their proper object structure when any nested property is accessed
 
 **Root Cause**:
 
-Node.js module caching was causing the same module objects to be reused across different slothlet instances. When slothlet imported modules using:
+Two issues in the lazy loading proxy chain:
 
-```javascript
-// BEFORE: Shared module imports
-const rawModule = await import(moduleUrl);
-```
+1. **Duplicate materialization trigger**: An erroneous `if (!inFlight) inFlight = _materialize();` line was added to `lazy_propertyAccessor`, causing race conditions in the materialization process.
 
-All slothlet instances loading the same file path would get the exact same module object from Node.js cache, including any stateful objects within those modules.
+2. **Missing deep property handler**: The `lazy_deepPropertyAccessor` proxy only had an `apply` handler but no `get` handler, breaking the proxy chain for properties deeper than 3 levels.
 
 **Fix Applied**:
 
-1. **Added unique instance ID generation** to each slothlet instance:
+1. **Removed duplicate materialization check** in `lazy_propertyAccessor`:
 
    ```javascript
-   // Generate unique instance ID for cache isolation between different slothlet instances
-   this.instanceId = `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-   ```
-
-2. **Implemented instance-based cache busting** using query parameters:
-
-   ```javascript
-   // Add instance-based cache busting to isolate imports between different slothlet instances
-   let importUrl = moduleUrl;
-   if (instance && instance.instanceId) {
-   	const separator = moduleUrl.includes("?") ? "&" : "?";
-   	importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+   // BEFORE: Caused race conditions
+   function lazy_propertyAccessor(...args) {
+   	if (!inFlight) inFlight = _materialize(); // ❌ REMOVED
+   	return inFlight.then(/* ... */);
    }
 
-   const rawModule = await import(importUrl);
+   // AFTER: Clean materialization flow
+   function lazy_propertyAccessor(...args) {
+   	return inFlight.then(/* ... */);
+   }
    ```
 
-3. **Files Modified**:
-   - `src/slothlet.mjs` - Added `instanceId` property and generation
-   - `src/lib/helpers/api_builder.mjs` - Updated `analyzeModule()` function
-   - `src/lib/helpers/multidefault.mjs` - Updated `multidefault_analyzeModules()` function
-   - All calling sites updated to pass the `instance` parameter
+2. **Added missing `get` handler** for deeper nesting in `lazy_deepPropertyAccessor`:
+   ```javascript
+   // ADDED: Continues proxy chain for 4+ level nesting
+   get(target, nextProp) {
+       return new Proxy(
+           function lazy_deeperPropertyAccessor() {},
+           {
+               apply(target, thisArg, args) {
+                   // Handle materialization for deeper nested calls
+               }
+           }
+       );
+   }
+   ```
+
+**Impact Before Fix**:
+
+- `src/slothlet.mjs` - Added `instanceId` property and generation
+- `src/lib/helpers/api_builder.mjs` - Updated `analyzeModule()` function
+- `src/lib/helpers/multidefault.mjs` - Updated `multidefault_analyzeModules()` function
+- All calling sites updated to pass the `instance` parameter
 
 **Test Case Created**:
 

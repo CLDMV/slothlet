@@ -35,5 +35,12 @@ export namespace selfObject {
      * console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
      */
     function addViaSelf(a: number, b: number): number;
+    /**
+     * Gets the current instance ID using the runtime system.
+     * @function getCurrentInstanceId
+     * @public
+     * @returns {string} The current instance ID
+     */
+    function getCurrentInstanceId(): string;
 }
 //# sourceMappingURL=self-object.d.mts.map

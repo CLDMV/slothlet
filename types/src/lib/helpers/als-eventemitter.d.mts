@@ -3,7 +3,7 @@
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} [als=sharedALS] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
+ * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
@@ -18,6 +18,6 @@
  * import { enableAlsForEventEmitters } from "./als-eventemitter.mjs";
  * enableAlsForEventEmitters(als);
  */
-export function enableAlsForEventEmitters(als?: AsyncLocalStorage): void;
-export type AsyncLocalStorage = import("async_hooks").AsyncLocalStorage<any>;
+export function enableAlsForEventEmitters(als?: AsyncLocalStorage<any>): void;
+import { AsyncLocalStorage } from "node:async_hooks";
 //# sourceMappingURL=als-eventemitter.d.mts.map

@@ -162,3 +162,6 @@ web_modules/
 clickup-data/*
 debug/*
 TODO.md
+
+# Audit and analysis tools (temporary/local development)
+audit/

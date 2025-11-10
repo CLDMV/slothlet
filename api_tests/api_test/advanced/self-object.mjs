@@ -4,7 +4,7 @@
  * @memberof module:api_test
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+import { self, context, reference } from "@cldmv/slothlet/runtime";
 
 /**
  * Advanced API module for testing slothlet loader self-reference functionality.
@@ -76,24 +76,61 @@ export const selfObject =
 		 * console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 */
 		addViaSelf(a, b) {
-			// console.log("[TEST] === addViaSelf function START ===");
-			// console.log("[TEST] Function called with arguments.length:", arguments.length);
-			// console.log("[TEST] Function called with arguments:", Array.from(arguments));
-			// console.log("[TEST] Function called with a:", a, "b:", b);
-			// console.log("[TEST] === checking self.math.add ===");
-			// console.log("[TEST] typeof self:", typeof self);
-			// console.log("[TEST] typeof self.math:", typeof self.math);
-			// console.log("[TEST] typeof self.math.add:", typeof self.math.add);
-			// console.log("[TEST] self.math.add function:", self.math.add);
-			// console.log("[TEST] self.math.add.toString():", self.math.add ? self.math.add.toString() : "undefined");
+			console.log("[SELF-OBJECT DEBUG] addViaSelf called - dumping stack trace:");
+			console.log(new Error().stack);
+			// Direct test of instance detection
+			import("@cldmv/slothlet/helpers/instance-manager")
+				.then(async ({ detectCurrentInstanceId, getInstanceData }) => {
+					const instanceId = detectCurrentInstanceId();
+					console.log("[TEST] detectCurrentInstanceId():", instanceId);
+					if (instanceId) {
+						const instanceData = getInstanceData(instanceId);
+						console.log("[TEST] instanceData keys:", instanceData ? Object.keys(instanceData) : "null");
+						if (instanceData) {
+							console.log("[TEST] instanceData.self type:", typeof instanceData.self);
+							console.log("[TEST] instanceData.context type:", typeof instanceData.context);
+							console.log("[TEST] instanceData.reference type:", typeof instanceData.reference);
+							if (instanceData.self) {
+								console.log("[TEST] instanceData.self keys:", Object.keys(instanceData.self));
+							}
+						}
+					}
+				})
+				.catch(() => {
+					// instance-manager not available in AsyncLocalStorage version
+					console.log("[TEST] instance-manager not available (AsyncLocalStorage version)");
+				});
+
+			console.log("[TEST] === Runtime Objects Debug ===");
+			console.log("[TEST] typeof self:", typeof self);
+			console.log("[TEST] Object.keys(self):", Object.keys(self));
+			console.log("[TEST] typeof context:", typeof context);
+			console.log("[TEST] Object.keys(context):", Object.keys(context || {}));
+			console.log("[TEST] typeof reference:", typeof reference);
+			console.log("[TEST] Object.keys(reference):", Object.keys(reference || {}));
 
 			if (self && self.math && typeof self.math.add === "function") {
-				// console.log("[TEST] About to call self.math.add with args:", a, b);
+				console.log("[TEST] About to call self.math.add with args:", a, b);
 				const result = self.math.add(a, b);
-				// console.log("[TEST] Result from self.math.add:", result);
+				console.log("[TEST] Result from self.math.add:", result);
 				return result;
 			}
-			// console.log("[TEST] === addViaSelf function END (returning NaN) ===");
+			console.log("[TEST] === addViaSelf function END (returning NaN) ===");
 			return NaN;
+		},
+
+		/**
+		 * Gets the current instance ID using the runtime system.
+		 * @function getCurrentInstanceId
+		 * @public
+		 * @returns {string} The current instance ID
+		 */
+		async getCurrentInstanceId() {
+			try {
+				const { instanceId } = await import("@cldmv/slothlet/runtime");
+				return String(instanceId);
+			} catch (error) {
+				return `error: ${error.message}`;
+			}
 		}
 	};

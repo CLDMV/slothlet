@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 11:04:23 -07:00 (1761588263)
+ *	@Last modified time: 2025-11-09 22:37:38 -08:00 (1762756658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -155,7 +155,6 @@ import fs from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { types as utilTypes } from "node:util";
-import { runWithCtx } from "@cldmv/slothlet/runtime";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 
@@ -190,6 +189,11 @@ import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefaul
  */
 export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	const instance = this; // bound slothlet instance
+
+	// Import the correct runtime based on instance config
+	const runtimePath = instance.config.runtime === "live" ? "@cldmv/slothlet/runtime/live" : "@cldmv/slothlet/runtime/async";
+	const { runWithCtx } = await import(runtimePath);
+
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	let api = {};
 	let rootDefaultFn = null;
@@ -318,7 +322,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				instance,
 				depth,
 				maxDepth,
-				pathParts: [key]
+				pathParts: [key],
+				runWithCtx
 			});
 			parent[key] = proxy;
 		}
@@ -445,7 +450,7 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
  * const result = await proxy.add(2, 3); // Materializes math folder and calls add
  * console.log(result); // 5
  */
-function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts }) {
+function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts, runWithCtx }) {
 	let materialized = null;
 	let inFlight = null;
 
@@ -494,7 +499,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 						instance,
 						depth: cd + 1,
 						maxDepth: md,
-						pathParts: [...pathParts, nestedKey]
+						pathParts: [...pathParts, nestedKey],
+						runWithCtx
 					})
 			});
 			materialized = value;
@@ -693,6 +699,43 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 							 * const result = lazy_deepPropertyAccessor();
 							 */ function lazy_deepPropertyAccessor() {},
 							{
+								get(target, nextProp) {
+									if (nextProp === "name") return `lazy_${prop}_${subProp}`;
+									if (nextProp === "length") return 0;
+									// Continue the chain for even deeper properties
+									return new Proxy(function lazy_deeperPropertyAccessor() {}, {
+										apply(target, thisArg, args) {
+											if (materialized) {
+												const value = materialized[prop];
+												const subValue = value ? value[subProp] : undefined;
+												if (subValue && typeof subValue[nextProp] === "function") {
+													const ctx = instance.boundapi?.__ctx;
+													if (ctx) {
+														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
+													} else {
+														return subValue[nextProp].apply(thisArg, args);
+													}
+												}
+												return subValue ? subValue[nextProp] : undefined;
+											}
+
+											if (!inFlight) inFlight = _materialize();
+											return inFlight.then(function lazy_handleDeeperResolvedValue(resolved) {
+												const value = resolved ? resolved[prop] : undefined;
+												const subValue = value ? value[subProp] : undefined;
+												if (subValue && typeof subValue[nextProp] === "function") {
+													const ctx = instance.boundapi?.__ctx;
+													if (ctx) {
+														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
+													} else {
+														return subValue[nextProp].apply(thisArg, args);
+													}
+												}
+												return subValue ? subValue[nextProp] : undefined;
+											});
+										}
+									});
+								},
 								apply(target, thisArg, args) {
 									// Check if we have materialized value first, then handle promises
 									if (materialized) {

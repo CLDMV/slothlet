@@ -104,6 +104,12 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 > [!TIP]  
 > **📁 For comprehensive examples of API flattening, naming conventions, and function preservation patterns, see the test modules in [api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests) and their documentation in [docs/api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/docs/api_tests)**
 
+> [!NOTE]  
+> **🔍 For detailed technical documentation on API transformation rules:**
+>
+> - **[API-RULES.md](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES.md)** - Verified API transformation rules with examples and test cases
+> - **[API-RULES-CONDITIONS.md](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES-CONDITIONS.md)** - Complete technical reference of all conditional logic that controls API generation
+
 ### 🔗 **Advanced Binding System**
 
 - **Live Bindings**: Dynamic context and reference binding for runtime API mutation
@@ -193,9 +199,16 @@ const mixedResult = await api.interop.processData({ data: "test" }); // CJS+ESM 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-// Lazy mode with copy-left materialization (opt-in)
+// Lazy mode with copy-left materialization
 const api = await slothlet({
-	lazy: true,
+	mode: "lazy", // New preferred syntax
+	dir: "./api",
+	apiDepth: 3
+});
+
+// Or use legacy syntax (still supported)
+const apiLegacy = await slothlet({
+	lazy: true, // Legacy syntax
 	dir: "./api",
 	apiDepth: 3
 });
@@ -214,7 +227,8 @@ import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet({
 	dir: "./api",
-	lazy: false, // Loading strategy
+	mode: "eager", // New: Loading strategy (lazy/eager)
+	engine: "singleton", // New: Execution environment
 	api_mode: "auto", // API structure behavior
 	apiDepth: Infinity, // Directory traversal depth
 	debug: false, // Enable verbose logging
@@ -334,14 +348,49 @@ Creates and loads an API instance with the specified configuration.
 | Option      | Type      | Default       | Description                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------- | --------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dir`       | `string`  | `"api"`       | Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd().                                                                                                                                                                                                                                                                    |
-| `lazy`      | `boolean` | `false`       | Loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate)                                                                                                                                                                                                                                                                                      |
+| `lazy`      | `boolean` | `false`       | **Legacy** loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate). Use `mode` option instead.                                                                                                                                                                                                                                               |
+| `mode`      | `string`  | -             | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading. Takes precedence over `lazy` option. Also supports execution modes for backward compatibility.                                                                                                                                                                                             |
+| `engine`    | `string`  | `"singleton"` | **New** execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                |
 | `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                   |
 | `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                      |
-| `mode`      | `string`  | `"singleton"` | Execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                        |
 | `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports) |
 | `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                        |
 | `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                      |
 | `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Control how filenames become API property names. Supports exact matches, glob patterns (`*json*`), and boundary patterns (`**url**`). Configure `lowerFirst` and `rules` for `leave`, `leaveInsensitive`, `upper`, and `lower` transformations                                                                                                                         |
+
+#### ✨ New Option Format (v2.6.0+)
+
+The option structure has been improved for better clarity:
+
+```javascript
+// ✅ New recommended syntax
+const api = await slothlet({
+	mode: "lazy", // Loading strategy: "lazy" | "eager"
+	engine: "singleton", // Execution environment: "singleton" | "vm" | "worker" | "fork"
+	dir: "./api"
+});
+
+// ✅ Legacy syntax (still fully supported)
+const api = await slothlet({
+	lazy: true, // Boolean loading strategy
+	mode: "singleton", // Execution environment (legacy placement)
+	dir: "./api"
+});
+
+// ✅ Mixed usage (mode takes precedence)
+const api = await slothlet({
+	lazy: false, // Will be overridden
+	mode: "lazy", // Takes precedence - results in lazy loading
+	engine: "singleton"
+});
+```
+
+**Benefits of the new syntax:**
+
+- **Clearer separation**: `mode` for loading strategy, `engine` for execution environment
+- **Better discoverability**: String values are more self-documenting than boolean flags
+- **Future-proof**: Easier to extend with additional loading strategies
+- **Backward compatible**: All existing code continues to work unchanged
 
 #### `slothlet.getApi()` ⇒ `object`
 
@@ -1156,6 +1205,11 @@ Key highlights:
 - **[Contributing Guide](https://github.com/CLDMV/slothlet/blob/HEAD/CONTRIBUTING.md)** - How to contribute to the project
 - **[Security Policy](https://github.com/CLDMV/slothlet/blob/HEAD/SECURITY.md)** - Security guidelines and reporting
 - **[Test Documentation](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests)** - Comprehensive test module examples
+
+### 🔧 Technical Documentation
+
+- **[API Rules](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES.md)** - Systematically verified API transformation rules with real examples and test cases
+- **[API Rules Conditions](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES-CONDITIONS.md)** - Complete technical reference of all 26 conditional statements that control API generation
 
 ---
 

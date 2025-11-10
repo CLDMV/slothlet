@@ -163,13 +163,13 @@ async function testMainExport(tempDir) {
 import slothlet from "@cldmv/slothlet";
 
 async function validateMainExport(): Promise<boolean> {
-    // Test main function with all options
+    // Test main function with all options (including new mode/engine syntax)
     const api: Promise<object | Function> = slothlet({
         dir: './api_tests/api_test',
-        lazy: true,
+        mode: 'lazy',        // New syntax for loading mode
+        engine: 'singleton', // New syntax for execution environment
         debug: false,
         apiDepth: 5,
-        mode: 'singleton',
         api_mode: 'auto',
         context: { test: true },
         reference: { version: '1.0' }
@@ -180,12 +180,19 @@ async function validateMainExport(): Promise<boolean> {
     const api3 = await slothlet({}); // Empty object
     const api4 = await slothlet({ dir: './test' }); // Single property
     
+    // Test legacy syntax (should still work)
+    const apiLegacy = await slothlet({
+        dir: './api_tests/api_test',
+        lazy: true,          // Legacy boolean syntax
+        mode: 'singleton'    // Legacy execution mode placement
+    });
+    
     // Test type extraction
     type SlothletType = typeof slothlet;
     type SlothletParams = Parameters<SlothletType>[0];
     type SlothletReturn = ReturnType<SlothletType>;
     
-    const params: SlothletParams = { dir: './test', lazy: true };
+    const params: SlothletParams = { dir: './test', mode: 'eager' };
     const result: SlothletReturn = slothlet(params);
     
     return true;
