@@ -49,10 +49,11 @@ function normalizeRuntimeType(runtime) {
  *
  * @param {object} [options={}] - Configuration options for the slothlet instance
  * @param {string} [options.dir="api"] - Directory to load API modules from
- * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false)
+ * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false) - legacy option
+ * @param {string} [options.mode] - Loading mode ("lazy", "eager") or execution mode ("singleton", "vm", "worker", "fork") - takes precedence over lazy option
+ * @param {string} [options.engine="singleton"] - Execution mode (singleton, vm, worker, fork)
  * @param {number} [options.apiDepth=Infinity] - Maximum directory depth to scan
  * @param {boolean} [options.debug=false] - Enable debug logging
- * @param {string} [options.mode="singleton"] - Execution mode (singleton, vm, worker, fork)
  * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
  * @param {object} [options.context={}] - Context data for live bindings
  * @param {object} [options.reference={}] - Reference objects to merge into API root

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 10:38:09 -08:00 (1762713489)
+ *	@Last modified time: 2025-11-10 09:28:15 -08:00 (1762795695)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -305,11 +305,26 @@ const slothletObject = {
 			return this.boundapi;
 		}
 
+		// Support both old and new option names:
+		// - engine (new) vs mode (old) for execution environment
+		// - mode: "lazy"/"eager" as alternative to lazy: true/false
+		const { entry = import.meta.url, engine = "singleton", mode, api_mode = "auto" } = options ?? {};
+
+		// Handle execution engine option (backward compatibility for mode -> engine)
+		const executionEngine = mode && ["singleton", "vm", "worker", "fork"].includes(mode) ? mode : engine;
+
+		// Handle loading mode option (mode: "lazy"/"eager" takes precedence over lazy: true/false)
+		let isLazyMode;
+		if (mode && ["lazy", "eager"].includes(mode)) {
+			isLazyMode = mode === "lazy";
+		} else {
+			isLazyMode = options.lazy !== undefined ? options.lazy : this.config.lazy;
+		}
+
 		// Generate unique instance ID for cache isolation between different slothlet instances
-		// Use options parameter to get the correct runtime and lazy settings
 		const runtimeType = normalizeRuntimeType(options.runtime || "async");
-		const loadingMode = options.lazy !== undefined ? (options.lazy ? "lazy" : "eager") : this.config.lazy ? "lazy" : "eager";
-		this.instanceId = `slothlet_${runtimeType}_${loadingMode}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
+		const loadingModeStr = isLazyMode ? "lazy" : "eager";
+		this.instanceId = `slothlet_${runtimeType}_${loadingModeStr}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {
@@ -351,20 +366,18 @@ const slothletObject = {
 			}
 		}
 
-		// Default entry is THIS module, which re-exports `slothlet`
-		// const { entry = import.meta.url, mode = "vm" } = options ?? {};
-		const { entry = import.meta.url, mode = "singleton", api_mode = "auto" } = options ?? {};
-
 		// self = this.boundapi;
 		// context = this.context;
 		// reference = this.reference;
 
-		this.mode = mode;
+		this.mode = executionEngine;
 		this.api_mode = api_mode;
 		let api;
 		let dispose;
-		if (mode === "singleton") {
-			const { context = null, reference = null, sanitize = null, ...loadConfig } = options;
+		if (executionEngine === "singleton") {
+			// Destructure and exclude engine/mode from loadConfig to avoid conflicts
+			// eslint-disable-next-line no-unused-vars
+			const { context = null, reference = null, sanitize = null, engine, mode, ...loadConfig } = options;
 			this.context = context;
 			this.reference = reference;
 
@@ -372,6 +385,9 @@ const slothletObject = {
 			if (sanitize !== null) {
 				this.config.sanitize = sanitize;
 			}
+
+			// Update loadConfig with the resolved loading mode, removing conflicting options
+			loadConfig.lazy = isLazyMode;
 
 			/**
 			 * Conditionally initialize boundapi as a function or object based on api_mode.
@@ -404,7 +420,8 @@ const slothletObject = {
 			return this.boundapi;
 		} else {
 			const { createEngine } = await import("./lib/engine/slothlet_engine.mjs");
-			({ api, dispose } = await createEngine({ entry, ...options }));
+			// Pass the execution engine as 'mode' parameter to createEngine for backward compatibility
+			({ api, dispose } = await createEngine({ entry, mode: executionEngine, ...options }));
 			// setShutdown(dispose); // stash the disposer so shutdown() can call it
 			// Attach __dispose__ as a non-enumerable property to the API object
 			if (typeof dispose === "function") {
@@ -1558,9 +1575,19 @@ export default slothlet;
  *   - Can be absolute or relative path.
  *   - If relative, resolved from the calling file's location.
  *   - Defaults to "api" directory relative to caller.
- * @property {boolean} [lazy=false] - Loading strategy:
+ * @property {boolean} [lazy=false] - Loading strategy (legacy option):
  *   - `true`: Lazy loading - modules loaded on-demand when accessed (lower initial load, proxy overhead)
  *   - `false`: Eager loading - all modules loaded immediately (default, higher initial load, direct access)
+ * @property {string} [mode] - Loading mode (alternative to lazy option):
+ *   - `"lazy"`: Lazy loading - modules loaded on-demand when accessed (same as lazy: true)
+ *   - `"eager"`: Eager loading - all modules loaded immediately (same as lazy: false)
+ *   - `"singleton"`, `"vm"`, `"worker"`, `"fork"`: Execution engine mode (legacy, use engine option instead)
+ *   - Takes precedence over lazy option when both are provided
+ * @property {string} [engine=singleton] - Execution environment mode:
+ *   - `"singleton"`: Single shared instance within current process (default, fastest)
+ *   - `"vm"`: Isolated VM context for security/isolation
+ *   - `"worker"`: Web Worker or Worker Thread execution
+ *   - `"fork"`: Child process execution for complete isolation
  * @property {number} [apiDepth=Infinity] - Directory traversal depth control:
  *   - `Infinity`: Traverse all subdirectories recursively (default)
  *   - `0`: Only load files in root directory, no subdirectories
@@ -1570,11 +1597,6 @@ export default slothlet;
  *   - `false`: Silent operation (default)
  *   - Can be set via command line flag `--slothletdebug`, environment variable `SLOTHLET_DEBUG=true`, or options parameter
  *   - Command line and environment settings become the default for all instances unless overridden
- * @property {string} [mode=singleton] - Execution environment mode:
- *   - `"singleton"`: Single shared instance within current process (default, fastest)
- *   - `"vm"`: Isolated VM context for security/isolation
- *   - `"worker"`: Web Worker or Worker Thread execution
- *   - `"fork"`: Child process execution for complete isolation
  * @property {string} [api_mode=auto] - API structure and calling convention:
  *   - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
  *   - `"function"`: Force API to be callable as function with properties attached
