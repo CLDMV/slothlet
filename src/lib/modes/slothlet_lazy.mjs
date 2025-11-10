@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 09:25:38 -08:00 (1762709138)
+ *	@Last modified time: 2025-11-09 22:37:38 -08:00 (1762756658)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -648,7 +648,6 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				 * const result = await lazy_propertyAccessor(arg1, arg2);
 				 */
 				function lazy_propertyAccessor(...args) {
-					if (!inFlight) inFlight = _materialize();
 					return inFlight.then(
 						/**
 						 * @function lazy_handleResolvedValue
@@ -700,6 +699,43 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 							 * const result = lazy_deepPropertyAccessor();
 							 */ function lazy_deepPropertyAccessor() {},
 							{
+								get(target, nextProp) {
+									if (nextProp === "name") return `lazy_${prop}_${subProp}`;
+									if (nextProp === "length") return 0;
+									// Continue the chain for even deeper properties
+									return new Proxy(function lazy_deeperPropertyAccessor() {}, {
+										apply(target, thisArg, args) {
+											if (materialized) {
+												const value = materialized[prop];
+												const subValue = value ? value[subProp] : undefined;
+												if (subValue && typeof subValue[nextProp] === "function") {
+													const ctx = instance.boundapi?.__ctx;
+													if (ctx) {
+														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
+													} else {
+														return subValue[nextProp].apply(thisArg, args);
+													}
+												}
+												return subValue ? subValue[nextProp] : undefined;
+											}
+
+											if (!inFlight) inFlight = _materialize();
+											return inFlight.then(function lazy_handleDeeperResolvedValue(resolved) {
+												const value = resolved ? resolved[prop] : undefined;
+												const subValue = value ? value[subProp] : undefined;
+												if (subValue && typeof subValue[nextProp] === "function") {
+													const ctx = instance.boundapi?.__ctx;
+													if (ctx) {
+														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
+													} else {
+														return subValue[nextProp].apply(thisArg, args);
+													}
+												}
+												return subValue ? subValue[nextProp] : undefined;
+											});
+										}
+									});
+								},
 								apply(target, thisArg, args) {
 									// Check if we have materialized value first, then handle promises
 									if (materialized) {

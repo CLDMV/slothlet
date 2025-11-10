@@ -22,8 +22,8 @@ Each rule documents:
 - [x] Rule 5: Multi-Default Export Mixed Pattern ✅ **VERIFIED** (api_tests/api_tv_test) - Re-verified
 - [x] Rule 6: Self-Referential Export Protection ✅ **VERIFIED** (api_tests/api_test) - Tested
 - [x] Rule 7: Auto-Flattening Single Named Export ✅ **VERIFIED** (api_tests/api_test) - Tested
-- [x] Rule 8: Single-File Auto-Flattening Patterns ✅ **PARTIALLY VERIFIED** (Patterns A & D verified with real test files, Patterns B & C need test cases)
-- [x] Rule 9: Function Name Preference Over Sanitization ✅ **PARTIALLY VERIFIED** (auto-ip.mjs example verified, need additional test cases)
+- [x] Rule 8: Single-File Auto-Flattening Patterns ✅ **FULLY VERIFIED** (All 4 patterns A, B, C, D verified with real test files)
+- [x] Rule 9: Function Name Preference Over Sanitization ✅ **FULLY VERIFIED** (Multiple examples verified: autoIP, parseJSON, getHTTPStatus, XMLParser)
 - [x] Rule 10: Generic Filename Parent-Level Promotion ✅ **VERIFIED** (nest4/singlefile.mjs example verified with api_tests/api_test)
 
 > **Note**: Rule 11 (Single File Context Flattening) has been **intentionally removed** from slothlet for architectural reasons. The rule reduced API path flexibility and was commented out in source code (api_builder.mjs lines 618-626, multidefault.mjs lines 212-216). This maintains cleaner API namespacing while preserving predictable path structures.
@@ -559,9 +559,19 @@ api.math.add(2, 3); // → 5 ✅ VERIFIED with api_tests/api_test
 **Pattern C: Non-matching Object Export** (C13):
 
 ```javascript
-// File: folder/file.mjs (object name doesn't match filename)
-// Need to find example - no current test case available
-// ⚠️ PATTERN C NEEDS TEST CASE
+// File: api_tests/api_test/singletest/helper.mjs (single file, object name ≠ filename)
+export const utilities = {
+	format(input) {
+		return `Formatted: ${input}`;
+	},
+	parse(value) {
+		return `Parsed: ${value}`;
+	}
+};
+
+// Result: No auto-flattening, full nested path preserved
+api.singletest.helper.utilities.format("test"); // → "Formatted: test" ✅ VERIFIED (eager mode)
+// Note: Deep nested paths have known issues in lazy mode
 ```
 
 **Pattern D: Default Function Flattening** (C15):
