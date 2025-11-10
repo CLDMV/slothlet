@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-21 16:26:51 -07:00 (1761089211)
+ *	@Last modified time: 2025-11-09 13:57:16 -08:00 (1762725436)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -32,14 +32,17 @@
 
 import { AsyncResource } from "node:async_hooks";
 import { EventEmitter } from "node:events";
-import { sharedALS } from "../runtime/runtime.mjs";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+// Define a default ALS instance to avoid circular imports
+const defaultALS = new AsyncLocalStorage();
 
 /**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
  * @function enableAlsForEventEmitters
  * @package
- * @param {AsyncLocalStorage} [als=sharedALS] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
+ * @param {AsyncLocalStorage} [als] - The AsyncLocalStorage instance to use (defaults to slothlet's shared instance)
  *
  * @description
  * Patches EventEmitter.prototype to automatically preserve AsyncLocalStorage context
@@ -54,7 +57,7 @@ import { sharedALS } from "../runtime/runtime.mjs";
  * import { enableAlsForEventEmitters } from "./als-eventemitter.mjs";
  * enableAlsForEventEmitters(als);
  */
-export function enableAlsForEventEmitters(als = sharedALS) {
+export function enableAlsForEventEmitters(als = defaultALS) {
 	// Symbol flag so we don't double-patch
 	const kPatched = Symbol.for("slothlet.als.patched");
 
@@ -204,7 +207,3 @@ export function enableAlsForEventEmitters(als = sharedALS) {
 		return res;
 	};
 }
-
-/**
- * @typedef {import('node:async_hooks').AsyncLocalStorage} AsyncLocalStorage
- */

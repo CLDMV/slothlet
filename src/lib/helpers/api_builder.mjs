@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-04 15:24:53 -08:00 (1762298693)
+ *	@Last modified time: 2025-11-09 09:25:37 -08:00 (1762709137)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -52,6 +52,7 @@ import path from "node:path";
 import { types as utilTypes } from "node:util";
 import { pathToFileURL } from "node:url";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
+import { setActiveInstance } from "@cldmv/slothlet/helpers/instance-manager";
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -118,11 +119,22 @@ export async function analyzeModule(modulePath, options = {}) {
 
 	const moduleUrl = pathToFileURL(modulePath).href;
 
-	// Add instance-based cache busting to isolate imports between different slothlet instances
+	// Add instance-based cache busting only for live bindings runtime
 	let importUrl = moduleUrl;
 	if (instance && instance.instanceId) {
-		const separator = moduleUrl.includes("?") ? "&" : "?";
-		importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+		const runtimeType = instance.config?.runtime || "async";
+
+		// Only add URL parameters for live bindings runtime (needs stack trace detection)
+		if (runtimeType === "live") {
+			const separator = moduleUrl.includes("?") ? "&" : "?";
+			importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+			importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
+
+			// Set active instance for live bindings runtime
+			setActiveInstance(instance.instanceId);
+		}
+		// AsyncLocalStorage runtime doesn't need URL parameters or setActiveInstance
+		// It uses als.run() for context isolation
 	}
 
 	const rawModule = await import(importUrl);

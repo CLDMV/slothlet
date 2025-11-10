@@ -362,6 +362,6 @@
 
 **Total Conditions Found**: 26 distinct conditional statements (plus their nested conditions)  
 **Primary Functions**: 5 key functions containing API generation logic  
-**Coverage Gap**: Previous VERIFIED-API-RULES.md documented only 2 of these 26 conditions
+**Coverage Gap**: Previous API-RULES.md documented only 2 of these 26 conditions
 
 **Key Finding**: The majority of slothlet's API structure decisions are controlled by these 26 conditions across 5 functions. Any changes to API generation behavior require understanding and potentially modifying these conditional statements.

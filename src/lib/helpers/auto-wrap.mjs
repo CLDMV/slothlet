@@ -39,13 +39,15 @@
 export async function autoWrapEventEmitters(nodeModule) {
 	// Only wrap if we're in a slothlet API context
 	try {
-		const { self } = await import("@cldmv/slothlet/runtime");
+		// Auto-wrap is only needed for AsyncLocalStorage runtime
+		// Live binding runtime handles context differently and doesn't need EventEmitter wrapping
+		const { self } = await import("@cldmv/slothlet/runtime/async");
 		if (!self?.__ctx) {
-			// Not in slothlet context, return original module
+			// Not in AsyncLocalStorage slothlet context, return original module
 			return nodeModule;
 		}
 
-		const { makeWrapper } = await import("../runtime/runtime.mjs");
+		const { makeWrapper } = await import("@cldmv/slothlet/runtime/async");
 		const wrapper = makeWrapper(self.__ctx);
 
 		// Create wrapped version of the module

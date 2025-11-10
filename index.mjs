@@ -3,6 +3,35 @@
  * @module @cldmv/slothlet
  */
 
+/**
+ * Normalize runtime input to internal standard format.
+ * @function normalizeRuntimeType
+ * @param {string} runtime - Input runtime type (various formats accepted)
+ * @returns {string} Normalized runtime type ("async" or "live")
+ * @internal
+ * @private
+ */
+function normalizeRuntimeType(runtime) {
+	if (!runtime || typeof runtime !== "string") {
+		return "async"; // Default to AsyncLocalStorage
+	}
+
+	const normalized = runtime.toLowerCase().trim();
+
+	// AsyncLocalStorage runtime variants
+	if (normalized === "async" || normalized === "asynclocal" || normalized === "asynclocalstorage") {
+		return "async";
+	}
+
+	// Live bindings runtime variants
+	if (normalized === "live" || normalized === "livebindings" || normalized === "experimental") {
+		return "live";
+	}
+
+	// Default to async for unknown values
+	return "async";
+}
+
 // Development environment check (must happen before slothlet imports)
 (async () => {
 	try {
@@ -20,10 +49,11 @@
  *
  * @param {object} [options={}] - Configuration options for the slothlet instance
  * @param {string} [options.dir="api"] - Directory to load API modules from
- * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false)
+ * @param {boolean} [options.lazy=false] - Use lazy loading (true) or eager loading (false) - legacy option
+ * @param {string} [options.mode] - Loading mode ("lazy", "eager") or execution mode ("singleton", "vm", "worker", "fork") - takes precedence over lazy option
+ * @param {string} [options.engine="singleton"] - Execution mode (singleton, vm, worker, fork)
  * @param {number} [options.apiDepth=Infinity] - Maximum directory depth to scan
  * @param {boolean} [options.debug=false] - Enable debug logging
- * @param {string} [options.mode="singleton"] - Execution mode (singleton, vm, worker, fork)
  * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
  * @param {object} [options.context={}] - Context data for live bindings
  * @param {object} [options.reference={}] - Reference objects to merge into API root
@@ -37,28 +67,28 @@
  */
 export default async function slothlet(options = {}) {
 	// Dynamic imports after environment check
-	const [runtime, mod] = await Promise.all([import("@cldmv/slothlet/runtime"), import("@cldmv/slothlet/slothlet")]);
+	// Dynamic imports after environment check
+	const mod = await import("@cldmv/slothlet/slothlet");
 
-	const { makeWrapper } = runtime;
 	const build = mod.slothlet ?? mod.default;
 
 	const api = await build(options);
+
+	// Use the same runtime selection logic as slothlet.mjs
+	const normalizedRuntime = normalizeRuntimeType(options.runtime);
+	let runtimeModule;
+	if (normalizedRuntime === "live") {
+		runtimeModule = await import("@cldmv/slothlet/runtime/live");
+	} else {
+		// Default to AsyncLocalStorage runtime (original master branch implementation)
+		runtimeModule = await import("@cldmv/slothlet/runtime/async");
+	}
+	const { makeWrapper } = runtimeModule;
 
 	// Prefer an explicit instance context the internal attached to the API (api.__ctx),
 	// else fall back to module-level pieces if you expose them.
 	const ctx = api?.__ctx ?? { self: mod.self, context: mod.context, reference: mod.reference };
 
-	// console.log("[DEBUG index.mjs] Context setup:", {
-	// 	hasApiCtx: !!api?.__ctx,
-	// 	ctxSelfType: typeof ctx.self,
-	// 	ctxSelfKeys: Object.keys(ctx.self || {}),
-	// 	ctxContextType: typeof ctx.context,
-	// 	ctxContextKeys: Object.keys(ctx.context || {}),
-	// 	ctxReferenceType: typeof ctx.reference,
-	// 	ctxReferenceKeys: Object.keys(ctx.reference || {}),
-	// 	fallbackToMod: !api?.__ctx
-	// });
-	// return api;
 	return makeWrapper(ctx)(api);
 }
 

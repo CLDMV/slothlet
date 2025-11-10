@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.5.6",
+	"version": "2.6.0",
 	"moduleVersions": {
 		"lazy": "1.3.0",
 		"eager": "1.3.0"
@@ -33,6 +33,22 @@
 			},
 			"types": "./types/dist/lib/runtime/runtime.d.mts",
 			"import": "./dist/lib/runtime/runtime.mjs"
+		},
+		"./runtime/async": {
+			"development": {
+				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
+			},
+			"types": "./types/dist/lib/runtime/runtime-asynclocalstorage.d.mts",
+			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
+		},
+		"./runtime/live": {
+			"development": {
+				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src/lib/runtime/runtime-livebindings.mjs"
+			},
+			"types": "./types/dist/lib/runtime/runtime-livebindings.d.mts",
+			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
 			"development": {
