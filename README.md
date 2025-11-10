@@ -104,6 +104,12 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 > [!TIP]  
 > **📁 For comprehensive examples of API flattening, naming conventions, and function preservation patterns, see the test modules in [api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests) and their documentation in [docs/api_tests/](https://github.com/CLDMV/slothlet/blob/HEAD/docs/api_tests)**
 
+> [!NOTE]  
+> **🔍 For detailed technical documentation on API transformation rules:**
+>
+> - **[API-RULES.md](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES.md)** - Verified API transformation rules with examples and test cases
+> - **[API-RULES-CONDITIONS.md](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES-CONDITIONS.md)** - Complete technical reference of all conditional logic that controls API generation
+
 ### 🔗 **Advanced Binding System**
 
 - **Live Bindings**: Dynamic context and reference binding for runtime API mutation
@@ -1156,6 +1162,11 @@ Key highlights:
 - **[Contributing Guide](https://github.com/CLDMV/slothlet/blob/HEAD/CONTRIBUTING.md)** - How to contribute to the project
 - **[Security Policy](https://github.com/CLDMV/slothlet/blob/HEAD/SECURITY.md)** - Security guidelines and reporting
 - **[Test Documentation](https://github.com/CLDMV/slothlet/blob/HEAD/api_tests)** - Comprehensive test module examples
+
+### 🔧 Technical Documentation
+
+- **[API Rules](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES.md)** - Systematically verified API transformation rules with real examples and test cases
+- **[API Rules Conditions](https://github.com/CLDMV/slothlet/blob/HEAD/API-RULES-CONDITIONS.md)** - Complete technical reference of all 26 conditional statements that control API generation
 
 ---
 
