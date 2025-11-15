@@ -139,6 +139,39 @@ function runtime_shouldWrapMethod(value, prop) {
 }
 
 /**
+ * @function runtime_shouldExcludeFromProxy
+ * @internal
+ * @private
+ * @param {any} val - The value to check
+ * @returns {boolean} True if the value should be excluded from proxy wrapping entirely
+ *
+ * @description
+ * Determines if a value should be excluded from proxy wrapping entirely.
+ * This prevents Map, Set, and other excluded types from being wrapped in proxies
+ * which would break their native prototype methods. Only checks instanceof exclusions
+ * to avoid breaking context binding for regular objects.
+ *
+ * @example
+ * // Check if value should be excluded from proxying
+ * const shouldExclude = runtime_shouldExcludeFromProxy(new Map());
+ */
+function runtime_shouldExcludeFromProxy(val) {
+	if (val == null || typeof val !== "object") {
+		return false;
+	}
+
+	// Only check instanceof exclusions (Map, Set, etc.) to avoid breaking regular object proxying
+	// Don't check constructor exclusions here as they are used for class instance detection
+	for (const cls of EXCLUDED_INSTANCEOF_CLASSES) {
+		if (typeof cls === "function" && val instanceof cls) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
  * @function runtime_isClassInstance
  * @internal
  * @private
@@ -285,6 +318,13 @@ export const makeWrapper = (ctx) => {
 	const wrap = (val) => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
+
+		// Check if this value should be excluded from proxying entirely
+		// This prevents Map/Set and other excluded types from being wrapped in proxies
+		if (runtime_shouldExcludeFromProxy(val)) {
+			cache.set(val, val); // Cache the original value to avoid repeated checks
+			return val;
+		}
 
 		const proxied = new Proxy(val, {
 			apply(target, thisArg, args) {
