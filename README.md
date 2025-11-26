@@ -260,7 +260,7 @@ const api = await slothlet({
 
 ### Sanitize Options Examples
 
-Transform module filenames into clean, professional API property names:
+Transform module filenames into clean, professional API property names with sophisticated control:
 
 ```javascript
 // Without sanitize options (default behavior)
@@ -272,23 +272,96 @@ const api = await slothlet({ dir: "./api" });
 const api = await slothlet({
 	dir: "./api",
 	sanitize: {
-		lowerFirst: false,
+		lowerFirst: false, // Keep first character casing
+		preserveAllUpper: true, // Preserve identifiers like "COMMON_APPS"
+		preserveAllLower: false, // Transform identifiers like "common_apps"
 		rules: {
-			leave: ["parseJSON"], // Exact match preservation
-			upper: ["**url**", "ip", "http*"], // Boundary + glob patterns
-			leaveInsensitive: ["*xml*"] // Case-insensitive globs
+			leave: ["parseJSON"], // Exact match preservation (case-sensitive)
+			leaveInsensitive: ["*xml*"], // Case-insensitive preservation
+			upper: ["**url**", "ip", "http*"], // Force uppercase transformations
+			lower: ["id", "*id"] // Force lowercase transformations
 		}
 	}
 });
 // Result: api.buildURLWithParams, api.parseJSON, api.autoIP
 ```
 
+**Comprehensive Sanitize Configuration:**
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	sanitize: {
+		// Basic Options
+		lowerFirst: true, // Default: lowercase first character for camelCase
+		preserveAllUpper: true, // Keep "COMMON_APPS" unchanged
+		preserveAllLower: false, // Transform "common_apps" → "commonApps"
+
+		rules: {
+			// Preserve exact matches (case-sensitive)
+			leave: ["parseJSON", "autoIP", "getHTTPStatus"],
+
+			// Preserve patterns (case-insensitive)
+			leaveInsensitive: ["*xml*", "*html*"],
+
+			// Force uppercase transformations
+			upper: [
+				"api", // Exact: "api" → "API"
+				"http*", // Glob: "httpGet" → "HTTPGet"
+				"**url**", // Boundary: "buildUrlPath" → "buildURLPath"
+				"**json**" // Boundary: "parseJsonData" → "parseJSONData"
+			],
+
+			// Force lowercase transformations
+			lower: [
+				"id", // Exact: "ID" → "id"
+				"*id", // Glob: "userId" → "userid"
+				"uuid*" // Glob: "UUIDGenerator" → "uuidGenerator"
+			]
+		}
+	}
+});
+```
+
 **Sanitize Pattern Types:**
 
 - **Exact Match**: `"parseJSON"` - Matches exact string only
-- **Glob Patterns**: `"*json*"`, `"auto*"`, `"http*"` - Wildcard matching
-- **Boundary Patterns**: `"**url**"` - Only matches when surrounded by word boundaries
-- **Case Control**: `leaveInsensitive` for case-insensitive matching
+- **Glob Patterns**:
+  - `"*json*"` - Matches anywhere in string (`parseJsonData`)
+  - `"auto*"` - Matches at start (`autoGenerateId`)
+  - `"*id"` - Matches at end (`userId`)
+- **Boundary Patterns**:
+  - `"**url**"` - Only matches when surrounded by characters (`buildUrlPath` ✓, `url` ✗)
+  - `"**json**"` - Matches `parseJsonData` but not standalone `json`
+- **Case Control**:
+  - `leave` - Case-sensitive exact preservation
+  - `leaveInsensitive` - Case-insensitive preservation
+  - `preserveAllUpper`/`preserveAllLower` - Automatic case detection
+
+**Advanced Pattern Examples:**
+
+```javascript
+// File transformations with patterns:
+sanitizePathName("build-url-with-params", {
+	rules: { upper: ["**url**"] }
+}); // → "buildURLWithParams"
+
+sanitizePathName("parse-json-data", {
+	rules: { upper: ["**json**"] }
+}); // → "parseJSONData"
+
+sanitizePathName("get-http-status", {
+	rules: { upper: ["http*"] }
+}); // → "getHTTPStatus"
+
+sanitizePathName("validate-user-id", {
+	rules: { lower: ["*id"] }
+}); // → "validateUserid"
+
+sanitizePathName("XML_PARSER", {
+	preserveAllUpper: true
+}); // → "XML_PARSER" (preserved)
+```
 
 ### Multiple Instances
 
@@ -345,18 +418,19 @@ Creates and loads an API instance with the specified configuration.
 
 **Options:**
 
-| Option      | Type      | Default       | Description                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------- | --------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`       | `string`  | `"api"`       | Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd().                                                                                                                                                                                                                                                                    |
-| `lazy`      | `boolean` | `false`       | **Legacy** loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate). Use `mode` option instead.                                                                                                                                                                                                                                               |
-| `mode`      | `string`  | -             | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading. Takes precedence over `lazy` option. Also supports execution modes for backward compatibility.                                                                                                                                                                                             |
-| `engine`    | `string`  | `"singleton"` | **New** execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                |
-| `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                   |
-| `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                      |
-| `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports) |
-| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                        |
-| `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                      |
-| `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Control how filenames become API property names. Supports exact matches, glob patterns (`*json*`), and boundary patterns (`**url**`). Configure `lowerFirst` and `rules` for `leave`, `leaveInsensitive`, `upper`, and `lower` transformations                                                                                                                         |
+| Option      | Type      | Default       | Description                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------- | --------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`       | `string`  | `"api"`       | Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd().                                                                                                                                                                                                                                                                                       |
+| `lazy`      | `boolean` | `false`       | **Legacy** loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate). Use `mode` option instead.                                                                                                                                                                                                                                                                  |
+| `mode`      | `string`  | -             | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading. Takes precedence over `lazy` option. Also supports execution modes for backward compatibility.                                                                                                                                                                                                                |
+| `engine`    | `string`  | `"singleton"` | **New** execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                                   |
+| `runtime`   | `string`  | `"async"`     | Runtime context system - `"async"` for AsyncLocalStorage-based context isolation, `"live"` for experimental live-binding system                                                                                                                                                                                                                                                                       |
+| `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                                      |
+| `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                                         |
+| `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports)                    |
+| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                                           |
+| `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                                         |
+| `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Advanced filename-to-API transformation control. Options: `lowerFirst` (boolean), `preserveAllUpper` (boolean), `preserveAllLower` (boolean), `rules` object with `leave` (exact case-sensitive), `leaveInsensitive` (case-insensitive), `upper`/`lower` arrays. Supports exact matches, glob patterns (`*json*`, `http*`), and boundary patterns (`**url**` for surrounded matches only) |
 
 #### ✨ New Option Format (v2.6.0+)
 

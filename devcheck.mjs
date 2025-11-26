@@ -22,26 +22,27 @@ const isCI = !!(
 if (existsSync(srcPath) && !isCI) {
 	// if (existsSync(srcPath) && !existsSync(distPath)) {
 	const nodeEnv = process.env.NODE_ENV?.toLowerCase();
-	const hasNodeOptions = process.env.NODE_OPTIONS?.includes("--conditions=development");
+	const hasSlothletDev = process.env.NODE_OPTIONS?.includes("--conditions=slothlet-dev");
 
-	if (!nodeEnv || (!["dev", "development"].includes(nodeEnv) && !hasNodeOptions)) {
+	if (!nodeEnv || (!["dev", "development"].includes(nodeEnv) && !hasSlothletDev)) {
 		console.error("❌ Development environment not properly configured!");
-		console.error("📁 Source folder detected but NODE_ENV/NODE_OPTIONS not set for development.");
+		console.error("📁 Source folder detected but NODE_ENV/NODE_OPTIONS not set for slothlet development.");
 		console.error("");
 		console.error("🔧 To fix this, run one of these commands:");
 		console.error("   Windows (cmd):");
 		console.error("     set NODE_ENV=development");
-		console.error("     set NODE_OPTIONS=--conditions=development");
+		console.error("     set NODE_OPTIONS=--conditions=slothlet-dev");
 		console.error("");
 		console.error("   Windows (PowerShell):");
 		console.error("     $env:NODE_ENV='development'");
-		console.error("     $env:NODE_OPTIONS='--conditions=development'");
+		console.error("     $env:NODE_OPTIONS='--conditions=slothlet-dev'");
 		console.error("");
 		console.error("   Unix/Linux/macOS:");
 		console.error("     export NODE_ENV=development");
-		console.error("     export NODE_OPTIONS=--conditions=development");
+		console.error("     export NODE_OPTIONS=--conditions=slothlet-dev");
 		console.error("");
 		console.error("💡 This ensures slothlet loads from src/ instead of dist/ for development.");
+		console.error("🔧 Using 'slothlet-dev' prevents conflicts with consumer development settings.");
 		console.error("🚀 CI environments automatically skip this check.");
 		process.exit(1);
 	}
