@@ -19,7 +19,7 @@
 			"import": "./devcheck.mjs"
 		},
 		"./slothlet": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/slothlet.d.mts",
 				"import": "./src/slothlet.mjs"
 			},
@@ -27,7 +27,7 @@
 			"import": "./dist/slothlet.mjs"
 		},
 		"./runtime": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
 				"import": "./src/lib/runtime/runtime.mjs"
 			},
@@ -35,7 +35,7 @@
 			"import": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
 				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
 			},
@@ -43,7 +43,7 @@
 			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
 				"import": "./src/lib/runtime/runtime-livebindings.mjs"
 			},
@@ -51,7 +51,7 @@
 			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/helpers/*.d.mts",
 				"import": "./src/lib/helpers/*.mjs"
 			},
@@ -59,7 +59,7 @@
 			"import": "./dist/lib/helpers/*.mjs"
 		},
 		"./modes/*": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/modes/*.d.mts",
 				"import": "./src/lib/modes/*.mjs"
 			},
