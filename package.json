@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.6.1",
+	"version": "2.6.2",
 	"moduleVersions": {
 		"lazy": "1.3.0",
 		"eager": "1.3.0"
@@ -19,7 +19,7 @@
 			"import": "./devcheck.mjs"
 		},
 		"./slothlet": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/slothlet.d.mts",
 				"import": "./src/slothlet.mjs"
 			},
@@ -27,7 +27,7 @@
 			"import": "./dist/slothlet.mjs"
 		},
 		"./runtime": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
 				"import": "./src/lib/runtime/runtime.mjs"
 			},
@@ -35,7 +35,7 @@
 			"import": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
 				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
 			},
@@ -43,7 +43,7 @@
 			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
 				"import": "./src/lib/runtime/runtime-livebindings.mjs"
 			},
@@ -51,7 +51,7 @@
 			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/helpers/*.d.mts",
 				"import": "./src/lib/helpers/*.mjs"
 			},
@@ -59,7 +59,7 @@
 			"import": "./dist/lib/helpers/*.mjs"
 		},
 		"./modes/*": {
-			"development": {
+			"slothlet-dev": {
 				"types": "./types/src/lib/modes/*.d.mts",
 				"import": "./src/lib/modes/*.mjs"
 			},
@@ -85,8 +85,9 @@
 		"test:performance-aggregated": "node tests/performance-benchmark-aggregated.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
 		"build": "node tools/build-with-tests.mjs",
-		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
+		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
 		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
+		"ci:cleanup-src": "node tools/ci-cleanup-src.mjs",
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",
 		"build:dist": "shx mkdir -p dist && shx cp -r src/* dist/ && shx rm -rf dist/**/*.backup",
 		"build:types": "npx tsc -p .configs/tsconfig.dts.jsonc",

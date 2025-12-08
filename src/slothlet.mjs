@@ -1588,6 +1588,10 @@ export default slothlet;
  *   - `"vm"`: Isolated VM context for security/isolation
  *   - `"worker"`: Web Worker or Worker Thread execution
  *   - `"fork"`: Child process execution for complete isolation
+ * @property {string} [runtime=async] - Runtime binding system:
+ *   - `"async"` or `"asynclocalstorage"`: Use AsyncLocalStorage for context isolation (default, recommended)
+ *   - `"live"` or `"livebindings"`: Use live binding system for dynamic context updates
+ *   - Controls how `self`, `context`, and `reference` bindings are managed across function calls
  * @property {number} [apiDepth=Infinity] - Directory traversal depth control:
  *   - `Infinity`: Traverse all subdirectories recursively (default)
  *   - `0`: Only load files in root directory, no subdirectories

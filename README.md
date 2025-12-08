@@ -40,7 +40,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 v2.0 represents a ground-up rewrite with enterprise-grade features:
 
 - **Universal Module Support**: Load both ESM (`.mjs`) and CommonJS (`.cjs`) files seamlessly
-- **AsyncLocalStorage Integration**: Advanced context isolation and live-binding system
+- **Dual Runtime System**: Choose AsyncLocalStorage or live-bindings for context isolation
 - **4.3x Faster Startup**: Lazy mode achieves 564.17μs vs 2.45ms in eager mode
 - **Copy-Left Materialization**: Once loaded, modules stay materialized for optimal performance
 - **Zero Dependencies**: Pure Node.js implementation with no external dependencies
@@ -113,14 +113,14 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 ### 🔗 **Advanced Binding System**
 
 - **Live Bindings**: Dynamic context and reference binding for runtime API mutation
-- **AsyncLocalStorage**: Per-instance context isolation with seamless integration
+- **Context Isolation**: Dual runtime options for per-instance context isolation with seamless integration
 - **Copy-Left Preservation**: Materialized functions stay materialized, preserving performance gains
 - **Bubble-Up Updates**: Parent API synchronization ensures consistency across the API tree
 - **Mixed Module Support**: Seamlessly blend ESM and CommonJS modules in the same API
 
 ### 🛠 **Developer Experience**
 
-- **Standard Error Handling**: Clear JavaScript errors with plans for enhanced descriptive errors in v2.1.0
+- **Enhanced Error Handling**: Clear JavaScript errors with module suggestions and descriptive errors (planned for v3.0.0)
 - **TypeScript-Friendly**: Comprehensive JSDoc annotations for excellent editor support with auto-generated declarations
 - **Configurable Debug**: Detailed logging for development and troubleshooting via CLI flags or environment variables
 - **Multiple Instances**: Parameter-based isolation for complex applications with instance ID management
@@ -132,7 +132,7 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **Universal Loading**: CommonJS and ESM files work together seamlessly
 - **Zero Dependencies**: Lightweight footprint with no external dependencies
 - **Cross-Platform**: Works seamlessly across all Node.js environments
-- **Extensible**: Modular architecture designed for future plugin system (in development)
+- **Extensible**: Modular architecture with flexible API composition patterns
 
 ---
 
@@ -140,11 +140,16 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 
 ### Requirements
 
-- **Node.js v16.4.0 or higher** (for stable AsyncLocalStorage support)
-- **ESM support** (ES modules with `import`/`export`)
+- **Node.js v12.20.0 or higher** (for ESM support with `import`/`export`)
+- **Node.js v16.4.0 or higher** (recommended for AsyncLocalStorage runtime - `runtime: "async"`)
 
 > [!IMPORTANT]  
-> **v2.x Breaking Change**: Slothlet v2.x requires AsyncLocalStorage for its comprehensive live-binding system, which was stabilized in Node.js v16.4.0+ (June 2021). If you need older Node.js versions, please use slothlet v1.x (which requires Node.js v12.20.0+ (November 2020) for ESM support, dynamic imports, and query string imports). Note that v1.x live-binding worked in ESM (including multiple APIs via query strings) but was not available for multiple API instances in CommonJS.
+> **v2.x Runtime Options**: Slothlet v2.x supports two runtime systems:
+>
+> - **AsyncLocalStorage Runtime** (`runtime: "async"`) - Default, requires Node.js v16.4.0+ for context isolation
+> - **Live Bindings Runtime** (`runtime: "live"`) - Advanced system, works on Node.js v12.20.0+ without AsyncLocalStorage
+>
+> Both runtimes provide full live-binding capabilities with `self`, `context`, and `reference` support across ESM and CommonJS modules. Use `runtime: "live"` for older Node.js versions or advanced binding scenarios.
 
 ### Install
 
@@ -192,6 +197,28 @@ const api = await slothlet({
 
 const result = api.math.multiply(4, 5); // 20
 const mixedResult = await api.interop.processData({ data: "test" }); // CJS+ESM interop
+```
+
+### Runtime Selection
+
+```javascript
+// AsyncLocalStorage runtime (default) - requires Node.js v16.4.0+
+const apiAsync = await slothlet({
+	dir: "./api",
+	runtime: "async", // or "asynclocalstorage"
+	context: { user: "alice" }
+});
+
+// Live bindings runtime - works on Node.js v12.20.0+
+const apiLive = await slothlet({
+	dir: "./api",
+	runtime: "live", // or "livebindings"
+	context: { user: "bob" }
+});
+
+// Both provide identical live-binding capabilities
+import { self, context, reference } from "@cldmv/slothlet/runtime";
+// context.user is available in your modules regardless of runtime choice
 ```
 
 ### Lazy Loading Mode
@@ -260,7 +287,7 @@ const api = await slothlet({
 
 ### Sanitize Options Examples
 
-Transform module filenames into clean, professional API property names:
+Transform module filenames into clean, professional API property names with sophisticated control:
 
 ```javascript
 // Without sanitize options (default behavior)
@@ -272,23 +299,96 @@ const api = await slothlet({ dir: "./api" });
 const api = await slothlet({
 	dir: "./api",
 	sanitize: {
-		lowerFirst: false,
+		lowerFirst: false, // Keep first character casing
+		preserveAllUpper: true, // Preserve identifiers like "COMMON_APPS"
+		preserveAllLower: false, // Transform identifiers like "common_apps"
 		rules: {
-			leave: ["parseJSON"], // Exact match preservation
-			upper: ["**url**", "ip", "http*"], // Boundary + glob patterns
-			leaveInsensitive: ["*xml*"] // Case-insensitive globs
+			leave: ["parseJSON"], // Exact match preservation (case-sensitive)
+			leaveInsensitive: ["*xml*"], // Case-insensitive preservation
+			upper: ["**url**", "ip", "http*"], // Force uppercase transformations
+			lower: ["id", "*id"] // Force lowercase transformations
 		}
 	}
 });
 // Result: api.buildURLWithParams, api.parseJSON, api.autoIP
 ```
 
+**Comprehensive Sanitize Configuration:**
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	sanitize: {
+		// Basic Options
+		lowerFirst: true, // Default: lowercase first character for camelCase
+		preserveAllUpper: true, // Keep "COMMON_APPS" unchanged
+		preserveAllLower: false, // Transform "common_apps" → "commonApps"
+
+		rules: {
+			// Preserve exact matches (case-sensitive)
+			leave: ["parseJSON", "autoIP", "getHTTPStatus"],
+
+			// Preserve patterns (case-insensitive)
+			leaveInsensitive: ["*xml*", "*html*"],
+
+			// Force uppercase transformations
+			upper: [
+				"api", // Exact: "api" → "API"
+				"http*", // Glob: "httpGet" → "HTTPGet"
+				"**url**", // Boundary: "buildUrlPath" → "buildURLPath"
+				"**json**" // Boundary: "parseJsonData" → "parseJSONData"
+			],
+
+			// Force lowercase transformations
+			lower: [
+				"id", // Exact: "ID" → "id"
+				"*id", // Glob: "userId" → "userid"
+				"uuid*" // Glob: "UUIDGenerator" → "uuidGenerator"
+			]
+		}
+	}
+});
+```
+
 **Sanitize Pattern Types:**
 
 - **Exact Match**: `"parseJSON"` - Matches exact string only
-- **Glob Patterns**: `"*json*"`, `"auto*"`, `"http*"` - Wildcard matching
-- **Boundary Patterns**: `"**url**"` - Only matches when surrounded by word boundaries
-- **Case Control**: `leaveInsensitive` for case-insensitive matching
+- **Glob Patterns**:
+  - `"*json*"` - Matches anywhere in string (`parseJsonData`)
+  - `"auto*"` - Matches at start (`autoGenerateId`)
+  - `"*id"` - Matches at end (`userId`)
+- **Boundary Patterns**:
+  - `"**url**"` - Only matches when surrounded by characters (`buildUrlPath` ✓, `url` ✗)
+  - `"**json**"` - Matches `parseJsonData` but not standalone `json`
+- **Case Control**:
+  - `leave` - Case-sensitive exact preservation
+  - `leaveInsensitive` - Case-insensitive preservation
+  - `preserveAllUpper`/`preserveAllLower` - Automatic case detection
+
+**Advanced Pattern Examples:**
+
+```javascript
+// File transformations with patterns:
+sanitizePathName("build-url-with-params", {
+	rules: { upper: ["**url**"] }
+}); // → "buildURLWithParams"
+
+sanitizePathName("parse-json-data", {
+	rules: { upper: ["**json**"] }
+}); // → "parseJSONData"
+
+sanitizePathName("get-http-status", {
+	rules: { upper: ["http*"] }
+}); // → "getHTTPStatus"
+
+sanitizePathName("validate-user-id", {
+	rules: { lower: ["*id"] }
+}); // → "validateUserid"
+
+sanitizePathName("XML_PARSER", {
+	preserveAllUpper: true
+}); // → "XML_PARSER" (preserved)
+```
 
 ### Multiple Instances
 
@@ -323,7 +423,7 @@ console.log(api2.context.tenant); // "bob"
 ```
 
 > [!NOTE]  
-> **v2.x Simplification**: Unlike v1.x which required query string parameters or `withInstanceId()` methods, v2.x automatically creates isolated instances with each `slothlet()` call, leveraging AsyncLocalStorage for complete context separation.
+> **v2.x Simplification**: Unlike v1.x which required query string parameters or `withInstanceId()` methods, v2.x automatically creates isolated instances with each `slothlet()` call, using your chosen runtime system (`async` or `live`) for complete context separation.
 
 ---
 
@@ -345,20 +445,21 @@ Creates and loads an API instance with the specified configuration.
 
 **Options:**
 
-| Option      | Type      | Default       | Description                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------- | --------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`       | `string`  | `"api"`       | Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd().                                                                                                                                                                                                                                                                    |
-| `lazy`      | `boolean` | `false`       | **Legacy** loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate). Use `mode` option instead.                                                                                                                                                                                                                                               |
-| `mode`      | `string`  | -             | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading. Takes precedence over `lazy` option. Also supports execution modes for backward compatibility.                                                                                                                                                                                             |
-| `engine`    | `string`  | `"singleton"` | **New** execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                |
-| `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                   |
-| `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                      |
-| `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports) |
-| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                        |
-| `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                      |
-| `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Control how filenames become API property names. Supports exact matches, glob patterns (`*json*`), and boundary patterns (`**url**`). Configure `lowerFirst` and `rules` for `leave`, `leaveInsensitive`, `upper`, and `lower` transformations                                                                                                                         |
+| Option      | Type      | Default       | Description                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------- | --------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`       | `string`  | `"api"`       | Directory to load API modules from. Can be absolute or relative path. If relative, resolved from process.cwd().                                                                                                                                                                                                                                                                                       |
+| `lazy`      | `boolean` | `false`       | **Legacy** loading strategy - `true` for lazy loading (on-demand), `false` for eager loading (immediate). Use `mode` option instead.                                                                                                                                                                                                                                                                  |
+| `mode`      | `string`  | -             | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading. Takes precedence over `lazy` option. Also supports execution modes for backward compatibility.                                                                                                                                                                                                                |
+| `engine`    | `string`  | `"singleton"` | **New** execution environment mode - `"singleton"`, `"vm"`, `"worker"`, or `"fork"`                                                                                                                                                                                                                                                                                                                   |
+| `runtime`   | `string`  | `"async"`     | Runtime binding system: `"async"` for AsyncLocalStorage-based context isolation (default, requires Node.js v16.4.0+), `"live"` for advanced live-binding system (works on Node.js v12.20.0+). Both provide full live-binding capabilities.                                                                                                                                                            |
+| `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                                      |
+| `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                                         |
+| `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports)                    |
+| `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                                           |
+| `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                                         |
+| `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Advanced filename-to-API transformation control. Options: `lowerFirst` (boolean), `preserveAllUpper` (boolean), `preserveAllLower` (boolean), `rules` object with `leave` (exact case-sensitive), `leaveInsensitive` (case-insensitive), `upper`/`lower` arrays. Supports exact matches, glob patterns (`*json*`, `http*`), and boundary patterns (`**url**` for surrounded matches only) |
 
-#### ✨ New Option Format (v2.6.0+)
+#### ✨ Current Option Format
 
 The option structure has been improved for better clarity:
 
@@ -839,16 +940,16 @@ flowchart TD
     HASDEFAULT -->|Yes| NAMESPACE
 
     HASDEFAULT -->|No| NAMEDONLY{Only Named Exports?}
-    NAMEDONLY -->|Yes| FLATTEN[Flatten All Named Exports<br/>api.connect(), api.disconnect()]
+    NAMEDONLY -->|Yes| FLATTEN["Flatten All Named Exports<br/>api.connect, api.disconnect"]
 
     NAMEDONLY -->|No| SINGLENAMED{Single Named Export<br/>Matching Filename?}
     SINGLENAMED -->|Yes| FLATTENSINGLE[Flatten Single Export<br/>api.math]
     SINGLENAMED -->|No| NAMESPACE
 
-    style FLATTEN fill:#e1f5fe
-    style FLATTENSINGLE fill:#e8f5e8
-    style NAMESPACE fill:#fff3e0
-    style PRESERVE fill:#fce4ec
+    style FLATTEN fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    style FLATTENSINGLE fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px,color:#000
+    style NAMESPACE fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    style PRESERVE fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
 ```
 
 ### 🚀 Benefits of Smart Flattening
@@ -1049,7 +1150,7 @@ const syncResult = await api.string.format("Hello"); // Originally sync, but nee
 ## 🛡 Error Handling
 
 > [!NOTE]  
-> **Current Error Behavior**: Slothlet currently uses standard JavaScript error handling. Enhanced error handling with module suggestions is planned for v2.1.0 but not yet implemented.
+> **Current Error Behavior**: Slothlet currently uses standard JavaScript error handling. Enhanced error handling with module suggestions is planned for v3.0.0 but not yet implemented.
 
 **Current behavior:**
 
@@ -1062,7 +1163,7 @@ try {
 }
 ```
 
-**Planned Enhanced Error Features (v2.1.0):**
+**Planned Enhanced Error Features (v3.0.0):**
 
 > [!TIP]  
 > **Coming Soon**: Enhanced error handling with descriptive messages and module suggestions:
@@ -1123,7 +1224,7 @@ try {
 2. **Configuration**: New options (`api_mode`, `context`, `reference`)
 3. **Function names**: Enhanced preservation of original capitalization
 4. **Module structure**: Mixed ESM/CJS support
-5. **Live bindings**: New runtime system with AsyncLocalStorage
+5. **Live bindings**: Dual runtime system with AsyncLocalStorage and live-bindings options
 
 ### Migration Steps
 
@@ -1234,7 +1335,7 @@ Apache-2.0 © Shinrai / CLDMV
 
 Slothlet v2.0 represents a complete architectural rewrite with enterprise-grade features and performance. Special thanks to all contributors who made this comprehensive enhancement possible.
 
-**🎉 Welcome to the future of module loading with Slothlet v2.0!**
+**🎉 Welcome to the future of module loading with Slothlet!**
 
 > _Where sophisticated architecture meets blazing performance - slothlet is anything but slow._
 

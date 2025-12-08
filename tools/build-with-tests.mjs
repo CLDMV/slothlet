@@ -88,7 +88,7 @@ async function runCommand(command, args, description, extraEnv = {}) {
 async function buildWithTests() {
 	console.log("🚀 Starting Test-First Build Pipeline");
 	console.log("=".repeat(50));
-	const devEnv = { NODE_ENV: "development", NODE_OPTIONS: "--conditions=development" };
+	const devEnv = { NODE_ENV: "development", NODE_OPTIONS: "--conditions=slothlet-dev" };
 
 	try {
 		// Step 1: Run vitest tests

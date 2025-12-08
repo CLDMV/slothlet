@@ -64,6 +64,13 @@ export type SlothletOptions = {
      */
     engine?: string;
     /**
+     * - Runtime binding system:
+     * - `"async"` or `"asynclocalstorage"`: Use AsyncLocalStorage for context isolation (default, recommended)
+     * - `"live"` or `"livebindings"`: Use live binding system for dynamic context updates
+     * - Controls how `self`, `context`, and `reference` bindings are managed across function calls
+     */
+    runtime?: string;
+    /**
      * - Directory traversal depth control:
      * - `Infinity`: Traverse all subdirectories recursively (default)
      * - `0`: Only load files in root directory, no subdirectories
