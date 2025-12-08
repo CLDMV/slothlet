@@ -145,9 +145,10 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 
 > [!IMPORTANT]  
 > **v2.x Runtime Options**: Slothlet v2.x supports two runtime systems:
+>
 > - **AsyncLocalStorage Runtime** (`runtime: "async"`) - Default, requires Node.js v16.4.0+ for context isolation
 > - **Live Bindings Runtime** (`runtime: "live"`) - Advanced system, works on Node.js v12.20.0+ without AsyncLocalStorage
-> 
+>
 > Both runtimes provide full live-binding capabilities with `self`, `context`, and `reference` support across ESM and CommonJS modules. Use `runtime: "live"` for older Node.js versions or advanced binding scenarios.
 
 ### Install
@@ -204,13 +205,13 @@ const mixedResult = await api.interop.processData({ data: "test" }); // CJS+ESM 
 // AsyncLocalStorage runtime (default) - requires Node.js v16.4.0+
 const apiAsync = await slothlet({
 	dir: "./api",
-	runtime: "async", // or "asynclocalstorage" 
+	runtime: "async", // or "asynclocalstorage"
 	context: { user: "alice" }
 });
 
 // Live bindings runtime - works on Node.js v12.20.0+
 const apiLive = await slothlet({
-	dir: "./api", 
+	dir: "./api",
 	runtime: "live", // or "livebindings"
 	context: { user: "bob" }
 });
@@ -945,10 +946,10 @@ flowchart TD
     SINGLENAMED -->|Yes| FLATTENSINGLE[Flatten Single Export<br/>api.math]
     SINGLENAMED -->|No| NAMESPACE
 
-    style FLATTEN fill:#e1f5fe
-    style FLATTENSINGLE fill:#e8f5e8
-    style NAMESPACE fill:#fff3e0
-    style PRESERVE fill:#fce4ec
+    style FLATTEN fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    style FLATTENSINGLE fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px,color:#000
+    style NAMESPACE fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    style PRESERVE fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
 ```
 
 ### 🚀 Benefits of Smart Flattening
