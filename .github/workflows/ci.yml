@@ -6,7 +6,7 @@
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
 # @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2025-12-07 20:27:48 -08:00 (1765168068)
+# @Last modified time: 2025-12-07 20:37:11 -08:00 (1765168631)
 # -----
 # @Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -59,6 +59,11 @@ on:
                 type: string
                 required: false
                 default: "npm"
+            test_environment:
+                description: "Environment for tests (affects NODE_ENV and NODE_OPTIONS --conditions flag)"
+                type: string
+                required: false
+                default: "slothlet-dev" # Their desired default
 
 jobs:
     ci:
