@@ -12,7 +12,8 @@ import path from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const srcPath = path.join(__dirname, "src");
+const rootDir = path.dirname(__dirname); // Go up one level from tools/ to project root
+const srcPath = path.join(rootDir, "src");
 
 // Detect if we're running in a CI environment
 const isCI = !!(
