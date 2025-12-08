@@ -57,6 +57,11 @@ on:
         type: boolean
         required: false
         default: false
+      test_environment:
+        description: "Environment for tests (affects NODE_ENV and NODE_OPTIONS --conditions flag)"
+        type: string
+        required: false
+        default: "slothlet-dev"
 
 jobs:
   publish-package:
@@ -76,6 +81,7 @@ jobs:
       min_node_version: ${{ github.event.inputs.min_node_version || '16.4' }}
       max_node_major: ${{ github.event.inputs.max_node_major || '22' }}
       test_command: "npm test"
+      test_environment: ${{ github.event.inputs.test_environment || 'slothlet-dev' }}
       build_command: "npm run build:ci"
       is_prerelease: false
       release_source_only: false
