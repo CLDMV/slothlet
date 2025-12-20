@@ -385,6 +385,7 @@ const slothletObject = {
 			// Parse hooks configuration
 			let hooksEnabled = false;
 			let hooksPattern = null;
+			let hooksSuppressErrors = false;
 
 			if (hooks === true || hooks === false) {
 				// Boolean: enabled/disabled with all patterns
@@ -395,13 +396,14 @@ const slothletObject = {
 				hooksEnabled = true;
 				hooksPattern = hooks;
 			} else if (hooks && typeof hooks === "object") {
-				// Object: { enabled, pattern }
+				// Object: { enabled, pattern, suppressErrors }
 				hooksEnabled = hooks.enabled !== false; // Default true if object provided
 				hooksPattern = hooks.pattern || "**";
+				hooksSuppressErrors = hooks.suppressErrors || false;
 			}
 
 			// Create HookManager instance
-			this.hookManager = new HookManager(hooksEnabled, hooksPattern);
+			this.hookManager = new HookManager(hooksEnabled, hooksPattern, { suppressErrors: hooksSuppressErrors });
 
 			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
@@ -525,11 +527,11 @@ const slothletObject = {
 		// Add hooks API to this.api if HookManager exists (BEFORE wrapping with runtime)
 		if (this.hookManager) {
 			const hooksApi = {
-				on: (type, pattern, handler, priority) => this.hookManager.on(type, pattern, handler, priority),
-				off: (idOrPattern, type) => this.hookManager.off(idOrPattern, type),
+				on: (name, type, handler, options) => this.hookManager.on(name, type, handler, options),
+				off: (idOrPattern) => this.hookManager.off(idOrPattern),
 				enable: (pattern) => this.hookManager.enable(pattern),
 				disable: () => this.hookManager.disable(),
-				clear: (type) => this.hookManager.clear(type),
+				clear: () => this.hookManager.clear(),
 				list: (type) => this.hookManager.list(type)
 			};
 

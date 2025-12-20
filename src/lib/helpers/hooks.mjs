@@ -49,10 +49,13 @@ export class HookManager {
 	 * @constructor
 	 * @param {boolean} [enabled=true] - Initial enabled state
 	 * @param {string} [defaultPattern="**"] - Default pattern for filtering
+	 * @param {object} [options={}] - Additional options
+	 * @param {boolean} [options.suppressErrors=false] - If true, errors are logged but not thrown (except for before/after hooks)
 	 */
-	constructor(enabled = true, defaultPattern = "**") {
+	constructor(enabled = true, defaultPattern = "**", options = {}) {
 		this.enabled = enabled;
 		this.defaultPattern = defaultPattern;
+		this.suppressErrors = options.suppressErrors || false;
 		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern}>
 		this.registrationOrder = 0; // Counter for maintaining registration order
 	}
@@ -82,6 +85,7 @@ export class HookManager {
 		const order = this.registrationOrder++;
 
 		this.hooks.set(name, {
+			tag: name,
 			type,
 			handler,
 			priority,
@@ -89,6 +93,8 @@ export class HookManager {
 			compiledPattern,
 			order
 		});
+
+		return name;
 	}
 
 	/**
@@ -214,21 +220,32 @@ export class HookManager {
 		let currentArgs = args;
 
 		for (const hook of hooks) {
-			const result = hook.handler({ path, args: currentArgs });
+			try {
+				const result = hook.handler({ path, args: currentArgs });
 
-			// undefined = continue
-			if (result === undefined) {
-				continue;
+				// undefined = continue
+				if (result === undefined) {
+					continue;
+				}
+
+				// Array = modified args
+				if (Array.isArray(result)) {
+					currentArgs = result;
+					continue;
+				}
+
+				// Any other value = short-circuit
+				return { cancelled: true, value: result, args: currentArgs };
+			} catch (error) {
+				// Error in before hook - report with source info
+				error._hookSourceReported = true;
+				this.executeErrorHooks(path, error, {
+					type: "before",
+					hookId: hook.id,
+					hookTag: hook.tag
+				});
+				throw error;
 			}
-
-			// Array = modified args
-			if (Array.isArray(result)) {
-				currentArgs = result;
-				continue;
-			}
-
-			// Any other value = short-circuit
-			return { cancelled: true, value: result, args: currentArgs };
 		}
 
 		return { cancelled: false, args: currentArgs };
@@ -256,10 +273,21 @@ export class HookManager {
 		let currentResult = initialResult;
 
 		for (const hook of hooks) {
-			const transformed = hook.handler({ path, result: currentResult });
-			// If hook returns undefined, keep current result; otherwise use transformed
-			if (transformed !== undefined) {
-				currentResult = transformed;
+			try {
+				const transformed = hook.handler({ path, result: currentResult });
+				// If hook returns undefined, keep current result; otherwise use transformed
+				if (transformed !== undefined) {
+					currentResult = transformed;
+				}
+			} catch (error) {
+				// Error in after hook - report with source info
+				error._hookSourceReported = true;
+				this.executeErrorHooks(path, error, {
+					type: "after",
+					hookId: hook.id,
+					hookTag: hook.tag
+				});
+				throw error;
 			}
 		}
 
@@ -289,9 +317,14 @@ export class HookManager {
 		for (const hook of hooks) {
 			try {
 				hook.handler({ path, result });
-			} catch (hookError) {
-				// Error in always hook - log but don't throw
-				console.error(`Error in always hook for ${path}:`, hookError);
+			} catch (error) {
+				// Error in always hook - report with source info but don't throw
+				this.executeErrorHooks(path, error, {
+					type: "always",
+					hookId: hook.id,
+					hookTag: hook.tag
+				});
+				// Don't re-throw - always hooks are observers
 			}
 		}
 	}
@@ -302,21 +335,44 @@ export class HookManager {
 	 * @private
 	 * @param {string} path - Function path
 	 * @param {Error} error - Error that was thrown
+	 * @param {Object} [source] - Source information about where error originated
+	 * @param {string} source.type - Source type: 'before', 'function', 'after', 'always'
+	 * @param {string} [source.hookId] - Hook ID if error came from a hook
+	 * @param {string} [source.hookTag] - Hook tag if error came from a hook
 	 * @returns {void}
 	 *
 	 * @description
 	 * Execute error hooks (observers only, errors bubble naturally).
+	 * Provides detailed context about where the error originated.
 	 *
 	 * @example
-	 * // Execute error hooks
-	 * manager.executeErrorHooks("database.users.create", error);
+	 * // Execute error hooks with source info
+	 * manager.executeErrorHooks("database.users.create", error, {
+	 *   type: 'before',
+	 *   hookId: 'hook-123',
+	 *   hookTag: 'validation'
+	 * });
 	 */
-	executeErrorHooks(path, error) {
+	executeErrorHooks(path, error, source = { type: "unknown" }) {
 		const hooks = this._getMatchingHooks("error", path);
+
+		// Enhance error context with source information
+		const errorContext = {
+			path,
+			error,
+			errorType: error.constructor ? error.constructor.name : "Error",
+			source: {
+				type: source.type || "unknown",
+				hookId: source.hookId,
+				hookTag: source.hookTag,
+				timestamp: Date.now(),
+				stack: error.stack
+			}
+		};
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({ path, error });
+				hook.handler(errorContext);
 			} catch (hookError) {
 				// Error in error hook - log but don't throw
 				console.error(`Error in error hook for ${path}:`, hookError);
@@ -342,10 +398,10 @@ export class HookManager {
 	_getMatchingHooks(type, path) {
 		const matching = [];
 
-		for (const hook of this.hooks.values()) {
+		for (const [hookId, hook] of this.hooks.entries()) {
 			if (hook.type !== type) continue;
 			if (!this._matchPattern(hook.compiledPattern, path)) continue;
-			matching.push(hook);
+			matching.push({ ...hook, id: hookId });
 		}
 
 		// Sort: priority DESC, then order ASC

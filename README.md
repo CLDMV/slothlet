@@ -725,6 +725,100 @@ console.log("Processing completed with context preservation");
 
 Slothlet provides a powerful hook system for intercepting, modifying, and observing API function calls. Hooks work seamlessly across all loading modes (eager/lazy) and runtime types (async/live).
 
+#### Hook Configuration
+
+Hooks can be configured when creating a slothlet instance:
+
+```javascript
+// Enable hooks (simple boolean)
+const api = await slothlet({
+	dir: "./api",
+	hooks: true // Enable all hooks with default pattern "**"
+});
+
+// Enable with custom pattern
+const api = await slothlet({
+	dir: "./api",
+	hooks: "database.*" // Only enable for database functions
+});
+
+// Full configuration object
+const api = await slothlet({
+	dir: "./api",
+	hooks: {
+		enabled: true,
+		pattern: "**", // Default pattern for filtering
+		suppressErrors: false // Control error throwing behavior
+	}
+});
+```
+
+**Configuration Options:**
+
+- **`enabled`** (boolean): Enable or disable hook execution
+- **`pattern`** (string): Default pattern for filtering which functions hooks apply to
+- **`suppressErrors`** (boolean): Control error throwing behavior
+  - `false` (default): Errors are sent to error hooks, THEN thrown (normal behavior)
+  - `true`: Errors are sent to error hooks, BUT NOT thrown (returns `undefined`)
+
+**Error Suppression Behavior:**
+
+Error hooks **ALWAYS receive errors** regardless of this setting. The `suppressErrors` option only controls whether errors are thrown after error hooks execute.
+
+> [!IMPORTANT]  
+> **Hooks Must Be Enabled**: Error hooks (and all hooks) only execute when `hooks.enabled: true`. If hooks are disabled, errors are thrown normally without any hook execution.
+
+When `suppressErrors: true`, errors are caught and sent to error hooks, but not thrown:
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	hooks: {
+		enabled: true,
+		pattern: "**",
+		suppressErrors: true // Suppress all errors
+	}
+});
+
+// Register error hook to monitor failures
+api.hooks.on(
+	"error-monitor",
+	"error",
+	({ path, error, source }) => {
+		console.error(`Error in ${path}:`, error.message);
+		// Log to monitoring service without crashing
+	},
+	{ pattern: "**" }
+);
+
+// Function errors won't crash the application
+const result = await api.riskyOperation();
+if (result === undefined) {
+	// Function failed but didn't throw
+	console.log("Operation failed gracefully");
+}
+```
+
+**Error Flow:**
+
+1. Error occurs (in before hook, function, or after hook)
+2. Error hooks execute and receive the error
+3. **If `suppressErrors: false`** → Error is thrown (crashes if uncaught)
+4. **If `suppressErrors: true`** → Error is NOT thrown, function returns `undefined`
+
+**What Gets Suppressed (when `suppressErrors: true`):**
+
+- ✅ Before hook errors → Sent to error hooks, NOT thrown
+- ✅ Function execution errors → Sent to error hooks, NOT thrown
+- ✅ After hook errors → Sent to error hooks, NOT thrown
+- ✅ Always hook errors → Sent to error hooks, never thrown (regardless of setting)
+
+> [!TIP]  
+> **Use Case**: Enable `suppressErrors: true` for resilient systems where you want to monitor failures without crashing. Perfect for background workers, batch processors, or systems with comprehensive error monitoring.
+
+> [!CAUTION]  
+> **Critical Operations**: For validation or authorization hooks where errors MUST stop execution, use `suppressErrors: false` (default) to ensure errors propagate normally.
+
 #### Hook Types
 
 **Three hook types with distinct responsibilities:**
@@ -932,15 +1026,28 @@ api.hooks.clear(); // Remove all hooks
 
 #### Error Handling
 
-Hooks have a special `error` type for observing function errors:
+Hooks have a special `error` type for observing function errors with detailed source tracking:
 
 ```javascript
 api.hooks.on(
 	"error-logger",
 	"error",
-	({ path, error }) => {
+	({ path, error, source }) => {
 		console.error(`Error in ${path}:`, error.message);
-		// Log to monitoring service
+		console.error(`Source: ${source.type}`); // 'before', 'after', 'always', 'function', 'unknown'
+
+		if (source.type === "function") {
+			console.error("Error occurred in function execution");
+		} else if (["before", "after", "always"].includes(source.type)) {
+			console.error(`Error occurred in ${source.type} hook:`);
+			console.error(`  Hook ID: ${source.hookId}`);
+			console.error(`  Hook Tag: ${source.hookTag}`);
+		}
+
+		console.error(`Timestamp: ${source.timestamp}`);
+		console.error(`Stack trace:\n${source.stack}`);
+
+		// Log to monitoring service with full context
 		// Error is re-thrown after all error hooks execute
 	},
 	{ pattern: "**" }
@@ -953,6 +1060,99 @@ try {
 	console.log("Caught error:", error);
 }
 ```
+
+##### Error Source Tracking
+
+Error hooks receive detailed context about where errors originated:
+
+**Source Types:**
+
+- `"function"`: Error occurred during function execution
+- `"before"`: Error occurred in a before hook
+- `"after"`: Error occurred in an after hook
+- `"always"`: Error occurred in an always hook
+- `"unknown"`: Error source could not be determined
+
+**Source Metadata:**
+
+- `source.type`: Error source type (see above)
+- `source.hookId`: Hook identifier (for hook errors)
+- `source.hookTag`: Hook tag/name (for hook errors)
+- `source.timestamp`: ISO timestamp when error occurred
+- `source.stack`: Full stack trace
+
+**Example: Comprehensive Error Monitoring**
+
+```javascript
+const errorStats = {
+	function: 0,
+	before: 0,
+	after: 0,
+	always: 0,
+	byHook: {}
+};
+
+api.hooks.on(
+	"error-analytics",
+	"error",
+	({ path, error, source }) => {
+		// Track error source statistics
+		errorStats[source.type]++;
+
+		if (source.hookId) {
+			if (!errorStats.byHook[source.hookTag]) {
+				errorStats.byHook[source.hookTag] = 0;
+			}
+			errorStats.byHook[source.hookTag]++;
+		}
+
+		// Log detailed error info
+		console.error(`[${source.timestamp}] Error in ${path}:`);
+		console.error(`  Type: ${source.type}`);
+		console.error(`  Message: ${error.message}`);
+
+		if (source.type === "function") {
+			// Function-level error - might be a bug in implementation
+			console.error("  Action: Review function implementation");
+		} else {
+			// Hook-level error - might be a bug in hook logic
+			console.error(`  Action: Review ${source.hookTag} hook (${source.type})`);
+		}
+
+		// Send to monitoring service
+		sendToMonitoring({
+			timestamp: source.timestamp,
+			path,
+			errorType: source.type,
+			hookId: source.hookId,
+			hookTag: source.hookTag,
+			message: error.message,
+			stack: source.stack
+		});
+	},
+	{ pattern: "**" }
+);
+
+// Later: Analyze error patterns
+console.log("Error Statistics:", errorStats);
+// {
+//   function: 5,
+//   before: 2,
+//   after: 1,
+//   always: 0,
+//   byHook: {
+//     "validate-input": 2,
+//     "format-output": 1
+//   }
+// }
+```
+
+**Important Notes:**
+
+- Errors from `before` and `after` hooks are re-thrown after error hooks execute
+- Errors from `always` hooks are caught and logged but do NOT crash execution
+- Error hooks themselves do not receive errors from other error hooks (no recursion)
+- The `_hookSourceReported` flag prevents double-reporting of errors
 
 #### Cross-Mode Compatibility
 
