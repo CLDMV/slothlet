@@ -300,23 +300,34 @@ export class HookManager {
 	 * @private
 	 * @param {string} path - Function path
 	 * @param {any} result - Final result (from function or short-circuit)
+	 * @param {Array<Error>} [errors=[]] - Array of errors that occurred during execution
 	 * @returns {void}
 	 *
 	 * @description
 	 * Execute always hooks (like finally blocks). These hooks always run regardless
-	 * of whether execution was short-circuited or completed normally. Always hooks
-	 * are read-only observers and cannot modify the result.
+	 * of whether execution was short-circuited, completed normally, or threw errors.
+	 * Always hooks receive full execution context including both errors and results,
+	 * allowing a single hook to handle all logging scenarios.
 	 *
 	 * @example
-	 * // Execute always hooks
-	 * manager.executeAlwaysHooks("database.users.create", result);
+	 * // Execute always hooks with success result
+	 * manager.executeAlwaysHooks("database.users.create", result, []);
+	 *
+	 * @example
+	 * // Execute always hooks with error context
+	 * manager.executeAlwaysHooks("database.users.create", undefined, [error]);
 	 */
-	executeAlwaysHooks(path, result) {
+	executeAlwaysHooks(path, result, errors = []) {
 		const hooks = this._getMatchingHooks("always", path);
 
 		for (const hook of hooks) {
 			try {
-				hook.handler({ path, result });
+				hook.handler({
+					path,
+					result,
+					hasError: errors.length > 0,
+					errors
+				});
 			} catch (error) {
 				// Error in always hook - report with source info but don't throw
 				this.executeErrorHooks(path, error, {

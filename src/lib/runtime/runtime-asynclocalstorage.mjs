@@ -98,7 +98,7 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 
 			// If cancelled, skip function and after hooks, but always execute always hooks
 			if (beforeResult.cancelled) {
-				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value);
+				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
 				return beforeResult.value;
 			}
 
@@ -114,7 +114,7 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 					(resolvedResult) => {
 						// Execute after hooks with chaining, then always hooks
 						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult);
+						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
 						return finalResult;
 					},
 					(error) => {
@@ -122,6 +122,8 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 						if (!error._hookSourceReported) {
 							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 						}
+						// Always hooks run like finally blocks - even when errors occur
+						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 						// Re-throw error unless suppressErrors is enabled
 						if (!ctx.hookManager.suppressErrors) {
 							throw error;
@@ -133,13 +135,15 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 
 			// For sync results, execute after hooks then always hooks
 			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
-			ctx.hookManager.executeAlwaysHooks(path, finalResult);
+			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
 			if (!error._hookSourceReported) {
 				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 			}
+			// Always hooks run like finally blocks - even when errors occur
+			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 			// Re-throw error unless suppressErrors is enabled
 			if (!ctx.hookManager.suppressErrors) {
 				throw error;

@@ -315,7 +315,7 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 
 			// If cancelled, skip function and after hooks, but always execute always hooks
 			if (beforeResult.cancelled) {
-				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value);
+				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
 				return beforeResult.value;
 			}
 
@@ -331,7 +331,7 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 					(resolvedResult) => {
 						// Execute after hooks with chaining, then always hooks
 						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult);
+						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
 						return finalResult;
 					},
 					(error) => {
@@ -339,6 +339,8 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 						if (!error._hookSourceReported) {
 							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 						}
+						// Always hooks run like finally blocks - even when errors occur
+						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 						// Re-throw error unless suppressErrors is enabled
 						if (!ctx.hookManager.suppressErrors) {
 							throw error;
@@ -350,13 +352,15 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 
 			// For sync results, execute after hooks then always hooks
 			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
-			ctx.hookManager.executeAlwaysHooks(path, finalResult);
+			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
 			if (!error._hookSourceReported) {
 				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 			}
+			// Always hooks run like finally blocks - even when errors occur
+			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 			// Re-throw error unless suppressErrors is enabled
 			if (!ctx.hookManager.suppressErrors) {
 				throw error;
@@ -402,7 +406,15 @@ export function makeWrapper(ctx) {
 
 				// Check if this is an internal slothlet property (should not have hooks)
 				const isInternalProperty = currentPath === "" && ["hooks", "__ctx", "shutdown", "_impl"].includes(String(prop));
-				const isInternalPath = newPath.startsWith("hooks.") || newPath.startsWith("__ctx.") || newPath.startsWith("shutdown.");
+				const isInternalPath =
+					newPath === "hooks" ||
+					newPath.startsWith("hooks.") ||
+					newPath === "__ctx" ||
+					newPath.startsWith("__ctx.") ||
+					newPath === "shutdown" ||
+					newPath.startsWith("shutdown.") ||
+					newPath === "_impl" ||
+					newPath.startsWith("_impl.");
 
 				// Attach path to functions for hook matching (only for API functions, not internal)
 				if (typeof value === "function" && !value.__slothletPath && !isInternalProperty && !isInternalPath) {

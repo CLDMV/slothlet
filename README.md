@@ -821,7 +821,7 @@ if (result === undefined) {
 
 #### Hook Types
 
-**Three hook types with distinct responsibilities:**
+**Four hook types with distinct responsibilities:**
 
 - **`before`**: Intercept before function execution
   - Modify arguments passed to functions
@@ -831,11 +831,17 @@ if (result === undefined) {
   - Transform function return values
   - Only runs if function executes (skipped on short-circuit)
   - Chain multiple transformations in priority order
-- **`always`**: Observe final result (read-only)
+- **`always`**: Observe final result with full execution context
   - Always executes after function completes
-  - Runs even when `before` hooks cancel execution
+  - Runs even when `before` hooks cancel execution or errors occur
+  - Receives complete context: `{ path, result, hasError, errors }`
   - Cannot modify result (read-only observation)
-  - Perfect for logging, metrics, and monitoring
+  - Perfect for unified logging of both success and error scenarios
+- **`error`**: Monitor and handle errors
+  - Receives detailed error context with source tracking
+  - Error source types: 'before', 'function', 'after', 'always', 'unknown'
+  - Includes error type, hook ID, hook tag, timestamp, and stack trace
+  - Perfect for error monitoring, logging, and alerting
 
 #### Basic Usage
 
@@ -871,13 +877,17 @@ api.hooks.on(
 	{ pattern: "math.*", priority: 100 }
 );
 
-// Always hook: Observe final result (read-only)
+// Always hook: Observe final result with error context
 api.hooks.on(
-	"log-final",
+	"log-execution",
 	"always",
-	({ path, result }) => {
-		console.log(`Final result for ${path}:`, result);
-		// Return value ignored - read-only
+	({ path, result, hasError, errors }) => {
+		if (hasError) {
+			console.log(`${path} failed with ${errors.length} error(s):`, errors);
+		} else {
+			console.log(`${path} succeeded with result:`, result);
+		}
+		// Return value ignored - read-only observer
 	},
 	{ pattern: "**" } // All functions
 );
