@@ -335,10 +335,15 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 						return finalResult;
 					},
 					(error) => {
-						// Execute error hooks (observers only)
-						ctx.hookManager.executeErrorHooks(path, error);
-						// Re-throw error
-						throw error;
+						// Execute error hooks for async function errors
+						if (!error._hookSourceReported) {
+							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+						}
+						// Re-throw error unless suppressErrors is enabled
+						if (!ctx.hookManager.suppressErrors) {
+							throw error;
+						}
+						return undefined; // Return undefined if error suppressed
 					}
 				);
 			}
@@ -348,10 +353,15 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 			ctx.hookManager.executeAlwaysHooks(path, finalResult);
 			return finalResult;
 		} catch (error) {
-			// Execute error hooks for synchronous errors
-			ctx.hookManager.executeErrorHooks(path, error);
-			// Re-throw error
-			throw error;
+			// Execute error hooks for synchronous errors (from function or hooks)
+			if (!error._hookSourceReported) {
+				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+			}
+			// Re-throw error unless suppressErrors is enabled
+			if (!ctx.hookManager.suppressErrors) {
+				throw error;
+			}
+			return undefined; // Return undefined if error suppressed
 		}
 	} finally {
 		// Restore previous active instance

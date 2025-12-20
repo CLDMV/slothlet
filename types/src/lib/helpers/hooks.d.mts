@@ -17,10 +17,15 @@ export class HookManager {
      * @constructor
      * @param {boolean} [enabled=true] - Initial enabled state
      * @param {string} [defaultPattern="**"] - Default pattern for filtering
+     * @param {object} [options={}] - Additional options
+     * @param {boolean} [options.suppressErrors=false] - If true, errors are logged but not thrown (except for before/after hooks)
      */
-    constructor(enabled?: boolean, defaultPattern?: string);
+    constructor(enabled?: boolean, defaultPattern?: string, options?: {
+        suppressErrors?: boolean;
+    });
     enabled: boolean;
     defaultPattern: string;
+    suppressErrors: boolean;
     hooks: Map<any, any>;
     registrationOrder: number;
     /**
@@ -177,14 +182,23 @@ export class HookManager {
      * @private
      * @param {string} path - Function path
      * @param {Error} error - Error that was thrown
+     * @param {Object} [source] - Source information about where error originated
+     * @param {string} source.type - Source type: 'before', 'function', 'after', 'always'
+     * @param {string} [source.hookId] - Hook ID if error came from a hook
+     * @param {string} [source.hookTag] - Hook tag if error came from a hook
      * @returns {void}
      *
      * @description
      * Execute error hooks (observers only, errors bubble naturally).
+     * Provides detailed context about where the error originated.
      *
      * @example
-     * // Execute error hooks
-     * manager.executeErrorHooks("database.users.create", error);
+     * // Execute error hooks with source info
+     * manager.executeErrorHooks("database.users.create", error, {
+     *   type: 'before',
+     *   hookId: 'hook-123',
+     *   hookTag: 'validation'
+     * });
      */
     private executeErrorHooks;
     /**
