@@ -301,8 +301,58 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 	}
 
 	try {
-		// Execute function with correct instance context
-		return Reflect.apply(fn, thisArg, args);
+		// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
+		if (!ctx.hookManager?.enabled || !fn.__slothletPath) {
+			return Reflect.apply(fn, thisArg, args);
+		}
+
+		// Extract function path for hook matching (only API functions have __slothletPath)
+		const path = fn.__slothletPath;
+
+		try {
+			// Execute before hooks
+			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args);
+
+			// If cancelled, skip function and after hooks, but always execute always hooks
+			if (beforeResult.cancelled) {
+				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value);
+				return beforeResult.value;
+			}
+
+			// Use potentially modified args
+			const actualArgs = beforeResult.args;
+
+			// Execute the actual function
+			const result = Reflect.apply(fn, thisArg, actualArgs);
+
+			// Handle Promise results
+			if (result && typeof result === "object" && typeof result.then === "function") {
+				return result.then(
+					(resolvedResult) => {
+						// Execute after hooks with chaining, then always hooks
+						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
+						ctx.hookManager.executeAlwaysHooks(path, finalResult);
+						return finalResult;
+					},
+					(error) => {
+						// Execute error hooks (observers only)
+						ctx.hookManager.executeErrorHooks(path, error);
+						// Re-throw error
+						throw error;
+					}
+				);
+			}
+
+			// For sync results, execute after hooks then always hooks
+			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
+			ctx.hookManager.executeAlwaysHooks(path, finalResult);
+			return finalResult;
+		} catch (error) {
+			// Execute error hooks for synchronous errors
+			ctx.hookManager.executeErrorHooks(path, error);
+			// Re-throw error
+			throw error;
+		}
 	} finally {
 		// Restore previous active instance
 		setActiveInstance(previousActiveInstance);
@@ -310,16 +360,65 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 }
 
 /**
- * Legacy makeWrapper function for backwards compatibility.
+ * Create a wrapper function that sets __slothletPath on API functions.
+ * Required for hook pattern matching to work correctly.
  * @internal
  * @param {object} ctx - The context to bind
- * @returns {function} A wrapper function
+ * @returns {function} A wrapper function that proxies the API
  */
-export function makeWrapper(_) {
-	return function wrapperFunction(obj) {
-		// Since we have instance detection, we might not need complex wrapping
-		// But keep the interface for backwards compatibility
-		return obj;
+export function makeWrapper(ctx) {
+	const cache = new WeakMap();
+
+	return function wrapperFunction(obj, currentPath = "") {
+		if (obj == null || (typeof obj !== "object" && typeof obj !== "function")) {
+			return obj;
+		}
+
+		// Check cache to avoid wrapping the same object multiple times
+		if (cache.has(obj)) {
+			return cache.get(obj);
+		}
+
+		const proxied = new Proxy(obj, {
+			apply(target, thisArg, args) {
+				// Call runWithCtx for hook execution
+				return runWithCtx(ctx, target, thisArg, args);
+			},
+			get(target, prop, receiver) {
+				const value = Reflect.get(target, prop, receiver);
+
+				// Build path for nested properties
+				const newPath = currentPath ? `${currentPath}.${String(prop)}` : String(prop);
+
+				// Check if this is an internal slothlet property (should not have hooks)
+				const isInternalProperty = currentPath === "" && ["hooks", "__ctx", "shutdown", "_impl"].includes(String(prop));
+				const isInternalPath = newPath.startsWith("hooks.") || newPath.startsWith("__ctx.") || newPath.startsWith("shutdown.");
+
+				// Attach path to functions for hook matching (only for API functions, not internal)
+				if (typeof value === "function" && !value.__slothletPath && !isInternalProperty && !isInternalPath) {
+					try {
+						Object.defineProperty(value, "__slothletPath", {
+							value: newPath,
+							writable: false,
+							enumerable: false,
+							configurable: true
+						});
+					} catch {
+						// Ignore if property can't be defined (frozen objects, etc.)
+					}
+				}
+
+				// Recursively wrap returned values (functions and objects)
+				if ((typeof value === "function" || (value && typeof value === "object")) && !isInternalPath) {
+					return wrapperFunction(value, newPath);
+				}
+
+				return value;
+			}
+		});
+
+		cache.set(obj, proxied);
+		return proxied;
 	};
 }
 
