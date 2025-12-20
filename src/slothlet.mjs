@@ -129,6 +129,7 @@ import {
 	buildCategoryDecisions
 } from "@cldmv/slothlet/helpers/api_builder";
 import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
+import { HookManager } from "./lib/helpers/hooks.mjs";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -377,9 +378,30 @@ const slothletObject = {
 		if (executionEngine === "singleton") {
 			// Destructure and exclude engine/mode from loadConfig to avoid conflicts
 			// eslint-disable-next-line no-unused-vars
-			const { context = null, reference = null, sanitize = null, engine, mode, ...loadConfig } = options;
+			const { context = null, reference = null, sanitize = null, hooks = false, engine, mode, ...loadConfig } = options;
 			this.context = context;
 			this.reference = reference;
+
+			// Parse hooks configuration
+			let hooksEnabled = false;
+			let hooksPattern = null;
+
+			if (hooks === true || hooks === false) {
+				// Boolean: enabled/disabled with all patterns
+				hooksEnabled = hooks;
+				hooksPattern = hooks ? "**" : null;
+			} else if (typeof hooks === "string") {
+				// String: enabled with specific pattern
+				hooksEnabled = true;
+				hooksPattern = hooks;
+			} else if (hooks && typeof hooks === "object") {
+				// Object: { enabled, pattern }
+				hooksEnabled = hooks.enabled !== false; // Default true if object provided
+				hooksPattern = hooks.pattern || "**";
+			}
+
+			// Create HookManager instance
+			this.hookManager = new HookManager(hooksEnabled, hooksPattern);
 
 			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
@@ -414,6 +436,8 @@ const slothletObject = {
 			}
 
 			await this.load(loadConfig, { context, reference });
+
+			// Hooks API is now added in load() method before wrapping
 
 			// console.log("this.boundapi", this.boundapi);
 			// process.exit(0);
@@ -497,6 +521,27 @@ const slothletObject = {
 		} else {
 			this.api = await this.modes.eager.create.call(this, apiDir, this.config.apiDepth || Infinity, 0);
 		}
+
+		// Add hooks API to this.api if HookManager exists (BEFORE wrapping with runtime)
+		if (this.hookManager) {
+			const hooksApi = {
+				on: (type, pattern, handler, priority) => this.hookManager.on(type, pattern, handler, priority),
+				off: (idOrPattern, type) => this.hookManager.off(idOrPattern, type),
+				enable: (pattern) => this.hookManager.enable(pattern),
+				disable: () => this.hookManager.disable(),
+				clear: (type) => this.hookManager.clear(type),
+				list: (type) => this.hookManager.list(type)
+			};
+
+			// Define hooks as enumerable to work with both eager and lazy proxies
+			Object.defineProperty(this.api, "hooks", {
+				value: hooksApi,
+				writable: false,
+				enumerable: true,
+				configurable: true
+			});
+		}
+
 		if (this.config.debug) console.log(this.api);
 
 		// Auto-detect api_mode based on whether API is a function (has root default export)
@@ -1189,7 +1234,8 @@ const slothletObject = {
 		this.safeDefine(this.boundapi, "__ctx", {
 			self: this.boundapi,
 			context: this.context,
-			reference: this.reference
+			reference: this.reference,
+			hookManager: this.hookManager
 		});
 	},
 
