@@ -979,6 +979,95 @@ await runTest("ALL MODES: Short-circuit works across all combinations", async ()
 	}
 });
 
+// ============================================================================
+// ENABLE/DISABLE TESTS
+// ============================================================================
+
+await runTest("ENABLE/DISABLE: Hooks don't run when disabled", async () => {
+	const api = await slothlet({
+		dir: "./api_tests/api_test",
+		hooks: true
+	});
+
+	api.hooks.on(
+		"should-not-run",
+		"before",
+		({ path, args }) => {
+			return [args[0] * 10, args[1] * 10];
+		},
+		{ priority: 100, pattern: "math.add" }
+	);
+
+	// Disable hooks
+	api.hooks.disable();
+
+	// Result should be unmodified (5) not modified (50)
+	const result = await api.math.add(2, 3);
+	assert(result === 5, `Expected 5 (hooks disabled), got ${result}`);
+
+	await api.shutdown();
+});
+
+await runTest("ENABLE/DISABLE: Hooks can be re-enabled at runtime", async () => {
+	const api = await slothlet({
+		dir: "./api_tests/api_test",
+		hooks: true
+	});
+
+	api.hooks.on(
+		"toggle-test",
+		"before",
+		({ path, args }) => {
+			return [args[0] * 10, args[1] * 10];
+		},
+		{ priority: 100, pattern: "math.add" }
+	);
+
+	// Initially enabled - hook should run
+	const result1 = await api.math.add(2, 3);
+	assert(result1 === 50, `Expected 50 (enabled), got ${result1}`);
+
+	// Disable hooks
+	api.hooks.disable();
+	const result2 = await api.math.add(2, 3);
+	assert(result2 === 5, `Expected 5 (disabled), got ${result2}`);
+
+	// Re-enable hooks
+	api.hooks.enable();
+	const result3 = await api.math.add(2, 3);
+	assert(result3 === 50, `Expected 50 (re-enabled), got ${result3}`);
+
+	await api.shutdown();
+});
+
+await runTest("ENABLE/DISABLE: Pattern-specific enable works", async () => {
+	const api = await slothlet({
+		dir: "./api_tests/api_test",
+		hooks: true
+	});
+
+	api.hooks.on(
+		"pattern-test",
+		"before",
+		({ path, args }) => {
+			return [args[0] * 10, args[1] * 10];
+		},
+		{ priority: 100, pattern: "math.*" }
+	);
+
+	// Disable all hooks first
+	api.hooks.disable();
+
+	// Enable only math.* pattern
+	api.hooks.enable("math.*");
+
+	// Should work since pattern is enabled
+	const result = await api.math.add(2, 3);
+	assert(result === 50, `Expected 50 (pattern enabled), got ${result}`);
+
+	await api.shutdown();
+});
+
 console.log(`\n=== Test Results ===`);
 console.log(`Passed: ${passedTests}`);
 console.log(`Failed: ${failedTests}`);

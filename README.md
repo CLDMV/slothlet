@@ -74,6 +74,15 @@ v2.0 represents a ground-up rewrite with enterprise-grade features:
 - **AsyncResource Integration**: Production-ready context management following Node.js best practices
 - **Zero Configuration**: Works automatically with TCP servers, HTTP servers, and any EventEmitter-based patterns
 
+### 🎣 **Hook System (v2.6.4)** ⭐ NEW
+
+- **3-Hook Types**: `before` (modify args or cancel), `after` (transform results), `always` (observe final result)
+- **Cross-Mode Compatibility**: Works seamlessly across all 4 combinations (eager/lazy × async/live)
+- **Pattern Matching**: Target specific functions or use wildcards (`math.*`, `*.add`, `**`)
+- **Priority Control**: Order hook execution with numeric priorities
+- **Runtime Control**: Enable/disable hooks at runtime, globally or by pattern
+- **Short-Circuit Support**: Cancel execution and return custom values from `before` hooks
+
 ---
 
 ## 🚀 Key Features
@@ -711,6 +720,278 @@ console.log("Processing completed with context preservation");
 
 > [!TIP]  
 > **Universal Class Support**: Any class instance returned from your API functions automatically maintains slothlet context. This includes database models, service classes, utility classes, and any other object-oriented patterns in your codebase.
+
+### Hook System
+
+Slothlet provides a powerful hook system for intercepting, modifying, and observing API function calls. Hooks work seamlessly across all loading modes (eager/lazy) and runtime types (async/live).
+
+#### Hook Types
+
+**Three hook types with distinct responsibilities:**
+
+- **`before`**: Intercept before function execution
+  - Modify arguments passed to functions
+  - Cancel execution and return custom values (short-circuit)
+  - Execute validation or logging before function runs
+- **`after`**: Transform results after successful execution
+  - Transform function return values
+  - Only runs if function executes (skipped on short-circuit)
+  - Chain multiple transformations in priority order
+- **`always`**: Observe final result (read-only)
+  - Always executes after function completes
+  - Runs even when `before` hooks cancel execution
+  - Cannot modify result (read-only observation)
+  - Perfect for logging, metrics, and monitoring
+
+#### Basic Usage
+
+```javascript
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({
+	dir: "./api",
+	hooks: true // Enable hooks
+});
+
+// Before hook: Modify arguments
+api.hooks.on(
+	"validate-input",
+	"before",
+	({ path, args }) => {
+		console.log(`Calling ${path} with args:`, args);
+		// Return modified args or original
+		return [args[0] * 2, args[1] * 2];
+	},
+	{ pattern: "math.add", priority: 100 }
+);
+
+// After hook: Transform result
+api.hooks.on(
+	"format-output",
+	"after",
+	({ path, result }) => {
+		console.log(`${path} returned:`, result);
+		// Return transformed result
+		return result * 10;
+	},
+	{ pattern: "math.*", priority: 100 }
+);
+
+// Always hook: Observe final result (read-only)
+api.hooks.on(
+	"log-final",
+	"always",
+	({ path, result }) => {
+		console.log(`Final result for ${path}:`, result);
+		// Return value ignored - read-only
+	},
+	{ pattern: "**" } // All functions
+);
+
+// Call function - hooks execute automatically
+const result = await api.math.add(2, 3);
+// Logs: "Calling math.add with args: [2, 3]"
+// Logs: "math.add returned: 10" (4+6)
+// Logs: "Final result for math.add: 100" (10*10)
+// result === 100
+```
+
+#### Short-Circuit Execution
+
+`before` hooks can cancel function execution and return custom values:
+
+```javascript
+// Caching hook example
+const cache = new Map();
+
+api.hooks.on(
+	"cache-check",
+	"before",
+	({ path, args }) => {
+		const key = JSON.stringify({ path, args });
+		if (cache.has(key)) {
+			console.log(`Cache hit for ${path}`);
+			return cache.get(key); // Short-circuit: return cached value
+		}
+		// Return undefined to continue to function
+	},
+	{ pattern: "**", priority: 1000 } // High priority
+);
+
+api.hooks.on(
+	"cache-store",
+	"after",
+	({ path, args, result }) => {
+		const key = JSON.stringify({ path, args });
+		cache.set(key, result);
+		return result; // Pass through
+	},
+	{ pattern: "**", priority: 100 }
+);
+
+// First call - executes function and caches
+await api.math.add(2, 3); // Computes and stores
+
+// Second call - returns cached value (function not executed)
+await api.math.add(2, 3); // Cache hit! No computation
+```
+
+#### Pattern Matching
+
+Hooks support flexible pattern matching:
+
+```javascript
+// Exact match
+api.hooks.on("hook1", "before", handler, { pattern: "math.add" });
+
+// Wildcard: all functions in namespace
+api.hooks.on("hook2", "before", handler, { pattern: "math.*" });
+
+// Wildcard: specific function in all namespaces
+api.hooks.on("hook3", "before", handler, { pattern: "*.add" });
+
+// Global: all functions
+api.hooks.on("hook4", "before", handler, { pattern: "**" });
+```
+
+#### Priority and Chaining
+
+Multiple hooks execute in priority order (highest first):
+
+```javascript
+// High priority - runs first
+api.hooks.on(
+	"validate",
+	"before",
+	({ args }) => {
+		if (args[0] < 0) throw new Error("Negative numbers not allowed");
+		return args;
+	},
+	{ pattern: "math.*", priority: 1000 }
+);
+
+// Medium priority - runs second
+api.hooks.on("double", "before", ({ args }) => [args[0] * 2, args[1] * 2], { pattern: "math.*", priority: 500 });
+
+// Low priority - runs last
+api.hooks.on(
+	"log",
+	"before",
+	({ path, args }) => {
+		console.log(`Final args for ${path}:`, args);
+		return args;
+	},
+	{ pattern: "math.*", priority: 100 }
+);
+```
+
+#### Runtime Control
+
+Enable and disable hooks at runtime:
+
+```javascript
+const api = await slothlet({ dir: "./api", hooks: true });
+
+// Add hooks
+api.hooks.on("test", "before", handler, { pattern: "math.*" });
+
+// Disable all hooks
+api.hooks.disable();
+await api.math.add(2, 3); // No hooks execute
+
+// Re-enable all hooks
+api.hooks.enable();
+await api.math.add(2, 3); // Hooks execute
+
+// Enable specific pattern only
+api.hooks.disable();
+api.hooks.enable("math.*"); // Only math.* pattern enabled
+await api.math.add(2, 3); // math.* hooks execute
+await api.other.func(); // No hooks execute
+```
+
+#### Hook Management
+
+```javascript
+// List registered hooks
+const beforeHooks = api.hooks.list("before");
+const afterHooks = api.hooks.list("after");
+const allHooks = api.hooks.list(); // All types
+
+// Remove specific hook by ID
+const id = api.hooks.on("temp", "before", handler, { pattern: "math.*" });
+api.hooks.off(id);
+
+// Remove all hooks matching pattern
+api.hooks.off("math.*");
+
+// Clear all hooks of a type
+api.hooks.clear("before"); // Remove all before hooks
+api.hooks.clear(); // Remove all hooks
+```
+
+#### Error Handling
+
+Hooks have a special `error` type for observing function errors:
+
+```javascript
+api.hooks.on(
+	"error-logger",
+	"error",
+	({ path, error }) => {
+		console.error(`Error in ${path}:`, error.message);
+		// Log to monitoring service
+		// Error is re-thrown after all error hooks execute
+	},
+	{ pattern: "**" }
+);
+
+try {
+	await api.validateData({ invalid: true });
+} catch (error) {
+	// Error hooks executed before this catch block
+	console.log("Caught error:", error);
+}
+```
+
+#### Cross-Mode Compatibility
+
+Hooks work identically across all configurations:
+
+```javascript
+// Eager + AsyncLocalStorage
+const api1 = await slothlet({ dir: "./api", lazy: false, runtime: "async", hooks: true });
+
+// Eager + Live Bindings
+const api2 = await slothlet({ dir: "./api", lazy: false, runtime: "live", hooks: true });
+
+// Lazy + AsyncLocalStorage
+const api3 = await slothlet({ dir: "./api", lazy: true, runtime: "async", hooks: true });
+
+// Lazy + Live Bindings
+const api4 = await slothlet({ dir: "./api", lazy: true, runtime: "live", hooks: true });
+
+// Same hook code works with all configurations
+[api1, api2, api3, api4].forEach((api) => {
+	api.hooks.on(
+		"universal",
+		"before",
+		({ args }) => {
+			return [args[0] * 10, args[1] * 10];
+		},
+		{ pattern: "math.add" }
+	);
+});
+```
+
+**Key Benefits:**
+
+- ✅ **Universal**: Works across all 4 mode/runtime combinations
+- ✅ **Flexible**: Pattern matching with wildcards and priorities
+- ✅ **Powerful**: Modify args, transform results, observe execution
+- ✅ **Composable**: Chain multiple hooks with priority control
+- ✅ **Dynamic**: Enable/disable at runtime globally or by pattern
+- ✅ **Observable**: Separate hook types for different responsibilities
 
 ### API Mode Configuration
 
