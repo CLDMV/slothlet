@@ -336,7 +336,8 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 					},
 					(error) => {
 						// Execute error hooks for async function errors
-						if (!error._hookSourceReported) {
+						if (!ctx.hookManager.reportedErrors.has(error)) {
+							ctx.hookManager.reportedErrors.add(error);
 							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 						}
 						// Always hooks run like finally blocks - even when errors occur
@@ -356,7 +357,8 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
-			if (!error._hookSourceReported) {
+			if (!ctx.hookManager.reportedErrors.has(error)) {
+				ctx.hookManager.reportedErrors.add(error);
 				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
 			}
 			// Always hooks run like finally blocks - even when errors occur

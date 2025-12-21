@@ -28,6 +28,7 @@ export class HookManager {
     suppressErrors: boolean;
     hooks: Map<any, any>;
     registrationOrder: number;
+    reportedErrors: WeakSet<object>;
     /**
      * @function on
      * @public

@@ -58,6 +58,7 @@ export class HookManager {
 		this.suppressErrors = options.suppressErrors || false;
 		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern}>
 		this.registrationOrder = 0; // Counter for maintaining registration order
+		this.reportedErrors = new WeakSet(); // Track errors that have been reported to prevent duplicate error hook calls
 	}
 
 	/**
@@ -238,7 +239,7 @@ export class HookManager {
 				return { cancelled: true, value: result, args: currentArgs };
 			} catch (error) {
 				// Error in before hook - report with source info
-				error._hookSourceReported = true;
+				this.reportedErrors.add(error);
 				this.executeErrorHooks(path, error, {
 					type: "before",
 					hookId: hook.id,
@@ -281,7 +282,7 @@ export class HookManager {
 				}
 			} catch (error) {
 				// Error in after hook - report with source info
-				error._hookSourceReported = true;
+				this.reportedErrors.add(error);
 				this.executeErrorHooks(path, error, {
 					type: "after",
 					hookId: hook.id,
