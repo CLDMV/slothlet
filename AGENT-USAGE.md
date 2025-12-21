@@ -184,6 +184,198 @@ const api2 = await slothlet({
 // Contexts are isolated - alice can't see bob's data
 ```
 
+## 🎣 Hook System (v2.6.4+)
+
+Slothlet provides a powerful hook system for intercepting and modifying API function calls. Hooks work across all modes and runtimes.
+
+### Hook Configuration
+
+```js
+// Enable hooks with default settings
+const api = await slothlet({
+	dir: "./api",
+	hooks: true // Enables all hooks with pattern "**"
+});
+
+// Enable with error suppression
+const api = await slothlet({
+	dir: "./api",
+	hooks: {
+		enabled: true,
+		pattern: "**",
+		suppressErrors: true // Errors reported to error hooks only, not thrown
+	}
+});
+```
+
+### Hook Types
+
+**Four hook types available:**
+
+- **`before`**: Intercept before function execution
+  - Modify arguments
+  - Cancel execution (short-circuit) and return custom value
+  - Validation and pre-processing
+
+- **`after`**: Transform results after execution
+  - Transform return values
+  - Only runs if function executes
+  - Chain transformations
+
+- **`always`**: Observe final result (read-only)
+  - Always executes (even on short-circuit)
+  - Cannot modify result
+  - Perfect for logging and metrics
+
+- **`error`**: Monitor and handle errors
+  - Receives detailed error context
+  - Source tracking (before/function/after/always)
+  - Error class identification
+
+### Basic Hook Usage
+
+```js
+// Before hook - modify arguments
+api.hooks.on(
+	"validate-input",
+	"before",
+	({ path, args }) => {
+		console.log(`Calling ${path} with:`, args);
+		return [args[0] * 2, args[1] * 2]; // Modified args
+	},
+	{ pattern: "math.add", priority: 100 }
+);
+
+// After hook - transform result
+api.hooks.on(
+	"format-output",
+	"after",
+	({ path, result }) => {
+		return result * 10; // Transform result
+	},
+	{ pattern: "math.*" }
+);
+
+// Always hook - observe (read-only)
+api.hooks.on(
+	"log-final",
+	"always",
+	({ path, result }) => {
+		console.log(`Final: ${path} = ${result}`);
+	},
+	{ pattern: "**" }
+);
+
+// Error hook - monitor failures
+api.hooks.on(
+	"error-monitor",
+	"error",
+	({ path, error, source, errorType }) => {
+		console.error(`${source.type} error in ${path}:`, error.message);
+		console.error(`Error type: ${errorType}`);
+	},
+	{ pattern: "**" }
+);
+```
+
+### Hook Pattern Matching
+
+```js
+// Exact match
+api.hooks.on("hook1", "before", handler, { pattern: "math.add" });
+
+// Namespace wildcard
+api.hooks.on("hook2", "before", handler, { pattern: "math.*" });
+
+// Function wildcard
+api.hooks.on("hook3", "before", handler, { pattern: "*.add" });
+
+// All functions
+api.hooks.on("hook4", "before", handler, { pattern: "**" });
+```
+
+### Short-Circuit Execution
+
+```js
+// Return non-undefined value to short-circuit
+api.hooks.on(
+	"cache-check",
+	"before",
+	({ path, args }) => {
+		const key = JSON.stringify({ path, args });
+		if (cache.has(key)) {
+			return cache.get(key); // Skip function execution
+		}
+		// Return undefined to continue
+	},
+	{ pattern: "**", priority: 1000 }
+);
+```
+
+### Error Suppression
+
+Error hooks **ALWAYS receive errors** regardless of the `suppressErrors` setting. This option only controls whether errors are thrown after error hooks execute.
+
+**Important**: Hooks must be enabled (`enabled: true`) for error hooks to work. If hooks are disabled, all hooks (including error hooks) are bypassed and errors throw normally.
+
+**Default behavior (`suppressErrors: false`)**:
+
+- Errors sent to error hooks, THEN thrown
+- Application crashes on uncaught errors
+
+**Suppressed errors (`suppressErrors: true`)**:
+
+- Errors sent to error hooks, BUT NOT thrown
+- Function returns `undefined` instead of throwing
+- All hook errors suppressed (before, after, always)
+- Perfect for resilient systems with monitoring
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	hooks: {
+		enabled: true,
+		suppressErrors: true // Suppress all errors
+	}
+});
+
+api.hooks.on(
+	"error-log",
+	"error",
+	({ path, error }) => {
+		// Log error without crashing app
+		sendToMonitoring(path, error);
+	},
+	{ pattern: "**" }
+);
+
+// Function fails gracefully
+const result = await api.riskyOperation();
+if (result === undefined) {
+	console.log("Operation failed but didn't crash");
+}
+```
+
+### Hook Management
+
+```js
+// Register hook and get ID
+const hookId = api.hooks.on("my-hook", "before", handler, { pattern: "**" });
+
+// Remove specific hook
+api.hooks.off(hookId);
+
+// Clear all hooks
+api.hooks.clear();
+
+// List registered hooks
+const hooks = api.hooks.list();
+
+// Enable/disable hooks at runtime
+api.hooks.disable(); // Fast-path bypass
+api.hooks.enable("database.*"); // Re-enable with new pattern
+```
+
 ## 📁 File Organization Best Practices
 
 ### ✅ Clean Folder Structure
@@ -302,6 +494,7 @@ When building Slothlet API modules:
 - [ ] **Use proper JSDoc patterns** - One `@module` per folder, `@memberof` for secondary files
 - [ ] **Test cross-module access** via `self.otherModule.method()`
 - [ ] **Include context usage** if module needs user/session data
+- [ ] **Consider hooks** - Will functions be intercepted? Need error monitoring?
 - [ ] **Double quotes everywhere** - Follow Slothlet coding standards
 
 ## 📚 Reference Examples

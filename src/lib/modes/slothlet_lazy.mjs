@@ -621,6 +621,10 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			if (prop === "__materialized") return materialized;
 			if (prop === "_materialize") return _materialize;
 			if (prop === "then") return undefined; // avoid promise-like
+			// Return __slothletPath directly for hook system compatibility
+			if (prop === "__slothletPath") {
+				return pathParts.length > 0 ? pathParts.join(".") : undefined;
+			}
 			// If already materialized, return underlying value directly (supports chaining)
 			if (materialized) {
 				if (materialized && (typeof materialized === "object" || typeof materialized === "function")) return materialized[prop];
@@ -628,11 +632,13 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			}
 			// Ensure materialization started
 			if (!inFlight) inFlight = _materialize();
+			// Calculate API path for this property
+			const apiPath = pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}` : String(prop);
 			// For property access that might be used for synchronous traversal (like reduce),
 			// we need to check if this folder will materialize to an object and return
 			// a synchronous accessor to the property that resolves after materialization completes.
 			// This maintains the synchronous property chain expected by debug scripts.
-			return new Proxy(
+			const propertyProxy = new Proxy(
 				/**
 				 * @function lazy_propertyAccessor
 				 * @internal
@@ -666,13 +672,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 						function lazy_handleResolvedValue(resolved) {
 							const value = resolved ? resolved[prop] : undefined;
 							if (typeof value === "function") {
-								// Get the ALS context from the instance
-								const ctx = instance.boundapi?.__ctx;
-								if (ctx) {
-									return runWithCtx(ctx, value, this, args);
-								} else {
-									return value.apply(this, args);
-								}
+								// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
+								return value.apply(this, args);
 							}
 							return value;
 						}
@@ -683,6 +684,10 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 					get(target, subProp) {
 						if (subProp === "name") return `lazy_${prop}`;
 						if (subProp === "length") return 0;
+						// Return __slothletPath immediately for hook system compatibility
+						if (subProp === "__slothletPath") {
+							return pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}` : String(prop);
+						}
 						// For deeper property access, return another lazy accessor
 						return new Proxy(
 							/**
@@ -709,12 +714,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 												const value = materialized[prop];
 												const subValue = value ? value[subProp] : undefined;
 												if (subValue && typeof subValue[nextProp] === "function") {
-													const ctx = instance.boundapi?.__ctx;
-													if (ctx) {
-														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
-													} else {
-														return subValue[nextProp].apply(thisArg, args);
-													}
+													// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
+													return subValue[nextProp].apply(thisArg, args);
 												}
 												return subValue ? subValue[nextProp] : undefined;
 											}
@@ -741,13 +742,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 									if (materialized) {
 										const value = materialized[prop];
 										if (value && typeof value[subProp] === "function") {
-											// Get the ALS context from the instance
-											const ctx = instance.boundapi?.__ctx;
-											if (ctx) {
-												return runWithCtx(ctx, value[subProp], thisArg, args);
-											} else {
-												return value[subProp].apply(thisArg, args);
-											}
+											// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
+											return value[subProp].apply(thisArg, args);
 										}
 										return value ? value[subProp] : undefined;
 									}
@@ -789,6 +785,16 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 					}
 				}
 			);
+
+			// Set __slothletPath on the lazy accessor for hook system compatibility
+			Object.defineProperty(propertyProxy, "__slothletPath", {
+				value: apiPath,
+				writable: false,
+				enumerable: false,
+				configurable: true
+			});
+
+			return propertyProxy;
 		},
 		has(_t, prop) {
 			if (materialized && (typeof materialized === "object" || typeof materialized === "function")) return prop in materialized;

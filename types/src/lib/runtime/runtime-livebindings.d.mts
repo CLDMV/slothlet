@@ -10,12 +10,13 @@
  */
 export function runWithCtx(ctx: object, fn: Function, thisArg: any, args: any[]): any;
 /**
- * Legacy makeWrapper function for backwards compatibility.
+ * Create a wrapper function that sets __slothletPath on API functions.
+ * Required for hook pattern matching to work correctly.
  * @internal
  * @param {object} ctx - The context to bind
- * @returns {function} A wrapper function
+ * @returns {function} A wrapper function that proxies the API
  */
-export function makeWrapper(_: any): Function;
+export function makeWrapper(ctx: object): Function;
 /**
  * Legacy context management functions - kept for backwards compatibility
  * but may not be needed with instance detection approach.

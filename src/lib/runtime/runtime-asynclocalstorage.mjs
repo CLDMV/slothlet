@@ -66,6 +66,18 @@ enableAlsForEventEmitters(als);
  * const result = runWithCtx(ctx, myFunction, this, [arg1, arg2]);
  */
 export const runWithCtx = (ctx, fn, thisArg, args) => {
+	// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
+	if (!ctx.hookManager?.enabled || !fn.__slothletPath) {
+		const runtime_runInALS = () => {
+			const result = Reflect.apply(fn, thisArg, args);
+			return result;
+		};
+		return als.run(ctx, runtime_runInALS);
+	}
+
+	// Extract function path for hook matching (only API functions have __slothletPath)
+	const path = fn.__slothletPath;
+
 	/**
 	 * @function runtime_runInALS
 	 * @internal
@@ -73,16 +85,75 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 	 * @returns {any} The result of the function execution
 	 *
 	 * @description
-	 * Inner function that executes within AsyncLocalStorage context.
+	 * Inner function that executes within AsyncLocalStorage context with hooks.
 	 *
 	 * @example
 	 * // Internal execution within ALS context
 	 * const result = runtime_runInALS();
 	 */
 	const runtime_runInALS = () => {
-		const result = Reflect.apply(fn, thisArg, args);
-		return result;
+		try {
+			// Execute before hooks
+			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args);
+
+			// If cancelled, skip function and after hooks, but always execute always hooks
+			if (beforeResult.cancelled) {
+				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
+				return beforeResult.value;
+			}
+
+			// Use potentially modified args
+			const actualArgs = beforeResult.args;
+
+			// Execute the actual function
+			const result = Reflect.apply(fn, thisArg, actualArgs);
+
+			// Handle Promise results
+			if (result && typeof result === "object" && typeof result.then === "function") {
+				return result.then(
+					(resolvedResult) => {
+						// Execute after hooks with chaining, then always hooks
+						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
+						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+						return finalResult;
+					},
+					(error) => {
+						// Execute error hooks for async function errors
+						if (!ctx.hookManager.reportedErrors.has(error)) {
+							ctx.hookManager.reportedErrors.add(error);
+							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+						}
+						// Always hooks run like finally blocks - even when errors occur
+						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+						// Re-throw error unless suppressErrors is enabled
+						if (!ctx.hookManager.suppressErrors) {
+							throw error;
+						}
+						return undefined; // Return undefined if error suppressed
+					}
+				);
+			}
+
+			// For sync results, execute after hooks then always hooks
+			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
+			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+			return finalResult;
+		} catch (error) {
+			// Execute error hooks for synchronous errors (from function or hooks)
+			if (!ctx.hookManager.reportedErrors.has(error)) {
+				ctx.hookManager.reportedErrors.add(error);
+				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+			}
+			// Always hooks run like finally blocks - even when errors occur
+			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+			// Re-throw error unless suppressErrors is enabled
+			if (!ctx.hookManager.suppressErrors) {
+				throw error;
+			}
+			return undefined; // Return undefined if error suppressed
+		}
 	};
+
 	return als.run(ctx, runtime_runInALS);
 };
 
@@ -315,7 +386,7 @@ export const makeWrapper = (ctx) => {
 	const cache = new WeakMap();
 	const instanceCache = new WeakMap();
 	const promiseMethodCache = new WeakMap(); // Memoize Promise method wrappers
-	const wrap = (val) => {
+	const wrap = (val, currentPath = "") => {
 		if (val == null || (typeof val !== "object" && typeof val !== "function")) return val;
 		if (cache.has(val)) return cache.get(val);
 
@@ -328,17 +399,6 @@ export const makeWrapper = (ctx) => {
 
 		const proxied = new Proxy(val, {
 			apply(target, thisArg, args) {
-				// console.log("[DEBUG makeWrapper] Function call with context:", {
-				// 	targetName: target.name || "anonymous",
-				// 	ctxSelfType: typeof ctx.self,
-				// 	ctxSelfKeys: Object.keys(ctx.self || {}),
-				// 	ctxContextType: typeof ctx.context,
-				// 	ctxContextKeys: Object.keys(ctx.context || {}),
-				// 	ctxReferenceType: typeof ctx.reference,
-				// 	ctxReferenceKeys: Object.keys(ctx.reference || {}),
-				// 	hasRunWithCtx: typeof runWithCtx === "function"
-				// });
-
 				const result = runWithCtx(ctx, target, thisArg, args);
 
 				// Auto-wrap returned class instances to preserve context for method calls
@@ -361,6 +421,27 @@ export const makeWrapper = (ctx) => {
 			},
 			get(target, prop, receiver) {
 				const value = Reflect.get(target, prop, receiver);
+
+				// Build path for nested properties (always track for enable/disable functionality)
+				const newPath = currentPath ? `${currentPath}.${String(prop)}` : String(prop);
+
+				// Check if this is an internal slothlet property (should not have hooks)
+				const isInternalProperty = currentPath === "" && ["hooks", "__ctx", "shutdown", "_impl"].includes(String(prop));
+				const isInternalPath = newPath.startsWith("hooks.") || newPath.startsWith("__ctx.") || newPath.startsWith("shutdown.");
+
+				// Attach path to functions for hook matching (only for API functions, not internal)
+				if (typeof value === "function" && !value.__slothletPath && !isInternalProperty && !isInternalPath) {
+					try {
+						Object.defineProperty(value, "__slothletPath", {
+							value: newPath,
+							writable: false,
+							enumerable: false,
+							configurable: true
+						});
+					} catch {
+						// Ignore if property can't be defined (frozen objects, etc.)
+					}
+				}
 
 				// Special handling for Promise methods to preserve prototype chain and context
 				// Support both native Promises and thenables (objects with callable 'then')
@@ -394,14 +475,14 @@ export const makeWrapper = (ctx) => {
 						// Use Reflect.apply for cross-realm safety and avoid overridden apply
 						const result = Reflect.apply(value, target, wrappedArgs);
 						// The result might be a new Promise that also needs context wrapping
-						return wrap(result);
+						return wrap(result, newPath);
 					};
 
 					targetMethodCache.set(prop, wrappedMethod);
 					return wrappedMethod;
 				}
 
-				return wrap(value);
+				return wrap(value, newPath);
 			},
 			set(target, prop, value, receiver) {
 				// Invalidate cached Promise method wrapper for this (target, prop)

@@ -65,5 +65,39 @@ export namespace math {
      * console.log(api_test.math.multiply(4, 6)); // 24
      */
     function multiply(a: number, b: number): number;
+    /**
+     * Divides two numbers.
+     * @function divide
+     * @public
+     * @param {number} a - Numerator
+     * @param {number} b - Denominator
+     * @returns {number} The quotient of a divided by b
+     * @throws {Error} If denominator is zero
+     * @example // ESM usage via slothlet API
+     * import slothlet from "@cldmv/slothlet";
+     * const api_test = await slothlet({ dir: './api_tests/api_test' });
+     * console.log(api_test.math.divide(10, 2)); // 5
+     *
+     * @example // ESM usage via slothlet API (inside async function)
+     * async function example() {
+     *   const { default: slothlet } = await import("@cldmv/slothlet");
+     *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+     *   console.log(api_test.math.divide(10, 2)); // 5
+     * }
+     *
+     * @example // CJS usage via slothlet API (top-level)
+     * let slothlet;
+     * (async () => {
+     *   ({ slothlet } = await import("@cldmv/slothlet"));
+     *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+     *   console.log(api_test.math.divide(10, 2)); // 5
+     * })();
+     *
+     * @example // CJS usage via slothlet API (inside async function)
+     * const slothlet = require("@cldmv/slothlet");
+     * const api_test = await slothlet({ dir: './api_tests/api_test' });
+     * console.log(api_test.math.divide(10, 2)); // 5
+     */
+    function divide(a: number, b: number): number;
 }
 //# sourceMappingURL=math.d.mts.map

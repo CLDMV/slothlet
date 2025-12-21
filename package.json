@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.6.3",
+	"version": "2.7.0",
 	"moduleVersions": {
 		"lazy": "1.3.0",
 		"eager": "1.3.0"
@@ -188,6 +188,9 @@
 		"index.cjs",
 		"README.md",
 		"LICENSE",
+		"API-RULES.md",
+		"API-RULES-CONDITIONS.md",
+		"AGENT-USAGE.md",
 		"types/dist/",
 		"types/index.d.mts",
 		"types/index.d.mts.map",
