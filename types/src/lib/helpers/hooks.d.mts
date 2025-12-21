@@ -34,11 +34,15 @@ export class HookManager {
      * @public
      * @param {string} name - Hook name/ID for debugging and removal
      * @param {string} type - Hook type: "before", "after", "always", or "error"
-     * @param {Function} handler - Hook handler function
+     * @param {Function} handler - Hook handler function with type-specific signature:
+     *   - before: ({ path, args }) => modified args array or value to short-circuit
+     *   - after: ({ path, result }) => transformed result
+     *   - always: ({ path, result, hasError, errors }) => void (read-only)
+     *   - error: ({ path, error, errorType, source }) => void (observer)
      * @param {object} [options] - Registration options
      * @param {number} [options.priority=100] - Execution priority (higher = earlier)
      * @param {string} [options.pattern] - Glob pattern for path filtering
-     * @returns {void}
+     * @returns {string} Hook name/ID for later removal
      *
      * @description
      * Register a hook with optional priority and pattern filtering.
@@ -50,47 +54,62 @@ export class HookManager {
     public on(name: string, type: string, handler: Function, options?: {
         priority?: number;
         pattern?: string;
-    }): void;
+    }): string;
     /**
      * @function off
      * @public
-     * @param {string} name - Hook name to remove
-     * @returns {boolean} True if hook was removed
+     * @param {string} nameOrPattern - Hook name or glob pattern to remove
+     * @returns {boolean} True if one or more hooks were removed
      *
      * @description
-     * Remove a registered hook by name.
+     * Remove registered hook(s) by exact name or pattern matching.
      *
      * @example
-     * // Remove hook
+     * // Remove hook by exact name
      * manager.off("validator");
+     *
+     * @example
+     * // Remove all hooks matching pattern
+     * manager.off("math.*");
      */
-    public off(name: string): boolean;
+    public off(nameOrPattern: string): boolean;
     /**
      * @function clear
      * @public
+     * @param {string} [type] - Optional hook type to clear ("before", "after", "always", "error")
      * @returns {void}
      *
      * @description
-     * Remove all registered hooks.
+     * Remove registered hooks. If type is provided, only hooks of that type are removed.
      *
      * @example
      * // Clear all hooks
      * manager.clear();
+     *
+     * @example
+     * // Clear only before hooks
+     * manager.clear("before");
      */
-    public clear(): void;
+    public clear(type?: string): void;
     /**
      * @function list
      * @public
+     * @param {string} [type] - Optional hook type to filter by ("before", "after", "always", "error")
      * @returns {Array<object>} Array of hook metadata
      *
      * @description
-     * List all registered hooks with their metadata.
+     * List registered hooks with their metadata. When type is provided, only hooks
+     * matching that type are returned.
      *
      * @example
-     * // List hooks
+     * // List all hooks
      * const hooks = manager.list();
+     *
+     * @example
+     * // List only before hooks
+     * const beforeHooks = manager.list("before");
      */
-    public list(): Array<object>;
+    public list(type?: string): Array<object>;
     /**
      * @function enable
      * @public

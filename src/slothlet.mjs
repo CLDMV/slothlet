@@ -531,7 +531,7 @@ const slothletObject = {
 				off: (idOrPattern) => this.hookManager.off(idOrPattern),
 				enable: (pattern) => this.hookManager.enable(pattern),
 				disable: () => this.hookManager.disable(),
-				clear: () => this.hookManager.clear(),
+				clear: (type) => this.hookManager.clear(type),
 				list: (type) => this.hookManager.list(type)
 			};
 
