@@ -71,6 +71,10 @@ on:
                 required: false
                 default: false
 
+permissions:
+    id-token: write  # Required for OIDC
+    contents: read
+  
 jobs:
     publish-package:
         if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
