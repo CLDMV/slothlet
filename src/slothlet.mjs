@@ -129,6 +129,7 @@ import {
 	buildCategoryDecisions
 } from "@cldmv/slothlet/helpers/api_builder";
 import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
+import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "./lib/helpers/als-eventemitter.mjs";
 import { HookManager } from "./lib/helpers/hooks.mjs";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
@@ -1549,11 +1550,29 @@ const slothletObject = {
 				this._dispose = null;
 				this._boundAPIShutdown = null;
 
+				// Clean up hook manager to prevent listener leaks
+				if (this.hookManager) {
+					this.hookManager.cleanup();
+					this.hookManager = null;
+				}
+
 				// Runtime cleanup handled by individual runtime modules
 
 				// Clean up instance data for live bindings runtime
 				if (this.instanceId) {
 					await cleanupInstance(this.instanceId);
+				}
+
+				// Clean up global EventEmitter patching to prevent hanging AsyncResource instances
+				// Note: This is a global operation that affects all EventEmitters
+				try {
+					// First clean up all slothlet-created listeners
+					cleanupAllSlothletListeners();
+					// Then disable the patching system
+					disableAlsForEventEmitters();
+				} catch (cleanupError) {
+					// Log but don't fail shutdown for cleanup errors
+					console.warn("[slothlet] Warning: EventEmitter cleanup failed:", cleanupError.message);
 				}
 
 				if (apiError || internalError) throw apiError || internalError;

@@ -37,6 +37,17 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // Define a default ALS instance to avoid circular imports
 const defaultALS = new AsyncLocalStorage();
 
+// Track original methods for restoration
+let originalMethods = null;
+
+// Global tracking of AsyncResource instances for proper cleanup
+const globalResourceSet = new Set();
+
+// Global tracking of ALL listeners that go through slothlet's patched EventEmitter methods
+// This includes both wrapped and unwrapped listeners from any library in the process
+const globalListenerTracker = new WeakMap(); // WeakMap<EventEmitter, Set<{event, listener, wrapped}>>
+const allPatchedListeners = new Set(); // Set of all listener info that went through our patches
+
 /**
  * Enable AsyncLocalStorage context propagation for all EventEmitter instances.
  *
@@ -101,6 +112,9 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 		// Create a resource now, under the active store
 		const resource = new AsyncResource("slothlet-als-listener");
 
+		// Track this resource globally for cleanup
+		globalResourceSet.add(resource);
+
 		/**
 		 * @function runtime_wrappedListener
 		 * @internal
@@ -121,6 +135,9 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 				...args
 			);
 		};
+
+		// Store reference to resource for cleanup
+		runtime_wrappedListener._slothletResource = resource;
 
 		return runtime_wrappedListener;
 	}
@@ -150,6 +167,22 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 		proto[addFnName] = function (event, listener) {
 			const map = runtime_ensureMap(this);
 			const wrapped = runtime_wrapListener(listener);
+
+			// Track ALL listeners that go through our patched methods
+			// This ensures we can clean up everything during shutdown
+			if (!globalListenerTracker.has(this)) {
+				globalListenerTracker.set(this, new Set());
+			}
+			const listenerInfo = {
+				emitter: this,
+				event,
+				originalListener: listener,
+				wrappedListener: wrapped,
+				addMethod: addFnName
+			};
+			globalListenerTracker.get(this).add(listenerInfo);
+			allPatchedListeners.add(listenerInfo);
+
 			if (wrapped !== listener) map.set(listener, wrapped);
 			return orig.call(this, event, wrapped);
 		};
@@ -188,6 +221,30 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 		const runtime_removeWrapper = function (event, listener) {
 			const map = runtime_ensureMap(this);
 			const wrapped = map.get(listener) || listener;
+
+			// Clean up from global tracking
+			if (globalListenerTracker.has(this)) {
+				const emitterListeners = globalListenerTracker.get(this);
+				for (const info of emitterListeners) {
+					if (info.originalListener === listener || info.wrappedListener === wrapped) {
+						emitterListeners.delete(info);
+						allPatchedListeners.delete(info);
+						break;
+					}
+				}
+			}
+
+			// Clean up AsyncResource if this was a wrapped listener
+			if (wrapped && wrapped._slothletResource) {
+				const resource = wrapped._slothletResource;
+				globalResourceSet.delete(resource);
+				try {
+					resource.emitDestroy();
+				} catch (err) {
+					// Ignore cleanup errors
+				}
+			}
+
 			map.delete(listener);
 			return method.call(this, event, wrapped);
 		};
@@ -206,4 +263,113 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 		if (this[kMap]) this[kMap] = new WeakMap();
 		return res;
 	};
+
+	// Store original methods for potential restoration
+	if (!originalMethods) {
+		originalMethods = {
+			on: origOn,
+			once: origOnce,
+			addListener: origAdd,
+			prependListener: origPre,
+			prependOnceListener: origPreO,
+			off: origOff,
+			removeListener: origRem,
+			removeAllListeners: origRemoveAll
+		};
+	}
+}
+
+/**
+ * Disable AsyncLocalStorage context propagation for EventEmitter instances.
+ *
+ * @function disableAlsForEventEmitters
+ * @package
+ *
+ * @description
+ * Restores original EventEmitter methods, removing the AsyncLocalStorage
+ * context propagation. This should be called during cleanup to prevent
+ * hanging AsyncResource instances that can keep the event loop alive.
+ *
+ * @example
+ * // Disable ALS patching during shutdown
+ * disableAlsForEventEmitters();
+ */
+/**
+ * Clean up ALL listeners that went through slothlet's EventEmitter patching.
+ *
+ * @function cleanupAllSlothletListeners
+ * @package
+ *
+ * @description
+ * Removes all event listeners that were registered through slothlet's patched
+ * EventEmitter methods. This includes listeners from third-party libraries
+ * that got wrapped with AsyncResource instances. This nuclear cleanup option
+ * should be called during shutdown to prevent hanging listeners.
+ *
+ * @example
+ * // Clean up all patched listeners during shutdown
+ * cleanupAllSlothletListeners();
+ */
+export function cleanupAllSlothletListeners() {
+	let cleanedCount = 0;
+	let errorCount = 0;
+
+	// Remove all tracked listeners from their emitters
+	for (const listenerInfo of allPatchedListeners) {
+		try {
+			const { emitter, event, wrappedListener } = listenerInfo;
+			if (emitter && typeof emitter.removeListener === "function") {
+				emitter.removeListener(event, wrappedListener);
+				cleanedCount++;
+			}
+		} catch (err) {
+			errorCount++;
+			// Continue cleaning up other listeners even if one fails
+		}
+	}
+
+	// Clear all tracking data
+	allPatchedListeners.clear();
+	// globalListenerTracker will be cleaned up automatically
+
+	if (process.env.NODE_ENV === "development" || process.env.SLOTHLET_DEBUG) {
+		console.log(`[slothlet] Cleaned up ${cleanedCount} listeners (${errorCount} errors)`);
+	}
+}
+
+export function disableAlsForEventEmitters() {
+	const kPatched = Symbol.for("slothlet.als.patched");
+
+	if (!EventEmitter.prototype[kPatched] || !originalMethods) return;
+
+	// Clean up all slothlet listeners first
+	cleanupAllSlothletListeners();
+
+	// Clean up all tracked AsyncResource instances
+	for (const resource of globalResourceSet) {
+		try {
+			resource.emitDestroy();
+		} catch (err) {
+			// Ignore individual cleanup errors but continue
+			console.warn("[slothlet] AsyncResource cleanup warning:", err.message);
+		}
+	}
+	globalResourceSet.clear();
+
+	// Restore original methods
+	const proto = EventEmitter.prototype;
+	proto.on = originalMethods.on;
+	proto.once = originalMethods.once;
+	proto.addListener = originalMethods.addListener;
+	if (originalMethods.prependListener) proto.prependListener = originalMethods.prependListener;
+	if (originalMethods.prependOnceListener) proto.prependOnceListener = originalMethods.prependOnceListener;
+	if (originalMethods.off) proto.off = originalMethods.off;
+	proto.removeListener = originalMethods.removeListener;
+	proto.removeAllListeners = originalMethods.removeAllListeners;
+
+	// Clear the patched flag
+	delete EventEmitter.prototype[kPatched];
+
+	// Clear stored references
+	originalMethods = null;
 }
