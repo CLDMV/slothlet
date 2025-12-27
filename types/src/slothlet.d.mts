@@ -93,6 +93,13 @@ export type SlothletOptions = {
      */
     api_mode?: string;
     /**
+     * - Controls whether addApi can overwrite existing API endpoints:
+     * - `true`: Allow overwrites (default, backwards compatible)
+     * - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
+     * - Applies to both function and object overwrites at the final key of the API path
+     */
+    allowApiOverwrite?: boolean;
+    /**
      * - Context data object injected into live-binding `context` reference.
      * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
      * - user sessions, environment configs, etc.
@@ -121,14 +128,28 @@ export type SlothletOptions = {
         };
     };
 };
+export type SlothletAPI = {
+    /**
+     * - Shuts down the API instance and cleans up all resources
+     */
+    shutdown: () => Promise<void>;
+    /**
+     * - Dynamically adds API modules from a folder to a specified API path
+     */
+    addApi: (apiPath: string, folderPath: string) => Promise<void>;
+    /**
+     * - Returns metadata about the current API instance configuration. In lazy mode with showAll=false, returns an array of property keys. In lazy mode with showAll=true, returns a Promise resolving to an object. In eager mode, returns a plain object.
+     */
+    describe: (showAll?: boolean) => ((string | symbol)[] | object | Promise<object>);
+};
 /**
  * Creates a slothlet API instance with the specified configuration.
  * This is the main entry point that can be called directly as a function.
  * @async
  * @alias module:@cldmv/slothlet
  * @param {SlothletOptions} [options={}] - Configuration options for creating the API
- * @returns {Promise<function|object>} The bound API object or function
+ * @returns {Promise<SlothletAPI>} The bound API object or function with management methods
  * @public
  */
-export function slothlet(options?: SlothletOptions): Promise<Function | object>;
+export function slothlet(options?: SlothletOptions): Promise<SlothletAPI>;
 //# sourceMappingURL=slothlet.d.mts.map

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-10 09:28:15 -08:00 (1762795695)
+ *	@Last modified time: 2025-12-26 22:05:21 -08:00 (1766815521)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -213,7 +213,7 @@ export const reference = {};
  * @async
  * @alias module:@cldmv/slothlet
  * @param {SlothletOptions} [options={}] - Configuration options for creating the API
- * @returns {Promise<function|object>} The bound API object or function
+ * @returns {Promise<SlothletAPI>} The bound API object or function with management methods
  * @public
  */
 async function slothlet(options = {}) {
@@ -287,7 +287,7 @@ const slothletObject = {
 	reference: {},
 	mode: "singleton",
 	loaded: false,
-	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null },
+	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null, allowApiOverwrite: true },
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
@@ -1325,6 +1325,9 @@ const slothletObject = {
 		// this.safeDefine(boundApi, "self", self);
 		// this.safeDefine(boundApi, "context", context);
 		// this.safeDefine(boundApi, "reference", reference);
+
+		// Capture instance reference for describe function
+		const instance = this;
 		this.safeDefine(boundApi, "describe", function (showAll = false) {
 			/**
 			 * For lazy mode:
@@ -1332,7 +1335,7 @@ const slothletObject = {
 			 * - If showAll is true, recursively resolve all endpoints and return a fully built API object.
 			 * For eager mode, return full API object.
 			 */
-			if (this.config && this.config.lazy) {
+			if (instance.config && instance.config.lazy) {
 				if (!showAll) {
 					return Reflect.ownKeys(boundApi);
 				}
@@ -1388,16 +1391,35 @@ const slothletObject = {
 		} else {
 			this._boundAPIShutdown = null;
 		}
+
+		// Determine if shutdown should be enumerable
+		// If user defined a shutdown function, keep it enumerable (part of API surface)
+		// If it's only our management method, make it non-enumerable (hidden)
+		const hasUserDefinedShutdown = this._boundAPIShutdown !== null;
+
 		const shutdownDesc = Object.getOwnPropertyDescriptor(boundApi, "shutdown");
 		if (!shutdownDesc || shutdownDesc.configurable) {
 			Object.defineProperty(boundApi, "shutdown", {
 				value: this.shutdown.bind(this),
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable: hasUserDefinedShutdown // Enumerable if user-defined, hidden if management-only
 			});
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.shutdown: not configurable");
+		}
+
+		// Add addApi method to boundApi
+		const addApiDesc = Object.getOwnPropertyDescriptor(boundApi, "addApi");
+		if (!addApiDesc || addApiDesc.configurable) {
+			Object.defineProperty(boundApi, "addApi", {
+				value: this.addApi.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false // Non-enumerable to distinguish from API endpoints
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.addApi: not configurable");
 		}
 		// console.debug("[slothlet] createBoundApi: boundApi.shutdown is now slothlet.shutdown.");
 
@@ -1415,26 +1437,27 @@ const slothletObject = {
 	 * @param {object} obj - Target object
 	 * @param {string} key - Property key
 	 * @param {any} value - Property value
+	 * @param {boolean} [enumerable=false] - Whether the property should be enumerable (default: false for management methods)
 	 * @private
 	 * @internal
 	 * @example
-	 * safeDefine(api, 'shutdown', shutdownFunction);
+	 * safeDefine(api, 'shutdown', shutdownFunction, false);
 	 */
-	safeDefine(obj, key, value) {
+	safeDefine(obj, key, value, enumerable = false) {
 		const desc = Object.getOwnPropertyDescriptor(obj, key);
 		if (!desc) {
 			Object.defineProperty(obj, key, {
 				value,
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable
 			});
 		} else if (desc.configurable) {
 			Object.defineProperty(obj, key, {
 				value,
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable
 			});
 		} else if (this.config && this.config.debug) {
 			console.warn(`Could not redefine boundApi.${key}: not configurable`);
@@ -1473,6 +1496,267 @@ const slothletObject = {
 	 */
 	getBoundApi() {
 		return this.boundapi;
+	},
+
+	/**
+	 * Dynamically adds API modules from a new folder to the existing API at a specified path.
+	 *
+	 * This method allows extending the API after it has been created by loading modules from
+	 * an additional folder and merging them into the API at a specific location defined by
+	 * a dotted path notation. Works with both lazy and eager loading modes.
+	 *
+	 * **Warning:** This method is not thread-safe. Concurrent calls to addApi with overlapping
+	 * paths may result in race conditions and inconsistent state. Ensure calls are properly
+	 * sequenced using await or other synchronization mechanisms.
+	 *
+	 * @async
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - Dotted path where to add the new API (e.g., "runtime.newapi", "tools.external")
+	 * @param {string} folderPath - Path to the folder containing modules to load (relative or absolute)
+	 * @returns {Promise<void>} Resolves when the API extension is complete
+	 * @throws {Error} If API is not loaded, folder doesn't exist, or path navigation fails
+	 * @public
+	 *
+	 * @description
+	 * The method performs the following steps:
+	 * 1. Validates that the API is loaded and the folder exists
+	 * 2. Resolves relative folder paths from the caller's location
+	 * 3. Loads modules from the specified folder using the current loading mode (lazy/eager)
+	 * 4. Navigates to the specified API path, creating intermediate objects as needed
+	 * 5. Merges the new modules into the target location
+	 * 6. Updates all live bindings to reflect the changes
+	 *
+	 * @example
+	 * // Create initial API
+	 * const api = await slothlet({ dir: "./api" });
+	 *
+	 * // Add additional modules at runtime.plugins path
+	 * await api.addApi("runtime.plugins", "./plugins");
+	 *
+	 * // Access the new API
+	 * api.runtime.plugins.myPlugin();
+	 *
+	 * @example
+	 * // Add modules to root level
+	 * await api.addApi("utilities", "./utils");
+	 * api.utilities.helperFunc();
+	 *
+	 * @example
+	 * // Add nested modules
+	 * await api.addApi("services.external.github", "./integrations/github");
+	 * api.services.external.github.getUser();
+	 */
+	async addApi(apiPath, folderPath) {
+		if (!this.loaded) {
+			throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
+		}
+
+		// Validate apiPath parameter
+		if (typeof apiPath !== "string") {
+			throw new TypeError("[slothlet] addApi: 'apiPath' must be a string.");
+		}
+		const normalizedApiPath = apiPath.trim();
+		if (normalizedApiPath === "") {
+			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty, non-whitespace string.");
+		}
+		const pathParts = normalizedApiPath.split(".");
+		if (pathParts.some((part) => part === "")) {
+			throw new Error(`[slothlet] addApi: 'apiPath' must not contain empty segments. Received: "${normalizedApiPath}"`);
+		}
+
+		// Validate folderPath parameter
+		if (typeof folderPath !== "string") {
+			throw new TypeError("[slothlet] addApi: 'folderPath' must be a string.");
+		}
+
+		// Resolve relative folder paths from the caller's location
+		let resolvedFolderPath = folderPath;
+		if (!path.isAbsolute(folderPath)) {
+			resolvedFolderPath = resolvePathFromCaller(folderPath);
+		}
+
+		// Verify the folder exists
+		let stats;
+		try {
+			stats = await fs.stat(resolvedFolderPath);
+		} catch (error) {
+			throw new Error(`[slothlet] addApi: Cannot access folder: ${resolvedFolderPath} - ${error.message}`);
+		}
+		if (!stats.isDirectory()) {
+			throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
+		}
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${normalizedApiPath}`);
+		}
+
+		// Load modules from the new folder using the appropriate mode
+		let newModules;
+		if (this.config.lazy) {
+			// Use lazy mode to create the API structure
+			newModules = await this.modes.lazy.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
+		} else {
+			// Use eager mode to create the API structure
+			newModules = await this.modes.eager.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
+		}
+
+		if (this.config.debug) {
+			if (newModules && typeof newModules === "object") {
+				console.log(`[DEBUG] addApi: Loaded modules:`, Object.keys(newModules));
+			} else {
+				console.log(
+					`[DEBUG] addApi: Loaded modules (non-object):`,
+					typeof newModules === "function" ? `[Function: ${newModules.name || "anonymous"}]` : newModules
+				);
+			}
+		}
+
+		// Navigate to the target location in the API, creating intermediate objects as needed
+		let currentTarget = this.api;
+		let currentBoundTarget = this.boundapi;
+
+		for (let i = 0; i < pathParts.length - 1; i++) {
+			const part = pathParts[i];
+			const key = this._toapiPathKey(part);
+
+			// Create intermediate objects if they don't exist
+			// Allow both objects and functions as containers (slothlet's function.property pattern)
+			// Functions are valid containers in JavaScript and can have properties added to them
+			if (Object.prototype.hasOwnProperty.call(currentTarget, key)) {
+				const existing = currentTarget[key];
+				if (existing === null || (typeof existing !== "object" && typeof existing !== "function")) {
+					throw new Error(
+						`[slothlet] Cannot extend API path "${normalizedApiPath}" through segment "${part}": ` +
+							`existing value is type "${typeof existing}", cannot add properties.`
+					);
+				}
+				// At this point, existing is guaranteed to be an object or function
+				// Both are valid containers that can be traversed and extended with properties
+			} else {
+				currentTarget[key] = {};
+			}
+			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, key)) {
+				const existingBound = currentBoundTarget[key];
+				if (existingBound === null || (typeof existingBound !== "object" && typeof existingBound !== "function")) {
+					throw new Error(
+						`[slothlet] Cannot extend bound API path "${normalizedApiPath}" through segment "${part}": ` +
+							`existing value is type "${typeof existingBound}", cannot add properties.`
+					);
+				}
+				// At this point, existingBound is guaranteed to be an object or function
+			} else {
+				currentBoundTarget[key] = {};
+			}
+
+			// Navigate into the container (object or function) to continue path traversal
+			currentTarget = currentTarget[key];
+			currentBoundTarget = currentBoundTarget[key];
+		}
+
+		// Get the final key where we'll merge the new modules
+		const finalKey = this._toapiPathKey(pathParts[pathParts.length - 1]);
+
+		// Merge the new modules into the target location
+		if (typeof newModules === "function") {
+			// If the loaded modules result in a function, set it directly
+			// Check for existing value and handle based on allowApiOverwrite config
+			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
+				const existing = currentTarget[finalKey];
+
+				// Check if overwrites are disabled
+				if (this.config.allowApiOverwrite === false) {
+					console.warn(
+						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
+							`already exists (type: "${typeof existing}"). Set allowApiOverwrite: true to allow overwrites.`
+					);
+					return; // Skip the overwrite
+				}
+
+				// Warn if overwriting an existing non-function value (potential data loss)
+				if (existing !== null && typeof existing !== "function") {
+					console.warn(
+						`[slothlet] Overwriting existing non-function value at API path "${normalizedApiPath}" ` +
+							`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
+					);
+				} else if (typeof existing === "function") {
+					// Warn when replacing an existing function
+					console.warn(
+						`[slothlet] Overwriting existing function at API path "${normalizedApiPath}" ` + `final key "${finalKey}" with a new function.`
+					);
+				}
+			}
+			currentTarget[finalKey] = newModules;
+			currentBoundTarget[finalKey] = newModules;
+		} else if (typeof newModules === "object" && newModules !== null) {
+			// Validate existing target is compatible (object or function, not primitive)
+			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
+				const existing = currentTarget[finalKey];
+
+				// Check if overwrites are disabled and target already has content
+				if (this.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
+					// For objects, check if they have any keys (non-empty)
+					const hasContent = typeof existing === "object" ? Object.keys(existing).length > 0 : true;
+					if (hasContent) {
+						console.warn(
+							`[slothlet] Skipping addApi merge: API path "${normalizedApiPath}" final key "${finalKey}" ` +
+								`already exists with content (type: "${typeof existing}"). Set allowApiOverwrite: true to allow merging.`
+						);
+						return; // Skip the merge
+					}
+				}
+
+				if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
+					throw new Error(
+						`[slothlet] Cannot merge API at "${normalizedApiPath}": ` +
+							`existing value at final key "${finalKey}" is type "${typeof existing}", cannot merge into primitives.`
+					);
+				}
+			}
+			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, finalKey)) {
+				const existingBound = currentBoundTarget[finalKey];
+				if (existingBound !== null && typeof existingBound !== "object" && typeof existingBound !== "function") {
+					throw new Error(
+						`[slothlet] Cannot merge bound API at "${normalizedApiPath}": ` +
+							`existing value at final key "${finalKey}" is type "${typeof existingBound}", cannot merge into primitives.`
+					);
+				}
+			}
+
+			// If target doesn't exist, create it
+			if (!currentTarget[finalKey]) {
+				currentTarget[finalKey] = {};
+			}
+			if (!currentBoundTarget[finalKey]) {
+				currentBoundTarget[finalKey] = {};
+			}
+
+			// Merge new modules into existing object
+			// Note: Object.assign performs shallow merge, which is intentional here.
+			// We want to preserve references to the actual module exports, including
+			// proxies (lazy mode) and function references (eager mode). Deep cloning
+			// would break these references and lose the proxy/function behavior.
+			Object.assign(currentTarget[finalKey], newModules);
+			Object.assign(currentBoundTarget[finalKey], newModules);
+		} else if (newModules === null || newModules === undefined) {
+			// Warn when loaded modules result in null or undefined
+			const receivedType = newModules === null ? "null" : "undefined";
+			console.warn(
+				`[slothlet] addApi: No modules loaded from folder at API path "${normalizedApiPath}". ` +
+					`Loaded modules resulted in ${receivedType}. Check that the folder contains valid module files.`
+			);
+		} else {
+			// Handle primitive values (string, number, boolean, symbol, bigint)
+			// Set them directly like functions
+			currentTarget[finalKey] = newModules;
+			currentBoundTarget[finalKey] = newModules;
+		}
+
+		// Update live bindings to reflect the changes
+		this.updateBindings(this.context, this.reference, this.boundapi);
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] addApi: Successfully added modules at ${normalizedApiPath}`);
+		}
 	},
 
 	/**
@@ -1616,10 +1900,22 @@ export function mutateLiveBindingFunction(target, source) {
 		for (const key of Object.keys(target)) {
 			if (key !== "_impl" && key !== "__ctx") delete target[key];
 		}
-		// Attach new properties/methods
+		// Attach new properties/methods (enumerable API endpoints)
 		for (const [key, value] of Object.entries(source)) {
 			if (key !== "__ctx") {
 				target[key] = value;
+			}
+		}
+		// Manually copy management methods (may be non-enumerable)
+		const managementMethods = ["shutdown", "addApi", "describe"];
+		for (const method of managementMethods) {
+			const desc = Object.getOwnPropertyDescriptor(source, method);
+			if (desc) {
+				try {
+					Object.defineProperty(target, method, desc);
+				} catch {
+					// ignore
+				}
 			}
 		}
 		// Optionally, set _impl to a default method if present
@@ -1672,6 +1968,10 @@ export default slothlet;
  *   - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
  *   - `"function"`: Force API to be callable as function with properties attached
  *   - `"object"`: Force API to be plain object with method properties
+ * @property {boolean} [allowApiOverwrite=true] - Controls whether addApi can overwrite existing API endpoints:
+ *   - `true`: Allow overwrites (default, backwards compatible)
+ *   - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
+ *   - Applies to both function and object overwrites at the final key of the API path
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.
@@ -1689,4 +1989,11 @@ export default slothlet;
  * @property {string[]} [sanitize.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports * and ? globs).
  * @property {string[]} [sanitize.rules.upper=[]] - Segments to force to UPPERCASE (case-insensitive, supports * and ? globs).
  * @property {string[]} [sanitize.rules.lower=[]] - Segments to force to lowercase (case-insensitive, supports * and ? globs).
+ */
+
+/**
+ * @typedef {object} SlothletAPI
+ * @property {() => Promise<void>} shutdown - Shuts down the API instance and cleans up all resources
+ * @property {(apiPath: string, folderPath: string) => Promise<void>} addApi - Dynamically adds API modules from a folder to a specified API path
+ * @property {(showAll?: boolean) => ((string|symbol)[]|object|Promise<object>)} describe - Returns metadata about the current API instance configuration. In lazy mode with showAll=false, returns an array of property keys. In lazy mode with showAll=true, returns a Promise resolving to an object. In eager mode, returns a plain object.
  */

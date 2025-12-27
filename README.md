@@ -464,6 +464,7 @@ Creates and loads an API instance with the specified configuration.
 | `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                                      |
 | `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                                         |
 | `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports)                    |
+| `allowApiOverwrite` | `boolean` | `true` | Controls whether `addApi()` can overwrite existing API endpoints:<br/>• `true`: Allow overwrites (default, backwards compatible)<br/>• `false`: Prevent overwrites - logs warning and skips when attempting to overwrite existing endpoints<br/>Applies to both function and object overwrites at the final key of the API path |
 | `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                                           |
 | `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                                         |
 | `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Advanced filename-to-API transformation control. Options: `lowerFirst` (boolean), `preserveAllUpper` (boolean), `preserveAllLower` (boolean), `rules` object with `leave` (exact case-sensitive), `leaveInsensitive` (case-insensitive), `upper`/`lower` arrays. Supports exact matches, glob patterns (`*json*`, `http*`), and boundary patterns (`**url**` for surrounded matches only) |
@@ -525,8 +526,9 @@ Returns true if the API is loaded.
 Gracefully shuts down the API and performs comprehensive resource cleanup to prevent hanging processes.
 
 **Cleanup includes:**
+
 - Hook manager state and registered hooks
-- AsyncLocalStorage context and bindings  
+- AsyncLocalStorage context and bindings
 - EventEmitter listeners and AsyncResource instances (including third-party libraries)
 - Instance data and runtime coordination
 
@@ -534,6 +536,107 @@ Gracefully shuts down the API and performs comprehensive resource cleanup to pre
 
 > [!IMPORTANT]  
 > **🛡️ Process Cleanup**: The shutdown method now performs comprehensive cleanup of all EventEmitter listeners created after slothlet loads, including those from third-party libraries like pg-pool. This prevents hanging AsyncResource instances that could prevent your Node.js process from exiting cleanly.
+
+#### `api.addApi(apiPath, folderPath)` ⇒ `Promise<void>` ⭐ NEW
+
+Dynamically extend your API at runtime by loading additional modules and merging them into a specified path.
+
+**Parameters:**
+
+| Param        | Type     | Description                                                         |
+| ------------ | -------- | ------------------------------------------------------------------- |
+| `apiPath`    | `string` | Dotted path where modules will be added (e.g., `"runtime.plugins"`) |
+| `folderPath` | `string` | Path to folder containing modules to load (relative or absolute)    |
+
+**Returns:** `Promise<void>` - Resolves when the API extension is complete
+
+**Features:**
+
+- ✅ **Dynamic Loading**: Add modules after initial API creation
+- ✅ **Path Creation**: Automatically creates intermediate objects for nested paths
+- ✅ **Smart Merging**: Merges into existing objects or creates new namespaces
+- ✅ **Mode Respect**: Uses same loading mode (lazy/eager) as parent API
+- ✅ **Live Binding Updates**: Automatically updates `self`, `context`, and `reference`
+- ✅ **Function Support**: Can traverse through functions (slothlet's function.property pattern)
+- ✅ **Validation**: Prevents extension through primitives, validates path format
+- ✅ **Overwrite Protection**: Optional `allowApiOverwrite` config prevents accidental endpoint overwrites
+
+**Configuration:**
+
+The `allowApiOverwrite` option controls whether `addApi` can overwrite existing endpoints:
+
+```javascript
+// Default behavior - allows overwrites (backwards compatible)
+const api = await slothlet({ 
+    dir: "./api",
+    allowApiOverwrite: true // default
+});
+await api.addApi("tools", "./new-tools"); // Overwrites existing api.tools
+
+// Protected mode - prevents overwrites
+const api = await slothlet({ 
+    dir: "./api",
+    allowApiOverwrite: false // protection enabled
+});
+await api.addApi("tools", "./new-tools"); // Logs warning and skips
+// Console: "[slothlet] Skipping addApi: API path "tools" final key "tools" already exists..."
+```
+
+**Usage Examples:**
+
+```javascript
+const api = await slothlet({ dir: "./api" });
+
+// Add modules to nested path
+await api.addApi("runtime.plugins", "./plugins");
+api.runtime.plugins.myPlugin(); // New modules accessible
+
+// Add to root level
+await api.addApi("utilities", "./utils");
+api.utilities.helperFunc(); // Root-level addition
+
+// Deep nesting (creates intermediate objects)
+await api.addApi("services.external.github", "./integrations/github");
+api.services.external.github.getUser(); // Deep path created
+
+// Merge into existing namespace
+await api.addApi("math", "./advanced-math"); // Merges with existing api.math
+api.math.add(2, 3); // Original functions preserved
+api.math.advancedCalc(); // New functions added
+```
+
+**Path Validation:**
+
+```javascript
+// ❌ Invalid paths throw errors
+await api.addApi("", "./modules"); // Empty string
+await api.addApi(".path", "./modules"); // Leading dot
+await api.addApi("path.", "./modules"); // Trailing dot
+await api.addApi("path..name", "./modules"); // Consecutive dots
+
+// ✅ Valid paths
+await api.addApi("simple", "./modules"); // Single segment
+await api.addApi("nested.path", "./modules"); // Dotted path
+await api.addApi("very.deep.nested", "./modules"); // Multi-level
+```
+
+**Type Safety:**
+
+```javascript
+// ✅ Can extend through objects and functions
+api.logger = { info: () => {} };
+await api.addApi("logger.plugins", "./logger-plugins"); // Works - object
+
+api.handler = () => "handler";
+await api.addApi("handler.middleware", "./middleware"); // Works - function
+
+// ❌ Cannot extend through primitives
+api.config.timeout = 5000;
+await api.addApi("config.timeout.advanced", "./modules"); // Throws error
+```
+
+> [!WARNING]  
+> **⚠️ Concurrency Limitation:** The `addApi` method is **not thread-safe**. Concurrent calls to `addApi` with overlapping paths may result in race conditions and inconsistent API state. Ensure calls are properly sequenced using `await` or other synchronization mechanisms. Do not call `addApi` from multiple threads/workers simultaneously.
 
 > [!NOTE]  
 > **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)**
