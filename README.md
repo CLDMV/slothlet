@@ -522,9 +522,18 @@ Returns true if the API is loaded.
 
 #### `slothlet.shutdown()` ⇒ `Promise<void>`
 
-Gracefully shuts down the API and cleans up resources.
+Gracefully shuts down the API and performs comprehensive resource cleanup to prevent hanging processes.
+
+**Cleanup includes:**
+- Hook manager state and registered hooks
+- AsyncLocalStorage context and bindings  
+- EventEmitter listeners and AsyncResource instances (including third-party libraries)
+- Instance data and runtime coordination
 
 **Returns:** `Promise<void>` - Resolves when shutdown is complete
+
+> [!IMPORTANT]  
+> **🛡️ Process Cleanup**: The shutdown method now performs comprehensive cleanup of all EventEmitter listeners created after slothlet loads, including those from third-party libraries like pg-pool. This prevents hanging AsyncResource instances that could prevent your Node.js process from exiting cleanly.
 
 > [!NOTE]  
 > **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)**
@@ -649,6 +658,7 @@ console.log("TCP server started with context preservation");
 - ✅ **Nested Events**: Works with any depth of EventEmitter nesting (server → socket → custom emitters)
 - ✅ **Universal Support**: All EventEmitter methods (`on`, `once`, `addListener`) are automatically context-aware
 - ✅ **Production Ready**: Uses Node.js AsyncResource patterns for reliable context propagation
+- ✅ **Clean Shutdown**: Automatically cleans up all AsyncResource instances during shutdown to prevent hanging processes
 - ✅ **Zero Overhead**: Only wraps listeners when context is active, minimal performance impact
 
 > [!TIP]  

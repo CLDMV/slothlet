@@ -103,6 +103,24 @@ export class HookManager {
 	}
 
 	/**
+	 * Clean up all hooks and resources
+	 * @public
+	 * @description
+	 * Clears all registered hooks and resets internal state.
+	 * Should be called during shutdown to prevent memory leaks.
+	 *
+	 * @example
+	 * // Clean up during shutdown
+	 * manager.cleanup();
+	 */
+	cleanup() {
+		this.hooks.clear();
+		this.reportedErrors = new WeakSet();
+		this.registrationOrder = 0;
+		this.enabled = false;
+	}
+
+	/**
 	 * @function off
 	 * @public
 	 * @param {string} nameOrPattern - Hook name or glob pattern to remove
