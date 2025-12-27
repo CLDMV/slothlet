@@ -138,9 +138,9 @@ export type SlothletAPI = {
      */
     addApi: (apiPath: string, folderPath: string) => Promise<void>;
     /**
-     * - Returns metadata about the current API instance configuration
+     * - Returns metadata about the current API instance configuration. In lazy mode with showAll=false, returns an array of property keys. In lazy mode with showAll=true, returns a Promise resolving to an object. In eager mode, returns a plain object.
      */
-    describe: () => object;
+    describe: (showAll?: boolean) => ((string | symbol)[] | object | Promise<object>);
 };
 /**
  * Creates a slothlet API instance with the specified configuration.

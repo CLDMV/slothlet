@@ -55,6 +55,7 @@ function normalizeRuntimeType(runtime) {
  * @param {number} [options.apiDepth=Infinity] - Maximum directory depth to scan
  * @param {boolean} [options.debug=false] - Enable debug logging
  * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
+ * @param {boolean} [options.allowApiOverwrite=true] - Allow addApi to overwrite existing API endpoints
  * @param {object} [options.context={}] - Context data for live bindings
  * @param {object} [options.reference={}] - Reference objects to merge into API root
  * @returns {Promise<import("./src/slothlet.mjs").SlothletAPI>} The bound API object with management methods

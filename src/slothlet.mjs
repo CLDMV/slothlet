@@ -1995,5 +1995,5 @@ export default slothlet;
  * @typedef {object} SlothletAPI
  * @property {() => Promise<void>} shutdown - Shuts down the API instance and cleans up all resources
  * @property {(apiPath: string, folderPath: string) => Promise<void>} addApi - Dynamically adds API modules from a folder to a specified API path
- * @property {() => object} describe - Returns metadata about the current API instance configuration
+ * @property {(showAll?: boolean) => ((string|symbol)[]|object|Promise<object>)} describe - Returns metadata about the current API instance configuration. In lazy mode with showAll=false, returns an array of property keys. In lazy mode with showAll=true, returns a Promise resolving to an object. In eager mode, returns a plain object.
  */

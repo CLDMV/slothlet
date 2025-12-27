@@ -363,6 +363,130 @@ async function test_addApi_function_extension() {
 }
 
 /**
+ * Test allowApiOverwrite configuration option
+ * @async
+ * @returns {Promise<void>}
+ */
+async function test_addApi_allowOverwrite() {
+	console.log("\n🔍 Testing allowApiOverwrite configuration option");
+
+	// Test 1: Default behavior (allowApiOverwrite: true) - should allow overwrites
+	console.log("\n[TEST] Testing default behavior (allowApiOverwrite: true)...");
+	const api1 = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false,
+		allowApiOverwrite: true
+	});
+
+	// Add initial API
+	await api1.addApi("test.endpoint", path.join(__dirname, "../api_tests/api_test_mixed"));
+	const initialKeys = Object.keys(api1.test.endpoint);
+	console.log(`  🔍 Initial keys at test.endpoint: ${initialKeys.join(", ")}`);
+
+	// Overwrite with different modules - should succeed
+	await api1.addApi("test.endpoint", path.join(__dirname, "../api_tests/api_test_cjs"));
+	const overwrittenKeys = Object.keys(api1.test.endpoint);
+	console.log(`  🔍 After overwrite: ${overwrittenKeys.join(", ")}`);
+
+	// Verify the overwrite happened (keys should be different)
+	const hasNewKeys = overwrittenKeys.some((key) => !initialKeys.includes(key));
+	if (!hasNewKeys) {
+		throw new Error("Overwrite did not occur with allowApiOverwrite: true");
+	}
+	console.log("  ✓ Successfully overwrote API endpoint with allowApiOverwrite: true");
+
+	await api1.shutdown();
+
+	// Test 2: Prevent overwrites (allowApiOverwrite: false)
+	console.log("\n[TEST] Testing overwrite prevention (allowApiOverwrite: false)...");
+	const api2 = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false,
+		allowApiOverwrite: false
+	});
+
+	// Add initial API
+	await api2.addApi("protected.endpoint", path.join(__dirname, "../api_tests/api_test_mixed"));
+	const protectedKeys = Object.keys(api2.protected.endpoint);
+	console.log(`  🔍 Initial keys at protected.endpoint: ${protectedKeys.join(", ")}`);
+
+	// Capture console.warn output to verify warning message
+	const originalWarn = console.warn;
+	let warnMessage = "";
+	console.warn = (msg) => {
+		warnMessage = msg;
+	};
+
+	// Attempt to overwrite - should fail silently with warning
+	await api2.addApi("protected.endpoint", path.join(__dirname, "../api_tests/api_test_cjs"));
+
+	// Restore console.warn
+	console.warn = originalWarn;
+
+	// Verify warning was logged
+	if (!warnMessage.includes("already exists")) {
+		throw new Error("Expected warning message about existing endpoint not logged");
+	}
+	console.log("  ✓ Warning logged when attempting to overwrite with allowApiOverwrite: false");
+
+	// Verify the original API was NOT overwritten
+	const unchangedKeys2 = Object.keys(api2.protected.endpoint);
+	const keysMatch2 = protectedKeys.length === unchangedKeys2.length && protectedKeys.every((key) => unchangedKeys2.includes(key));
+
+	if (!keysMatch2) {
+		throw new Error("API was overwritten despite allowApiOverwrite: false");
+	}
+	console.log("  ✓ Successfully prevented overwrite with allowApiOverwrite: false");
+
+	await api2.shutdown();
+
+	// Test 3: Test function overwrite prevention
+	console.log("\n[TEST] Testing function overwrite with allowApiOverwrite: false...");
+	const api3 = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false,
+		allowApiOverwrite: false
+	});
+
+	// First add API modules to create actual API structure
+	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"));
+	const originalKeys = Object.keys(api3.funcTest);
+	console.log(`  🔍 Initial keys at funcTest: ${originalKeys.join(", ")}`);
+
+	// Capture console.warn
+	let funcWarnMessage = "";
+	console.warn = (msg) => {
+		funcWarnMessage = msg;
+	};
+
+	// Try to overwrite with different modules - should warn and skip
+	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_cjs"));
+
+	console.warn = originalWarn;
+
+	// Verify warning
+	if (!funcWarnMessage.includes("already exists")) {
+		throw new Error("Expected warning for object overwrite not logged");
+	}
+
+	// Verify original modules still intact
+	const unchangedKeys3 = Object.keys(api3.funcTest);
+	const keysMatch3 = originalKeys.length === unchangedKeys3.length && originalKeys.every((key) => unchangedKeys3.includes(key));
+
+	if (!keysMatch3) {
+		throw new Error("API was modified despite allowApiOverwrite: false");
+	}
+	console.log("  ✓ Successfully prevented object overwrite with allowApiOverwrite: false");
+
+	await api3.shutdown();
+
+	console.log("\n✅ allowApiOverwrite configuration test passed");
+}
+
+/**
  * Run all tests
  * @async
  * @returns {Promise<void>}
@@ -379,6 +503,7 @@ async function runAllTests() {
 		await test_addApi_errors();
 		await test_addApi_merge();
 		await test_addApi_function_extension();
+		await test_addApi_allowOverwrite();
 
 		console.log("\n========================================");
 		console.log("🎉 All addApi tests passed!");
