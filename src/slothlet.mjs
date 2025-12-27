@@ -213,7 +213,7 @@ export const reference = {};
  * @async
  * @alias module:@cldmv/slothlet
  * @param {SlothletOptions} [options={}] - Configuration options for creating the API
- * @returns {Promise<function|object>} The bound API object or function
+ * @returns {Promise<SlothletAPI>} The bound API object or function with management methods
  * @public
  */
 async function slothlet(options = {}) {
@@ -1634,6 +1634,26 @@ const slothletObject = {
 			currentTarget[finalKey] = newModules;
 			currentBoundTarget[finalKey] = newModules;
 		} else if (typeof newModules === "object" && newModules !== null) {
+			// Validate existing target is compatible (object or function, not primitive)
+			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
+				const existing = currentTarget[finalKey];
+				if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
+					throw new Error(
+						`[slothlet] Cannot merge API at "${apiPath}": ` +
+							`existing value at final key "${finalKey}" is type "${typeof existing}", cannot merge into primitives.`
+					);
+				}
+			}
+			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, finalKey)) {
+				const existingBound = currentBoundTarget[finalKey];
+				if (existingBound !== null && typeof existingBound !== "object" && typeof existingBound !== "function") {
+					throw new Error(
+						`[slothlet] Cannot merge bound API at "${apiPath}": ` +
+							`existing value at final key "${finalKey}" is type "${typeof existingBound}", cannot merge into primitives.`
+					);
+				}
+			}
+
 			// If target doesn't exist, create it
 			if (!currentTarget[finalKey]) {
 				currentTarget[finalKey] = {};
@@ -1869,4 +1889,11 @@ export default slothlet;
  * @property {string[]} [sanitize.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports * and ? globs).
  * @property {string[]} [sanitize.rules.upper=[]] - Segments to force to UPPERCASE (case-insensitive, supports * and ? globs).
  * @property {string[]} [sanitize.rules.lower=[]] - Segments to force to lowercase (case-insensitive, supports * and ? globs).
+ */
+
+/**
+ * @typedef {object} SlothletAPI
+ * @property {() => Promise<void>} shutdown - Shuts down the API instance and cleans up all resources
+ * @property {(apiPath: string, folderPath: string) => Promise<void>} addApi - Dynamically adds API modules from a folder to a specified API path
+ * @property {() => object} describe - Returns metadata about the current API instance configuration
  */

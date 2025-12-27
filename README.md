@@ -536,6 +536,82 @@ Gracefully shuts down the API and performs comprehensive resource cleanup to pre
 > [!IMPORTANT]  
 > **🛡️ Process Cleanup**: The shutdown method now performs comprehensive cleanup of all EventEmitter listeners created after slothlet loads, including those from third-party libraries like pg-pool. This prevents hanging AsyncResource instances that could prevent your Node.js process from exiting cleanly.
 
+#### `api.addApi(apiPath, folderPath)` ⇒ `Promise<void>` ⭐ NEW
+
+Dynamically extend your API at runtime by loading additional modules and merging them into a specified path.
+
+**Parameters:**
+
+| Param        | Type     | Description                                                         |
+| ------------ | -------- | ------------------------------------------------------------------- |
+| `apiPath`    | `string` | Dotted path where modules will be added (e.g., `"runtime.plugins"`) |
+| `folderPath` | `string` | Path to folder containing modules to load (relative or absolute)    |
+
+**Returns:** `Promise<void>` - Resolves when the API extension is complete
+
+**Features:**
+
+- ✅ **Dynamic Loading**: Add modules after initial API creation
+- ✅ **Path Creation**: Automatically creates intermediate objects for nested paths
+- ✅ **Smart Merging**: Merges into existing objects or creates new namespaces
+- ✅ **Mode Respect**: Uses same loading mode (lazy/eager) as parent API
+- ✅ **Live Binding Updates**: Automatically updates `self`, `context`, and `reference`
+- ✅ **Function Support**: Can traverse through functions (slothlet's function.property pattern)
+- ✅ **Validation**: Prevents extension through primitives, validates path format
+
+**Usage Examples:**
+
+```javascript
+const api = await slothlet({ dir: "./api" });
+
+// Add modules to nested path
+await api.addApi("runtime.plugins", "./plugins");
+api.runtime.plugins.myPlugin(); // New modules accessible
+
+// Add to root level
+await api.addApi("utilities", "./utils");
+api.utilities.helperFunc(); // Root-level addition
+
+// Deep nesting (creates intermediate objects)
+await api.addApi("services.external.github", "./integrations/github");
+api.services.external.github.getUser(); // Deep path created
+
+// Merge into existing namespace
+await api.addApi("math", "./advanced-math"); // Merges with existing api.math
+api.math.add(2, 3); // Original functions preserved
+api.math.advancedCalc(); // New functions added
+```
+
+**Path Validation:**
+
+```javascript
+// ❌ Invalid paths throw errors
+await api.addApi("", "./modules"); // Empty string
+await api.addApi(".path", "./modules"); // Leading dot
+await api.addApi("path.", "./modules"); // Trailing dot
+await api.addApi("path..name", "./modules"); // Consecutive dots
+
+// ✅ Valid paths
+await api.addApi("simple", "./modules"); // Single segment
+await api.addApi("nested.path", "./modules"); // Dotted path
+await api.addApi("very.deep.nested", "./modules"); // Multi-level
+```
+
+**Type Safety:**
+
+```javascript
+// ✅ Can extend through objects and functions
+api.logger = { info: () => {} };
+await api.addApi("logger.plugins", "./logger-plugins"); // Works - object
+
+api.handler = () => "handler";
+await api.addApi("handler.middleware", "./middleware"); // Works - function
+
+// ❌ Cannot extend through primitives
+api.config.timeout = 5000;
+await api.addApi("config.timeout.advanced", "./modules"); // Throws error
+```
+
 > [!NOTE]  
 > **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)**
 

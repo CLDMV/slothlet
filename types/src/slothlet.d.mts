@@ -121,14 +121,28 @@ export type SlothletOptions = {
         };
     };
 };
+export type SlothletAPI = {
+    /**
+     * - Shuts down the API instance and cleans up all resources
+     */
+    shutdown: () => Promise<void>;
+    /**
+     * - Dynamically adds API modules from a folder to a specified API path
+     */
+    addApi: (apiPath: string, folderPath: string) => Promise<void>;
+    /**
+     * - Returns metadata about the current API instance configuration
+     */
+    describe: () => object;
+};
 /**
  * Creates a slothlet API instance with the specified configuration.
  * This is the main entry point that can be called directly as a function.
  * @async
  * @alias module:@cldmv/slothlet
  * @param {SlothletOptions} [options={}] - Configuration options for creating the API
- * @returns {Promise<function|object>} The bound API object or function
+ * @returns {Promise<SlothletAPI>} The bound API object or function with management methods
  * @public
  */
-export function slothlet(options?: SlothletOptions): Promise<Function | object>;
+export function slothlet(options?: SlothletOptions): Promise<SlothletAPI>;
 //# sourceMappingURL=slothlet.d.mts.map
