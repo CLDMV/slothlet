@@ -225,6 +225,30 @@ async function test_addApi_errors() {
 		}
 	}
 
+	// Test with whitespace-only apiPath
+	try {
+		await api.addApi("   ", path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for whitespace-only apiPath");
+	} catch (error) {
+		if (error.message.includes("non-empty string")) {
+			console.log("  ✓ Correctly throws error for whitespace-only apiPath");
+		} else {
+			throw error;
+		}
+	}
+
+	// Test with non-string folderPath
+	try {
+		await api.addApi("test", null);
+		throw new Error("Should have thrown error for non-string folderPath");
+	} catch (error) {
+		if (error.message.includes("folderPath' must be a string")) {
+			console.log("  ✓ Correctly throws error for non-string folderPath");
+		} else {
+			throw error;
+		}
+	}
+
 	await api.shutdown();
 	console.log("\n✅ Error handling test passed");
 }

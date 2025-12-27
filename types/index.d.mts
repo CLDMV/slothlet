@@ -14,7 +14,7 @@
  * @param {string} [options.api_mode="auto"] - API structure mode (auto, function, object)
  * @param {object} [options.context={}] - Context data for live bindings
  * @param {object} [options.reference={}] - Reference objects to merge into API root
- * @returns {Promise<function|object>} The bound API object with live-binding context
+ * @returns {Promise<import("./src/slothlet.mjs").SlothletAPI>} The bound API object with management methods
  *
  * @example // ESM
  * import slothlet from "@cldmv/slothlet";
@@ -32,5 +32,5 @@ export default function slothlet(options?: {
     api_mode?: string;
     context?: object;
     reference?: object;
-}): Promise<Function | object>;
+}): Promise<import("./src/slothlet.mjs").SlothletAPI>;
 //# sourceMappingURL=index.d.mts.map

@@ -1495,6 +1495,10 @@ const slothletObject = {
 	 * an additional folder and merging them into the API at a specific location defined by
 	 * a dotted path notation. Works with both lazy and eager loading modes.
 	 *
+	 * **Warning:** This method is not thread-safe. Concurrent calls to addApi with overlapping
+	 * paths may result in race conditions and inconsistent state. Ensure calls are properly
+	 * sequenced using await or other synchronization mechanisms.
+	 *
 	 * @async
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} apiPath - Dotted path where to add the new API (e.g., "runtime.newapi", "tools.external")
@@ -1538,12 +1542,21 @@ const slothletObject = {
 		}
 
 		// Validate apiPath parameter
-		if (typeof apiPath !== "string" || apiPath.trim() === "") {
+		if (typeof apiPath !== "string") {
+			throw new TypeError("[slothlet] addApi: 'apiPath' must be a string.");
+		}
+		const normalizedApiPath = apiPath.trim();
+		if (normalizedApiPath === "") {
 			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty string.");
 		}
-		const pathParts = apiPath.split(".");
+		const pathParts = normalizedApiPath.split(".");
 		if (pathParts.some((part) => part === "")) {
-			throw new Error(`[slothlet] addApi: 'apiPath' must not contain empty segments. Received: "${apiPath}"`);
+			throw new Error(`[slothlet] addApi: 'apiPath' must not contain empty segments. Received: "${normalizedApiPath}"`);
+		}
+
+		// Validate folderPath parameter
+		if (typeof folderPath !== "string") {
+			throw new TypeError("[slothlet] addApi: 'folderPath' must be a string.");
 		}
 
 		// Resolve relative folder paths from the caller's location
@@ -1564,7 +1577,7 @@ const slothletObject = {
 		}
 
 		if (this.config.debug) {
-			console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${apiPath}`);
+			console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${normalizedApiPath}`);
 		}
 
 		// Load modules from the new folder using the appropriate mode
@@ -1602,7 +1615,7 @@ const slothletObject = {
 				const existing = currentTarget[key];
 				if (existing === null || (typeof existing !== "object" && typeof existing !== "function")) {
 					throw new Error(
-						`[slothlet] Cannot extend API path "${apiPath}" through segment "${part}": ` +
+						`[slothlet] Cannot extend API path "${normalizedApiPath}" through segment "${part}": ` +
 							`existing value is type "${typeof existing}", cannot add properties.`
 					);
 				}
@@ -1613,7 +1626,7 @@ const slothletObject = {
 				const existingBound = currentBoundTarget[key];
 				if (existingBound === null || (typeof existingBound !== "object" && typeof existingBound !== "function")) {
 					throw new Error(
-						`[slothlet] Cannot extend bound API path "${apiPath}" through segment "${part}": ` +
+						`[slothlet] Cannot extend bound API path "${normalizedApiPath}" through segment "${part}": ` +
 							`existing value is type "${typeof existingBound}", cannot add properties.`
 					);
 				}
@@ -1631,6 +1644,16 @@ const slothletObject = {
 		// Merge the new modules into the target location
 		if (typeof newModules === "function") {
 			// If the loaded modules result in a function, set it directly
+			// Warn if overwriting an existing non-function value (potential data loss)
+			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
+				const existing = currentTarget[finalKey];
+				if (existing !== null && typeof existing !== "function") {
+					console.warn(
+						`[slothlet] Overwriting existing non-function value at API path "${normalizedApiPath}" ` +
+							`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
+					);
+				}
+			}
 			currentTarget[finalKey] = newModules;
 			currentBoundTarget[finalKey] = newModules;
 		} else if (typeof newModules === "object" && newModules !== null) {
@@ -1639,7 +1662,7 @@ const slothletObject = {
 				const existing = currentTarget[finalKey];
 				if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
 					throw new Error(
-						`[slothlet] Cannot merge API at "${apiPath}": ` +
+						`[slothlet] Cannot merge API at "${normalizedApiPath}": ` +
 							`existing value at final key "${finalKey}" is type "${typeof existing}", cannot merge into primitives.`
 					);
 				}
@@ -1648,7 +1671,7 @@ const slothletObject = {
 				const existingBound = currentBoundTarget[finalKey];
 				if (existingBound !== null && typeof existingBound !== "object" && typeof existingBound !== "function") {
 					throw new Error(
-						`[slothlet] Cannot merge bound API at "${apiPath}": ` +
+						`[slothlet] Cannot merge bound API at "${normalizedApiPath}": ` +
 							`existing value at final key "${finalKey}" is type "${typeof existingBound}", cannot merge into primitives.`
 					);
 				}
@@ -1671,7 +1694,7 @@ const slothletObject = {
 		this.updateBindings(this.context, this.reference, this.boundapi);
 
 		if (this.config.debug) {
-			console.log(`[DEBUG] addApi: Successfully added modules at ${apiPath}`);
+			console.log(`[DEBUG] addApi: Successfully added modules at ${normalizedApiPath}`);
 		}
 	},
 

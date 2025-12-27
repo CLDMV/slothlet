@@ -32,7 +32,7 @@
  * @param {string} [options.runtime] - Runtime type ("async", "asynclocalstorage", "live", "livebindings", "experimental")
  * @param {object} [options.context={}] - Context data for live bindings
  * @param {object} [options.reference={}] - Reference objects to merge into API root
- * @returns {Promise<function|object>} The bound API object with live-binding context
+ * @returns {Promise<import("./src/slothlet.mjs").SlothletAPI>} The bound API object with management methods
  *
  * @example // CJS usage
  * const slothlet = require("@cldmv/slothlet");
