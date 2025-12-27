@@ -93,6 +93,13 @@ export type SlothletOptions = {
      */
     api_mode?: string;
     /**
+     * - Controls whether addApi can overwrite existing API endpoints:
+     * - `true`: Allow overwrites (default, backwards compatible)
+     * - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
+     * - Applies to both function and object overwrites at the final key of the API path
+     */
+    allowApiOverwrite?: boolean;
+    /**
      * - Context data object injected into live-binding `context` reference.
      * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
      * - user sessions, environment configs, etc.

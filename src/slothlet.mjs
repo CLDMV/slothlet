@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-10 09:28:15 -08:00 (1762795695)
+ *	@Last modified time: 2025-12-26 22:05:21 -08:00 (1766815521)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -287,7 +287,7 @@ const slothletObject = {
 	reference: {},
 	mode: "singleton",
 	loaded: false,
-	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null },
+	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null, allowApiOverwrite: true },
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
@@ -1325,6 +1325,9 @@ const slothletObject = {
 		// this.safeDefine(boundApi, "self", self);
 		// this.safeDefine(boundApi, "context", context);
 		// this.safeDefine(boundApi, "reference", reference);
+
+		// Capture instance reference for describe function
+		const instance = this;
 		this.safeDefine(boundApi, "describe", function (showAll = false) {
 			/**
 			 * For lazy mode:
@@ -1332,7 +1335,7 @@ const slothletObject = {
 			 * - If showAll is true, recursively resolve all endpoints and return a fully built API object.
 			 * For eager mode, return full API object.
 			 */
-			if (this.config && this.config.lazy) {
+			if (instance.config && instance.config.lazy) {
 				if (!showAll) {
 					return Reflect.ownKeys(boundApi);
 				}
@@ -1388,13 +1391,19 @@ const slothletObject = {
 		} else {
 			this._boundAPIShutdown = null;
 		}
+
+		// Determine if shutdown should be enumerable
+		// If user defined a shutdown function, keep it enumerable (part of API surface)
+		// If it's only our management method, make it non-enumerable (hidden)
+		const hasUserDefinedShutdown = this._boundAPIShutdown !== null;
+
 		const shutdownDesc = Object.getOwnPropertyDescriptor(boundApi, "shutdown");
 		if (!shutdownDesc || shutdownDesc.configurable) {
 			Object.defineProperty(boundApi, "shutdown", {
 				value: this.shutdown.bind(this),
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable: hasUserDefinedShutdown // Enumerable if user-defined, hidden if management-only
 			});
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.shutdown: not configurable");
@@ -1407,7 +1416,7 @@ const slothletObject = {
 				value: this.addApi.bind(this),
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable: false // Non-enumerable to distinguish from API endpoints
 			});
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.addApi: not configurable");
@@ -1428,26 +1437,27 @@ const slothletObject = {
 	 * @param {object} obj - Target object
 	 * @param {string} key - Property key
 	 * @param {any} value - Property value
+	 * @param {boolean} [enumerable=false] - Whether the property should be enumerable (default: false for management methods)
 	 * @private
 	 * @internal
 	 * @example
-	 * safeDefine(api, 'shutdown', shutdownFunction);
+	 * safeDefine(api, 'shutdown', shutdownFunction, false);
 	 */
-	safeDefine(obj, key, value) {
+	safeDefine(obj, key, value, enumerable = false) {
 		const desc = Object.getOwnPropertyDescriptor(obj, key);
 		if (!desc) {
 			Object.defineProperty(obj, key, {
 				value,
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable
 			});
 		} else if (desc.configurable) {
 			Object.defineProperty(obj, key, {
 				value,
 				writable: true,
 				configurable: true,
-				enumerable: true
+				enumerable
 			});
 		} else if (this.config && this.config.debug) {
 			console.warn(`Could not redefine boundApi.${key}: not configurable`);
@@ -1547,7 +1557,7 @@ const slothletObject = {
 		}
 		const normalizedApiPath = apiPath.trim();
 		if (normalizedApiPath === "") {
-			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty string.");
+			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty, non-whitespace string.");
 		}
 		const pathParts = normalizedApiPath.split(".");
 		if (pathParts.some((part) => part === "")) {
@@ -1610,7 +1620,8 @@ const slothletObject = {
 			const key = this._toapiPathKey(part);
 
 			// Create intermediate objects if they don't exist
-			// Allow both objects and functions (functions can have properties in slothlet)
+			// Allow both objects and functions as containers (slothlet's function.property pattern)
+			// Functions are valid containers in JavaScript and can have properties added to them
 			if (Object.prototype.hasOwnProperty.call(currentTarget, key)) {
 				const existing = currentTarget[key];
 				if (existing === null || (typeof existing !== "object" && typeof existing !== "function")) {
@@ -1619,6 +1630,8 @@ const slothletObject = {
 							`existing value is type "${typeof existing}", cannot add properties.`
 					);
 				}
+				// At this point, existing is guaranteed to be an object or function
+				// Both are valid containers that can be traversed and extended with properties
 			} else {
 				currentTarget[key] = {};
 			}
@@ -1630,10 +1643,12 @@ const slothletObject = {
 							`existing value is type "${typeof existingBound}", cannot add properties.`
 					);
 				}
+				// At this point, existingBound is guaranteed to be an object or function
 			} else {
 				currentBoundTarget[key] = {};
 			}
 
+			// Navigate into the container (object or function) to continue path traversal
 			currentTarget = currentTarget[key];
 			currentBoundTarget = currentBoundTarget[key];
 		}
@@ -1644,13 +1659,29 @@ const slothletObject = {
 		// Merge the new modules into the target location
 		if (typeof newModules === "function") {
 			// If the loaded modules result in a function, set it directly
-			// Warn if overwriting an existing non-function value (potential data loss)
+			// Check for existing value and handle based on allowApiOverwrite config
 			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
 				const existing = currentTarget[finalKey];
+
+				// Check if overwrites are disabled
+				if (this.config.allowApiOverwrite === false) {
+					console.warn(
+						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
+							`already exists (type: "${typeof existing}"). Set allowApiOverwrite: true to allow overwrites.`
+					);
+					return; // Skip the overwrite
+				}
+
+				// Warn if overwriting an existing non-function value (potential data loss)
 				if (existing !== null && typeof existing !== "function") {
 					console.warn(
 						`[slothlet] Overwriting existing non-function value at API path "${normalizedApiPath}" ` +
 							`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
+					);
+				} else if (typeof existing === "function") {
+					// Warn when replacing an existing function
+					console.warn(
+						`[slothlet] Overwriting existing function at API path "${normalizedApiPath}" ` + `final key "${finalKey}" with a new function.`
 					);
 				}
 			}
@@ -1660,6 +1691,20 @@ const slothletObject = {
 			// Validate existing target is compatible (object or function, not primitive)
 			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
 				const existing = currentTarget[finalKey];
+
+				// Check if overwrites are disabled and target already has content
+				if (this.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
+					// For objects, check if they have any keys (non-empty)
+					const hasContent = typeof existing === "object" ? Object.keys(existing).length > 0 : true;
+					if (hasContent) {
+						console.warn(
+							`[slothlet] Skipping addApi merge: API path "${normalizedApiPath}" final key "${finalKey}" ` +
+								`already exists with content (type: "${typeof existing}"). Set allowApiOverwrite: true to allow merging.`
+						);
+						return; // Skip the merge
+					}
+				}
+
 				if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
 					throw new Error(
 						`[slothlet] Cannot merge API at "${normalizedApiPath}": ` +
@@ -1686,8 +1731,24 @@ const slothletObject = {
 			}
 
 			// Merge new modules into existing object
+			// Note: Object.assign performs shallow merge, which is intentional here.
+			// We want to preserve references to the actual module exports, including
+			// proxies (lazy mode) and function references (eager mode). Deep cloning
+			// would break these references and lose the proxy/function behavior.
 			Object.assign(currentTarget[finalKey], newModules);
 			Object.assign(currentBoundTarget[finalKey], newModules);
+		} else if (newModules === null || newModules === undefined) {
+			// Warn when loaded modules result in null or undefined
+			const receivedType = newModules === null ? "null" : "undefined";
+			console.warn(
+				`[slothlet] addApi: No modules loaded from folder at API path "${normalizedApiPath}". ` +
+					`Loaded modules resulted in ${receivedType}. Check that the folder contains valid module files.`
+			);
+		} else {
+			// Handle primitive values (string, number, boolean, symbol, bigint)
+			// Set them directly like functions
+			currentTarget[finalKey] = newModules;
+			currentBoundTarget[finalKey] = newModules;
 		}
 
 		// Update live bindings to reflect the changes
@@ -1839,10 +1900,22 @@ export function mutateLiveBindingFunction(target, source) {
 		for (const key of Object.keys(target)) {
 			if (key !== "_impl" && key !== "__ctx") delete target[key];
 		}
-		// Attach new properties/methods
+		// Attach new properties/methods (enumerable API endpoints)
 		for (const [key, value] of Object.entries(source)) {
 			if (key !== "__ctx") {
 				target[key] = value;
+			}
+		}
+		// Manually copy management methods (may be non-enumerable)
+		const managementMethods = ["shutdown", "addApi", "describe"];
+		for (const method of managementMethods) {
+			const desc = Object.getOwnPropertyDescriptor(source, method);
+			if (desc) {
+				try {
+					Object.defineProperty(target, method, desc);
+				} catch {
+					// ignore
+				}
 			}
 		}
 		// Optionally, set _impl to a default method if present
@@ -1895,6 +1968,10 @@ export default slothlet;
  *   - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
  *   - `"function"`: Force API to be callable as function with properties attached
  *   - `"object"`: Force API to be plain object with method properties
+ * @property {boolean} [allowApiOverwrite=true] - Controls whether addApi can overwrite existing API endpoints:
+ *   - `true`: Allow overwrites (default, backwards compatible)
+ *   - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
+ *   - Applies to both function and object overwrites at the final key of the API path
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.

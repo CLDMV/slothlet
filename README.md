@@ -464,6 +464,7 @@ Creates and loads an API instance with the specified configuration.
 | `apiDepth`  | `number`  | `Infinity`    | Directory traversal depth control - `0` for root only, `Infinity` for all levels                                                                                                                                                                                                                                                                                                                      |
 | `debug`     | `boolean` | `false`       | Enable verbose logging. Can also be set via `--slothletdebug` command line flag or `SLOTHLET_DEBUG=true` environment variable                                                                                                                                                                                                                                                                         |
 | `api_mode`  | `string`  | `"auto"`      | API structure behavior when root-level default functions exist:<br/>• `"auto"`: Automatically detects if root has default function export and creates callable API<br/>• `"function"`: Forces API to be callable (use when you have root-level default function exports)<br/>• `"object"`: Forces API to be object-only (use when you want object interface regardless of exports)                    |
+| `allowApiOverwrite` | `boolean` | `true` | Controls whether `addApi()` can overwrite existing API endpoints:<br/>• `true`: Allow overwrites (default, backwards compatible)<br/>• `false`: Prevent overwrites - logs warning and skips when attempting to overwrite existing endpoints<br/>Applies to both function and object overwrites at the final key of the API path |
 | `context`   | `object`  | `{}`          | Context data object injected into live-binding `context` reference. Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`                                                                                                                                                                                                                                           |
 | `reference` | `object`  | `{}`          | Reference object merged into the API root level. Properties not conflicting with loaded modules are added directly to the API                                                                                                                                                                                                                                                                         |
 | `sanitize`  | `object`  | `{}`          | **🔧 NEW**: Advanced filename-to-API transformation control. Options: `lowerFirst` (boolean), `preserveAllUpper` (boolean), `preserveAllLower` (boolean), `rules` object with `leave` (exact case-sensitive), `leaveInsensitive` (case-insensitive), `upper`/`lower` arrays. Supports exact matches, glob patterns (`*json*`, `http*`), and boundary patterns (`**url**` for surrounded matches only) |
@@ -558,6 +559,28 @@ Dynamically extend your API at runtime by loading additional modules and merging
 - ✅ **Live Binding Updates**: Automatically updates `self`, `context`, and `reference`
 - ✅ **Function Support**: Can traverse through functions (slothlet's function.property pattern)
 - ✅ **Validation**: Prevents extension through primitives, validates path format
+- ✅ **Overwrite Protection**: Optional `allowApiOverwrite` config prevents accidental endpoint overwrites
+
+**Configuration:**
+
+The `allowApiOverwrite` option controls whether `addApi` can overwrite existing endpoints:
+
+```javascript
+// Default behavior - allows overwrites (backwards compatible)
+const api = await slothlet({ 
+    dir: "./api",
+    allowApiOverwrite: true // default
+});
+await api.addApi("tools", "./new-tools"); // Overwrites existing api.tools
+
+// Protected mode - prevents overwrites
+const api = await slothlet({ 
+    dir: "./api",
+    allowApiOverwrite: false // protection enabled
+});
+await api.addApi("tools", "./new-tools"); // Logs warning and skips
+// Console: "[slothlet] Skipping addApi: API path "tools" final key "tools" already exists..."
+```
 
 **Usage Examples:**
 
@@ -611,6 +634,9 @@ await api.addApi("handler.middleware", "./middleware"); // Works - function
 api.config.timeout = 5000;
 await api.addApi("config.timeout.advanced", "./modules"); // Throws error
 ```
+
+> [!WARNING]  
+> **⚠️ Concurrency Limitation:** The `addApi` method is **not thread-safe**. Concurrent calls to `addApi` with overlapping paths may result in race conditions and inconsistent API state. Ensure calls are properly sequenced using `await` or other synchronization mechanisms. Do not call `addApi` from multiple threads/workers simultaneously.
 
 > [!NOTE]  
 > **📚 For detailed API documentation with comprehensive parameter descriptions, method signatures, and examples, see [docs/API.md](https://github.com/CLDMV/slothlet/blob/HEAD/docs/API.md)**

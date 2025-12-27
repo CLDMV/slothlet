@@ -177,12 +177,24 @@ async function test_addApi_errors() {
 		}
 	}
 
+	// Test with non-string apiPath
+	try {
+		await api.addApi(null, path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for non-string apiPath");
+	} catch (error) {
+		if (error.message.includes("apiPath' must be a string")) {
+			console.log("  ✓ Correctly throws error for non-string apiPath");
+		} else {
+			throw error;
+		}
+	}
+
 	// Test with empty apiPath
 	try {
 		await api.addApi("", path.join(__dirname, "../api_tests/api_test_mixed"));
 		throw new Error("Should have thrown error for empty apiPath");
 	} catch (error) {
-		if (error.message.includes("non-empty string")) {
+		if (error.message.includes("non-empty, non-whitespace string") || error.message.includes("non-empty string")) {
 			console.log("  ✓ Correctly throws error for empty apiPath");
 		} else {
 			throw error;
@@ -230,7 +242,7 @@ async function test_addApi_errors() {
 		await api.addApi("   ", path.join(__dirname, "../api_tests/api_test_mixed"));
 		throw new Error("Should have thrown error for whitespace-only apiPath");
 	} catch (error) {
-		if (error.message.includes("non-empty string")) {
+		if (error.message.includes("non-empty, non-whitespace string") || error.message.includes("non-empty string")) {
 			console.log("  ✓ Correctly throws error for whitespace-only apiPath");
 		} else {
 			throw error;
