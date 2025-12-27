@@ -1399,6 +1399,19 @@ const slothletObject = {
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.shutdown: not configurable");
 		}
+
+		// Add addApi method to boundApi
+		const addApiDesc = Object.getOwnPropertyDescriptor(boundApi, "addApi");
+		if (!addApiDesc || addApiDesc.configurable) {
+			Object.defineProperty(boundApi, "addApi", {
+				value: this.addApi.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: true
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.addApi: not configurable");
+		}
 		// console.debug("[slothlet] createBoundApi: boundApi.shutdown is now slothlet.shutdown.");
 
 		// this.boundApi = boundApi;
@@ -1473,6 +1486,140 @@ const slothletObject = {
 	 */
 	getBoundApi() {
 		return this.boundapi;
+	},
+
+	/**
+	 * Dynamically adds API modules from a new folder to the existing API at a specified path.
+	 *
+	 * This method allows extending the API after it has been created by loading modules from
+	 * an additional folder and merging them into the API at a specific location defined by
+	 * a dotted path notation. Works with both lazy and eager loading modes.
+	 *
+	 * @async
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - Dotted path where to add the new API (e.g., "runtime.newapi", "tools.external")
+	 * @param {string} folderPath - Path to the folder containing modules to load (relative or absolute)
+	 * @returns {Promise<void>} Resolves when the API extension is complete
+	 * @throws {Error} If API is not loaded, folder doesn't exist, or path navigation fails
+	 * @public
+	 *
+	 * @description
+	 * The method performs the following steps:
+	 * 1. Validates that the API is loaded and the folder exists
+	 * 2. Resolves relative folder paths from the caller's location
+	 * 3. Loads modules from the specified folder using the current loading mode (lazy/eager)
+	 * 4. Navigates to the specified API path, creating intermediate objects as needed
+	 * 5. Merges the new modules into the target location
+	 * 6. Updates all live bindings to reflect the changes
+	 *
+	 * @example
+	 * // Create initial API
+	 * const api = await slothlet({ dir: "./api" });
+	 *
+	 * // Add additional modules at runtime.plugins path
+	 * await api.addApi("runtime.plugins", "./plugins");
+	 *
+	 * // Access the new API
+	 * api.runtime.plugins.myPlugin();
+	 *
+	 * @example
+	 * // Add modules to root level
+	 * await api.addApi("utilities", "./utils");
+	 * api.utilities.helperFunc();
+	 *
+	 * @example
+	 * // Add nested modules
+	 * await api.addApi("services.external.github", "./integrations/github");
+	 * api.services.external.github.getUser();
+	 */
+	async addApi(apiPath, folderPath) {
+		if (!this.loaded) {
+			throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
+		}
+
+		// Resolve relative folder paths from the caller's location
+		let resolvedFolderPath = folderPath;
+		if (!path.isAbsolute(folderPath)) {
+			resolvedFolderPath = resolvePathFromCaller(folderPath);
+		}
+
+		// Verify the folder exists
+		try {
+			const stats = await fs.stat(resolvedFolderPath);
+			if (!stats.isDirectory()) {
+				throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
+			}
+		} catch (error) {
+			throw new Error(`[slothlet] addApi: Cannot access folder: ${resolvedFolderPath} - ${error.message}`);
+		}
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${apiPath}`);
+		}
+
+		// Load modules from the new folder using the appropriate mode
+		let newModules;
+		if (this.config.lazy) {
+			// Use lazy mode to create the API structure
+			newModules = await this.modes.lazy.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
+		} else {
+			// Use eager mode to create the API structure
+			newModules = await this.modes.eager.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
+		}
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] addApi: Loaded modules:`, Object.keys(newModules));
+		}
+
+		// Navigate to the target location in the API, creating intermediate objects as needed
+		const pathParts = apiPath.split(".");
+		let currentTarget = this.api;
+		let currentBoundTarget = this.boundapi;
+
+		for (let i = 0; i < pathParts.length - 1; i++) {
+			const part = pathParts[i];
+			const key = this._toapiPathKey(part);
+
+			// Create intermediate objects if they don't exist
+			if (!currentTarget[key] || typeof currentTarget[key] !== "object") {
+				currentTarget[key] = {};
+			}
+			if (!currentBoundTarget[key] || typeof currentBoundTarget[key] !== "object") {
+				currentBoundTarget[key] = {};
+			}
+
+			currentTarget = currentTarget[key];
+			currentBoundTarget = currentBoundTarget[key];
+		}
+
+		// Get the final key where we'll merge the new modules
+		const finalKey = this._toapiPathKey(pathParts[pathParts.length - 1]);
+
+		// Merge the new modules into the target location
+		if (typeof newModules === "function") {
+			// If the loaded modules result in a function, set it directly
+			currentTarget[finalKey] = newModules;
+			currentBoundTarget[finalKey] = newModules;
+		} else if (typeof newModules === "object" && newModules !== null) {
+			// If target doesn't exist, create it
+			if (!currentTarget[finalKey]) {
+				currentTarget[finalKey] = {};
+			}
+			if (!currentBoundTarget[finalKey]) {
+				currentBoundTarget[finalKey] = {};
+			}
+
+			// Merge new modules into existing object
+			Object.assign(currentTarget[finalKey], newModules);
+			Object.assign(currentBoundTarget[finalKey], newModules);
+		}
+
+		// Update live bindings to reflect the changes
+		this.updateBindings(this.context, this.reference, this.boundapi);
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] addApi: Successfully added modules at ${apiPath}`);
+		}
 	},
 
 	/**

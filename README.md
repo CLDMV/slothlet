@@ -525,8 +525,9 @@ Returns true if the API is loaded.
 Gracefully shuts down the API and performs comprehensive resource cleanup to prevent hanging processes.
 
 **Cleanup includes:**
+
 - Hook manager state and registered hooks
-- AsyncLocalStorage context and bindings  
+- AsyncLocalStorage context and bindings
 - EventEmitter listeners and AsyncResource instances (including third-party libraries)
 - Instance data and runtime coordination
 
