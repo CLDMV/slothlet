@@ -1537,6 +1537,15 @@ const slothletObject = {
 			throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
 		}
 
+		// Validate apiPath parameter
+		if (typeof apiPath !== "string" || apiPath.trim() === "") {
+			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty string.");
+		}
+		const pathParts = apiPath.split(".");
+		if (pathParts.some((part) => part === "")) {
+			throw new Error(`[slothlet] addApi: 'apiPath' must not contain empty segments. Received: "${apiPath}"`);
+		}
+
 		// Resolve relative folder paths from the caller's location
 		let resolvedFolderPath = folderPath;
 		if (!path.isAbsolute(folderPath)) {
@@ -1544,13 +1553,14 @@ const slothletObject = {
 		}
 
 		// Verify the folder exists
+		let stats;
 		try {
-			const stats = await fs.stat(resolvedFolderPath);
-			if (!stats.isDirectory()) {
-				throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
-			}
+			stats = await fs.stat(resolvedFolderPath);
 		} catch (error) {
 			throw new Error(`[slothlet] addApi: Cannot access folder: ${resolvedFolderPath} - ${error.message}`);
+		}
+		if (!stats.isDirectory()) {
+			throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
 		}
 
 		if (this.config.debug) {
@@ -1568,11 +1578,17 @@ const slothletObject = {
 		}
 
 		if (this.config.debug) {
-			console.log(`[DEBUG] addApi: Loaded modules:`, Object.keys(newModules));
+			if (newModules && typeof newModules === "object") {
+				console.log(`[DEBUG] addApi: Loaded modules:`, Object.keys(newModules));
+			} else {
+				console.log(
+					`[DEBUG] addApi: Loaded modules (non-object):`,
+					typeof newModules === "function" ? `[Function: ${newModules.name || "anonymous"}]` : newModules
+				);
+			}
 		}
 
 		// Navigate to the target location in the API, creating intermediate objects as needed
-		const pathParts = apiPath.split(".");
 		let currentTarget = this.api;
 		let currentBoundTarget = this.boundapi;
 
@@ -1581,10 +1597,27 @@ const slothletObject = {
 			const key = this._toapiPathKey(part);
 
 			// Create intermediate objects if they don't exist
-			if (!currentTarget[key] || typeof currentTarget[key] !== "object") {
+			// Allow both objects and functions (functions can have properties in slothlet)
+			if (Object.prototype.hasOwnProperty.call(currentTarget, key)) {
+				const existing = currentTarget[key];
+				if (existing === null || (typeof existing !== "object" && typeof existing !== "function")) {
+					throw new Error(
+						`[slothlet] Cannot extend API path "${apiPath}" through segment "${part}": ` +
+							`existing value is type "${typeof existing}", cannot add properties.`
+					);
+				}
+			} else {
 				currentTarget[key] = {};
 			}
-			if (!currentBoundTarget[key] || typeof currentBoundTarget[key] !== "object") {
+			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, key)) {
+				const existingBound = currentBoundTarget[key];
+				if (existingBound === null || (typeof existingBound !== "object" && typeof existingBound !== "function")) {
+					throw new Error(
+						`[slothlet] Cannot extend bound API path "${apiPath}" through segment "${part}": ` +
+							`existing value is type "${typeof existingBound}", cannot add properties.`
+					);
+				}
+			} else {
 				currentBoundTarget[key] = {};
 			}
 

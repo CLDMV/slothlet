@@ -177,8 +177,153 @@ async function test_addApi_errors() {
 		}
 	}
 
+	// Test with empty apiPath
+	try {
+		await api.addApi("", path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for empty apiPath");
+	} catch (error) {
+		if (error.message.includes("non-empty string")) {
+			console.log("  ✓ Correctly throws error for empty apiPath");
+		} else {
+			throw error;
+		}
+	}
+
+	// Test with apiPath containing empty segments (consecutive dots)
+	try {
+		await api.addApi("path..test", path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for consecutive dots");
+	} catch (error) {
+		if (error.message.includes("empty segments")) {
+			console.log("  ✓ Correctly throws error for consecutive dots");
+		} else {
+			throw error;
+		}
+	}
+
+	// Test with leading dot
+	try {
+		await api.addApi(".test", path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for leading dot");
+	} catch (error) {
+		if (error.message.includes("empty segments")) {
+			console.log("  ✓ Correctly throws error for leading dot");
+		} else {
+			throw error;
+		}
+	}
+
+	// Test with trailing dot
+	try {
+		await api.addApi("test.", path.join(__dirname, "../api_tests/api_test_mixed"));
+		throw new Error("Should have thrown error for trailing dot");
+	} catch (error) {
+		if (error.message.includes("empty segments")) {
+			console.log("  ✓ Correctly throws error for trailing dot");
+		} else {
+			throw error;
+		}
+	}
+
 	await api.shutdown();
 	console.log("\n✅ Error handling test passed");
+}
+
+/**
+ * Test merging into existing target object
+ * @async
+ * @returns {Promise<void>}
+ */
+async function test_addApi_merge() {
+	console.log("\n🔍 Testing addApi merging into existing object");
+
+	const api = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false
+	});
+
+	// First, add something to services.external
+	await api.addApi("services.external", path.join(__dirname, "../api_tests/api_test_mixed"));
+	const firstResult = api.services.external.mathEsm.add(5, 5);
+	console.log(`  🔍 First addition result: ${firstResult}`);
+
+	if (firstResult !== 10) {
+		throw new Error(`Expected 10, got ${firstResult}`);
+	}
+	console.log("  ✓ First API addition successful");
+
+	// Now add more to the same location
+	await api.addApi("services.external.more", path.join(__dirname, "../api_tests/api_test"));
+
+	// Verify original still works
+	const secondResult = api.services.external.mathEsm.add(3, 7);
+	console.log(`  🔍 After second addition: ${secondResult}`);
+	if (secondResult !== 10) {
+		throw new Error(`Expected 10, got ${secondResult}`);
+	}
+
+	// Verify new addition exists
+	if (!api.services.external.more) {
+		throw new Error("New addition not found at services.external.more");
+	}
+	console.log("  ✓ Successfully merged into existing object");
+
+	await api.shutdown();
+	console.log("\n✅ Merge test passed");
+}
+
+/**
+ * Test adding properties to functions (slothlet supports function.property pattern)
+ * @async
+ * @returns {Promise<void>}
+ */
+async function test_addApi_function_extension() {
+	console.log("\n🔍 Testing adding properties to functions");
+
+	const api = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false
+	});
+
+	// First add a location
+	await api.addApi("test.func", path.join(__dirname, "../api_tests/api_test_mixed"));
+
+	// Create a function at a specific path
+	api.test.myFunction = () => "I'm a function";
+
+	// Add properties to the function - this SHOULD work in slothlet
+	await api.addApi("test.myFunction.nested", path.join(__dirname, "../api_tests/api_test"));
+
+	// Verify the function still works
+	const funcResult = api.test.myFunction();
+	if (funcResult !== "I'm a function") {
+		throw new Error("Function was broken during extension");
+	}
+	console.log("  ✓ Function still callable after adding properties");
+
+	// Verify the nested properties exist
+	if (!api.test.myFunction.nested) {
+		throw new Error("Nested properties not added to function");
+	}
+	console.log("  ✓ Successfully added properties to function");
+
+	// Test with primitive (should fail)
+	api.test.primitive = 42;
+	try {
+		await api.addApi("test.primitive.nested", path.join(__dirname, "../api_tests/api_test"));
+		throw new Error("Should have thrown error when trying to extend primitive");
+	} catch (error) {
+		if (error.message.includes("cannot add properties")) {
+			console.log("  ✓ Correctly prevents extension of primitives");
+		} else {
+			throw error;
+		}
+	}
+
+	await api.shutdown();
+	console.log("\n✅ Function extension test passed");
 }
 
 /**
@@ -196,6 +341,8 @@ async function runAllTests() {
 		await test_addApi_lazy();
 		await test_addApi_nested();
 		await test_addApi_errors();
+		await test_addApi_merge();
+		await test_addApi_function_extension();
 
 		console.log("\n========================================");
 		console.log("🎉 All addApi tests passed!");
