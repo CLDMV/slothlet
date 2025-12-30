@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-30 07:27:18 -08:00 (1767108438)
+ *	@Last modified time: 2025-12-30 08:28:05 -08:00 (1767112085)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -30,9 +30,10 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { types as utilTypes } from "node:util";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 import { analyzeModule, processModuleFromAnalysis } from "@cldmv/slothlet/helpers/api_builder/analysis";
-import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder/decisions";
+import { processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/api_builder/decisions";
 
 // ============================================================================
 // CATEGORY CONSTRUCTION FUNCTIONS
@@ -74,236 +75,244 @@ import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder/decisio
 export async function buildCategoryStructure(categoryPath, options = {}) {
 	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler, instance } = options;
 
-	if (!instance || typeof instance._toapiPathKey !== "function" || typeof instance._shouldIncludeFile !== "function") {
+	if (!instance || typeof instance._toapiPathKey !== "function") {
 		throw new Error("buildCategoryStructure requires a valid slothlet instance");
 	}
 
-	const debug = instance.config?.debug || false;
+	// Use centralized category building decisions
+	const decisions = await buildCategoryDecisions(categoryPath, {
+		currentDepth,
+		maxDepth,
+		mode,
+		subdirHandler,
+		instance
+	});
 
-	if (debug) {
-		console.log(`[DEBUG] buildCategoryStructure called with path: ${categoryPath}, mode: ${mode}, depth: ${currentDepth}`);
-	}
+	// SINGLE FILE CASE
+	if (decisions.type === "single-file") {
+		const { singleFile } = decisions;
+		const { mod, moduleName } = singleFile;
 
-	const files = await fs.readdir(categoryPath, { withFileTypes: true });
-	const moduleFiles = files.filter((f) => instance._shouldIncludeFile(f));
-	const categoryName = instance._toapiPathKey(path.basename(categoryPath));
-	const subDirs = files.filter((e) => e.isDirectory() && !e.name.startsWith("."));
+		// Handle flattening based on centralized decisions
+		if (decisions.shouldFlatten) {
+			switch (decisions.flattenType) {
+				case "function-folder-match":
+				case "default-function":
+					try {
+						Object.defineProperty(mod, "name", { value: decisions.preferredName, configurable: true });
+					} catch {
+						// ignore
+					}
+					return mod;
 
-	// SINGLE FILE CASE - Special flattening rules
-	if (moduleFiles.length === 1 && subDirs.length === 0) {
-		const moduleExt = path.extname(moduleFiles[0].name);
-		const moduleName = instance._toapiPathKey(path.basename(moduleFiles[0].name, moduleExt));
+				case "default-export-flatten":
+					// Return the module directly - it already has the default object contents spread with named exports
+					return mod;
 
-		// Analyze the module using centralized function
-		const analysis = await analyzeModule(path.join(categoryPath, moduleFiles[0].name), {
-			debug,
-			instance
-		});
+				case "object-auto-flatten":
+					// Return the contents of the named export directly (flatten it)
+					return mod[decisions.preferredName];
 
-		// Process the analysis into final module
-		const mod = processModuleFromAnalysis(analysis, { instance, debug });
-
-		// Function name matching checks
-		const functionNameMatchesFolder = typeof mod === "function" && mod.name && mod.name.toLowerCase() === categoryName.toLowerCase();
-
-		const functionNameMatchesFilename =
-			typeof mod === "function" &&
-			mod.name &&
-			instance._toapiPathKey(mod.name).toLowerCase() === instance._toapiPathKey(moduleName).toLowerCase() &&
-			mod.name !== instance._toapiPathKey(moduleName);
-
-		// Auto-flattening rules for single files
-
-		// 0. CJS Default Export Flattening: Skip this rule - let loadAndProcessModule handle CJS defaults
-		// The CJS unwrapping in loadAndProcessModule already spreads default objects properly
-
-		// 1. Flatten if file matches folder name and exports a function (NOT for root-level)
-		if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
-			try {
-				Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
-			} catch {
-				// ignore
-			}
-			return mod;
-		}
-
-		// 2. Auto-flatten single-file folders where filename matches folder name and exports object (NOT for root-level)
-		if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
-			if (debug) {
-				console.log(`[DEBUG] Single-file auto-flattening: ${categoryName}/${moduleFiles[0].name} -> flatten object contents`);
-			}
-
-			// Check if module exports single named export matching filename, and flatten it
-			const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-			if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
-				return mod[moduleName]; // Return the contents of the named export directly
-			}
-
-			// CRITICAL: Check if this was originally a default export (ESM or CJS)
-			// If filename matches folder name AND this object came from a default export, flatten it
-			// This handles both ESM: "export default { multiply, divide }; export { getCalculatorName }"
-			// And CJS: "module.exports = { default: { multiply, divide }, getCalculatorName }"
-			// After processing, both become: { multiply, divide, getCalculatorName }
-			// We detect this by checking if we have multiple exports (indicating spread default + named exports)
-			if (moduleKeys.length > 1) {
-				if (debug) {
-					console.log(`[DEBUG] Default export flattening: ${categoryName}/${moduleFiles[0].name} -> flatten default object contents`);
+				case "parent-level-flatten": {
+					// Return an object with the export name as key, promoting it to parent level
+					const exportValue = mod[Object.keys(mod).filter((k) => k !== "default")[0]];
+					return { [decisions.preferredName]: exportValue };
 				}
-				return mod; // Return the spread object directly (default + named exports merged)
-			}
-			return mod;
-		}
 
-		// 3. Auto-flatten single-file folders to parent level (eliminate intermediate filename namespace)
-		if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
-			const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-			const fileName = moduleFiles[0].name.replace(/\.(mjs|cjs|js)$/, "");
-
-			// Only flatten if filename is generic/meaningless
-			const isGenericFilename = ["singlefile", "index", "main", "default"].includes(fileName.toLowerCase());
-
-			// If single file has single export AND filename is generic, flatten to parent level
-			if (moduleKeys.length === 1 && isGenericFilename) {
-				if (debug) {
-					console.log(
-						`[DEBUG] Single-file parent-level auto-flattening: ${categoryName}/${moduleFiles[0].name} -> flatten to parent level`
-					);
-				}
-				const exportValue = mod[moduleKeys[0]];
-				return { [moduleKeys[0]]: exportValue }; // Promote export to parent level
+				case "filename-folder-match-flatten":
+					// Return the module directly to avoid double nesting (e.g., nest/nest.mjs -> nest.alpha, not nest.nest.alpha)
+					return mod;
 			}
 		}
 
-		// 4. Flatten if function name matches folder name (case-insensitive) and prefer function name (NOT for root-level)
-		if (functionNameMatchesFolder && currentDepth > 0) {
-			try {
-				Object.defineProperty(mod, "name", { value: mod.name, configurable: true });
-			} catch {
-				// ignore
-			}
-			return mod;
+		// Handle preferred name without flattening
+		if (decisions.preferredName && decisions.preferredName !== moduleName) {
+			return { [decisions.preferredName]: mod };
 		}
 
-		// 5. Use function name instead of sanitized filename when they match (case-insensitive)
-		if (functionNameMatchesFilename) {
-			return { [mod.name]: mod };
-		}
-
-		// 6. Flatten if this was a default function export (NOT for root-level)
-		if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__slothletDefault === true) && currentDepth > 0) {
-			try {
-				Object.defineProperty(mod, "name", { value: categoryName, configurable: true });
-			} catch {
-				// ignore
-			}
-			return mod;
-		}
-
-		// 7. Check for auto-flattening: if module has single named export matching filename, use it directly
-		const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-		if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
-			return mod[moduleName]; // Auto-flatten single named export
-		}
-
-		// Default: preserve as namespace
+		// Default case: return as namespace
 		return { [moduleName]: mod };
 	}
 
-	// MULTI-FILE CASE - Complex processing with multi-default handling
+	// MULTI-FILE CASE
 	const categoryModules = {};
+	const { categoryName, processedModules, subdirectoryDecisions } = decisions;
 
-	// Use shared multi-default detection utility
-	const analysis = await multidefault_analyzeModules(moduleFiles, categoryPath, { debug, instance });
-	const { totalDefaultExports, hasMultipleDefaultExports, selfReferentialFiles, defaultExportFiles: analysisDefaults } = analysis;
+	// Process each module based on centralized decisions
+	for (const moduleDecision of processedModules) {
+		const { moduleName, mod, type, apiPathKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
+		// Handle different module types based on centralized decisions
+		if (specialHandling === "category-merge") {
+			// Module filename matches category name - merge logic
+			if (Object.prototype.hasOwnProperty.call(mod, categoryName) && typeof mod[categoryName] === "object" && mod[categoryName] !== null) {
+				Object.assign(categoryModules, mod[categoryName]);
+				for (const [key, value] of Object.entries(mod)) {
+					if (key !== categoryName) categoryModules[instance._toapiPathKey(key)] = value;
+				}
+			} else {
+				Object.assign(categoryModules, mod);
+			}
+		} else if (type === "function") {
+			// Function handling with appropriate naming
+			if (specialHandling === "multi-default-filename") {
+				try {
+					Object.defineProperty(mod, "name", { value: moduleName, configurable: true });
+				} catch {
+					// ignore
+				}
+				categoryModules[moduleName] = mod;
+			} else if (specialHandling === "prefer-function-name") {
+				categoryModules[apiPathKey] = mod;
+			} else {
+				// Standard function processing
+				categoryModules[apiPathKey] = mod;
+			}
+		} else if (type === "self-referential") {
+			// Self-referential case: use the named export directly to avoid nesting
+			categoryModules[moduleName] = mod[moduleName] || mod;
+		} else if (type === "object") {
+			// Object/named exports handling
+			if (specialHandling === "preferred-export-names") {
+				Object.assign(categoryModules, processedExports);
+			} else if (shouldFlatten) {
+				switch (flattenType) {
+					case "single-default-object": {
+						// Flatten the default export and merge named exports
+						// Special handling for Proxy objects: don't use spread operator which breaks custom handlers
+						let flattened;
 
-	// Convert analysis results to match existing structure
-	const defaultExportFiles = [];
-	for (const { fileName } of analysisDefaults) {
-		const file = moduleFiles.find((f) => path.basename(f.name, path.extname(f.name)) === fileName);
-		if (file) {
-			const analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				debug,
-				instance
-			});
-			const processedMod = processModuleFromAnalysis(analysis, {
-				debug,
-				instance
-			});
-			defaultExportFiles.push({ file, moduleName: instance._toapiPathKey(fileName), mod: processedMod, analysis });
+						// Check if mod.default is likely a Proxy with custom behavior
+						const defaultExport = mod.default;
+						const hasNamedExports = Object.keys(mod).some((k) => k !== "default");
+
+						if (hasNamedExports && defaultExport && typeof defaultExport === "object") {
+							// Use Node.js built-in proxy detection for reliable detection
+							const isProxy = utilTypes?.isProxy?.(defaultExport) ?? false;
+
+							if (isProxy) {
+								// Preserve Proxy object and add named exports
+								flattened = defaultExport;
+								let assignmentFailed = false;
+								// Use Map from the start to avoid array-to-Map conversion overhead
+								const failedMap = new Map();
+
+								// Try to add named exports directly to the proxy
+								for (const [key, value] of Object.entries(mod)) {
+									if (key !== "default") {
+										try {
+											flattened[key] = value;
+										} catch (e) {
+											// Track assignment failure
+											assignmentFailed = true;
+											failedMap.set(key, value);
+											if (instance.config?.debug) {
+												console.warn(
+													`Could not assign '${key}' to proxy object in module '${moduleName}' at '${categoryPath}':`,
+													e.message
+												);
+											}
+										}
+									}
+								}
+
+								// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
+								if (assignmentFailed) {
+									// DOUBLE-PROXY LAYER JUSTIFICATION:
+									// This creates a wrapper around the original proxy because direct property assignment
+									// failed (e.g., LGTVControllers proxy with custom setters that reject certain properties).
+									// The double-proxy approach is necessary because:
+									// 1. We can't modify the original proxy's behavior without breaking its intended functionality
+									// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
+									// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
+									// 4. Performance impact is minimal since this only occurs when assignment fails, not in normal operation
+									const originalProxy = flattened;
+									flattened = new Proxy(originalProxy, {
+										get(target, prop, receiver) {
+											// Check failed assignments first
+											if (failedMap.has(prop)) return failedMap.get(prop);
+
+											// Fallback to original proxy
+											return Reflect.get(target, prop, receiver);
+										},
+										has(target, prop) {
+											// Include failed assignments in has checks
+											if (failedMap.has(prop)) return true;
+											return Reflect.has(target, prop);
+										},
+										ownKeys(target) {
+											const originalKeys = Reflect.ownKeys(target);
+											const failedKeys = Array.from(failedMap.keys());
+											return [...new Set([...originalKeys, ...failedKeys])];
+										},
+										getOwnPropertyDescriptor(target, prop) {
+											if (failedMap.has(prop)) {
+												return { configurable: true, enumerable: true, value: failedMap.get(prop) };
+											}
+											return Reflect.getOwnPropertyDescriptor(target, prop);
+										}
+									});
+								}
+							} else {
+								// Regular object, use spread operator
+								flattened = { ...defaultExport };
+								for (const [key, value] of Object.entries(mod)) {
+									if (key !== "default") {
+										flattened[key] = value;
+									}
+								}
+							}
+						} else {
+							// No named exports or not an object, use as-is
+							flattened = defaultExport;
+						}
+
+						categoryModules[apiPathKey] = flattened;
+						break;
+					}
+					case "multi-default-no-default": {
+						// Multi-default context: flatten modules WITHOUT default exports to category
+						const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+						for (const key of moduleKeys) {
+							categoryModules[key] = mod[key];
+						}
+						break;
+					}
+					case "single-named-export-match":
+						// Auto-flatten: module exports single named export matching filename
+						categoryModules[apiPathKey] = mod[apiPathKey];
+						break;
+					case "category-name-match-flatten": {
+						// Auto-flatten: module filename matches folder name and has no default → flatten to category
+						const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
+						for (const key of moduleKeys) {
+							categoryModules[key] = mod[key];
+						}
+						break;
+					}
+				}
+			} else {
+				// Standard object export
+				categoryModules[apiPathKey] = mod;
+			}
 		}
 	}
 
-	if (debug) {
-		console.log(`[DEBUG] buildCategoryStructure: Multi-default analysis results`);
-		console.log(`[DEBUG]   - totalDefaultExports: ${totalDefaultExports}`);
-		console.log(`[DEBUG]   - hasMultipleDefaultExports: ${hasMultipleDefaultExports}`);
-		console.log(`[DEBUG]   - selfReferentialFiles: ${Array.from(selfReferentialFiles)}`);
-	}
-
-	// Process each module file
-	for (const file of moduleFiles) {
-		const moduleExt = path.extname(file.name);
-		const moduleName = instance._toapiPathKey(path.basename(file.name, moduleExt));
-		const fileName = path.basename(file.name, moduleExt);
-		const apiPathKey = instance._toapiPathKey(fileName);
-
-		// Check if we already loaded this module during first pass
-		let mod = null;
-		let analysis = null;
-		const existingDefault = defaultExportFiles.find((def) => def.moduleName === moduleName);
-		if (existingDefault) {
-			mod = existingDefault.mod; // Reuse already loaded module
-			analysis = existingDefault.analysis; // Reuse stored analysis data
-		} else {
-			analysis = await analyzeModule(path.join(categoryPath, file.name), {
-				debug,
-				instance
-			});
-			mod = processModuleFromAnalysis(analysis, {
-				debug,
-				instance
-			});
-		}
-
-		// Use centralized API builder for module processing
-		processModuleForAPI({
-			mod,
-			fileName,
-			apiPathKey,
-			hasMultipleDefaultExports,
-			isSelfReferential: selfReferentialFiles.has(moduleName),
-			api: categoryModules,
-			getRootDefault: () => null, // Categories don't have root defaults
-			setRootDefault: () => {}, // No-op for categories
-			context: {
-				debug,
-				mode: "category",
-				categoryName,
-				totalModules: moduleFiles.length
-			},
-			originalAnalysis: analysis
-		});
-	}
-
-	// Process subdirectories
-	for (const subDirEntry of subDirs) {
-		if (currentDepth < maxDepth) {
-			const key = instance._toapiPathKey(subDirEntry.name);
-			const subDirPath = path.join(categoryPath, subDirEntry.name);
+	// SUBDIRECTORIES - handle based on centralized decisions
+	for (const subDirDecision of subdirectoryDecisions) {
+		if (subDirDecision.shouldRecurse) {
+			const { name, path: subDirPath, apiPathKey } = subDirDecision;
 			let subModule;
 
 			if (mode === "lazy" && typeof subdirHandler === "function") {
-				// Lazy mode: use custom subdirectory handler
 				subModule = subdirHandler({
-					subDirEntry,
+					subDirEntry: { name },
 					subDirPath,
-					key,
+					key: apiPathKey,
 					categoryModules,
 					currentDepth,
 					maxDepth
 				});
 			} else {
-				// Eager mode: recursive category building
 				subModule = await buildCategoryStructure(subDirPath, {
 					currentDepth: currentDepth + 1,
 					maxDepth,
@@ -317,12 +326,34 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 			if (
 				typeof subModule === "function" &&
 				subModule.name &&
-				subModule.name.toLowerCase() === key.toLowerCase() &&
-				subModule.name !== key
+				subModule.name.toLowerCase() === apiPathKey.toLowerCase() &&
+				subModule.name !== apiPathKey
 			) {
-				categoryModules[subModule.name] = subModule; // Use original function name
+				// Use the original function name as the key
+				categoryModules[subModule.name] = subModule;
 			} else {
-				categoryModules[key] = subModule; // Use sanitized folder name
+				categoryModules[apiPathKey] = subModule;
+			}
+		}
+	}
+
+	// UPWARD FLATTENING
+	const keys = Object.keys(categoryModules);
+	if (keys.length === 1) {
+		const singleKey = keys[0];
+		if (singleKey === categoryName) {
+			const single = categoryModules[singleKey];
+			if (typeof single === "function") {
+				if (single.name !== categoryName) {
+					try {
+						Object.defineProperty(single, "name", { value: categoryName, configurable: true });
+					} catch {
+						// ignore
+					}
+				}
+				return single;
+			} else if (single && typeof single === "object" && !Array.isArray(single)) {
+				return single;
 			}
 		}
 	}
