@@ -53,6 +53,6 @@ export {
 
 export { buildCategoryStructure, buildRootAPI, toapiPathKey, shouldIncludeFile } from "@cldmv/slothlet/helpers/api_builder/construction";
 
-export { safeDefine, deepMerge, mutateLiveBindingFunction } from "@cldmv/slothlet/helpers/api_builder/utilities";
+export { safeDefine, deepMerge, mutateLiveBindingFunction } from "@cldmv/slothlet/helpers/utilities";
 
 export { addApiFromFolder } from "@cldmv/slothlet/helpers/api_builder/add_api";

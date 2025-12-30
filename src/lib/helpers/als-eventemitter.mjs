@@ -331,7 +331,7 @@ export function cleanupAllSlothletListeners() {
 	allPatchedListeners.clear();
 	// globalListenerTracker will be cleaned up automatically
 
-	if (process.env.NODE_ENV === "development" || process.env.SLOTHLET_DEBUG) {
+	if (process.env.SLOTHLET_DEBUG === "1" || process.env.SLOTHLET_DEBUG === "true") {
 		console.log(`[slothlet] Cleaned up ${cleanedCount} listeners (${errorCount} errors)`);
 	}
 }

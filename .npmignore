@@ -25,7 +25,7 @@ docs/
 CONTRIBUTING.md
 SECURITY.md
 TODO.md
-PERFORMANCE.md
+docs/PERFORMANCE.md
 
 # Test and config files
 *.test.*
