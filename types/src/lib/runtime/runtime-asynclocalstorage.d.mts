@@ -5,6 +5,13 @@
  * @public
  */
 export const sharedALS: AsyncLocalStorageType;
+/**
+ * Per-request AsyncLocalStorage instance for request-scoped context.
+ * Stores temporary context data that merges with instance context.
+ * @type {AsyncLocalStorageType}
+ * @public
+ */
+export const requestALS: AsyncLocalStorageType;
 export function runWithCtx(ctx: object, fn: Function, thisArg: any, args: any[]): any;
 export function getCtx(): object | null;
 export function makeWrapper(ctx: object): Function;

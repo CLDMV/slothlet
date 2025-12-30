@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-26 22:05:21 -08:00 (1766815521)
+ *	@Last modified time: 2025-12-29 21:48:08 -08:00 (1767073688)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -379,7 +379,7 @@ const slothletObject = {
 		if (executionEngine === "singleton") {
 			// Destructure and exclude engine/mode from loadConfig to avoid conflicts
 			// eslint-disable-next-line no-unused-vars
-			const { context = null, reference = null, sanitize = null, hooks = false, engine, mode, ...loadConfig } = options;
+			const { context = null, reference = null, sanitize = null, hooks = false, scope, engine, mode, ...loadConfig } = options;
 			this.context = context;
 			this.reference = reference;
 
@@ -405,6 +405,20 @@ const slothletObject = {
 
 			// Create HookManager instance
 			this.hookManager = new HookManager(hooksEnabled, hooksPattern, { suppressErrors: hooksSuppressErrors });
+
+			// Parse scope configuration for per-request context
+			if (scope && typeof scope === "object") {
+				const mergeStrategy = scope.merge || "shallow";
+				if (mergeStrategy !== "shallow" && mergeStrategy !== "deep") {
+					throw new TypeError(`Invalid scope.merge value: "${mergeStrategy}". Must be "shallow" or "deep".`);
+				}
+				this.config.scope = { merge: mergeStrategy };
+			} else if (scope === false) {
+				this.config.scope = { enabled: false };
+			} else {
+				// Default: shallow merge enabled
+				this.config.scope = { merge: "shallow" };
+			}
 
 			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
@@ -1421,6 +1435,32 @@ const slothletObject = {
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.addApi: not configurable");
 		}
+
+		// Add .run() method to boundApi
+		const runDesc = Object.getOwnPropertyDescriptor(boundApi, "run");
+		if (!runDesc || runDesc.configurable) {
+			Object.defineProperty(boundApi, "run", {
+				value: this.run.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.run: not configurable");
+		}
+
+		// Add .scope() method to boundApi
+		const scopeDesc = Object.getOwnPropertyDescriptor(boundApi, "scope");
+		if (!scopeDesc || scopeDesc.configurable) {
+			Object.defineProperty(boundApi, "scope", {
+				value: this.scope.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.scope: not configurable");
+		}
 		// console.debug("[slothlet] createBoundApi: boundApi.shutdown is now slothlet.shutdown.");
 
 		// this.boundApi = boundApi;
@@ -1790,6 +1830,166 @@ const slothletObject = {
 	 *   console.error('Shutdown failed:', error.message);
 	 * }
 	 */
+
+	/**
+	 * Execute a function with per-request context data.
+	 *
+	 * @function run
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} contextData - Context data to merge with instance context
+	 * @param {Function} callback - Function to execute with the merged context
+	 * @param {...any} args - Additional arguments to pass to the callback
+	 * @returns {any} The result of the callback function
+	 * @public
+	 */
+	run(contextData, callback, ...args) {
+		if (this.config.scope?.enabled === false) {
+			throw new Error("Per-request context (scope) is disabled for this instance.");
+		}
+
+		if (typeof callback !== "function") {
+			throw new TypeError("Callback must be a function.");
+		}
+
+		const runtimeType = this.config.runtime || "async";
+		let requestALS;
+		if (runtimeType === "async") {
+			return import("./lib/runtime/runtime-asynclocalstorage.mjs").then((asyncRuntime) => {
+				requestALS = asyncRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, contextData);
+				} else {
+					mergedContext = { ...parentContext, ...contextData };
+				}
+
+				return requestALS.run(mergedContext, () => callback(...args));
+			});
+		} else {
+			return import("./lib/runtime/runtime-livebindings.mjs").then((liveRuntime) => {
+				requestALS = liveRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, contextData);
+				} else {
+					mergedContext = { ...parentContext, ...contextData };
+				}
+
+				return requestALS.run(mergedContext, () => callback(...args));
+			});
+		}
+	},
+
+	/**
+	 * Execute a function with per-request context data (structured API).
+	 *
+	 * @function scope
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} options - Configuration object
+	 * @param {object} options.context - Context data to merge with instance context
+	 * @param {Function} options.fn - Function to execute with the merged context
+	 * @param {Array} [options.args] - Optional array of arguments to pass to the function
+	 * @returns {any} The result of the function execution
+	 * @public
+	 */
+	scope({ context, fn, args }) {
+		if (this.config.scope?.enabled === false) {
+			throw new Error("Per-request context (scope) is disabled for this instance.");
+		}
+
+		if (!context || typeof context !== "object") {
+			throw new TypeError("context must be an object.");
+		}
+
+		if (typeof fn !== "function") {
+			throw new TypeError("fn must be a function.");
+		}
+
+		const runtimeType = this.config.runtime || "async";
+		let requestALS;
+		if (runtimeType === "async") {
+			return import("./lib/runtime/runtime-asynclocalstorage.mjs").then((asyncRuntime) => {
+				requestALS = asyncRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, context);
+				} else {
+					mergedContext = { ...parentContext, ...context };
+				}
+
+				const argsArray = args || [];
+				return requestALS.run(mergedContext, () => fn(...argsArray));
+			});
+		} else {
+			return import("./lib/runtime/runtime-livebindings.mjs").then((liveRuntime) => {
+				requestALS = liveRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, context);
+				} else {
+					mergedContext = { ...parentContext, ...context };
+				}
+
+				const argsArray = args || [];
+				return requestALS.run(mergedContext, () => fn(...argsArray));
+			});
+		}
+	},
+
+	/**
+	 * Deep merge two objects recursively.
+	 *
+	 * @function _deepMerge
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} target - Target object
+	 * @param {object} source - Source object
+	 * @returns {object} Merged object
+	 * @private
+	 */
+	_deepMerge(target, source) {
+		if (!source || typeof source !== "object" || Array.isArray(source)) {
+			return source;
+		}
+
+		for (const key in source) {
+			if (Object.prototype.hasOwnProperty.call(source, key)) {
+				const sourceValue = source[key];
+				const targetValue = target[key];
+
+				if (sourceValue && typeof sourceValue === "object" && !Array.isArray(sourceValue)) {
+					target[key] = this._deepMerge(
+						targetValue && typeof targetValue === "object" && !Array.isArray(targetValue) ? targetValue : {},
+						sourceValue
+					);
+				} else {
+					target[key] = sourceValue;
+				}
+			}
+		}
+
+		return target;
+	},
+
 	async shutdown() {
 		// If a shutdown is already in progress AND we're still loaded, treat as a true recursive call.
 		// If a shutdown completed earlier (loaded === false) just make this a no-op.
