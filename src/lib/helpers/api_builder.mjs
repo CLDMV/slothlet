@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 00:00:00 -08:00
+ *	@Last modified time: 2025-12-30 08:54:22 -08:00 (1767113662)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,18 +19,20 @@
  *
  * @description
  * This module serves as the main coordinator and re-export point for the split API builder modules.
- * The actual functionality is now organized into three focused modules:
+ * The actual functionality is now organized into focused modules:
  *
- * - api_builder_analysis.mjs: Module analysis and processing
- * - api_builder_decisions.mjs: Decision-making logic for flattening and structure
- * - api_builder_construction.mjs: Final API assembly and construction
+ * - analysis.mjs: Module analysis and processing
+ * - decisions.mjs: Decision-making logic for flattening and structure
+ * - construction.mjs: Final API assembly and construction
+ * - utilities.mjs: Utility functions for property manipulation and deep merging
+ * - add_api.mjs: Dynamic API extension functionality
  *
  * This split maintains the same public API while improving maintainability by organizing
  * related functionality into smaller, more focused files.
  *
  * @example
  * // Import from main module (re-exports from split modules)
- * import { analyzeModule, buildCategoryStructure } from "@cldmv/slothlet/helpers/api_builder";
+ * import { analyzeModule, buildCategoryStructure, addApiFromFolder } from "@cldmv/slothlet/helpers/api_builder";
  */
 
 // Re-export all functions from the split modules (in api_builder/ subfolder)
@@ -40,13 +42,17 @@ export {
 	processModuleFromAnalysis,
 	analyzeDirectoryStructure,
 	getCategoryBuildingDecisions
-} from "./api_builder/analysis.mjs";
+} from "@cldmv/slothlet/helpers/api_builder/analysis";
 
 export {
 	getFlatteningDecision,
 	applyFunctionNamePreference,
 	processModuleForAPI,
 	buildCategoryDecisions
-} from "./api_builder/decisions.mjs";
+} from "@cldmv/slothlet/helpers/api_builder/decisions";
 
-export { buildCategoryStructure, buildRootAPI, toapiPathKey, shouldIncludeFile } from "./api_builder/construction.mjs";
+export { buildCategoryStructure, buildRootAPI, toapiPathKey, shouldIncludeFile } from "@cldmv/slothlet/helpers/api_builder/construction";
+
+export { safeDefine, deepMerge, mutateLiveBindingFunction } from "@cldmv/slothlet/helpers/api_builder/utilities";
+
+export { addApiFromFolder } from "@cldmv/slothlet/helpers/api_builder/add_api";
