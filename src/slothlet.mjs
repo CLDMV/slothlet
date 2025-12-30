@@ -120,12 +120,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
 import {
 	analyzeModule,
 	processModuleFromAnalysis,
-	getCategoryBuildingDecisions,
-	buildCategoryStructure
+	buildCategoryStructure,
+	toapiPathKey,
+	shouldIncludeFile
 } from "@cldmv/slothlet/helpers/api_builder";
 import { updateInstanceData, cleanupInstance } from "@cldmv/slothlet/helpers/instance-manager";
 import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "@cldmv/slothlet/helpers/als-eventemitter";
@@ -643,6 +643,7 @@ const slothletObject = {
 
 	/**
 	 * Converts a filename or folder name to camelCase for API property.
+	 * Delegates to centralized api_builder utility function.
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} name - The name to convert
 	 * @returns {string} The camelCase version of the name
@@ -652,8 +653,7 @@ const slothletObject = {
 	 * _toapiPathKey('root-math') // 'rootMath'
 	 */
 	_toapiPathKey(name) {
-		return sanitizePathName(name, this.config.sanitize || {});
-		// return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
+		return toapiPathKey(name, this.config.sanitize || {});
 	},
 
 	/**
@@ -704,6 +704,7 @@ const slothletObject = {
 
 	/**
 	 * Loads a single module file and returns its exports (flattened if needed).
+	 * Thin wrapper around analyzeModule + processModuleFromAnalysis from api_builder.
 	 * @async
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} modulePath - Absolute path to the module file to load
@@ -719,7 +720,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	async _loadSingleModule(modulePath, returnAnalysis = false) {
-		// Use centralized module loading logic
+		// Delegate to centralized api_builder functions
 		const analysis = await analyzeModule(modulePath, {
 			debug: this.config.debug,
 			instance: this
@@ -738,138 +739,19 @@ const slothletObject = {
 		return processedModule;
 	},
 
-	/**
-	 * Enhanced category builder using centralized decision logic.
-	 * This is a test version that uses the decision functions to maintain the same behavior
-	 * but with centralized logic that both eager and lazy modes can benefit from.
-	 * @async
-	 * @memberof module:@cldmv/slothlet
-	 * @param {string} categoryPath
-	 * @param {object} [options]
-	 * @param {number} [options.currentDepth=0]
-	 * @param {number} [options.maxDepth=Infinity]
-	 * @param {'eager'|'lazy'} [options.mode='eager']
-	 * @param {Function} [options.subdirHandler] - (ctx) => node; only used in lazy mode
-	 * @returns {Promise<function|object>}
-	 * @private
-	 * @internal
-	 */
-	async _buildCategoryEnhanced(categoryPath, options = {}) {
-		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
-		// Get centralized building decisions
-		const decisions = await getCategoryBuildingDecisions(categoryPath, {
-			instance: this,
-			currentDepth,
-			maxDepth,
-			debug: this.config.debug
-		});
 
-		const { processingStrategy, categoryName, processedModules, subDirectories } = decisions;
 
-		// SINGLE FILE CASE - use the same logic as original but with decisions
-		if (processingStrategy === "single-file" && processedModules.length === 1) {
-			const { processedModule, flattening } = processedModules[0];
-
-			if (flattening.shouldFlatten) {
-				// Apply the flattening decision
-				if (typeof processedModule === "function") {
-					try {
-						Object.defineProperty(processedModule, "name", { value: flattening.apiPathKey, configurable: true });
-					} catch {
-						// ignore
-					}
-				}
-				return processedModule;
-			}
-
-			// No flattening - return as namespace
-			return { [flattening.apiPathKey]: processedModule };
-		}
-
-		// MULTI-FILE CASE - use processed modules from decisions
-		const categoryModules = {};
-
-		for (const { processedModule, flattening } of processedModules) {
-			categoryModules[flattening.apiPathKey] = processedModule;
-		}
-
-		// SUBDIRECTORIES - handle the same as original
-		for (const { dirEntry: subDirEntry, apiPathKey: key } of subDirectories) {
-			const subDirPath = path.join(categoryPath, subDirEntry.name);
-			let subModule;
-
-			if (mode === "lazy" && typeof subdirHandler === "function") {
-				subModule = subdirHandler({
-					subDirEntry,
-					subDirPath,
-					key,
-					categoryModules,
-					currentDepth,
-					maxDepth
-				});
-			} else {
-				// Recursive call using enhanced version
-				subModule = await this._buildCategoryEnhanced(subDirPath, {
-					currentDepth: currentDepth + 1,
-					maxDepth,
-					mode: "eager"
-				});
-			}
-
-			// Apply function name preference logic
-			if (
-				typeof subModule === "function" &&
-				subModule.name &&
-				subModule.name.toLowerCase() === key.toLowerCase() &&
-				subModule.name !== key
-			) {
-				categoryModules[subModule.name] = subModule;
-			} else {
-				categoryModules[key] = subModule;
-			}
-		}
-
-		// UPWARD FLATTENING - same logic as original
-		const keys = Object.keys(categoryModules);
-		if (keys.length === 1) {
-			const singleKey = keys[0];
-			if (singleKey === categoryName) {
-				const single = categoryModules[singleKey];
-				if (typeof single === "function") {
-					if (single.name !== categoryName) {
-						try {
-							Object.defineProperty(single, "name", { value: categoryName, configurable: true });
-						} catch {
-							// ignore
-						}
-					}
-					return single;
-				} else if (single && typeof single === "object" && !Array.isArray(single)) {
-					return single;
-				}
-			}
-		}
-
-		return categoryModules;
-	},
 
 	/**
 	 * Filters out files that should not be loaded by slothlet.
+	 * Delegates to centralized api_builder utility function.
 	 * @private
 	 * @param {object} entry - The directory entry to check
 	 * @returns {boolean} True if the file should be included, false if it should be excluded
 	 */
 	_shouldIncludeFile(entry) {
-		// Only include actual files
-		if (!entry.isFile()) return false;
-		// Only include JavaScript module files
-		if (!(entry.name.endsWith(".mjs") || entry.name.endsWith(".cjs") || entry.name.endsWith(".js"))) return false;
-		// Exclude hidden files (starting with .)
-		if (entry.name.startsWith(".")) return false;
-		// Exclude slothlet JSDoc files (starting with __slothlet_)
-		if (entry.name.startsWith("__slothlet_")) return false;
-		return true;
+		return shouldIncludeFile(entry);
 	},
 
 	/**

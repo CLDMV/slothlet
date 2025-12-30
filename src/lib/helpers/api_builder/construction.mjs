@@ -31,9 +31,59 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { types as utilTypes } from "node:util";
+import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
 import { analyzeModule, processModuleFromAnalysis } from "@cldmv/slothlet/helpers/api_builder/analysis";
 import { processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/api_builder/decisions";
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Converts a filename or folder name to camelCase for API property.
+ * Extracted from slothlet._toapiPathKey for use in API building functions.
+ *
+ * @function toapiPathKey
+ * @internal
+ * @package
+ * @param {string} name - The name to convert
+ * @param {object} [sanitizeConfig={}] - Sanitization configuration
+ * @returns {string} The camelCase version of the name
+ *
+ * @example
+ * toapiPathKey('root-math') // 'rootMath'
+ * toapiPathKey('auto-ip') // 'autoIP' (with proper config)
+ */
+export function toapiPathKey(name, sanitizeConfig = {}) {
+	return sanitizePathName(name, sanitizeConfig);
+}
+
+/**
+ * Filters out files that should not be loaded by slothlet.
+ * Extracted from slothlet._shouldIncludeFile for use in API building functions.
+ *
+ * @function shouldIncludeFile
+ * @internal
+ * @package
+ * @param {object} entry - The directory entry to check
+ * @returns {boolean} True if the file should be included, false if it should be excluded
+ *
+ * @example
+ * const entries = await fs.readdir(dir, { withFileTypes: true });
+ * const moduleFiles = entries.filter(e => shouldIncludeFile(e));
+ */
+export function shouldIncludeFile(entry) {
+	// Only include actual files
+	if (!entry.isFile()) return false;
+	// Only include JavaScript module files
+	if (!(entry.name.endsWith(".mjs") || entry.name.endsWith(".cjs") || entry.name.endsWith(".js"))) return false;
+	// Exclude hidden files (starting with .)
+	if (entry.name.startsWith(".")) return false;
+	// Exclude slothlet JSDoc files (starting with __slothlet_)
+	if (entry.name.startsWith("__slothlet_")) return false;
+	return true;
+}
 
 // ============================================================================
 // CATEGORY CONSTRUCTION FUNCTIONS

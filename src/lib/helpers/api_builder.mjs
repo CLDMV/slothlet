@@ -49,4 +49,4 @@ export {
 	buildCategoryDecisions
 } from "./api_builder/decisions.mjs";
 
-export { buildCategoryStructure, buildRootAPI } from "./api_builder/construction.mjs";
+export { buildCategoryStructure, buildRootAPI, toapiPathKey, shouldIncludeFile } from "./api_builder/construction.mjs";
