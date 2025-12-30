@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 00:00:00 -08:00
+ *	@Last modified time: 2025-12-30 07:27:18 -08:00 (1767108438)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -31,8 +31,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
-import { analyzeModule, processModuleFromAnalysis } from "./analysis.mjs";
-import { processModuleForAPI } from "./decisions.mjs";
+import { analyzeModule, processModuleFromAnalysis } from "@cldmv/slothlet/helpers/api_builder/analysis";
+import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder/decisions";
 
 // ============================================================================
 // CATEGORY CONSTRUCTION FUNCTIONS

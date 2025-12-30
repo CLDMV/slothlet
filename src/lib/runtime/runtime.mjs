@@ -12,11 +12,11 @@
  * @public
  */
 
-import { detectCurrentInstanceId, getInstanceData } from "../helpers/instance-manager.mjs";
+import { detectCurrentInstanceId, getInstanceData } from "@cldmv/slothlet/helpers/instance-manager";
 
 // Pre-load both runtimes at module load time
-const asyncRuntime = await import("./runtime-asynclocalstorage.mjs");
-const liveBindingsRuntime = await import("./runtime-livebindings.mjs");
+const asyncRuntime = await import("@cldmv/slothlet/runtime/async");
+const liveBindingsRuntime = await import("@cldmv/slothlet/runtime/live");
 
 // Detect runtime type from instance configuration (called on each access)
 function detectRuntimeType() {

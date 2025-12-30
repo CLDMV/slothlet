@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 21:48:08 -08:00 (1767073688)
+ *	@Last modified time: 2025-12-30 05:41:53 -08:00 (1767102113)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -128,9 +128,9 @@ import {
 	getCategoryBuildingDecisions,
 	buildCategoryDecisions
 } from "@cldmv/slothlet/helpers/api_builder";
-import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
-import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "./lib/helpers/als-eventemitter.mjs";
-import { HookManager } from "./lib/helpers/hooks.mjs";
+import { updateInstanceData, cleanupInstance } from "@cldmv/slothlet/helpers/instance-manager";
+import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { HookManager } from "@cldmv/slothlet/helpers/hooks";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -2078,7 +2078,7 @@ const slothletObject = {
  * mutateLiveBindingFunction(self, newSelf);
  * mutateLiveBindingFunction(boundapi, newApi);
  */
-export function mutateLiveBindingFunction(target, source) {
+function mutateLiveBindingFunction(target, source) {
 	if (typeof source === "function") {
 		target._impl = (...args) => source(...args);
 		// Remove old methods except _impl and __ctx

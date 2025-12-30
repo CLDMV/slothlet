@@ -1,15 +1,4 @@
 /**
- * Mutates a live-binding variable (object or function) to match a new value, preserving reference.
- * @param {function|object} target - The variable to mutate (object or function).
- * @param {function|object} source - The new value to copy from (object or function).
- * @private
- * @internal
- * @example
- * mutateLiveBindingFunction(self, newSelf);
- * mutateLiveBindingFunction(boundapi, newApi);
- */
-export function mutateLiveBindingFunction(target: Function | object, source: Function | object): void;
-/**
  * Live-binding reference to the current API instance.
  * This is updated whenever a new API instance is created.
  * Dynamically imported modules can access this at runtime.
