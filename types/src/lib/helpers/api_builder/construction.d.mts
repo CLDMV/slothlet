@@ -1,4 +1,35 @@
 /**
+ * Converts a filename or folder name to camelCase for API property.
+ * Extracted from slothlet._toapiPathKey for use in API building functions.
+ *
+ * @function toapiPathKey
+ * @internal
+ * @package
+ * @param {string} name - The name to convert
+ * @param {object} [sanitizeConfig={}] - Sanitization configuration
+ * @returns {string} The camelCase version of the name
+ *
+ * @example
+ * toapiPathKey('root-math') // 'rootMath'
+ * toapiPathKey('auto-ip') // 'autoIP' (with proper config)
+ */
+export function toapiPathKey(name: string, sanitizeConfig?: object): string;
+/**
+ * Filters out files that should not be loaded by slothlet.
+ * Extracted from slothlet._shouldIncludeFile for use in API building functions.
+ *
+ * @function shouldIncludeFile
+ * @internal
+ * @package
+ * @param {object} entry - The directory entry to check
+ * @returns {boolean} True if the file should be included, false if it should be excluded
+ *
+ * @example
+ * const entries = await fs.readdir(dir, { withFileTypes: true });
+ * const moduleFiles = entries.filter(e => shouldIncludeFile(e));
+ */
+export function shouldIncludeFile(entry: object): boolean;
+/**
  * Comprehensive category/directory building function that replaces _buildCategory.
  * Handles complete directory structure processing with all flattening rules.
  *
