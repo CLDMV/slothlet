@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-26 22:05:21 -08:00 (1766815521)
+ *	@Last modified time: 2025-12-30 08:40:42 -08:00 (1767112842)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -117,20 +117,23 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
-import { types as utilTypes } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { sanitizePathName } from "@cldmv/slothlet/helpers/sanitize";
 import {
 	analyzeModule,
 	processModuleFromAnalysis,
-	getCategoryBuildingDecisions,
-	buildCategoryDecisions
+	buildCategoryStructure,
+	toapiPathKey,
+	shouldIncludeFile,
+	safeDefine,
+	deepMerge,
+	mutateLiveBindingFunction,
+	addApiFromFolder
 } from "@cldmv/slothlet/helpers/api_builder";
-import { updateInstanceData, cleanupInstance } from "./lib/helpers/instance-manager.mjs";
-import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "./lib/helpers/als-eventemitter.mjs";
-import { HookManager } from "./lib/helpers/hooks.mjs";
+import { updateInstanceData, cleanupInstance } from "@cldmv/slothlet/helpers/instance-manager";
+import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { HookManager } from "@cldmv/slothlet/helpers/hooks";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -332,31 +335,18 @@ const slothletObject = {
 		if (!this.modes) {
 			this.modes = {};
 			const modesDir = path.join(__dirname, "lib", "modes");
-			// console.log(modesDir);
-			// process.exit(0);
+
 			const dirents = await fs.readdir(modesDir, { withFileTypes: true });
 			const modeFiles = dirents.filter((d) => d.isFile()).map((d) => path.join(modesDir, d.name));
-			// const modeFiles = dirents.filter((d) => d.isFile()).map((d) => d.name);
-			// const modeFiles = dirents.filter((d) => d.isFile());
 
 			for (const file of modeFiles) {
-				// console.log("file: ", file);
-				// const modePath = path.join(modesDir, file);
 				const modePath = file;
-
-				// const modeName = path
-				// 	.basename(file)
-				// 	.replace(/^slothlet_/, "")
-				// 	.replace(/\..+$/, "");
 
 				const modeName = path.parse(file).name.replace(/^slothlet_/, "");
 				if (!modeName || modeName.includes(" ")) continue;
 				try {
 					// Use dynamic import for ESM, ensure file:// URL for Windows compatibility
 					const modeUrl = pathToFileURL(modePath).href;
-					// console.log("modePath: ", modePath);
-					// console.log("modeUrl: ", modeUrl);
-					// process.exit(0);
 
 					const imported = await import(modeUrl);
 					if (imported && typeof imported === "object") {
@@ -368,10 +358,6 @@ const slothletObject = {
 			}
 		}
 
-		// self = this.boundapi;
-		// context = this.context;
-		// reference = this.reference;
-
 		this.mode = executionEngine;
 		this.api_mode = api_mode;
 		let api;
@@ -379,7 +365,7 @@ const slothletObject = {
 		if (executionEngine === "singleton") {
 			// Destructure and exclude engine/mode from loadConfig to avoid conflicts
 			// eslint-disable-next-line no-unused-vars
-			const { context = null, reference = null, sanitize = null, hooks = false, engine, mode, ...loadConfig } = options;
+			const { context = null, reference = null, sanitize = null, hooks = false, scope, engine, mode, ...loadConfig } = options;
 			this.context = context;
 			this.reference = reference;
 
@@ -405,6 +391,20 @@ const slothletObject = {
 
 			// Create HookManager instance
 			this.hookManager = new HookManager(hooksEnabled, hooksPattern, { suppressErrors: hooksSuppressErrors });
+
+			// Parse scope configuration for per-request context
+			if (scope && typeof scope === "object") {
+				const mergeStrategy = scope.merge || "shallow";
+				if (mergeStrategy !== "shallow" && mergeStrategy !== "deep") {
+					throw new TypeError(`Invalid scope.merge value: "${mergeStrategy}". Must be "shallow" or "deep".`);
+				}
+				this.config.scope = { merge: mergeStrategy };
+			} else if (scope === false) {
+				this.config.scope = { enabled: false };
+			} else {
+				// Default: shallow merge enabled
+				this.config.scope = { merge: "shallow" };
+			}
 
 			// Store sanitize options in config for use by _toapiPathKey
 			if (sanitize !== null) {
@@ -441,9 +441,6 @@ const slothletObject = {
 			await this.load(loadConfig, { context, reference });
 
 			// Hooks API is now added in load() method before wrapping
-
-			// console.log("this.boundapi", this.boundapi);
-			// process.exit(0);
 			return this.boundapi;
 		} else {
 			const { createEngine } = await import("./lib/engine/slothlet_engine.mjs");
@@ -505,17 +502,10 @@ const slothletObject = {
 			}
 		}
 
-		// console.log("this.config", this.config);
-		// process.exit(0);
 		let apiDir = this.config.dir || "api";
 		// If apiDir is relative, resolve it from process.cwd() (the caller's working directory)
 		if (apiDir && !path.isAbsolute(apiDir)) {
-			// console.log("before:", apiDir);
 			apiDir = resolvePathFromCaller(apiDir);
-			// console.log("after:", apiDir);
-			// console.error(new Error("Stack trace").stack);
-			// process.exit(0);
-			// apiDir = path.resolve(process.cwd(), apiDir);
 		}
 
 		if (this.loaded) return this.api;
@@ -568,68 +558,22 @@ const slothletObject = {
 			}
 		}
 
-		// this.self = this.boundapi;
-
 		const l_ctxRef = { ...{ context: null, reference: null }, ...ctxRef };
 
-		// this.updateBindings(l_ctxRef.context, l_ctxRef.reference, this.boundapi);
-		// Object.assign(this.boundapi, this.createBoundApi(l_ctxRef.context, l_ctxRef.reference) || {});
-		// this.boundapi = this.createBoundApi(l_ctxRef.context, l_ctxRef.reference);
 		const _boundapi = this.createBoundApi(l_ctxRef.reference);
 
 		mutateLiveBindingFunction(this.boundapi, _boundapi);
 
 		this.updateBindings(this.context, this.reference, this.boundapi);
-		// Debug: Check what's actually in the live bindings
-		// console.log("[DEBUG] After updateBindings:");
-		// console.log("  l_ctxRef.context:", l_ctxRef.context);
-		// console.log("  l_ctxRef.reference:", l_ctxRef.reference);
-		// console.log("  self keys:", Object.keys(self));
-		// console.log("  context keys:", Object.keys(context));
-		// console.log("  reference keys:", Object.keys(reference));
-		// process.exit(0);
+
 		this.loaded = true;
-
-		// Update the bindings for this instance
-		// this.updateBindings(null, null, this.boundapi);
-
-		// Set up the async local storage context for this instance
-
-		// this.safeDefine(this.boundapi, "__ctx", {
-		// 	self: this.boundapi,
-		// 	context: { ...context },
-		// 	reference: { ...reference }
-		// });
-
-		// Update the bindings for this instance
-		// this.updateBindings(null, null, this.boundapi);
-
-		// this.safeDefine(this, "__ctx", {
-		// 	self: this.boundapi,
-		// 	context: { ...context },
-		// 	reference: { ...reference }
-		// });
-		// this.boundapi.__ctx = {
-		// 	self: this.boundapi,
-		// 	context: { ...context },
-		// 	reference: { ...reference }
-		// };
-		// if (this.config.lazy) {
-		// 	console.log("[DEBUG] Setting __ctx:", {
-		// 		hasSelf: !!this.boundapi.__ctx.self,
-		// 		selfKeys: Object.keys(this.boundapi.__ctx.self || {}),
-		// 		hasContext: !!this.boundapi.__ctx.context,
-		// 		hasReference: !!this.boundapi.__ctx.reference
-		// 	});
-		// 	console.log("[DEBUG] this.boundapi", this.boundapi);
-		// 	process.exit(0);
-		// }
 
 		return this.boundapi;
 	},
 
 	/**
 	 * Converts a filename or folder name to camelCase for API property.
+	 * Delegates to centralized api_builder utility function.
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} name - The name to convert
 	 * @returns {string} The camelCase version of the name
@@ -639,8 +583,7 @@ const slothletObject = {
 	 * _toapiPathKey('root-math') // 'rootMath'
 	 */
 	_toapiPathKey(name) {
-		return sanitizePathName(name, this.config.sanitize || {});
-		// return name.replace(/-([a-zA-Z0-9])/g, (_, c) => c.toUpperCase());
+		return toapiPathKey(name, this.config.sanitize || {});
 	},
 
 	/**
@@ -664,289 +607,14 @@ const slothletObject = {
 	async _buildCategory(categoryPath, options = {}) {
 		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
 
-		// Use centralized category building decisions
-		const decisions = await buildCategoryDecisions(categoryPath, {
+		// Delegate to centralized category building function
+		return buildCategoryStructure(categoryPath, {
 			currentDepth,
 			maxDepth,
 			mode,
 			subdirHandler,
 			instance: this
 		});
-
-		// SINGLE FILE CASE
-		if (decisions.type === "single-file") {
-			const { singleFile } = decisions;
-			const { mod, moduleName } = singleFile;
-
-			// Handle flattening based on centralized decisions
-			if (decisions.shouldFlatten) {
-				switch (decisions.flattenType) {
-					case "function-folder-match":
-					case "default-function":
-						try {
-							Object.defineProperty(mod, "name", { value: decisions.preferredName, configurable: true });
-						} catch {
-							// ignore
-						}
-						return mod;
-
-					case "default-export-flatten":
-						// Return the module directly - it already has the default object contents spread with named exports
-						return mod;
-
-					case "object-auto-flatten":
-						// Return the contents of the named export directly (flatten it)
-						return mod[decisions.preferredName];
-
-					case "parent-level-flatten": {
-						// Return an object with the export name as key, promoting it to parent level
-						const exportValue = mod[Object.keys(mod).filter((k) => k !== "default")[0]];
-						return { [decisions.preferredName]: exportValue };
-					}
-
-					case "filename-folder-match-flatten":
-						// Return the module directly to avoid double nesting (e.g., nest/nest.mjs -> nest.alpha, not nest.nest.alpha)
-						return mod;
-				}
-			}
-
-			// Handle preferred name without flattening
-			if (decisions.preferredName && decisions.preferredName !== moduleName) {
-				return { [decisions.preferredName]: mod };
-			}
-
-			// Default case: return as namespace
-			return { [moduleName]: mod };
-		}
-
-		// MULTI-FILE CASE
-		const categoryModules = {};
-		const { categoryName, processedModules, subdirectoryDecisions } = decisions;
-
-		// Process each module based on centralized decisions
-		for (const moduleDecision of processedModules) {
-			const { moduleName, mod, type, apiPathKey, shouldFlatten, flattenType, specialHandling, processedExports } = moduleDecision;
-			// Handle different module types based on centralized decisions
-			if (specialHandling === "category-merge") {
-				// Module filename matches category name - merge logic
-				if (
-					Object.prototype.hasOwnProperty.call(mod, categoryName) &&
-					typeof mod[categoryName] === "object" &&
-					mod[categoryName] !== null
-				) {
-					Object.assign(categoryModules, mod[categoryName]);
-					for (const [key, value] of Object.entries(mod)) {
-						if (key !== categoryName) categoryModules[this._toapiPathKey(key)] = value;
-					}
-				} else {
-					Object.assign(categoryModules, mod);
-				}
-			} else if (type === "function") {
-				// Function handling with appropriate naming
-				if (specialHandling === "multi-default-filename") {
-					try {
-						Object.defineProperty(mod, "name", { value: moduleName, configurable: true });
-					} catch {
-						// ignore
-					}
-					categoryModules[moduleName] = mod;
-				} else if (specialHandling === "prefer-function-name") {
-					categoryModules[apiPathKey] = mod;
-				} else {
-					// Standard function processing
-					categoryModules[apiPathKey] = mod;
-				}
-			} else if (type === "self-referential") {
-				// Self-referential case: use the named export directly to avoid nesting
-				categoryModules[moduleName] = mod[moduleName] || mod;
-			} else if (type === "object") {
-				// Object/named exports handling
-				if (specialHandling === "preferred-export-names") {
-					Object.assign(categoryModules, processedExports);
-				} else if (shouldFlatten) {
-					switch (flattenType) {
-						case "single-default-object": {
-							// Flatten the default export and merge named exports
-							// Special handling for Proxy objects: don't use spread operator which breaks custom handlers
-							let flattened;
-
-							// Check if mod.default is likely a Proxy with custom behavior
-							const defaultExport = mod.default;
-							const hasNamedExports = Object.keys(mod).some((k) => k !== "default");
-
-							if (hasNamedExports && defaultExport && typeof defaultExport === "object") {
-								// Use Node.js built-in proxy detection for reliable detection
-								const isProxy = utilTypes?.isProxy?.(defaultExport) ?? false;
-
-								if (isProxy) {
-									// Preserve Proxy object and add named exports
-									flattened = defaultExport;
-									let assignmentFailed = false;
-									// Use Map from the start to avoid array-to-Map conversion overhead
-									const failedMap = new Map();
-
-									// Try to add named exports directly to the proxy
-									for (const [key, value] of Object.entries(mod)) {
-										if (key !== "default") {
-											try {
-												flattened[key] = value;
-											} catch (e) {
-												// Track assignment failure
-												assignmentFailed = true;
-												failedMap.set(key, value);
-												if (this.config?.debug) {
-													console.warn(
-														`Could not assign '${key}' to proxy object in module '${moduleName}' at '${categoryPath}':`,
-														e.message
-													);
-												}
-											}
-										}
-									}
-
-									// If any assignments failed, create a wrapper proxy to ensure named exports are accessible
-									if (assignmentFailed) {
-										// DOUBLE-PROXY LAYER JUSTIFICATION:
-										// This creates a wrapper around the original proxy because direct property assignment
-										// failed (e.g., LGTVControllers proxy with custom setters that reject certain properties).
-										// The double-proxy approach is necessary because:
-										// 1. We can't modify the original proxy's behavior without breaking its intended functionality
-										// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
-										// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
-										// 4. Performance impact is minimal since this only occurs when assignment fails, not in normal operation
-										const originalProxy = flattened;
-										flattened = new Proxy(originalProxy, {
-											get(target, prop, receiver) {
-												// Check failed assignments first
-												if (failedMap.has(prop)) return failedMap.get(prop);
-
-												// Fallback to original proxy
-												return Reflect.get(target, prop, receiver);
-											},
-											has(target, prop) {
-												// Include failed assignments in has checks
-												if (failedMap.has(prop)) return true;
-												return Reflect.has(target, prop);
-											},
-											ownKeys(target) {
-												const originalKeys = Reflect.ownKeys(target);
-												const failedKeys = Array.from(failedMap.keys());
-												return [...new Set([...originalKeys, ...failedKeys])];
-											},
-											getOwnPropertyDescriptor(target, prop) {
-												if (failedMap.has(prop)) {
-													return { configurable: true, enumerable: true, value: failedMap.get(prop) };
-												}
-												return Reflect.getOwnPropertyDescriptor(target, prop);
-											}
-										});
-									}
-								} else {
-									// Regular object, use spread operator
-									flattened = { ...defaultExport };
-									for (const [key, value] of Object.entries(mod)) {
-										if (key !== "default") {
-											flattened[key] = value;
-										}
-									}
-								}
-							} else {
-								// No named exports or not an object, use as-is
-								flattened = defaultExport;
-							}
-
-							categoryModules[apiPathKey] = flattened;
-							break;
-						}
-						case "multi-default-no-default": {
-							// Multi-default context: flatten modules WITHOUT default exports to category
-							const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-							for (const key of moduleKeys) {
-								categoryModules[key] = mod[key];
-							}
-							break;
-						}
-						case "single-named-export-match":
-							// Auto-flatten: module exports single named export matching filename
-							categoryModules[apiPathKey] = mod[apiPathKey];
-							break;
-						case "category-name-match-flatten": {
-							// Auto-flatten: module filename matches folder name and has no default → flatten to category
-							const moduleKeys = Object.keys(mod).filter((k) => k !== "default");
-							for (const key of moduleKeys) {
-								categoryModules[key] = mod[key];
-							}
-							break;
-						}
-					}
-				} else {
-					// Standard object export
-					categoryModules[apiPathKey] = mod;
-				}
-			}
-		}
-
-		// SUBDIRECTORIES - handle based on centralized decisions
-		for (const subDirDecision of subdirectoryDecisions) {
-			if (subDirDecision.shouldRecurse) {
-				const { name, path: subDirPath, apiPathKey } = subDirDecision;
-				let subModule;
-
-				if (mode === "lazy" && typeof subdirHandler === "function") {
-					subModule = subdirHandler({
-						subDirEntry: { name },
-						subDirPath,
-						key: apiPathKey,
-						categoryModules,
-						currentDepth,
-						maxDepth
-					});
-				} else {
-					subModule = await this._buildCategory(subDirPath, {
-						currentDepth: currentDepth + 1,
-						maxDepth,
-						mode: "eager"
-					});
-				}
-
-				// Check if returned module is a function with name matching folder (case-insensitive)
-				// If so, use the function name instead of the sanitized folder name
-				if (
-					typeof subModule === "function" &&
-					subModule.name &&
-					subModule.name.toLowerCase() === apiPathKey.toLowerCase() &&
-					subModule.name !== apiPathKey
-				) {
-					// Use the original function name as the key
-					categoryModules[subModule.name] = subModule;
-				} else {
-					categoryModules[apiPathKey] = subModule;
-				}
-			}
-		}
-
-		// UPWARD FLATTENING
-		const keys = Object.keys(categoryModules);
-		if (keys.length === 1) {
-			const singleKey = keys[0];
-			if (singleKey === categoryName) {
-				const single = categoryModules[singleKey];
-				if (typeof single === "function") {
-					if (single.name !== categoryName) {
-						try {
-							Object.defineProperty(single, "name", { value: categoryName, configurable: true });
-						} catch {
-							// ignore
-						}
-					}
-					return single;
-				} else if (single && typeof single === "object" && !Array.isArray(single)) {
-					return single;
-				}
-			}
-		}
-
-		return categoryModules;
 	},
 
 	/**
@@ -966,6 +634,7 @@ const slothletObject = {
 
 	/**
 	 * Loads a single module file and returns its exports (flattened if needed).
+	 * Thin wrapper around analyzeModule + processModuleFromAnalysis from api_builder.
 	 * @async
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} modulePath - Absolute path to the module file to load
@@ -981,7 +650,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	async _loadSingleModule(modulePath, returnAnalysis = false) {
-		// Use centralized module loading logic
+		// Delegate to centralized api_builder functions
 		const analysis = await analyzeModule(modulePath, {
 			debug: this.config.debug,
 			instance: this
@@ -1001,137 +670,14 @@ const slothletObject = {
 	},
 
 	/**
-	 * Enhanced category builder using centralized decision logic.
-	 * This is a test version that uses the decision functions to maintain the same behavior
-	 * but with centralized logic that both eager and lazy modes can benefit from.
-	 * @async
-	 * @memberof module:@cldmv/slothlet
-	 * @param {string} categoryPath
-	 * @param {object} [options]
-	 * @param {number} [options.currentDepth=0]
-	 * @param {number} [options.maxDepth=Infinity]
-	 * @param {'eager'|'lazy'} [options.mode='eager']
-	 * @param {Function} [options.subdirHandler] - (ctx) => node; only used in lazy mode
-	 * @returns {Promise<function|object>}
-	 * @private
-	 * @internal
-	 */
-	async _buildCategoryEnhanced(categoryPath, options = {}) {
-		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
-
-		// Get centralized building decisions
-		const decisions = await getCategoryBuildingDecisions(categoryPath, {
-			instance: this,
-			currentDepth,
-			maxDepth,
-			debug: this.config.debug
-		});
-
-		const { processingStrategy, categoryName, processedModules, subDirectories } = decisions;
-
-		// SINGLE FILE CASE - use the same logic as original but with decisions
-		if (processingStrategy === "single-file" && processedModules.length === 1) {
-			const { processedModule, flattening } = processedModules[0];
-
-			if (flattening.shouldFlatten) {
-				// Apply the flattening decision
-				if (typeof processedModule === "function") {
-					try {
-						Object.defineProperty(processedModule, "name", { value: flattening.apiPathKey, configurable: true });
-					} catch {
-						// ignore
-					}
-				}
-				return processedModule;
-			}
-
-			// No flattening - return as namespace
-			return { [flattening.apiPathKey]: processedModule };
-		}
-
-		// MULTI-FILE CASE - use processed modules from decisions
-		const categoryModules = {};
-
-		for (const { processedModule, flattening } of processedModules) {
-			categoryModules[flattening.apiPathKey] = processedModule;
-		}
-
-		// SUBDIRECTORIES - handle the same as original
-		for (const { dirEntry: subDirEntry, apiPathKey: key } of subDirectories) {
-			const subDirPath = path.join(categoryPath, subDirEntry.name);
-			let subModule;
-
-			if (mode === "lazy" && typeof subdirHandler === "function") {
-				subModule = subdirHandler({
-					subDirEntry,
-					subDirPath,
-					key,
-					categoryModules,
-					currentDepth,
-					maxDepth
-				});
-			} else {
-				// Recursive call using enhanced version
-				subModule = await this._buildCategoryEnhanced(subDirPath, {
-					currentDepth: currentDepth + 1,
-					maxDepth,
-					mode: "eager"
-				});
-			}
-
-			// Apply function name preference logic
-			if (
-				typeof subModule === "function" &&
-				subModule.name &&
-				subModule.name.toLowerCase() === key.toLowerCase() &&
-				subModule.name !== key
-			) {
-				categoryModules[subModule.name] = subModule;
-			} else {
-				categoryModules[key] = subModule;
-			}
-		}
-
-		// UPWARD FLATTENING - same logic as original
-		const keys = Object.keys(categoryModules);
-		if (keys.length === 1) {
-			const singleKey = keys[0];
-			if (singleKey === categoryName) {
-				const single = categoryModules[singleKey];
-				if (typeof single === "function") {
-					if (single.name !== categoryName) {
-						try {
-							Object.defineProperty(single, "name", { value: categoryName, configurable: true });
-						} catch {
-							// ignore
-						}
-					}
-					return single;
-				} else if (single && typeof single === "object" && !Array.isArray(single)) {
-					return single;
-				}
-			}
-		}
-
-		return categoryModules;
-	},
-
-	/**
 	 * Filters out files that should not be loaded by slothlet.
+	 * Delegates to centralized api_builder utility function.
 	 * @private
 	 * @param {object} entry - The directory entry to check
 	 * @returns {boolean} True if the file should be included, false if it should be excluded
 	 */
 	_shouldIncludeFile(entry) {
-		// Only include actual files
-		if (!entry.isFile()) return false;
-		// Only include JavaScript module files
-		if (!(entry.name.endsWith(".mjs") || entry.name.endsWith(".cjs") || entry.name.endsWith(".js"))) return false;
-		// Exclude hidden files (starting with .)
-		if (entry.name.startsWith(".")) return false;
-		// Exclude slothlet JSDoc files (starting with __slothlet_)
-		if (entry.name.startsWith("__slothlet_")) return false;
-		return true;
+		return shouldIncludeFile(entry);
 	},
 
 	/**
@@ -1272,20 +818,7 @@ const slothletObject = {
 	createBoundApi(ref = null) {
 		if (!this.api) throw new Error("BindleApi modules not loaded. Call load() first.");
 
-		// console.log(this.api);
-		// process.exit(0);
-
 		let boundApi;
-		/* 		
-		if (this.config.lazy) {
-			// The new lazy mode creates a fully functional proxy API
-			// No need to wrap it again, just use it directly
-			boundApi = this.api;
-		} else {
-			// Use the eager mode's buildCompleteApi function
-			boundApi = this.modes.eager._buildCompleteApi(this.api);
-		} 
-		*/
 
 		boundApi = this.api;
 
@@ -1307,24 +840,6 @@ const slothletObject = {
 				}
 			}
 		}
-
-		// Allow ref to extend boundApi
-		// if (ref && typeof ref === "object") {
-		// 	for (const [key, value] of Object.entries(ref)) {
-		// 		if (!(key in boundApi)) {
-		// 			try {
-		// 				boundApi[key] = value;
-		// 			} catch {}
-		// 		}
-		// 	}
-		// }
-
-		// Live-bind self and context for submodules
-		// this.updateBindings(ctx, ref, boundApi);
-
-		// this.safeDefine(boundApi, "self", self);
-		// this.safeDefine(boundApi, "context", context);
-		// this.safeDefine(boundApi, "reference", reference);
 
 		// Capture instance reference for describe function
 		const instance = this;
@@ -1421,6 +936,32 @@ const slothletObject = {
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.addApi: not configurable");
 		}
+
+		// Add .run() method to boundApi
+		const runDesc = Object.getOwnPropertyDescriptor(boundApi, "run");
+		if (!runDesc || runDesc.configurable) {
+			Object.defineProperty(boundApi, "run", {
+				value: this.run.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.run: not configurable");
+		}
+
+		// Add .scope() method to boundApi
+		const scopeDesc = Object.getOwnPropertyDescriptor(boundApi, "scope");
+		if (!scopeDesc || scopeDesc.configurable) {
+			Object.defineProperty(boundApi, "scope", {
+				value: this.scope.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.scope: not configurable");
+		}
 		// console.debug("[slothlet] createBoundApi: boundApi.shutdown is now slothlet.shutdown.");
 
 		// this.boundApi = boundApi;
@@ -1444,24 +985,7 @@ const slothletObject = {
 	 * safeDefine(api, 'shutdown', shutdownFunction, false);
 	 */
 	safeDefine(obj, key, value, enumerable = false) {
-		const desc = Object.getOwnPropertyDescriptor(obj, key);
-		if (!desc) {
-			Object.defineProperty(obj, key, {
-				value,
-				writable: true,
-				configurable: true,
-				enumerable
-			});
-		} else if (desc.configurable) {
-			Object.defineProperty(obj, key, {
-				value,
-				writable: true,
-				configurable: true,
-				enumerable
-			});
-		} else if (this.config && this.config.debug) {
-			console.warn(`Could not redefine boundApi.${key}: not configurable`);
-		}
+		return safeDefine(obj, key, value, enumerable, this.config);
 	},
 
 	/**
@@ -1547,216 +1071,7 @@ const slothletObject = {
 	 * api.services.external.github.getUser();
 	 */
 	async addApi(apiPath, folderPath) {
-		if (!this.loaded) {
-			throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
-		}
-
-		// Validate apiPath parameter
-		if (typeof apiPath !== "string") {
-			throw new TypeError("[slothlet] addApi: 'apiPath' must be a string.");
-		}
-		const normalizedApiPath = apiPath.trim();
-		if (normalizedApiPath === "") {
-			throw new TypeError("[slothlet] addApi: 'apiPath' must be a non-empty, non-whitespace string.");
-		}
-		const pathParts = normalizedApiPath.split(".");
-		if (pathParts.some((part) => part === "")) {
-			throw new Error(`[slothlet] addApi: 'apiPath' must not contain empty segments. Received: "${normalizedApiPath}"`);
-		}
-
-		// Validate folderPath parameter
-		if (typeof folderPath !== "string") {
-			throw new TypeError("[slothlet] addApi: 'folderPath' must be a string.");
-		}
-
-		// Resolve relative folder paths from the caller's location
-		let resolvedFolderPath = folderPath;
-		if (!path.isAbsolute(folderPath)) {
-			resolvedFolderPath = resolvePathFromCaller(folderPath);
-		}
-
-		// Verify the folder exists
-		let stats;
-		try {
-			stats = await fs.stat(resolvedFolderPath);
-		} catch (error) {
-			throw new Error(`[slothlet] addApi: Cannot access folder: ${resolvedFolderPath} - ${error.message}`);
-		}
-		if (!stats.isDirectory()) {
-			throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
-		}
-
-		if (this.config.debug) {
-			console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${normalizedApiPath}`);
-		}
-
-		// Load modules from the new folder using the appropriate mode
-		let newModules;
-		if (this.config.lazy) {
-			// Use lazy mode to create the API structure
-			newModules = await this.modes.lazy.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
-		} else {
-			// Use eager mode to create the API structure
-			newModules = await this.modes.eager.create.call(this, resolvedFolderPath, this.config.apiDepth || Infinity, 0);
-		}
-
-		if (this.config.debug) {
-			if (newModules && typeof newModules === "object") {
-				console.log(`[DEBUG] addApi: Loaded modules:`, Object.keys(newModules));
-			} else {
-				console.log(
-					`[DEBUG] addApi: Loaded modules (non-object):`,
-					typeof newModules === "function" ? `[Function: ${newModules.name || "anonymous"}]` : newModules
-				);
-			}
-		}
-
-		// Navigate to the target location in the API, creating intermediate objects as needed
-		let currentTarget = this.api;
-		let currentBoundTarget = this.boundapi;
-
-		for (let i = 0; i < pathParts.length - 1; i++) {
-			const part = pathParts[i];
-			const key = this._toapiPathKey(part);
-
-			// Create intermediate objects if they don't exist
-			// Allow both objects and functions as containers (slothlet's function.property pattern)
-			// Functions are valid containers in JavaScript and can have properties added to them
-			if (Object.prototype.hasOwnProperty.call(currentTarget, key)) {
-				const existing = currentTarget[key];
-				if (existing === null || (typeof existing !== "object" && typeof existing !== "function")) {
-					throw new Error(
-						`[slothlet] Cannot extend API path "${normalizedApiPath}" through segment "${part}": ` +
-							`existing value is type "${typeof existing}", cannot add properties.`
-					);
-				}
-				// At this point, existing is guaranteed to be an object or function
-				// Both are valid containers that can be traversed and extended with properties
-			} else {
-				currentTarget[key] = {};
-			}
-			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, key)) {
-				const existingBound = currentBoundTarget[key];
-				if (existingBound === null || (typeof existingBound !== "object" && typeof existingBound !== "function")) {
-					throw new Error(
-						`[slothlet] Cannot extend bound API path "${normalizedApiPath}" through segment "${part}": ` +
-							`existing value is type "${typeof existingBound}", cannot add properties.`
-					);
-				}
-				// At this point, existingBound is guaranteed to be an object or function
-			} else {
-				currentBoundTarget[key] = {};
-			}
-
-			// Navigate into the container (object or function) to continue path traversal
-			currentTarget = currentTarget[key];
-			currentBoundTarget = currentBoundTarget[key];
-		}
-
-		// Get the final key where we'll merge the new modules
-		const finalKey = this._toapiPathKey(pathParts[pathParts.length - 1]);
-
-		// Merge the new modules into the target location
-		if (typeof newModules === "function") {
-			// If the loaded modules result in a function, set it directly
-			// Check for existing value and handle based on allowApiOverwrite config
-			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
-				const existing = currentTarget[finalKey];
-
-				// Check if overwrites are disabled
-				if (this.config.allowApiOverwrite === false) {
-					console.warn(
-						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
-							`already exists (type: "${typeof existing}"). Set allowApiOverwrite: true to allow overwrites.`
-					);
-					return; // Skip the overwrite
-				}
-
-				// Warn if overwriting an existing non-function value (potential data loss)
-				if (existing !== null && typeof existing !== "function") {
-					console.warn(
-						`[slothlet] Overwriting existing non-function value at API path "${normalizedApiPath}" ` +
-							`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
-					);
-				} else if (typeof existing === "function") {
-					// Warn when replacing an existing function
-					console.warn(
-						`[slothlet] Overwriting existing function at API path "${normalizedApiPath}" ` + `final key "${finalKey}" with a new function.`
-					);
-				}
-			}
-			currentTarget[finalKey] = newModules;
-			currentBoundTarget[finalKey] = newModules;
-		} else if (typeof newModules === "object" && newModules !== null) {
-			// Validate existing target is compatible (object or function, not primitive)
-			if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
-				const existing = currentTarget[finalKey];
-
-				// Check if overwrites are disabled and target already has content
-				if (this.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
-					// For objects, check if they have any keys (non-empty)
-					const hasContent = typeof existing === "object" ? Object.keys(existing).length > 0 : true;
-					if (hasContent) {
-						console.warn(
-							`[slothlet] Skipping addApi merge: API path "${normalizedApiPath}" final key "${finalKey}" ` +
-								`already exists with content (type: "${typeof existing}"). Set allowApiOverwrite: true to allow merging.`
-						);
-						return; // Skip the merge
-					}
-				}
-
-				if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
-					throw new Error(
-						`[slothlet] Cannot merge API at "${normalizedApiPath}": ` +
-							`existing value at final key "${finalKey}" is type "${typeof existing}", cannot merge into primitives.`
-					);
-				}
-			}
-			if (Object.prototype.hasOwnProperty.call(currentBoundTarget, finalKey)) {
-				const existingBound = currentBoundTarget[finalKey];
-				if (existingBound !== null && typeof existingBound !== "object" && typeof existingBound !== "function") {
-					throw new Error(
-						`[slothlet] Cannot merge bound API at "${normalizedApiPath}": ` +
-							`existing value at final key "${finalKey}" is type "${typeof existingBound}", cannot merge into primitives.`
-					);
-				}
-			}
-
-			// If target doesn't exist, create it
-			if (!currentTarget[finalKey]) {
-				currentTarget[finalKey] = {};
-			}
-			if (!currentBoundTarget[finalKey]) {
-				currentBoundTarget[finalKey] = {};
-			}
-
-			// Merge new modules into existing object
-			// Note: Object.assign performs shallow merge, which is intentional here.
-			// We want to preserve references to the actual module exports, including
-			// proxies (lazy mode) and function references (eager mode). Deep cloning
-			// would break these references and lose the proxy/function behavior.
-			Object.assign(currentTarget[finalKey], newModules);
-			Object.assign(currentBoundTarget[finalKey], newModules);
-		} else if (newModules === null || newModules === undefined) {
-			// Warn when loaded modules result in null or undefined
-			const receivedType = newModules === null ? "null" : "undefined";
-			console.warn(
-				`[slothlet] addApi: No modules loaded from folder at API path "${normalizedApiPath}". ` +
-					`Loaded modules resulted in ${receivedType}. Check that the folder contains valid module files.`
-			);
-		} else {
-			// Handle primitive values (string, number, boolean, symbol, bigint)
-			// Set them directly like functions
-			currentTarget[finalKey] = newModules;
-			currentBoundTarget[finalKey] = newModules;
-		}
-
-		// Update live bindings to reflect the changes
-		this.updateBindings(this.context, this.reference, this.boundapi);
-
-		if (this.config.debug) {
-			console.log(`[DEBUG] addApi: Successfully added modules at ${normalizedApiPath}`);
-		}
+		return addApiFromFolder({ apiPath, folderPath, instance: this });
 	},
 
 	/**
@@ -1790,6 +1105,146 @@ const slothletObject = {
 	 *   console.error('Shutdown failed:', error.message);
 	 * }
 	 */
+
+	/**
+	 * Execute a function with per-request context data.
+	 *
+	 * @function run
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} contextData - Context data to merge with instance context
+	 * @param {Function} callback - Function to execute with the merged context
+	 * @param {...any} args - Additional arguments to pass to the callback
+	 * @returns {any} The result of the callback function
+	 * @public
+	 */
+	run(contextData, callback, ...args) {
+		if (this.config.scope?.enabled === false) {
+			throw new Error("Per-request context (scope) is disabled for this instance.");
+		}
+
+		if (typeof callback !== "function") {
+			throw new TypeError("Callback must be a function.");
+		}
+
+		const runtimeType = this.config.runtime || "async";
+		let requestALS;
+		if (runtimeType === "async") {
+			return import("@cldmv/slothlet/runtime/async").then((asyncRuntime) => {
+				requestALS = asyncRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, contextData);
+				} else {
+					mergedContext = { ...parentContext, ...contextData };
+				}
+
+				return requestALS.run(mergedContext, () => callback(...args));
+			});
+		} else {
+			return import("@cldmv/slothlet/runtime/live").then((liveRuntime) => {
+				requestALS = liveRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, contextData);
+				} else {
+					mergedContext = { ...parentContext, ...contextData };
+				}
+
+				return requestALS.run(mergedContext, () => callback(...args));
+			});
+		}
+	},
+
+	/**
+	 * Execute a function with per-request context data (structured API).
+	 *
+	 * @function scope
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} options - Configuration object
+	 * @param {object} options.context - Context data to merge with instance context
+	 * @param {Function} options.fn - Function to execute with the merged context
+	 * @param {Array} [options.args] - Optional array of arguments to pass to the function
+	 * @returns {any} The result of the function execution
+	 * @public
+	 */
+	scope({ context, fn, args }) {
+		if (this.config.scope?.enabled === false) {
+			throw new Error("Per-request context (scope) is disabled for this instance.");
+		}
+
+		if (!context || typeof context !== "object") {
+			throw new TypeError("context must be an object.");
+		}
+
+		if (typeof fn !== "function") {
+			throw new TypeError("fn must be a function.");
+		}
+
+		const runtimeType = this.config.runtime || "async";
+		let requestALS;
+		if (runtimeType === "async") {
+			return import("./lib/runtime/runtime-asynclocalstorage.mjs").then((asyncRuntime) => {
+				requestALS = asyncRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, context);
+				} else {
+					mergedContext = { ...parentContext, ...context };
+				}
+
+				const argsArray = args || [];
+				return requestALS.run(mergedContext, () => fn(...argsArray));
+			});
+		} else {
+			return import("./lib/runtime/runtime-livebindings.mjs").then((liveRuntime) => {
+				requestALS = liveRuntime.requestALS;
+				const parentContext = requestALS.getStore() || {};
+
+				let mergedContext;
+				if (this.config.scope?.merge === "deep") {
+					const instanceContext = this.context || {};
+					let temp = this._deepMerge({}, instanceContext);
+					temp = this._deepMerge(temp, parentContext);
+					mergedContext = this._deepMerge(temp, context);
+				} else {
+					mergedContext = { ...parentContext, ...context };
+				}
+
+				const argsArray = args || [];
+				return requestALS.run(mergedContext, () => fn(...argsArray));
+			});
+		}
+	},
+
+	/**
+	 * Deep merge two objects recursively.
+	 *
+	 * @function _deepMerge
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} target - Target object
+	 * @param {object} source - Source object
+	 * @returns {object} Merged object
+	 * @private
+	 */
+	_deepMerge(target, source) {
+		return deepMerge(target, source);
+	},
+
 	async shutdown() {
 		// If a shutdown is already in progress AND we're still loaded, treat as a true recursive call.
 		// If a shutdown completed earlier (loaded === false) just make this a no-op.
@@ -1868,62 +1323,7 @@ const slothletObject = {
 	}
 };
 
-/**
- * Mutates a live-binding variable (object or function) to match a new value, preserving reference.
- * @param {function|object} target - The variable to mutate (object or function).
- * @param {function|object} source - The new value to copy from (object or function).
- * @private
- * @internal
- * @example
- * mutateLiveBindingFunction(self, newSelf);
- * mutateLiveBindingFunction(boundapi, newApi);
- */
-export function mutateLiveBindingFunction(target, source) {
-	if (typeof source === "function") {
-		target._impl = (...args) => source(...args);
-		// Remove old methods except _impl and __ctx
-		for (const key of Object.keys(target)) {
-			if (key !== "_impl" && key !== "__ctx") delete target[key];
-		}
-		// Attach new methods
-		for (const key of Object.getOwnPropertyNames(source)) {
-			if (key !== "length" && key !== "name" && key !== "prototype" && key !== "_impl" && key !== "__ctx") {
-				try {
-					target[key] = source[key];
-				} catch {
-					// ignore
-				}
-			}
-		}
-	} else if (typeof source === "object" && source !== null) {
-		// Remove old methods except _impl and __ctx
-		for (const key of Object.keys(target)) {
-			if (key !== "_impl" && key !== "__ctx") delete target[key];
-		}
-		// Attach new properties/methods (enumerable API endpoints)
-		for (const [key, value] of Object.entries(source)) {
-			if (key !== "__ctx") {
-				target[key] = value;
-			}
-		}
-		// Manually copy management methods (may be non-enumerable)
-		const managementMethods = ["shutdown", "addApi", "describe"];
-		for (const method of managementMethods) {
-			const desc = Object.getOwnPropertyDescriptor(source, method);
-			if (desc) {
-				try {
-					Object.defineProperty(target, method, desc);
-				} catch {
-					// ignore
-				}
-			}
-		}
-		// Optionally, set _impl to a default method if present
-		if (typeof source._impl === "function") {
-			target._impl = source._impl;
-		}
-	}
-}
+// mutateLiveBindingFunction is now imported from api_builder/utilities.mjs
 
 export { slothlet };
 export default slothlet;

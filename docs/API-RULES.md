@@ -1,6 +1,9 @@
 # Slothlet API Rules - Verified Documentation
 
 > **Verification Status**: Each rule has been systematically verified against actual test files and source code.
+> **Last Updated**: December 30, 2025  
+> **Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
+> **Note**: Source code has been refactored into modular structure. See [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md) for complete conditional logic documentation with exact line numbers.
 
 ## Methodology
 
@@ -26,7 +29,7 @@ Each rule documents:
 - [x] Rule 9: Function Name Preference Over Sanitization ✅ **FULLY VERIFIED** (Multiple examples verified: autoIP, parseJSON, getHTTPStatus, XMLParser)
 - [x] Rule 10: Generic Filename Parent-Level Promotion ✅ **VERIFIED** (nest4/singlefile.mjs example verified with api_tests/api_test)
 
-> **Note**: Rule 11 (Single File Context Flattening) has been **intentionally removed** from slothlet for architectural reasons. The rule reduced API path flexibility and was commented out in source code (api_builder.mjs lines 618-626, multidefault.mjs lines 212-216). This maintains cleaner API namespacing while preserving predictable path structures.
+> **Note**: Rule 11 (Single File Context Flattening) has been **intentionally removed** from slothlet for architectural reasons. The rule reduced API path flexibility and was commented out in source code. See [C06](API-RULES-CONDITIONS.md#c06-single-file-context-commented-out) in API-RULES-CONDITIONS.md for details. This maintains cleaner API namespacing while preserving predictable path structures.
 
 ---
 
@@ -72,12 +75,14 @@ node tests/debug-slothlet.mjs
 # Confirms flattening works: api.math.add (not api.math.math.add)
 ```
 
-**Source Code Location**: `src/lib/helpers/api_builder.mjs` line 607 - `getFlatteningDecision` function
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()` function [Lines 87-189](../src/lib/helpers/api_builder/decisions.mjs#L87-L189)  
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
+**Specific Condition**: See [C05](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten) in API-RULES-CONDITIONS.md
 **Technical Implementation**:
 
 ```javascript
-// Rule 4: Filename matches container - flatten to container level
+// C05: Filename Matches Container (Category-Level Flatten)
+// Location: src/lib/helpers/api_builder/decisions.mjs Line 154
 if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0) {
 	return {
 		shouldFlatten: true,
@@ -121,8 +126,9 @@ api.config.username; // → "admin"
 api.config.secure; // → true
 ```
 
-**Source Code Location**: `src/lib/helpers/api_builder.mjs` lines 810-812 - `processModuleForAPI` function  
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()` function [Lines 315-466](../src/lib/helpers/api_builder/decisions.mjs#L315-L466)  
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
+**Specific Condition**: See [C09b](API-RULES-CONDITIONS.md#c09b-flatten-to-rootcategory) in API-RULES-CONDITIONS.md
 **Technical Implementation**:
 
 ```javascript
@@ -151,8 +157,8 @@ node tests/debug-slothlet.mjs
 **Status**: ✅ **VERIFIED**
 
 **Condition**: Folders with no module files (`moduleFiles.length === 0`)
-**Source Code Location**: `src/lib/helpers/api_builder.mjs` lines 318-319
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Location**: `src/slothlet.mjs` [Lines 318-319](../src/slothlet.mjs#L318-L319)  
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 **Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
 
 **Verified Example**:
@@ -182,10 +188,10 @@ node tests/debug-slothlet.mjs
 
 **Technical Details**:
 
-- **Detection**: `analyzeDirectoryStructure` sets `processingStrategy = "empty"` when `moduleFiles.length === 0`
-- **Source Code**: `src/lib/helpers/api_builder.mjs` lines 318-319
+- **Detection**: `analyzeDirectoryStructure` in `src/lib/helpers/api_builder/analysis.mjs` detects empty directories
 - **Handling**: Empty `processedModules` and `subDirectories` arrays result in empty object
 - **API Result**: Empty folder becomes empty object property on API
+- **Implementation**: See `buildCategoryStructure()` in `src/lib/helpers/api_builder/construction.mjs`
 
 ---
 
@@ -195,8 +201,9 @@ node tests/debug-slothlet.mjs
 
 **Condition**: When a module has a default export (function or object)
 **Behavior**: Default export becomes the container callable/content, named exports spread to same level
-**Source Code**: `src/lib/helpers/api_builder.mjs` lines 246-255 + 747-757 + 318-319
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code**: `processModuleForAPI()` in `src/lib/helpers/api_builder/decisions.mjs` [L315-466](../src/lib/helpers/api_builder/decisions.mjs#L315-L466)
+**Detailed Conditions**: See [C08 (Has Default Function Export)](API-RULES-CONDITIONS.md#c08-has-default-function-export) in API-RULES-CONDITIONS.md
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Pattern A: Default Function + Named Exports**:
 
@@ -251,14 +258,17 @@ api.funcmod("World"); // → "Hello, World!" (default export becomes namespaced 
 **Technical Implementation**:
 
 ```javascript
-// Lines 747-757 in processModuleForAPI()
+// C08c: Traditional Default Function - Root API
+// src/lib/helpers/api_builder/decisions.mjs Line 378
 if (mode === "root" && getRootDefault && setRootDefault && !hasMultipleDefaultExports && !getRootDefault()) {
 	// Root context: Make API itself callable
 	setRootDefault(defaultFunction);
-	// Named exports are already attached as properties
+	rootDefaultSet = true;
 } else {
-	// Subfolder context: Create namespaced callable
+	// C08d: Function As Namespace (Subfolder context)
+	// Line 384+
 	apiAssignments[apiPathKey] = mod;
+	namespaced = true;
 }
 ```
 
@@ -282,8 +292,9 @@ node -e "const slothlet = await import('./index.mjs'); const api = await slothle
 
 **Condition**: When a container has MULTIPLE files with default exports
 **Behavior**: Files with defaults become namespaces, files without defaults flatten to container level
-**Source Code**: `src/lib/helpers/multidefault.mjs` lines 177-196
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code**: `multidefault_getFlatteningDecision()` in `src/lib/helpers/multidefault.mjs` [L178-262](../src/lib/helpers/multidefault.mjs#L178-L262)
+**Detailed Conditions**: See [C28 (Multi-Default With Default Export)](API-RULES-CONDITIONS.md#c28-multi-default-with-default-export) and [C29 (Multi-Default Without Default Export)](API-RULES-CONDITIONS.md#c29-multi-default-without-default-export) in API-RULES-CONDITIONS.md
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Example: api_tv_test folder demonstrates both patterns**:
 
@@ -316,24 +327,26 @@ api.disconnect(); // from connection.mjs
 **Technical Implementation**:
 
 ```javascript
-// Lines 177-186: Files WITH default exports become namespaces
-if (moduleHasDefault) {
-	return {
-		shouldFlatten: false,
-		flattenToRoot: false,
-		preserveAsNamespace: true,
-		reason: "multi-default context with default export"
-	};
-}
+// C28: Multi-Default With Default Export
+// src/lib/helpers/multidefault.mjs Line 210-211
+if (hasMultipleDefaultExports) {
+	if (moduleHasDefault) {
+		return {
+			shouldFlatten: false,
+			preserveAsNamespace: true,
+			reason: "multi-default context with default export"
+		};
+	}
 
-// Lines 189-196: Files WITHOUT default exports flatten to container
-else {
-	return {
-		shouldFlatten: true,
-		flattenToRoot: true,
-		preserveAsNamespace: false,
-		reason: "multi-default context without default export"
-	};
+	// C29: Multi-Default Without Default Export
+	// Line 219
+	else {
+		return {
+			shouldFlatten: true,
+			flattenToRoot: true,
+			reason: "multi-default context without default export"
+		};
+	}
 }
 ```
 
@@ -354,8 +367,8 @@ node -e "const slothlet = await import('./index.mjs'); const api = await slothle
 
 **Condition**: When filename matches an exported property name (creates potential infinite nesting)
 **Behavior**: Always preserve as namespace to avoid `api.config.config.config...` infinite loops
-**Source Code Conditions**: C01, C08b, C09c, C19, C21 (5 implementations across all processing paths)
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Conditions**: [C01](API-RULES-CONDITIONS.md#c01-self-referential-check), [C08b](API-RULES-CONDITIONS.md#c08b-self-referential-function), [C09c](API-RULES-CONDITIONS.md#c09c-self-referential-non-function), [C20](API-RULES-CONDITIONS.md#c20-multi-file-self-referential), [C27](API-RULES-CONDITIONS.md#c27-multi-default-self-referential) (5 implementations)
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Verified Examples**:
 
@@ -386,7 +399,7 @@ node -e "const slothlet = await import('./index.mjs'); const api = await slothle
 **Technical Implementation** (5 locations):
 
 ```javascript
-// C01: getFlatteningDecision() - line 558
+// C01: getFlatteningDecision() - decisions.mjs Line 105
 if (isSelfReferential) {
 	return {
 		shouldFlatten: false,
@@ -395,25 +408,24 @@ if (isSelfReferential) {
 	};
 }
 
-// C08b: processModuleForAPI() function exports - line 728
+// C08b: processModuleForAPI() function exports - decisions.mjs Line 361
 else if (isSelfReferential) {
 	apiAssignments[apiPathKey] = mod;
 	namespaced = true;
 }
 
-// C09c: processModuleForAPI() non-function exports - line 797
+// C09c: processModuleForAPI() non-function exports - decisions.mjs Line 440
 else if (isSelfReferential) {
 	apiAssignments[apiPathKey] = mod[apiPathKey] || mod;
 	namespaced = true;
 }
 
-// C19: buildCategoryDecisions() multi-file - line 1712
+// C20: buildCategoryDecisions() multi-file - decisions.mjs Line 846
 else if (selfReferentialFiles.has(moduleName)) {
 	moduleDecision.type = "self-referential";
-	moduleDecision.specialHandling = "self-referential-namespace";
 }
 
-// C21: multidefault_getFlatteningDecision() - line 168
+// C27: multidefault_getFlatteningDecision() - multidefault.mjs Line 199
 if (isSelfReferential) {
 	return {
 		shouldFlatten: false,
@@ -441,8 +453,8 @@ node tests/debug-slothlet.mjs
 
 **Condition**: Module exports single named export that matches sanitized filename
 **Behavior**: Use the export contents directly instead of wrapping in namespace
-**Source Code Conditions**: C04, C16, C20c, C24 (4 implementations across processing contexts)
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Conditions**: [C04](API-RULES-CONDITIONS.md#c04-auto-flatten-single-named-export-matching-filename), [C18](API-RULES-CONDITIONS.md#c18-single-named-export-match-secondary-check), [C21c](API-RULES-CONDITIONS.md#c21c-single-named-export-match), [C30](API-RULES-CONDITIONS.md#c30-single-named-export-match) (4 implementations)
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Verified Examples**:
 
@@ -473,7 +485,7 @@ node -e "(async () => { const slothlet = await import('./index.mjs'); const api 
 **Technical Implementation** (4 locations):
 
 ```javascript
-// C04: getFlatteningDecision() - line 593
+// C04: getFlatteningDecision() - decisions.mjs Line 142
 if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	return {
 		shouldFlatten: true,
@@ -482,21 +494,25 @@ if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	};
 }
 
-// C16: buildCategoryStructure() single-file - line 1063
+// C18: buildCategoryDecisions() - decisions.mjs Line 693
 if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
-	return mod[moduleName]; // Auto-flatten single named export
+	return {
+		shouldFlatten: true,
+		flattenType: "object-auto-flatten"
+	};
 }
 
-// C20c: buildCategoryDecisions() multi-file - line 1731
+// C21c: buildCategoryDecisions() multi-file - decisions.mjs Line 867
 else if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	moduleDecision.shouldFlatten = true;
 	moduleDecision.flattenType = "single-named-export-match";
 }
 
-// C24: multidefault_getFlatteningDecision() - line 200
+// C30: multidefault_getFlatteningDecision() - multidefault.mjs Line 231
 if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey) {
 	return {
 		shouldFlatten: true,
+		flattenToRoot: false,
 		reason: "single named export matching filename"
 	};
 }
@@ -521,7 +537,7 @@ node tests/debug-slothlet.mjs
 **Condition**: Various patterns for eliminating unnecessary nesting in single-file folders
 **Behavior**: Multiple sub-patterns for flattening single files based on different criteria
 **Source Code Conditions**: C10, C11a/C11b/C11c, C13, C15 (buildCategoryStructure single-file logic)
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Pattern A: Object Export Flattening** (C11a/C11b/C11c):
 
@@ -589,24 +605,39 @@ api.funcmod("test"); // → "Hello, test!" ✅ VERIFIED with api_tests/api_test
 **Technical Implementation**:
 
 ```javascript
-// C10: Single-file function folder match - line 984
+// C10: Single-file function folder match - decisions.mjs Line 584
 if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
-	return mod; // Return function directly
+	return {
+		shouldFlatten: true,
+		flattenType: "function-folder-match"
+	};
 }
 
-// C11a: Single named export match - line 1000
-if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
-	return mod[moduleName]; // Return export contents directly
+// C12: Object auto-flatten - decisions.mjs Line 604-609
+if (moduleName === categoryName && mod && typeof mod === "object" && currentDepth > 0) {
+	if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
+		return {
+			shouldFlatten: true,
+			flattenType: "object-auto-flatten"
+		};
+	}
 }
 
-// C13: Function name matches folder - line 1039
+// C15: Function name matches folder - decisions.mjs Line 663
 if (functionNameMatchesFolder && currentDepth > 0) {
-	return mod; // Return function with preserved name
+	return {
+		shouldFlatten: true,
+		flattenType: "function-folder-match",
+		preferredName: mod.name
+	};
 }
 
-// C15: Default function export - line 1053
-if (typeof mod === "function" && mod.__slothletDefault === true && currentDepth > 0) {
-	return mod; // Flatten default function
+// C17: Default function export - decisions.mjs Line 680-682
+if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__slothletDefault === true) && currentDepth > 0) {
+	return {
+		shouldFlatten: true,
+		flattenType: "default-function"
+	};
 }
 ```
 
@@ -620,8 +651,8 @@ if (typeof mod === "function" && mod.__slothletDefault === true && currentDepth 
 
 **Condition**: Original function name semantically matches sanitized filename but has different casing
 **Behavior**: Use original function name instead of sanitized version to preserve conventions (IP, JSON, HTTP, etc.)
-**Source Code Conditions**: C14, C18 (function name preference logic)
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Conditions**: [C16](API-RULES-CONDITIONS.md#c16-function-name-matches-filename-name-preference), [C19](API-RULES-CONDITIONS.md#c19-multi-file-function-with-preferred-name) (function name preference logic)
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Verified Examples**:
 
@@ -644,10 +675,19 @@ if (functionNameMatchesFilename) {
 	return { [mod.name]: mod }; // Use original function name
 }
 
-// C18: buildCategoryDecisions() preferred export names - line 1709
+// C16: Function name matches filename - decisions.mjs Line 671
+if (functionNameMatchesFilename) {
+	return {
+		shouldFlatten: false,
+		preferredName: mod.name
+	};
+}
+
+// C19: Multi-file function with preferred name - decisions.mjs Line 844
 if (hasPreferredName) {
-	moduleDecision.specialHandling = "preferred-export-names";
-	moduleDecision.processedExports = modWithPreferredNames;
+	return {
+		specialHandling: "preferred-export-names"
+	};
 }
 
 // Function name preference logic checks:
@@ -676,8 +716,8 @@ node tests/debug-slothlet.mjs
 
 **Condition**: Single export with generic filename (singlefile, index, main, default) in subfolder
 **Behavior**: Promote export to parent level to eliminate meaningless intermediate namespace
-**Source Code Conditions**: C12, C12a (parent-level flattening logic)
-**Git Commit**: `c2f081a321c738f86196fdfdb19b6a5a706022ef`
+**Source Code Conditions**: [C14](API-RULES-CONDITIONS.md#c14-parent-level-flattening-generic-filenames) (parent-level flattening logic)
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
 
 **Verified Examples**:
 
@@ -695,14 +735,16 @@ api.advanced.nest4.beta("test"); // → "Hello, test!" ✅ VERIFIED with api_tes
 **Technical Implementation**:
 
 ```javascript
-// C12: Parent-level flattening detection - line 1018
+// C14: Parent-level flattening detection - decisions.mjs Line 641
 if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
 	const isGenericFilename = ["singlefile", "index", "main", "default"].includes(fileName.toLowerCase());
 
-	// C12a: Generic filename single export promotion - line 1026
+	// Line 649: Generic filename single export promotion
 	if (moduleKeys.length === 1 && isGenericFilename) {
-		const exportValue = mod[moduleKeys[0]];
-		return { [moduleKeys[0]]: exportValue }; // Promote to parent level
+		return {
+			shouldFlatten: true,
+			flattenType: "parent-level-flatten"
+		};
 	}
 }
 ```
@@ -770,7 +812,20 @@ node tests/debug-slothlet.mjs
 
 ## Source Code Locations
 
-_To be populated as rules are verified_
+**Note**: The slothlet API generation logic has been refactored into a modular structure:
+
+- **`src/lib/helpers/api_builder/decisions.mjs`** - Core decision logic (899 lines)
+  - `getFlatteningDecision()` [L87-189] - Controls flattening behavior
+  - `processModuleForAPI()` [L315-466] - Module processing logic
+  - `buildCategoryDecisions()` [L505-899] - Directory structure decisions
+
+- **`src/lib/helpers/api_builder/construction.mjs`** - API assembly (555 lines)
+  - `buildCategoryStructure()` [L125-555] - Structural construction
+
+- **`src/lib/helpers/multidefault.mjs`** - Multi-default handling (262 lines)
+  - `multidefault_getFlatteningDecision()` [L178-262] - Multi-default flattening logic
+
+**For complete documentation** of all 32 conditional statements with exact line numbers, see [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md).
 
 ## Test File Index
 

@@ -1,12 +1,12 @@
 ﻿/**
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/runtime/runtime.mjs
+ *	@Filename: /src/lib/runtime/runtime-livebindings.mjs
  *	@Date: 2025-11-05 19:45:00 -08:00 (1762400700)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-05 19:45:00 -08:00 (1762400700)
+ *	@Last modified time: 2025-12-29 21:48:08 -08:00 (1767073688)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -31,12 +31,21 @@
  * const { self, context, reference } = require("@cldmv/slothlet/runtime");
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
 	detectCurrentInstanceId,
 	getInstanceData,
 	setActiveInstance,
 	getCurrentActiveInstanceId
 } from "@cldmv/slothlet/helpers/instance-manager";
+
+/**
+ * Per-request AsyncLocalStorage instance for request-scoped context.
+ * Works alongside live bindings to provide per-request context isolation.
+ * @type {AsyncLocalStorage}
+ * @public
+ */
+export const requestALS = new AsyncLocalStorage();
 
 /**
  * Gets the current instance context, either from instance detection or ALS fallback.
@@ -149,10 +158,21 @@ export const context = new Proxy(
 	{
 		get(target, prop) {
 			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.context) {
-				return ctx.context[prop];
+			const baseContext = ctx?.context || {};
+			const requestContext = requestALS.getStore() || {};
+
+			// Check if deep merge is enabled via slothlet config
+			// If deep merge is enabled, requestContext already contains fully merged data
+			const isDeepMerge = ctx?.config?.scope?.merge === "deep";
+
+			if (isDeepMerge && Object.keys(requestContext).length > 0) {
+				// Deep merge mode: requestContext is already fully merged, return it directly
+				return requestContext[prop];
 			}
-			return undefined;
+
+			// Shallow merge mode: merge baseContext with requestContext
+			const merged = { ...baseContext, ...requestContext };
+			return merged[prop];
 		},
 
 		set(target, prop, value) {
