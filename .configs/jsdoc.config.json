@@ -17,19 +17,19 @@
 	"targets": [
 		{
 			"src": "src/**/*.mjs",
-			"dest": "docs/API.md"
+			"dest": "docs/generated/API.md"
 		},
 		{
 			"src": "api_tests/api_test/**/*.mjs",
-			"dest": "docs/api_tests/api_test.md"
+			"dest": "docs/generated/api_tests/api_test.md"
 		},
 		{
 			"src": "api_tests/api_test_cjs/**/*.cjs",
-			"dest": "docs/api_tests/api_test_cjs.md"
+			"dest": "docs/generated/api_tests/api_test_cjs.md"
 		},
 		{
 			"src": "api_tests/api_test_mixed/**/*.{mjs,cjs}",
-			"dest": "docs/api_tests/api_test_mixed.md"
+			"dest": "docs/generated/api_tests/api_test_mixed.md"
 		},
 		{
 			"src": "tools/**/*.mjs",

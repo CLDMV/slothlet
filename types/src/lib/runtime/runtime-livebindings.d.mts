@@ -24,6 +24,13 @@ export function makeWrapper(ctx: object): Function;
 export function getContext(): any;
 export function setContext(newContext: any): void;
 /**
+ * Per-request AsyncLocalStorage instance for request-scoped context.
+ * Works alongside live bindings to provide per-request context isolation.
+ * @type {AsyncLocalStorage}
+ * @public
+ */
+export const requestALS: AsyncLocalStorage<any>;
+/**
  * Live-binding reference to the current API instance.
  * Automatically resolves to the appropriate instance based on calling context.
  * @type {object}
@@ -56,4 +63,5 @@ export namespace contextManager {
     export { setContext as set };
     export { runWithCtx };
 }
+import { AsyncLocalStorage } from "node:async_hooks";
 //# sourceMappingURL=runtime-livebindings.d.mts.map

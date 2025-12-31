@@ -524,7 +524,7 @@ When building Slothlet API modules:
 
 ### 🔧 **Advanced Pattern Documentation**
 
-- **[`docs/api_tests/`](./docs/api_tests/)** - Generated documentation for all test module patterns
+- **[`docs/generated/api_tests/`](./docs/generated/api_tests/)** - Generated documentation for all test module patterns
 
 ### ⚡ **Critical Reading Order for AI Agents**
 

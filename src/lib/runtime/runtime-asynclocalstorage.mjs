@@ -1,12 +1,12 @@
 ﻿/**
  *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/runtime/runtime.mjs
+ *	@Filename: /src/lib/runtime/runtime-asynclocalstorage.mjs
  *	@Date: 2025-10-21 16:20:59 -07:00 (1761088859)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:55:42 -07:00 (1761144942)
+ *	@Last modified time: 2025-12-29 21:48:07 -08:00 (1767073687)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -45,6 +45,14 @@ const als = new AsyncLocalStorage();
  */
 export const sharedALS = new AsyncLocalStorage();
 
+/**
+ * Per-request AsyncLocalStorage instance for request-scoped context.
+ * Stores temporary context data that merges with instance context.
+ * @type {AsyncLocalStorageType}
+ * @public
+ */
+export const requestALS = new AsyncLocalStorage();
+
 // Enable AsyncLocalStorage context propagation for all EventEmitter instances
 enableAlsForEventEmitters(als);
 
@@ -75,6 +83,10 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 		return als.run(ctx, runtime_runInALS);
 	}
 
+	// Merge per-request context into the ctx before hook execution
+	const requestContext = requestALS.getStore();
+	const mergedCtx = requestContext ? { ...ctx, context: { ...ctx.context, ...requestContext } } : ctx;
+
 	// Extract function path for hook matching (only API functions have __slothletPath)
 	const path = fn.__slothletPath;
 
@@ -94,11 +106,11 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 	const runtime_runInALS = () => {
 		try {
 			// Execute before hooks
-			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args);
+			const beforeResult = mergedCtx.hookManager.executeBeforeHooks(path, args);
 
 			// If cancelled, skip function and after hooks, but always execute always hooks
 			if (beforeResult.cancelled) {
-				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
+				mergedCtx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
 				return beforeResult.value;
 			}
 
@@ -113,20 +125,20 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 				return result.then(
 					(resolvedResult) => {
 						// Execute after hooks with chaining, then always hooks
-						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+						const finalResult = mergedCtx.hookManager.executeAfterHooks(path, resolvedResult);
+						mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, []);
 						return finalResult;
 					},
 					(error) => {
 						// Execute error hooks for async function errors
-						if (!ctx.hookManager.reportedErrors.has(error)) {
-							ctx.hookManager.reportedErrors.add(error);
-							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+						if (!mergedCtx.hookManager.reportedErrors.has(error)) {
+							mergedCtx.hookManager.reportedErrors.add(error);
+							mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" });
 						}
 						// Always hooks run like finally blocks - even when errors occur
-						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+						mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 						// Re-throw error unless suppressErrors is enabled
-						if (!ctx.hookManager.suppressErrors) {
+						if (!mergedCtx.hookManager.suppressErrors) {
 							throw error;
 						}
 						return undefined; // Return undefined if error suppressed
@@ -135,26 +147,26 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 			}
 
 			// For sync results, execute after hooks then always hooks
-			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
-			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+			const finalResult = mergedCtx.hookManager.executeAfterHooks(path, result);
+			mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, []);
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
-			if (!ctx.hookManager.reportedErrors.has(error)) {
-				ctx.hookManager.reportedErrors.add(error);
-				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+			if (!mergedCtx.hookManager.reportedErrors.has(error)) {
+				mergedCtx.hookManager.reportedErrors.add(error);
+				mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" });
 			}
 			// Always hooks run like finally blocks - even when errors occur
-			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+			mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error]);
 			// Re-throw error unless suppressErrors is enabled
-			if (!ctx.hookManager.suppressErrors) {
+			if (!mergedCtx.hookManager.suppressErrors) {
 				throw error;
 			}
 			return undefined; // Return undefined if error suppressed
 		}
 	};
 
-	return als.run(ctx, runtime_runInALS);
+	return als.run(mergedCtx, runtime_runInALS);
 };
 
 /**
@@ -728,6 +740,26 @@ function runtime_createLiveBinding(contextKey) {
 				return currentValue[prop];
 			}
 			*/
+
+			// For context binding, merge with per-request context
+			if (contextKey === "context") {
+				const ctx = getCtx();
+				const baseContext = ctx?.context || {};
+				const requestContext = requestALS.getStore() || {};
+
+				// Check if deep merge is enabled via slothlet config
+				// If deep merge is enabled, requestContext already contains fully merged data
+				const isDeepMerge = ctx?.config?.scope?.merge === "deep";
+
+				if (isDeepMerge && Object.keys(requestContext).length > 0) {
+					// Deep merge mode: requestContext is already fully merged, return it directly
+					return requestContext[prop];
+				}
+
+				// Shallow merge mode: merge baseContext with requestContext
+				const merged = { ...baseContext, ...requestContext };
+				return merged[prop];
+			}
 
 			// Fallback to target if no current context
 			runtime_syncWithContext();

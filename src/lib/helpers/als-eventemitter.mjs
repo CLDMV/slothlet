@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 13:57:16 -08:00 (1762725436)
+ *	@Last modified time: 2025-12-30 07:25:32 -08:00 (1767108332)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -30,9 +30,8 @@
  * const { enableAlsForEventEmitters } = require("@cldmv/slothlet/helpers/als-eventemitter");
  */
 
-import { AsyncResource } from "node:async_hooks";
+import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";
 import { EventEmitter } from "node:events";
-import { AsyncLocalStorage } from "node:async_hooks";
 
 // Define a default ALS instance to avoid circular imports
 const defaultALS = new AsyncLocalStorage();
@@ -240,7 +239,7 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 				globalResourceSet.delete(resource);
 				try {
 					resource.emitDestroy();
-				} catch (err) {
+				} catch (_) {
 					// Ignore cleanup errors
 				}
 			}
@@ -322,7 +321,7 @@ export function cleanupAllSlothletListeners() {
 				emitter.removeListener(event, wrappedListener);
 				cleanedCount++;
 			}
-		} catch (err) {
+		} catch (_) {
 			errorCount++;
 			// Continue cleaning up other listeners even if one fails
 		}
@@ -332,7 +331,7 @@ export function cleanupAllSlothletListeners() {
 	allPatchedListeners.clear();
 	// globalListenerTracker will be cleaned up automatically
 
-	if (process.env.NODE_ENV === "development" || process.env.SLOTHLET_DEBUG) {
+	if (process.env.SLOTHLET_DEBUG === "1" || process.env.SLOTHLET_DEBUG === "true") {
 		console.log(`[slothlet] Cleaned up ${cleanedCount} listeners (${errorCount} errors)`);
 	}
 }

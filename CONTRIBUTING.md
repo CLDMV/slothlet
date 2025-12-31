@@ -22,8 +22,8 @@ Thank you for your interest in contributing to Slothlet!
 
 When modifying API generation logic, refer to these technical documents:
 
-- **[API-RULES.md](API-RULES.md)** - Verified API transformation rules with examples and test cases
-- **[API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md)** - Complete reference of all 26 conditional statements in the source code
+- **[API-RULES.md](docs/API-RULES.md)** - Verified API transformation rules with examples and test cases
+- **[API-RULES-CONDITIONS.md](docs/API-RULES-CONDITIONS.md)** - Complete reference of all 26 conditional statements in the source code
 
 These documents ensure that any changes to API generation logic maintain consistency with existing behavior and don't introduce regressions.
 

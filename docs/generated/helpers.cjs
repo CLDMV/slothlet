@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /docs/helpers.cjs
+ *	@Filename: /docs/generated/helpers.cjs
  *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
