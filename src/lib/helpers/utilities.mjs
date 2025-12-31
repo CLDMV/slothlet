@@ -97,6 +97,10 @@ export function safeDefine(obj, key, value, enumerable = false, config = null) {
  * Arrays are treated as primitive values and replaced rather than merged.
  * Used for context merging in scope operations.
  *
+ * **Security Note**: This function explicitly blocks the `__proto__`, `prototype`, and
+ * `constructor` keys to prevent prototype pollution attacks. Any attempt to merge
+ * these dangerous keys will be silently ignored.
+ *
  * @example
  * // Internal usage
  * import { deepMerge } from "./utilities.mjs";
