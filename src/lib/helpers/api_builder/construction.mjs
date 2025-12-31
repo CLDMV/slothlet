@@ -274,7 +274,8 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 									// 1. We can't modify the original proxy's behavior without breaking its intended functionality
 									// 2. Some proxies (like LGTVControllers) have custom get/set handlers that conflict with property assignment
 									// 3. The wrapper provides a "fallback layer" that ensures API completeness while preserving original proxy behavior
-								// 4. The wrapper is only created when assignment to the original proxy fails, keeping it on an exceptional path rather than the common case
+									// 4. The wrapper is only created when assignment to the original proxy fails,
+									//    keeping it on an exceptional path rather than the common case
 									const originalProxy = flattened;
 									flattened = new Proxy(originalProxy, {
 										get(target, prop, receiver) {
