@@ -93,27 +93,27 @@ processor/
 ```mermaid
 flowchart TD
 	A[Start: Analyze folder] --> B{Single file in folder?}
-	B -->|No| Z[No flattening]
-	B -->|Yes| C{File name matches folder?}
+	B --> BNO[No] --> Z[No flattening]
+	B --> BYES[Yes] --> C{File name matches folder?}
 
-	C -->|Yes| D{Has default export?}
-	D -->|Yes| E[✓ Flatten: Rule 4<br/>Folder with matching default]
-	D -->|No| F[✓ Flatten: Rule 1<br/>Folder/file name match]
+	C --> CYES[Yes] --> D{Has default export?}
+	D --> DYES[Yes] --> E[✓ Flatten: Rule 4<br/>Folder with matching default]
+	D --> DNO[No] --> F[✓ Flatten: Rule 1<br/>Folder/file name match]
 
-	C -->|No| G{Is file named 'index'?}
-	G -->|Yes| H[✓ Flatten: Rule 2<br/>Index file pattern]
-	G -->|No| I{Single named export?}
+	C --> CNO[No] --> G{Is file named 'index'?}
+	G --> GYES[Yes] --> H[✓ Flatten: Rule 2<br/>Index file pattern]
+	G --> GNO[No] --> I{Single named export?}
 
-	I -->|Yes| J{Export name matches folder?}
-	J -->|Yes| K[✓ Flatten: Rule 3<br/>Named export match]
-	J -->|No| L{Has default export?}
+	I --> IYES[Yes] --> J{Export name matches folder?}
+	J --> JYES[Yes] --> K[✓ Flatten: Rule 3<br/>Named export match]
+	J --> JNO[No] --> L{Has default export?}
 
-	L -->|Yes| M[✓ Flatten: Rule 5<br/>Single file default]
-	L -->|No| Z
+	L --> LYES[Yes] --> M[✓ Flatten: Rule 5<br/>Single file default]
+	L --> LNO[No] --> Z
 
-	I -->|No| N{Has default export?}
-	N -->|Yes| M
-	N -->|No| Z
+	I --> INO[No] --> N{Has default export?}
+	N --> NYES[Yes] --> M
+	N --> NNO[No] --> Z
 
 	E --> O[Result: Flattened API]
 	F --> O
@@ -121,6 +121,50 @@ flowchart TD
 	K --> O
 	M --> O
 	Z --> P[Result: Normal nesting]
+
+	%% Slothlet brand colors - #9BC66B primary on dark theme
+	style A fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style B fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style C fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style D fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style G fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style I fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style J fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style L fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style N fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+
+	%% Yes/No nodes - styled boxes
+	style BNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style BYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style CYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style CNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style DYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style DNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style GYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style GNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style IYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style INO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style JYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style JNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style LYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style LNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style NYES fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+	style NNO fill:#1a1a1a,stroke:#9BC66B,stroke-width:2px,color:#9BC66B,opacity:0.5
+
+	%% Success states - primary green
+	style E fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+	style F fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+	style H fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+	style K fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+	style M fill:#0d1a0d,stroke:#9BC66B,stroke-width:3px,color:#9BC66B,opacity:0.5
+
+	%% Results - accent colors
+	style O fill:#0d1a0d,stroke:#7FA94F,stroke-width:3px,color:#7FA94F,opacity:0.5
+	style P fill:#1a1a1a,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+	style Z fill:#1a1a1a,stroke:#B8D982,stroke-width:2px,color:#B8D982,opacity:0.5
+
+	%% Arrow styling
+	linkStyle default stroke:#9BC66B,stroke-width:3px,opacity:0.5
 ```
 
 ## Benefits
