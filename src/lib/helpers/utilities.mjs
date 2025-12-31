@@ -112,18 +112,25 @@ export function deepMerge(target, source) {
 	}
 
 	for (const key in source) {
-		if (Object.prototype.hasOwnProperty.call(source, key)) {
-			const sourceValue = source[key];
-			const targetValue = target[key];
+		if (!Object.prototype.hasOwnProperty.call(source, key)) {
+			continue;
+		}
 
-			if (sourceValue && typeof sourceValue === "object" && !Array.isArray(sourceValue)) {
-				target[key] = deepMerge(
-					targetValue && typeof targetValue === "object" && !Array.isArray(targetValue) ? targetValue : {},
-					sourceValue
-				);
-			} else {
-				target[key] = sourceValue;
-			}
+		// Prevent prototype pollution by blocking dangerous keys
+		if (key === "__proto__" || key === "prototype" || key === "constructor") {
+			continue;
+		}
+
+		const sourceValue = source[key];
+		const targetValue = target[key];
+
+		if (sourceValue && typeof sourceValue === "object" && !Array.isArray(sourceValue)) {
+			target[key] = deepMerge(
+				targetValue && typeof targetValue === "object" && !Array.isArray(targetValue) ? targetValue : {},
+				sourceValue
+			);
+		} else {
+			target[key] = sourceValue;
 		}
 	}
 
