@@ -1,6 +1,5 @@
 /**
- * Dynamically adds API modules from a new folder to the exithe node env right now is development…
- * sting API at a specified path.
+ * Dynamically adds API modules from a new folder to the existing API at a specified path.
  *
  * @function addApiFromFolder
  * @memberof module:@cldmv/slothlet.lib.helpers.api_builder.add_api
