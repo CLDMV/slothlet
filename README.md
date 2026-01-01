@@ -253,6 +253,73 @@ api.hooks.on(
 const result = await api.math.add(2, 3);
 ```
 
+### Dynamic API Extension with addApi()
+
+Load additional modules at runtime and extend your API dynamically:
+
+```javascript
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({ dir: "./api" });
+
+// Add plugins at runtime
+await api.addApi("plugins", "./plugins-folder");
+api.plugins.myPlugin();
+
+// Create nested API structures
+await api.addApi("runtime.plugins", "./more-plugins");
+api.runtime.plugins.loader();
+
+// Add with metadata for security/authorization
+await api.addApi("plugins.trusted", "./trusted-plugins", {
+	trusted: true,
+	permissions: ["read", "write", "admin"],
+	version: "1.0.0"
+});
+
+await api.addApi("plugins.external", "./third-party", {
+	trusted: false,
+	permissions: ["read"]
+});
+
+// Access metadata on functions
+const meta = api.plugins.trusted.someFunc.__metadata;
+console.log(meta.trusted); // true
+console.log(meta.permissions); // ["read", "write", "admin"]
+```
+
+**Security & Authorization with metadataAPI:**
+
+```javascript
+// Inside your modules, use metadataAPI for runtime introspection
+import { metadataAPI } from "@cldmv/slothlet/runtime";
+
+export async function sensitiveOperation() {
+	// Check caller's metadata
+	const caller = await metadataAPI.caller();
+
+	if (!caller?.trusted) {
+		throw new Error("Unauthorized: Caller is not trusted");
+	}
+
+	if (!caller.permissions.includes("admin")) {
+		throw new Error("Unauthorized: Admin permission required");
+	}
+
+	// Proceed with secure operation
+	return "Success";
+}
+
+// Get metadata by path
+const meta = await metadataAPI.get("plugins.trusted.someFunc");
+
+// Get current function's metadata
+const self = await metadataAPI.self();
+console.log("My version:", self.version);
+```
+
+🔒 **For complete metadata system documentation, see [docs/METADATA.md](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)**
+
 ---
 
 ## 📚 Configuration Options
@@ -481,6 +548,7 @@ Key highlights:
 
 - **[Hook System](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)** - Complete hook system documentation with 4 hook types, pattern matching, and examples
 - **[Context Propagation](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)** - EventEmitter and class instance context preservation
+- **[Metadata System](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)** - Function metadata tagging and runtime introspection for security, authorization, and auditing
 - **[Module Structure](https://github.com/CLDMV/slothlet/blob/master/docs/MODULE-STRUCTURE.md)** - Comprehensive module organization patterns and examples
 - **[API Flattening](https://github.com/CLDMV/slothlet/blob/master/docs/API-FLATTENING.md)** - The 5 flattening rules with decision tree and benefits
 

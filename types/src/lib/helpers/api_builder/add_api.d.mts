@@ -7,6 +7,7 @@
  * @param {string} options.apiPath - Dot-notation path where modules will be added
  * @param {string} options.folderPath - Path to folder containing modules to load
  * @param {object} options.instance - Slothlet instance with api, boundapi, config, modes, etc.
+ * @param {object} [options.metadata={}] - Metadata to attach to all loaded functions
  * @returns {Promise<void>}
  * @throws {Error} If API not loaded, invalid parameters, folder does not exist, or merge conflicts
  * @package
@@ -51,10 +52,25 @@
  *   folderPath: "./services/stripe",
  *   instance: slothletInstance
  * });
+ *
+ * @example
+ * // Add modules with metadata
+ * await addApiFromFolder({
+ *   apiPath: "plugins",
+ *   folderPath: "./untrusted-plugins",
+ *   instance: slothletInstance,
+ *   metadata: {
+ *     trusted: false,
+ *     permissions: ["read"],
+ *     version: "1.0.0",
+ *     author: "external"
+ *   }
+ * });
  */
-export function addApiFromFolder({ apiPath, folderPath, instance }: {
+export function addApiFromFolder({ apiPath, folderPath, instance, metadata }: {
     apiPath: string;
     folderPath: string;
     instance: object;
+    metadata?: object;
 }): Promise<void>;
 //# sourceMappingURL=add_api.d.mts.map

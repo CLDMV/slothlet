@@ -808,14 +808,19 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	}
 
 	if (compared.differingValues.length > 0) {
-		hasErrors = true;
-		console.log(chalk.yellowBright("⚠️  Value differences:"));
-		compared.differingValues.forEach((diff) => {
-			const aValueStr = typeof diff.aValue === "function" ? "[Function]" : diff.aValue;
-			const bValueStr = typeof diff.bValue === "function" ? "[Function]" : diff.bValue;
-			console.log(`  - ${diff.path}: (${diff.aType}) ${aValueStr} vs (${diff.bType}) ${bValueStr}`);
-		});
-		console.log();
+		// Filter out instanceId differences (expected to be different between instances)
+		const significantDifferences = compared.differingValues.filter((diff) => diff.path !== "instanceId");
+
+		if (significantDifferences.length > 0) {
+			hasErrors = true;
+			console.log(chalk.yellowBright("⚠️  Value differences:"));
+			significantDifferences.forEach((diff) => {
+				const aValueStr = typeof diff.aValue === "function" ? "[Function]" : diff.aValue;
+				const bValueStr = typeof diff.bValue === "function" ? "[Function]" : diff.bValue;
+				console.log(`  - ${diff.path}: (${diff.aType}) ${aValueStr} vs (${diff.bType}) ${bValueStr}`);
+			});
+			console.log();
+		}
 	}
 
 	if (compared.nestedDifferences.length > 0) {
