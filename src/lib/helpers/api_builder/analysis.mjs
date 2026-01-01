@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 00:00:00 -08:00
+ *	@Last modified time: 2025-12-31 21:39:58 -08:00 (1767245998)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -103,22 +103,32 @@ export async function analyzeModule(modulePath, options = {}) {
 
 	const moduleUrl = pathToFileURL(modulePath).href;
 
-	// Add instance-based cache busting only for live bindings runtime
+	// ALWAYS add cache-busting to get fresh module instances
+	// This prevents metadata pollution when loading the same folder multiple times
 	let importUrl = moduleUrl;
+	const separator = moduleUrl.includes("?") ? "&" : "?";
+
+	// Add timestamp for cache-busting (ensures fresh module load every time)
+	importUrl = `${moduleUrl}${separator}_t=${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
 	if (instance && instance.instanceId) {
 		const runtimeType = instance.config?.runtime || "async";
 
-		// Only add URL parameters for live bindings runtime (needs stack trace detection)
+		// Add runtime-specific parameters for live bindings (needs stack trace detection)
 		if (runtimeType === "live") {
-			const separator = moduleUrl.includes("?") ? "&" : "?";
-			importUrl = `${moduleUrl}${separator}slothlet_instance=${instance.instanceId}`;
+			importUrl = `${importUrl}&slothlet_instance=${instance.instanceId}`;
 			importUrl = `${importUrl}&slothlet_runtime=${runtimeType}`;
 
 			// Set active instance for live bindings runtime
 			setActiveInstance(instance.instanceId);
 		}
-		// AsyncLocalStorage runtime doesn't need URL parameters or setActiveInstance
+		// AsyncLocalStorage runtime doesn't need instance parameters
 		// It uses als.run() for context isolation
+	}
+
+	if (debug) {
+		console.log(`[DEBUG] analyzeModule: Importing ${path.basename(modulePath)}`);
+		console.log(`[DEBUG]   URL: ${importUrl}`);
 	}
 
 	const rawModule = await import(importUrl);

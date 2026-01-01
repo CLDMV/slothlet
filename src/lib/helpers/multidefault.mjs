@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-05 19:24:55 -08:00 (1762399495)
+ *	@Last modified time: 2025-12-31 21:39:58 -08:00 (1767245998)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -57,11 +57,20 @@ async function multidefault_analyzeModules(moduleFiles, baseDir, options = {}) {
 		const fileName = path.basename(file.name, moduleExt);
 		const moduleFilePath = path.resolve(baseDir, file.name);
 
-		// Create instance-isolated import URL for cache busting between slothlet instances
+		// ALWAYS add cache-busting to get fresh module instances on every load
+		// This prevents metadata pollution when loading the same folder multiple times
 		let importUrl = `file://${moduleFilePath.replace(/\\/g, "/")}`;
+		const separator = importUrl.includes("?") ? "&" : "?";
+
+		// Add timestamp for cache-busting (ensures fresh module load every time)
+		importUrl = `${importUrl}${separator}_t=${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+		// Add instance-specific parameters for live bindings runtime
 		if (instance && instance.instanceId) {
-			const separator = importUrl.includes("?") ? "&" : "?";
-			importUrl = `${importUrl}${separator}slothlet_instance=${instance.instanceId}`;
+			const runtimeType = instance.config?.runtime || "async";
+			if (runtimeType === "live") {
+				importUrl = `${importUrl}&slothlet_instance=${instance.instanceId}`;
+			}
 		}
 
 		// Load raw module once and cache it
