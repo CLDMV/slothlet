@@ -184,6 +184,11 @@ let DEBUG = process.argv.includes("--slothletdebug")
 		? true
 		: false;
 
+// Set environment variable based on detected DEBUG flag for consistent access throughout codebase
+if (DEBUG && !process.env.SLOTHLET_DEBUG) {
+	process.env.SLOTHLET_DEBUG = "1";
+}
+
 /**
  * Live-binding reference to the current API instance.
  * This is updated whenever a new API instance is created.
@@ -950,6 +955,17 @@ const slothletObject = {
 			console.warn("Could not redefine boundApi.run: not configurable");
 		}
 
+		// Add instanceId for debugging
+		const instanceIdDesc = Object.getOwnPropertyDescriptor(boundApi, "instanceId");
+		if (!instanceIdDesc || instanceIdDesc.configurable) {
+			Object.defineProperty(boundApi, "instanceId", {
+				value: this.instanceId,
+				writable: false,
+				configurable: true,
+				enumerable: false
+			});
+		}
+
 		// Add .scope() method to boundApi
 		const scopeDesc = Object.getOwnPropertyDescriptor(boundApi, "scope");
 		if (!scopeDesc || scopeDesc.configurable) {
@@ -1037,6 +1053,7 @@ const slothletObject = {
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} apiPath - Dotted path where to add the new API (e.g., "runtime.newapi", "tools.external")
 	 * @param {string} folderPath - Path to the folder containing modules to load (relative or absolute)
+	 * @param {object} [metadata={}] - Metadata object to attach to all loaded functions (e.g., {trusted: true, version: "1.0"})
 	 * @returns {Promise<void>} Resolves when the API extension is complete
 	 * @throws {Error} If API is not loaded, folder doesn't exist, or path navigation fails
 	 * @public
@@ -1046,9 +1063,14 @@ const slothletObject = {
 	 * 1. Validates that the API is loaded and the folder exists
 	 * 2. Resolves relative folder paths from the caller's location
 	 * 3. Loads modules from the specified folder using the current loading mode (lazy/eager)
-	 * 4. Navigates to the specified API path, creating intermediate objects as needed
-	 * 5. Merges the new modules into the target location
-	 * 6. Updates all live bindings to reflect the changes
+	 * 4. Tags all loaded functions with the provided metadata (immutable but extensible)
+	 * 5. Navigates to the specified API path, creating intermediate objects as needed
+	 * 6. Merges the new modules into the target location
+	 * 7. Updates all live bindings to reflect the changes
+	 *
+	 * Metadata is attached as an immutable proxy object that allows adding new properties
+	 * but prevents modification of existing properties. This enables security features like
+	 * access control where functions can verify the identity and permissions of their callers.
 	 *
 	 * @example
 	 * // Create initial API
@@ -1069,9 +1091,29 @@ const slothletObject = {
 	 * // Add nested modules
 	 * await api.addApi("services.external.github", "./integrations/github");
 	 * api.services.external.github.getUser();
+	 *
+	 * @example
+	 * // Add modules with metadata for access control
+	 * await api.addApi("plugins", "./untrusted-plugins", {
+	 *     trusted: false,
+	 *     permissions: ["read"],
+	 *     version: "1.0.0",
+	 *     author: "external"
+	 * });
+	 *
+	 * // In a secure function, check caller metadata
+	 * import { metadataAPI } from "@cldmv/slothlet/runtime";
+	 *
+	 * export function getSecrets() {
+	 *     const caller = metadataAPI.caller();
+	 *     if (!caller?.trusted) {
+	 *         throw new Error("Access denied: untrusted caller");
+	 *     }
+	 *     return { apiKey: "secret" };
+	 * }
 	 */
-	async addApi(apiPath, folderPath) {
-		return addApiFromFolder({ apiPath, folderPath, instance: this });
+	async addApi(apiPath, folderPath, metadata = {}) {
+		return addApiFromFolder({ apiPath, folderPath, instance: this, metadata });
 	},
 
 	/**

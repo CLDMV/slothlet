@@ -6,4 +6,5 @@ export const context: {};
 export const reference: {};
 export const instanceId: any;
 export const sharedALS: any;
+export const metadataAPI: {};
 //# sourceMappingURL=runtime.d.mts.map

@@ -625,6 +625,11 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			if (prop === "__slothletPath") {
 				return pathParts.length > 0 ? pathParts.join(".") : undefined;
 			}
+			// Pass through metadata properties directly from target (security-critical)
+			if (prop === "__metadata" || prop === "__sourceFolder") {
+				// Use Reflect.get to bypass proxy and get actual target property
+				return Reflect.get(_t, prop);
+			}
 			// If already materialized, return underlying value directly (supports chaining)
 			if (materialized) {
 				if (materialized && (typeof materialized === "object" || typeof materialized === "function")) return materialized[prop];
@@ -816,6 +821,10 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			}
 			if (prop === "__materialized") {
 				return { configurable: true, enumerable: false, writable: true, value: materialized };
+			}
+			// Pass through metadata property descriptors from target
+			if (prop === "__metadata" || prop === "__sourceFolder") {
+				return Reflect.getOwnPropertyDescriptor(lazy_lazyTarget, prop);
 			}
 			if (prop === "prototype") {
 				// Delegate to original target's prototype descriptor to avoid conflicts

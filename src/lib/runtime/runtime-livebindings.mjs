@@ -38,6 +38,7 @@ import {
 	setActiveInstance,
 	getCurrentActiveInstanceId
 } from "@cldmv/slothlet/helpers/instance-manager";
+import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 
 /**
  * Per-request AsyncLocalStorage instance for request-scoped context.
@@ -493,3 +494,10 @@ export const contextManager = {
 	set: setContext,
 	runWithCtx
 };
+
+/**
+ * Metadata API for function introspection and access control.
+ * Re-exported from helpers/metadata-api for convenient access.
+ * @public
+ */
+export { metadataAPI };

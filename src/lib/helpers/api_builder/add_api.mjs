@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-30 08:52:51 -08:00 (1767113571)
+ *	@Last modified time: 2025-12-31 21:39:04 -08:00 (1767245944)
  *	-----
  *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -46,6 +46,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
 
 /**
  * Dynamically adds API modules from a new folder to the existing API at a specified path.
@@ -56,6 +57,7 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
  * @param {string} options.apiPath - Dot-notation path where modules will be added
  * @param {string} options.folderPath - Path to folder containing modules to load
  * @param {object} options.instance - Slothlet instance with api, boundapi, config, modes, etc.
+ * @param {object} [options.metadata={}] - Metadata to attach to all loaded functions
  * @returns {Promise<void>}
  * @throws {Error} If API not loaded, invalid parameters, folder does not exist, or merge conflicts
  * @package
@@ -100,8 +102,22 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
  *   folderPath: "./services/stripe",
  *   instance: slothletInstance
  * });
+ *
+ * @example
+ * // Add modules with metadata
+ * await addApiFromFolder({
+ *   apiPath: "plugins",
+ *   folderPath: "./untrusted-plugins",
+ *   instance: slothletInstance,
+ *   metadata: {
+ *     trusted: false,
+ *     permissions: ["read"],
+ *     version: "1.0.0",
+ *     author: "external"
+ *   }
+ * });
  */
-export async function addApiFromFolder({ apiPath, folderPath, instance }) {
+export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {} }) {
 	if (!instance.loaded) {
 		throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
 	}
@@ -124,10 +140,22 @@ export async function addApiFromFolder({ apiPath, folderPath, instance }) {
 		throw new TypeError("[slothlet] addApi: 'folderPath' must be a string.");
 	}
 
-	// Resolve relative folder paths from the caller's location
+	// Resolve folder paths:
+	// - If absolute: use as-is
+	// - If relative: resolve from caller's location (where addApi was called)
 	let resolvedFolderPath = folderPath;
-	if (!path.isAbsolute(folderPath)) {
+	const isAbsolute = path.isAbsolute(folderPath);
+
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: folderPath="${folderPath}"`);
+		console.log(`[DEBUG] addApi: isAbsolute=${isAbsolute}`);
+	}
+
+	if (!isAbsolute) {
 		resolvedFolderPath = resolvePathFromCaller(folderPath);
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Resolved relative path to: ${resolvedFolderPath}`);
+		}
 	}
 
 	// Verify the folder exists
@@ -153,6 +181,29 @@ export async function addApiFromFolder({ apiPath, folderPath, instance }) {
 	} else {
 		// Use eager mode to create the API structure
 		newModules = await instance.modes.eager.create.call(instance, resolvedFolderPath, instance.config.apiDepth || Infinity, 0);
+	}
+
+	// Handle metadata tagging:
+	// - If metadata provided: tag all functions with metadata
+	// - If no metadata provided: clean any existing metadata (handles CJS module caching)
+	if (newModules && metadata && typeof metadata === "object" && Object.keys(metadata).length > 0) {
+		// Add sourceFolder to metadata
+		const fullMetadata = {
+			...metadata,
+			sourceFolder: resolvedFolderPath
+		};
+
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Tagging functions with metadata:`, Object.keys(fullMetadata));
+		}
+
+		tagLoadedFunctions(newModules, fullMetadata, resolvedFolderPath);
+	} else if (newModules) {
+		// No metadata provided - clean any existing metadata from cached modules
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Cleaning metadata from functions (no metadata provided)`);
+		}
+		cleanMetadata(newModules);
 	}
 
 	if (instance.config.debug) {
@@ -277,7 +328,26 @@ export async function addApiFromFolder({ apiPath, folderPath, instance }) {
 			}
 		}
 
-		// If target doesn't exist, create it
+		// Detect and materialize lazy proxies FIRST, before checking existence
+		// Lazy proxies have __slothletPath property and are functions
+		// To materialize: access a property (triggers _materialize), then await the proxy (waits for completion)
+		const targetValue = currentTarget[finalKey];
+		if (typeof targetValue === "function" && targetValue.__slothletPath) {
+			// This is a lazy folder proxy - trigger materialization by accessing a property
+			// then await the proxy to complete materialization and replacement
+			const _ = targetValue.__trigger; // Trigger _materialize()
+			await targetValue(); // Wait for materialization to complete
+			// Now replacePlaceholder has replaced the proxy in currentTarget[finalKey] with the materialized object
+		}
+
+		const boundTargetValue = currentBoundTarget[finalKey];
+		if (typeof boundTargetValue === "function" && boundTargetValue.__slothletPath) {
+			// Trigger materialization and await completion
+			const _ = boundTargetValue.__trigger;
+			await boundTargetValue();
+		}
+
+		// If target doesn't exist (after materialization), create it
 		if (!currentTarget[finalKey]) {
 			currentTarget[finalKey] = {};
 		}

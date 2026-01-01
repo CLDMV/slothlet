@@ -34,6 +34,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
 import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 
 const als = new AsyncLocalStorage();
 
@@ -884,6 +885,13 @@ export const context = runtime_createLiveBinding("context");
  * console.log(reference); // Current reference data
  */
 export const reference = runtime_createLiveBinding("reference");
+
+/**
+ * Metadata API for accessing function metadata.
+ * @memberof module:@cldmv/slothlet.runtime
+ * @public
+ */
+export { metadataAPI };
 
 /**
  * @typedef {import("node:async_hooks").AsyncLocalStorage} AsyncLocalStorageType

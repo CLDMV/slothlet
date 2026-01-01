@@ -219,3 +219,14 @@ export const instanceId = (() => {
 })();
 
 export const sharedALS = getCurrentRuntime().sharedALS;
+
+// Forward metadataAPI from the appropriate runtime
+export const metadataAPI = new Proxy(
+	{},
+	{
+		get(_, prop) {
+			const runtime = getCurrentRuntime();
+			return runtime.metadataAPI[prop];
+		}
+	}
+);
