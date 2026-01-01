@@ -32,7 +32,7 @@ export function getMetadata(path: string): Promise<object | null>;
  */
 export function getSelfMetadata(): Promise<object | null>;
 /**
- * Test helper that simulates a caller/callee scenario for metadataAPI.caller().
+ * Test helper that simulates a caller detection scenario for metadataAPI.caller().
  *
  * @function testCaller
  * @public

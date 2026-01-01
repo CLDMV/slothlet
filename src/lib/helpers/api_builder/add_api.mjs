@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-31 21:39:04 -08:00 (1767245944)
+ *	@Last modified time: 2026-01-01 11:30:10 -08:00 (1767295810)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -49,7 +49,8 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
 import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
 
 /**
- * Dynamically adds API modules from a new folder to the existing API at a specified path.
+ * Dynamically adds API modules from a new folder to the exithe node env right now is development…
+ * sting API at a specified path.
  *
  * @function addApiFromFolder
  * @memberof module:@cldmv/slothlet.lib.helpers.api_builder.add_api

@@ -58,7 +58,7 @@ export async function getSelfMetadata() {
 }
 
 /**
- * Test helper that simulates a caller/callee scenario for metadataAPI.caller().
+ * Test helper that simulates a caller detection scenario for metadataAPI.caller().
  *
  * @function testCaller
  * @public
