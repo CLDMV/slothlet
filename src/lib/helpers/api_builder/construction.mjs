@@ -135,7 +135,8 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		maxDepth,
 		mode,
 		subdirHandler,
-		instance
+		instance,
+		existingApi: options.existingApi
 	});
 
 	// SINGLE FILE CASE

@@ -514,7 +514,7 @@ export function processModuleForAPI(options) {
  * });
  */
 export async function buildCategoryDecisions(categoryPath, options = {}) {
-	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
+	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler, existingApi } = options;
 	const { instance } = options;
 
 	if (!instance || typeof instance._toapiPathKey !== "function") {

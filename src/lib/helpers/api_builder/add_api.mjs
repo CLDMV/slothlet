@@ -173,6 +173,74 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${normalizedApiPath}`);
 	}
 
+	// *** SUPER CRITICAL: Capture existing API content BEFORE loading new modules ***
+	// New module loading can corrupt the existing bound API state in lazy mode
+	// This must happen before lazy.create() to preserve previous addApi results
+
+	// Navigate to the target location to check existing content
+	let earlyCurrentTarget = instance.api;
+	let earlyCurrentBoundTarget = instance.boundapi;
+	const earlyPathParts = normalizedApiPath.split(".");
+
+	for (let i = 0; i < earlyPathParts.length - 1; i++) {
+		const part = earlyPathParts[i];
+		const key = instance._toapiPathKey(part);
+		if (earlyCurrentTarget[key]) {
+			earlyCurrentTarget = earlyCurrentTarget[key];
+		} else {
+			earlyCurrentTarget = null;
+			break;
+		}
+		if (earlyCurrentBoundTarget[key]) {
+			earlyCurrentBoundTarget = earlyCurrentBoundTarget[key];
+		} else {
+			earlyCurrentBoundTarget = null;
+			break;
+		}
+	}
+
+	const earlyFinalKey = instance._toapiPathKey(earlyPathParts[earlyPathParts.length - 1]);
+	let superEarlyExistingTargetContent = null;
+	let superEarlyExistingBoundContent = null;
+
+	if (earlyCurrentTarget && earlyCurrentTarget[earlyFinalKey]) {
+		if (typeof earlyCurrentTarget[earlyFinalKey] === "function" && earlyCurrentTarget[earlyFinalKey].__slothletPath) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: SUPER EARLY - Target is lazy proxy - materializing to capture existing content`);
+			}
+			const _ = earlyCurrentTarget[earlyFinalKey].__trigger;
+			await earlyCurrentTarget[earlyFinalKey]();
+		}
+		if (typeof earlyCurrentTarget[earlyFinalKey] === "object") {
+			superEarlyExistingTargetContent = { ...earlyCurrentTarget[earlyFinalKey] };
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing target content:`, Object.keys(superEarlyExistingTargetContent || {}));
+			}
+		}
+	}
+
+	if (earlyCurrentBoundTarget && earlyCurrentBoundTarget[earlyFinalKey]) {
+		if (instance.config.debug) {
+			console.log(
+				`[DEBUG] addApi: SUPER EARLY - currentBoundTarget[${earlyFinalKey}] exists, type:`,
+				typeof earlyCurrentBoundTarget[earlyFinalKey]
+			);
+		}
+		if (typeof earlyCurrentBoundTarget[earlyFinalKey] === "function" && earlyCurrentBoundTarget[earlyFinalKey].__slothletPath) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: SUPER EARLY - Bound target is lazy proxy - materializing to capture existing bound content`);
+			}
+			const _ = earlyCurrentBoundTarget[earlyFinalKey].__trigger;
+			await earlyCurrentBoundTarget[earlyFinalKey]();
+		}
+		if (typeof earlyCurrentBoundTarget[earlyFinalKey] === "object") {
+			superEarlyExistingBoundContent = { ...earlyCurrentBoundTarget[earlyFinalKey] };
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing bound content:`, Object.keys(superEarlyExistingBoundContent || {}));
+			}
+		}
+	}
+
 	// Load modules from the new folder using the appropriate mode
 	let newModules;
 	if (instance.config.lazy) {
@@ -231,11 +299,30 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	if (newModules && typeof newModules === "object" && newModules[lastSegment]) {
 		if (instance.config.debug) {
 			console.log(`[DEBUG] addApi: Found root-level file matching API path segment "${lastSegment}" - applying Rule 7 flattening`);
-			console.log(`[DEBUG] addApi: Root-level file content:`, Object.keys(newModules[lastSegment]));
+		}
+
+		// Handle lazy mode proxies - need to materialize to get function names
+		let fileContent = newModules[lastSegment];
+		if (typeof fileContent === "function" && fileContent.name && fileContent.name.startsWith("lazyFolder_")) {
+			// This is a lazy proxy - trigger materialization like the existing addApi pattern
+			if (fileContent.__slothletPath) {
+				const _ = fileContent.__trigger; // Trigger _materialize()
+				await fileContent(); // Wait for materialization to complete
+				// After materialization, the proxy should be replaced with the actual object
+				fileContent = newModules[lastSegment]; // Get the materialized result
+				if (instance.config.debug) {
+					console.log(`[DEBUG] addApi: Materialized lazy proxy for root-level file:`, Object.keys(fileContent || {}));
+				}
+			}
+		}
+
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Root-level file content:`, Object.keys(fileContent || {}));
 		}
 
 		// Store the root-level file content for later merging
-		rootLevelFileContent = newModules[lastSegment];
+		// IMPORTANT: Make a copy to prevent reference contamination during merge operations
+		rootLevelFileContent = fileContent && typeof fileContent === "object" ? { ...fileContent } : fileContent;
 
 		// Remove the matching file from the structure so it doesn't interfere with subdirectory content
 		delete newModules[lastSegment];
@@ -324,6 +411,14 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	// Get the final key where we'll merge the new modules
 	const finalKey = instance._toapiPathKey(pathParts[pathParts.length - 1]);
 
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Final assignment - newModules type:`, typeof newModules, "keys:", Object.keys(newModules || {}));
+	}
+
+	// *** CRITICAL: Capture existing content BEFORE any processing that might overwrite it ***
+	// This must happen after API navigation but before Rule 7 materialization to preserve previous addApi results
+	// (Content already captured in super early phase before module loading - this is just to validate the structure)
+
 	// Merge the new modules into the target location
 	if (typeof newModules === "function") {
 		// If the loaded modules result in a function, set it directly
@@ -356,7 +451,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		currentTarget[finalKey] = newModules;
 		currentBoundTarget[finalKey] = newModules;
 	} else if (typeof newModules === "object" && newModules !== null) {
-		// Validate existing target is compatible (object or function, not primitive)
+		// SECOND: Validate existing target is compatible (object or function, not primitive)
 		if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
 			const existing = currentTarget[finalKey];
 
@@ -390,7 +485,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			}
 		}
 
-		// Detect and materialize lazy proxies FIRST, before checking existence
+		// Detect and materialize lazy proxies in new modules before extracting Rule 7 content
 		// Lazy proxies have __slothletPath property and are functions
 		// To materialize: access a property (triggers _materialize), then await the proxy (waits for completion)
 		const targetValue = currentTarget[finalKey];
@@ -422,14 +517,38 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		// We want to preserve references to the actual module exports, including
 		// proxies (lazy mode) and function references (eager mode). Deep cloning
 		// would break these references and lose the proxy/function behavior.
+
+		// First restore any existing content that may have been lost during materialization
+		if (superEarlyExistingTargetContent) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Restoring existing content - keys:`, Object.keys(superEarlyExistingTargetContent));
+			}
+			Object.assign(currentTarget[finalKey], superEarlyExistingTargetContent);
+		}
+		if (superEarlyExistingBoundContent) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Restoring existing BOUND content - keys:`, Object.keys(superEarlyExistingBoundContent));
+			}
+			Object.assign(currentBoundTarget[finalKey], superEarlyExistingBoundContent);
+		}
+
+		// Then merge new modules
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Before merging new modules - current keys:`, Object.keys(currentTarget[finalKey] || {}));
+			console.log(`[DEBUG] addApi: New modules to merge - keys:`, Object.keys(newModules || {}));
+		}
 		Object.assign(currentTarget[finalKey], newModules);
 		Object.assign(currentBoundTarget[finalKey], newModules);
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: After merging new modules - keys:`, Object.keys(currentTarget[finalKey] || {}));
+		}
 
 		// Rule 7: Merge root-level file content if it was stored earlier
 		if (rootLevelFileContent !== null) {
 			if (instance.config.debug) {
 				console.log(`[DEBUG] addApi: Merging root-level file content into API path "${normalizedApiPath}"`);
 				console.log(`[DEBUG] addApi: Root-level file functions:`, Object.keys(rootLevelFileContent));
+				console.log(`[DEBUG] addApi: Target before root-level merge:`, Object.keys(currentTarget[finalKey]));
 			}
 
 			// Merge the root-level file content at the API level
@@ -461,7 +580,17 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 
 	// Update live bindings to reflect the changes
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Before updateBindings - currentTarget[${finalKey}]:`, Object.keys(currentTarget[finalKey] || {}));
+		console.log(
+			`[DEBUG] addApi: Before updateBindings - currentBoundTarget[${finalKey}]:`,
+			Object.keys(currentBoundTarget[finalKey] || {})
+		);
+	}
 	instance.updateBindings(instance.context, instance.reference, instance.boundapi);
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: After updateBindings - api[${finalKey}]:`, Object.keys(instance.api[finalKey] || {}));
+	}
 
 	if (instance.config.debug) {
 		console.log(`[DEBUG] addApi: Successfully added modules at ${normalizedApiPath}`);

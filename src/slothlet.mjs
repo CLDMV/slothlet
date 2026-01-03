@@ -610,7 +610,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	async _buildCategory(categoryPath, options = {}) {
-		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
+		const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler, existingApi } = options;
 
 		// Delegate to centralized category building function
 		return buildCategoryStructure(categoryPath, {
@@ -618,7 +618,8 @@ const slothletObject = {
 			maxDepth,
 			mode,
 			subdirHandler,
-			instance: this
+			instance: this,
+			existingApi
 		});
 	},
 

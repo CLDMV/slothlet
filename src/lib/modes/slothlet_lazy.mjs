@@ -323,7 +323,8 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 				depth,
 				maxDepth,
 				pathParts: [key],
-				runWithCtx
+				runWithCtx,
+				existingContent: parent[key] // Pass any existing content from root-level file
 			});
 			parent[key] = proxy;
 		}
@@ -361,6 +362,28 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
  */
 function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	if (!parent || !key) return;
+
+	// Check for merge case: existing object from root file + materialized subdirectory
+	if (
+		parent[key] !== placeholder &&
+		parent[key] &&
+		typeof parent[key] === "object" &&
+		typeof value === "object" &&
+		!Array.isArray(parent[key]) &&
+		!Array.isArray(value)
+	) {
+		if (instance?.config?.debug) {
+			console.log(`[lazy] MERGE CASE DETECTED for '${key}' - existing:`, Object.keys(parent[key]), "new:", Object.keys(value));
+			console.log(`[lazy] Before merge - parent[${key}]:`, parent[key]);
+		}
+		// Merge the subdirectory content with existing root-level content
+		Object.assign(parent[key], value);
+		if (instance?.config?.debug) {
+			console.log(`[lazy] After merge - parent[${key}]:`, Object.keys(parent[key]));
+		}
+		return;
+	}
+
 	if (parent[key] !== placeholder) return; // parent changed meanwhile – respect existing
 
 	// Check if the materialized value is a custom Proxy object
@@ -403,9 +426,43 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	}
 
 	try {
-		Object.defineProperty(parent, finalKey, { value, writable: true, enumerable: true, configurable: true });
+		// Apply merge logic for subdirectory conflicts (same as eager mode)
+		if (
+			parent[finalKey] &&
+			typeof parent[finalKey] === "object" &&
+			typeof value === "object" &&
+			!Array.isArray(parent[finalKey]) &&
+			!Array.isArray(value)
+		) {
+			if (instance?.config?.debug) {
+				console.log(`[lazy] Merging subdirectory '${finalKey}' - existing:`, Object.keys(parent[finalKey]), "new:", Object.keys(value));
+			}
+			// Merge the objects instead of overwriting
+			Object.assign(parent[finalKey], value);
+		} else {
+			Object.defineProperty(parent, finalKey, { value, writable: true, enumerable: true, configurable: true });
+		}
 	} catch {
-		parent[finalKey] = value; // fallback
+		// Apply same merge logic in fallback
+		if (
+			parent[finalKey] &&
+			typeof parent[finalKey] === "object" &&
+			typeof value === "object" &&
+			!Array.isArray(parent[finalKey]) &&
+			!Array.isArray(value)
+		) {
+			if (instance?.config?.debug) {
+				console.log(
+					`[lazy] Merging subdirectory '${finalKey}' (fallback) - existing:`,
+					Object.keys(parent[finalKey]),
+					"new:",
+					Object.keys(value)
+				);
+			}
+			Object.assign(parent[finalKey], value);
+		} else {
+			parent[finalKey] = value; // original fallback
+		}
 	}
 	if (instance?.config?.debug) {
 		console.log(`[lazy][materialize] replaced ${key}${finalKey !== key ? ` -> ${finalKey}` : ""} (${typeof value})`);
@@ -450,7 +507,7 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
  * const result = await proxy.add(2, 3); // Materializes math folder and calls add
  * console.log(result); // 5
  */
-function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts, runWithCtx }) {
+function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts, runWithCtx, existingContent }) {
 	let materialized = null;
 	let inFlight = null;
 
@@ -491,6 +548,7 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				currentDepth: depth,
 				maxDepth,
 				mode: "lazy",
+				existingApi: parent, // Pass current API state to check for conflicts
 				subdirHandler: ({ subDirPath: nestedPath, key: nestedKey, categoryModules, currentDepth: cd, maxDepth: md }) =>
 					createFolderProxy({
 						subDirPath: nestedPath,
@@ -504,6 +562,29 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 					})
 			});
 			materialized = value;
+
+			// Merge with existing content from root-level file (same logic as eager mode)
+			if (
+				existingContent &&
+				typeof existingContent === "object" &&
+				typeof materialized === "object" &&
+				!Array.isArray(existingContent) &&
+				!Array.isArray(materialized)
+			) {
+				if (instance?.config?.debug) {
+					console.log(
+						`[lazy] Merging existing content with materialized subdirectory '${key}' - existing:`,
+						Object.keys(existingContent),
+						"new:",
+						Object.keys(materialized)
+					);
+				}
+				// Create merged object with existing content first, then subdirectory content
+				materialized = Object.assign({}, existingContent, materialized);
+			} else if (existingContent && !materialized) {
+				// If subdirectory is empty but we have existing content, use existing
+				materialized = existingContent;
+			}
 			if (instance?.config?.debug) {
 				try {
 					const infoKeys = materialized && typeof materialized === "object" ? Object.keys(materialized) : [];
