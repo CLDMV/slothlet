@@ -183,6 +183,68 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		newModules = await instance.modes.eager.create.call(instance, resolvedFolderPath, instance.config.apiDepth || Infinity, 0);
 	}
 
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Loaded modules structure:`, Object.keys(newModules || {}));
+		console.log(`[DEBUG] addApi: Full newModules:`, newModules);
+	}
+
+	// Rule 6: AddApi Special File Pattern - Handle addapi.mjs flattening
+	// Check if the loaded modules contain an 'addapi' key and flatten it
+	if (newModules && typeof newModules === "object" && newModules.addapi) {
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Found addapi.mjs - applying Rule 6 flattening`);
+			console.log(`[DEBUG] addApi: Original structure:`, Object.keys(newModules));
+			console.log(`[DEBUG] addApi: Addapi contents:`, Object.keys(newModules.addapi));
+		}
+
+		// Extract the addapi module content
+		const addapiContent = newModules.addapi;
+
+		// Remove the addapi key from newModules
+		delete newModules.addapi;
+
+		// Merge addapi content directly into the root level of newModules
+		if (addapiContent && typeof addapiContent === "object") {
+			// Handle both function exports and object exports
+			Object.assign(newModules, addapiContent);
+
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: After addapi flattening:`, Object.keys(newModules));
+			}
+		} else if (typeof addapiContent === "function") {
+			// If addapi exports a single function, merge its properties
+			Object.assign(newModules, addapiContent);
+
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Flattened addapi function with properties:`, Object.keys(newModules));
+			}
+		}
+	}
+
+	// Rule 7: AddApi Root-Level File Matching
+	// Handle root-level files that match the API path segment by flattening them
+	// The root-level file content should be merged at the API level, not replace subdirectory content
+	const pathSegments = normalizedApiPath.split(".");
+	const lastSegment = pathSegments[pathSegments.length - 1];
+	let rootLevelFileContent = null;
+
+	if (newModules && typeof newModules === "object" && newModules[lastSegment]) {
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Found root-level file matching API path segment "${lastSegment}" - applying Rule 7 flattening`);
+			console.log(`[DEBUG] addApi: Root-level file content:`, Object.keys(newModules[lastSegment]));
+		}
+
+		// Store the root-level file content for later merging
+		rootLevelFileContent = newModules[lastSegment];
+
+		// Remove the matching file from the structure so it doesn't interfere with subdirectory content
+		delete newModules[lastSegment];
+
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: After removing root-level file, remaining structure:`, Object.keys(newModules));
+		}
+	}
+
 	// Handle metadata tagging:
 	// - If metadata provided: tag all functions with metadata
 	// - If no metadata provided: clean any existing metadata (handles CJS module caching)
@@ -362,6 +424,28 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		// would break these references and lose the proxy/function behavior.
 		Object.assign(currentTarget[finalKey], newModules);
 		Object.assign(currentBoundTarget[finalKey], newModules);
+
+		// Rule 7: Merge root-level file content if it was stored earlier
+		if (rootLevelFileContent !== null) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Merging root-level file content into API path "${normalizedApiPath}"`);
+				console.log(`[DEBUG] addApi: Root-level file functions:`, Object.keys(rootLevelFileContent));
+			}
+
+			// Merge the root-level file content at the API level
+			if (rootLevelFileContent && typeof rootLevelFileContent === "object") {
+				Object.assign(currentTarget[finalKey], rootLevelFileContent);
+				Object.assign(currentBoundTarget[finalKey], rootLevelFileContent);
+			} else if (typeof rootLevelFileContent === "function") {
+				// For function exports, add the function and any properties
+				Object.assign(currentTarget[finalKey], rootLevelFileContent);
+				Object.assign(currentBoundTarget[finalKey], rootLevelFileContent);
+			}
+
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: After merging root-level file, final API structure:`, Object.keys(currentTarget[finalKey]));
+			}
+		}
 	} else if (newModules === null || newModules === undefined) {
 		// Warn when loaded modules result in null or undefined
 		const receivedType = newModules === null ? "null" : "undefined";

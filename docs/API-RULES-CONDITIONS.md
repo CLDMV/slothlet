@@ -20,6 +20,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 - [`buildCategoryDecisions()`](#buildcategorydecisions-conditions) - 11 decisions for directory structure
 - [`buildCategoryStructure()`](#buildcategorystructure-conditions) - 6 structural assembly conditions
 - [`multidefault_getFlatteningDecision()`](#multidefault_getflatteningdecision-conditions) - 4 multi-default rules
+- [`addApiFromFolder()`](#addapifromfolder-conditions) - 1 special addapi handling rule
 
 ---
 
@@ -30,6 +31,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 3. [buildCategoryDecisions() Conditions](#buildcategorydecisions-conditions) (11 decisions)
 4. [buildCategoryStructure() Conditions](#buildcategorystructure-conditions) (6 structural)
 5. [multidefault_getFlatteningDecision() Conditions](#multidefault_getflatteningdecision-conditions) (4 rules)
+6. [addApiFromFolder() Conditions](#addapifromfolder-conditions) (1 special rule)
 
 ---
 
@@ -476,10 +478,47 @@ Specialized flattening logic for multi-default export contexts.
 
 ---
 
+## addApiFromFolder() Conditions
+
+**File**: [`src/lib/helpers/api_builder/add_api.mjs`](../src/lib/helpers/api_builder/add_api.mjs#L381-L390)  
+**Function**: `addApiFromFolder(options)`  
+**Lines**: [381-390](../src/lib/helpers/api_builder/add_api.mjs#L381-L390)
+
+This function provides special handling for addapi files that are loaded via the addApi method.
+
+### C33: AddApi Special File Pattern
+
+**Line**: [381](../src/lib/helpers/api_builder/add_api.mjs#L381)  
+**Condition**: `if (moduleKeys.includes("addapi"))`  
+**Purpose**: Files named `addapi.mjs` are always flattened regardless of autoFlatten setting  
+**Result**: Extract addapi module contents and merge with other modules at same level  
+**Reason**: `"unwrapping special addapi file (always flattened)"`
+
+**Technical Implementation**:
+
+```javascript
+if (moduleKeys.includes("addapi")) {
+	// Extract the addapi module's contents and merge with other modules at the same level
+	const addapiModule = newModules["addapi"];
+	const otherModules = { ...newModules };
+	delete otherModules["addapi"];
+
+	// Merge the contents of the addapi module with other modules
+	modulesToMerge = { ...addapiModule, ...otherModules };
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Auto-flattening - unwrapping special "addapi" file (always flattened)`);
+	}
+}
+```
+
+**Example**: `addapi.mjs` files extend API levels directly → `api.plugins.addapi.func()` becomes `api.plugins.func()`
+
+---
+
 ## Summary
 
-**Total Active Conditions**: 32 documented conditions (2 commented out: C06, C31)  
-**Primary Functions**: 5 key functions containing API generation logic  
+**Total Active Conditions**: 33 documented conditions (2 commented out: C06, C31)  
+**Primary Functions**: 6 key functions containing API generation logic  
 **File Locations**: 3 source files across api_builder/ and multidefault.mjs
 
 ### Condition Categories
@@ -489,6 +528,7 @@ Specialized flattening logic for multi-default export contexts.
 - **Category Decisions** (13): C10-C21d
 - **Structural Assembly** (5): C22-C26
 - **Multi-Default Logic** (6): C27-C32
+- **AddApi Special Cases** (1): C33
 
 ### Key Architectural Patterns
 

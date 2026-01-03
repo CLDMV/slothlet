@@ -28,6 +28,7 @@ Each rule documents:
 - [x] Rule 8: Single-File Auto-Flattening Patterns ✅ **FULLY VERIFIED** (All 4 patterns A, B, C, D verified with real test files)
 - [x] Rule 9: Function Name Preference Over Sanitization ✅ **FULLY VERIFIED** (Multiple examples verified: autoIP, parseJSON, getHTTPStatus, XMLParser)
 - [x] Rule 10: Generic Filename Parent-Level Promotion ✅ **VERIFIED** (nest4/singlefile.mjs example verified with api_tests/api_test)
+- [x] Rule 11: AddApi Special File Pattern ✅ **VERIFIED** (api_tests/api_smart_flatten_addapi) - Tests demonstrate always-flatten behavior
 
 > **Note**: Rule 11 (Single File Context Flattening) has been **intentionally removed** from slothlet for architectural reasons. The rule reduced API path flexibility and was commented out in source code. See [C06](API-RULES-CONDITIONS.md#c06-single-file-context-commented-out) in API-RULES-CONDITIONS.md for details. This maintains cleaner API namespacing while preserving predictable path structures.
 
@@ -760,6 +761,92 @@ node tests/debug-slothlet.mjs
 ```
 
 **Processing Path**: Single-file subfolder processing via `buildCategoryStructure()`
+
+---
+
+### Rule 11: AddApi Special File Pattern
+
+**Status**: ✅ **VERIFIED**
+
+**Condition**: Files named `addapi.mjs` loaded via `addApi()` method (Special Case)
+**Source File**: `api_tests/api_smart_flatten_addapi/addapi.mjs`
+**Technical Condition**: `moduleKeys.includes("addapi")` in addApi processing
+
+**Verified Example**:
+
+```javascript
+// File: api_tests/api_smart_flatten_addapi/addapi.mjs (special filename "addapi")
+export function initializePlugin() {
+	return "Plugin initialized";
+}
+
+export function pluginMethod() {
+	return "Plugin method called";
+}
+
+export function cleanup() {
+	return "Plugin cleaned up";
+}
+
+export default {
+	special: "addapi-file",
+	version: "1.0.0"
+};
+```
+
+**Usage Pattern**:
+
+```javascript
+// Load via addApi method
+await api.addApi("plugins", path.join(__dirname, "../api_tests/api_smart_flatten_addapi"));
+
+// Result: Functions are flattened to the plugins level
+api.plugins.initializePlugin(); // "Plugin initialized"
+api.plugins.pluginMethod(); // "Plugin method called"
+api.plugins.cleanup(); // "Plugin cleaned up"
+api.plugins.special; // "addapi-file"
+api.plugins.version; // "1.0.0"
+
+// NOT api.plugins.addapi.* - addapi namespace is completely removed
+```
+
+**Special Behaviors**:
+
+- **Always flattened:** Regardless of `autoFlatten=true/false` setting
+- **Priority processing:** Evaluated before other flattening rules
+- **Extends parent level:** Merges exports directly into the target API path
+- **Namespace elimination:** The "addapi" filename never appears in the final API structure
+
+**Test Verification**:
+
+```bash
+node tests/test-smart-flattening-api.mjs
+# Verifies both autoFlatten=true and autoFlatten=false scenarios
+# Confirms addapi files are always flattened regardless of setting
+```
+
+**Source Code Location**: `src/lib/helpers/api_builder/add_api.mjs` - `addApiFromFolder()` function [Lines 381-390](../src/lib/helpers/api_builder/add_api.mjs#L381-L390)  
+**Git Commit**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
+**Technical Implementation**:
+
+```javascript
+// Special case: addapi.* files are ALWAYS flattened regardless of autoFlatten setting
+// Location: src/lib/helpers/api_builder/add_api.mjs Line 381
+if (moduleKeys.includes("addapi")) {
+	// Extract the addapi module's contents and merge with other modules at the same level
+	const addapiModule = newModules["addapi"];
+	const otherModules = { ...newModules };
+	delete otherModules["addapi"];
+
+	// Merge the contents of the addapi module with other modules
+	modulesToMerge = { ...addapiModule, ...otherModules };
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Auto-flattening - unwrapping special "addapi" file (always flattened)`);
+	}
+}
+```
+
+**Processing Path**: addApi method processing via `addApiFromFolder()` (special case handling)
 
 ---
 
