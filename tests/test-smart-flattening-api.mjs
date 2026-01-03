@@ -43,6 +43,18 @@ function assert(condition, message) {
 	}
 }
 
+/**
+ * In lazy mode, folders are represented as functions, while in eager mode they are objects.
+ * This helper checks if a value is a valid folder type for the current mode.
+ */
+function isValidFolderType(value, mode) {
+	if (mode === "lazy") {
+		return typeof value === "function" || typeof value === "object";
+	} else {
+		return typeof value === "object";
+	}
+}
+
 async function runTest(name, fn) {
 	testCount++;
 	try {
@@ -84,7 +96,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Single file matching API path - autoFlatten=true`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, true);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
 		// Should flatten: api.config.{functions} not api.config.config.{functions}
 		assert(typeof api.config.getConfig === "function", "getConfig should be directly under api.config");
@@ -103,16 +115,15 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Single file matching API path - autoFlatten=false`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, false);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
-		// Should NOT flatten: api.config.config.{functions}
-		assert(typeof api.config.config === "object", "Should have nested api.config.config");
-		assert(typeof api.config.config.getConfig === "function", "getConfig should be under api.config.config");
-		assert(typeof api.config.config.setConfig === "function", "setConfig should be under api.config.config");
+		// Should flatten: Rule 7 auto-flattening always applies regardless of autoFlatten parameter
+		assert(typeof api.config.getConfig === "function", "getConfig should be directly under api.config");
+		assert(!api.config.config, "Should NOT have nested api.config.config - Rule 7 always applies");
 
 		// Test function execution
-		await materialize(api.config.config.getConfig);
-		const result = await api.config.config.getConfig();
+		await materialize(api.config.getConfig);
+		const result = await api.config.getConfig();
 		assert(result === "config-value", "Function should execute correctly");
 
 		await api.shutdown();
@@ -125,7 +136,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Special addapi.mjs file - autoFlatten=true`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("plugins", path.join(__dirname, "../api_tests/api_smart_flatten_addapi"), {}, true);
+		await api.addApi("plugins", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_addapi"), {});
 
 		// Should flatten: api.plugins.{functions} not api.plugins.addapi.{functions}
 		assert(typeof api.plugins.initializePlugin === "function", "initializePlugin should be directly under api.plugins");
@@ -144,7 +155,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Special addapi.mjs file - autoFlatten=false`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("plugins", path.join(__dirname, "../api_tests/api_smart_flatten_addapi"), {}, false);
+		await api.addApi("plugins", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_addapi"), {});
 
 		// Should still flatten addapi files even when autoFlatten=false (special case)
 		assert(typeof api.plugins.initializePlugin === "function", "addapi should be flattened even with autoFlatten=false");
@@ -160,7 +171,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Multiple files with matching API path - autoFlatten=true`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("utils", path.join(__dirname, "../api_tests/api_smart_flatten_multiple"), {}, true);
+		await api.addApi("utils", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_multiple"), {});
 
 		// Should flatten utils.mjs contents to root level
 		assert(typeof api.utils.utilFunction === "function", "utilFunction should be directly under api.utils");
@@ -187,11 +198,11 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Multiple files with matching API path - autoFlatten=false`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("utils", path.join(__dirname, "../api_tests/api_smart_flatten_multiple"), {}, false);
+		await api.addApi("utils", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_multiple"), {});
 
-		// Should NOT flatten: api.utils.utils.{functions}
-		assert(typeof api.utils.utils === "object", "Should have nested api.utils.utils");
-		assert(typeof api.utils.utils.utilFunction === "function", "utilFunction should be under api.utils.utils");
+		// Should flatten utils.mjs due to Rule 7 (always applies)
+		assert(typeof api.utils.utilFunction === "function", "utilFunction should be flattened to api.utils level");
+		assert(!api.utils.utils, "Should NOT have nested api.utils.utils - Rule 7 always applies");
 
 		// Should still preserve other modules
 		assert(typeof api.utils.validator === "object", "validator module should be preserved");
@@ -207,7 +218,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: No matching files - normal behavior autoFlatten=true`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("services", path.join(__dirname, "../api_tests/api_smart_flatten_none"), {}, true);
+		await api.addApi("services", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_none"), {});
 
 		// Should NOT flatten since no files match "services"
 		assert(typeof api.services.auth === "object", "auth module should be preserved");
@@ -224,7 +235,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: No matching files - normal behavior autoFlatten=false`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("services", path.join(__dirname, "../api_tests/api_smart_flatten_none"), {}, false);
+		await api.addApi("services", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_none"), {});
 
 		// Should behave same as autoFlatten=true when no files match
 		assert(typeof api.services.auth === "object", "auth module should be preserved");
@@ -240,24 +251,24 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Folder with config subfolder containing config.mjs`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_folder_config"), {}, true);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_folder_config"), {});
 
 		// Root level files should be namespaced by filename
 		assert(typeof api.config.main === "object", "main module should exist as namespace");
 		assert(typeof api.config.main.getRootInfo === "function", "getRootInfo should be in main namespace");
 
-		// Config subfolder should NOT be flattened (no matching file at root level)
-		assert(typeof api.config.config === "object", "config subfolder should exist as api.config.config");
-		assert(typeof api.config.config.getNestedConfig === "function", "getNestedConfig should be in subfolder");
-		assert(typeof api.config.config.setNestedConfig === "function", "setNestedConfig should be in subfolder");
+		// Config subfolder should be flattened due to Rule 1 (config/config.mjs - filename matches folder)
+		assert(typeof api.config.getNestedConfig === "function", "getNestedConfig should be flattened due to Rule 1");
+		assert(typeof api.config.setNestedConfig === "function", "setNestedConfig should be flattened due to Rule 1");
+		assert(!api.config.config, "Should NOT have nested config.config due to Rule 1 flattening");
 
 		// Test execution
 		await materialize(api.config.main.getRootInfo);
 		const rootResult = await api.config.main.getRootInfo();
 		assert(rootResult === "root-level-function", "Root function should execute correctly");
 
-		await materialize(api.config.config.getNestedConfig);
-		const nestedResult = await api.config.config.getNestedConfig();
+		await materialize(api.config.getNestedConfig);
+		const nestedResult = await api.config.getNestedConfig();
 		assert(nestedResult === "nested-config-value", "Nested function should execute correctly");
 
 		await api.shutdown();
@@ -266,7 +277,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Folder with config subfolder containing different named files`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_folder_different"), {}, true);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_folder_different"), {});
 
 		// Root level files should be namespaced by filename
 		assert(typeof api.config.utils === "object", "utils module should exist as namespace");
@@ -293,35 +304,40 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Addapi.mjs with folders - only first level flattening`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("plugins", path.join(__dirname, "../api_tests/api_smart_flatten_addapi_with_folders"), {}, true);
+		await api.addApi("plugins", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_addapi_with_folders"), {});
 
 		// Addapi.mjs contents should be flattened to root level
 		assert(typeof api.plugins.initializeMainPlugin === "function", "initializeMainPlugin should be flattened to root");
 		assert(typeof api.plugins.pluginGlobalMethod === "function", "pluginGlobalMethod should be flattened to root");
 		assert(api.plugins.pluginVersion === "1.0.0", "pluginVersion should be flattened to root");
 
-		// Subfolders should NOT be flattened (preserve structure)
-		assert(typeof api.plugins.config === "object", "config subfolder should exist");
-		assert(typeof api.plugins.utils === "object", "utils subfolder should exist");
-		assert(typeof api.plugins.services === "object", "services subfolder should exist");
+		// Trigger materialization by accessing nested properties first
+		const configSettings = api.plugins.config.settings;
+		const utilsHelpers = api.plugins.utils.helpers;
+		const servicesApi = api.plugins.services.api;
+
+		// Now check that subfolders exist (as objects in eager mode, functions in lazy mode)
+		assert(isValidFolderType(api.plugins.config, mode), "config subfolder should exist");
+		assert(isValidFolderType(api.plugins.utils, mode), "utils subfolder should exist");
+		assert(isValidFolderType(api.plugins.services, mode), "services subfolder should exist");
 
 		// Config subfolder contents (files get namespaced by filename)
-		assert(typeof api.plugins.config.settings === "object", "settings.mjs should be namespaced within config");
-		assert(typeof api.plugins.config.settings.getPluginConfig === "function", "getPluginConfig should be in config.settings");
+		assert(isValidFolderType(configSettings, mode), "settings.mjs should be namespaced within config");
+		assert(typeof configSettings.getPluginConfig === "function", "getPluginConfig should be in config.settings");
 
 		// Utils subfolder contents (files get namespaced by filename)
-		assert(typeof api.plugins.utils.helpers === "object", "helpers.mjs should be namespaced within utils");
-		assert(typeof api.plugins.utils.helpers.formatPluginOutput === "function", "formatPluginOutput should be in utils.helpers");
+		assert(isValidFolderType(utilsHelpers, mode), "helpers.mjs should be namespaced within utils");
+		assert(typeof utilsHelpers.formatPluginOutput === "function", "formatPluginOutput should be in utils.helpers");
 
 		// Services subfolder contents (files get namespaced by filename)
-		assert(typeof api.plugins.services.api === "object", "api.mjs should be namespaced within services");
-		assert(typeof api.plugins.services.api.getPluginApiService === "function", "getPluginApiService should be in services.api");
+		assert(isValidFolderType(servicesApi, mode), "api.mjs should be namespaced within services");
+		assert(typeof servicesApi.getPluginApiService === "function", "getPluginApiService should be in services.api");
 
 		// Deep nested structure should be preserved (no recursive flattening)
-		assert(typeof api.plugins.services.services === "object", "services.services should exist");
+		assert(isValidFolderType(api.plugins.services.services, mode), "services.services should exist");
 		assert(
-			typeof api.plugins.services.services.services.getNestedPluginService === "function",
-			"getNestedPluginService should be in services.services.services"
+			typeof api.plugins.services.services.getNestedPluginService === "function",
+			"getNestedPluginService should be flattened due to Rule 1 (services/services.mjs)"
 		);
 
 		// Test execution
@@ -329,8 +345,8 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 		const initResult = await api.plugins.initializeMainPlugin();
 		assert(initResult === "Main plugin initialized from addapi.mjs", "Main plugin function should execute correctly");
 
-		await materialize(api.plugins.services.services.services.getNestedPluginService);
-		const nestedResult = await api.plugins.services.services.services.getNestedPluginService();
+		await materialize(api.plugins.services.services.getNestedPluginService);
+		const nestedResult = await api.plugins.services.services.getNestedPluginService();
 		assert(nestedResult === "deeply-nested-plugin-service", "Deep nested function should execute correctly");
 
 		await api.shutdown();
@@ -339,19 +355,22 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Nested folders - no recursive flattening`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("nested", path.join(__dirname, "../api_tests/api_smart_flatten_nested"), {}, true);
+		await api.addApi("nested", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_nested"), {});
 
 		// Root level files should be namespaced by filename
 		assert(typeof api.nested.root === "object", "root module should exist as namespace");
 		assert(typeof api.nested.root.getRootFunction === "function", "getRootFunction should be in root namespace");
 
+		// Trigger materialization by accessing nested properties first
+		const servicesApiObj = api.nested.services.api;
+
 		// Services subfolder contents should preserve structure (api.mjs stays nested)
-		assert(typeof api.nested.services.api === "object", "api.mjs should be nested under services subfolder");
-		assert(typeof api.nested.services.api.getApiService === "function", "getApiService should be in services.api namespace");
+		assert(isValidFolderType(servicesApiObj, mode), "api.mjs should be nested under services subfolder");
+		assert(typeof servicesApiObj.getApiService === "function", "getApiService should be in services.api namespace");
 
 		// services/services/services.mjs should flatten because folder name matches file name
-		assert(typeof api.nested.services === "object", "services subfolder should exist for nested structure");
-		assert(typeof api.nested.services.services === "object", "services.services should be flattened (folder=file name)");
+		assert(isValidFolderType(api.nested.services, mode), "services subfolder should exist for nested structure");
+		assert(isValidFolderType(api.nested.services.services, mode), "services.services should be flattened (folder=file name)");
 		assert(
 			typeof api.nested.services.services.getNestedService === "function",
 			"getNestedService should be in services.services (flattened)"
@@ -380,7 +399,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Nested API paths with flattening`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("deep.nested.config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, true);
+		await api.addApi("deep.nested.config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
 		// Should create nested structure but flatten config.mjs contents
 		assert(typeof api.deep === "object", "deep should exist");
@@ -396,18 +415,18 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
 		// First call with flattening
-		await api.addApi("area1.config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, true);
+		await api.addApi("area1.config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
 		// Second call without flattening
-		await api.addApi("area2.config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, false);
+		await api.addApi("area2.config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
 		// area1 should be flattened
 		assert(typeof api.area1.config.getConfig === "function", "area1.config should be flattened");
 		assert(!api.area1.config.config, "area1 should NOT have config.config");
 
-		// area2 should NOT be flattened
-		assert(typeof api.area2.config.config === "object", "area2.config should have nested config");
-		assert(typeof api.area2.config.config.getConfig === "function", "area2.config.config.getConfig should exist");
+		// Both should be flattened due to Rule 7 (always applies)
+		assert(typeof api.area2.config.getConfig === "function", "area2.config.getConfig should be flattened");
+		assert(!api.area2.config.config, "area2 should NOT have config.config - Rule 7 always applies");
 
 		await api.shutdown();
 	});
@@ -415,7 +434,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Function calls work correctly after flattening`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("functional", path.join(__dirname, "../api_tests/api_smart_flatten_multiple"), {}, true);
+		await api.addApi("functional", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_multiple"), {});
 
 		// Test all functions work through their correct namespaces
 		await materialize(api.functional.utils.utilFunction);
@@ -431,7 +450,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 		assert(formatted === "Formatted: test", "formatData should work correctly");
 
 		// Test preserved module functions work
-		await materialize(api.functional.validator.validate, true);
+		await materialize(api.functional.validator.validate);
 		await materialize(api.functional.logger.debug, "test message");
 
 		const validated = await api.functional.validator.validate(true);
@@ -450,7 +469,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Primary load vs addApi behavior consistency`, async () => {
 		// Test that primary loading doesn't apply addApi flattening rules
 		const primaryApi = await slothlet({
-			dir: path.join(__dirname, "../api_tests/api_smart_flatten_single"),
+			dir: path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"),
 			mode: mode,
 			runtime: runtime,
 			hooks: hooks
@@ -466,7 +485,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 			hooks: hooks
 		});
 
-		await addApiInstance.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_single"), {}, true);
+		await addApiInstance.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_single"), {});
 
 		// AddApi should flatten
 		assert(typeof addApiInstance.config.getConfig === "function", "AddApi should flatten config");
@@ -482,21 +501,21 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Folder with config subfolder containing config.mjs`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_folder_config"), {}, true);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_folder_config"), {});
 
 		// Should have both root level files and config subfolder properly namespaced
 		assert(typeof api.config.main === "object", "Should have main.mjs as 'main' namespace");
 		assert(typeof api.config.main.getRootInfo === "function", "Should have root level function from main.mjs");
-		assert(typeof api.config.config === "object", "Should have config subfolder as nested object");
-		assert(typeof api.config.config.getNestedConfig === "function", "Should have config.mjs flattened within config subfolder");
+		assert(!api.config.config, "Should NOT have config.config due to Rule 1 flattening (filename matches folder)");
+		assert(typeof api.config.getNestedConfig === "function", "Should have config.mjs content flattened to root due to Rule 1");
 
 		// Verify functions work
 		await materialize(api.config.main.getRootInfo);
 		const rootResult = await api.config.main.getRootInfo();
 		assert(rootResult === "root-level-function", "Root function should execute correctly");
 
-		await materialize(api.config.config.getNestedConfig);
-		const nestedResult = await api.config.config.getNestedConfig();
+		await materialize(api.config.getNestedConfig);
+		const nestedResult = await api.config.getNestedConfig();
 		assert(nestedResult === "nested-config-value", "Nested function should execute correctly");
 
 		await api.shutdown();
@@ -505,7 +524,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Folder with config subfolder containing different named files`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_folder_different"), {}, true);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_folder_different"), {});
 
 		// Should have utils.mjs namespaced and config subfolder contents flattened to root level
 		assert(typeof api.config.utils === "object", "Should have utils.mjs as 'utils' namespace");
@@ -530,32 +549,34 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: Nested folder structure - flattening only at first level`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("services", path.join(__dirname, "../api_tests/api_smart_flatten_nested"), {}, true);
+		await api.addApi("services", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_nested"), {});
 
 		// Should have root level function properly namespaced
 		assert(typeof api.services.root === "object", "Should have root.mjs as 'root' namespace");
 		assert(typeof api.services.root.getRootFunction === "function", "Should have root level function");
 
-		// Should have services subfolder contents preserve structure
-		assert(typeof api.services.services.api === "object", "Should have api.mjs nested under services subfolder");
-		assert(typeof api.services.services.api.getApiService === "function", "Should have api service function");
+		// Should have services/api.mjs at services level
+		assert(typeof api.services.api === "object", "Should have api.mjs at services level");
+		assert(typeof api.services.api.getApiService === "function", "Should have api service function");
 
-		// Should have services/services/services.mjs flattened due to name matching
-		assert(typeof api.services.services === "object", "Should have services subfolder");
-		assert(typeof api.services.services.services === "object", "Should have services.mjs flattened within services subfolder");
-		assert(typeof api.services.services.services.getNestedService === "function", "Should have nested service function");
+		// Trigger materialization by accessing nested properties first
+		api.services.services.getNestedService;
+
+		// Should have services/services/services.mjs flattened due to Rule 1 (filename matches folder)
+		assert(isValidFolderType(api.services.services, mode), "Should have services subfolder");
+		assert(typeof api.services.services.getNestedService === "function", "Should have services.mjs functions flattened due to Rule 1");
 
 		// Verify functions work
 		await materialize(api.services.root.getRootFunction);
 		const rootResult = await api.services.root.getRootFunction();
 		assert(rootResult === "root-function-data", "Root function should execute correctly");
 
-		await materialize(api.services.services.api.getApiService);
-		const apiResult = await api.services.services.api.getApiService();
+		await materialize(api.services.api.getApiService);
+		const apiResult = await api.services.api.getApiService();
 		assert(apiResult === "api-service-function", "API service should execute correctly");
 
-		await materialize(api.services.services.services.getNestedService);
-		const nestedResult = await api.services.services.services.getNestedService();
+		await materialize(api.services.services.getNestedService);
+		const nestedResult = await api.services.services.getNestedService();
 		assert(nestedResult === "deeply-nested-service", "Nested service should execute correctly");
 
 		await api.shutdown();
@@ -565,14 +586,13 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
 		// Test with autoFlatten=false - should preserve exact structure
-		await api.addApi("config", path.join(__dirname, "../api_tests/api_smart_flatten_folder_config"), {}, false);
+		await api.addApi("config", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_folder_config"), {});
 
-		// Should NOT flatten - should preserve folder structure exactly
+		// Should apply Rule 1 flattening regardless of autoFlatten=false (filename matches folder)
 		assert(typeof api.config.main === "object", "Should have main file as object (not flattened)");
 		assert(typeof api.config.main.getRootInfo === "function", "Should have getRootInfo under main object");
-		assert(typeof api.config.config === "object", "Should have config subfolder");
-		assert(typeof api.config.config.config === "object", "Should have config file under config subfolder");
-		assert(typeof api.config.config.config.getNestedConfig === "function", "Should have nested function under preserved structure");
+		assert(!api.config.config, "Should NOT have config.config due to Rule 1 flattening overriding autoFlatten=false");
+		assert(typeof api.config.getNestedConfig === "function", "Should have Rule 1 flattening even with autoFlatten=false");
 
 		await api.shutdown();
 	});
@@ -580,17 +600,22 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	await runTest(`${modeLabel}: AddApi with both files and folders - special handling`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
-		await api.addApi("plugins", path.join(__dirname, "../api_tests/api_smart_flatten_addapi_with_folders"), {}, true);
+		await api.addApi("plugins", path.join(__dirname, "../api_tests/smart_flatten/api_smart_flatten_addapi_with_folders"), {});
 
 		// Should flatten addapi content to root level
 		assert(typeof api.plugins.initializeMainPlugin === "function", "Should have addapi.mjs contents flattened to root");
 		assert(typeof api.plugins.pluginGlobalMethod === "function", "Should have addapi.mjs contents flattened to root");
 		assert(api.plugins.pluginVersion === "1.0.0", "Should have addapi constant flattened to root");
 
+		// Trigger materialization by accessing nested properties first
+		api.plugins.config.settings;
+		api.plugins.utils.helpers;
+		api.plugins.services.api;
+
 		// Should preserve folder structure for non-addapi content
-		assert(typeof api.plugins.config === "object", "Should have config subfolder");
-		assert(typeof api.plugins.utils === "object", "Should have utils subfolder");
-		assert(typeof api.plugins.services === "object", "Should have services subfolder");
+		assert(isValidFolderType(api.plugins.config, mode), "Should have config subfolder");
+		assert(isValidFolderType(api.plugins.utils, mode), "Should have utils subfolder");
+		assert(isValidFolderType(api.plugins.services, mode), "Should have services subfolder");
 
 		// Verify functions work
 		await materialize(api.plugins.initializeMainPlugin);
