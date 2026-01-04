@@ -168,13 +168,19 @@ export function compareApiShapes(
 
 		if (typeof valA === "function" && typeof valB === "function") {
 			// Compare function signatures and implementations
-			if (valA.length !== valB.length || valA.toString() !== valB.toString()) {
+			// Safely extract function properties
+			const aName = typeof valA.name === "string" ? valA.name : "anonymous";
+			const bName = typeof valB.name === "string" ? valB.name : "anonymous";
+			const aLength = typeof valA.length === "number" ? valA.length : 0;
+			const bLength = typeof valB.length === "number" ? valB.length : 0;
+
+			if (aLength !== bLength || valA.toString() !== valB.toString()) {
 				differingFunctions.push({
 					path: fullPath,
-					aSignature: `${valA.name || "anonymous"}(${valA.length} params)`,
-					bSignature: `${valB.name || "anonymous"}(${valB.length} params)`,
-					aLength: valA.length,
-					bLength: valB.length
+					aSignature: `${aName}(${aLength} params)`,
+					bSignature: `${bName}(${bLength} params)`,
+					aLength: aLength,
+					bLength: bLength
 				});
 			}
 
@@ -388,6 +394,20 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 		// funcmod
 		{ section: "funcmod", calls: [{ path: ["funcmod"], args: [5, 6] }] },
+
+		// logger (callable namespace test)
+		{
+			section: "logger (default)",
+			calls: [{ path: ["logger"], args: ["Test log message"] }]
+		},
+		{
+			section: "logger.utils.debug",
+			calls: [{ path: ["logger", "utils", "debug"], args: ["Debug message"] }]
+		},
+		{
+			section: "logger.utils.error",
+			calls: [{ path: ["logger", "utils", "error"], args: ["Error message"] }]
+		},
 
 		// util
 		{ section: "util.size", calls: [{ path: ["util", "size"], args: [123] }] },
@@ -802,7 +822,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		hasErrors = true;
 		console.log(chalk.yellowBright("⚠️  Function signature differences:"));
 		compared.differingFunctions.forEach((diff) => {
-			console.log(`  - ${diff.path}: ${diff.aSignature} vs ${diff.bSignature}`);
+			console.log(`  - ${diff.path}: ${diff.aSignature} [eager] vs ${diff.bSignature} [lazy]`);
 		});
 		console.log();
 	}
@@ -827,7 +847,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		hasErrors = true;
 		console.log(chalk.magentaBright("🔍 Nested differences:"));
 		compared.nestedDifferences.forEach((diff) => {
-			console.log(`  - [${diff.type}] ${diff.path}`);
+			const typeLabel = diff.type === "onlyInA" ? "only in eager" : diff.type === "onlyInB" ? "only in lazy" : diff.type;
+			console.log(`  - [${typeLabel}] ${diff.path}`);
 		});
 		console.log();
 	}

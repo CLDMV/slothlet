@@ -389,6 +389,34 @@ export async function buildCategoryStructure(categoryPath, options = {}) {
 		}
 	}
 
+	// CALLABLE NAMESPACE PATTERN
+	// Check if any module has a default function - only apply if there's exactly ONE default function
+	let defaultFunctions = [];
+	for (const moduleDecision of processedModules) {
+		const { mod, type } = moduleDecision;
+		if (type === "function" && typeof mod === "function") {
+			defaultFunctions.push({ mod, moduleDecision });
+		}
+	}
+
+	// Apply callable namespace pattern only if there's exactly one default function
+	// AND there are no other modules in the category (to avoid circular references)
+	// Multiple modules should use standard namespace pattern
+	if (defaultFunctions.length === 1 && Object.keys(categoryModules).length === 1) {
+		const categoryDefaultFunction = defaultFunctions[0].mod;
+
+		// Set the function name to match the category if needed
+		if (categoryDefaultFunction.name !== categoryName) {
+			try {
+				Object.defineProperty(categoryDefaultFunction, "name", { value: categoryName, configurable: true });
+			} catch {
+				// ignore
+			}
+		}
+
+		return categoryDefaultFunction;
+	}
+
 	// UPWARD FLATTENING
 	const keys = Object.keys(categoryModules);
 	if (keys.length === 1) {
@@ -514,10 +542,19 @@ export async function buildRootAPI(dir, options = {}) {
 			const categoryPath = path.join(dir, entry.name);
 
 			if (lazy) {
-				// Lazy mode: use existing _loadCategory method (will be replaced later)
-				api[instance._toapiPathKey(entry.name)] = await instance._loadCategory(categoryPath, 0, maxDepth);
+				// Lazy mode: use same centralized category builder with lazy mode and subdirHandler
+				api[instance._toapiPathKey(entry.name)] = await buildCategoryStructure(categoryPath, {
+					currentDepth: 1,
+					maxDepth,
+					mode: "lazy",
+					subdirHandler: (ctx) => {
+						// Create lazy proxy for subdirectories in lazy mode
+						return instance._loadCategory(ctx.subDirPath, ctx.currentDepth, ctx.maxDepth);
+					},
+					instance
+				});
 			} else {
-				// Eager mode: use new centralized category builder
+				// Eager mode: use centralized category builder
 				api[instance._toapiPathKey(entry.name)] = await buildCategoryStructure(categoryPath, {
 					currentDepth: 1,
 					maxDepth,
