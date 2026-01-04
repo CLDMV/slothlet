@@ -37,6 +37,8 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 ### Latest: v2.11.0 (January 2025)
 
+- **AddApi Special File Pattern (Rule 11)** - Files named `addapi.mjs` now always flatten for seamless API namespace extensions
+- **Filename-Matches-Container in addApi (Rule 1 Extension)** - Auto-flattening now works in runtime `addApi()` contexts
 - **Enhanced addApi Content Preservation** - Fixed critical issue where multiple addApi calls were overwriting previous content instead of merging
 - **Rule 12 Smart Flattening Enhancements** - Comprehensive smart flattening improvements with 168-scenario test coverage
 - **API Documentation Suite Overhaul** - Enhanced 3-tier navigation system with verified examples and cross-references

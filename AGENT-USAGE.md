@@ -144,6 +144,47 @@ export function rootFunctionShout(message) {
 
 > 📖 **See**: [API-RULES.md Rule 4](./API-RULES.md#rule-4-default-export-container-pattern) for root-level default export handling
 
+### Pattern 5: AddApi Special File Pattern (Rule 11)
+
+**File**: `addapi.mjs` loaded via `addApi()` → **API**: Always flattened for API extensions
+
+```js
+// File: plugins/addapi.mjs
+/**
+ * Special addapi.mjs file for runtime API extensions.
+ * Always flattens regardless of autoFlatten setting.
+ */
+export function initializePlugin() {
+	return "Plugin initialized";
+}
+
+export function cleanup() {
+	return "Plugin cleaned up";
+}
+
+export function configure(options) {
+	return `Configured with ${options}`;
+}
+
+// Usage:
+await api.addApi("plugins", "./plugins-folder");
+
+// Result: Always flattened (no .addapi. level)
+api.plugins.initializePlugin(); // ✅ Direct extension
+api.plugins.cleanup(); // ✅ No intermediate namespace
+api.plugins.configure(opts); // ✅ Seamless integration
+```
+
+**Result**: `addapi.mjs` always flattens → Perfect for plugin systems and runtime extensions
+
+**Use Cases**:
+
+- 🔌 **Plugin Systems**: Runtime plugin loading
+- 🔄 **Hot Reloading**: Dynamic API updates during development
+- 📦 **Modular Extensions**: Clean extension of existing API surfaces
+
+> 📖 **See**: [API-RULES.md Rule 11](./API-RULES.md#rule-11-addapi-special-file-pattern) for technical implementation details
+
 ## 🔄 Cross-Module Communication Patterns
 
 ### ✅ Using Live Bindings

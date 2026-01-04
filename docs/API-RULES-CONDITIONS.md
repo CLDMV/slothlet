@@ -595,3 +595,118 @@ if (currentTarget[finalKey] !== undefined && this._config.enableModuleOwnership 
 - ✅ Registration via `_registerApiOwnership(apiPath, moduleId)`
 - ✅ Validation via `_getApiOwnership(apiPath)` lookup
 - ✅ Cross-module protection regardless of `allowApiOverwrite` setting
+
+---
+
+## C33: AddApi Special File Detection
+
+**Category**: AddApi  
+**Related Rule**: [Rule 11](API-RULES-v2.md#rule-11-addapi-special-file-pattern)  
+**Flattening Guide**: [F06: AddApi Special File Pattern](API-FLATTENING-v2.md#f06-addapi-special-file-pattern)  
+**Status**: ✅ **VERIFIED** (api_tests/api_smart_flatten_addapi)
+
+**Pattern**: Files named `addapi.mjs` loaded via `addApi()` method always flatten regardless of `autoFlatten` setting
+
+**Purpose**: Designed for seamless API namespace extensions - `addapi.mjs` files should extend the target API path directly without creating an intermediate `.addapi.` namespace level
+
+**Implementation Location**: [src/lib/helpers/api_builder/add_api.mjs](../../src/lib/helpers/api_builder/add_api.mjs#L266-L310) (lines 266-310)
+
+**When Evaluated**: During `addApiFromFolder()` execution, after modules are loaded but before they are merged into the API
+
+**Condition Check**:
+
+```javascript
+// Rule 6: AddApi Special File Pattern - Handle addapi.mjs flattening
+// Check if the loaded modules contain an 'addapi' key and flatten it
+if (newModules && typeof newModules === "object" && newModules.addapi) {
+	if (instance.config.debug) {
+		console.log(`[DEBUG] addApi: Found addapi.mjs - applying Rule 6 flattening`);
+		console.log(`[DEBUG] addApi: Original structure:`, Object.keys(newModules));
+		console.log(`[DEBUG] addApi: Addapi contents:`, Object.keys(newModules.addapi));
+	}
+
+	// Extract the addapi module content
+	const addapiContent = newModules.addapi;
+
+	// Remove the addapi key from newModules
+	delete newModules.addapi;
+
+	// Merge addapi content directly into the root level of newModules
+	if (addapiContent && typeof addapiContent === "object") {
+		// Handle both function exports and object exports
+		Object.assign(newModules, addapiContent);
+
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: After addapi flattening:`, Object.keys(newModules));
+		}
+	} else if (typeof addapiContent === "function") {
+		// If addapi exports a single function, merge its properties
+		Object.assign(newModules, addapiContent);
+
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Flattened addapi function with properties:`, Object.keys(newModules));
+		}
+	}
+}
+```
+
+**Example Structure**:
+
+```text
+plugin-folder/
+└── addapi.mjs
+    export function initializePlugin() {...}
+    export function cleanup() {...}
+    export function configure() {...}
+```
+
+**API Usage**:
+
+```javascript
+// Load plugin folder via addApi
+await api.addApi("plugins", "./plugin-folder");
+
+// Result: addapi.mjs always flattens (no .addapi. level)
+api.plugins.initializePlugin(); // ✅ Direct extension
+api.plugins.cleanup(); // ✅ Seamless integration
+api.plugins.configure(); // ✅ No intermediate namespace
+```
+
+**Without C33 Behavior** (hypothetical):
+
+```javascript
+// Without special handling, would create nested structure
+api.plugins.addapi.initializePlugin(); // ❌ Unwanted intermediate level
+api.plugins.addapi.cleanup(); // ❌ Breaks API extension pattern
+```
+
+**Key Implementation Details**:
+
+1. **Detection**: Checks for `newModules.addapi` key in loaded module structure
+2. **Extraction**: Stores content of `addapi` module in `addapiContent` variable
+3. **Removal**: Deletes the `addapi` key from `newModules` to prevent namespace creation
+4. **Flattening**: Merges all exports from `addapi.mjs` directly into root level of `newModules`
+5. **Type Handling**: Supports both object exports and function exports with properties
+
+**Use Cases**:
+
+- 🔌 **Plugin Systems**: Runtime plugin loading that extends existing API namespaces
+- 🔄 **Hot Reloading**: Dynamic API updates during development without intermediate levels
+- 📦 **Modular Extensions**: Clean extension of existing API surfaces
+- 🎯 **Targeted Integration**: Specific API namespace enhancement for add-on functionality
+
+**Behavior Characteristics**:
+
+- ✅ **Always Active**: Works regardless of `autoFlatten` configuration setting
+- ✅ **Priority Processing**: Occurs before other flattening rules are applied
+- ✅ **Transparent Integration**: Exports appear as if they were originally part of target namespace
+- ✅ **Works with addApi Only**: Special handling only applies to `addApi()` method, not initial load
+
+**Result**: `addapi.mjs` file contents are merged directly at the target API path level, eliminating the intermediate `.addapi.` namespace
+
+**Common Implementation Pattern**:
+
+- ✅ Detection via `newModules.addapi` property check
+- ✅ Extraction and deletion of `addapi` key
+- ✅ Direct merge using `Object.assign(newModules, addapiContent)`
+- ✅ Support for both object and function exports
