@@ -6,6 +6,7 @@
  * meaningful slothlet configuration combinations to ensure consistent behavior.
  */
 
+import { pathToFileURL } from "url";
 import { runOwnershipTestMatrix, runSelectTestMatrix } from "./test-helper.mjs";
 
 /**
@@ -94,7 +95,8 @@ async function testRule12ConfigurationValidation() {
 				"../api_tests/api_test",
 				{},
 				{
-					forceOverwrite: true
+					forceOverwrite: true,
+					moduleId: "testModule" // Provide moduleId so it reaches enableModuleOwnership check
 				}
 			);
 		} catch (error) {
@@ -159,17 +161,13 @@ async function testRule12AllowApiOverwriteInteraction() {
 		async (api, configName, _) => {
 			// Test 1: Normal addApi should still respect allowApiOverwrite: false
 			await api.addApi("normal.test", "../api_tests/api_test");
+			const originalApi = api.normal.test; // Capture original API
 
-			let normalOverwriteBlocked = false;
-			try {
-				await api.addApi("normal.test", "../api_tests/api_test_mixed"); // Should fail
-			} catch (error) {
-				if (error.message.includes("allowApiOverwrite")) {
-					normalOverwriteBlocked = true;
-				}
-			}
+			// This should be silently skipped with a warning (not throw error)
+			await api.addApi("normal.test", "../api_tests/api_test_mixed");
 
-			if (!normalOverwriteBlocked) {
+			// Verify the API was NOT overwritten
+			if (api.normal.test !== originalApi) {
 				throw new Error(`Normal overwrite should be blocked by allowApiOverwrite: false in ${configName}`);
 			}
 
@@ -277,7 +275,7 @@ async function runRule12ComprehensiveTests() {
 }
 
 // Execute if run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 	const success = await runRule12ComprehensiveTests();
 	if (!success) {
 		process.exit(1);
