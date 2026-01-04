@@ -174,7 +174,8 @@ function pickPrimaryBaseFile() {
 	for (const cs of getStack(pickPrimaryBaseFile)) {
 		const f = toFsPath(cs?.getFileName?.());
 		if (!f) continue;
-		if (f.startsWith?.("node:internal")) continue;
+		// Skip all Node.js built-in modules (node:*)
+		if (f.startsWith?.("node:")) continue;
 		files.push(f);
 	}
 
@@ -211,6 +212,13 @@ function pickPrimaryBaseFile() {
 			console.log(`[DEBUG_RESOLVE] Candidate file at [${j}]: ${candidateFile}`);
 			console.log(`[DEBUG_RESOLVE] Candidate basename: ${b}`);
 			console.log(`[DEBUG_RESOLVE] Is internal: ${isSlothletInternalFile(candidateFile)}`);
+
+			// Skip Node.js built-in modules (node:*)
+			if (candidateFile.startsWith?.("node:")) {
+				console.log(`[DEBUG_RESOLVE] Skipping Node.js built-in module, checking next...`);
+				j++;
+				continue;
+			}
 
 			// Skip internal files - keep looking
 			if (isSlothletInternalFile(candidateFile)) {
@@ -289,7 +297,8 @@ function pickFallbackBaseFile() {
 	for (const cs of getStack(pickFallbackBaseFile)) {
 		const f = toFsPath(cs?.getFileName?.());
 		if (!f) continue;
-		if (f.startsWith?.("node:internal")) continue;
+		// Skip all Node.js built-in modules (node:*)
+		if (f.startsWith?.("node:")) continue;
 		if (f === THIS_FILE) continue;
 		if (f.startsWith(THIS_DIR + path.sep)) continue; // helper's own dir
 		if (path.basename(f).toLowerCase() === "slothlet.mjs") continue;
