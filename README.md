@@ -135,7 +135,8 @@ Automatic context preservation across all asynchronous boundaries:
 
 ### Requirements
 
-- **Node.js v16.4.0 or higher** (required for AsyncLocalStorage support)
+- **Node.js v16.20.2 or higher** (required for stack trace API fixes used in path resolution)
+  - Node.js 16.4-16.19 has a stack trace regression. For these versions, use slothlet 2.10.0: `npm install @cldmv/slothlet@2.10.0`
 
 ### Install
 
@@ -335,7 +336,7 @@ console.log("My version:", self.version);
 | `mode`                  | `string`  | `"eager"`     | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading                                                                                                                   |
 | `lazy`                  | `boolean` | `false`       | **Legacy** loading strategy (use `mode` instead)                                                                                                                                                         |
 | `engine`                | `string`  | `"singleton"` | Execution environment: `"singleton"`, `"vm"`, `"worker"`, or `"fork"` (experimental modes)                                                                                                               |
-| `runtime`               | `string`  | `"async"`     | Runtime binding system: `"async"` for AsyncLocalStorage (requires Node.js v16.4.0+), `"live"` for live-bindings (works on Node.js v12.20.0+)                                                             |
+| `runtime`               | `string`  | `"async"`     | Runtime binding system: `"async"` for AsyncLocalStorage (requires Node.js v16.20.2+), `"live"` for live-bindings (works on Node.js v12.20.0+)                                                            |
 | `apiDepth`              | `number`  | `Infinity`    | Directory traversal depth - `0` for root only, `Infinity` for all levels                                                                                                                                 |
 | `debug`                 | `boolean` | `false`       | Enable verbose logging (also via `--slothletdebug` flag or `SLOTHLET_DEBUG=true` env var)                                                                                                                |
 | `api_mode`              | `string`  | `"auto"`      | API structure behavior: `"auto"` (detect), `"function"` (force callable), `"object"` (force object)                                                                                                      |

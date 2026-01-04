@@ -3,7 +3,7 @@
  * @description Tests whether closures show definition or execution location in stack traces
  */
 
-import { pathToFileURL } from "url";
+// import { pathToFileURL } from "url";
 
 function getStackTrace() {
 	const originalPrepareStackTrace = Error.prepareStackTrace;
@@ -59,7 +59,7 @@ const { runTestWithApi } = await import("./test-helper.mjs");
 const slothlet = (await import("../index.mjs")).default;
 const api = await slothlet({ dir: "./api_tests/api_test", lazy: false });
 
-await runTestWithApi(api, async (api) => {
+await runTestWithApi(api, async (_) => {
 	const stack = getStackTrace();
 	console.log("   Stack frames:");
 	for (let i = 0; i < Math.min(10, stack.length); i++) {

@@ -45,15 +45,15 @@ on:
                 required: false
                 default: "lts/*"
             min_node_version:
-                description: "Minimum Node.js version for matrix testing (default: 20, oldest non-EOL)"
+                description: "Minimum Node.js version for matrix testing (default: 16.20.2, due to stack trace regression in 16.4-16.19)"
                 type: string
                 required: false
-                default: "20"
+                default: "16.20.2"
             max_node_major:
-                description: "Override max Node.js major version (default: 22)"
+                description: "Override max Node.js major version (default: 24)"
                 type: string
                 required: false
-                default: "22"
+                default: "24"
             package_manager:
                 description: "Package manager (npm or yarn)"
                 type: string
@@ -73,8 +73,8 @@ jobs:
             package_name: "@cldmv/slothlet" # Required: Your NPM package name
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
-            min_node_version: ${{ github.event.inputs.min_node_version || '16.4' }}
-            max_node_major: ${{ github.event.inputs.max_node_major || '22' }}
+            min_node_version: ${{ github.event.inputs.min_node_version || '16.20.2' }}
+            max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
             package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
             test_command: "npm test"
             test_environment: ${{ github.event.inputs.test_environment || 'slothlet-dev' }} # Alternative to setting in test_command

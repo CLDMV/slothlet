@@ -309,8 +309,10 @@ function pickFallbackBaseFile() {
 		console.log(`[DEBUG_RESOLVE] Fallback considering: ${f}`);
 		return f;
 	}
-	console.log("[DEBUG_RESOLVE] Fallback returning THIS_FILE:", THIS_FILE);
-	return THIS_FILE;
+	// If we can't find any user code in the stack, use the current working directory
+	// This is safer than using THIS_FILE (which is deep inside src/lib/)
+	console.log(`[DEBUG_RESOLVE] Fallback: No user code found in stack, using process.cwd(): ${process.cwd()}`);
+	return process.cwd();
 }
 
 /* ---------- generic resolver (shared) ---------- */

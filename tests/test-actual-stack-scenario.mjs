@@ -3,7 +3,7 @@
  * @description Replicates exact pattern: closure defined here, executed through test-helper.mjs
  */
 
-import { pathToFileURL } from "url";
+// import { pathToFileURL } from "url";
 import { runOwnershipTestMatrix } from "./test-helper.mjs";
 
 console.log("🧪 Testing ACTUAL stack scenario from test-rule-12-comprehensive.mjs\n");
