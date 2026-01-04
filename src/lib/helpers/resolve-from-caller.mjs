@@ -178,6 +178,12 @@ function pickPrimaryBaseFile() {
 		files.push(f);
 	}
 
+	console.log(`[DEBUG_RESOLVE] pickPrimaryBaseFile - Total stack frames: ${files.length}`);
+	console.log(`[DEBUG_RESOLVE] ALL stack frames:`);
+	for (let i = 0; i < files.length; i++) {
+		console.log(`[DEBUG_RESOLVE]   [${i}] ${files[i]}`);
+	}
+
 	let iSloth = -1;
 	for (let i = 0; i < files.length; i++) {
 		if (path.basename(files[i]).toLowerCase() === "slothlet.mjs") {
@@ -185,38 +191,47 @@ function pickPrimaryBaseFile() {
 		}
 	}
 
+	console.log(`[DEBUG_RESOLVE] Found slothlet.mjs at index: ${iSloth}, total files: ${files.length}`);
 	if (iSloth !== -1) {
-		const j = iSloth + 1;
-		if (j < files.length) {
+		console.log(`[DEBUG_RESOLVE] Files after slothlet.mjs:`);
+		for (let k = iSloth + 1; k < Math.min(files.length, iSloth + 5); k++) {
+			console.log(`[DEBUG_RESOLVE]   [${k}] ${files[k]}`);
+		}
+	}
+
+	if (iSloth !== -1) {
+		// Start from the frame after slothlet.mjs
+		let j = iSloth + 1;
+
+		// Skip ALL internal files (src/lib/*, helpers/*, etc.) until we find user code
+		while (j < files.length) {
 			const candidateFile = files[j];
 			const b = path.basename(candidateFile).toLowerCase();
 
-			console.log(`[DEBUG_RESOLVE] Candidate file: ${candidateFile}`);
+			console.log(`[DEBUG_RESOLVE] Candidate file at [${j}]: ${candidateFile}`);
 			console.log(`[DEBUG_RESOLVE] Candidate basename: ${b}`);
 			console.log(`[DEBUG_RESOLVE] Is internal: ${isSlothletInternalFile(candidateFile)}`);
 
-			// Skip index files as originally intended
-			if (/^index\.(mjs|cjs|js)$/.test(b) && j + 1 < files.length) {
-				const nextFile = files[j + 1];
-				console.log(`[DEBUG_RESOLVE] Is index file, checking next: ${nextFile}`);
-				console.log(`[DEBUG_RESOLVE] Next file is internal: ${isSlothletInternalFile(nextFile)}`);
-				// Validate that the next file isn't a slothlet internal file
-				if (!isSlothletInternalFile(nextFile)) {
-					console.log(`[DEBUG_RESOLVE] Using next file: ${nextFile}`);
-					return nextFile;
-				}
-				console.log(`[DEBUG_RESOLVE] Next file is internal, falling back`);
-				// If it is internal, fall through to fallback logic
-			} else {
-				// Validate that this candidate isn't a slothlet internal file
-				if (!isSlothletInternalFile(candidateFile)) {
-					console.log(`[DEBUG_RESOLVE] Using candidate file: ${candidateFile}`);
-					return candidateFile;
-				}
-				console.log(`[DEBUG_RESOLVE] Candidate file is internal, falling back`);
-				// If it is internal, fall through to fallback logic
+			// Skip internal files - keep looking
+			if (isSlothletInternalFile(candidateFile)) {
+				console.log(`[DEBUG_RESOLVE] Skipping internal file, checking next...`);
+				j++;
+				continue;
 			}
+
+			// Skip index files - look at next file
+			if (/^index\.(mjs|cjs|js)$/.test(b)) {
+				console.log(`[DEBUG_RESOLVE] Is index file, skipping to next...`);
+				j++;
+				continue;
+			}
+
+			// Found a non-internal, non-index file - this is our caller!
+			console.log(`[DEBUG_RESOLVE] Using file: ${candidateFile}`);
+			return candidateFile;
 		}
+
+		console.log(`[DEBUG_RESOLVE] No non-internal files after slothlet.mjs, falling back`);
 	}
 	return null;
 }

@@ -104,7 +104,14 @@ export async function runTestMatrix(configOverride = {}, testFunction, testDescr
 
 	return results;
 }
-
+/**
+ * Run a test with an existing API instance (for path resolution testing)
+ * @param {object} api - Slothlet API instance
+ * @param {Function} testFunction - Test function to run
+ */
+export async function runTestWithApi(api, testFunction) {
+	await testFunction(api);
+}
 /**
  * Run a test function across only ownership-enabled configurations
  */
