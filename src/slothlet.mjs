@@ -295,7 +295,17 @@ const slothletObject = {
 	reference: {},
 	mode: "singleton",
 	loaded: false,
-	config: { lazy: false, apiDepth: Infinity, debug: DEBUG, dir: null, sanitize: null, allowApiOverwrite: true },
+	config: {
+		lazy: false,
+		apiDepth: Infinity,
+		debug: DEBUG,
+		dir: null,
+		sanitize: null,
+		allowApiOverwrite: true,
+		enableModuleOwnership: false
+	},
+	// Module ownership tracking for Rule 12: Module Ownership and Selective API Overwriting
+	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
@@ -1040,6 +1050,66 @@ const slothletObject = {
 	},
 
 	/**
+	 * Registers API ownership for module tracking (Rule 12).
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - The API path (e.g., "plugins.moduleA")
+	 * @param {string} moduleId - The module identifier
+	 * @private
+	 * @internal
+	 */
+	_registerApiOwnership(apiPath, moduleId) {
+		if (!this.config.enableModuleOwnership) return;
+		this._moduleOwnership.set(apiPath, moduleId);
+		if (this.config.debug) {
+			console.log(`[DEBUG] Registered ownership: ${apiPath} -> ${moduleId}`);
+		}
+	},
+
+	/**
+	 * Gets the module that owns the specified API path (Rule 12).
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - The API path to check
+	 * @returns {string|null} The module ID that owns this path, or null if unowned
+	 * @private
+	 * @internal
+	 */
+	_getApiOwnership(apiPath) {
+		if (!this.config.enableModuleOwnership) return null;
+		return this._moduleOwnership.get(apiPath) || null;
+	},
+
+	/**
+	 * Validates module ownership for overwrites (Rule 12).
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - The API path being overwritten
+	 * @param {string} moduleId - The module attempting the overwrite
+	 * @param {boolean} forceOverwrite - Whether forceOverwrite is enabled
+	 * @returns {boolean} True if overwrite is allowed, false otherwise
+	 * @private
+	 * @internal
+	 */
+	_validateModuleOwnership(apiPath, moduleId, forceOverwrite) {
+		if (!this.config.enableModuleOwnership || !forceOverwrite) return false;
+
+		const existingOwner = this._getApiOwnership(apiPath);
+		if (!existingOwner) {
+			// No existing owner, allow and register
+			return true;
+		}
+
+		// Check if same module owns the path
+		if (existingOwner === moduleId) {
+			return true;
+		}
+
+		// Different module owns the path - not allowed
+		if (this.config.debug) {
+			console.log(`[DEBUG] Ownership conflict: ${apiPath} owned by ${existingOwner}, attempted by ${moduleId}`);
+		}
+		return false;
+	},
+
+	/**
 	 * Dynamically adds API modules from a new folder to the existing API at a specified path.
 	 *
 	 * This method allows extending the API after it has been created by loading modules from
@@ -1055,6 +1125,9 @@ const slothletObject = {
 	 * @param {string} apiPath - Dotted path where to add the new API (e.g., "runtime.newapi", "tools.external")
 	 * @param {string} folderPath - Path to the folder containing modules to load (relative or absolute)
 	 * @param {object} [metadata={}] - Metadata object to attach to all loaded functions (e.g., {trusted: true, version: "1.0"})
+	 * @param {object} [options={}] - Advanced options for module ownership and overwrite control
+	 * @param {boolean} [options.forceOverwrite=false] - Allow overwriting APIs when this module owns them (requires enableModuleOwnership)
+	 * @param {string} [options.moduleId] - Unique module identifier for ownership tracking (required when forceOverwrite=true)
 	 * @returns {Promise<void>} Resolves when the API extension is complete
 	 * @throws {Error} If API is not loaded, folder doesn't exist, or path navigation fails
 	 * @public
@@ -1113,8 +1186,8 @@ const slothletObject = {
 	 *     return { apiKey: "secret" };
 	 * }
 	 */
-	async addApi(apiPath, folderPath, metadata = {}) {
-		return addApiFromFolder({ apiPath, folderPath, instance: this, metadata });
+	async addApi(apiPath, folderPath, metadata = {}, options = {}) {
+		return addApiFromFolder({ apiPath, folderPath, instance: this, metadata, options });
 	},
 
 	/**
@@ -1415,6 +1488,11 @@ export default slothlet;
  *   - `true`: Allow overwrites (default, backwards compatible)
  *   - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
  *   - Applies to both function and object overwrites at the final key of the API path
+ * @property {boolean} [enableModuleOwnership=false] - Enable module-based API ownership tracking for selective overwrites:
+ *   - `true`: Track which modules register APIs, enable forceOverwrite with moduleId validation
+ *   - `false`: Disable ownership tracking (default, no performance overhead)
+ *   - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
+ *   - Requires moduleId parameter in addApi options when using forceOverwrite capability
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.

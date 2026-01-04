@@ -2,7 +2,7 @@
  * Config Module - Shutdown Lifecycle
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+// import { self } from "@cldmv/slothlet/runtime"; // unused
 
 /**
  * Shutdown config module

@@ -513,5 +513,85 @@ This section maps conditions to the higher-level documentation they support.
 **Next Steps**:
 
 - Verify line numbers after any source code changes
-- Add conditions for Rule 12 (Module Ownership) when implemented
 - Update cross-references when higher-level documentation changes
+
+---
+
+## C19-C22: Rule 12 Module Ownership Conditions
+
+**Functionality**: Module ownership tracking and selective API overwriting validation  
+**Primary Rule**: [Rule 12 - Module Ownership and Selective API Overwriting](API-RULES-v2.md#rule-12-module-ownership-and-selective-api-overwriting)  
+**Source Code**: [slothlet.mjs](../src/slothlet.mjs) (ownership tracking), [add_api.mjs](../src/lib/helpers/api_builder/add_api.mjs) (validation)
+
+### C19: Configuration Validation Condition
+
+**Code Location**: [slothlet.mjs#L85-L90](../src/slothlet.mjs#L85-L90)
+
+```javascript
+if (options.forceOverwrite && !this._config.enableModuleOwnership) {
+	throw new Error("forceOverwrite requires enableModuleOwnership: true in slothlet configuration");
+}
+```
+
+**Triggers**: `options.forceOverwrite === true && this._config.enableModuleOwnership !== true`  
+**Logic**: Configuration consistency validation  
+**Result**: Throws error requiring enableModuleOwnership for forceOverwrite operations
+
+### C20: Module ID Requirement Condition
+
+**Code Location**: [slothlet.mjs#L90-L95](../src/slothlet.mjs#L90-L95)
+
+```javascript
+if (options.forceOverwrite && !options.moduleId) {
+	throw new Error("forceOverwrite requires moduleId parameter for ownership tracking");
+}
+```
+
+**Triggers**: `options.forceOverwrite === true && !options.moduleId`  
+**Logic**: Module identification requirement for ownership tracking  
+**Result**: Throws error requiring moduleId for ownership-tracked operations
+
+### C21: Function Ownership Validation Condition
+
+**Code Location**: [add_api.mjs#L145-L155](../src/lib/helpers/api_builder/add_api.mjs#L145-L155)
+
+```javascript
+if (currentTarget[finalKey] !== undefined && typeof currentTarget[finalKey] === "function" && this._config.enableModuleOwnership) {
+	const existingOwner = this._getApiOwnership(fullPath);
+	if (existingOwner && existingOwner !== options.moduleId) {
+		throw new Error(
+			`Cannot overwrite API "${fullPath}" - owned by module "${existingOwner}", attempted by module "${options.moduleId}". Modules can only overwrite APIs they own.`
+		);
+	}
+}
+```
+
+**Triggers**: Function overwrite attempt with ownership tracking enabled  
+**Logic**: Cross-module ownership violation detection for functions  
+**Result**: Throws error if moduleId doesn't match existing function owner
+
+### C22: Object Ownership Validation Condition
+
+**Code Location**: [add_api.mjs#L160-L170](../src/lib/helpers/api_builder/add_api.mjs#L160-L170)
+
+```javascript
+if (currentTarget[finalKey] !== undefined && this._config.enableModuleOwnership && options.moduleId) {
+	const existingOwner = this._getApiOwnership(fullPath);
+	if (existingOwner && existingOwner !== options.moduleId) {
+		throw new Error(
+			`Cannot overwrite API "${fullPath}" - owned by module "${existingOwner}", attempted by module "${options.moduleId}". Modules can only overwrite APIs they own.`
+		);
+	}
+}
+```
+
+**Triggers**: Object/namespace overwrite attempt with ownership tracking enabled  
+**Logic**: Cross-module ownership violation detection for objects/namespaces  
+**Result**: Throws error if moduleId doesn't match existing object owner
+
+**Common Implementation Pattern**:
+
+- ✅ Ownership tracking via `Map<string, string>` in `_moduleOwnership`
+- ✅ Registration via `_registerApiOwnership(apiPath, moduleId)`
+- ✅ Validation via `_getApiOwnership(apiPath)` lookup
+- ✅ Cross-module protection regardless of `allowApiOverwrite` setting

@@ -44,7 +44,6 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 ## Table of Contents
 
 - [The Seven Flattening Rules](#the-seven-flattening-rules) (F01-F07)
-- [Visual Decision Tree](#visual-decision-tree)
 - [Benefits and Examples](#benefits-and-examples)
 - [Advanced Scenarios](#advanced-scenarios)
 - [Cross-Reference Guide](#cross-reference-guide)
@@ -295,29 +294,53 @@ api.plugins.configure(opts); // Clean integration
 
 ### F07: AddApi Root-Level File Matching
 
-**When:** Using `addApi()` where a file name at the root level matches the last segment of the API path  
-**Result:** Root-level file contents flatten while subdirectories follow normal rules  
-**Detailed Coverage**: [API-RULES Rule 12](API-RULES-v2.md#rule-12-module-ownership-and-selective-api-overwriting) (related) | **Technical**: _Implementation in add_api.mjs_
+**When:** Using `addApi()` with module ownership tracking for selective API overwriting  
+**Result:** Modules can only overwrite APIs they originally registered, enabling safe hot-reloading  
+**Detailed Coverage**: [API-RULES Rule 12](API-RULES-v2.md#rule-12-module-ownership-and-selective-api-overwriting) | **Technical**: [CONDITIONS C19-C22](API-RULES-CONDITIONS-v2.md#c19-c22)
 
 **Example:**
 
-```text
-// Using api.addApi("config", "./settings-folder")
-settings-folder/
-├── config.mjs          ← Root-level file matches API path segment "config"
-│   export function getConfig() {...}
-│   export function setConfig() {...}
-├── utils.mjs
-│   export function validate() {...}
-└── config/             ← Subdirectory (NOT flattened)
-    └── config.mjs
-        export function getNestedConfig() {...}
+```javascript
+// Module A registers plugins with ownership tracking
+await api.addApi(
+	"plugins.moduleA",
+	"./modules/moduleA",
+	{},
+	{
+		moduleId: "moduleA", // Track ownership
+		forceOverwrite: true // Override global allowApiOverwrite
+	}
+);
+
+// Module A hot-reload - only affects APIs it owns
+await api.addApi(
+	"plugins.moduleA",
+	"./modules/moduleA-v2",
+	{},
+	{
+		moduleId: "moduleA",
+		forceOverwrite: true // ✅ Allowed - moduleA owns these APIs
+	}
+);
+
+// Cross-module protection
+await api.addApi(
+	"plugins.moduleB",
+	"./malicious-code",
+	{},
+	{
+		moduleId: "moduleA", // ❌ Error - cannot overwrite moduleB's APIs
+		forceOverwrite: true
+	}
+);
 ```
 
 ```javascript
-// Expected API Structure:
-api.config.getConfig(); // ✅ Root-level config.mjs flattened
-api.config.setConfig(); // ✅ Direct access to config functions
+// Configuration Requirements:
+const api = await slothlet({
+	enableModuleOwnership: true // Required for ownership tracking
+});
+
 api.config.utils.validate(); // ✅ utils.mjs preserved normally
 api.config.config.getNestedConfig(); // ✅ Subdirectory NOT flattened
 
@@ -675,14 +698,14 @@ api.math.math.math.nested; // Self-referential structure clear
 | **F04**         | [Rule 4](API-RULES-v2.md#rule-4), [Rule 8 Pattern B](API-RULES-v2.md#pattern-b-default-export-promotion) | [C08c, C24](API-RULES-CONDITIONS-v2.md#c08c)     | api_tests/api_test + api_tv_test   |
 | **F05**         | [Rule 8 Pattern C](API-RULES-v2.md#pattern-c-single-default-export)                                      | [C08c, C11](API-RULES-CONDITIONS-v2.md#c08c)     | Multiple test files                |
 | **F06**         | [Rule 11](API-RULES-v2.md#rule-11)                                                                       | [C33](API-RULES-CONDITIONS-v2.md#c33)            | api_tests/api_smart_flatten_addapi |
-| **F07**         | [Rule 12](API-RULES-v2.md#rule-12) (related)                                                             | _Implementation pending_                         | _In development_                   |
+| **F07**         | [Rule 12](API-RULES-v2.md#rule-12) (related)                                                             | [C19-C22](API-RULES-CONDITIONS-v2.md#c19-c22)    | tests/test-rule-12.mjs             |
 
 ### Implementation Status
 
-| Rule    | Status                       | Verification                  | Implementation Notes                  |
-| ------- | ---------------------------- | ----------------------------- | ------------------------------------- |
-| F01-F06 | ✅ **Fully Implemented**     | ✅ Verified with test files   | Production ready                      |
-| F07     | ⚠️ **Partially Implemented** | ⚠️ Basic functionality exists | AddApi root matching needs completion |
+| Rule    | Status                   | Verification                | Implementation Notes                |
+| ------- | ------------------------ | --------------------------- | ----------------------------------- |
+| F01-F06 | ✅ **Fully Implemented** | ✅ Verified with test files | Production ready                    |
+| F07     | ✅ **Fully Implemented** | ✅ Verified with test files | Rule 12 ownership tracking complete |
 
 ---
 

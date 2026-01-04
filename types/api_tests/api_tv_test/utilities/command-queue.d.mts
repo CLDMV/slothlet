@@ -15,7 +15,7 @@ export function queueUpdateCommands(updateCommands: any, _?: {}): Promise<{
 }>;
 export function getPendingUserCommandCount(): number;
 export function getPendingUpdateCommandCount(): number;
-export function isUpdateCommandPending(commandId: any): boolean;
+export function isUpdateCommandPending(_: any): boolean;
 export function clearPendingUpdateCommands(_?: {}): {
     success: boolean;
     cleared: number;

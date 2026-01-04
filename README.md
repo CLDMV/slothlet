@@ -35,14 +35,17 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 ## ✨ What's New
 
-### Latest: v2.9 (December 30, 2025)
+### Latest: v2.11.0 (January 2025)
 
-- **Per-Request Context Isolation** - New `api.run()` and `api.scope()` methods for isolated context execution ([Documentation](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md#per-request-context-isolation))
-- API Builder Modularization - Improved maintainability and code organization
-- [View Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md)
+- **Enhanced addApi Content Preservation** - Fixed critical issue where multiple addApi calls were overwriting previous content instead of merging
+- **Rule 12 Smart Flattening Enhancements** - Comprehensive smart flattening improvements with 168-scenario test coverage
+- **API Documentation Suite Overhaul** - Enhanced 3-tier navigation system with verified examples and cross-references
+- [View Changelog](./docs/changelog/v2.11.md)
 
 ### Recent Releases
 
+- **v2.10.0** - Function metadata tagging and introspection capabilities ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.10.md))
+- **v2.9** - Per-Request Context Isolation with `api.run()` and `api.scope()` methods ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md))
 - **v2.8** - NPM security fixes and package workflow updates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.8.md))
 - **v2.7** - Security updates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.7.md))
 - **v2.6** - Hook System with 4 interceptor types ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.6.md))
@@ -324,21 +327,22 @@ console.log("My version:", self.version);
 
 ## 📚 Configuration Options
 
-| Option              | Type      | Default       | Description                                                                                                                                                                                              |
-| ------------------- | --------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`               | `string`  | `"api"`       | Directory to load API modules from (absolute or relative path)                                                                                                                                           |
-| `mode`              | `string`  | `"eager"`     | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading                                                                                                                   |
-| `lazy`              | `boolean` | `false`       | **Legacy** loading strategy (use `mode` instead)                                                                                                                                                         |
-| `engine`            | `string`  | `"singleton"` | Execution environment: `"singleton"`, `"vm"`, `"worker"`, or `"fork"` (experimental modes)                                                                                                               |
-| `runtime`           | `string`  | `"async"`     | Runtime binding system: `"async"` for AsyncLocalStorage (requires Node.js v16.4.0+), `"live"` for live-bindings (works on Node.js v12.20.0+)                                                             |
-| `apiDepth`          | `number`  | `Infinity`    | Directory traversal depth - `0` for root only, `Infinity` for all levels                                                                                                                                 |
-| `debug`             | `boolean` | `false`       | Enable verbose logging (also via `--slothletdebug` flag or `SLOTHLET_DEBUG=true` env var)                                                                                                                |
-| `api_mode`          | `string`  | `"auto"`      | API structure behavior: `"auto"` (detect), `"function"` (force callable), `"object"` (force object)                                                                                                      |
-| `allowApiOverwrite` | `boolean` | `true`        | Allow `addApi()` to overwrite existing endpoints (`false` = prevent overwrites with warning)                                                                                                             |
-| `context`           | `object`  | `{}`          | Context data injected into live-binding (available via `import { context } from "@cldmv/slothlet/runtime"`)                                                                                              |
-| `reference`         | `object`  | `{}`          | Reference object merged into API root level                                                                                                                                                              |
-| `sanitize`          | `object`  | `{}`          | Advanced filename-to-API transformation control with `lowerFirst`, `preserveAllUpper`, `preserveAllLower`, and `rules` (supports exact matches, glob patterns `*json*`, and boundary patterns `**url**`) |
-| `hooks`             | `mixed`   | `false`       | Enable hook system: `true` (enable all), `"pattern"` (enable with pattern), or object with `enabled`, `pattern`, `suppressErrors` options                                                                |
+| Option                  | Type      | Default       | Description                                                                                                                                                                                              |
+| ----------------------- | --------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`                   | `string`  | `"api"`       | Directory to load API modules from (absolute or relative path)                                                                                                                                           |
+| `mode`                  | `string`  | `"eager"`     | **New** loading mode - `"lazy"` for on-demand loading, `"eager"` for immediate loading                                                                                                                   |
+| `lazy`                  | `boolean` | `false`       | **Legacy** loading strategy (use `mode` instead)                                                                                                                                                         |
+| `engine`                | `string`  | `"singleton"` | Execution environment: `"singleton"`, `"vm"`, `"worker"`, or `"fork"` (experimental modes)                                                                                                               |
+| `runtime`               | `string`  | `"async"`     | Runtime binding system: `"async"` for AsyncLocalStorage (requires Node.js v16.4.0+), `"live"` for live-bindings (works on Node.js v12.20.0+)                                                             |
+| `apiDepth`              | `number`  | `Infinity`    | Directory traversal depth - `0` for root only, `Infinity` for all levels                                                                                                                                 |
+| `debug`                 | `boolean` | `false`       | Enable verbose logging (also via `--slothletdebug` flag or `SLOTHLET_DEBUG=true` env var)                                                                                                                |
+| `api_mode`              | `string`  | `"auto"`      | API structure behavior: `"auto"` (detect), `"function"` (force callable), `"object"` (force object)                                                                                                      |
+| `allowApiOverwrite`     | `boolean` | `true`        | Allow `addApi()` to overwrite existing endpoints (`false` = prevent overwrites with warning)                                                                                                             |
+| `enableModuleOwnership` | `boolean` | `false`       | Enable module-based API ownership tracking (`true` = track ownership for selective overwrites, `false` = disabled for performance)                                                                       |
+| `context`               | `object`  | `{}`          | Context data injected into live-binding (available via `import { context } from "@cldmv/slothlet/runtime"`)                                                                                              |
+| `reference`             | `object`  | `{}`          | Reference object merged into API root level                                                                                                                                                              |
+| `sanitize`              | `object`  | `{}`          | Advanced filename-to-API transformation control with `lowerFirst`, `preserveAllUpper`, `preserveAllLower`, and `rules` (supports exact matches, glob patterns `*json*`, and boundary patterns `**url**`) |
+| `hooks`                 | `mixed`   | `false`       | Enable hook system: `true` (enable all), `"pattern"` (enable with pattern), or object with `enabled`, `pattern`, `suppressErrors` options                                                                |
 
 **For complete API documentation with detailed parameter descriptions and examples, see [docs/generated/API.md](https://github.com/CLDMV/slothlet/blob/master/docs/generated/API.md)**
 

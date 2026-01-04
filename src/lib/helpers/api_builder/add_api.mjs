@@ -49,20 +49,27 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
 import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
 
 /**
+ * @typedef {Object} AddApiFromFolderParams
+ * @property {string} apiPath - Dot-notation path where modules will be added
+ * @property {string} folderPath - Path to folder containing modules to load
+ * @property {object} instance - Slothlet instance with api, boundapi, config, modes, etc.
+ * @property {object} [metadata={}] - Metadata to attach to all loaded functions
+ * @property {object} [options={}] - Additional options for module loading
+ * @property {boolean} [options.forceOverwrite=false] - Allow overwriting existing APIs (requires Rule 12)
+ * @property {string} [options.moduleId] - Module identifier for ownership tracking (required with forceOverwrite)
+ */
+
+/**
+ * @description
  * Dynamically adds API modules from a new folder to the existing API at a specified path.
  *
  * @function addApiFromFolder
  * @memberof module:@cldmv/slothlet.lib.helpers.api_builder.add_api
- * @param {object} options - Configuration object
- * @param {string} options.apiPath - Dot-notation path where modules will be added
- * @param {string} options.folderPath - Path to folder containing modules to load
- * @param {object} options.instance - Slothlet instance with api, boundapi, config, modes, etc.
- * @param {object} [options.metadata={}] - Metadata to attach to all loaded functions
+ * @param {AddApiFromFolderParams} params - Configuration object
  * @returns {Promise<void>}
  * @throws {Error} If API not loaded, invalid parameters, folder does not exist, or merge conflicts
  * @package
  *
- * @description
  * This function enables runtime extension of the API by loading modules from a folder
  * and merging them into a specified location in the API tree. It performs comprehensive
  * validation, supports both relative and absolute paths, handles intermediate object
@@ -81,43 +88,54 @@ import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
  * import { addApiFromFolder } from "./add_api.mjs";
  *
  * // Add additional modules at runtime.plugins path
- * await addApiFromFolder({
- *   apiPath: "runtime.plugins",
- *   folderPath: "./plugins",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "runtime.plugins",
+ *   "./plugins",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add modules to root level
- * await addApiFromFolder({
- *   apiPath: "utilities",
- *   folderPath: "./utils",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "utilities",
+ *   "./utils",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add deep nested modules
- * await addApiFromFolder({
- *   apiPath: "services.external.stripe",
- *   folderPath: "./services/stripe",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "services.external.stripe",
+ *   "./services/stripe",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add modules with metadata
- * await addApiFromFolder({
- *   apiPath: "plugins",
- *   folderPath: "./untrusted-plugins",
- *   instance: slothletInstance,
- *   metadata: {
+ * await addApiFromFolder(
+ *   "extensions.untrusted",
+ *   "./untrusted-plugins",
+ *   slothletInstance,
+ *   {
  *     trusted: false,
  *     permissions: ["read"],
  *     version: "1.0.0",
  *     author: "external"
  *   }
- * });
+ * );
  */
-export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {} }) {
+export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {}, options = {} }) {
+	const { forceOverwrite = false, moduleId } = options;
+
+	// Rule 12: Module Ownership validation
+	if (forceOverwrite && !moduleId) {
+		throw new Error(`[slothlet] Rule 12: forceOverwrite requires moduleId parameter for ownership tracking`);
+	}
+
+	if (forceOverwrite && !instance.config.enableModuleOwnership) {
+		throw new Error(`[slothlet] Rule 12: forceOverwrite requires enableModuleOwnership: true in slothlet configuration`);
+	}
+
 	if (!instance.loaded) {
 		throw new Error("[slothlet] Cannot add API: API not loaded. Call create() or load() first.");
 	}
@@ -422,12 +440,26 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	// Merge the new modules into the target location
 	if (typeof newModules === "function") {
 		// If the loaded modules result in a function, set it directly
-		// Check for existing value and handle based on allowApiOverwrite config
+		// Check for existing value and handle based on allowApiOverwrite config and Rule 12
 		if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
 			const existing = currentTarget[finalKey];
 
-			// Check if overwrites are disabled
-			if (instance.config.allowApiOverwrite === false) {
+			// Rule 12: Check module ownership for overwrites
+			if (instance.config.enableModuleOwnership && existing) {
+				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
+				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
+
+				if (forceOverwrite && !canOverwrite) {
+					const existingOwner = instance._getApiOwnership(normalizedPath);
+					throw new Error(
+						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module "${existingOwner}", ` +
+							`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
+					);
+				}
+			}
+
+			// Check if overwrites are disabled (existing logic)
+			if (!forceOverwrite && instance.config.allowApiOverwrite === false) {
 				console.warn(
 					`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
 						`already exists (type: "${typeof existing}"). Set allowApiOverwrite: true to allow overwrites.`
@@ -455,8 +487,22 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
 			const existing = currentTarget[finalKey];
 
+			// Rule 12: Check module ownership for object merges
+			if (instance.config.enableModuleOwnership && existing) {
+				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
+				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
+
+				if (forceOverwrite && !canOverwrite) {
+					const existingOwner = instance._getApiOwnership(normalizedPath);
+					throw new Error(
+						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module "${existingOwner}", ` +
+							`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
+					);
+				}
+			}
+
 			// Check if overwrites are disabled and target already has content
-			if (instance.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
+			if (!forceOverwrite && instance.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
 				// For objects, check if they have any keys (non-empty)
 				const hasContent = typeof existing === "object" ? Object.keys(existing).length > 0 : true;
 				if (hasContent) {
@@ -587,6 +633,13 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			Object.keys(currentBoundTarget[finalKey] || {})
 		);
 	}
+
+	// Rule 12: Register ownership after successful update
+	if (instance.config.enableModuleOwnership && moduleId) {
+		const fullApiPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
+		instance._registerApiOwnership(fullApiPath, moduleId);
+	}
+
 	instance.updateBindings(instance.context, instance.reference, instance.boundapi);
 	if (instance.config.debug) {
 		console.log(`[DEBUG] addApi: After updateBindings - api[${finalKey}]:`, Object.keys(instance.api[finalKey] || {}));

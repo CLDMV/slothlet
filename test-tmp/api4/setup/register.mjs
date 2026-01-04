@@ -6,7 +6,7 @@
  * NOTE: Logger module is not initialized during register, use bootstrap logger
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+// import { self } from "@cldmv/slothlet/runtime"; // unused
 /**
  * Register config module
  * Called once during first load or in dev mode

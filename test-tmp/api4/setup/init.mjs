@@ -11,7 +11,7 @@
  * getConfig/isConfigLoaded. This preserves the security boundary.
  */
 
-import { self } from "@cldmv/slothlet/runtime";
+// import { self } from "@cldmv/slothlet/runtime"; // unused
 // import { initializeConfigAPI } from "../config.mjs";
 
 /**
