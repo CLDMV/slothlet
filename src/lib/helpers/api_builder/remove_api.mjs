@@ -86,7 +86,7 @@ export async function removeApiPath(instance, apiPath) {
 	delete currentBoundTarget[finalKey];
 
 	// Clean up ownership tracking
-	if (instance.config.enableModuleOwnership) {
+	if (instance.config.hotReload) {
 		const moduleId = instance._moduleOwnership.get(normalizedApiPath);
 		if (moduleId) {
 			// Remove from moduleId -> apiPaths mapping
@@ -163,8 +163,8 @@ export async function removeApiByModuleId(instance, moduleId) {
 		throw new TypeError("[slothlet] removeApiByModuleId: moduleId must be a non-empty string");
 	}
 
-	if (!instance.config.enableModuleOwnership) {
-		console.warn(`[slothlet] removeApi: enableModuleOwnership is disabled. Module ID-based removal requires enableModuleOwnership: true`);
+	if (!instance.config.hotReload) {
+		console.warn(`[slothlet] removeApi: hotReload is disabled. Module ID-based removal requires hotReload: true`);
 		return false;
 	}
 
