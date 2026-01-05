@@ -133,8 +133,8 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		throw new Error(`[slothlet] Rule 12: forceOverwrite requires moduleId parameter for ownership tracking`);
 	}
 
-	if (forceOverwrite && !instance.config.enableModuleOwnership) {
-		throw new Error(`[slothlet] Rule 12: forceOverwrite requires enableModuleOwnership: true in slothlet configuration`);
+	if (forceOverwrite && !instance.config.hotReload) {
+		throw new Error(`[slothlet] Rule 12: forceOverwrite requires hotReload: true in slothlet configuration`);
 	}
 
 	if (!instance.loaded) {
@@ -190,7 +190,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 	// Rule 12: Check cross-module ownership BEFORE auto-cleanup
 	// If the target path exists and is owned by a DIFFERENT module, block the operation
-	if (instance.config.enableModuleOwnership && moduleId && forceOverwrite) {
+	if (instance.config.hotReload && moduleId && forceOverwrite) {
 		const existingOwner = instance._getApiOwnership(normalizedApiPath);
 		if (existingOwner && existingOwner !== moduleId) {
 			throw new Error(
@@ -200,11 +200,11 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		}
 	}
 
-	// Rule 13: Auto-cleanup before reload when ownership tracking enabled
+	// Rule 13: Auto-cleanup before reload when hot reload tracking enabled
 	// Remove existing APIs owned by this module to prevent orphan functions
 	// CRITICAL: This must happen AFTER path resolution and cross-module check but BEFORE module loading
 	// to preserve the synchronous call stack for resolvePathFromCaller()
-	if (instance.config.enableModuleOwnership && moduleId) {
+	if (instance.config.hotReload && moduleId) {
 		if (instance.config.debug) {
 			console.log(`[DEBUG] addApi: Auto-cleanup enabled - removing existing APIs for moduleId: ${moduleId}`);
 		}
@@ -469,7 +469,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			const existing = currentTarget[finalKey];
 
 			// Rule 12: Check module ownership for overwrites
-			if (instance.config.enableModuleOwnership && existing) {
+			if (instance.config.hotReload && existing) {
 				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
 				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
 
@@ -512,7 +512,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			const existing = currentTarget[finalKey];
 
 			// Rule 12: Check module ownership for object merges
-			if (instance.config.enableModuleOwnership && existing) {
+			if (instance.config.hotReload && existing) {
 				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
 				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
 
@@ -659,7 +659,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 
 	// Rule 12: Register ownership after successful update
-	if (instance.config.enableModuleOwnership && moduleId) {
+	if (instance.config.hotReload && moduleId) {
 		// The API is being added AT normalizedApiPath, not under it
 		// finalKey is the last segment of pathParts and is already included in normalizedApiPath
 		instance._registerApiOwnership(normalizedApiPath, moduleId);

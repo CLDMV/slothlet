@@ -85,9 +85,9 @@ async function testRule12OwnershipTracking() {
 async function testRule12ConfigurationValidation() {
 	console.log("\n⚙️  Testing Rule 12 configuration validation...");
 
-	// Test against basic configs that don't have enableModuleOwnership
+	// Test against basic configs that don't have hotReload
 	const results = await runSelectTestMatrix(["EAGER_BASIC", "LAZY_BASIC", "EAGER_ALLOW_OVERWRITE"], {}, async (api, configName, _) => {
-		// Test 1: forceOverwrite should require enableModuleOwnership
+		// Test 1: forceOverwrite should require hotReload
 		let configValidationWorked = false;
 		try {
 			await api.addApi(
@@ -96,17 +96,17 @@ async function testRule12ConfigurationValidation() {
 				{},
 				{
 					forceOverwrite: true,
-					moduleId: "testModule" // Provide moduleId so it reaches enableModuleOwnership check
+					moduleId: "testModule" // Provide moduleId so it reaches hotReload check
 				}
 			);
 		} catch (error) {
-			if (error.message.includes("forceOverwrite requires enableModuleOwnership")) {
+			if (error.message.includes("forceOverwrite requires hotReload")) {
 				configValidationWorked = true;
 			}
 		}
 
 		if (!configValidationWorked) {
-			throw new Error(`Configuration validation should require enableModuleOwnership for forceOverwrite in ${configName}`);
+			throw new Error(`Configuration validation should require hotReload for forceOverwrite in ${configName}`);
 		}
 	});
 

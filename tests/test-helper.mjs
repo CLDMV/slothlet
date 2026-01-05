@@ -13,15 +13,15 @@ const TEST_MATRIX = [
 	{ name: "LAZY_DENY_OVERWRITE", config: { dir: "./api_tests/api_test", lazy: true, allowApiOverwrite: false, debug: false } },
 
 	// Module ownership configurations
-	{ name: "EAGER_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: false, enableModuleOwnership: true, debug: false } },
-	{ name: "LAZY_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: true, enableModuleOwnership: true, debug: false } },
+	{ name: "EAGER_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, debug: false } },
+	{ name: "LAZY_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, debug: false } },
 	{
 		name: "EAGER_OWNERSHIP_DENY_OVERWRITE",
-		config: { dir: "./api_tests/api_test", lazy: false, enableModuleOwnership: true, allowApiOverwrite: false, debug: false }
+		config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: false, debug: false }
 	},
 	{
-		name: "LAZY_OWNERSHIP_DENY_OVERWRITE",
-		config: { dir: "./api_tests/api_test", lazy: true, enableModuleOwnership: true, allowApiOverwrite: false, debug: false }
+		name: "LAZY_MODULE_OWNERSHIP_NO_OVERWRITE",
+		config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: false, debug: false }
 	},
 
 	// API depth configurations
@@ -37,11 +37,11 @@ const TEST_MATRIX = [
 	// Combined edge cases
 	{
 		name: "LAZY_ALL_FEATURES",
-		config: { dir: "./api_tests/api_test", lazy: true, enableModuleOwnership: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
+		config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
 	},
 	{
 		name: "EAGER_ALL_FEATURES",
-		config: { dir: "./api_tests/api_test", lazy: false, enableModuleOwnership: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
+		config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
 	}
 ];
 
@@ -116,7 +116,7 @@ export async function runTestWithApi(api, testFunction) {
  * Run a test function across only ownership-enabled configurations
  */
 export async function runOwnershipTestMatrix(configOverride = {}, testFunction, testDescription = "Ownership Test Matrix") {
-	const ownershipConfigs = TEST_MATRIX.filter(({ config }) => config.enableModuleOwnership);
+	const ownershipConfigs = TEST_MATRIX.filter(({ config }) => config.hotReload);
 
 	const results = {
 		total: 0,

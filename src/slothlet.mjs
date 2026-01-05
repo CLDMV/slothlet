@@ -304,7 +304,8 @@ const slothletObject = {
 		dir: null,
 		sanitize: null,
 		allowApiOverwrite: true,
-		enableModuleOwnership: false
+		hotReload: false, // New unified flag for hot reload and module ownership tracking
+		enableModuleOwnership: false // DEPRECATED: Use hotReload instead (kept for backward compatibility)
 	},
 	// Module ownership tracking for Rule 12: Module Ownership and Selective API Overwriting
 	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership (apiPath -> moduleId)
@@ -508,6 +509,15 @@ const slothletObject = {
 	 */
 	async load(config = {}, ctxRef = { context: null, reference: null }) {
 		this.config = { ...this.config, ...config };
+
+		// Handle backward compatibility: enableModuleOwnership → hotReload
+		// Only trigger if enableModuleOwnership is explicitly set and hotReload was not provided
+		if (this.config.enableModuleOwnership && !("hotReload" in config)) {
+			console.warn(
+				"[slothlet] DEPRECATION WARNING: 'enableModuleOwnership' is deprecated and will be removed in v3.0.0. Please use 'hotReload' instead."
+			);
+			this.config.hotReload = true;
+		}
 
 		// Normalize runtime input to internal format (async/live)
 		this.config.runtime = normalizeRuntimeType(this.config.runtime);
@@ -1075,7 +1085,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	_registerApiOwnership(apiPath, moduleId) {
-		if (!this.config.enableModuleOwnership) return;
+		if (!this.config.hotReload) return;
 
 		// Register apiPath -> moduleId
 		this._moduleOwnership.set(apiPath, moduleId);
@@ -1100,7 +1110,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	_getApiOwnership(apiPath) {
-		if (!this.config.enableModuleOwnership) return null;
+		if (!this.config.hotReload) return null;
 		return this._moduleOwnership.get(apiPath) || null;
 	},
 
@@ -1115,7 +1125,7 @@ const slothletObject = {
 	 * @internal
 	 */
 	_validateModuleOwnership(apiPath, moduleId, forceOverwrite) {
-		if (!this.config.enableModuleOwnership || !forceOverwrite) return false;
+		if (!this.config.hotReload || !forceOverwrite) return false;
 
 		const existingOwner = this._getApiOwnership(apiPath);
 		if (!existingOwner) {
@@ -1152,7 +1162,7 @@ const slothletObject = {
 	 * @param {string} folderPath - Path to the folder containing modules to load (relative or absolute)
 	 * @param {object} [metadata={}] - Metadata object to attach to all loaded functions (e.g., {trusted: true, version: "1.0"})
 	 * @param {object} [options={}] - Advanced options for module ownership and overwrite control
-	 * @param {boolean} [options.forceOverwrite=false] - Allow overwriting APIs when this module owns them (requires enableModuleOwnership)
+	 * @param {boolean} [options.forceOverwrite=false] - Allow overwriting APIs when this module owns them (requires hotReload)
 	 * @param {string} [options.moduleId] - Unique module identifier for ownership tracking (required when forceOverwrite=true)
 	 * @returns {Promise<void>} Resolves when the API extension is complete
 	 * @throws {Error} If API is not loaded, folder doesn't exist, or path navigation fails
@@ -1566,11 +1576,13 @@ export default slothlet;
  *   - `true`: Allow overwrites (default, backwards compatible)
  *   - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
  *   - Applies to both function and object overwrites at the final key of the API path
- * @property {boolean} [enableModuleOwnership=false] - Enable module-based API ownership tracking for selective overwrites:
- *   - `true`: Track which modules register APIs, enable forceOverwrite with moduleId validation
- *   - `false`: Disable ownership tracking (default, no performance overhead)
+ * @property {boolean} [hotReload=false] - Enable hot reload and module ownership tracking for selective overwrites:
+ *   - `true`: Track which modules register APIs, enable forceOverwrite with moduleId validation, support hot reload
+ *   - `false`: Disable ownership tracking and hot reload (default, no performance overhead)
  *   - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
  *   - Requires moduleId parameter in addApi options when using forceOverwrite capability
+ * @property {boolean} [enableModuleOwnership=false] - **DEPRECATED** - Use hotReload instead. Will be removed in v3.0.0.
+ *   - Internally mapped to hotReload for backward compatibility
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.
