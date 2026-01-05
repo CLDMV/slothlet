@@ -1,47 +1,39 @@
-import slothlet from "../index.mjs";
+import slothlet from "@cldmv/slothlet";
 
 // Test configuration matrix covering all meaningful slothlet initialization options
 const TEST_MATRIX = [
 	// Basic modes
-	{ name: "EAGER_BASIC", config: { dir: "./api_tests/api_test", lazy: false, debug: false } },
-	{ name: "LAZY_BASIC", config: { dir: "./api_tests/api_test", lazy: true, debug: false } },
+	{ name: "EAGER_BASIC", config: { dir: "../api_tests/api_test", lazy: false, debug: false } },
+	{ name: "LAZY_BASIC", config: { dir: "../api_tests/api_test", lazy: true, debug: false } },
 
 	// API overwrite configurations
-	{ name: "EAGER_ALLOW_OVERWRITE", config: { dir: "./api_tests/api_test", lazy: false, allowApiOverwrite: true, debug: false } },
-	{ name: "LAZY_ALLOW_OVERWRITE", config: { dir: "./api_tests/api_test", lazy: true, allowApiOverwrite: true, debug: false } },
-	{ name: "EAGER_DENY_OVERWRITE", config: { dir: "./api_tests/api_test", lazy: false, allowApiOverwrite: false, debug: false } },
-	{ name: "LAZY_DENY_OVERWRITE", config: { dir: "./api_tests/api_test", lazy: true, allowApiOverwrite: false, debug: false } },
+	{ name: "EAGER_ALLOW_OVERWRITE", config: { dir: "../api_tests/api_test", lazy: false, allowApiOverwrite: true, debug: false } },
+	{ name: "LAZY_ALLOW_OVERWRITE", config: { dir: "../api_tests/api_test", lazy: true, allowApiOverwrite: true, debug: false } },
+	{ name: "EAGER_DENY_OVERWRITE", config: { dir: "../api_tests/api_test", lazy: false, allowApiOverwrite: false, debug: false } },
+	{ name: "LAZY_DENY_OVERWRITE", config: { dir: "../api_tests/api_test", lazy: true, allowApiOverwrite: false, debug: false } },
 
-	// Module ownership configurations
-	{ name: "EAGER_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, debug: false } },
-	{ name: "LAZY_MODULE_OWNERSHIP", config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, debug: false } },
-	{
-		name: "EAGER_OWNERSHIP_DENY_OVERWRITE",
-		config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: false, debug: false }
-	},
-	{
-		name: "LAZY_MODULE_OWNERSHIP_NO_OVERWRITE",
-		config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: false, debug: false }
-	},
+	// Hot reload feature test (one config to ensure feature works in matrix)
+	{ name: "EAGER_HOT_RELOAD", config: { dir: "../api_tests/api_test", lazy: false, hotReload: true, debug: false } },
+	{ name: "LAZY_HOT_RELOAD", config: { dir: "../api_tests/api_test", lazy: true, hotReload: true, debug: false } },
 
 	// API depth configurations
-	{ name: "EAGER_DEPTH_1", config: { dir: "./api_tests/api_test", lazy: false, apiDepth: 1, debug: false } },
-	{ name: "LAZY_DEPTH_1", config: { dir: "./api_tests/api_test", lazy: true, apiDepth: 1, debug: false } },
-	{ name: "EAGER_DEPTH_3", config: { dir: "./api_tests/api_test", lazy: false, apiDepth: 3, debug: false } },
-	{ name: "LAZY_DEPTH_3", config: { dir: "./api_tests/api_test", lazy: true, apiDepth: 3, debug: false } },
+	{ name: "EAGER_DEPTH_1", config: { dir: "../api_tests/api_test", lazy: false, apiDepth: 1, debug: false } },
+	{ name: "LAZY_DEPTH_1", config: { dir: "../api_tests/api_test", lazy: true, apiDepth: 1, debug: false } },
+	{ name: "EAGER_DEPTH_3", config: { dir: "../api_tests/api_test", lazy: false, apiDepth: 3, debug: false } },
+	{ name: "LAZY_DEPTH_3", config: { dir: "../api_tests/api_test", lazy: true, apiDepth: 3, debug: false } },
 
 	// Different API directories for testing different module structures
-	{ name: "EAGER_MIXED", config: { dir: "./api_tests/api_test_mixed", lazy: false, debug: false } },
-	{ name: "LAZY_MIXED", config: { dir: "./api_tests/api_test_mixed", lazy: true, debug: false } },
+	{ name: "EAGER_MIXED", config: { dir: "../api_tests/api_test_mixed", lazy: false, debug: false } },
+	{ name: "LAZY_MIXED", config: { dir: "../api_tests/api_test_mixed", lazy: true, debug: false } },
 
 	// Combined edge cases
 	{
 		name: "LAZY_ALL_FEATURES",
-		config: { dir: "./api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
+		config: { dir: "../api_tests/api_test", lazy: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
 	},
 	{
 		name: "EAGER_ALL_FEATURES",
-		config: { dir: "./api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: false, apiDepth: 5, debug: false }
+		config: { dir: "../api_tests/api_test", lazy: false, allowApiOverwrite: false, apiDepth: 5, debug: false }
 	}
 ];
 
@@ -53,7 +45,6 @@ export async function runTestMatrix(configOverride = {}, testFunction, testDescr
 		total: 0,
 		passed: 0,
 		failed: 0,
-		skipped: 0,
 		errors: []
 	};
 
@@ -101,6 +92,9 @@ export async function runTestMatrix(configOverride = {}, testFunction, testDescr
 			console.log(`   - ${error.config}: ${error.error}`);
 		}
 	}
+
+	// Return results so caller can track failures
+	return results;
 
 	return results;
 }

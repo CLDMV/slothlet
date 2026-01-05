@@ -211,6 +211,28 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		await removeApiByModuleId(instance, moduleId);
 	}
 
+	// Track addApi call for hot reload (before any potential errors)
+	if (instance.config.hotReload) {
+		// Remove any previous entry for this apiPath/moduleId (if reloading)
+		// Use moduleId if available, otherwise use apiPath as identifier
+		const identifier = moduleId || apiPath;
+		instance._addApiHistory = instance._addApiHistory.filter((entry) => {
+			const entryId = entry.options?.moduleId || entry.apiPath;
+			return entryId !== identifier;
+		});
+		// Add new entry with all options preserved
+		instance._addApiHistory.push({
+			apiPath,
+			folderPath,
+			metadata: metadata ? { ...metadata } : {},
+			options: options ? { ...options } : {}
+		});
+		// Remove from removal history if it was there (using same identifier)
+		if (moduleId) {
+			instance._removeApiHistory.delete(moduleId);
+		}
+	}
+
 	if (instance.config.debug) {
 		console.log(`[DEBUG] addApi: Loading modules from ${resolvedFolderPath} to path: ${normalizedApiPath}`);
 	}
