@@ -311,6 +311,10 @@ const slothletObject = {
 	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership (apiPath -> moduleId)
 	_moduleApiPaths: new Map(), // Map of moduleId to Set of API paths (moduleId -> Set<apiPath>)
 	_pathSegmentModules: new Map(), // Map of path segments to Set of moduleIds that use them (pathSegment -> Set<moduleId>)
+	// Hot reload tracking
+	_initialLoadConfig: null, // Initial config passed to load() for hot reload
+	_addApiHistory: [], // Track all addApi calls for hot reload: [{apiPath, folderPath, metadata, options}]
+	_removeApiHistory: new Set(), // Track removed modules by moduleId to exclude from reload
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
@@ -517,6 +521,18 @@ const slothletObject = {
 				"[slothlet] DEPRECATION WARNING: 'enableModuleOwnership' is deprecated and will be removed in v3.0.0. Please use 'hotReload' instead."
 			);
 			this.config.hotReload = true;
+		}
+
+		// Store initial load config for hot reload
+		if (this.config.hotReload && !this._initialLoadConfig) {
+			this._initialLoadConfig = { ...config };
+		}
+
+		// Regenerate instanceId on every load() call (including reloads)
+		if (!this.loaded || this.config.hotReload) {
+			const runtimeType = normalizeRuntimeType(this.config.runtime);
+			const loadingModeStr = this.config.lazy ? "lazy" : "eager";
+			this.instanceId = `slothlet_${runtimeType}_${loadingModeStr}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
 		}
 
 		// Normalize runtime input to internal format (async/live)
@@ -980,6 +996,21 @@ const slothletObject = {
 			console.warn("Could not redefine boundApi.removeApi: not configurable");
 		}
 
+		// Add reload method to boundApi (only if hotReload is enabled)
+		if (this.config.hotReload) {
+			const reloadDesc = Object.getOwnPropertyDescriptor(boundApi, "reload");
+			if (!reloadDesc || reloadDesc.configurable) {
+				Object.defineProperty(boundApi, "reload", {
+					value: this.reload.bind(this),
+					writable: true,
+					configurable: true,
+					enumerable: false // Non-enumerable to distinguish from API endpoints
+				});
+			} else if (this.config && this.config.debug) {
+				console.warn("Could not redefine boundApi.reload: not configurable");
+			}
+		}
+
 		// Add .run() method to boundApi
 		const runDesc = Object.getOwnPropertyDescriptor(boundApi, "run");
 		if (!runDesc || runDesc.configurable) {
@@ -1275,6 +1306,90 @@ const slothletObject = {
 			}
 		} else {
 			throw new TypeError("[slothlet] removeApi: target must be a string (API path) or object with moduleId/apiPath");
+		}
+	},
+
+	/**
+	 * Hot reloads the API by re-executing initial load and all addApi calls.
+	 *
+	 * @memberof module:@cldmv/slothlet
+	 * @async
+	 * @returns {Promise<void>}
+	 * @throws {Error} If hotReload is not enabled in config
+	 * @throws {Error} If no initial load config was stored
+	 *
+	 * @description
+	 * Performs a hot reload of the entire API structure:
+	 * 1. Clears the current API state
+	 * 2. Re-runs the initial load() with stored config
+	 * 3. Replays all addApi() calls (except those that were removed)
+	 * 4. Maintains the same bound API reference (no reassignment needed)
+	 *
+	 * This allows modules to be updated without restarting the application.
+	 * The consumer's API reference remains valid after reload.
+	 *
+	 * @example
+	 * // Setup with hot reload enabled
+	 * const api = await slothlet({ dir: "./api", hotReload: true });
+	 *
+	 * // Later, after file changes
+	 * await api.reload(); // Same reference, updated functionality
+	 *
+	 * @public
+	 */
+	async reload() {
+		if (!this.config.hotReload) {
+			throw new Error("[slothlet] reload: hotReload must be enabled in config to use reload()");
+		}
+
+		if (!this._initialLoadConfig) {
+			throw new Error("[slothlet] reload: No initial load config found. Cannot reload.");
+		}
+
+		if (this.config.debug) {
+			console.log("[DEBUG] reload: Starting hot reload...");
+		}
+
+		// Clear current API state while preserving structure
+		this.loaded = false;
+		this.api = null;
+
+		// Re-run initial load with stored config (this regenerates instanceId internally)
+		await this.load(this._initialLoadConfig);
+
+		// Replay all addApi calls that weren't removed
+		for (const entry of this._addApiHistory) {
+			const { apiPath, folderPath, metadata, options } = entry;
+			const moduleId = options?.moduleId;
+
+			// Skip if this module was explicitly removed
+			if (moduleId && this._removeApiHistory.has(moduleId)) {
+				if (this.config.debug) {
+					console.log(`[DEBUG] reload: Skipping removed module "${moduleId}"`);
+				}
+				continue;
+			}
+
+			if (this.config.debug) {
+				console.log(`[DEBUG] reload: Re-adding API at "${apiPath}" from "${folderPath}"`);
+			}
+
+			await this.addApi(apiPath, folderPath, metadata, options);
+		}
+
+		// Update bindings to reflect all changes
+		// IMPORTANT: Update boundapi.instanceId first since load() regenerated this.instanceId
+		Object.defineProperty(this.boundapi, "instanceId", {
+			value: this.instanceId,
+			writable: false,
+			configurable: true,
+			enumerable: false
+		});
+
+		this.updateBindings(this.context, this.reference, this.boundapi);
+
+		if (this.config.debug) {
+			console.log("[DEBUG] reload: Hot reload complete");
 		}
 	},
 

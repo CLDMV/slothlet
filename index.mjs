@@ -33,7 +33,7 @@ function normalizeRuntimeType(runtime) {
 }
 
 // Development environment check (must happen before slothlet imports)
-(async () => {
+const devcheckPromise = (async () => {
 	try {
 		await import("@cldmv/slothlet/devcheck");
 	} catch {
@@ -67,7 +67,9 @@ function normalizeRuntimeType(runtime) {
  *
  */
 export default async function slothlet(options = {}) {
-	// Dynamic imports after environment check
+	// Wait for devcheck to complete before proceeding
+	await devcheckPromise;
+
 	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 
