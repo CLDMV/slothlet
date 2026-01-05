@@ -201,7 +201,7 @@ async function test_removeApi_withoutOwnership(testWithConfig) {
 			assert(removed === true, "removeApi by path should work");
 			assert(api.test === undefined || api.test.module === undefined, "test.module should be removed");
 		},
-		{ enableModuleOwnership: false }
+		{ hotReload: false }
 	);
 }
 
@@ -219,7 +219,7 @@ async function test_removeApi_moduleId_requiresOwnership(testWithConfig) {
 			const removed = await api.removeApi({ moduleId: "someModule" });
 			assert(removed === false, "Should return false when ownership tracking disabled");
 		},
-		{ enableModuleOwnership: false }
+		{ hotReload: false }
 	);
 }
 
@@ -299,7 +299,7 @@ async function test_addApi_moduleId_withoutOwnership(testWithConfig) {
 			assert(removedByPath === true, "Should remove by path");
 			assert(api.plugins === undefined || api.plugins.test === undefined, "Module should be removed");
 		},
-		{ enableModuleOwnership: false }
+		{ hotReload: false }
 	);
 }
 
@@ -328,7 +328,7 @@ async function runAllTests() {
 			"Basic API Removal Tests"
 		);
 
-		console.log("\n🔄 Running tests that require enableModuleOwnership...");
+		console.log("\n🔄 Running tests that require hotReload...");
 		await runOwnershipTestMatrix(
 			{},
 			async (testWithConfig) => {
