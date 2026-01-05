@@ -47,6 +47,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
+import { removeApiByModuleId } from "./remove_api.mjs";
 
 /**
  * @typedef {Object} AddApiFromFolderParams
@@ -185,6 +186,29 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 	if (!stats.isDirectory()) {
 		throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
+	}
+
+	// Rule 12: Check cross-module ownership BEFORE auto-cleanup
+	// If the target path exists and is owned by a DIFFERENT module, block the operation
+	if (instance.config.enableModuleOwnership && moduleId && forceOverwrite) {
+		const existingOwner = instance._getApiOwnership(normalizedApiPath);
+		if (existingOwner && existingOwner !== moduleId) {
+			throw new Error(
+				`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module "${existingOwner}", ` +
+					`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
+			);
+		}
+	}
+
+	// Rule 13: Auto-cleanup before reload when ownership tracking enabled
+	// Remove existing APIs owned by this module to prevent orphan functions
+	// CRITICAL: This must happen AFTER path resolution and cross-module check but BEFORE module loading
+	// to preserve the synchronous call stack for resolvePathFromCaller()
+	if (instance.config.enableModuleOwnership && moduleId) {
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Auto-cleanup enabled - removing existing APIs for moduleId: ${moduleId}`);
+		}
+		await removeApiByModuleId(instance, moduleId);
 	}
 
 	if (instance.config.debug) {
@@ -636,8 +660,9 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 	// Rule 12: Register ownership after successful update
 	if (instance.config.enableModuleOwnership && moduleId) {
-		const fullApiPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
-		instance._registerApiOwnership(fullApiPath, moduleId);
+		// The API is being added AT normalizedApiPath, not under it
+		// finalKey is the last segment of pathParts and is already included in normalizedApiPath
+		instance._registerApiOwnership(normalizedApiPath, moduleId);
 	}
 
 	instance.updateBindings(instance.context, instance.reference, instance.boundapi);
