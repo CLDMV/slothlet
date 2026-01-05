@@ -56,3 +56,5 @@ export { buildCategoryStructure, buildRootAPI, toapiPathKey, shouldIncludeFile }
 export { safeDefine, deepMerge, mutateLiveBindingFunction } from "@cldmv/slothlet/helpers/utilities";
 
 export { addApiFromFolder } from "@cldmv/slothlet/helpers/api_builder/add_api";
+
+export { removeApiPath, removeApiByModuleId } from "@cldmv/slothlet/helpers/api_builder/remove_api";

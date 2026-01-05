@@ -129,7 +129,9 @@ import {
 	safeDefine,
 	deepMerge,
 	mutateLiveBindingFunction,
-	addApiFromFolder
+	addApiFromFolder,
+	removeApiPath,
+	removeApiByModuleId
 } from "@cldmv/slothlet/helpers/api_builder";
 import { updateInstanceData, cleanupInstance } from "@cldmv/slothlet/helpers/instance-manager";
 import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "@cldmv/slothlet/helpers/als-eventemitter";
@@ -305,7 +307,9 @@ const slothletObject = {
 		enableModuleOwnership: false
 	},
 	// Module ownership tracking for Rule 12: Module Ownership and Selective API Overwriting
-	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership
+	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership (apiPath -> moduleId)
+	_moduleApiPaths: new Map(), // Map of moduleId to Set of API paths (moduleId -> Set<apiPath>)
+	_pathSegmentModules: new Map(), // Map of path segments to Set of moduleIds that use them (pathSegment -> Set<moduleId>)
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
@@ -953,6 +957,19 @@ const slothletObject = {
 			console.warn("Could not redefine boundApi.addApi: not configurable");
 		}
 
+		// Add removeApi method to boundApi
+		const removeApiDesc = Object.getOwnPropertyDescriptor(boundApi, "removeApi");
+		if (!removeApiDesc || removeApiDesc.configurable) {
+			Object.defineProperty(boundApi, "removeApi", {
+				value: this.removeApi.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false // Non-enumerable to distinguish from API endpoints
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.removeApi: not configurable");
+		}
+
 		// Add .run() method to boundApi
 		const runDesc = Object.getOwnPropertyDescriptor(boundApi, "run");
 		if (!runDesc || runDesc.configurable) {
@@ -1059,7 +1076,16 @@ const slothletObject = {
 	 */
 	_registerApiOwnership(apiPath, moduleId) {
 		if (!this.config.enableModuleOwnership) return;
+
+		// Register apiPath -> moduleId
 		this._moduleOwnership.set(apiPath, moduleId);
+
+		// Register moduleId -> apiPaths (bidirectional)
+		if (!this._moduleApiPaths.has(moduleId)) {
+			this._moduleApiPaths.set(moduleId, new Set());
+		}
+		this._moduleApiPaths.get(moduleId).add(apiPath);
+
 		if (this.config.debug) {
 			console.log(`[DEBUG] Registered ownership: ${apiPath} -> ${moduleId}`);
 		}
@@ -1188,6 +1214,58 @@ const slothletObject = {
 	 */
 	async addApi(apiPath, folderPath, metadata = {}, options = {}) {
 		return addApiFromFolder({ apiPath, folderPath, instance: this, metadata, options });
+	},
+
+	/**
+	 * Removes API endpoints and cleans up ownership tracking.
+	 *
+	 * @memberof module:@cldmv/slothlet
+	 * @async
+	 * @param {string|object} target - API path (string) or options object {moduleId, apiPath}
+	 * @param {string} [target.moduleId] - Remove all APIs owned by this module
+	 * @param {string} [target.apiPath] - Remove specific API path
+	 * @returns {Promise<boolean>} True if any APIs were removed, false otherwise
+	 * @throws {TypeError} If target is invalid type
+	 * @throws {Error} If neither moduleId nor apiPath provided in options object
+	 *
+	 * @description
+	 * Removes API endpoints from the API structure and cleans up ownership registries.
+	 * Can remove by API path or by module ID (removes all APIs owned by that module).
+	 * When ownership tracking is disabled, only direct API path removal is supported.
+	 *
+	 * @example
+	 * // Remove by API path
+	 * await api.removeApi("plugins.myModule");
+	 *
+	 * @example
+	 * // Remove all APIs owned by a module ID
+	 * await api.removeApi({ moduleId: "myModule" });
+	 *
+	 * @example
+	 * // Remove specific path (object syntax)
+	 * await api.removeApi({ apiPath: "plugins.myModule" });
+	 *
+	 * @public
+	 */
+	async removeApi(target) {
+		if (typeof target === "string") {
+			// Simple string path
+			return removeApiPath(this, target);
+		} else if (target && typeof target === "object") {
+			const { moduleId, apiPath } = target;
+
+			if (moduleId) {
+				// Remove all paths owned by this module
+				return removeApiByModuleId(this, moduleId);
+			} else if (apiPath) {
+				// Remove specific path
+				return removeApiPath(this, apiPath);
+			} else {
+				throw new Error("[slothlet] removeApi: options object must contain either 'moduleId' or 'apiPath'");
+			}
+		} else {
+			throw new TypeError("[slothlet] removeApi: target must be a string (API path) or object with moduleId/apiPath");
+		}
 	},
 
 	/**
