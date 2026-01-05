@@ -20,6 +20,10 @@
 #
 name: 🚀 Create Release PR
 
+permissions:
+    contents: write
+    pull-requests: write
+
 on:
     push:
         branches-ignore: [master, main]
