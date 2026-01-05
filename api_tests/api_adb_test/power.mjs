@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self as _, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
  * Powers on the Android TV device and ensures it's awake.

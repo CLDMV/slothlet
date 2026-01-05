@@ -232,7 +232,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		if (typeof earlyCurrentTarget[earlyFinalKey] === "object") {
 			superEarlyExistingTargetContent = { ...earlyCurrentTarget[earlyFinalKey] };
 			if (instance.config.debug) {
-				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing target content:`, Object.keys(superEarlyExistingTargetContent || {}));
+				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing target content:`, Object.keys(superEarlyExistingTargetContent));
 			}
 		}
 	}
@@ -254,7 +254,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		if (typeof earlyCurrentBoundTarget[earlyFinalKey] === "object") {
 			superEarlyExistingBoundContent = { ...earlyCurrentBoundTarget[earlyFinalKey] };
 			if (instance.config.debug) {
-				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing bound content:`, Object.keys(superEarlyExistingBoundContent || {}));
+				console.log(`[DEBUG] addApi: SUPER EARLY - Captured existing bound content:`, Object.keys(superEarlyExistingBoundContent));
 			}
 		}
 	}
@@ -581,7 +581,7 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		// Then merge new modules
 		if (instance.config.debug) {
 			console.log(`[DEBUG] addApi: Before merging new modules - current keys:`, Object.keys(currentTarget[finalKey] || {}));
-			console.log(`[DEBUG] addApi: New modules to merge - keys:`, Object.keys(newModules || {}));
+			console.log(`[DEBUG] addApi: New modules to merge - keys:`, Object.keys(newModules));
 		}
 		Object.assign(currentTarget[finalKey], newModules);
 		Object.assign(currentBoundTarget[finalKey], newModules);
