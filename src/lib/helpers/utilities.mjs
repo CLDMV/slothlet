@@ -175,13 +175,16 @@ export function mutateLiveBindingFunction(target, source) {
 		for (const key of Object.keys(target)) {
 			if (key !== "_impl" && key !== "__ctx") delete target[key];
 		}
-		// Attach new methods
+		// Attach new methods using defineProperty to handle non-writable properties
 		for (const key of Object.getOwnPropertyNames(source)) {
 			if (key !== "length" && key !== "name" && key !== "prototype" && key !== "_impl" && key !== "__ctx") {
-				try {
-					target[key] = source[key];
-				} catch {
-					// ignore
+				const desc = Object.getOwnPropertyDescriptor(source, key);
+				if (desc) {
+					try {
+						Object.defineProperty(target, key, desc);
+					} catch {
+						// ignore non-configurable properties
+					}
 				}
 			}
 		}
@@ -197,7 +200,7 @@ export function mutateLiveBindingFunction(target, source) {
 			}
 		}
 		// Manually copy management methods (may be non-enumerable)
-		const managementMethods = ["shutdown", "addApi", "describe"];
+		const managementMethods = ["shutdown", "addApi", "removeApi", "reload", "describe", "run", "instanceId", "scope"];
 		for (const method of managementMethods) {
 			const desc = Object.getOwnPropertyDescriptor(source, method);
 			if (desc) {

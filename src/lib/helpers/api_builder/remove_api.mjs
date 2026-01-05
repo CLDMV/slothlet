@@ -176,6 +176,13 @@ export async function removeApiByModuleId(instance, moduleId) {
 		return false;
 	}
 
+	// Track removal for hot reload
+	if (instance.config.hotReload) {
+		instance._removeApiHistory.add(moduleId);
+		// Remove from addApi history
+		instance._addApiHistory = instance._addApiHistory.filter((entry) => entry.options?.moduleId !== moduleId);
+	}
+
 	// Create array copy since we'll be modifying the set during iteration
 	const pathsToRemove = Array.from(apiPaths);
 
