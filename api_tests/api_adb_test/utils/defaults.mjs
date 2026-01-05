@@ -114,8 +114,7 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 			const restored = {};
 
 			keysArray.forEach((key) => {
-				if (systemDefaults.hasOwnProperty(key)) {
-					restored[key] = systemDefaults[key];
+				if (Object.prototype.hasOwnProperty.call(systemDefaults, key)) {
 				}
 			});
 
@@ -133,7 +132,7 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 		 * @returns {boolean} True if at default value
 		 */
 		isDefault(key) {
-			if (!systemDefaults.hasOwnProperty(key)) {
+			if (!Object.prototype.hasOwnProperty.call(systemDefaults, key)) {
 				return false;
 			}
 

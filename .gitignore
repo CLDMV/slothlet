@@ -165,3 +165,22 @@ TODO.md
 
 # Audit and analysis tools (temporary/local development)
 audit/
+
+# AI Assistant files
+.copilot/
+.cursor/
+.vscode/copilot-chat/
+.windsurfrules
+.claude/
+CLAUDE.md
+.aider.chat.history.md
+.aider.input.history
+aider.conf.yml
+.clinerules
+.roomodes
+.gpt/
+.chatgpt/
+*.ai
+*instructions*.md
+prompts/
+.github/copilot-instructions.md

@@ -174,23 +174,94 @@ function pickPrimaryBaseFile() {
 	for (const cs of getStack(pickPrimaryBaseFile)) {
 		const f = toFsPath(cs?.getFileName?.());
 		if (!f) continue;
-		if (f.startsWith?.("node:internal")) continue;
+		// Skip all Node.js built-in modules (node:*)
+		if (f.startsWith?.("node:")) continue;
 		files.push(f);
+	}
+
+	console.log(`[DEBUG_RESOLVE] pickPrimaryBaseFile - Total stack frames: ${files.length}`);
+	console.log(`[DEBUG_RESOLVE] ALL stack frames:`);
+	for (let i = 0; i < files.length; i++) {
+		console.log(`[DEBUG_RESOLVE]   [${i}] ${files[i]}`);
 	}
 
 	let iSloth = -1;
 	for (let i = 0; i < files.length; i++) {
-		if (path.basename(files[i]).toLowerCase() === "slothlet.mjs") iSloth = i;
-	}
-	if (iSloth !== -1) {
-		const j = iSloth + 1;
-		if (j < files.length) {
-			const b = path.basename(files[j]).toLowerCase();
-			if (/^index\.(mjs|cjs|js)$/.test(b) && j + 1 < files.length) return files[j + 1];
-			return files[j];
+		if (path.basename(files[i]).toLowerCase() === "slothlet.mjs") {
+			iSloth = i;
 		}
 	}
+
+	console.log(`[DEBUG_RESOLVE] Found slothlet.mjs at index: ${iSloth}, total files: ${files.length}`);
+	if (iSloth !== -1) {
+		console.log(`[DEBUG_RESOLVE] Files after slothlet.mjs:`);
+		for (let k = iSloth + 1; k < Math.min(files.length, iSloth + 5); k++) {
+			console.log(`[DEBUG_RESOLVE]   [${k}] ${files[k]}`);
+		}
+	}
+
+	if (iSloth !== -1) {
+		// Start from the frame after slothlet.mjs
+		let j = iSloth + 1;
+
+		// Skip ALL internal files (src/lib/*, helpers/*, etc.) until we find user code
+		while (j < files.length) {
+			const candidateFile = files[j];
+			const b = path.basename(candidateFile).toLowerCase();
+
+			console.log(`[DEBUG_RESOLVE] Candidate file at [${j}]: ${candidateFile}`);
+			console.log(`[DEBUG_RESOLVE] Candidate basename: ${b}`);
+			console.log(`[DEBUG_RESOLVE] Is internal: ${isSlothletInternalFile(candidateFile)}`);
+
+			// Skip Node.js built-in modules (node:*)
+			if (candidateFile.startsWith?.("node:")) {
+				console.log(`[DEBUG_RESOLVE] Skipping Node.js built-in module, checking next...`);
+				j++;
+				continue;
+			}
+
+			// Skip internal files - keep looking
+			if (isSlothletInternalFile(candidateFile)) {
+				console.log(`[DEBUG_RESOLVE] Skipping internal file, checking next...`);
+				j++;
+				continue;
+			}
+
+			// Skip index files - look at next file
+			if (/^index\.(mjs|cjs|js)$/.test(b)) {
+				console.log(`[DEBUG_RESOLVE] Is index file, skipping to next...`);
+				j++;
+				continue;
+			}
+
+			// Found a non-internal, non-index file - this is our caller!
+			console.log(`[DEBUG_RESOLVE] Using file: ${candidateFile}`);
+			return candidateFile;
+		}
+
+		console.log(`[DEBUG_RESOLVE] No non-internal files after slothlet.mjs, falling back`);
+	}
 	return null;
+}
+
+/**
+ * Check if a file path is a slothlet internal file that shouldn't be used as caller base
+ * @param {string} filePath - The file path to check
+ * @returns {boolean} True if this is an internal slothlet file
+ */
+function isSlothletInternalFile(filePath) {
+	if (!filePath) return true;
+
+	// Skip any file in src/lib/ (slothlet internal structure)
+	if (filePath.includes(path.sep + "src" + path.sep + "lib" + path.sep)) return true;
+
+	// Skip any slothlet.mjs files
+	if (path.basename(filePath).toLowerCase() === "slothlet.mjs") return true;
+
+	// Skip files in the helpers directory
+	if (filePath.startsWith(THIS_DIR + path.sep)) return true;
+
+	return false;
 }
 
 /**
@@ -222,16 +293,26 @@ function pickPrimaryBaseFile() {
  * // - Direct API usage without slothlet loader
  */
 function pickFallbackBaseFile() {
+	console.log("[DEBUG_RESOLVE] pickFallbackBaseFile called");
 	for (const cs of getStack(pickFallbackBaseFile)) {
 		const f = toFsPath(cs?.getFileName?.());
 		if (!f) continue;
-		if (f.startsWith?.("node:internal")) continue;
+		// Skip all Node.js built-in modules (node:*)
+		if (f.startsWith?.("node:")) continue;
 		if (f === THIS_FILE) continue;
-		if (f.startsWith(THIS_DIR + path.sep)) continue; // helper’s own dir
+		if (f.startsWith(THIS_DIR + path.sep)) continue; // helper's own dir
 		if (path.basename(f).toLowerCase() === "slothlet.mjs") continue;
+		if (isSlothletInternalFile(f)) {
+			console.log(`[DEBUG_RESOLVE] Fallback skipping internal file: ${f}`);
+			continue; // Skip slothlet internal files
+		}
+		console.log(`[DEBUG_RESOLVE] Fallback considering: ${f}`);
 		return f;
 	}
-	return THIS_FILE;
+	// If we can't find any user code in the stack, use the current working directory
+	// This is safer than using THIS_FILE (which is deep inside src/lib/)
+	console.log(`[DEBUG_RESOLVE] Fallback: No user code found in stack, using process.cwd(): ${process.cwd()}`);
+	return process.cwd();
 }
 
 /* ---------- generic resolver (shared) ---------- */

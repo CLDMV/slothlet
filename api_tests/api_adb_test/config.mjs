@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 14:28:24 -07:00 (1761600504)
+ *	@Last modified time: 2026-01-04 04:35:32 -08:00 (1767530132)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -18,7 +18,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self as _, context } from "@cldmv/slothlet/runtime";
 
 // Internal active configuration state
 let activeConfig = {
@@ -67,7 +67,7 @@ export function set(key, value) {
 
 		// Update context for immediate effect
 		Object.keys(key).forEach((k) => {
-			if (context.hasOwnProperty(k)) {
+			if (Object.prototype.hasOwnProperty.call(context, k)) {
 				context[k] = key[k];
 			}
 		});
@@ -76,7 +76,7 @@ export function set(key, value) {
 		activeConfig[key] = value;
 
 		// Update context for immediate effect
-		if (context.hasOwnProperty(key)) {
+		if (Object.prototype.hasOwnProperty.call(context, key)) {
 			context[key] = value;
 		}
 	}
@@ -117,7 +117,7 @@ export function merge(configObject, deep = false) {
 
 	// Update context for immediate effect
 	Object.keys(configObject).forEach((key) => {
-		if (context.hasOwnProperty(key)) {
+		if (Object.prototype.hasOwnProperty.call(context, key)) {
 			context[key] = configObject[key];
 		}
 	});

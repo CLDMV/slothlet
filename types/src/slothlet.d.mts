@@ -89,6 +89,14 @@ export type SlothletOptions = {
      */
     allowApiOverwrite?: boolean;
     /**
+     * - Enable module-based API ownership tracking for selective overwrites:
+     * - `true`: Track which modules register APIs, enable forceOverwrite with moduleId validation
+     * - `false`: Disable ownership tracking (default, no performance overhead)
+     * - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
+     * - Requires moduleId parameter in addApi options when using forceOverwrite capability
+     */
+    enableModuleOwnership?: boolean;
+    /**
      * - Context data object injected into live-binding `context` reference.
      * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
      * - user sessions, environment configs, etc.

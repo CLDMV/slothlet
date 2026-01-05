@@ -1,18 +1,24 @@
 /**
+ * @typedef {Object} AddApiFromFolderParams
+ * @property {string} apiPath - Dot-notation path where modules will be added
+ * @property {string} folderPath - Path to folder containing modules to load
+ * @property {object} instance - Slothlet instance with api, boundapi, config, modes, etc.
+ * @property {object} [metadata={}] - Metadata to attach to all loaded functions
+ * @property {object} [options={}] - Additional options for module loading
+ * @property {boolean} [options.forceOverwrite=false] - Allow overwriting existing APIs (requires Rule 12)
+ * @property {string} [options.moduleId] - Module identifier for ownership tracking (required with forceOverwrite)
+ */
+/**
+ * @description
  * Dynamically adds API modules from a new folder to the existing API at a specified path.
  *
  * @function addApiFromFolder
  * @memberof module:@cldmv/slothlet.lib.helpers.api_builder.add_api
- * @param {object} options - Configuration object
- * @param {string} options.apiPath - Dot-notation path where modules will be added
- * @param {string} options.folderPath - Path to folder containing modules to load
- * @param {object} options.instance - Slothlet instance with api, boundapi, config, modes, etc.
- * @param {object} [options.metadata={}] - Metadata to attach to all loaded functions
+ * @param {AddApiFromFolderParams} params - Configuration object
  * @returns {Promise<void>}
  * @throws {Error} If API not loaded, invalid parameters, folder does not exist, or merge conflicts
  * @package
  *
- * @description
  * This function enables runtime extension of the API by loading modules from a folder
  * and merging them into a specified location in the API tree. It performs comprehensive
  * validation, supports both relative and absolute paths, handles intermediate object
@@ -31,46 +37,66 @@
  * import { addApiFromFolder } from "./add_api.mjs";
  *
  * // Add additional modules at runtime.plugins path
- * await addApiFromFolder({
- *   apiPath: "runtime.plugins",
- *   folderPath: "./plugins",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "runtime.plugins",
+ *   "./plugins",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add modules to root level
- * await addApiFromFolder({
- *   apiPath: "utilities",
- *   folderPath: "./utils",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "utilities",
+ *   "./utils",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add deep nested modules
- * await addApiFromFolder({
- *   apiPath: "services.external.stripe",
- *   folderPath: "./services/stripe",
- *   instance: slothletInstance
- * });
+ * await addApiFromFolder(
+ *   "services.external.stripe",
+ *   "./services/stripe",
+ *   slothletInstance
+ * );
  *
  * @example
  * // Add modules with metadata
- * await addApiFromFolder({
- *   apiPath: "plugins",
- *   folderPath: "./untrusted-plugins",
- *   instance: slothletInstance,
- *   metadata: {
+ * await addApiFromFolder(
+ *   "extensions.untrusted",
+ *   "./untrusted-plugins",
+ *   slothletInstance,
+ *   {
  *     trusted: false,
  *     permissions: ["read"],
  *     version: "1.0.0",
  *     author: "external"
  *   }
- * });
+ * );
  */
-export function addApiFromFolder({ apiPath, folderPath, instance, metadata }: {
+export function addApiFromFolder({ apiPath, folderPath, instance, metadata, options }: AddApiFromFolderParams): Promise<void>;
+export type AddApiFromFolderParams = {
+    /**
+     * - Dot-notation path where modules will be added
+     */
     apiPath: string;
+    /**
+     * - Path to folder containing modules to load
+     */
     folderPath: string;
+    /**
+     * - Slothlet instance with api, boundapi, config, modes, etc.
+     */
     instance: object;
+    /**
+     * - Metadata to attach to all loaded functions
+     */
     metadata?: object;
-}): Promise<void>;
+    /**
+     * - Additional options for module loading
+     */
+    options?: {
+        forceOverwrite?: boolean;
+        moduleId?: string;
+    };
+};
 //# sourceMappingURL=add_api.d.mts.map

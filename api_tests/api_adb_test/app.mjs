@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self } from "@cldmv/slothlet/runtime";
+import { self as _ } from "@cldmv/slothlet/runtime";
 
 /**
  * Launches an application by package name.
@@ -25,9 +25,9 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export async function launch(packageName, options = {}) {
 	const { activity, clearTop = false, delay = 2000 } = options;
-	
+
 	// Dummy implementation
-	await new Promise(resolve => setTimeout(resolve, delay));
+	await new Promise((resolve) => setTimeout(resolve, delay));
 	return Promise.resolve({ packageName, activity, clearTop });
 }
 
@@ -66,12 +66,7 @@ export async function refresh() {
  * @returns {Promise<string[]>} List of package names
  */
 export async function getInstalledPackages(options = {}) {
-	return Promise.resolve([
-		"com.netflix.ninja",
-		"com.youtube.tv", 
-		"com.android.settings",
-		"com.google.android.apps.tv.launcherx"
-	]);
+	return Promise.resolve(["com.netflix.ninja", "com.youtube.tv", "com.android.settings", "com.google.android.apps.tv.launcherx"]);
 }
 
 /**
@@ -145,7 +140,7 @@ export async function getCurrentPackage() {
 
 /**
  * Gets the current activity name.
- * @returns {Promise<string>} Current activity name  
+ * @returns {Promise<string>} Current activity name
  */
 export async function getCurrentActivity() {
 	return Promise.resolve("com.netflix.ninja.MainActivity");

@@ -325,7 +325,35 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 	for (const entry of entries) {
 		if (entry.isDirectory() && !entry.name.startsWith(".") && currentDepth < maxDepth) {
 			const categoryPath = path.join(dir, entry.name);
-			api[this._toapiPathKey(entry.name)] = await this._loadCategory(categoryPath, currentDepth + 1, maxDepth);
+			const categoryKey = this._toapiPathKey(entry.name);
+			const categoryResult = await this._buildCategory(categoryPath, {
+				currentDepth: currentDepth + 1,
+				maxDepth,
+				mode: "eager",
+				existingApi: api // Pass current API state to check for conflicts
+			});
+
+			// Apply merge logic for subdirectory conflicts
+			if (
+				api[categoryKey] &&
+				typeof api[categoryKey] === "object" &&
+				typeof categoryResult === "object" &&
+				!Array.isArray(api[categoryKey]) &&
+				!Array.isArray(categoryResult)
+			) {
+				if (this.config.debug) {
+					console.log(
+						`[DEBUG] eager: Merging subdirectory '${categoryKey}' - existing:`,
+						Object.keys(api[categoryKey]),
+						"new:",
+						Object.keys(categoryResult)
+					);
+				}
+				// Merge the objects instead of overwriting
+				Object.assign(api[categoryKey], categoryResult);
+			} else {
+				api[categoryKey] = categoryResult;
+			}
 		}
 	}
 
