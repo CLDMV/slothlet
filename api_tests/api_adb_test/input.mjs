@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self } from "@cldmv/slothlet/runtime";
+import { self as _ } from "@cldmv/slothlet/runtime";
 
 // Dummy key data
 const keyboardKeys = {

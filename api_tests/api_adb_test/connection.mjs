@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self as _, context as __, reference as ___ } from "@cldmv/slothlet/runtime";
 import { EventEmitter } from "events";
 
 // Connection state

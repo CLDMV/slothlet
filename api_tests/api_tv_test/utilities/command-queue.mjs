@@ -22,7 +22,7 @@ export function getPendingUpdateCommandCount() {
 	return 0;
 }
 
-export function isUpdateCommandPending(commandId) {
+export function isUpdateCommandPending(_) {
 	return false;
 }
 

@@ -15,6 +15,7 @@
 	},
 	"include": ["../**/*.js", "../**/*.mjs", "../**/*.d.ts"],
 	"exclude": [
+		"../api_tests",
 		"../api_test",
 		"../tests",
 		"../tools",

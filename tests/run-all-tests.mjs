@@ -105,16 +105,28 @@ async function runAllTests() {
 	try {
 		// Discover test files
 		const files = await readdir(testsDir);
+
+		// Utility files that should NOT be run as standalone tests
+		const excludeExactFiles = [
+			"test-utils.mjs",
+			"test-helper.mjs",
+			"run-all-tests.mjs",
+			"test-conditional.mjs",
+			"dump-full-api.mjs",
+			"validate-typescript.mjs"
+		];
+
+		// Pattern-based exclusions
+		const excludePatterns = [
+			/^debug-/, // Debug tools
+			/performance-benchmark/, // Performance tests (run separately)
+			/\.vest\.mjs$/ // Vitest files (handled by npm test)
+		];
+
 		const testFiles = files
 			.filter((file) => file.endsWith(".mjs") || file.endsWith(".cjs"))
-			.filter((file) => !file.includes("test-utils")) // Exclude utility files
-			.filter((file) => !file.includes("run-all-tests")) // Exclude this file
-			.filter((file) => !file.includes("test-conditional")) //
-			.filter((file) => !file.includes("dump-full-api")) // Exclude debug tools
-			// .filter((file) => !file.includes("debug-slothlet")) // Include debug script (comprehensive test)
-			.filter((file) => !file.includes("performance-benchmark")) // Exclude performance (run separately)
-			.filter((file) => file !== "validate-typescript.mjs") // Exclude TS validation (part of build)
-			.filter((file) => !file.endsWith(".vest.mjs")) // Exclude vitest files (handled by npm test)
+			.filter((file) => !excludeExactFiles.includes(file))
+			.filter((file) => !excludePatterns.some((pattern) => pattern.test(file)))
 			.sort();
 		if (testFiles.length === 0) {
 			console.log("⚠️  No test files found");

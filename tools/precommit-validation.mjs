@@ -30,6 +30,7 @@ async function main() {
 	console.log("==========================================");
 
 	const validationSteps = [
+		{ name: "Clean Build Artifacts", command: "npm", args: ["run", "build:cleanup"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
 		{ name: "Build Distribution", command: "npm", args: ["run", "build:dist"] },

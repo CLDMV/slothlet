@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 import { createDefaultsAPI } from "./utils/defaults.mjs";
 
 // Internal device data state

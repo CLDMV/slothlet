@@ -450,10 +450,21 @@ export function processModuleForAPI(options) {
 
 	// Apply assignments to target API
 	for (const [key, value] of Object.entries(apiAssignments)) {
-		if (debug && key && typeof value === "function" && value.name) {
-			console.log(`[DEBUG] ${mode}: Assigning key '${key}' to function '${value.name}'`);
+		if (debug) {
+			console.log(`[DEBUG] ${mode}: About to assign key '${key}' - current api[${key}]:`, api[key] ? Object.keys(api[key]) : "undefined");
+			console.log(`[DEBUG] ${mode}: New value for key '${key}':`, typeof value === "object" && value ? Object.keys(value) : typeof value);
 		}
-		api[key] = value;
+
+		// Check if key already exists and merge instead of overwrite
+		if (api[key] && typeof api[key] === "object" && typeof value === "object" && !Array.isArray(api[key]) && !Array.isArray(value)) {
+			if (debug) {
+				console.log(`[DEBUG] ${mode}: Merging objects for key '${key}' - existing:`, Object.keys(api[key]), "new:", Object.keys(value));
+			}
+			// Merge the objects instead of overwriting
+			Object.assign(api[key], value);
+		} else {
+			api[key] = value;
+		}
 	}
 
 	return {
@@ -503,7 +514,7 @@ export function processModuleForAPI(options) {
  * });
  */
 export async function buildCategoryDecisions(categoryPath, options = {}) {
-	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler } = options;
+	const { currentDepth = 0, maxDepth = Infinity, mode = "eager", subdirHandler, existingApi: _ } = options;
 	const { instance } = options;
 
 	if (!instance || typeof instance._toapiPathKey !== "function") {

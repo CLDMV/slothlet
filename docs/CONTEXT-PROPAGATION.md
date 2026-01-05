@@ -89,6 +89,7 @@ module.exports = { cjsFunction };
 ### Overview
 
 Per-request context isolation allows you to execute API functions with temporary context data that:
+
 - **Doesn't affect** the global slothlet instance context
 - **Inherits from** parent context when nested
 - **Supports** both shallow and deep merge strategies
@@ -106,6 +107,7 @@ Per-request context isolation allows you to execute API functions with temporary
 Executes a callback function with isolated context data.
 
 **Parameters:**
+
 - `contextData` (Object) - Context data to merge with current context
 - `callback` (Function) - Function to execute with isolated context
 - `...args` (any) - Arguments to pass to the callback
@@ -139,6 +141,7 @@ const result = await api.run(
 Executes a function with isolated context using structured options.
 
 **Parameters:**
+
 - `context` (Object) - Context data to merge
 - `fn` (Function) - Function to execute
 - `args` (Array, optional) - Arguments array for the function
@@ -444,7 +447,7 @@ await api.scope({
 > **Use Cases**: Per-request context isolation is ideal for HTTP servers (request-specific data), multi-tenant applications (tenant isolation), batch processing (job-specific context), and any scenario where you need temporary, isolated context state without affecting the global slothlet instance.
 
 > [!NOTE]  
-> **Performance**: Per-request context uses AsyncLocalStorage.run() internally, which is highly optimized in Node.js v16+. There is minimal overhead compared to manual context passing patterns.
+> **Performance**: Per-request context uses AsyncLocalStorage.run() internally, which is highly optimized in Node.js v16.20+. There is minimal overhead compared to manual context passing patterns.
 
 ## EventEmitter Context Propagation
 

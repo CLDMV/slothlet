@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self } from "@cldmv/slothlet/runtime";
+import { self as _ } from "@cldmv/slothlet/runtime";
 
 /**
  * Captures a screenshot from the Android TV device.
@@ -19,7 +19,7 @@ import { self } from "@cldmv/slothlet/runtime";
  */
 export async function capture(options = {}) {
 	const { format = "png", quality = 90, width, height } = options;
-	
+
 	// Dummy implementation - return fake screenshot buffer
 	const dummyData = `dummy-screenshot-${format}-${quality}-${width || "auto"}x${height || "auto"}`;
 	return Promise.resolve(Buffer.from(dummyData));
