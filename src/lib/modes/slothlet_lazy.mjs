@@ -363,6 +363,44 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
 	if (!parent || !key) return;
 
+	// Copy metadata from placeholder to materialized value to match eager mode behavior
+	// In eager mode, __metadata and __slothletPath are applied via runtime wrapper
+	// In lazy mode, we need to transfer them from the proxy to the materialized content
+	if (value && (typeof value === "object" || typeof value === "function")) {
+		// Get metadata from placeholder (proxy traps return these from target)
+		const placeholderMetadata = placeholder?.__metadata;
+		const placeholderSlothletPath = placeholder?.__slothletPath;
+
+		// Apply __metadata if present and not already on materialized value
+		if (placeholderMetadata && !value.__metadata) {
+			try {
+				Object.defineProperty(value, "__metadata", {
+					value: placeholderMetadata,
+					writable: false,
+					enumerable: false,
+					configurable: true
+				});
+			} catch {
+				// Ignore if property can't be defined (frozen objects, etc.)
+			}
+		}
+
+		// Apply __slothletPath if present and not already on materialized value
+		// Convert the absolute path to API path format (dot-separated)
+		if (placeholderSlothletPath && !value.__slothletPath) {
+			try {
+				Object.defineProperty(value, "__slothletPath", {
+					value: placeholderSlothletPath,
+					writable: false,
+					enumerable: false,
+					configurable: true
+				});
+			} catch {
+				// Ignore if property can't be defined (frozen objects, etc.)
+			}
+		}
+	}
+
 	// Check for merge case: existing object from root file + materialized subdirectory
 	if (
 		parent[key] !== placeholder &&
@@ -508,8 +546,13 @@ function replacePlaceholder(parent, key, placeholder, value, instance, depth) {
  * console.log(result); // 5
  */
 function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth, pathParts, runWithCtx, existingContent }) {
-	let materialized = null;
-	let inFlight = null;
+	// Use a wrapper object so closure and target can share the same reference
+	const state = {
+		materialized: null,
+		inFlight: null
+	};
+	// Cache property proxies to preserve references across accesses
+	const propertyProxyCache = new Map();
 
 	/**
 	 * @function _materialize
@@ -526,8 +569,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 	 * const materializedValue = await _materialize();
 	 */
 	async function _materialize() {
-		if (materialized) return materialized;
-		if (inFlight) return inFlight;
+		if (state.materialized) return state.materialized;
+		if (state.inFlight) return state.inFlight;
 		// lazy_materializeCategory - async arrow function to preserve lexical this
 		/**
 		 * @function lazy_materializeCategory
@@ -549,8 +592,36 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				maxDepth,
 				mode: "lazy",
 				existingApi: parent, // Pass current API state to check for conflicts
-				subdirHandler: ({ subDirPath: nestedPath, key: nestedKey, categoryModules, currentDepth: cd, maxDepth: md }) =>
-					createFolderProxy({
+				subdirHandler: ({ subDirPath: nestedPath, key: nestedKey, categoryModules, currentDepth: cd, maxDepth: md }) => {
+					// Check if a lazy proxy already exists in the current materialized content (for reload/hot reload scenarios)
+					const existing = state.materialized && state.materialized[nestedKey];
+					if (instance?.config?.debug) {
+						console.log(
+							`[lazy] subdirHandler: key="${nestedKey}" existing=${typeof existing} isLazy=${typeof existing?._materialize === "function"}`
+						);
+					}
+					if (existing && typeof existing === "function" && existing._materialize) {
+						if (instance?.config?.debug) {
+							console.log(`[lazy] Reusing existing lazy proxy for "${nestedKey}" to preserve references`);
+						}
+						// Reuse existing lazy proxy to preserve references
+						// Update its _materialize function to point to new folder path if needed
+						const newProxy = createFolderProxy({
+							subDirPath: nestedPath,
+							key: nestedKey,
+							parent: categoryModules,
+							instance,
+							depth: cd + 1,
+							maxDepth: md,
+							pathParts: [...pathParts, nestedKey],
+							runWithCtx
+						});
+						// Copy the new _materialize to the existing proxy
+						existing._materialize = newProxy._materialize;
+						return existing;
+					}
+					// Create new lazy proxy
+					return createFolderProxy({
 						subDirPath: nestedPath,
 						key: nestedKey,
 						parent: categoryModules,
@@ -559,38 +630,39 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 						maxDepth: md,
 						pathParts: [...pathParts, nestedKey],
 						runWithCtx
-					})
+					});
+				}
 			});
-			materialized = value;
+			state.materialized = value;
 
 			// Merge with existing content from root-level file (same logic as eager mode)
 			if (
 				existingContent &&
 				typeof existingContent === "object" &&
-				typeof materialized === "object" &&
+				typeof state.materialized === "object" &&
 				!Array.isArray(existingContent) &&
-				!Array.isArray(materialized)
+				!Array.isArray(state.materialized)
 			) {
 				if (instance?.config?.debug) {
 					console.log(
 						`[lazy] Merging existing content with materialized subdirectory '${key}' - existing:`,
 						Object.keys(existingContent),
 						"new:",
-						Object.keys(materialized)
+						Object.keys(state.materialized)
 					);
 				}
 				// Create merged object with existing content first, then subdirectory content
-				materialized = Object.assign({}, existingContent, materialized);
-			} else if (existingContent && !materialized) {
+				state.materialized = Object.assign({}, existingContent, state.materialized);
+			} else if (existingContent && !state.materialized) {
 				// If subdirectory is empty but we have existing content, use existing
-				materialized = existingContent;
+				state.materialized = existingContent;
 			}
 			if (instance?.config?.debug) {
 				try {
-					const infoKeys = materialized && typeof materialized === "object" ? Object.keys(materialized) : [];
-					const todayType = materialized && materialized.today ? typeof materialized.today : "n/a";
+					const infoKeys = state.materialized && typeof state.materialized === "object" ? Object.keys(state.materialized) : [];
+					const todayType = state.materialized && state.materialized.today ? typeof state.materialized.today : "n/a";
 					console.log(
-						`[lazy][debug] materialized key='${key}' path='${subDirPath}' type=${typeof materialized} keys=${JSON.stringify(
+						`[lazy][debug] materialized key='${key}' path='${subDirPath}' type=${typeof state.materialized} keys=${JSON.stringify(
 							infoKeys
 						)} todayType=${todayType}`
 					);
@@ -599,29 +671,29 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				}
 			}
 			// Replace placeholder now that folder accessed
-			replacePlaceholder(parent, key, placeholder, materialized, instance, depth);
+			replacePlaceholder(parent, key, placeholder, state.materialized, instance, depth);
 			// Targeted instrumentation for debugging special single-file folder cases like nested/date
 			if (instance.config.debug) {
 				try {
-					const type = typeof materialized;
-					const keys = type === "object" && materialized ? Object.keys(materialized) : [];
+					const type = typeof state.materialized;
+					const keys = type === "object" && state.materialized ? Object.keys(state.materialized) : [];
 					console.log(
 						`[lazy][debug] materialized '${pathParts.join("/")}' -> type=${type} keys=${JSON.stringify(keys)} parentHas=${
-							parent[key] === materialized
+							parent[key] === state.materialized
 						}`
 					);
 				} catch {
 					// ignore
 				}
 			}
-			placeholder.__materialized = materialized;
-			return materialized;
+			placeholder.__materialized = state.materialized;
+			return state.materialized;
 		};
-		inFlight = lazy_materializeCategory();
+		state.inFlight = lazy_materializeCategory();
 		try {
-			return await inFlight;
+			return await state.inFlight;
 		} finally {
-			inFlight = null;
+			state.inFlight = null;
 		}
 	}
 
@@ -680,12 +752,29 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 	function lazy_lazyTarget(...args) {
 		return lazy_invoke(this, ...args);
 	}
-	// Tag state (minimal)
-	Object.defineProperty(lazy_lazyTarget, "__materialized", { value: null, writable: true, enumerable: false, configurable: true });
+	// Tag state (minimal) - store reference to state object so _materialize replacements share the same state
+	Object.defineProperty(lazy_lazyTarget, "__state", { value: state, writable: false, enumerable: false, configurable: true });
+	Object.defineProperty(lazy_lazyTarget, "__materialized", {
+		get() {
+			return state.materialized;
+		},
+		set(v) {
+			state.materialized = v;
+		},
+		enumerable: false,
+		configurable: true
+	});
 	// Store underlying absolute path for opportunistic single-file detection
 	Object.defineProperty(lazy_lazyTarget, "__slothletPath", { value: subDirPath, enumerable: false, configurable: true });
 	// Make _materialize configurable & writable so proxy descriptor invariants remain valid
 	Object.defineProperty(lazy_lazyTarget, "_materialize", { value: _materialize, enumerable: false, configurable: true, writable: true });
+	// Store property proxy cache on target so it persists across _materialize replacements during reload
+	Object.defineProperty(lazy_lazyTarget, "__propertyProxyCache", {
+		value: propertyProxyCache,
+		writable: false,
+		enumerable: false,
+		configurable: true
+	});
 
 	// Assign a helpful name
 	try {
@@ -699,8 +788,9 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			return lazy_invoke(thisArg, ...args);
 		},
 		get(_t, prop, _) {
-			if (prop === "__materialized") return materialized;
+			if (prop === "__materialized") return state.materialized;
 			if (prop === "_materialize") return _materialize;
+			if (prop === "__propertyProxyCache") return _t.__propertyProxyCache;
 			if (prop === "then") return undefined; // avoid promise-like
 			// Return __slothletPath directly for hook system compatibility
 			if (prop === "__slothletPath") {
@@ -712,12 +802,18 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				return Reflect.get(_t, prop);
 			}
 			// If already materialized, return underlying value directly (supports chaining)
-			if (materialized) {
-				if (materialized && (typeof materialized === "object" || typeof materialized === "function")) return materialized[prop];
+			if (state.materialized) {
+				if (state.materialized && (typeof state.materialized === "object" || typeof state.materialized === "function"))
+					return state.materialized[prop];
 				return undefined;
 			}
 			// Ensure materialization started
-			if (!inFlight) inFlight = _materialize();
+			if (!state.inFlight) state.inFlight = _materialize();
+			// Check cache for existing property proxy to preserve references (use target's cache for persistence across reloads)
+			const cache = _t.__propertyProxyCache;
+			if (cache && cache.has(prop)) {
+				return cache.get(prop);
+			}
 			// Calculate API path for this property
 			const apiPath = pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}` : String(prop);
 			// For property access that might be used for synchronous traversal (like reduce),
@@ -740,7 +836,7 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				 * const result = await lazy_propertyAccessor(arg1, arg2);
 				 */
 				function lazy_propertyAccessor(...args) {
-					return inFlight.then(
+					return state.inFlight.then(
 						/**
 						 * @function lazy_handleResolvedValue
 						 * @internal
@@ -796,8 +892,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 									// Continue the chain for even deeper properties
 									return new Proxy(function lazy_deeperPropertyAccessor() {}, {
 										apply(target, thisArg, args) {
-											if (materialized) {
-												const value = materialized[prop];
+											if (state.materialized) {
+												const value = state.materialized[prop];
 												const subValue = value ? value[subProp] : undefined;
 												if (subValue && typeof subValue[nextProp] === "function") {
 													// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
@@ -806,8 +902,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 												return subValue ? subValue[nextProp] : undefined;
 											}
 
-											if (!inFlight) inFlight = _materialize();
-											return inFlight.then(function lazy_handleDeeperResolvedValue(resolved) {
+											if (!state.inFlight) state.inFlight = _materialize();
+											return state.inFlight.then(function lazy_handleDeeperResolvedValue(resolved) {
 												const value = resolved ? resolved[prop] : undefined;
 												const subValue = value ? value[subProp] : undefined;
 												if (subValue && typeof subValue[nextProp] === "function") {
@@ -825,8 +921,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 								},
 								apply(target, thisArg, args) {
 									// Check if we have materialized value first, then handle promises
-									if (materialized) {
-										const value = materialized[prop];
+									if (state.materialized) {
+										const value = state.materialized[prop];
 										if (value && typeof value[subProp] === "function") {
 											// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
 											return value[subProp].apply(thisArg, args);
@@ -835,8 +931,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 									}
 
 									// If not materialized, ensure we have a promise
-									if (!inFlight) inFlight = _materialize();
-									return inFlight.then(
+									if (!state.inFlight) state.inFlight = _materialize();
+									return state.inFlight.then(
 										/**
 										 * @function lazy_handleDeepResolvedValue
 										 * @internal
@@ -880,17 +976,22 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				configurable: true
 			});
 
+			// Cache the proxy to preserve references across accesses (use target's cache for persistence across reloads)
+			if (cache) {
+				cache.set(prop, propertyProxy);
+			}
 			return propertyProxy;
 		},
 		has(_t, prop) {
-			if (materialized && (typeof materialized === "object" || typeof materialized === "function")) return prop in materialized;
+			if (state.materialized && (typeof state.materialized === "object" || typeof state.materialized === "function"))
+				return prop in state.materialized;
 			return false;
 		},
 		ownKeys() {
 			const baseKeys = Reflect.ownKeys(lazy_lazyTarget); // include internal keys like _materialize
-			if (!materialized) return baseKeys;
-			if (typeof materialized === "object" || typeof materialized === "function") {
-				const matKeys = Reflect.ownKeys(materialized);
+			if (!state.materialized) return baseKeys;
+			if (typeof state.materialized === "object" || typeof state.materialized === "function") {
+				const matKeys = Reflect.ownKeys(state.materialized);
 				return Array.from(new Set([...baseKeys, ...matKeys]));
 			}
 			return baseKeys;
@@ -901,7 +1002,7 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				return Reflect.getOwnPropertyDescriptor(lazy_lazyTarget, "_materialize");
 			}
 			if (prop === "__materialized") {
-				return { configurable: true, enumerable: false, writable: true, value: materialized };
+				return { configurable: true, enumerable: false, writable: true, value: state.materialized };
 			}
 			// Pass through metadata property descriptors from target
 			if (prop === "__metadata" || prop === "__sourceFolder") {
@@ -911,8 +1012,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 				// Delegate to original target's prototype descriptor to avoid conflicts
 				return Object.getOwnPropertyDescriptor(lazy_lazyTarget, "prototype");
 			}
-			if (materialized && (typeof materialized === "object" || typeof materialized === "function")) {
-				const d = Object.getOwnPropertyDescriptor(materialized, prop);
+			if (state.materialized && (typeof state.materialized === "object" || typeof state.materialized === "function")) {
+				const d = Object.getOwnPropertyDescriptor(state.materialized, prop);
 				if (d) return { ...d, configurable: true };
 			}
 			// Fallback to target descriptor

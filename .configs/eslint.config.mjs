@@ -47,10 +47,10 @@ export default defineConfig([
 			"no-unused-vars": [
 				"error",
 				{
-					argsIgnorePattern: "^_$",
-					caughtErrorsIgnorePattern: "^_$",
-					destructuredArrayIgnorePattern: "^_$",
-					varsIgnorePattern: "^_$"
+					argsIgnorePattern: "^(_|___.*)$",
+					caughtErrorsIgnorePattern: "^(_|___.*)$",
+					destructuredArrayIgnorePattern: "^(_|___.*)$",
+					varsIgnorePattern: "^(_|___.*)$"
 				}
 			]
 		}

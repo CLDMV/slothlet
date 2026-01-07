@@ -95,8 +95,6 @@ export async function runTestMatrix(configOverride = {}, testFunction, testDescr
 
 	// Return results so caller can track failures
 	return results;
-
-	return results;
 }
 /**
  * Run a test with an existing API instance (for path resolution testing)

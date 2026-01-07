@@ -338,7 +338,7 @@ await api.addApi(
 ```javascript
 // Configuration Requirements:
 const api = await slothlet({
-	enableModuleOwnership: true // Required for ownership tracking
+	hotReload: true // Required for ownership tracking
 });
 
 api.config.utils.validate(); // ✅ utils.mjs preserved normally

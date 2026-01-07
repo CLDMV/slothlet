@@ -398,8 +398,9 @@ async function test_addApi_allowOverwrite() {
 
 	await api1.shutdown();
 
-	// Test 2: Prevent overwrites (allowApiOverwrite: false)
-	console.log("\n[TEST] Testing overwrite prevention (allowApiOverwrite: false)...");
+	// Test 2: addApi MERGES (not blocks) even with allowApiOverwrite: false
+	// The allowApiOverwrite: false only blocks forceOverwrite, not normal addApi merging
+	console.log("\n[TEST] Testing addApi merging behavior (allowApiOverwrite: false)...");
 	const api2 = await slothlet({
 		dir: path.join(__dirname, "../api_tests/api_test"),
 		lazy: false,
@@ -412,74 +413,65 @@ async function test_addApi_allowOverwrite() {
 	const protectedKeys = Object.keys(api2.protected.endpoint);
 	console.log(`  🔍 Initial keys at protected.endpoint: ${protectedKeys.join(", ")}`);
 
-	// Capture console.warn output to verify warning message
-	const originalWarn = console.warn;
-	let warnMessage = "";
-	console.warn = (msg) => {
-		warnMessage = msg;
-	};
-
-	// Attempt to overwrite - should fail silently with warning
+	// Add more modules - should MERGE, not block
 	await api2.addApi("protected.endpoint", path.join(__dirname, "../api_tests/api_test_cjs"));
 
-	// Restore console.warn
-	console.warn = originalWarn;
+	// Verify the APIs were MERGED (both original and new keys present)
+	const mergedKeys = Object.keys(api2.protected.endpoint);
+	console.log(`  🔍 After merge: ${mergedKeys.join(", ")}`);
 
-	// Verify warning was logged
-	if (!warnMessage.includes("already exists")) {
-		throw new Error("Expected warning message about existing endpoint not logged");
+	// Should have more keys than before (merged)
+	if (mergedKeys.length <= protectedKeys.length) {
+		throw new Error("Expected APIs to be merged, but key count did not increase");
 	}
-	console.log("  ✓ Warning logged when attempting to overwrite with allowApiOverwrite: false");
-
-	// Verify the original API was NOT overwritten
-	const unchangedKeys2 = Object.keys(api2.protected.endpoint);
-	const keysMatch2 = protectedKeys.length === unchangedKeys2.length && protectedKeys.every((key) => unchangedKeys2.includes(key));
-
-	if (!keysMatch2) {
-		throw new Error("API was overwritten despite allowApiOverwrite: false");
+	// Original keys should still be present
+	if (!protectedKeys.every((key) => mergedKeys.includes(key))) {
+		throw new Error("Original keys were lost during merge");
 	}
-	console.log("  ✓ Successfully prevented overwrite with allowApiOverwrite: false");
+	console.log("  ✓ Successfully merged API endpoints (allowApiOverwrite: false still allows merging)");
 
 	await api2.shutdown();
 
-	// Test 3: Test function overwrite prevention
-	console.log("\n[TEST] Testing function overwrite with allowApiOverwrite: false...");
+	// Test 3: forceOverwrite IS blocked when attempting to overwrite ANOTHER module's API (Rule 12)
+	console.log("\n[TEST] Testing forceOverwrite blocking with Rule 12 (cross-module protection)...");
 	const api3 = await slothlet({
 		dir: path.join(__dirname, "../api_tests/api_test"),
 		lazy: false,
 		debug: false,
-		allowApiOverwrite: false
+		allowApiOverwrite: false,
+		hotReload: true // Required for forceOverwrite
 	});
 
-	// First add API modules to create actual API structure
-	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"));
+	// First add API modules to create actual API structure with a moduleId
+	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"), { moduleId: "original-module" });
 	const originalKeys = Object.keys(api3.funcTest);
 	console.log(`  🔍 Initial keys at funcTest: ${originalKeys.join(", ")}`);
 
-	// Capture console.warn
-	let funcWarnMessage = "";
-	console.warn = (msg) => {
-		funcWarnMessage = msg;
-	};
-
-	// Try to overwrite with different modules - should warn and skip
-	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_cjs"));
-
-	console.warn = originalWarn;
-
-	// Verify warning
-	if (!funcWarnMessage.includes("already exists")) {
-		throw new Error("Expected warning for object overwrite not logged");
+	// Try to FORCE overwrite with a DIFFERENT moduleId - THIS should be blocked by Rule 12
+	let ruleError = null;
+	try {
+		await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_cjs"), {
+			forceOverwrite: true,
+			moduleId: "hostile-module" // Different module trying to take over
+		});
+	} catch (error) {
+		ruleError = error;
 	}
+
+	// Verify Rule 12 error was thrown
+	if (!ruleError || !ruleError.message.includes("Rule 12")) {
+		throw new Error("Expected Rule 12 error for cross-module overwrite attempt");
+	}
+	console.log(`  ✓ Rule 12 correctly blocked cross-module overwrite: ${ruleError.message.split(".")[0]}`);
 
 	// Verify original modules still intact
-	const unchangedKeys3 = Object.keys(api3.funcTest);
-	const keysMatch3 = originalKeys.length === unchangedKeys3.length && originalKeys.every((key) => unchangedKeys3.includes(key));
+	const unchangedKeys = Object.keys(api3.funcTest);
+	const keysMatch = originalKeys.length === unchangedKeys.length && originalKeys.every((key) => unchangedKeys.includes(key));
 
-	if (!keysMatch3) {
-		throw new Error("API was modified despite allowApiOverwrite: false");
+	if (!keysMatch) {
+		throw new Error("API was modified despite Rule 12 blocking the overwrite");
 	}
-	console.log("  ✓ Successfully prevented object overwrite with allowApiOverwrite: false");
+	console.log("  ✓ Original API preserved after Rule 12 blocked the overwrite");
 
 	await api3.shutdown();
 
