@@ -50,6 +50,341 @@ import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
 import { removeApiByModuleId } from "./remove_api.mjs";
 
 /**
+ * Recursively add moduleId as owner to all objects/functions
+ * @param {object} obj - Object to mark
+ * @param {string} moduleId - Module identifier
+ * @param {WeakSet} visited - Visited objects
+ */
+function addOwnership(obj, moduleId, visited = new WeakSet()) {
+	if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return;
+	if (visited.has(obj)) return;
+	visited.add(obj);
+
+	// Add __owners array if not present
+	if (!obj.__owners) {
+		Object.defineProperty(obj, "__owners", {
+			value: [],
+			writable: true,
+			enumerable: false,
+			configurable: true
+		});
+	}
+
+	// Add moduleId if not already present
+	if (!obj.__owners.includes(moduleId)) {
+		obj.__owners.push(moduleId);
+	}
+
+	// Recursively mark nested objects
+	for (const key of Object.keys(obj)) {
+		if (key !== "__owners" && key !== "__metadata" && key !== "__slothletPath") {
+			addOwnership(obj[key], moduleId, visited);
+		}
+	}
+}
+
+/**
+ * Recursively remove moduleId from owners
+ * @param {object} obj - Object to update
+ * @param {string} moduleId - Module identifier
+ * @param {WeakSet} visited - Visited objects
+ */
+function removeOwnership(obj, moduleId, visited = new WeakSet()) {
+	if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return;
+	if (visited.has(obj)) return;
+	visited.add(obj);
+
+	// Remove moduleId from owners
+	if (obj.__owners && Array.isArray(obj.__owners)) {
+		const index = obj.__owners.indexOf(moduleId);
+		if (index !== -1) {
+			obj.__owners.splice(index, 1);
+		}
+	}
+
+	// Recursively process nested objects
+	for (const key of Object.keys(obj)) {
+		if (key !== "__owners" && key !== "__metadata" && key !== "__slothletPath") {
+			removeOwnership(obj[key], moduleId, visited);
+		}
+	}
+}
+
+/**
+ * Remove properties with no owners
+ * @param {object} obj - Object to clean
+ * @param {WeakSet} visited - Visited objects
+ */
+function removeOrphans(obj, visited = new WeakSet()) {
+	if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return;
+	if (visited.has(obj)) return;
+	visited.add(obj);
+
+	// Get keys to check (avoid modifying during iteration)
+	const keys = Object.keys(obj);
+	for (const key of keys) {
+		if (key !== "__owners" && key !== "__metadata" && key !== "__slothletPath") {
+			const value = obj[key];
+			if (value && (typeof value === "object" || typeof value === "function")) {
+				// Check if this object has no owners
+				if (value.__owners && Array.isArray(value.__owners) && value.__owners.length === 0) {
+					delete obj[key];
+				} else {
+					// Recursively clean nested objects
+					removeOrphans(value, visited);
+				}
+			}
+		}
+	}
+}
+
+/**
+ * Recursively mutate objects/functions while preserving references.
+ * Handles lazy proxy preservation by updating _materialize instead of replacing.
+ * @param {object} existingObj - Existing object to mutate
+ * @param {object} newObj - New object with updated values
+ * @param {object} options - Options for mutation
+ * @param {object} options.instance - Slothlet instance
+ * @param {boolean} options.skipDeletion - Whether to skip deleting removed properties (for multi-module paths)
+ * @param {WeakSet} [visited] - Visited objects to prevent infinite loops
+ * @returns {Promise<void>}
+ */
+async function recursivelyMutateWithLazyPreservation(existingObj, newObj, options, visited = new WeakSet()) {
+	const { instance, skipDeletion = false } = options;
+
+	// Prevent infinite loops
+	if (visited.has(existingObj)) return;
+	visited.add(existingObj);
+
+	// LAZY MODE: If existingObj is itself a lazy folder proxy, work with its materialized content
+	const isExistingFolderProxy = existingObj && typeof existingObj === "function" && existingObj._materialize && existingObj.__state;
+	const isNewFolderProxy = newObj && typeof newObj === "function" && newObj._materialize && newObj.__state;
+
+	if (isExistingFolderProxy && isNewFolderProxy) {
+		// Both are lazy folder proxies - update _materialize and state, then recurse on materialized content
+		if (instance.config.debug) {
+			console.log(`[DEBUG] recursivelyMutate: Both objects are lazy folder proxies - updating _materialize and state`);
+		}
+		// Update the _materialize function to point to the new implementation
+		existingObj._materialize = newObj._materialize;
+		// Handle state synchronization
+		const existingState = existingObj.__state;
+		const newState = newObj.__state;
+		if (existingState && newState) {
+			// Get the new materialized content (either already materialized or we need to materialize)
+			let newMaterialized = newState.materialized;
+			if (!newMaterialized && newObj._materialize) {
+				// New proxy not yet materialized - materialize it to get the content
+				await newObj._materialize();
+				newMaterialized = newState.materialized;
+			}
+
+			if (existingState.materialized && newMaterialized) {
+				// BOTH are materialized - recursively mutate to preserve internal references
+				if (instance.config.debug) {
+					console.log(`[DEBUG] recursivelyMutate: Both folder proxies are materialized - recursively mutating contents`);
+				}
+				await recursivelyMutateWithLazyPreservation(existingState.materialized, newMaterialized, options, visited);
+			} else if (!existingState.materialized && newMaterialized) {
+				// Existing not materialized yet - just copy the new materialized reference
+				existingState.materialized = newMaterialized;
+			}
+			// If new is not materialized, leave existing state as-is (it will materialize on demand)
+			// Always update inFlight to match
+			existingState.inFlight = newState.inFlight;
+		}
+		return; // Done - we've updated the lazy folder proxy in place
+	}
+
+	if (isExistingFolderProxy && !isNewFolderProxy) {
+		// Existing is a lazy folder proxy, new is a regular object
+		// Materialize existing and mutate its contents
+		if (!existingObj.__state?.materialized) {
+			await existingObj._materialize();
+		}
+		if (existingObj.__state?.materialized) {
+			await recursivelyMutateWithLazyPreservation(existingObj.__state.materialized, newObj, options, visited);
+		}
+		return;
+	}
+
+	if (!isExistingFolderProxy && isNewFolderProxy) {
+		// Existing is NOT a lazy folder proxy, new IS
+		// Materialize new proxy to get its contents, then recurse
+		if (!newObj.__state?.materialized) {
+			await newObj._materialize();
+		}
+		const newMaterialized = newObj.__state?.materialized;
+		if (newMaterialized) {
+			// Continue with the materialized content as newObj
+			await recursivelyMutateWithLazyPreservation(existingObj, newMaterialized, options, visited);
+		}
+		return;
+	}
+
+	// Delete properties that no longer exist (unless skipDeletion is true)
+	if (!skipDeletion) {
+		for (const key of Object.keys(existingObj)) {
+			if (!(key in newObj)) {
+				delete existingObj[key];
+			}
+		}
+	}
+
+	// Update or add properties
+	for (const key of Object.keys(newObj)) {
+		const existingValue = existingObj[key];
+		const newValue = newObj[key];
+
+		// LAZY MODE: Check if both are lazy proxies - preserve reference by updating _materialize
+		const isExistingLazyProxy = existingValue && typeof existingValue === "function" && existingValue._materialize;
+		const isNewLazyProxy = newValue && typeof newValue === "function" && newValue._materialize;
+
+		if (isExistingLazyProxy && isNewLazyProxy) {
+			// Both are lazy proxies - update _materialize to preserve the reference
+			if (instance.config.debug) {
+				console.log(`[DEBUG] recursivelyMutate: Preserving lazy proxy reference for "${key}" - updating _materialize`);
+			}
+			existingValue._materialize = newValue._materialize;
+			// Copy state if new one has materialized content
+			const existingState = existingValue.__state;
+			const newState = newValue.__state;
+			if (existingState && newState && newState.materialized !== undefined && newState.materialized !== null) {
+				existingState.materialized = newState.materialized;
+			}
+			// If both are materialized, recursively mutate the materialized contents
+			if (existingValue.__materialized && newValue.__materialized) {
+				await recursivelyMutateWithLazyPreservation(existingValue.__materialized, newValue.__materialized, options, visited);
+			}
+			continue; // Skip normal assignment - we've updated in place
+		}
+
+		// Handle case where existing is lazy proxy but new is not (or vice versa)
+		if (isExistingLazyProxy && !isNewLazyProxy) {
+			// Existing is lazy, new is not - materialize existing and mutate if new is an object
+			if (newValue && typeof newValue === "object" && !Array.isArray(newValue)) {
+				if (!existingValue.__materialized) {
+					await existingValue._materialize();
+				}
+				if (existingValue.__materialized) {
+					await recursivelyMutateWithLazyPreservation(existingValue.__materialized, newValue, options, visited);
+				}
+				continue;
+			}
+		}
+
+		// Check if existing value is a slothlet-tagged object/function that should be recursively mutated
+		const isExistingSlothletObject =
+			existingValue &&
+			(typeof existingValue === "object" || typeof existingValue === "function") &&
+			!Array.isArray(existingValue) &&
+			(existingValue.__metadata || existingValue.__slothletPath);
+		const isNewObject = newValue && (typeof newValue === "object" || typeof newValue === "function") && !Array.isArray(newValue);
+
+		// Check if existing is a plain object (materialized content without tags) that can be mutated
+		const isExistingPlainObjectOrFunction =
+			existingValue &&
+			(typeof existingValue === "object" || typeof existingValue === "function") &&
+			!Array.isArray(existingValue) &&
+			!existingValue.__metadata &&
+			!existingValue.__slothletPath;
+
+		if (instance.config.debug) {
+			console.log(
+				`[DEBUG] recursivelyMutate key="${key}": existingType=${typeof existingValue}, newType=${typeof newValue}, isExistingSlothlet=${isExistingSlothletObject}, isExistingPlain=${isExistingPlainObjectOrFunction}, isNewLazyProxy=${isNewLazyProxy}, isNewObject=${isNewObject}`
+			);
+		}
+
+		// Handle case where existing is slothlet-tagged object and new is lazy proxy
+		// This happens when the existing object was materialized before reload
+		if (isExistingSlothletObject && isNewLazyProxy) {
+			if (instance.config.debug) {
+				console.log(
+					`[DEBUG] recursivelyMutate: Existing is slothlet-tagged object, new is lazy proxy - materializing new and mutating existing`
+				);
+			}
+			// Trigger materialization of the new lazy proxy
+			if (newValue._materialize) {
+				await newValue._materialize();
+			}
+			// Get materialized content - either from __materialized or __state.materialized
+			const newMaterialized = newValue.__materialized ?? newValue.__state?.materialized;
+			if (newMaterialized) {
+				await recursivelyMutateWithLazyPreservation(existingValue, newMaterialized, options, visited);
+			} else {
+				// Fallback: materialize failed or returned nothing, do direct assignment
+				existingObj[key] = newValue;
+			}
+			continue;
+		}
+
+		if (isExistingSlothletObject && isNewObject) {
+			// Both are objects/functions and existing is slothlet-tagged - recursively mutate
+			// Copy ownership from new to existing since we're preserving the existing reference
+			if (newValue.__owners && Array.isArray(newValue.__owners)) {
+				if (!existingValue.__owners) {
+					Object.defineProperty(existingValue, "__owners", {
+						value: [...newValue.__owners],
+						writable: true,
+						enumerable: false,
+						configurable: true
+					});
+				} else {
+					// Merge owners - add any from newValue that aren't already present
+					for (const owner of newValue.__owners) {
+						if (!existingValue.__owners.includes(owner)) {
+							existingValue.__owners.push(owner);
+						}
+					}
+				}
+			}
+			await recursivelyMutateWithLazyPreservation(existingValue, newValue, options, visited);
+		} else if (isExistingPlainObjectOrFunction && isNewLazyProxy) {
+			// Existing is a plain materialized object, new is a lazy proxy
+			// Materialize new and mutate existing content to preserve reference
+			if (instance.config.debug) {
+				console.log(`[DEBUG] recursivelyMutate: Existing is plain object, new is lazy proxy - materializing new and mutating existing`);
+			}
+			// Trigger materialization of the new lazy proxy
+			if (newValue._materialize) {
+				await newValue._materialize();
+			}
+			// Get materialized content - either from __materialized or __state.materialized
+			const newMaterialized = newValue.__materialized ?? newValue.__state?.materialized;
+			if (newMaterialized) {
+				// Copy ownership from new materialized to existing
+				if (newMaterialized.__owners && Array.isArray(newMaterialized.__owners)) {
+					if (!existingValue.__owners) {
+						Object.defineProperty(existingValue, "__owners", {
+							value: [...newMaterialized.__owners],
+							writable: true,
+							enumerable: false,
+							configurable: true
+						});
+					} else {
+						for (const owner of newMaterialized.__owners) {
+							if (!existingValue.__owners.includes(owner)) {
+								existingValue.__owners.push(owner);
+							}
+						}
+					}
+				}
+				await recursivelyMutateWithLazyPreservation(existingValue, newMaterialized, options, visited);
+			} else {
+				// Fallback: materialize failed or returned nothing, do direct assignment
+				existingObj[key] = newValue;
+			}
+		} else {
+			// Different types, primitives, arrays, or not slothlet-tagged - direct assignment
+			if (instance.config.debug) {
+				console.log(`[DEBUG] recursivelyMutate: ASSIGNING existingObj["${key}"] = newValue (replacing reference!)`);
+			}
+			existingObj[key] = newValue;
+		}
+	}
+}
+
+/**
  * @typedef {Object} AddApiFromFolderParams
  * @property {string} apiPath - Dot-notation path where modules will be added
  * @property {string} folderPath - Path to folder containing modules to load
@@ -126,7 +461,7 @@ import { removeApiByModuleId } from "./remove_api.mjs";
  * );
  */
 export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {}, options = {} }) {
-	const { forceOverwrite = false, moduleId } = options;
+	const { forceOverwrite = false, mutateExisting = false, moduleId } = options;
 
 	// Rule 12: Module Ownership validation
 	if (forceOverwrite && !moduleId) {
@@ -189,12 +524,14 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 
 	// Rule 12: Check cross-module ownership BEFORE auto-cleanup
-	// If the target path exists and is owned by a DIFFERENT module, block the operation
+	// If forceOverwrite is used, block if the path is owned by a DIFFERENT module
+	// This prevents hostile takeover while still allowing multiple modules to share paths normally
 	if (instance.config.hotReload && moduleId && forceOverwrite) {
-		const existingOwner = instance._getApiOwnership(normalizedApiPath);
-		if (existingOwner && existingOwner !== moduleId) {
+		const existingOwners = instance._getApiOwnership(normalizedApiPath);
+		if (existingOwners && existingOwners.size > 0 && !existingOwners.has(moduleId)) {
+			const ownersList = Array.from(existingOwners).join(", ");
 			throw new Error(
-				`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module "${existingOwner}", ` +
+				`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module "${ownersList}", ` +
 					`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
 			);
 		}
@@ -204,11 +541,16 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	// Remove existing APIs owned by this module to prevent orphan functions
 	// CRITICAL: This must happen AFTER path resolution and cross-module check but BEFORE module loading
 	// to preserve the synchronous call stack for resolvePathFromCaller()
-	if (instance.config.hotReload && moduleId) {
+	// EXCEPTION: Skip auto-cleanup when mutateExisting is true to preserve references
+	if (instance.config.hotReload && moduleId && !mutateExisting) {
 		if (instance.config.debug) {
 			console.log(`[DEBUG] addApi: Auto-cleanup enabled - removing existing APIs for moduleId: ${moduleId}`);
 		}
 		await removeApiByModuleId(instance, moduleId);
+	} else if (instance.config.hotReload && moduleId && mutateExisting) {
+		if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Auto-cleanup skipped due to mutateExisting=true - preserving references for moduleId: ${moduleId}`);
+		}
 	}
 
 	// Track addApi call for hot reload (before any potential errors)
@@ -397,26 +739,33 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 
 	// Handle metadata tagging:
-	// - If metadata provided: tag all functions with metadata
-	// - If no metadata provided: clean any existing metadata (handles CJS module caching)
-	if (newModules && metadata && typeof metadata === "object" && Object.keys(metadata).length > 0) {
-		// Add sourceFolder to metadata
+	// ALWAYS tag functions with __metadata for reference tracking during hot reload
+	// User-provided metadata is optional and merged in if provided
+	if (newModules) {
+		// Build metadata object (always include sourceFolder, optionally merge user metadata)
 		const fullMetadata = {
-			...metadata,
 			sourceFolder: resolvedFolderPath
 		};
 
-		if (instance.config.debug) {
-			console.log(`[DEBUG] addApi: Tagging functions with metadata:`, Object.keys(fullMetadata));
+		// Merge user-provided metadata if present
+		if (metadata && typeof metadata === "object" && Object.keys(metadata).length > 0) {
+			Object.assign(fullMetadata, metadata);
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Tagging functions with metadata:`, Object.keys(fullMetadata));
+			}
+		} else if (instance.config.debug) {
+			console.log(`[DEBUG] addApi: Tagging functions with system metadata (no user metadata provided)`);
 		}
 
 		tagLoadedFunctions(newModules, fullMetadata, resolvedFolderPath);
-	} else if (newModules) {
-		// No metadata provided - clean any existing metadata from cached modules
-		if (instance.config.debug) {
-			console.log(`[DEBUG] addApi: Cleaning metadata from functions (no metadata provided)`);
+
+		// Track ownership if moduleId is provided
+		if (moduleId) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Marking new modules with owner: ${moduleId}`);
+			}
+			addOwnership(newModules, moduleId);
 		}
-		cleanMetadata(newModules);
 	}
 
 	if (instance.config.debug) {
@@ -488,7 +837,54 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		// If the loaded modules result in a function, set it directly
 		// Check for existing value and handle based on allowApiOverwrite config and Rule 12
 		if (Object.prototype.hasOwnProperty.call(currentTarget, finalKey)) {
-			const existing = currentTarget[finalKey];
+			let existing = currentTarget[finalKey];
+
+			// LAZY MODE: Check if both existing and new are lazy proxies - preserve reference by updating _materialize
+			const isExistingLazyProxy = existing && typeof existing === "function" && existing._materialize;
+			const isNewLazyProxy = newModules && typeof newModules === "function" && newModules._materialize;
+
+			if (mutateExisting && isExistingLazyProxy && isNewLazyProxy) {
+				if (instance.config.debug) {
+					console.log(`[DEBUG] addApi: Preserving lazy proxy reference at "${finalKey}" - updating _materialize instead of materializing`);
+				}
+				// Update _materialize to point to new content, preserving the proxy reference
+				existing._materialize = newModules._materialize;
+				// Copy state from new proxy if it has materialized content
+				const existingState = existing.__state;
+				const newState = newModules.__state;
+				if (existingState && newState) {
+					// Clear existing materialized so next access uses new _materialize
+					existingState.materialized = null;
+					existingState.inFlight = null;
+				}
+				// Copy metadata and properties from new to existing
+				for (const key of Object.keys(newModules)) {
+					if (key !== "_materialize" && key !== "__state" && key !== "__materialized") {
+						existing[key] = newModules[key];
+					}
+				}
+				// Mark ownership
+				if (moduleId) {
+					const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
+					instance._addOwnership(normalizedPath, moduleId);
+				}
+				return; // Skip normal assignment - we've updated in place
+			}
+
+			// LAZY MODE: If only existing is lazy proxy, materialize before mutation
+			if (mutateExisting && instance.config.lazy && isExistingLazyProxy && !isNewLazyProxy) {
+				if (instance.config.debug) {
+					console.log(`[DEBUG] addApi: Materializing lazy proxy at "${finalKey}" before mutation (new is not lazy)`);
+				}
+				try {
+					// Materialize the lazy proxy to get the actual module data
+					await existing._materialize();
+					// After materialization, the parent should have the real data, not the proxy
+					existing = currentTarget[finalKey];
+				} catch (error) {
+					console.warn(`[slothlet] Failed to materialize lazy proxy at "${finalKey}":`, error.message);
+				}
+			}
 
 			// Rule 12: Check module ownership for overwrites
 			if (instance.config.hotReload && existing) {
@@ -504,25 +900,88 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 				}
 			}
 
-			// Check if overwrites are disabled (existing logic)
-			if (!forceOverwrite && instance.config.allowApiOverwrite === false) {
-				console.warn(
-					`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
-						`already exists (type: "${typeof existing}"). Set allowApiOverwrite: true to allow overwrites.`
-				);
-				return; // Skip the overwrite
-			}
+			// Special case: If existing is an object and new is a function, we're creating a callable object
+			// This allows multiple modules to share the path - one provides the function, others add properties
+			if (existing !== null && typeof existing === "object" && !Array.isArray(existing)) {
+				// Check if we're allowed to replace object with function
+				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false) {
+					console.warn(
+						`[slothlet] Skipping addApi: Cannot replace object with function at API path "${normalizedApiPath}" final key "${finalKey}" ` +
+							`without forceOverwrite or mutateExisting. Set allowApiOverwrite: true or use forceOverwrite option.`
+					);
+					return; // Skip the replacement
+				}
 
-			// Warn if overwriting an existing non-function value (potential data loss)
-			if (existing !== null && typeof existing !== "function") {
+				if (mutateExisting) {
+					// Preserve references: recursively update nested objects, delete removed props, add new ones
+					console.log(
+						`[slothlet] Mutating existing object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+							`clearing and copying new properties to preserve references.`
+					);
+
+					// Check if multiple modules contribute to this path - if so, skip deletion
+					const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
+					if (multipleModules && instance.config.debug) {
+						console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+					}
+
+					// Use unified recursive mutation helper
+					await recursivelyMutateWithLazyPreservation(existing, newModules, {
+						instance,
+						skipDeletion: multipleModules
+					});
+
+					return; // Done - we've mutated in place
+				}
+
+				// Preserve existing object properties by copying them to the new function
 				console.warn(
-					`[slothlet] Overwriting existing non-function value at API path "${normalizedApiPath}" ` +
-						`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
+					`[slothlet] Creating callable object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+						`merging object properties onto function for shared module ownership.`
 				);
+				Object.assign(newModules, existing);
 			} else if (typeof existing === "function") {
-				// Warn when replacing an existing function
+				// Replacing function with another function
+				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false) {
+					console.warn(
+						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
+							`already exists (type: "function"). Set allowApiOverwrite: true to allow overwrites, or use forceOverwrite option.`
+					);
+					return; // Skip the overwrite
+				}
+
+				if (mutateExisting) {
+					// Preserve references: recursively update nested objects, delete removed props, add new ones
+					console.log(
+						`[slothlet] Mutating existing function at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+							`updating properties to preserve references.`
+					);
+
+					// Use unified recursive mutation helper
+					await recursivelyMutateWithLazyPreservation(existing, newModules, {
+						instance,
+						skipDeletion: false
+					});
+
+					// Remove orphaned properties (those with no owners)
+					if (moduleId) {
+						if (instance.config.debug) {
+							console.log(`[DEBUG] Removing orphaned properties from existing object`);
+						}
+						removeOrphans(existing);
+					}
+
+					return;
+				}
+
 				console.warn(
 					`[slothlet] Overwriting existing function at API path "${normalizedApiPath}" ` + `final key "${finalKey}" with a new function.`
+				);
+			} else {
+				// Replacing primitive with function
+				console.warn(
+					`[slothlet] Overwriting existing value at API path "${normalizedApiPath}" ` +
+						`final key "${finalKey}" with a function. Previous type: "${typeof existing}".`
 				);
 			}
 		}
@@ -539,28 +998,33 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
 
 				if (forceOverwrite && !canOverwrite) {
-					const existingOwner = instance._getApiOwnership(normalizedPath);
+					const existingOwners = instance._getApiOwnership(normalizedPath);
+					const ownersList = existingOwners ? Array.from(existingOwners).join(", ") : "unknown";
 					throw new Error(
-						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module "${existingOwner}", ` +
+						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module(s) "${ownersList}", ` +
 							`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
 					);
 				}
 			}
 
-			// Check if overwrites are disabled and target already has content
-			if (!forceOverwrite && instance.config.allowApiOverwrite === false && existing !== undefined && existing !== null) {
-				// For objects, check if they have any keys (non-empty)
-				const hasContent = typeof existing === "object" ? Object.keys(existing).length > 0 : true;
-				if (hasContent) {
+			// Note: Object merging is always allowed - allowApiOverwrite only controls property-level overwrites
+			// Special case: If existing is a function, we can merge properties onto it (creating callable object)
+			// unless forceOverwrite is used to replace the function entirely
+			if (existing !== null && typeof existing === "function") {
+				// Existing is a function, new is object - merge properties onto function for shared ownership
+				if (forceOverwrite && instance.config.allowApiOverwrite === false) {
 					console.warn(
-						`[slothlet] Skipping addApi merge: API path "${normalizedApiPath}" final key "${finalKey}" ` +
-							`already exists with content (type: "${typeof existing}"). Set allowApiOverwrite: true to allow merging.`
+						`[slothlet] Skipping addApi: Cannot replace function with object at API path "${normalizedApiPath}" final key "${finalKey}" ` +
+							`without allowApiOverwrite: true. Function will be preserved and new properties merged.`
 					);
-					return; // Skip the merge
+					// Don't return - continue to merge properties onto function
 				}
-			}
-
-			if (existing !== null && typeof existing !== "object" && typeof existing !== "function") {
+				console.log(
+					`[slothlet] Creating callable object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+						`merging object properties onto existing function for shared module ownership.`
+				);
+				// Continue to merge - properties will be added to the function below
+			} else if (existing !== null && typeof existing !== "object") {
 				throw new Error(
 					`[slothlet] Cannot merge API at "${normalizedApiPath}": ` +
 						`existing value at final key "${finalKey}" is type "${typeof existing}", cannot merge into primitives.`
@@ -569,7 +1033,13 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		}
 		if (Object.prototype.hasOwnProperty.call(currentBoundTarget, finalKey)) {
 			const existingBound = currentBoundTarget[finalKey];
-			if (existingBound !== null && typeof existingBound !== "object" && typeof existingBound !== "function") {
+			if (existingBound !== null && typeof existingBound === "function") {
+				// Same handling for bound target
+				console.log(
+					`[slothlet] Creating callable object in bound API at "${normalizedApiPath}" final key "${finalKey}": ` +
+						`merging object properties onto existing function.`
+				);
+			} else if (existingBound !== null && typeof existingBound !== "object") {
 				throw new Error(
 					`[slothlet] Cannot merge bound API at "${normalizedApiPath}": ` +
 						`existing value at final key "${finalKey}" is type "${typeof existingBound}", cannot merge into primitives.`
@@ -629,8 +1099,55 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			console.log(`[DEBUG] addApi: Before merging new modules - current keys:`, Object.keys(currentTarget[finalKey] || {}));
 			console.log(`[DEBUG] addApi: New modules to merge - keys:`, Object.keys(newModules));
 		}
-		Object.assign(currentTarget[finalKey], newModules);
-		Object.assign(currentBoundTarget[finalKey], newModules);
+
+		// When mutateExisting is true, use ownership tracking for clean reload
+		if (mutateExisting && currentTarget[finalKey]) {
+			// Remove this moduleId's ownership from existing properties
+			if (moduleId) {
+				if (instance.config.debug) {
+					console.log(`[DEBUG] addApi: Removing ownership of moduleId "${moduleId}" before merge`);
+				}
+				removeOwnership(currentTarget[finalKey], moduleId);
+			}
+		}
+		if (mutateExisting && currentBoundTarget[finalKey]) {
+			// Remove this moduleId's ownership from bound target
+			if (moduleId) {
+				removeOwnership(currentBoundTarget[finalKey], moduleId);
+			}
+		}
+
+		// When mutateExisting is true, use unified recursive mutation to preserve lazy proxy references
+		if (mutateExisting) {
+			// Check if multiple modules contribute to this path - if so, skip deletion to preserve other modules' properties
+			const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
+			if (multipleModules && instance.config.debug) {
+				console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+			}
+
+			// Use unified recursive mutation helper for both targets
+			await recursivelyMutateWithLazyPreservation(currentTarget[finalKey], newModules, {
+				instance,
+				skipDeletion: multipleModules
+			});
+			await recursivelyMutateWithLazyPreservation(currentBoundTarget[finalKey], newModules, {
+				instance,
+				skipDeletion: multipleModules
+			});
+		} else {
+			// Not mutateExisting - use standard Object.assign
+			Object.assign(currentTarget[finalKey], newModules);
+			Object.assign(currentBoundTarget[finalKey], newModules);
+		}
+
+		// Clean up orphaned properties after merge
+		if (mutateExisting && moduleId) {
+			if (instance.config.debug) {
+				console.log(`[DEBUG] addApi: Cleaning up orphaned properties`);
+			}
+			removeOrphans(currentTarget[finalKey]);
+			removeOrphans(currentBoundTarget[finalKey]);
+		}
 		if (instance.config.debug) {
 			console.log(`[DEBUG] addApi: After merging new modules - keys:`, Object.keys(currentTarget[finalKey] || {}));
 		}

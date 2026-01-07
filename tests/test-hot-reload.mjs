@@ -3,6 +3,9 @@
  * Tests the .reload() method with addApi/removeApi tracking across all configurations
  */
 
+// Enable internal test mode for context/reference access
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
 import slothlet from "@cldmv/slothlet";
 import { runTestMatrix } from "./test-helper.mjs";
 import { fileURLToPath } from "url";
@@ -178,30 +181,12 @@ result = await runTestMatrix(
 );
 if (result.failed > 0) failedTests++;
 
-// Test 6: reload() not available when hotReload disabled
-totalTests++;
-console.log("\n📋 Test 6: reload() not available when hotReload disabled");
-try {
-	const api = await slothlet({
-		dir: join(__dirname, "../api_tests/api_test"),
-		hotReload: false
-	});
-
-	if (typeof api.reload === "function") {
-		throw new Error("reload() should not be available when hotReload is disabled");
-	}
-
-	console.log("   ✅ PASSED: reload() correctly not exposed");
-	await api.shutdown();
-} catch (error) {
-	console.log("   ❌ FAILED:", error.message);
-	process.exit(1);
-}
+// Test 6 removed - was duplicate of Test 15
 
 // Test 7: Multiple addApi to same path with different moduleIds
 await runTestMatrix(
 	{ hotReload: true },
-	async (api, configName, fullConfig) => {
+	async (api, configName, _) => {
 		// Add API with first moduleId
 		await api.addApi("extra1", join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "module-1" });
 
@@ -285,6 +270,343 @@ result = await runTestMatrix(
 		}
 	},
 	"Test 9: Reload after shutdown"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 10: reloadApi() - selective reload of specific API path
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName) => {
+		// Add multiple APIs
+		await api.addApi("extra1", join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "module-1" });
+		await api.addApi("extra2", join(__dirname, "../api_tests/api_test"), {}, { moduleId: "module-2" });
+
+		// Store reference to extra1
+		const extra1Ref = api.extra1;
+
+		// Reload only extra1
+		await api.reloadApi("extra1");
+
+		// extra1 should be reloaded (same reference due to mutateExisting)
+		if (api.extra1 !== extra1Ref) {
+			throw new Error(`[${configName}] extra1 reference should be preserved after reloadApi`);
+		}
+
+		// extra2 should be untouched
+		if (typeof api.extra2?.math?.add !== "function") {
+			throw new Error(`[${configName}] extra2 should remain intact after reloadApi("extra1")`);
+		}
+	},
+	"Test 10: reloadApi() - selective reload"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 11: reloadApi() with multiple modules on same path
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName) => {
+		// Add two modules to same path
+		await api.addApi("features", join(__dirname, "../api_tests/api_test"), {}, { moduleId: "core" });
+		await api.addApi("features", join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "extra", forceOverwrite: true });
+
+		// Reload the entire "features" path - should reload both modules
+		await api.reloadApi("features");
+
+		// Both should still be available
+		if (typeof api.features?.math?.add !== "function") {
+			throw new Error(`[${configName}] features.math.add not available after reloadApi`);
+		}
+	},
+	"Test 11: reloadApi() with multiple modules on same path"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 12: Context preservation across reload
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName) => {
+		const testContext = { userId: 123, session: "abc" };
+		api.context.userId = testContext.userId;
+		api.context.session = testContext.session;
+
+		// Reload
+		await api.reload();
+
+		// Context should be preserved
+		if (api.context.userId !== 123 || api.context.session !== "abc") {
+			throw new Error(`[${configName}] Context not preserved after reload`);
+		}
+	},
+	"Test 12: Context preservation across reload"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 13: Reference preservation across reload
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName) => {
+		api.reference.customUtil = () => "test";
+		api.reference.constant = 42;
+
+		// Reload
+		await api.reload();
+
+		// Reference should be preserved
+		if (typeof api.reference.customUtil !== "function" || api.reference.customUtil() !== "test") {
+			throw new Error(`[${configName}] Reference.customUtil not preserved after reload`);
+		}
+		if (api.reference.constant !== 42) {
+			throw new Error(`[${configName}] Reference.constant not preserved after reload`);
+		}
+	},
+	"Test 13: Reference preservation across reload"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 14: Hooks preservation across reload
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true, hooks: true },
+	async (api, configName, fullConfig) => {
+		const isMixed = fullConfig.dir.includes("api_test_mixed");
+		let hookCalled = false;
+
+		// Register a hook
+		api.hooks.on(
+			"test-hook",
+			"before",
+			({ path: ___path, args: ___args }) => {
+				hookCalled = true;
+			},
+			{ pattern: "**" }
+		);
+
+		// Reload
+		await api.reload();
+
+		// Call function to trigger hook
+		const checkFunc = isMixed ? api.mathEsm?.add : api.math?.add;
+		if (typeof checkFunc === "function") {
+			await checkFunc(1, 2);
+		}
+
+		// Hook should still work after reload
+		if (!hookCalled) {
+			throw new Error(`[${configName}] Hook not preserved/executed after reload`);
+		}
+	},
+	"Test 14: Hooks preservation across reload"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 15: Error - reload() when hotReload disabled
+totalTests++;
+console.log("\n📋 Test 15: Error - reload() when hotReload disabled");
+try {
+	const api = await slothlet({
+		dir: join(__dirname, "../api_tests/api_test"),
+		hotReload: false
+	});
+
+	let errorThrown = false;
+	try {
+		await api.reload();
+	} catch (error) {
+		if (error.message.includes("hotReload must be enabled")) {
+			errorThrown = true;
+		}
+	}
+
+	if (!errorThrown) {
+		throw new Error("reload() should throw error when hotReload is disabled");
+	}
+
+	console.log("   ✅ PASSED: Correct error thrown");
+	await api.shutdown();
+} catch (error) {
+	console.log("   ❌ FAILED:", error.message);
+	failedTests++;
+}
+
+// Test 16: Error - reloadApi() with invalid arguments
+totalTests++;
+console.log("\n📋 Test 16: Error - reloadApi() with invalid arguments");
+try {
+	const api = await slothlet({
+		dir: join(__dirname, "../api_tests/api_test"),
+		hotReload: true
+	});
+
+	let errors = 0;
+
+	// Test non-string argument
+	try {
+		await api.reloadApi(123);
+	} catch (error) {
+		if (error.message.includes("must be a string")) errors++;
+	}
+
+	// Test empty string
+	try {
+		await api.reloadApi("");
+	} catch (error) {
+		if (error.message.includes("non-empty")) errors++;
+	}
+
+	// Test whitespace-only string
+	try {
+		await api.reloadApi("   ");
+	} catch (error) {
+		if (error.message.includes("non-whitespace")) errors++;
+	}
+
+	if (errors !== 3) {
+		throw new Error(`Expected 3 errors, got ${errors}`);
+	}
+
+	console.log("   ✅ PASSED: All invalid arguments rejected correctly");
+	await api.shutdown();
+} catch (error) {
+	console.log("   ❌ FAILED:", error.message);
+	failedTests++;
+}
+
+// Test 17: Error - reloadApi() when hotReload disabled
+totalTests++;
+console.log("\n📋 Test 17: Error - reloadApi() when hotReload disabled");
+try {
+	const api = await slothlet({
+		dir: join(__dirname, "../api_tests/api_test"),
+		hotReload: false
+	});
+
+	let errorThrown = false;
+	try {
+		await api.reloadApi("test");
+	} catch (error) {
+		if (error.message.includes("hotReload must be enabled")) {
+			errorThrown = true;
+		}
+	}
+
+	if (!errorThrown) {
+		throw new Error("reloadApi() should throw error when hotReload is disabled");
+	}
+
+	console.log("   ✅ PASSED: Correct error thrown");
+	await api.shutdown();
+} catch (error) {
+	console.log("   ❌ FAILED:", error.message);
+	failedTests++;
+}
+
+// Test 18: reloadApi() on non-existent path (should not throw)
+totalTests++;
+console.log("\n📋 Test 18: reloadApi() on non-existent path");
+try {
+	const api = await slothlet({
+		dir: join(__dirname, "../api_tests/api_test"),
+		hotReload: true
+	});
+
+	// Should not throw - just does nothing
+	await api.reloadApi("nonExistentPath");
+
+	console.log("   ✅ PASSED: No error thrown for non-existent path");
+	await api.shutdown();
+} catch (error) {
+	console.log("   ❌ FAILED:", error.message);
+	failedTests++;
+}
+
+// Test 19: Nested API reloads
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName) => {
+		// Add nested APIs
+		await api.addApi("features.core", join(__dirname, "../api_tests/api_test"), {}, { moduleId: "core" });
+		await api.addApi("features.extra", join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "extra" });
+
+		// Reload just features.core
+		await api.reloadApi("features.core");
+
+		// Both should still be accessible
+		if (typeof api.features?.core?.math?.add !== "function") {
+			throw new Error(`[${configName}] features.core.math.add not available after reloadApi`);
+		}
+		if (typeof api.features?.extra?.mathCjs !== "object") {
+			throw new Error(`[${configName}] features.extra should remain intact after reloadApi("features.core")`);
+		}
+	},
+	"Test 19: Nested API reloads"
+);
+if (result.failed > 0) failedTests++;
+
+// Test 20: Concurrent reload operations
+totalTests++;
+console.log("\n📋 Test 20: Concurrent reload operations");
+try {
+	const api = await slothlet({
+		dir: join(__dirname, "../api_tests/api_test"),
+		hotReload: true
+	});
+
+	await api.addApi("extra1", join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "module-1" });
+	await api.addApi("extra2", join(__dirname, "../api_tests/api_test"), {}, { moduleId: "module-2" });
+
+	// Run multiple reloadApi calls concurrently
+	await Promise.all([api.reloadApi("extra1"), api.reloadApi("extra2")]);
+
+	// Verify both are still functional
+	if (typeof api.extra1?.mathCjs !== "object" || typeof api.extra2?.math?.add !== "function") {
+		throw new Error("APIs not functional after concurrent reloadApi calls");
+	}
+
+	console.log("   ✅ PASSED: Concurrent reloads handled correctly");
+	await api.shutdown();
+} catch (error) {
+	console.log("   ❌ FAILED:", error.message);
+	failedTests++;
+}
+
+// Test 21: mutateExisting preserves deeply nested references
+// Note: References can only be preserved for MATERIALIZED content.
+// In lazy mode, you must call a function to materialize before storing a reference.
+totalTests++;
+result = await runTestMatrix(
+	{ hotReload: true },
+	async (api, configName, fullConfig) => {
+		// Add API
+		await api.addApi("deep", join(__dirname, "../api_tests/api_test"), {}, { moduleId: "deep-test" });
+
+		// In lazy mode, we must materialize before storing references
+		// (you can't hold a reference to something that doesn't exist yet)
+		if (fullConfig.lazy) {
+			// Materialize by calling a function
+			await api.deep.math.add(1, 1);
+		}
+
+		// Store deep references (now materialized in both modes)
+		const mathRef = api.deep?.math;
+		const addRef = api.deep?.math?.add;
+
+		// Reload with mutateExisting via reloadApi
+		await api.reloadApi("deep");
+
+		// References should be preserved
+		if (api.deep?.math !== mathRef) {
+			throw new Error(`[${configName}] Nested object reference not preserved with mutateExisting`);
+		}
+		if (api.deep?.math?.add !== addRef) {
+			throw new Error(`[${configName}] Deeply nested function reference not preserved with mutateExisting`);
+		}
+	},
+	"Test 21: mutateExisting preserves deeply nested references"
 );
 if (result.failed > 0) failedTests++;
 

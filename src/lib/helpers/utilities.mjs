@@ -148,6 +148,7 @@ export function deepMerge(target, source) {
  * @memberof module:@cldmv/slothlet.lib.helpers.utilities
  * @param {function|object} target - The variable to mutate (object or function)
  * @param {function|object} source - The new value to copy from (object or function)
+ * @param {boolean} [recursive=false] - Whether to recursively mutate nested slothlet-managed objects
  * @package
  *
  * @description
@@ -158,17 +159,21 @@ export function deepMerge(target, source) {
  * For functions: Sets _impl to call source, removes old properties (except _impl and __ctx),
  * and attaches new properties from source.
  *
- * For objects: Removes old properties (except _impl and __ctx), attaches new properties,
- * and manually copies management methods (shutdown, addApi, describe).
+ * For objects: Updates properties to match source, removes old properties not in source,
+ * and manually copies management methods.
+ *
+ * When recursive=true, only recurses into slothlet-managed objects (those with __metadata).
+ * This prevents infinite loops from user objects or system objects while supporting deep
+ * mutation of slothlet API structures during hot reload.
  *
  * @example
  * // Internal usage
  * import { mutateLiveBindingFunction } from "./utilities.mjs";
  *
  * mutateLiveBindingFunction(self, newSelf);
- * mutateLiveBindingFunction(boundapi, newApi);
+ * mutateLiveBindingFunction(boundapi, newApi, true); // recursive for hot reload
  */
-export function mutateLiveBindingFunction(target, source) {
+export function mutateLiveBindingFunction(target, source, recursive = false) {
 	if (typeof source === "function") {
 		target._impl = (...args) => source(...args);
 		// Remove old methods except _impl and __ctx
@@ -189,28 +194,50 @@ export function mutateLiveBindingFunction(target, source) {
 			}
 		}
 	} else if (typeof source === "object" && source !== null) {
-		// Remove old methods except _impl and __ctx
+		// Remove old keys that don't exist in source (except _impl and __ctx)
 		for (const key of Object.keys(target)) {
-			if (key !== "_impl" && key !== "__ctx") delete target[key];
-		}
-		// Attach new properties/methods (enumerable API endpoints)
-		for (const [key, value] of Object.entries(source)) {
-			if (key !== "__ctx") {
-				target[key] = value;
+			if (key !== "_impl" && key !== "__ctx" && !(key in source)) {
+				delete target[key];
 			}
 		}
-		// Manually copy management methods (may be non-enumerable)
-		const managementMethods = ["shutdown", "addApi", "removeApi", "reload", "describe", "run", "instanceId", "scope"];
-		for (const method of managementMethods) {
-			const desc = Object.getOwnPropertyDescriptor(source, method);
-			if (desc) {
-				try {
-					Object.defineProperty(target, method, desc);
-				} catch {
-					// ignore
+
+		// Update or add properties/methods from source
+		// Use getOwnPropertyNames to avoid triggering getters
+		for (const key of Object.getOwnPropertyNames(source)) {
+			if (key !== "__ctx") {
+				const value = source[key];
+
+				// If recursive mode is enabled and both target[key] and value are objects
+				if (
+					recursive &&
+					target[key] &&
+					typeof target[key] === "object" &&
+					value &&
+					typeof value === "object" &&
+					!Array.isArray(value) &&
+					// CRITICAL: Only recurse into slothlet-managed objects (those with __metadata)
+					// This prevents infinite loops from user objects, system objects (console, etc.)
+					// while still supporting deep mutation of slothlet API structures
+					value.__metadata !== undefined
+				) {
+					// Recursively mutate nested slothlet objects
+					mutateLiveBindingFunction(target[key], value, true);
+				} else {
+					// Simple assignment for primitives, arrays, non-slothlet objects, and non-recursive mode
+					try {
+						target[key] = value;
+					} catch (error) {
+						// Skip read-only properties (instanceId, hooks, etc.)
+						if (error instanceof TypeError && error.message.includes("read only")) {
+							// Silently skip - these are system properties that shouldn't be mutated
+							continue;
+						}
+						throw error;
+					}
 				}
 			}
 		}
+
 		// Optionally, set _impl to a default method if present
 		if (typeof source._impl === "function") {
 			target._impl = source._impl;

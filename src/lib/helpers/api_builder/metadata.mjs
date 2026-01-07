@@ -268,8 +268,8 @@ export function tagLoadedFunctions(obj, metadata, baseDir, visited = new WeakSet
 	if (visited.has(obj)) return;
 	visited.add(obj);
 
-	// Tag if it's a function
-	if (typeof obj === "function") {
+	// Tag both functions AND objects (excluding arrays)
+	if (typeof obj === "function" || (typeof obj === "object" && !Array.isArray(obj))) {
 		try {
 			// Create new immutable metadata object
 			const immutableMeta = createImmutableMetadata(metadata);
@@ -297,7 +297,7 @@ export function tagLoadedFunctions(obj, metadata, baseDir, visited = new WeakSet
 		} catch (error) {
 			// Ignore errors (frozen objects, etc.)
 			if (metadata.debug) {
-				console.warn(`[slothlet] Could not tag function with metadata:`, error.message);
+				console.warn(`[slothlet] Could not tag object/function with metadata:`, error.message);
 			}
 		}
 	}

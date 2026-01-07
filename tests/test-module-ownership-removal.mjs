@@ -36,7 +36,7 @@ async function setupTestModules() {
 	// Clean up if exists
 	try {
 		await fs.rm(testDir, { recursive: true, force: true });
-	} catch (err) {
+	} catch (_) {
 		// Ignore if doesn't exist
 	}
 
@@ -100,7 +100,7 @@ export function helperB() {
 async function cleanupTestModules() {
 	try {
 		await fs.rm(testDir, { recursive: true, force: true });
-	} catch (err) {
+	} catch (_) {
 		// Ignore errors
 	}
 }

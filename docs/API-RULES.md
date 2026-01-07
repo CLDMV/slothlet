@@ -679,7 +679,7 @@ if (moduleKeys.includes("addapi")) {
 ```javascript
 const api = await slothlet({
 	dir: "./api",
-	enableModuleOwnership: true, // ✅ Enables ownership tracking
+	hotReload: true, // ✅ Enables ownership tracking
 	allowApiOverwrite: false // Global protection (optional)
 });
 ```
@@ -751,7 +751,7 @@ await api.addApi(
 
 ```javascript
 // Enhanced conflict resolution in add_api.mjs
-if (instance.config.enableModuleOwnership && options.forceOverwrite && options.moduleId) {
+if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 	const existingOwner = getApiOwnership(instance, apiPath);
 	if (existingOwner && existingOwner.moduleId !== options.moduleId) {
 		throw new Error(`Cannot overwrite API owned by "${existingOwner.moduleId}"`);
@@ -769,7 +769,7 @@ if (instance.config.enableModuleOwnership && options.forceOverwrite && options.m
 - **Ownership Tracking**: Each API path tracks which module registered it
 - **Selective Overwrites**: `forceOverwrite` only works on module's own APIs
 - **Namespace Sharing**: Multiple modules can safely extend same namespace
-- **Performance Conscious**: Only active when `enableModuleOwnership: true`
+- **Performance Conscious**: Only active when `hotReload: true`
 - **Precedence Logic**: `forceOverwrite` takes precedence over `allowApiOverwrite`
 
 **Implementation TODO**:

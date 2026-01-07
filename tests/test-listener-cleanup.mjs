@@ -76,7 +76,7 @@ async function testConfiguration(config) {
 			return result;
 		});
 
-		api.hooks.on("test-always", "always", ({ path, result, hasError }) => {
+		api.hooks.on("test-always", "always", ({ path, result: _, hasError }) => {
 			console.log(`  🪝 Always hook: ${path} (error: ${hasError})`);
 		});
 

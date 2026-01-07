@@ -410,7 +410,7 @@ await runTest("SHORT-CIRCUIT: Before hook with object short-circuits", async () 
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			secondHookCalled = true;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -444,7 +444,7 @@ await runTest("SHORT-CIRCUIT: Before hook with string short-circuits", async () 
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			secondHookCalled = true;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -478,7 +478,7 @@ await runTest("SHORT-CIRCUIT: Before hook with null short-circuits", async () =>
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			secondHookCalled = true;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -512,7 +512,7 @@ await runTest("SHORT-CIRCUIT: Before hook with 0 short-circuits", async () => {
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			secondHookCalled = true;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -546,7 +546,7 @@ await runTest("SHORT-CIRCUIT: Before hook with false short-circuits", async () =
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			secondHookCalled = true;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -573,7 +573,7 @@ await runTest("ALWAYS: Always hooks execute after short-circuit", async () => {
 	api.hooks.on(
 		"before-short",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return 99;
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -583,7 +583,7 @@ await runTest("ALWAYS: Always hooks execute after short-circuit", async () => {
 	api.hooks.on(
 		"after-transform",
 		"after",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			afterHookCalled = true;
 			return result * 2;
 		},
@@ -594,7 +594,7 @@ await runTest("ALWAYS: Always hooks execute after short-circuit", async () => {
 	api.hooks.on(
 		"always-observe",
 		"always",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			alwaysHookCalled = true;
 			assert(result === 99, "Always hook should receive short-circuit value");
 		},
@@ -624,7 +624,7 @@ await runTest("ALWAYS: Always hooks execute after normal completion", async () =
 	api.hooks.on(
 		"after-transform",
 		"after",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			afterHookCalled = true;
 			return result * 2; // 5 → 10
 		},
@@ -635,7 +635,7 @@ await runTest("ALWAYS: Always hooks execute after normal completion", async () =
 	api.hooks.on(
 		"always-observe",
 		"always",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			alwaysHookCalled = true;
 			receivedResult = result;
 		},
@@ -662,7 +662,7 @@ await runTest("ALWAYS: Always hooks cannot modify result", async () => {
 	api.hooks.on(
 		"always-try-modify",
 		"always",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			return 999; // This should be ignored
 		},
 		{ priority: 50, pattern: "math.add" }
@@ -703,7 +703,7 @@ await runTest("ERROR: Error in before hook is caught by error hook", async () =>
 	api.hooks.on(
 		"thrower",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			throw new Error("Test error");
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -735,7 +735,7 @@ await runTest("ERROR: Multiple error hooks all execute", async () => {
 	api.hooks.on(
 		"error1",
 		"error",
-		({ path, error }) => {
+		({ path: ___path, error }) => {
 			errorHooks.push("hook1");
 		},
 		{ priority: 100, pattern: "**" }
@@ -744,7 +744,7 @@ await runTest("ERROR: Multiple error hooks all execute", async () => {
 	api.hooks.on(
 		"error2",
 		"error",
-		({ path, error }) => {
+		({ path: ___path, error }) => {
 			errorHooks.push("hook2");
 		},
 		{ priority: 100, pattern: "**" }
@@ -753,7 +753,7 @@ await runTest("ERROR: Multiple error hooks all execute", async () => {
 	api.hooks.on(
 		"error3",
 		"error",
-		({ path, error }) => {
+		({ path: ___path, error }) => {
 			errorHooks.push("hook3");
 		},
 		{ priority: 100, pattern: "**" }
@@ -763,7 +763,7 @@ await runTest("ERROR: Multiple error hooks all execute", async () => {
 	api.hooks.on(
 		"thrower",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			throw new Error("Test error");
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -794,7 +794,7 @@ await runTest("MIXED: Args modified, short-circuit, result transformed", async (
 	api.hooks.on(
 		"modify-args",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [10, 20];
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -804,7 +804,7 @@ await runTest("MIXED: Args modified, short-circuit, result transformed", async (
 	api.hooks.on(
 		"transform-result",
 		"after",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			return { original: result, doubled: result * 2 };
 		},
 		{ priority: 100, pattern: "math.add" }
@@ -830,7 +830,7 @@ await runTest("MIXED: Before hooks modify args, after hooks chain transforms", a
 	api.hooks.on(
 		"before1",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [args[0] * 2, args[1] * 2];
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -840,7 +840,7 @@ await runTest("MIXED: Before hooks modify args, after hooks chain transforms", a
 	api.hooks.on(
 		"before2",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [args[0] + 5, args[1] + 5];
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -850,7 +850,7 @@ await runTest("MIXED: Before hooks modify args, after hooks chain transforms", a
 	api.hooks.on(
 		"after1",
 		"after",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			return result * 2;
 		},
 		{ priority: 300, pattern: "math.add" }
@@ -860,7 +860,7 @@ await runTest("MIXED: Before hooks modify args, after hooks chain transforms", a
 	api.hooks.on(
 		"after2",
 		"after",
-		({ path, result }) => {
+		({ path: ___path, result }) => {
 			return result + 100;
 		},
 		{ priority: 200, pattern: "math.add" }
@@ -901,7 +901,7 @@ await runTest("ALL MODES: Arg modification works across all combinations", async
 		api.hooks.on(
 			"multiply-args",
 			"before",
-			({ path, args }) => {
+			({ path: ___path, args }) => {
 				return [args[0] * 10, args[1] * 10];
 			},
 			{ priority: 100, pattern: "math.add" }
@@ -933,7 +933,7 @@ await runTest("ALL MODES: Result transformation works across all combinations", 
 		api.hooks.on(
 			"multiply-result",
 			"after",
-			({ path, result }) => {
+			({ path: ___path, result }) => {
 				return result * 10;
 			},
 			{ priority: 100, pattern: "math.add" }
@@ -965,7 +965,7 @@ await runTest("ALL MODES: Short-circuit works across all combinations", async ()
 		api.hooks.on(
 			"short-circuit",
 			"before",
-			({ path, args }) => {
+			({ path: ___path, args }) => {
 				return 999;
 			},
 			{ priority: 100, pattern: "math.add" }
@@ -992,7 +992,7 @@ await runTest("ENABLE/DISABLE: Hooks don't run when disabled", async () => {
 	api.hooks.on(
 		"should-not-run",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [args[0] * 10, args[1] * 10];
 		},
 		{ priority: 100, pattern: "math.add" }
@@ -1017,7 +1017,7 @@ await runTest("ENABLE/DISABLE: Hooks can be re-enabled at runtime", async () => 
 	api.hooks.on(
 		"toggle-test",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [args[0] * 10, args[1] * 10];
 		},
 		{ priority: 100, pattern: "math.add" }
@@ -1049,7 +1049,7 @@ await runTest("ENABLE/DISABLE: Pattern-specific enable works", async () => {
 	api.hooks.on(
 		"pattern-test",
 		"before",
-		({ path, args }) => {
+		({ path: ___path, args }) => {
 			return [args[0] * 10, args[1] * 10];
 		},
 		{ priority: 100, pattern: "math.*" }

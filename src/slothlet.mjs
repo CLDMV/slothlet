@@ -304,11 +304,10 @@ const slothletObject = {
 		dir: null,
 		sanitize: null,
 		allowApiOverwrite: true,
-		hotReload: false, // New unified flag for hot reload and module ownership tracking
-		enableModuleOwnership: false // DEPRECATED: Use hotReload instead (kept for backward compatibility)
+		hotReload: false // Enable hot reload and module ownership tracking
 	},
 	// Module ownership tracking for Rule 12: Module Ownership and Selective API Overwriting
-	_moduleOwnership: new Map(), // Map of API paths to moduleId ownership (apiPath -> moduleId)
+	_moduleOwnership: new Map(), // Map of API paths to Set of moduleIds (apiPath -> Set<moduleId>)
 	_moduleApiPaths: new Map(), // Map of moduleId to Set of API paths (moduleId -> Set<apiPath>)
 	_pathSegmentModules: new Map(), // Map of path segments to Set of moduleIds that use them (pathSegment -> Set<moduleId>)
 	// Hot reload tracking
@@ -514,15 +513,6 @@ const slothletObject = {
 	async load(config = {}, ctxRef = { context: null, reference: null }) {
 		this.config = { ...this.config, ...config };
 
-		// Handle backward compatibility: enableModuleOwnership → hotReload
-		// Only trigger if enableModuleOwnership is explicitly set and hotReload was not provided
-		if (this.config.enableModuleOwnership && !("hotReload" in config)) {
-			console.warn(
-				"[slothlet] DEPRECATION WARNING: 'enableModuleOwnership' is deprecated and will be removed in v3.0.0. Please use 'hotReload' instead."
-			);
-			this.config.hotReload = true;
-		}
-
 		// Store initial load config for hot reload
 		if (this.config.hotReload && !this._initialLoadConfig) {
 			this._initialLoadConfig = { ...config };
@@ -607,7 +597,8 @@ const slothletObject = {
 
 		const _boundapi = this.createBoundApi(l_ctxRef.reference);
 
-		mutateLiveBindingFunction(this.boundapi, _boundapi);
+		// Use recursive=true to support nested slothlet API structures
+		mutateLiveBindingFunction(this.boundapi, _boundapi, true);
 
 		this.updateBindings(this.context, this.reference, this.boundapi);
 
@@ -760,7 +751,8 @@ const slothletObject = {
 				// This ensures the boundapi reflects the current state of this.api
 				const currentApi = this.api;
 				if (currentApi && currentApi[key] === materializedValue) {
-					mutateLiveBindingFunction(this.boundapi, currentApi);
+					// Use recursive=true to preserve nested slothlet API structures during hot reload
+					mutateLiveBindingFunction(this.boundapi, currentApi, true);
 				}
 
 				if (this.config.debug) {
@@ -996,19 +988,30 @@ const slothletObject = {
 			console.warn("Could not redefine boundApi.removeApi: not configurable");
 		}
 
-		// Add reload method to boundApi (only if hotReload is enabled)
-		if (this.config.hotReload) {
-			const reloadDesc = Object.getOwnPropertyDescriptor(boundApi, "reload");
-			if (!reloadDesc || reloadDesc.configurable) {
-				Object.defineProperty(boundApi, "reload", {
-					value: this.reload.bind(this),
-					writable: true,
-					configurable: true,
-					enumerable: false // Non-enumerable to distinguish from API endpoints
-				});
-			} else if (this.config && this.config.debug) {
-				console.warn("Could not redefine boundApi.reload: not configurable");
-			}
+		// Add reload method to boundApi (always exposed, but throws if hotReload disabled)
+		const reloadDesc = Object.getOwnPropertyDescriptor(boundApi, "reload");
+		if (!reloadDesc || reloadDesc.configurable) {
+			Object.defineProperty(boundApi, "reload", {
+				value: this.reload.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false // Non-enumerable to distinguish from API endpoints
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.reload: not configurable");
+		}
+
+		// Add reloadApi method to boundApi (always exposed, but throws if hotReload disabled)
+		const reloadApiDesc = Object.getOwnPropertyDescriptor(boundApi, "reloadApi");
+		if (!reloadApiDesc || reloadApiDesc.configurable) {
+			Object.defineProperty(boundApi, "reloadApi", {
+				value: this.reloadApi.bind(this),
+				writable: true,
+				configurable: true,
+				enumerable: false // Non-enumerable to distinguish from API endpoints
+			});
+		} else if (this.config && this.config.debug) {
+			console.warn("Could not redefine boundApi.reloadApi: not configurable");
 		}
 
 		// Add .run() method to boundApi
@@ -1047,6 +1050,61 @@ const slothletObject = {
 		} else if (this.config && this.config.debug) {
 			console.warn("Could not redefine boundApi.scope: not configurable");
 		}
+
+		// Add context property for direct access/modification (hot reload support)
+		// Only exposed when SLOTHLET_INTERNAL_TEST_MODE environment variable is set
+		// This is a security measure to prevent accidental exposure in production
+		if (process.env.SLOTHLET_INTERNAL_TEST_MODE === "true") {
+			const contextDesc = Object.getOwnPropertyDescriptor(boundApi, "context");
+			if (!contextDesc || contextDesc.configurable) {
+				Object.defineProperty(boundApi, "context", {
+					get: () => {
+						// Initialize context if null
+						if (this.context === null) {
+							this.context = {};
+						}
+						return this.context;
+					},
+					set: (value) => {
+						if (typeof value === "object" && value !== null) {
+							// Initialize context if null
+							if (this.context === null) {
+								this.context = {};
+							}
+							Object.assign(this.context, value);
+						}
+					},
+					configurable: true,
+					enumerable: false
+				});
+			}
+
+			// Add reference property for direct access/modification (hot reload support)
+			const referenceDesc = Object.getOwnPropertyDescriptor(boundApi, "reference");
+			if (!referenceDesc || referenceDesc.configurable) {
+				Object.defineProperty(boundApi, "reference", {
+					get: () => {
+						// Initialize reference if null
+						if (this.reference === null) {
+							this.reference = {};
+						}
+						return this.reference;
+					},
+					set: (value) => {
+						if (typeof value === "object" && value !== null) {
+							// Initialize reference if null
+							if (this.reference === null) {
+								this.reference = {};
+							}
+							Object.assign(this.reference, value);
+						}
+					},
+					configurable: true,
+					enumerable: false
+				});
+			}
+		}
+
 		// console.debug("[slothlet] createBoundApi: boundApi.shutdown is now slothlet.shutdown.");
 
 		// this.boundApi = boundApi;
@@ -1118,8 +1176,11 @@ const slothletObject = {
 	_registerApiOwnership(apiPath, moduleId) {
 		if (!this.config.hotReload) return;
 
-		// Register apiPath -> moduleId
-		this._moduleOwnership.set(apiPath, moduleId);
+		// Register apiPath -> Set<moduleId> (multiple modules can own same path)
+		if (!this._moduleOwnership.has(apiPath)) {
+			this._moduleOwnership.set(apiPath, new Set());
+		}
+		this._moduleOwnership.get(apiPath).add(moduleId);
 
 		// Register moduleId -> apiPaths (bidirectional)
 		if (!this._moduleApiPaths.has(moduleId)) {
@@ -1133,10 +1194,10 @@ const slothletObject = {
 	},
 
 	/**
-	 * Gets the module that owns the specified API path (Rule 12).
+	 * Gets the modules that own the specified API path (Rule 12).
 	 * @memberof module:@cldmv/slothlet
 	 * @param {string} apiPath - The API path to check
-	 * @returns {string|null} The module ID that owns this path, or null if unowned
+	 * @returns {Set<string>|null} Set of module IDs that own this path, or null if unowned
 	 * @private
 	 * @internal
 	 */
@@ -1158,22 +1219,23 @@ const slothletObject = {
 	_validateModuleOwnership(apiPath, moduleId, forceOverwrite) {
 		if (!this.config.hotReload || !forceOverwrite) return false;
 
-		const existingOwner = this._getApiOwnership(apiPath);
-		if (!existingOwner) {
-			// No existing owner, allow and register
+		const existingOwners = this._getApiOwnership(apiPath);
+		if (!existingOwners || existingOwners.size === 0) {
+			// No existing owners, allow and register
 			return true;
 		}
 
-		// Check if same module owns the path
-		if (existingOwner === moduleId) {
+		// Check if this module already owns the path
+		if (existingOwners.has(moduleId)) {
 			return true;
 		}
 
-		// Different module owns the path - not allowed
+		// Different module(s) own the path - allowed with forceOverwrite
 		if (this.config.debug) {
-			console.log(`[DEBUG] Ownership conflict: ${apiPath} owned by ${existingOwner}, attempted by ${moduleId}`);
+			const ownersList = Array.from(existingOwners).join(", ");
+			console.log(`[DEBUG] Ownership validation: ${apiPath} owned by ${ownersList}, allowing ${moduleId} with forceOverwrite`);
 		}
-		return false;
+		return true;
 	},
 
 	/**
@@ -1390,6 +1452,104 @@ const slothletObject = {
 
 		if (this.config.debug) {
 			console.log("[DEBUG] reload: Hot reload complete");
+		}
+	},
+
+	/**
+	 * Hot reloads a specific API path by re-executing its addApi calls.
+	 *
+	 * @memberof module:@cldmv/slothlet
+	 * @async
+	 * @param {string} apiPath - The API path to reload (e.g., "plugins.myModule")
+	 * @returns {Promise<void>}
+	 * @throws {Error} If hotReload is not enabled in config
+	 * @throws {TypeError} If apiPath is not a string
+	 *
+	 * @description
+	 * Reloads only the modules at the specified API path:
+	 * 1. Finds all addApi history entries with exact apiPath match
+	 * 2. For each match, re-executes addApi with mutateExisting: true
+	 * 3. Nested modules are automatically preserved via recursive mutation
+	 * 4. Maintains all existing references (top-level and nested)
+	 *
+	 * This is more efficient than reload() when you only need to update
+	 * specific modules rather than the entire API structure.
+	 *
+	 * @example
+	 * // Setup with hot reload enabled
+	 * const api = await slothlet({ dir: "./api", hotReload: true });
+	 * await api.addApi("plugins", "./plugins");
+	 *
+	 * // Later, reload just the plugins
+	 * await api.reloadApi("plugins"); // Faster than full reload()
+	 *
+	 * @example
+	 * // Multiple modules on same path are all reloaded
+	 * await api.addApi("features", "./features/core", {}, { moduleId: "core" });
+	 * await api.addApi("features", "./features/extra", {}, { moduleId: "extra" });
+	 * await api.reloadApi("features"); // Reloads both core and extra
+	 *
+	 * @public
+	 */
+	async reloadApi(apiPath) {
+		if (!this.config.hotReload) {
+			throw new Error("[slothlet] reloadApi: hotReload must be enabled in config to use reloadApi()");
+		}
+
+		if (typeof apiPath !== "string") {
+			throw new TypeError("[slothlet] reloadApi: apiPath must be a string");
+		}
+
+		const normalizedApiPath = apiPath.trim();
+		if (normalizedApiPath === "") {
+			throw new TypeError("[slothlet] reloadApi: apiPath must be a non-empty, non-whitespace string");
+		}
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] reloadApi: Reloading API path "${normalizedApiPath}"...`);
+		}
+
+		// Find all addApi history entries that match this exact apiPath
+		const matchingEntries = this._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath);
+
+		if (matchingEntries.length === 0) {
+			if (this.config.debug) {
+				console.log(`[DEBUG] reloadApi: No addApi history found for path "${normalizedApiPath}"`);
+			}
+			return;
+		}
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] reloadApi: Found ${matchingEntries.length} matching entries for "${normalizedApiPath}"`);
+		}
+
+		// Reload each matching entry with mutateExisting: true to preserve references
+		for (const entry of matchingEntries) {
+			const { apiPath: entryPath, folderPath, metadata, options } = entry;
+			const moduleId = options?.moduleId;
+
+			// Skip if this module was explicitly removed
+			if (moduleId && this._removeApiHistory.has(moduleId)) {
+				if (this.config.debug) {
+					console.log(`[DEBUG] reloadApi: Skipping removed module "${moduleId}"`);
+				}
+				continue;
+			}
+
+			if (this.config.debug) {
+				console.log(`[DEBUG] reloadApi: Reloading "${entryPath}" from "${folderPath}"${moduleId ? ` (moduleId: ${moduleId})` : ""}`);
+			}
+
+			// Re-execute addApi with mutateExisting: true to preserve references
+			const reloadOptions = { ...options, mutateExisting: true };
+			await this.addApi(entryPath, folderPath, metadata, reloadOptions);
+		}
+
+		// Update bindings to reflect all changes
+		this.updateBindings(this.context, this.reference, this.boundapi);
+
+		if (this.config.debug) {
+			console.log(`[DEBUG] reloadApi: Reload complete for "${normalizedApiPath}"`);
 		}
 	},
 
@@ -1696,8 +1856,6 @@ export default slothlet;
  *   - `false`: Disable ownership tracking and hot reload (default, no performance overhead)
  *   - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
  *   - Requires moduleId parameter in addApi options when using forceOverwrite capability
- * @property {boolean} [enableModuleOwnership=false] - **DEPRECATED** - Use hotReload instead. Will be removed in v3.0.0.
- *   - Internally mapped to hotReload for backward compatibility
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.

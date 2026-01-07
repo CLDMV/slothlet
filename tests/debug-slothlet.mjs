@@ -129,6 +129,11 @@ export function compareApiShapes(
 
 	// Helper function to check if a key should be skipped
 	const shouldSkipKey = (key, obj) => {
+		// Always skip internal path properties - these may differ between modes
+		// but don't affect user-facing API behavior
+		if (key === "__slothletPath") {
+			return true;
+		}
 		return (
 			["constructor", "prototype", "__proto__", "__ctx", "_impl", "length", "name", "__slothletDefault"].includes(key) &&
 			typeof obj === "function"
