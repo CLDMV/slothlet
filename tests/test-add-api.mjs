@@ -432,35 +432,39 @@ async function test_addApi_allowOverwrite() {
 
 	await api2.shutdown();
 
-	// Test 3: forceOverwrite IS blocked when attempting to overwrite ANOTHER module's API (Rule 12)
-	console.log("\n[TEST] Testing forceOverwrite blocking with Rule 12 (cross-module protection)...");
+	// Test 3: Cross-module overwrites are blocked by Rule 12 when allowApiOverwrite: false
+	console.log("\n[TEST] Testing Rule 12 blocks cross-module overwrites when allowApiOverwrite: false...");
 	const api3 = await slothlet({
 		dir: path.join(__dirname, "../api_tests/api_test"),
 		lazy: false,
 		debug: false,
-		allowApiOverwrite: false,
-		hotReload: true // Required for forceOverwrite
+		allowApiOverwrite: false, // Blocking cross-module overwrites
+		hotReload: true // Required for moduleId tracking
 	});
 
 	// First add API modules to create actual API structure with a moduleId
-	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"), { moduleId: "original-module" });
+	await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "original-module" });
 	const originalKeys = Object.keys(api3.funcTest);
 	console.log(`  🔍 Initial keys at funcTest: ${originalKeys.join(", ")}`);
 
-	// Try to FORCE overwrite with a DIFFERENT moduleId - THIS should be blocked by Rule 12
+	// Try to overwrite with a DIFFERENT moduleId - should be blocked by Rule 12 (allowApiOverwrite: false)
 	let ruleError = null;
 	try {
-		await api3.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_cjs"), {
-			forceOverwrite: true,
-			moduleId: "hostile-module" // Different module trying to take over
-		});
+		await api3.addApi(
+			"funcTest",
+			path.join(__dirname, "../api_tests/api_test_cjs"),
+			{},
+			{
+				moduleId: "hostile-module" // Different module trying to take over
+			}
+		);
 	} catch (error) {
 		ruleError = error;
 	}
 
 	// Verify Rule 12 error was thrown
 	if (!ruleError || !ruleError.message.includes("Rule 12")) {
-		throw new Error("Expected Rule 12 error for cross-module overwrite attempt");
+		throw new Error("Expected Rule 12 error for cross-module overwrite attempt with allowApiOverwrite: false");
 	}
 	console.log(`  ✓ Rule 12 correctly blocked cross-module overwrite: ${ruleError.message.split(".")[0]}`);
 
@@ -474,6 +478,36 @@ async function test_addApi_allowOverwrite() {
 	console.log("  ✓ Original API preserved after Rule 12 blocked the overwrite");
 
 	await api3.shutdown();
+
+	// Test 4: Cross-module overwrites are ALLOWED when allowApiOverwrite: true
+	console.log("\n[TEST] Testing cross-module overwrites allowed when allowApiOverwrite: true...");
+	const api4 = await slothlet({
+		dir: path.join(__dirname, "../api_tests/api_test"),
+		lazy: false,
+		debug: false,
+		allowApiOverwrite: true, // Allowing cross-module overwrites
+		hotReload: true
+	});
+
+	// First add API modules with a moduleId
+	await api4.addApi("funcTest", path.join(__dirname, "../api_tests/api_test_mixed"), {}, { moduleId: "original-module" });
+
+	// Cross-module overwrite should succeed with allowApiOverwrite: true
+	try {
+		await api4.addApi(
+			"funcTest",
+			path.join(__dirname, "../api_tests/api_test_cjs"),
+			{},
+			{
+				moduleId: "new-owner-module"
+			}
+		);
+	} catch (error) {
+		throw new Error(`Cross-module overwrite should be allowed with allowApiOverwrite: true, but got: ${error.message}`);
+	}
+	console.log("  ✓ Cross-module overwrite allowed with allowApiOverwrite: true");
+
+	await api4.shutdown();
 
 	console.log("\n✅ allowApiOverwrite configuration test passed");
 }

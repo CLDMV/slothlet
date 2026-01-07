@@ -304,7 +304,8 @@ const slothletObject = {
 		dir: null,
 		sanitize: null,
 		allowApiOverwrite: true,
-		hotReload: false // Enable hot reload and module ownership tracking
+		hotReload: false, // New unified flag for hot reload and module ownership tracking
+		enableModuleOwnership: false // DEPRECATED: Use hotReload instead (kept for backward compatibility)
 	},
 	// Module ownership tracking for Rule 12: Module Ownership and Selective API Overwriting
 	_moduleOwnership: new Map(), // Map of API paths to Set of moduleIds (apiPath -> Set<moduleId>)
@@ -512,6 +513,15 @@ const slothletObject = {
 	 */
 	async load(config = {}, ctxRef = { context: null, reference: null }) {
 		this.config = { ...this.config, ...config };
+
+		// Handle backward compatibility: enableModuleOwnership → hotReload
+		// Only trigger if enableModuleOwnership is explicitly set and hotReload was not provided
+		if (this.config.enableModuleOwnership && !("hotReload" in config)) {
+			console.warn(
+				"[slothlet] DEPRECATION WARNING: 'enableModuleOwnership' is deprecated and will be removed in v3.0.0. Please use 'hotReload' instead."
+			);
+			this.config.hotReload = true;
+		}
 
 		// Store initial load config for hot reload
 		if (this.config.hotReload && !this._initialLoadConfig) {
@@ -1856,6 +1866,8 @@ export default slothlet;
  *   - `false`: Disable ownership tracking and hot reload (default, no performance overhead)
  *   - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
  *   - Requires moduleId parameter in addApi options when using forceOverwrite capability
+ * @property {boolean} [enableModuleOwnership=false] - **DEPRECATED** - Use hotReload instead. Will be removed in v3.0.0.
+ *   - Internally mapped to hotReload for backward compatibility
  * @property {object} [context={}] - Context data object injected into live-binding `context` reference.
  *   - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
  *   - user sessions, environment configs, etc.

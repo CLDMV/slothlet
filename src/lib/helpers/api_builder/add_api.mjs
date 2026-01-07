@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-01 11:30:10 -08:00 (1767295810)
+ *	@Last modified time: 2026-01-06 17:27:53 -08:00 (1767749273)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -46,7 +46,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { cleanMetadata, tagLoadedFunctions } from "./metadata.mjs";
+import { tagLoadedFunctions } from "./metadata.mjs";
 import { removeApiByModuleId } from "./remove_api.mjs";
 
 /**
@@ -391,8 +391,9 @@ async function recursivelyMutateWithLazyPreservation(existingObj, newObj, option
  * @property {object} instance - Slothlet instance with api, boundapi, config, modes, etc.
  * @property {object} [metadata={}] - Metadata to attach to all loaded functions
  * @property {object} [options={}] - Additional options for module loading
- * @property {boolean} [options.forceOverwrite=false] - Allow overwriting existing APIs (requires Rule 12)
- * @property {string} [options.moduleId] - Module identifier for ownership tracking (required with forceOverwrite)
+ * @property {boolean} [options.forceOverwrite=false] - Allow complete replacement of existing APIs (bypasses merge behavior)
+ * @property {boolean} [options.mutateExisting=true] - Preserve references by mutating existing objects in-place instead of replacing them. Set to false to replace references entirely.
+ * @property {string} [options.moduleId] - Module identifier for ownership tracking. Required for hot reload cleanup.
  */
 
 /**
@@ -461,7 +462,7 @@ async function recursivelyMutateWithLazyPreservation(existingObj, newObj, option
  * );
  */
 export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {}, options = {} }) {
-	const { forceOverwrite = false, mutateExisting = false, moduleId } = options;
+	const { forceOverwrite = false, mutateExisting = true, moduleId } = options;
 
 	// Rule 12: Module Ownership validation
 	if (forceOverwrite && !moduleId) {
@@ -523,19 +524,8 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 		throw new Error(`[slothlet] addApi: Path is not a directory: ${resolvedFolderPath}`);
 	}
 
-	// Rule 12: Check cross-module ownership BEFORE auto-cleanup
-	// If forceOverwrite is used, block if the path is owned by a DIFFERENT module
-	// This prevents hostile takeover while still allowing multiple modules to share paths normally
-	if (instance.config.hotReload && moduleId && forceOverwrite) {
-		const existingOwners = instance._getApiOwnership(normalizedApiPath);
-		if (existingOwners && existingOwners.size > 0 && !existingOwners.has(moduleId)) {
-			const ownersList = Array.from(existingOwners).join(", ");
-			throw new Error(
-				`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module "${ownersList}", ` +
-					`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
-			);
-		}
-	}
+	// Note: forceOverwrite=true means "allow complete replacement" - it does NOT block overwrites
+	// Ownership tracking via __owners arrays handles cleanup of orphaned entities
 
 	// Rule 13: Auto-cleanup before reload when hot reload tracking enabled
 	// Remove existing APIs owned by this module to prevent orphan functions
@@ -863,10 +853,9 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 						existing[key] = newModules[key];
 					}
 				}
-				// Mark ownership
+				// Mark ownership at the API path level
 				if (moduleId) {
-					const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
-					instance._addOwnership(normalizedPath, moduleId);
+					instance._registerApiOwnership(normalizedApiPath, moduleId);
 				}
 				return; // Skip normal assignment - we've updated in place
 			}
@@ -887,16 +876,21 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			}
 
 			// Rule 12: Check module ownership for overwrites
-			if (instance.config.hotReload && existing) {
-				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
-				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
+			if (instance.config.hotReload && existing && moduleId) {
+				// Check ownership at the apiPath level (not apiPath.finalKey since finalKey is already part of apiPath)
+				const existingOwners = instance._getApiOwnership(normalizedApiPath);
 
-				if (forceOverwrite && !canOverwrite) {
-					const existingOwner = instance._getApiOwnership(normalizedPath);
-					throw new Error(
-						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module "${existingOwner}", ` +
-							`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
-					);
+				// Check if a different module owns this path
+				if (existingOwners && existingOwners.size > 0 && !existingOwners.has(moduleId)) {
+					// Different module owns it - only allow if allowApiOverwrite is true
+					if (instance.config.allowApiOverwrite === false) {
+						const ownersList = Array.from(existingOwners).join(", ");
+						throw new Error(
+							`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module(s) "${ownersList}", ` +
+								`attempted by module "${moduleId}". Set allowApiOverwrite: true to allow cross-module overwrites.`
+						);
+					}
+					// allowApiOverwrite is true - allow the cross-module overwrite
 				}
 			}
 
@@ -904,10 +898,16 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			// This allows multiple modules to share the path - one provides the function, others add properties
 			if (existing !== null && typeof existing === "object" && !Array.isArray(existing)) {
 				// Check if we're allowed to replace object with function
-				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false) {
+				// Same module updates are always allowed; cross-module blocked when allowApiOverwrite=false
+				const existingOwners = instance._getApiOwnership?.(normalizedApiPath);
+				const isSameModuleUpdate = moduleId && existingOwners && existingOwners.has(moduleId);
+				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false && !isSameModuleUpdate) {
+					// Get ownership info for better error message
+					const ownerInfo = existingOwners && existingOwners.size > 0 ? ` Owned by: "${Array.from(existingOwners).join(", ")}".` : "";
+					const attemptInfo = moduleId ? ` Attempted by module: "${moduleId}".` : "";
 					console.warn(
-						`[slothlet] Skipping addApi: Cannot replace object with function at API path "${normalizedApiPath}" final key "${finalKey}" ` +
-							`without forceOverwrite or mutateExisting. Set allowApiOverwrite: true or use forceOverwrite option.`
+						`[slothlet] Skipping addApi: Cannot replace object with function at "${normalizedApiPath}" ` +
+							`(config: allowApiOverwrite=${instance.config.allowApiOverwrite}, forceOverwrite=${forceOverwrite}, mutateExisting=${mutateExisting}).${ownerInfo}${attemptInfo}`
 					);
 					return; // Skip the replacement
 				}
@@ -919,16 +919,20 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 							`clearing and copying new properties to preserve references.`
 					);
 
-					// Check if multiple modules contribute to this path - if so, skip deletion
-					const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
-					if (multipleModules && instance.config.debug) {
-						console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+					// Determine if we should skip property deletion
+					let skipDeletion = true; // Default to safe behavior
+					if (moduleId) {
+						const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
+						skipDeletion = multipleModules;
+						if (multipleModules && instance.config.debug) {
+							console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+						}
 					}
 
 					// Use unified recursive mutation helper
 					await recursivelyMutateWithLazyPreservation(existing, newModules, {
 						instance,
-						skipDeletion: multipleModules
+						skipDeletion
 					});
 
 					return; // Done - we've mutated in place
@@ -942,10 +946,16 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 				Object.assign(newModules, existing);
 			} else if (typeof existing === "function") {
 				// Replacing function with another function
-				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false) {
+				// Same module updates are always allowed; cross-module blocked when allowApiOverwrite=false
+				const existingOwners = instance._getApiOwnership?.(normalizedApiPath);
+				const isSameModuleUpdate = moduleId && existingOwners && existingOwners.has(moduleId);
+				if (!forceOverwrite && !mutateExisting && instance.config.allowApiOverwrite === false && !isSameModuleUpdate) {
+					// Get ownership info for better error message
+					const ownerInfo = existingOwners && existingOwners.size > 0 ? ` Owned by: "${Array.from(existingOwners).join(", ")}".` : "";
+					const attemptInfo = moduleId ? ` Attempted by module: "${moduleId}".` : "";
 					console.warn(
-						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" final key "${finalKey}" ` +
-							`already exists (type: "function"). Set allowApiOverwrite: true to allow overwrites, or use forceOverwrite option.`
+						`[slothlet] Skipping addApi: API path "${normalizedApiPath}" already exists (type: "function") ` +
+							`(config: allowApiOverwrite=${instance.config.allowApiOverwrite}, forceOverwrite=${forceOverwrite}, mutateExisting=${mutateExisting}).${ownerInfo}${attemptInfo}`
 					);
 					return; // Skip the overwrite
 				}
@@ -993,17 +1003,21 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			const existing = currentTarget[finalKey];
 
 			// Rule 12: Check module ownership for object merges
-			if (instance.config.hotReload && existing) {
-				const normalizedPath = normalizedApiPath + (normalizedApiPath ? "." : "") + finalKey;
-				const canOverwrite = instance._validateModuleOwnership(normalizedPath, moduleId, forceOverwrite);
+			if (instance.config.hotReload && existing && moduleId) {
+				// Check ownership at the apiPath level (not apiPath.finalKey since finalKey is already part of apiPath)
+				const existingOwners = instance._getApiOwnership(normalizedApiPath);
 
-				if (forceOverwrite && !canOverwrite) {
-					const existingOwners = instance._getApiOwnership(normalizedPath);
-					const ownersList = existingOwners ? Array.from(existingOwners).join(", ") : "unknown";
-					throw new Error(
-						`[slothlet] Rule 12: Cannot overwrite API "${normalizedPath}" - owned by module(s) "${ownersList}", ` +
-							`attempted by module "${moduleId}". Modules can only overwrite APIs they own.`
-					);
+				// Check if a different module owns this path
+				if (existingOwners && existingOwners.size > 0 && !existingOwners.has(moduleId)) {
+					// Different module owns it - only allow if allowApiOverwrite is true
+					if (instance.config.allowApiOverwrite === false) {
+						const ownersList = Array.from(existingOwners).join(", ");
+						throw new Error(
+							`[slothlet] Rule 12: Cannot overwrite API "${normalizedApiPath}" - owned by module(s) "${ownersList}", ` +
+								`attempted by module "${moduleId}". Set allowApiOverwrite: true to allow cross-module overwrites.`
+						);
+					}
+					// allowApiOverwrite is true - allow the cross-module overwrite
 				}
 			}
 
@@ -1012,10 +1026,17 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			// unless forceOverwrite is used to replace the function entirely
 			if (existing !== null && typeof existing === "function") {
 				// Existing is a function, new is object - merge properties onto function for shared ownership
-				if (forceOverwrite && instance.config.allowApiOverwrite === false) {
+				// Same module updates are always allowed; cross-module blocked when allowApiOverwrite=false
+				const existingOwners = instance._getApiOwnership?.(normalizedApiPath);
+				const isSameModuleUpdate = moduleId && existingOwners && existingOwners.has(moduleId);
+				if (forceOverwrite && instance.config.allowApiOverwrite === false && !isSameModuleUpdate) {
+					// Get ownership info for better error message
+					const ownerInfo = existingOwners && existingOwners.size > 0 ? ` Owned by: "${Array.from(existingOwners).join(", ")}".` : "";
+					const attemptInfo = moduleId ? ` Attempted by module: "${moduleId}".` : "";
 					console.warn(
-						`[slothlet] Skipping addApi: Cannot replace function with object at API path "${normalizedApiPath}" final key "${finalKey}" ` +
-							`without allowApiOverwrite: true. Function will be preserved and new properties merged.`
+						`[slothlet] Skipping addApi: Cannot replace function with object at "${normalizedApiPath}" ` +
+							`(config: allowApiOverwrite=${instance.config.allowApiOverwrite}, forceOverwrite=${forceOverwrite}).${ownerInfo}${attemptInfo} ` +
+							`Function will be preserved and new properties merged instead.`
 					);
 					// Don't return - continue to merge properties onto function
 				}
@@ -1119,20 +1140,29 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 		// When mutateExisting is true, use unified recursive mutation to preserve lazy proxy references
 		if (mutateExisting) {
-			// Check if multiple modules contribute to this path - if so, skip deletion to preserve other modules' properties
-			const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
-			if (multipleModules && instance.config.debug) {
-				console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+			// Determine if we should skip property deletion:
+			// - Without moduleId: always skip deletion (we're just merging, not doing tracked reload)
+			// - With moduleId: skip deletion if multiple modules contribute to this path
+			let skipDeletion = true; // Default to safe behavior (skip deletion)
+			if (moduleId) {
+				// Only delete properties if this is the only module at this path
+				const multipleModules = instance._addApiHistory.filter((entry) => entry.apiPath === normalizedApiPath).length > 1;
+				skipDeletion = multipleModules;
+				if (multipleModules && instance.config.debug) {
+					console.log(`[DEBUG] Multiple modules contribute to "${normalizedApiPath}" - skipping property deletion during reload`);
+				}
+			} else if (instance.config.debug) {
+				console.log(`[DEBUG] No moduleId provided - skipping property deletion (merge mode)`);
 			}
 
 			// Use unified recursive mutation helper for both targets
 			await recursivelyMutateWithLazyPreservation(currentTarget[finalKey], newModules, {
 				instance,
-				skipDeletion: multipleModules
+				skipDeletion
 			});
 			await recursivelyMutateWithLazyPreservation(currentBoundTarget[finalKey], newModules, {
 				instance,
-				skipDeletion: multipleModules
+				skipDeletion
 			});
 		} else {
 			// Not mutateExisting - use standard Object.assign
