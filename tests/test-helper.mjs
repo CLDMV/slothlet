@@ -16,6 +16,24 @@ const TEST_MATRIX = [
 	{ name: "EAGER_HOT_RELOAD", config: { dir: "../api_tests/api_test", lazy: false, hotReload: true, debug: false } },
 	{ name: "LAZY_HOT_RELOAD", config: { dir: "../api_tests/api_test", lazy: true, hotReload: true, debug: false } },
 
+	// Ownership with allowApiOverwrite combinations (for Rule 12 testing)
+	{
+		name: "EAGER_OWNERSHIP_ALLOW_OVERWRITE",
+		config: { dir: "../api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: true, debug: false }
+	},
+	{
+		name: "LAZY_OWNERSHIP_ALLOW_OVERWRITE",
+		config: { dir: "../api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: true, debug: false }
+	},
+	{
+		name: "EAGER_OWNERSHIP_DENY_OVERWRITE",
+		config: { dir: "../api_tests/api_test", lazy: false, hotReload: true, allowApiOverwrite: false, debug: false }
+	},
+	{
+		name: "LAZY_OWNERSHIP_DENY_OVERWRITE",
+		config: { dir: "../api_tests/api_test", lazy: true, hotReload: true, allowApiOverwrite: false, debug: false }
+	},
+
 	// API depth configurations
 	{ name: "EAGER_DEPTH_1", config: { dir: "../api_tests/api_test", lazy: false, apiDepth: 1, debug: false } },
 	{ name: "LAZY_DEPTH_1", config: { dir: "../api_tests/api_test", lazy: true, apiDepth: 1, debug: false } },

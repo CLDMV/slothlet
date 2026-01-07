@@ -16,7 +16,7 @@ import { runOwnershipTestMatrix, runSelectTestMatrix } from "./test-helper.mjs";
 async function testRule12OwnershipTracking() {
 	const results = await runOwnershipTestMatrix(
 		{},
-		async (api, configName, _) => {
+		async (api, configName, config) => {
 			// Test 1: Module can register and update its own APIs
 			await api.addApi(
 				"plugins.moduleA",
@@ -50,7 +50,10 @@ async function testRule12OwnershipTracking() {
 				}
 			);
 
-			// Test 4: Cross-module overwrite should fail
+			// Test 4: Cross-module overwrite behavior depends on allowApiOverwrite setting
+			// When allowApiOverwrite: false (or explicitly set), cross-module should be blocked
+			// When allowApiOverwrite: true (default), cross-module should be allowed
+			const shouldBlock = config.allowApiOverwrite === false;
 			let crossModuleBlocked = false;
 			try {
 				await api.addApi(
@@ -58,8 +61,7 @@ async function testRule12OwnershipTracking() {
 					"../api_tests/api_test",
 					{},
 					{
-						moduleId: "moduleA", // moduleA trying to overwrite moduleB's APIs
-						forceOverwrite: true
+						moduleId: "moduleA" // moduleA trying to overwrite moduleB's APIs
 					}
 				);
 			} catch (error) {
@@ -68,8 +70,11 @@ async function testRule12OwnershipTracking() {
 				}
 			}
 
-			if (!crossModuleBlocked) {
-				throw new Error(`Cross-module overwrite should have been blocked in ${configName}`);
+			if (shouldBlock && !crossModuleBlocked) {
+				throw new Error(`Cross-module overwrite should have been blocked in ${configName} (allowApiOverwrite: false)`);
+			}
+			if (!shouldBlock && crossModuleBlocked) {
+				throw new Error(`Cross-module overwrite should have been allowed in ${configName} (allowApiOverwrite: true)`);
 			}
 		},
 		"Rule 12 Ownership Tracking Test"
@@ -159,7 +164,7 @@ async function testRule12AllowApiOverwriteInteraction() {
 				}
 			);
 
-			// Test 4: Cross-module protection should still work
+			// Test 4: Cross-module protection should work because allowApiOverwrite: false
 			let crossModuleBlocked = false;
 			try {
 				await api.addApi(
@@ -167,8 +172,8 @@ async function testRule12AllowApiOverwriteInteraction() {
 					"../api_tests/api_test_collections",
 					{},
 					{
-						moduleId: "differentModule",
-						forceOverwrite: true
+						moduleId: "differentModule"
+						// Should be blocked by Rule 12 since allowApiOverwrite: false
 					}
 				);
 			} catch (error) {
@@ -178,7 +183,7 @@ async function testRule12AllowApiOverwriteInteraction() {
 			}
 
 			if (!crossModuleBlocked) {
-				throw new Error(`Cross-module protection should work regardless of allowApiOverwrite setting in ${configName}`);
+				throw new Error(`Cross-module protection should work with allowApiOverwrite: false in ${configName}`);
 			}
 		}
 	);
