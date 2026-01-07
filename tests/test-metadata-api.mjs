@@ -394,7 +394,7 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 	// EDGE CASES
 	// ========================================================================
 
-	await runTest(`${modeLabel}: addApi without metadata doesn't add metadata`, async () => {
+	await runTest(`${modeLabel}: addApi without metadata adds system metadata`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
 		const cjsPath = path.resolve(__dirname, "../api_tests/api_test_cjs");
@@ -405,22 +405,25 @@ async function runAllTestsForMode(mode, runtime, hooks) {
 		const mathAdd = api.nometa.rootMath?.add;
 		assert(typeof mathAdd === "function", "rootMath.add should be a function");
 
-		if (mathAdd.__metadata) {
-			console.log(`[${modeLabel}] mathAdd has metadata:`, Object.keys(mathAdd.__metadata));
-		}
-		assert(!mathAdd.__metadata, "Function loaded without metadata should not have __metadata property");
+		// Metadata should always be present (at least sourceFolder) for hot reload support
+		assert(mathAdd.__metadata, "Function should have __metadata property for hot reload tracking");
+		assert(mathAdd.__metadata.sourceFolder, "Metadata should include sourceFolder");
+		assert(Object.keys(mathAdd.__metadata).length === 1, "Without user metadata, should only have sourceFolder");
 
 		await api.shutdown();
 	});
 
-	await runTest(`${modeLabel}: Empty metadata object doesn't create metadata`, async () => {
+	await runTest(`${modeLabel}: Empty metadata object adds system metadata`, async () => {
 		const api = await slothlet({ dir: path.join(__dirname, "../api_tests/api_test"), mode: mode, runtime: runtime, hooks: hooks });
 
 		await api.addApi("empty", path.join(__dirname, "../api_tests/api_test_collections"), {});
 
 		const collectionsObj = api.empty.collections;
 		assert(typeof collectionsObj === "object", "Collections object should be loaded");
-		assert(!collectionsObj.__metadata, "Empty metadata object should not create metadata on objects");
+		// Metadata should always be present (at least sourceFolder) for hot reload support
+		assert(collectionsObj.__metadata, "Object should have __metadata property for hot reload tracking");
+		assert(collectionsObj.__metadata.sourceFolder, "Metadata should include sourceFolder");
+		assert(Object.keys(collectionsObj.__metadata).length === 1, "With empty user metadata, should only have sourceFolder");
 
 		await api.shutdown();
 	});

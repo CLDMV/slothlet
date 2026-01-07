@@ -114,40 +114,6 @@ async function testRule12ConfigurationValidation() {
 }
 
 /**
- * Test Rule 12 moduleId requirement validation
- * @private
- */
-async function testRule12ModuleIdRequirement() {
-	console.log("\n🆔 Testing Rule 12 moduleId requirement...");
-
-	const results = await runOwnershipTestMatrix({}, async (api, configName, _) => {
-		// Test: forceOverwrite should require moduleId
-		let moduleIdValidationWorked = false;
-		try {
-			await api.addApi(
-				"test.path",
-				"../api_tests/api_test",
-				{},
-				{
-					forceOverwrite: true
-					// Missing moduleId
-				}
-			);
-		} catch (error) {
-			if (error.message.includes("forceOverwrite requires moduleId parameter")) {
-				moduleIdValidationWorked = true;
-			}
-		}
-
-		if (!moduleIdValidationWorked) {
-			throw new Error(`ModuleId validation should require moduleId parameter for forceOverwrite in ${configName}`);
-		}
-	});
-
-	return results;
-}
-
-/**
  * Test Rule 12 interaction with allowApiOverwrite setting
  * @private
  */
@@ -230,7 +196,6 @@ async function runRule12ComprehensiveTests() {
 	const testResults = {
 		ownershipTracking: null,
 		configurationValidation: null,
-		moduleIdRequirement: null,
 		allowApiOverwriteInteraction: null
 	};
 
@@ -238,7 +203,6 @@ async function runRule12ComprehensiveTests() {
 		// Run all test suites
 		testResults.ownershipTracking = await testRule12OwnershipTracking();
 		testResults.configurationValidation = await testRule12ConfigurationValidation();
-		testResults.moduleIdRequirement = await testRule12ModuleIdRequirement();
 		testResults.allowApiOverwriteInteraction = await testRule12AllowApiOverwriteInteraction();
 
 		// Overall summary

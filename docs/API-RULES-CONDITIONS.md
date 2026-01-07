@@ -528,14 +528,14 @@ This section maps conditions to the higher-level documentation they support.
 **Code Location**: [slothlet.mjs#L85-L90](../src/slothlet.mjs#L85-L90)
 
 ```javascript
-if (options.forceOverwrite && !this._config.enableModuleOwnership) {
-	throw new Error("forceOverwrite requires enableModuleOwnership: true in slothlet configuration");
+if (options.forceOverwrite && !this._config.hotReload) {
+	throw new Error("forceOverwrite requires hotReload: true in slothlet configuration");
 }
 ```
 
-**Triggers**: `options.forceOverwrite === true && this._config.enableModuleOwnership !== true`  
+**Triggers**: `options.forceOverwrite === true && this._config.hotReload !== true`  
 **Logic**: Configuration consistency validation  
-**Result**: Throws error requiring enableModuleOwnership for forceOverwrite operations
+**Result**: Throws error requiring hotReload for forceOverwrite operations
 
 ### C20: Module ID Requirement Condition
 
@@ -556,7 +556,7 @@ if (options.forceOverwrite && !options.moduleId) {
 **Code Location**: [add_api.mjs#L145-L155](../src/lib/helpers/api_builder/add_api.mjs#L145-L155)
 
 ```javascript
-if (currentTarget[finalKey] !== undefined && typeof currentTarget[finalKey] === "function" && this._config.enableModuleOwnership) {
+if (currentTarget[finalKey] !== undefined && typeof currentTarget[finalKey] === "function" && this._config.hotReload) {
 	const existingOwner = this._getApiOwnership(fullPath);
 	if (existingOwner && existingOwner !== options.moduleId) {
 		throw new Error(
@@ -575,7 +575,7 @@ if (currentTarget[finalKey] !== undefined && typeof currentTarget[finalKey] === 
 **Code Location**: [add_api.mjs#L160-L170](../src/lib/helpers/api_builder/add_api.mjs#L160-L170)
 
 ```javascript
-if (currentTarget[finalKey] !== undefined && this._config.enableModuleOwnership && options.moduleId) {
+if (currentTarget[finalKey] !== undefined && this._config.hotReload && options.moduleId) {
 	const existingOwner = this._getApiOwnership(fullPath);
 	if (existingOwner && existingOwner !== options.moduleId) {
 		throw new Error(
