@@ -54,7 +54,7 @@ export async function getResolution() {
  * @param {Object} [options={}] - Analysis options
  * @returns {Promise<Object>} Analysis results
  */
-export async function analyzeScreenshot(options = {}) {
+export async function analyzeScreenshot(___options = {}) {
 	return Promise.resolve({
 		brightness: 0.5,
 		isDark: false,

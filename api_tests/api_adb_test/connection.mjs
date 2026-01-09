@@ -5,7 +5,7 @@
  */
 
 // Slothlet runtime imports for live bindings
-import { self as _, context as __, reference as ___ } from "@cldmv/slothlet/runtime";
+import { self } from "@cldmv/slothlet/runtime";
 import { EventEmitter } from "events";
 
 // Connection state
@@ -139,7 +139,7 @@ export async function isAwake() {
 		// Quick shell command to check responsiveness
 		const result = await self.adb.shell("echo 'ping'");
 		return result?.toString().trim() === "ping";
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }
@@ -163,7 +163,7 @@ export async function ensureAwake() {
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
 		return await isAwake();
-	} catch (error) {
+	} catch {
 		return false;
 	}
 }
