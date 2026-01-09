@@ -78,7 +78,7 @@ await runTest("ALWAYS CONTEXT: Short-circuit execution provides empty errors arr
 	api.hooks.on(
 		"short-circuit",
 		"before",
-		({ path: _, args }) => {
+		() => {
 			return 99; // Short-circuit
 		},
 		{ pattern: "math.add", priority: 200 }

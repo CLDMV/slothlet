@@ -217,10 +217,11 @@ async function forceMaterializeLazyFolders(api) {
  * @param {object} [options] - Options for display
  * @param {number} [options.maxDepth=8] - Maximum depth to traverse
  * @param {boolean} [options.showMethods=false] - Whether to show available methods for functions
+ * @param {object} [options.slothletConfig] - Configuration for slothlet initialization
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 8, lazy = true } = options;
+	const { maxDepth = 8, lazy = true, slothletConfig = {} } = options;
 
 	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${lazy ? "lazy" : "eager"} mode) ===\n`));
 
@@ -228,8 +229,17 @@ async function inspectApi(apiName, options = {}) {
 		const apiPath = `./api_tests/${apiName}`;
 		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
+		// Build slothlet configuration
+		const config = {
+			dir: apiPath,
+			lazy: lazy,
+			...slothletConfig // Include any additional configuration parameters
+		};
+
+		console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
+
 		// Load the API
-		const api = await slothlet({ dir: apiPath, lazy: lazy });
+		const api = await slothlet(config);
 
 		console.log(chalk.green("✅ API loaded successfully"));
 
@@ -404,31 +414,52 @@ async function main() {
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
 		console.log("  node tools/inspect-api-structure.mjs api_test_cjs --eager");
-		console.log("  node tools/inspect-api-structure.mjs api_test_mixed --lazy");
+		console.log("  node tools/inspect-api-structure.mjs api_test_mixed --lazy --allowApiOverwrite --hotReload");
 		console.log("\nOptions:");
-		console.log("  --depth <n>     Maximum depth to traverse (default: 3)");
-		console.log("  --show-methods  Show available methods for functions");
-		console.log("  --lazy          Use lazy loading mode (default)");
-		console.log("  --eager         Use eager loading mode");
+		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
+		console.log("  --show-methods        Show available methods for functions");
+		console.log("  --lazy                Use lazy loading mode (default)");
+		console.log("  --eager               Use eager loading mode");
+		console.log("  --allowApiOverwrite   Allow API property overwriting");
+		console.log("  --hotReload           Enable hot reload and ownership tracking");
+		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
+		console.log("  --debug               Enable debug mode");
 		return;
 	}
 
 	const apiName = args[0];
 	const options = { lazy: true }; // Default to lazy mode
+	const slothletConfig = {}; // Configuration for slothlet initialization
 
 	// Parse options
 	for (let i = 1; i < args.length; i++) {
 		if (args[i] === "--depth" && i + 1 < args.length) {
 			options.maxDepth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
+		} else if (args[i] === "--apiDepth" && i + 1 < args.length) {
+			slothletConfig.apiDepth = parseInt(args[i + 1], 10);
+			i++; // Skip next arg
 		} else if (args[i] === "--show-methods") {
 			options.showMethods = true;
 		} else if (args[i] === "--lazy") {
 			options.lazy = true;
+			slothletConfig.lazy = true;
 		} else if (args[i] === "--eager") {
 			options.lazy = false;
+			slothletConfig.lazy = false;
+		} else if (args[i] === "--allowApiOverwrite") {
+			slothletConfig.allowApiOverwrite = true;
+		} else if (args[i] === "--hotReload") {
+			slothletConfig.hotReload = true;
+		} else if (args[i] === "--debug") {
+			slothletConfig.debug = true;
 		}
 	}
+
+	// Pass slothlet configuration as part of options
+	options.slothletConfig = slothletConfig;
+
+	await inspectApi(apiName, options);
 
 	await inspectApi(apiName, options);
 }

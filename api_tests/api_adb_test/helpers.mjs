@@ -93,7 +93,7 @@ export async function fetchCurrentAppInfo() {
 				applicationLabel,
 				timestamp: new Date().toISOString()
 			};
-		} catch (error) {
+		} catch {
 			return {
 				packageName,
 				activityName,
@@ -153,7 +153,7 @@ export async function fetchNetworkDetails() {
 			ethernet: { connected: !ethernetInfo.includes("No ethernet") },
 			activeConnection: wifiInfo.includes("enabled") ? "wifi" : "ethernet"
 		};
-	} catch (error) {
+	} catch {
 		return {
 			wifi: { connected: false },
 			ethernet: { connected: false },

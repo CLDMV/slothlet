@@ -1,7 +1,8 @@
 import slothlet from "@cldmv/slothlet";
 
 // Test configuration matrix covering all meaningful slothlet initialization options
-const TEST_MATRIX = [
+// Exported for use by vitest tests with describe.each/it.each patterns
+export const TEST_MATRIX = [
 	// Basic modes
 	{ name: "EAGER_BASIC", config: { dir: "../api_tests/api_test", lazy: false, debug: false } },
 	{ name: "LAZY_BASIC", config: { dir: "../api_tests/api_test", lazy: true, debug: false } },

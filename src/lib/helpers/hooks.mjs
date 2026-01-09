@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-18 00:00:00 -00:00
+ *	@Last modified time: 2026-01-08 16:08:18 -08:00 (1767917298)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -55,6 +55,8 @@ export class HookManager {
 	constructor(enabled = true, defaultPattern = "**", options = {}) {
 		this.enabled = enabled;
 		this.defaultPattern = defaultPattern;
+		this.enabledPatterns = new Set(); // Patterns currently enabled for execution
+		this.patternFilterActive = false; // Whether pattern filtering is in use
 		this.suppressErrors = options.suppressErrors || false;
 		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern}>
 		this.registrationOrder = 0; // Counter for maintaining registration order
@@ -64,33 +66,38 @@ export class HookManager {
 	/**
 	 * @function on
 	 * @public
-	 * @param {string} name - Hook name/ID for debugging and removal
 	 * @param {string} type - Hook type: "before", "after", "always", or "error"
 	 * @param {Function} handler - Hook handler function with type-specific signature:
 	 *   - before: ({ path, args }) => modified args array or value to short-circuit
 	 *   - after: ({ path, result }) => transformed result
 	 *   - always: ({ path, result, hasError, errors }) => void (read-only)
 	 *   - error: ({ path, error, errorType, source }) => void (observer)
-	 * @param {object} [options] - Registration options
-	 * @param {number} [options.priority=100] - Execution priority (higher = earlier)
-	 * @param {string} [options.pattern] - Glob pattern for path filtering
-	 * @returns {string} Hook name/ID for later removal
+	 * @param {object} [data] - Registration options
+	 * @param {string} [data.id] - Hook ID for debugging and removal (auto-generated if not provided)
+	 * @param {number} [data.priority=1000] - Execution priority (higher = earlier)
+	 * @param {string} [data.pattern] - Glob pattern for path filtering (uses defaultPattern if not provided)
+	 * @returns {string} Hook ID for later removal
 	 *
 	 * @description
 	 * Register a hook with optional priority and pattern filtering.
 	 *
 	 * @example
 	 * // Register hook with priority
-	 * manager.on("validator", "before", handler, { priority: 200 });
+	 * manager.on("before", handler, { priority: 200 });
+	 *
+	 * @example
+	 * // Register hook with custom ID and pattern
+	 * manager.on("before", handler, { id: "validator", pattern: "math.*", priority: 500 });
 	 */
-	on(name, type, handler, options = {}) {
-		const priority = options.priority ?? 100;
-		const pattern = options.pattern || this.defaultPattern;
+	on(type, handler, data = {}) {
+		const id = data.id || `hook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		const priority = data.priority ?? 1000;
+		const pattern = data.pattern || this.defaultPattern;
 		const compiledPattern = this._compilePattern(pattern);
 		const order = this.registrationOrder++;
 
-		this.hooks.set(name, {
-			tag: name,
+		this.hooks.set(id, {
+			tag: id,
 			type,
 			handler,
 			priority,
@@ -99,7 +106,7 @@ export class HookManager {
 			order
 		});
 
-		return name;
+		return id;
 	}
 
 	/**
@@ -191,25 +198,26 @@ export class HookManager {
 	 * @function list
 	 * @public
 	 * @param {string} [type] - Optional hook type to filter by ("before", "after", "always", "error")
-	 * @returns {Array<object>} Array of hook metadata
+	 * @returns {object} Hook manager status and registered hooks
 	 *
 	 * @description
-	 * List registered hooks with their metadata. When type is provided, only hooks
-	 * matching that type are returned.
+	 * Returns hook manager state including enabled patterns, global status, and registered hooks.
+	 * When type is provided, only hooks matching that type are included.
 	 *
 	 * @example
-	 * // List all hooks
-	 * const hooks = manager.list();
+	 * // Get full status
+	 * const status = manager.list();
+	 * console.log(status.enabledPatterns); // ["math.*", "string.*"]
 	 *
 	 * @example
 	 * // List only before hooks
-	 * const beforeHooks = manager.list("before");
+	 * const beforeStatus = manager.list("before");
 	 */
 	list(type) {
-		const result = [];
+		const hooks = [];
 		for (const [name, hook] of this.hooks) {
 			if (type === undefined || hook.type === type) {
-				result.push({
+				hooks.push({
 					name,
 					type: hook.type,
 					priority: hook.priority,
@@ -218,43 +226,78 @@ export class HookManager {
 				});
 			}
 		}
-		return result;
+
+		return {
+			globalEnabled: this.enabled,
+			defaultPattern: this.defaultPattern,
+			patternFilterActive: this.patternFilterActive,
+			enabledPatterns: Array.from(this.enabledPatterns),
+			registeredHooks: hooks
+		};
 	}
 
 	/**
 	 * @function enable
 	 * @public
-	 * @param {string} [pattern] - Optional new default pattern
+	 * @param {string} [pattern] - Pattern to enable for execution, or omit to enable all
 	 * @returns {void}
 	 *
 	 * @description
-	 * Enable hook execution, optionally updating default pattern.
+	 * Enable hook execution globally or add pattern to enabled patterns.
+	 * If pattern is provided, enables pattern-based filtering.
+	 * If no pattern provided, clears all pattern filtering.
 	 *
 	 * @example
-	 * // Enable with new pattern
-	 * manager.enable("database.*");
+	 * // Enable all hooks (clear pattern filtering)
+	 * manager.enable();
+	 *
+	 * // Enable only math operations
+	 * manager.enable("math.*");
+	 *
+	 * // Add string operations to enabled patterns
+	 * manager.enable("string.*");
 	 */
 	enable(pattern) {
 		this.enabled = true;
 		if (pattern !== undefined) {
-			this.defaultPattern = pattern;
+			this.enabledPatterns.add(pattern);
+			this.patternFilterActive = true;
+		} else {
+			// enable() with no args clears pattern filtering
+			this.enabledPatterns.clear();
+			this.patternFilterActive = false;
 		}
 	}
 
 	/**
 	 * @function disable
 	 * @public
+	 * @param {string} [pattern] - Pattern to disable, or omit to disable all hooks globally
 	 * @returns {void}
 	 *
 	 * @description
-	 * Disable hook execution (fast-path bypass).
+	 * Disable hook execution globally or remove pattern from enabled patterns.
+	 * If pattern is provided, removes it from pattern filtering.
+	 * If no pattern provided, disables all hooks globally.
 	 *
 	 * @example
-	 * // Disable hooks
+	 * // Disable all hooks globally
 	 * manager.disable();
+	 *
+	 * // Remove math operations from enabled patterns
+	 * manager.disable("math.*");
 	 */
-	disable() {
-		this.enabled = false;
+	disable(pattern) {
+		if (pattern !== undefined) {
+			this.enabledPatterns.delete(pattern);
+			// If no patterns left, deactivate filtering
+			if (this.enabledPatterns.size === 0) {
+				this.patternFilterActive = false;
+			}
+		} else {
+			// disable() with no args disables globally
+			this.enabled = false;
+		}
 	}
 
 	/**
@@ -279,13 +322,13 @@ export class HookManager {
 	 * const result = manager.executeBeforeHooks("database.users.create", [data]);
 	 * if (result.cancelled) return result.value;
 	 */
-	executeBeforeHooks(path, args) {
+	executeBeforeHooks(path, args, self, context) {
 		const hooks = this._getMatchingHooks("before", path);
 		let currentArgs = args;
 
 		for (const hook of hooks) {
 			try {
-				const result = hook.handler({ path, args: currentArgs });
+				const result = hook.handler({ path: path, args: currentArgs, self, context });
 
 				// undefined = continue
 				if (result === undefined) {
@@ -303,11 +346,17 @@ export class HookManager {
 			} catch (error) {
 				// Error in before hook - report with source info
 				this.reportedErrors.add(error);
-				this.executeErrorHooks(path, error, {
-					type: "before",
-					hookId: hook.id,
-					hookTag: hook.tag
-				});
+				this.executeErrorHooks(
+					path,
+					error,
+					{
+						type: "before",
+						hookId: hook.id,
+						hookTag: hook.tag
+					},
+					self,
+					context
+				);
 				throw error;
 			}
 		}
@@ -332,13 +381,13 @@ export class HookManager {
 	 * // Execute after hooks with chaining
 	 * const finalResult = manager.executeAfterHooks("database.users.create", result);
 	 */
-	executeAfterHooks(path, initialResult) {
+	executeAfterHooks(path, initialResult, self, context) {
 		const hooks = this._getMatchingHooks("after", path);
 		let currentResult = initialResult;
 
 		for (const hook of hooks) {
 			try {
-				const transformed = hook.handler({ path, result: currentResult });
+				const transformed = hook.handler({ path: path, result: currentResult, self, context });
 				// If hook returns undefined, keep current result; otherwise use transformed
 				if (transformed !== undefined) {
 					currentResult = transformed;
@@ -346,11 +395,16 @@ export class HookManager {
 			} catch (error) {
 				// Error in after hook - report with source info
 				this.reportedErrors.add(error);
-				this.executeErrorHooks(path, error, {
-					type: "after",
-					hookId: hook.id,
-					hookTag: hook.tag
-				});
+				this.executeErrorHooks(
+					path,
+					error,
+					{
+						type: "after",
+						hookId: hook.id,
+						hookTag: hook.tag
+					},
+					self
+				);
 				throw error;
 			}
 		}
@@ -381,24 +435,32 @@ export class HookManager {
 	 * // Execute always hooks with error context
 	 * manager.executeAlwaysHooks("database.users.create", undefined, [error]);
 	 */
-	executeAlwaysHooks(path, result, errors = []) {
+	executeAlwaysHooks(path, result, errors = [], self, context) {
 		const hooks = this._getMatchingHooks("always", path);
 
 		for (const hook of hooks) {
 			try {
 				hook.handler({
-					path,
-					result,
+					path: path,
+					result: result,
 					hasError: errors.length > 0,
-					errors
+					errors,
+					self,
+					context
 				});
 			} catch (error) {
 				// Error in always hook - report with source info but don't throw
-				this.executeErrorHooks(path, error, {
-					type: "always",
-					hookId: hook.id,
-					hookTag: hook.tag
-				});
+				this.executeErrorHooks(
+					path,
+					error,
+					{
+						type: "always",
+						hookId: hook.id,
+						hookTag: hook.tag
+					},
+					self,
+					context
+				);
 				// Don't re-throw - always hooks are observers
 			}
 		}
@@ -428,13 +490,13 @@ export class HookManager {
 	 *   hookTag: 'validation'
 	 * });
 	 */
-	executeErrorHooks(path, error, source = { type: "unknown" }) {
+	executeErrorHooks(path, error, source = { type: "unknown" }, self, context) {
 		const hooks = this._getMatchingHooks("error", path);
 
 		// Enhance error context with source information
 		const errorContext = {
-			path,
-			error,
+			path: path,
+			error: error,
 			errorType: error.constructor ? error.constructor.name : "Error",
 			source: {
 				type: source.type || "unknown",
@@ -442,7 +504,9 @@ export class HookManager {
 				hookTag: source.hookTag,
 				timestamp: Date.now(),
 				stack: error.stack
-			}
+			},
+			self,
+			context
 		};
 
 		for (const hook of hooks) {
@@ -471,6 +535,16 @@ export class HookManager {
 	 * const hooks = manager._getMatchingHooks("before", "database.users.create");
 	 */
 	_getMatchingHooks(type, path) {
+		// Fast-path: if hooks are disabled globally, return empty array
+		if (!this.enabled) {
+			return [];
+		}
+
+		// Pattern filtering check: if pattern filtering is active and path doesn't match enabled patterns
+		if (this.patternFilterActive && !this._isPathEnabled(path)) {
+			return [];
+		}
+
 		const matching = [];
 
 		for (const [hookId, hook] of this.hooks.entries()) {
@@ -686,5 +760,32 @@ export class HookManager {
 		}
 
 		return compiledPattern.test(path);
+	}
+
+	/**
+	 * @function _isPathEnabled
+	 * @internal
+	 * @private
+	 * @param {string} path - Function path to check
+	 * @returns {boolean} True if path matches any enabled pattern
+	 *
+	 * @description
+	 * Check if execution path matches any of the enabled patterns.
+	 * Used for pattern-based execution filtering.
+	 *
+	 * @example
+	 * // Internal usage
+	 * const enabled = manager._isPathEnabled("math.add");
+	 */
+	_isPathEnabled(path) {
+		if (!this.patternFilterActive) return true;
+
+		for (const pattern of this.enabledPatterns) {
+			const compiledPattern = this._compilePattern(pattern);
+			if (this._matchPattern(compiledPattern, path)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

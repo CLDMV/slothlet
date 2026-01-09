@@ -1,6 +1,19 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/slothlet.mjs
+ *	@Date: 2026-01-04 16:52:46 -08:00 (1767574366)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-08 10:47:48 -08:00 (1767898068)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/slothlet.mjs
  *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -566,7 +579,7 @@ const slothletObject = {
 				on: (name, type, handler, options) => this.hookManager.on(name, type, handler, options),
 				off: (idOrPattern) => this.hookManager.off(idOrPattern),
 				enable: (pattern) => this.hookManager.enable(pattern),
-				disable: () => this.hookManager.disable(),
+				disable: (pattern) => this.hookManager.disable(pattern),
 				clear: (type) => this.hookManager.clear(type),
 				list: (type) => this.hookManager.list(type)
 			};

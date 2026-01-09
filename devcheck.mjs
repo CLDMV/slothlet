@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-05 15:53:59 -08:00 (1767657239)
+ *	@Last modified time: 2026-01-07 17:30:26 -08:00 (1767835826)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -95,6 +95,8 @@ if (existsSync(srcPath) && !isCI) {
 		}
 
 		console.error(errorMessage);
+		throw new Error(errorMessage);
+		// eslint-disable-next-line no-unreachable
 		process.exit(1);
 	}
 }

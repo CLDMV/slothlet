@@ -246,7 +246,7 @@ export async function basic() {
 	await refresh(["info", "network", "audio", "power", "app"]);
 	const data = await get();
 	// Return without display
-	const { display, ...basicData } = data;
+	const { ...basicData } = data;
 	return basicData;
 }
 
@@ -275,7 +275,7 @@ export async function snapshot(options = {}) {
 
 	return {
 		timestamp: new Date().toISOString(),
-		data: includeDisplay ? data : (({ display, ...rest }) => rest)(data),
+		data: includeDisplay ? data : (({ ...rest }) => rest)(data),
 		lastRefresh: deviceData.lastRefresh,
 		cacheAge: deviceData.lastRefresh ? Date.now() - new Date(deviceData.lastRefresh).getTime() : null
 	};

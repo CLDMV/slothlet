@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 21:48:08 -08:00 (1767073688)
+ *	@Last modified time: 2026-01-08 16:08:38 -08:00 (1767917318)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -332,11 +332,11 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 
 		try {
 			// Execute before hooks
-			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args);
+			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args, ctx.self, ctx.context);
 
 			// If cancelled, skip function and after hooks, but always execute always hooks
 			if (beforeResult.cancelled) {
-				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
+				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, [], ctx.self, ctx.context);
 				return beforeResult.value;
 			}
 
@@ -351,18 +351,18 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 				return result.then(
 					(resolvedResult) => {
 						// Execute after hooks with chaining, then always hooks
-						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult, ctx.self, ctx.context);
+						ctx.hookManager.executeAlwaysHooks(path, finalResult, [], ctx.self, ctx.context);
 						return finalResult;
 					},
 					(error) => {
 						// Execute error hooks for async function errors
 						if (!ctx.hookManager.reportedErrors.has(error)) {
 							ctx.hookManager.reportedErrors.add(error);
-							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+							ctx.hookManager.executeErrorHooks(path, error, { type: "function" }, ctx.self, ctx.context);
 						}
 						// Always hooks run like finally blocks - even when errors occur
-						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+						ctx.hookManager.executeAlwaysHooks(path, undefined, [error], ctx.self, ctx.context);
 						// Re-throw error unless suppressErrors is enabled
 						if (!ctx.hookManager.suppressErrors) {
 							throw error;
@@ -373,17 +373,17 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 			}
 
 			// For sync results, execute after hooks then always hooks
-			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
-			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
+			const finalResult = ctx.hookManager.executeAfterHooks(path, result, ctx.self, ctx.context);
+			ctx.hookManager.executeAlwaysHooks(path, finalResult, [], ctx.self, ctx.context);
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
 			if (!ctx.hookManager.reportedErrors.has(error)) {
 				ctx.hookManager.reportedErrors.add(error);
-				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
+				ctx.hookManager.executeErrorHooks(path, error, { type: "function" }, ctx.self, ctx.context);
 			}
 			// Always hooks run like finally blocks - even when errors occur
-			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+			ctx.hookManager.executeAlwaysHooks(path, undefined, [error], ctx.self, ctx.context);
 			// Re-throw error unless suppressErrors is enabled
 			if (!ctx.hookManager.suppressErrors) {
 				throw error;

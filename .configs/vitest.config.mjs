@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-07 21:44:40 -08:00 (1765172680)
+ *	@Last modified time: 2026-01-09 06:18:17 -08:00 (1767968297)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { defineConfig } from "vitest/config";
@@ -30,13 +30,18 @@ export default defineConfig({
 		}
 	},
 	test: {
-		include: ["tests/**/*.vest.{js,mjs,cjs}"],
+		include: ["tests/**/*.vest.{js,mjs}", "tests/**/*.test.vitest.{js,mjs}"],
 		exclude: ["node_modules"],
 		environment: "node",
 		globals: true,
+		globalSetup: ["./tests/vitests/global-setup.mjs"],
 		nodeOptions: ["--conditions=slothlet-dev"],
 		env: {
-			NODE_ENV: "slothlet-dev"
-		}
+			NODE_ENV: "development"
+		},
+		reporters: ["verbose"],
+		logHeapUsage: false,
+
+		silent: "passed-only"
 	}
 });
