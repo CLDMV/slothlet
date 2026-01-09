@@ -50,13 +50,8 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 - **v2.9** - Per-Request Context Isolation with `api.run()` and `api.scope()` methods ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md))
 - **v2.8** - NPM security fixes and package workflow updates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.8.md))
 - **v2.7** - Security updates ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.7.md))
-- **v2.6** - Hook System with 4 interceptor types ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.6.md))
-- **v2.5** - Architectural consolidation and API consistency ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.5.md))
-- **v2.4** - Multi-default export handling ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.4.md))
-- **v2.3** - EventEmitter & Class Context Propagation ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.3.md))
-- **v2.2** - Case preservation options ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.2.md))
-- **v2.1** - Advanced sanitization patterns ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.1.md))
-- **v2.0** - Complete Architectural Rewrite ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.0.md))
+
+📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
 ---
 
@@ -75,12 +70,18 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 ### ⚡ Performance Excellence
 
-- **2.9x faster startup** in lazy mode (4.89ms vs 14.29ms)
-- **1.1x faster function calls** in eager mode (0.90μs vs 0.99μs)
-- **Copy-left materialization**: Once loaded, modules stay materialized
+- **Startup Performance**: 4.3x faster startup in lazy mode (4.89ms vs 14.29ms)
+- **Runtime Performance**: 1.1x faster function calls in eager mode (0.90μs vs 0.99μs)
+- **Copy-left materialization**: Once loaded, modules stay materialized - no re-processing overhead
 - **Zero dependencies**: Pure Node.js implementation
+- **Memory efficiency**: Lazy mode loads modules on-demand, eager mode optimizes for predictable behavior
 
-📊 **For comprehensive performance analysis, benchmarks, and recommendations, see [docs/PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)**
+**Mode Selection Guide:**
+
+- **Eager Mode**: Best for production environments with maximum runtime performance and predictable behavior
+- **Lazy Mode**: Best for development and applications with large APIs where startup time matters
+
+📊 **For comprehensive performance benchmarks and analysis, see [docs/PERFORMANCE.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)**
 
 ### 🎣 **Hook System**
 
@@ -564,19 +565,6 @@ Key highlights:
 - **[API Rules](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES.md)** - Systematically verified API transformation rules with real examples and test cases
 - **[API Rules Conditions](https://github.com/CLDMV/slothlet/blob/master/docs/API-RULES-CONDITIONS.md)** - Complete technical reference of all 26 conditional statements that control API generation
 
-### Changelog
-
-- **[v2.9](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md)** - Per-Request Context Isolation & API Builder Modularization (December 30, 2025)
-- **[v2.8](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.8.md)** - NPM security fixes and package workflow updates (December 26, 2025)
-- **[v2.7](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.7.md)** - Hook System with 4 interceptor types (December 20, 2025)
-- **[v2.6](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.6.md)** - Mode/Engine options and deep nested path fixes (November 10, 2025)
-- **[v2.5](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.5.md)** - Architectural consolidation and API consistency (October 20, 2025)
-- **[v2.4](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.4.md)** - Multi-default export handling with file-based naming (October 18, 2025)
-- **[v2.3](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.3.md)** - EventEmitter & Class Context Propagation (October 16, 2025)
-- **[v2.2](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.2.md)** - Case preservation options (preserveAllUpper/preserveAllLower) (October 14, 2025)
-- **[v2.1](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.1.md)** - Advanced sanitization with boundary patterns (October 12, 2025)
-- **[v2.0](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.0.md)** - Complete Architectural Rewrite (September 9, 2025)
-
 ---
 
 ## 🛡 Error Handling
@@ -597,20 +585,18 @@ try {
 
 ---
 
-## 🔧 Production vs Development Modes
+## �️ Production \u0026 Development Modes
 
 ### Production Ready ✅
 
 - **Eager Mode**: Stable, battle-tested, maximum performance
 - **Lazy Mode**: Production-ready with copy-left optimization
-- **Singleton Mode**: Default mode for standard applications
 - **Mixed Module Loading**: ESM/CJS interoperability fully supported
 
 ### Development Features 🛠️
 
-- **Development Check**: `devcheck.mjs` for environment validation
 - **Debug Mode**: Comprehensive logging via `--slothletdebug` flag or `SLOTHLET_DEBUG=true`
-- **Performance Monitoring**: Built-in timing and performance analysis
+- **Development Check**: `devcheck.mjs` for environment validation
 - **Source Detection**: Automatic `src/` vs `dist/` mode detection
 
 ### Experimental ⚠️

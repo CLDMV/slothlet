@@ -78,6 +78,8 @@
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
 		"test:unit": "vitest --config .configs/vitest.config.mjs run",
+		"vitest": "vitest --config .configs/vitest.config.mjs run",
+		"test:vitest": "vitest --config .configs/vitest.config.mjs run",
 		"test:node": "node tests/run-all-tests.mjs",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",

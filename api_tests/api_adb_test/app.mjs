@@ -45,7 +45,7 @@ export async function stop(packageName) {
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} Current app info
  */
-export async function getCurrentApp(options = {}) {
+export async function getCurrentApp(___options = {}) {
 	return Promise.resolve({
 		packageName: "com.netflix.ninja",
 		activity: "com.netflix.ninja.MainActivity"
@@ -65,7 +65,7 @@ export async function refresh() {
  * @param {Object} [options={}] - Options
  * @returns {Promise<string[]>} List of package names
  */
-export async function getInstalledPackages(options = {}) {
+export async function getInstalledPackages(___options = {}) {
 	return Promise.resolve(["com.netflix.ninja", "com.youtube.tv", "com.android.settings", "com.google.android.apps.tv.launcherx"]);
 }
 
@@ -74,7 +74,7 @@ export async function getInstalledPackages(options = {}) {
  * @param {Object} [options={}] - Monitor options
  * @returns {Promise<void>}
  */
-export async function startMonitoring(options = {}) {
+export async function startMonitoring(___options = {}) {
 	return Promise.resolve({ monitoring: true });
 }
 
@@ -92,7 +92,7 @@ export async function stopMonitoring() {
  * @param {Object} [options={}] - Clear options
  * @returns {Promise<void>}
  */
-export async function clearData(packageName, options = {}) {
+export async function clearData(packageName, ___options = {}) {
 	return Promise.resolve({ cleared: packageName });
 }
 
@@ -126,7 +126,7 @@ export async function getPackageInfo(packageName) {
  * @param {Object} [options={}] - Uninstall options
  * @returns {Promise<void>}
  */
-export async function uninstall(packageName, options = {}) {
+export async function uninstall(packageName, ___options = {}) {
 	return Promise.resolve({ uninstalled: packageName });
 }
 

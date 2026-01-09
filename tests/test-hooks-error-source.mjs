@@ -72,7 +72,7 @@ await runTest("ERROR SOURCE: Error in before hook reports correct source", async
 	api.hooks.on(
 		"failing-validator",
 		"before",
-		({ args }) => {
+		() => {
 			throw new Error("Validation failed");
 		},
 		{ pattern: "math.add" }
@@ -123,7 +123,7 @@ await runTest("ERROR SOURCE: Error in sync function reports correct source", asy
 		// Call function that doesn't exist to trigger error
 		await api.math.divide(10, 0);
 		// If divide doesn't exist or throws, we'll catch it
-	} catch (error) {
+	} catch (_) {
 		// Expected error
 	}
 
@@ -158,7 +158,7 @@ await runTest("ERROR SOURCE: Error in sync function reports correct source", asy
 	testApi.hooks.on(
 		"inject-error",
 		"after",
-		({ result }) => {
+		() => {
 			// Throw in after hook to test after source
 			throw new Error("After hook error");
 		},
@@ -205,7 +205,7 @@ await runTest("ERROR SOURCE: Error in after hook reports correct source", async 
 	api.hooks.on(
 		"failing-formatter",
 		"after",
-		({ result }) => {
+		() => {
 			throw new Error("Formatting failed");
 		},
 		{ pattern: "math.add" }
@@ -256,7 +256,7 @@ await runTest("ERROR SOURCE: Error in always hook reports correct source (doesn'
 	api.hooks.on(
 		"failing-logger",
 		"always",
-		({ result }) => {
+		() => {
 			throw new Error("Logging failed");
 		},
 		{ pattern: "math.add" }
@@ -312,7 +312,7 @@ await runTest("ERROR SOURCE: Multiple errors report each source correctly", asyn
 
 	try {
 		await api.math.add(1, 2);
-	} catch (e) {
+	} catch (_) {
 		// Expected
 	}
 
@@ -331,7 +331,7 @@ await runTest("ERROR SOURCE: Multiple errors report each source correctly", asyn
 
 	try {
 		await api.math.multiply(3, 4);
-	} catch (e) {
+	} catch (_) {
 		// Expected
 	}
 
@@ -403,7 +403,7 @@ await runTest("ERROR SOURCE: Works across all mode/runtime combinations", async 
 
 		try {
 			await api.math.add(1, 2);
-		} catch (e) {
+		} catch (_) {
 			// Expected
 		}
 

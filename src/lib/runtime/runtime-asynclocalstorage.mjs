@@ -107,11 +107,11 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 	const runtime_runInALS = () => {
 		try {
 			// Execute before hooks
-			const beforeResult = mergedCtx.hookManager.executeBeforeHooks(path, args);
+			const beforeResult = mergedCtx.hookManager.executeBeforeHooks(path, args, mergedCtx.self, mergedCtx.context);
 
 			// If cancelled, skip function and after hooks, but always execute always hooks
 			if (beforeResult.cancelled) {
-				mergedCtx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
+				mergedCtx.hookManager.executeAlwaysHooks(path, beforeResult.value, [], mergedCtx.self, mergedCtx.context);
 				return beforeResult.value;
 			}
 
@@ -126,18 +126,18 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 				return result.then(
 					(resolvedResult) => {
 						// Execute after hooks with chaining, then always hooks
-						const finalResult = mergedCtx.hookManager.executeAfterHooks(path, resolvedResult);
-						mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, []);
+						const finalResult = mergedCtx.hookManager.executeAfterHooks(path, resolvedResult, mergedCtx.self, mergedCtx.context);
+						mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, [], mergedCtx.self, mergedCtx.context);
 						return finalResult;
 					},
 					(error) => {
 						// Execute error hooks for async function errors
 						if (!mergedCtx.hookManager.reportedErrors.has(error)) {
 							mergedCtx.hookManager.reportedErrors.add(error);
-							mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" });
+							mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" }, mergedCtx.self, mergedCtx.context);
 						}
 						// Always hooks run like finally blocks - even when errors occur
-						mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+						mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error], mergedCtx.self, mergedCtx.context);
 						// Re-throw error unless suppressErrors is enabled
 						if (!mergedCtx.hookManager.suppressErrors) {
 							throw error;
@@ -148,17 +148,17 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 			}
 
 			// For sync results, execute after hooks then always hooks
-			const finalResult = mergedCtx.hookManager.executeAfterHooks(path, result);
-			mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, []);
+			const finalResult = mergedCtx.hookManager.executeAfterHooks(path, result, mergedCtx.self, mergedCtx.context);
+			mergedCtx.hookManager.executeAlwaysHooks(path, finalResult, [], mergedCtx.self, mergedCtx.context);
 			return finalResult;
 		} catch (error) {
 			// Execute error hooks for synchronous errors (from function or hooks)
 			if (!mergedCtx.hookManager.reportedErrors.has(error)) {
 				mergedCtx.hookManager.reportedErrors.add(error);
-				mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" });
+				mergedCtx.hookManager.executeErrorHooks(path, error, { type: "function" }, mergedCtx.self);
 			}
 			// Always hooks run like finally blocks - even when errors occur
-			mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error]);
+			mergedCtx.hookManager.executeAlwaysHooks(path, undefined, [error], mergedCtx.self);
 			// Re-throw error unless suppressErrors is enabled
 			if (!mergedCtx.hookManager.suppressErrors) {
 				throw error;
