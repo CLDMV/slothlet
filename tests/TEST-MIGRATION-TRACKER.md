@@ -12,6 +12,14 @@ Migrating all tests to Vitest using matrix-based testing approach.
 - Fix: Re-enable `enableAlsForEventEmitters` for each instance and restore previous active ALS after wrapped listener execution.
 - Result: `tests/vitests/processed/context/auto-context-propagation.test.vitest.mjs` now passes 16/16 matrix configs (full run on January 11, 2026).
 
+## ✅ Vitest process suite relocation (January 11, 2026)
+
+- Moved remaining `tests/vitests/process/*.test.vitest.mjs` files into their processed subfolders:
+  - add-api, addapi-path-resolution → `tests/vitests/processed/addapi/`
+  - function-name-preservation → `tests/vitests/processed/api/`
+  - hooks-always-error-context, hooks-comprehensive → `tests/vitests/processed/hooks/`
+- Updated module headers accordingly; relative imports remain unchanged.
+
 ### ✅ Core Hook System Fixes
 
 1. **HookManager execution pipeline**: Fixed all hook execution methods to use correct parameter format

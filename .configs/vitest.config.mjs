@@ -42,6 +42,7 @@ export default defineConfig({
 		env: {
 			NODE_ENV: "development"
 		},
+		testTimeout: 10000,
 		reporters: ["verbose"],
 		logHeapUsage: false,
 

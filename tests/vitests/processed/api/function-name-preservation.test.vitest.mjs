@@ -9,7 +9,7 @@
  * Original test: tests/test-function-name-preservation.mjs
  * New test count: 120 tests (6 test cases × 20 matrix configs)
  *
- * @module tests/vitests/process/function-name-preservation.test.vitest
+ * @module tests/vitests/processed/api/function-name-preservation.test.vitest
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
