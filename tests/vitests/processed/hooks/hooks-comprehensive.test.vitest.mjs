@@ -1,6 +1,6 @@
 /**
  * @fileoverview Vitest tests for comprehensive hook system scenarios.
- * @module tests/vitests/process/hooks-comprehensive.test.vitest
+ * @module tests/vitests/processed/hooks/hooks-comprehensive.test.vitest
  *
  * @description
  * Exhaustive tests for hook system edge cases and advanced scenarios following
