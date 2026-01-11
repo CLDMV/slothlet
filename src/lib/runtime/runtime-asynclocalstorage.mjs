@@ -33,31 +33,74 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
-import { enableAlsForEventEmitters, setDefaultAls } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { enableAlsForEventEmitters, setActiveAls, setDefaultAls } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { detectCurrentInstanceId, setActiveInstance, getCurrentActiveInstanceId } from "@cldmv/slothlet/helpers/instance-manager";
 import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 
-const als = new AsyncLocalStorage();
+const DEFAULT_INSTANCE_ID = "slothlet_async_default";
+const runtimeRegistry = new Map(); // instanceId -> { als, requestALS, currentAls }
+
+function runtime_resolveInstanceId(ctx) {
+	if (ctx?.instanceId) return ctx.instanceId;
+
+	// Try to derive from any active ALS store to keep callbacks in the correct instance
+	for (const state of runtimeRegistry.values()) {
+		const store = state.currentAls?.getStore ? state.currentAls.getStore() : state.als?.getStore ? state.als.getStore() : null;
+		if (store?.instanceId) return store.instanceId;
+	}
+
+	const detected = detectCurrentInstanceId();
+	if (detected) return detected;
+	return DEFAULT_INSTANCE_ID;
+}
+
+function runtime_getOrCreateState(instanceId, providedAls) {
+	let state = runtimeRegistry.get(instanceId);
+	if (state) {
+		if (providedAls instanceof AsyncLocalStorage && state.als !== providedAls) {
+			state.als = providedAls;
+			state.currentAls = providedAls;
+		}
+		return state;
+	}
+
+	const alsInstance = providedAls instanceof AsyncLocalStorage ? providedAls : new AsyncLocalStorage();
+	state = {
+		id: instanceId,
+		als: alsInstance,
+		requestALS: new AsyncLocalStorage(),
+		currentAls: alsInstance
+	};
+	runtimeRegistry.set(instanceId, state);
+	return state;
+}
+
+// Initialize the EventEmitter patcher with a default ALS; active ALS is switched per-call in runWithCtx
+const defaultRuntimeState = runtime_getOrCreateState(DEFAULT_INSTANCE_ID);
+setDefaultAls(defaultRuntimeState.als);
+enableAlsForEventEmitters(defaultRuntimeState.als);
 
 /**
- * Shared AsyncLocalStorage instance for all slothlet instances.
- * Provides unified context management across all EventEmitter wrappers.
- * @type {AsyncLocalStorageType}
+ * Shared AsyncLocalStorage access for the current instance (falls back to default runtime).
+ * Uses the per-instance runtime registry rather than a module singleton.
  * @public
  */
-export const sharedALS = new AsyncLocalStorage();
+export const sharedALS = {
+	run: (...args) => runtime_getOrCreateState(runtime_resolveInstanceId()).als.run(...args),
+	getStore: () => runtime_getOrCreateState(runtime_resolveInstanceId()).als.getStore(),
+	disable: () => runtime_getOrCreateState(runtime_resolveInstanceId()).als.disable()
+};
 
 /**
- * Per-request AsyncLocalStorage instance for request-scoped context.
- * Stores temporary context data that merges with instance context.
- * @type {AsyncLocalStorageType}
+ * Per-request AsyncLocalStorage access for the current instance.
+ * Delegates to the instance-specific requestALS to prevent cross-instance leaks.
  * @public
  */
-export const requestALS = new AsyncLocalStorage();
-
-// Ensure the EventEmitter patcher shares this ALS instance when callers omit it
-setDefaultAls(als);
-// Enable AsyncLocalStorage context propagation for all EventEmitter instances
-enableAlsForEventEmitters(als);
+export const requestALS = {
+	run: (...args) => runtime_getOrCreateState(runtime_resolveInstanceId()).requestALS.run(...args),
+	getStore: () => runtime_getOrCreateState(runtime_resolveInstanceId()).requestALS.getStore(),
+	disable: () => runtime_getOrCreateState(runtime_resolveInstanceId()).requestALS.disable()
+};
 
 /**
  * @function runWithCtx
@@ -77,7 +120,17 @@ enableAlsForEventEmitters(als);
  * const result = runWithCtx(ctx, myFunction, this, [arg1, arg2]);
  */
 export const runWithCtx = (ctx, fn, thisArg, args) => {
+	const instanceId = runtime_resolveInstanceId(ctx);
+	const state = runtime_getOrCreateState(instanceId, ctx?.als);
+	const ctxWithInstance = ctx?.instanceId === instanceId ? ctx || {} : { ...(ctx || {}), instanceId };
 	const path = typeof fn?.__slothletPath === "string" ? fn.__slothletPath : undefined;
+	const alsInstance = ctx?.als instanceof AsyncLocalStorage ? ctx.als : state.als;
+	state.currentAls = alsInstance;
+	// Ensure the EventEmitter patcher uses this instance's ALS
+	setActiveAls(alsInstance);
+
+	const previousActiveInstance = getCurrentActiveInstanceId();
+	setActiveInstance(instanceId);
 
 	// Fast-path: If hooks are disabled OR no valid __slothletPath (internal functions), execute directly
 	if (!ctx.hookManager?.enabled || !path) {
@@ -85,12 +138,12 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 			const result = Reflect.apply(fn, thisArg, args);
 			return result;
 		};
-		return als.run(ctx, runtime_runInALS);
+		return alsInstance.run(ctx, runtime_runInALS);
 	}
 
 	// Merge per-request context into the ctx before hook execution
-	const requestContext = requestALS.getStore();
-	const mergedCtx = requestContext ? { ...ctx, context: { ...ctx.context, ...requestContext } } : ctx;
+	const requestContext = state.requestALS.getStore();
+	const mergedCtx = requestContext ? { ...ctxWithInstance, context: { ...ctxWithInstance.context, ...requestContext } } : ctxWithInstance;
 
 	if (process.env.NODE_ENV === "development") {
 		if (fn.__slothletPath !== undefined && typeof fn.__slothletPath !== "string") {
@@ -191,7 +244,11 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 		}
 	};
 
-	return als.run(mergedCtx, runtime_runInALS);
+	try {
+		return alsInstance.run(mergedCtx, runtime_runInALS);
+	} finally {
+		setActiveInstance(previousActiveInstance);
+	}
 };
 
 /**
@@ -209,7 +266,17 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
  *   console.log("Current context:", ctx);
  * }
  */
-export const getCtx = () => als.getStore() || null;
+export const getCtx = () => {
+	const state = runtime_getOrCreateState(runtime_resolveInstanceId());
+	const storeFromCurrent = state.currentAls?.getStore ? state.currentAls.getStore() : null;
+	if (storeFromCurrent) {
+		return storeFromCurrent;
+	}
+
+	const defaultState = runtime_getOrCreateState(DEFAULT_INSTANCE_ID);
+	const fallbackStore = defaultState.currentAls?.getStore ? defaultState.currentAls.getStore() : null;
+	return fallbackStore || null;
+};
 
 // Set of constructors to exclude from being considered as class instances
 const EXCLUDED_CONSTRUCTORS = new Set([Object, Array, Promise, Date, RegExp, Error]);
@@ -916,6 +983,32 @@ export const reference = runtime_createLiveBinding("reference");
  * @public
  */
 export { metadataAPI };
+
+/**
+ * Create a per-instance AsyncLocalStorage runtime facade.
+ * @param {{ instanceId?: string, als?: AsyncLocalStorage }} params - Instance configuration.
+ * @returns {{ runWithCtx: typeof runWithCtx, makeWrapper: typeof makeWrapper, getCtx: typeof getCtx, self: typeof self, context: typeof context, reference: typeof reference, sharedALS: AsyncLocalStorage, requestALS: AsyncLocalStorage, metadataAPI: typeof metadataAPI }} Runtime API bound to the provided instance ALS.
+ * @example
+ * const runtime = createAsyncRuntime({ instanceId: "abc", als: new AsyncLocalStorage() });
+ * runtime.runWithCtx({ self: {}, context: {}, reference: {} }, fn, thisArg, args);
+ */
+export function createAsyncRuntime({ instanceId, als } = {}) {
+	const resolvedId = runtime_resolveInstanceId({ instanceId });
+	const state = runtime_getOrCreateState(resolvedId, als);
+	const bindCtx = (ctx) => ({ ...(ctx || {}), instanceId: resolvedId, als: state.als });
+
+	return {
+		runWithCtx: (ctx, fn, thisArg, args) => runWithCtx(bindCtx(ctx), fn, thisArg, args),
+		makeWrapper: (ctx) => makeWrapper(bindCtx(ctx)),
+		getCtx,
+		self,
+		context,
+		reference,
+		sharedALS: state.als,
+		requestALS: state.requestALS,
+		metadataAPI
+	};
+}
 
 /**
  * @typedef {import("node:async_hooks").AsyncLocalStorage} AsyncLocalStorageType

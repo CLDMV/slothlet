@@ -1,27 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/slothlet.mjs
- *	@Date: 2026-01-04 16:52:46 -08:00 (1767574366)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-08 10:47:48 -08:00 (1767898068)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/slothlet.mjs
  *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-30 08:40:42 -08:00 (1767112842)
+ *	@Last modified time: 2026-01-11 11:26:01 -08:00 (1768159561)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -129,6 +116,7 @@
  * await api.shutdown();
  */
 import fs from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -147,7 +135,11 @@ import {
 	removeApiByModuleId
 } from "@cldmv/slothlet/helpers/api_builder";
 import { updateInstanceData, cleanupInstance } from "@cldmv/slothlet/helpers/instance-manager";
-import { disableAlsForEventEmitters, cleanupAllSlothletListeners } from "@cldmv/slothlet/helpers/als-eventemitter";
+import {
+	disableAlsForEventEmitters,
+	cleanupAllSlothletListeners,
+	enableAlsForEventEmitters
+} from "@cldmv/slothlet/helpers/als-eventemitter";
 import { HookManager } from "@cldmv/slothlet/helpers/hooks";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
@@ -331,6 +323,7 @@ const slothletObject = {
 	_dispose: null,
 	_boundAPIShutdown: null,
 	instanceId: null, // Unique instance identifier for cache isolation
+	instanceAls: null,
 
 	/**
 	 * Creates and initializes a slothlet API instance.
@@ -367,6 +360,8 @@ const slothletObject = {
 		const runtimeType = normalizeRuntimeType(options.runtime || "async");
 		const loadingModeStr = isLazyMode ? "lazy" : "eager";
 		this.instanceId = `slothlet_${runtimeType}_${loadingModeStr}_${Date.now()}_${Math.random().toString(36).slice(2, 11).padEnd(9, "0")}`;
+		this.instanceAls = new AsyncLocalStorage();
+		enableAlsForEventEmitters(this.instanceAls);
 
 		// Dynamically scan src/lib/modes for slothlet_*.mjs files and assign to this.modes
 		if (!this.modes) {
@@ -839,13 +834,16 @@ const slothletObject = {
 			updateInstanceData(this.instanceId, "context", contextWithRuntime);
 			updateInstanceData(this.instanceId, "reference", newReference);
 			updateInstanceData(this.instanceId, "config", this.config);
+			updateInstanceData(this.instanceId, "als", this.instanceAls);
 		}
 
 		this.safeDefine(this.boundapi, "__ctx", {
 			self: this.boundapi,
 			context: this.context,
 			reference: this.reference,
-			hookManager: this.hookManager
+			hookManager: this.hookManager,
+			als: this.instanceAls,
+			instanceId: this.instanceId
 		});
 	},
 
