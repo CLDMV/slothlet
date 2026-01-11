@@ -1,11 +1,12 @@
 /**
  * @fileoverview Hooks debug test - verifies hook system debug functionality
+ *
+ * Original test: tests/rewritten/test-hooks-debug.mjs
+ * @module tests/vitests/processed/hooks/hooks-debug.test.vitest
  */
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
-
-// Test each configuration in the matrix
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'", ({ config }) => {
 	let api;
 
@@ -24,7 +25,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		}
 	});
 
-	test("should expose hook management API", () => {
+	it("should expose hook management API", () => {
 		// Verify hooks API exists
 		expect(api.hooks).toBeDefined();
 		expect(typeof api.hooks.on).toBe("function");
@@ -36,7 +37,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		expect(typeof api.__ctx.hookManager.enabled).toBe("boolean");
 	});
 
-	test("should register and list hooks correctly", () => {
+	it("should register and list hooks correctly", () => {
 		// Register a test hook
 		api.hooks.on(
 			"test-hook",
@@ -60,7 +61,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		}
 	});
 
-	test("should expose hook manager internal methods", () => {
+	it("should expose hook manager internal methods", () => {
 		const manager = api.__ctx.hookManager;
 
 		// Test pattern compilation methods exist
@@ -82,7 +83,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		expect(fullRegex.test("math.add")).toBe(true);
 	});
 
-	test("should compile hook patterns correctly", () => {
+	it("should compile hook patterns correctly", () => {
 		const manager = api.__ctx.hookManager;
 
 		// Register a hook and verify pattern compilation
@@ -111,7 +112,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		}
 	});
 
-	test("should expose function metadata for debugging", async () => {
+	it("should expose function metadata for debugging", async () => {
 		// First materialize the function (needed for lazy mode)
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(5);
@@ -126,7 +127,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		expect(api.math.add.__slothletPath).toMatch(/math\.add/);
 	});
 
-	test("should enable hook pattern debugging", () => {
+	it("should enable hook pattern debugging", () => {
 		const manager = api.__ctx.hookManager;
 
 		// Test various pattern types
@@ -143,12 +144,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 
 				const fullRegex = new RegExp(`^${regexString}$`);
 				const shouldMatch = ["**", "math.*", "*.add", "math.add"].includes(pattern);
-				expect(fullRegex.test(testPath)).toBe(shouldMatch);
+				expect(fullRegex.it(testPath)).toBe(shouldMatch);
 			}
 		}
 	});
 
-	test("should track hook manager state", () => {
+	it("should track hook manager state", () => {
 		const manager = api.__ctx.hookManager;
 
 		// Verify initial state

@@ -14,39 +14,38 @@
  * Original test count: 7 test suites (eager, lazy, nested, errors, merge, function extension, allowOverwrite)
  * New test count: 7 tests × 20 matrix configs = 140 tests
  *
- * @module tests/vitests/add-api.test.vitest
+ * @module tests/vitests/process/add-api.test.vitest
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../vitest-helper.mjs";
 
 describe("addApi Functionality", () => {
-	let api;
-
-	afterEach(async () => {
-		if (api && typeof api.shutdown === "function") {
-			await api.shutdown();
-		}
-		api = null;
-	});
-
 	// addApi works on all configurations, no filtering needed
 	const matrixConfigs = getMatrixConfigs({});
 
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
+		let api;
+
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		afterEach(async () => {
+			if (api && typeof api.shutdown === "function") {
+				await api.shutdown();
+			}
+			api = null;
+		});
 		/**
 		 * Test 1: Basic addApi - add API at new dotted path and root level
 		 * Covers: test_addApi_eager and test_addApi_lazy from original
 		 */
 		it("should add API at new paths and root level with working endpoints", async () => {
-			// Initialize slothlet with a base API directory first (like original test)
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			// Add API at runtime.newapi path
 			await api.addApi("runtime.newapi", TEST_DIRS.API_TEST_MIXED);
 
@@ -69,13 +68,6 @@ describe("addApi Functionality", () => {
 		 * Covers: test_addApi_nested from original
 		 */
 		it("should create deeply nested path structure", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			await api.addApi("level1.level2.level3", TEST_DIRS.API_TEST_CJS);
 
 			expect(api.level1).toBeDefined();
@@ -89,13 +81,6 @@ describe("addApi Functionality", () => {
 		 * Covers: test_addApi_errors from original
 		 */
 		it("should throw appropriate errors for invalid inputs", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			// Non-existent folder
 			await expect(api.addApi("test", "/non/existent/path")).rejects.toThrow("Cannot access folder");
 
@@ -126,13 +111,6 @@ describe("addApi Functionality", () => {
 		 * Covers: test_addApi_merge from original
 		 */
 		it("should merge APIs when adding to existing objects", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			// First addition
 			await api.addApi("services.external", TEST_DIRS.API_TEST_MIXED);
 			const firstResult = api.services.external.mathEsm.add(5, 5);
@@ -154,13 +132,6 @@ describe("addApi Functionality", () => {
 		 * Covers: test_addApi_function_extension from original
 		 */
 		it("should handle function extension and reject primitive extension", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			// Setup
 			await api.addApi("test.func", TEST_DIRS.API_TEST_MIXED);
 			api.test.myFunction = () => "I'm a function";
@@ -184,13 +155,6 @@ describe("addApi Functionality", () => {
 		 * Tests that addApi MERGES regardless of allowApiOverwrite setting
 		 */
 		it("should merge APIs regardless of allowApiOverwrite setting", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			await api.addApi("test.endpoint", TEST_DIRS.API_TEST_MIXED);
 			const initialKeys = Object.keys(api.test.endpoint);
 

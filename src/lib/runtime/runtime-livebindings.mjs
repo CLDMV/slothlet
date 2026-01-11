@@ -322,13 +322,19 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 	}
 
 	try {
+		const path = typeof fn?.__slothletPath === "string" ? fn.__slothletPath : undefined;
+
 		// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
-		if (!ctx.hookManager?.enabled || !fn.__slothletPath) {
+		if (!ctx.hookManager?.enabled || !path) {
+			if (process.env.NODE_ENV === "development" && fn.__slothletPath !== undefined && typeof fn.__slothletPath !== "string") {
+				console.log(`[DEBUG] livebindings runtime: __slothletPath is not a string; skipping hooks`, {
+					pathType: typeof fn.__slothletPath,
+					fnName: fn.name || "anonymous",
+					fnConstructor: fn.constructor?.name || "unknown"
+				});
+			}
 			return Reflect.apply(fn, thisArg, args);
 		}
-
-		// Extract function path for hook matching (only API functions have __slothletPath)
-		const path = fn.__slothletPath;
 
 		try {
 			// Execute before hooks

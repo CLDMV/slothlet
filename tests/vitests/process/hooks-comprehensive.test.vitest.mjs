@@ -1,6 +1,6 @@
 /**
  * @fileoverview Vitest tests for comprehensive hook system scenarios.
- * @module tests/vitests/hooks-comprehensive
+ * @module tests/vitests/process/hooks-comprehensive.test.vitest
  *
  * @description
  * Exhaustive tests for hook system edge cases and advanced scenarios following
@@ -16,7 +16,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: '$name'", ({ config }) => {
@@ -24,8 +24,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	let api;
 
 	beforeEach(async () => {
-		// Dynamic import of slothlet
-		const slothletModule = await import("../../index.mjs");
+		// Dynamic import of slothlet via package export
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 
 		// Create API instance with the test config

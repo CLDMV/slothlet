@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-30 07:25:32 -08:00 (1767108332)
+ *	@Last modified time: 2026-01-10 17:38:56 -08:00 (1768095536)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -33,8 +33,22 @@
 import { AsyncResource, AsyncLocalStorage } from "node:async_hooks";
 import { EventEmitter } from "node:events";
 
-// Define a default ALS instance to avoid circular imports
-const defaultALS = new AsyncLocalStorage();
+// Default ALS used when callers do not provide one; runtime sets this to its active ALS
+let defaultALS = new AsyncLocalStorage();
+let activeAls = defaultALS;
+
+/**
+ * Allow runtime to inject the shared AsyncLocalStorage instance so EventEmitter
+ * wrapping uses the same store as runWithCtx. Prevents context splits when
+ * callers omit the ALS parameter.
+ * @param {AsyncLocalStorage} alsInstance
+ */
+export function setDefaultAls(alsInstance) {
+	if (alsInstance instanceof AsyncLocalStorage) {
+		defaultALS = alsInstance;
+		activeAls = alsInstance;
+	}
+}
 
 // Track original methods for restoration
 let originalMethods = null;
@@ -68,6 +82,9 @@ const allPatchedListeners = new Set(); // Set of all listener info that went thr
  * enableAlsForEventEmitters(als);
  */
 export function enableAlsForEventEmitters(als = defaultALS) {
+	// Always refresh activeAls so subsequent calls can point wrappers at the runtime ALS
+	activeAls = als || defaultALS;
+
 	// Symbol flag so we don't double-patch
 	const kPatched = Symbol.for("slothlet.als.patched");
 
@@ -105,7 +122,7 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 	 */
 	function runtime_wrapListener(listener) {
 		// If there is no active store when registering, do not wrap (fast path)
-		const store = als.getStore();
+		const store = activeAls.getStore();
 		if (!store) return listener;
 
 		// Create a resource now, under the active store
