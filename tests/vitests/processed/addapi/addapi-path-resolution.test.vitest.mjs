@@ -11,7 +11,7 @@
  * Original test count: 9 path resolution tests
  * New test count: 9 tests × 20 matrix configs = 180 tests
  *
- * @module tests/vitests/process/addapi-path-resolution.test.vitest
+ * @module tests/vitests/processed/addapi/addapi-path-resolution.test.vitest
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

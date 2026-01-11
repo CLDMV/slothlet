@@ -6,6 +6,14 @@
 
 import { self, context, reference } from "@cldmv/slothlet/runtime";
 
+const verboseSelfObject = process.env.SLOTHLET_SELF_OBJECT_DEBUG === "1" || process.env.SLOTHLET_SELF_OBJECT_DEBUG === "true";
+
+const debugLog = (...args) => {
+	if (verboseSelfObject) {
+		console.log(...args);
+	}
+};
+
 /**
  * Advanced API module for testing slothlet loader self-reference functionality.
  * Provides methods to test live-binding of self object properties.
@@ -76,46 +84,46 @@ export const selfObject =
 		 * console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 		 */
 		addViaSelf(a, b) {
-			console.log("[SELF-OBJECT DEBUG] addViaSelf called - dumping stack trace:");
-			console.log(new Error().stack);
+			debugLog("[SELF-OBJECT DEBUG] addViaSelf called - dumping stack trace:");
+			debugLog(new Error().stack);
 			// Direct test of instance detection
 			import("@cldmv/slothlet/helpers/instance-manager")
 				.then(async ({ detectCurrentInstanceId, getInstanceData }) => {
 					const instanceId = detectCurrentInstanceId();
-					console.log("[TEST] detectCurrentInstanceId():", instanceId);
+					debugLog("[TEST] detectCurrentInstanceId():", instanceId);
 					if (instanceId) {
 						const instanceData = getInstanceData(instanceId);
-						console.log("[TEST] instanceData keys:", instanceData ? Object.keys(instanceData) : "null");
+						debugLog("[TEST] instanceData keys:", instanceData ? Object.keys(instanceData) : "null");
 						if (instanceData) {
-							console.log("[TEST] instanceData.self type:", typeof instanceData.self);
-							console.log("[TEST] instanceData.context type:", typeof instanceData.context);
-							console.log("[TEST] instanceData.reference type:", typeof instanceData.reference);
+							debugLog("[TEST] instanceData.self type:", typeof instanceData.self);
+							debugLog("[TEST] instanceData.context type:", typeof instanceData.context);
+							debugLog("[TEST] instanceData.reference type:", typeof instanceData.reference);
 							if (instanceData.self) {
-								console.log("[TEST] instanceData.self keys:", Object.keys(instanceData.self));
+								debugLog("[TEST] instanceData.self keys:", Object.keys(instanceData.self));
 							}
 						}
 					}
 				})
 				.catch(() => {
 					// instance-manager not available in AsyncLocalStorage version
-					console.log("[TEST] instance-manager not available (AsyncLocalStorage version)");
+					debugLog("[TEST] instance-manager not available (AsyncLocalStorage version)");
 				});
 
-			console.log("[TEST] === Runtime Objects Debug ===");
-			console.log("[TEST] typeof self:", typeof self);
-			console.log("[TEST] Object.keys(self):", Object.keys(self));
-			console.log("[TEST] typeof context:", typeof context);
-			console.log("[TEST] Object.keys(context):", Object.keys(context || {}));
-			console.log("[TEST] typeof reference:", typeof reference);
-			console.log("[TEST] Object.keys(reference):", Object.keys(reference || {}));
+			debugLog("[TEST] === Runtime Objects Debug ===");
+			debugLog("[TEST] typeof self:", typeof self);
+			debugLog("[TEST] Object.keys(self):", Object.keys(self));
+			debugLog("[TEST] typeof context:", typeof context);
+			debugLog("[TEST] Object.keys(context):", Object.keys(context || {}));
+			debugLog("[TEST] typeof reference:", typeof reference);
+			debugLog("[TEST] Object.keys(reference):", Object.keys(reference || {}));
 
 			if (self && self.math && typeof self.math.add === "function") {
-				console.log("[TEST] About to call self.math.add with args:", a, b);
+				debugLog("[TEST] About to call self.math.add with args:", a, b);
 				const result = self.math.add(a, b);
-				console.log("[TEST] Result from self.math.add:", result);
+				debugLog("[TEST] Result from self.math.add:", result);
 				return result;
 			}
-			console.log("[TEST] === addViaSelf function END (returning NaN) ===");
+			debugLog("[TEST] === addViaSelf function END (returning NaN) ===");
 			return NaN;
 		},
 

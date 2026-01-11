@@ -6,15 +6,88 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 22:10:15 -08:00 (1762755015)
+ *	@Last modified time: 2026-01-11 12:15:35 -08:00 (1768162535)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import chalk from "chalk";
+import { spawn } from "node:child_process";
 
-import slothlet from "@cldmv/slothlet";
+// import slothlet from "@cldmv/slothlet";
 import crypto from "crypto";
+
+let slothlet;
+const verbose =
+	process.argv.includes("--verbose") ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+
+/**
+ * Force dev-only resolution for this run by re-executing with required conditions.
+ * Ensures src exports load even if the parent shell lacks flags; scope is limited to this process.
+ * @returns {boolean} True if a child process was spawned and the current process should stop.
+ * @example
+ * if (ensureDevEnvFlags()) return;
+ */
+function ensureDevEnvFlags() {
+	/**
+	 * @param {string[]} args
+	 * @param {string} condition
+	 * @returns {boolean}
+	 */
+	const hasCondition = (args, condition) =>
+		args.some((arg) => arg.startsWith("--conditions=") && arg.slice("--conditions=".length).split(/[|,]/u).includes(condition));
+
+	process.env.NODE_ENV = "development";
+
+	const requiredConditions = ["slothlet-dev", "development"];
+	const nextExecArgv = [...process.execArgv];
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production");
+
+	let needsRespawn = process.env.NODE_ENV !== "development";
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		if (!hasCondition(nextExecArgv, condition)) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
+
+const verboseLog = (...args) => {
+	if (verbose) {
+		console.log(...args);
+	}
+};
 
 /**
  * Returns the MD5 hash of a string.
@@ -255,8 +328,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	if (modeLabel === "EAGER") bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
-	else bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
+	bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
 
 	// bound = await slothlet.create({ ...config, dir: "./api_test" });
 	// } else {
@@ -267,7 +339,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	console.log("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n");
 
 	// console.dir(bound, { depth: null });
-	console.log("bound api (before calls): ", bound);
+	verboseLog("bound api (before calls): ", bound);
 	// process.exit(0);
 	// console.log(await bound.describe());
 	// console.dir(await bound.describe(), { depth: null });
@@ -558,7 +630,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	const testBeforeOutput = 40;
 
 	for (const test of tests) {
-		console.log(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
+		verboseLog(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
 		for (const call of test.calls) {
 			// Auto-generate label from path and args
 			const pathStr = call.path.join(".");
@@ -575,7 +647,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			// Single-shot property access for correct Proxy getter behavior
 			let fn;
 			try {
-				console.log("calling: " + chalk.cyanBright(`${awaitCalls ? "await " : ""}${label}`));
+				verboseLog("calling: " + chalk.cyanBright(`${awaitCalls ? "await " : ""}${label}`));
 				if (pathStr) {
 					fn = call.path.reduce((acc, key) => acc && acc[key], bound);
 				} else {
@@ -593,7 +665,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 				console.log = (...args) => {
 					capturedOutput.push({ type: "log", args });
-					originalConsoleLog(...args);
+					if (verbose) originalConsoleLog(...args);
 				};
 				console.error = (...args) => {
 					capturedOutput.push({ type: "error", args });
@@ -601,16 +673,16 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 				};
 				console.warn = (...args) => {
 					capturedOutput.push({ type: "warn", args });
-					originalConsoleWarn(...args);
+					if (verbose) originalConsoleWarn(...args);
 				};
 
 				let result;
 				if (call.isObject) {
 					// Object access - just return the object/property, don't call it
-					console.log("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
+					verboseLog("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
 					result = fn;
 				} else if (typeof fn === "function") {
-					console.log("[DEBUG_SCRIPT] About to call function with args:", call.args);
+					verboseLog("[DEBUG_SCRIPT] About to call function with args:", call.args);
 					if (awaitCalls) {
 						result = await fn(...call.args);
 					} else {
@@ -618,7 +690,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 					}
 				} else if (typeof fn === "object" && fn !== null) {
 					// Handle objects - don't try to call them, just return the object
-					console.log("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
+					verboseLog("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
 					result = fn;
 				} else {
 					// Fallback to eval for dynamic property/function chains
@@ -712,32 +784,38 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			}
 			testCounter++;
 			if (testCounter === testBeforeOutput) {
-				console.log("bound api (after " + testCounter + " calls): ", bound);
+				verboseLog("bound api (after " + testCounter + " calls): ", bound);
 			}
 		}
 	}
 	// await slothlet.shutdown();
-	if (awaitCalls) console.log("bound api (after calls): ", bound);
+	if (awaitCalls) verboseLog("bound api (after calls): ", bound);
 	return bound;
 }
 
 (async () => {
+	if (ensureDevEnvFlags()) {
+		return;
+	}
+	const module = await import("@cldmv/slothlet");
+	// Prefer default export, fallback to named, then module itself
+	slothlet = module?.default ?? module?.slothlet ?? module;
+	if (typeof slothlet !== "function") {
+		throw new Error("slothlet entrypoint did not export a callable function");
+	}
 	// Command line param: e/eager or l/lazy
 	// const modeArg = process.argv.find((arg) => arg === "e" || arg === "eager" || arg === "l" || arg === "lazy");
 
 	console.log("\n" + chalk.yellowBright.bold("===== EAGER & LAZY MODE TEST ====="));
 	console.log(chalk.cyanBright("Running EAGER & LAZY mode tests...\n"));
 
-	let lazy = false;
 	let label = "EAGER";
 	let awaitCalls = false;
-	const _eagerBound = await runDebug({ lazy }, label, awaitCalls);
-	// if (modeArg === "l" || modeArg === "lazy") {
-	lazy = true;
+	const _eagerBound = await runDebug({ mode: "eager" }, label, awaitCalls);
+
 	label = "LAZY";
 	awaitCalls = true;
-	// }
-	const _lazyBound = await runDebug({ lazy }, label, awaitCalls);
+	const _lazyBound = await runDebug({ mode: "lazy" }, label, awaitCalls);
 
 	console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER & LAZY MODE TEST ====="));
 

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Vitest tests for always hooks receiving full execution context with error information.
- * @module tests/vitests/process/hooks-always-error-context.test.vitest
+ * @module tests/vitests/processed/hooks/hooks-always-error-context.test.vitest
  *
  * @description
  * Verifies that always hooks receive complete context including:

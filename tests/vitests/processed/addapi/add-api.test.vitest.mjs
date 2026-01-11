@@ -14,7 +14,7 @@
  * Original test count: 7 test suites (eager, lazy, nested, errors, merge, function extension, allowOverwrite)
  * New test count: 7 tests × 20 matrix configs = 140 tests
  *
- * @module tests/vitests/process/add-api.test.vitest
+ * @module tests/vitests/processed/addapi/add-api.test.vitest
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
