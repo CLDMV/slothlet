@@ -1,6 +1,6 @@
 /**
  * @fileoverview Vitest tests for always hooks receiving full execution context with error information.
- * @module tests/vitests/hooks-always-error-context
+ * @module tests/vitests/process/hooks-always-error-context.test.vitest
  *
  * @description
  * Verifies that always hooks receive complete context including:
@@ -14,7 +14,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > Config: '$name'", ({ config }) => {
@@ -22,8 +22,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 	let api;
 
 	beforeEach(async () => {
-		// Dynamic import of slothlet
-		const slothletModule = await import("../../index.mjs");
+		// Dynamic import of published entrypoint to mirror consumer usage
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 
 		// Create API instance with the test config

@@ -1,14 +1,15 @@
 /**
  * @fileoverview Comprehensive tests for metadata API functionality.
+ *
+ * Original test: tests/test-metadata-api.mjs
+ * Original test count: 10 scenarios
+ * New test count: 10 scenarios × 16 configs = 160 tests
+ *
+ * @module tests/vitests/processed/metadata/metadata-api.test.vitest
  */
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config }) => {
@@ -38,7 +39,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		}
 	};
 
-	test("should attach metadata to functions via addApi", async () => {
+	it("should attach metadata to functions via addApi", async () => {
 		const testPath = TEST_DIRS.API_TEST_MIXED;
 		await api.addApi("metaTest", testPath, {
 			testKey: "testValue",
@@ -54,7 +55,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(meta.author).toBe("vitest");
 	});
 
-	test("should automatically add sourceFolder to metadata", async () => {
+	it("should automatically add sourceFolder to metadata", async () => {
 		const testPath = TEST_DIRS.API_TEST_MIXED;
 		await api.addApi("autoFolder", testPath, {
 			testKey: "testValue"
@@ -68,7 +69,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(meta.sourceFolder).toContain("api_test_mixed");
 	});
 
-	test("should make metadata immutable for primitive values", async () => {
+	it("should make metadata immutable for primitive values", async () => {
 		await api.addApi("immutable", TEST_DIRS.API_TEST_MIXED, {
 			count: 42,
 			name: "original"
@@ -95,7 +96,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(meta.name).toBe("original");
 	});
 
-	test("should make metadata immutable for object values", async () => {
+	it("should make metadata immutable for object values", async () => {
 		await api.addApi("immutableObj", TEST_DIRS.API_TEST_MIXED, {
 			config: { version: "1.0", debug: false },
 			tags: ["math", "core"]
@@ -124,7 +125,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(meta.tags.length).toBe(2);
 	});
 
-	test("should provide metadataAPI.get() for path-based lookup", async () => {
+	it("should provide metadataAPI.get() for path-based lookup", async () => {
 		// Skip if config doesn't support metadataAPI
 		if (!config.metadata && !config.hooks) {
 			return; // metadataAPI may not be available
@@ -144,7 +145,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		}
 	});
 
-	test("should provide metadataAPI.caller() for access control", async () => {
+	it("should provide metadataAPI.caller() for access control", async () => {
 		// Skip if config doesn't support metadataAPI
 		if (!config.metadata && !config.hooks) {
 			return; // metadataAPI may not be available
@@ -163,7 +164,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		}
 	});
 
-	test("should provide metadataAPI.self() for introspection", async () => {
+	it("should provide metadataAPI.self() for introspection", async () => {
 		// Skip if config doesn't support metadataAPI
 		if (!config.metadata && !config.hooks) {
 			return; // metadataAPI may not be available
@@ -181,7 +182,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		}
 	});
 
-	test("should preserve metadata across function calls", async () => {
+	it("should preserve metadata across function calls", async () => {
 		await api.addApi("preserve", TEST_DIRS.API_TEST_MIXED, {
 			callCount: 0,
 			persistent: true
@@ -198,7 +199,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(meta.persistent).toBe(true);
 	});
 
-	test("should work with different API paths", async () => {
+	it("should work with different API paths", async () => {
 		await api.addApi("multiPath", TEST_DIRS.API_TEST_MIXED, {
 			pathType: "mixed"
 		});
@@ -218,7 +219,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		expect(esmMeta.sourceFolder).toContain("api_test_mixed");
 	});
 
-	test("should handle metadata for nested API structures", async () => {
+	it("should handle metadata for nested API structures", async () => {
 		await api.addApi("nested", TEST_DIRS.API_TEST_MIXED, {
 			level: "nested",
 			depth: 1

@@ -20,14 +20,14 @@
  * - Hook configuration formats (boolean, string, object)
  *
  * Original test: tests/test-hooks-execution.mjs
- * Matrix test count: 21 tests × 20 matrix configurations = 420 total tests
- *
- * @module tests/vitests/hooks-execution.test.vitest
+ * Matrix test count: 20 tests × 8 hook-enabled configurations = 160 total tests
+
+ * @module tests/vitests/processed/hooks/hooks-execution.test.vitest
  */
 
-import { describe, test, beforeEach, afterEach, expect } from "vitest";
-import slothlet from "../../index.mjs";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { describe, it, beforeEach, afterEach, expect } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
 /**
  * Tests all hook execution scenarios across matrix configurations
@@ -50,7 +50,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		}
 	});
 
-	test("should execute higher priority hooks first", async () => {
+	it("should execute higher priority hooks first", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -74,7 +74,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(execution).toEqual(["hook2", "hook1"]);
 	});
 
-	test("should execute hooks in registration order for same priority", async () => {
+	it("should execute hooks in registration order for same priority", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(execution).toEqual(["first", "second"]);
 	});
 
-	test("should handle before hooks returning undefined", async () => {
+	it("should handle before hooks returning undefined", async () => {
 		let hookCalled = false;
 
 		api.hooks.on(
@@ -116,7 +116,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(5);
 	});
 
-	test("should handle before hooks returning modified args array", async () => {
+	it("should handle before hooks returning modified args array", async () => {
 		api.hooks.on(
 			"before",
 			({ args }) => {
@@ -130,7 +130,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(10); // (2*2) + (3*2) = 4 + 6 = 10
 	});
 
-	test("should handle before hooks returning single value", async () => {
+	it("should handle before hooks returning single value", async () => {
 		api.hooks.on(
 			"before",
 			() => {
@@ -144,7 +144,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(42);
 	});
 
-	test("should chain multiple before hooks with transformations", async () => {
+	it("should chain multiple before hooks with transformations", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -179,7 +179,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(9); // hook2: [2,3] -> [3,4], hook1: [3,4] -> [4,5], result: 4+5=9
 	});
 
-	test("should execute after hooks in reverse priority order", async () => {
+	it("should execute after hooks in reverse priority order", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -206,7 +206,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(11); // (2 + 3) * 2 + 1 = 5 * 2 + 1 = 11
 	});
 
-	test("should handle error hooks when function throws", async () => {
+	it("should handle error hooks when function throws", async () => {
 		let _ = false;
 		let ___ = null;
 
@@ -225,7 +225,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(typeof api.hooks.on).toBe("function");
 	});
 
-	test("should handle async hooks with promises", async () => {
+	it("should handle async hooks with promises", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -246,7 +246,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toEqual([12, 13]);
 	});
 
-	test("should support hook pattern matching", async () => {
+	it("should support hook pattern matching", async () => {
 		let mathHookCalled = false;
 		let allHookCalled = false;
 
@@ -272,7 +272,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(allHookCalled).toBe(true);
 	});
 
-	test("should support hook enable/disable", async () => {
+	it("should support hook enable/disable", async () => {
 		let hookCalled = false;
 
 		api.hooks.on(
@@ -291,7 +291,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(hookCalled).toBe(false);
 	});
 
-	test("should support hook removal by ID", async () => {
+	it("should support hook removal by ID", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -318,7 +318,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(execution).toEqual(["hook2"]);
 	});
 
-	test("should support clearing all hooks", async () => {
+	it("should support clearing all hooks", async () => {
 		let hooksCalled = 0;
 
 		api.hooks.on(
@@ -345,7 +345,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(hooksCalled).toBe(0);
 	});
 
-	test("should handle multiple before hooks with mixed return types", async () => {
+	it("should handle multiple before hooks with mixed return types", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -381,7 +381,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(result).toBe(115); // undefined-hook: [2,3] -> [2,3], array-hook: [2,3] -> [7,8], value-hook: [7,8] -> 115
 	});
 
-	test("should support hook configuration with boolean", async () => {
+	it("should support hook configuration with boolean", async () => {
 		// Test that hooks can be enabled/disabled with boolean config
 		expect(api.hooks).toBeDefined();
 		expect(typeof api.hooks.on).toBe("function");
@@ -389,7 +389,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(typeof api.hooks.clear).toBe("function");
 	});
 
-	test("should propagate context through hooks", async () => {
+	it("should propagate context through hooks", async () => {
 		let receivedContext = null;
 
 		api.hooks.on(
@@ -405,7 +405,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(receivedContext).toBeDefined();
 	});
 
-	test("should maintain execution order with complex priority scenarios", async () => {
+	it("should maintain execution order with complex priority scenarios", async () => {
 		const execution = [];
 
 		// Multiple hooks with different priorities
@@ -450,7 +450,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(execution).toEqual(["p300", "p200", "p100-1", "p100-2", "p50"]);
 	});
 
-	test("should handle always hooks regardless of success/failure", async () => {
+	it("should handle always hooks regardless of success/failure", async () => {
 		let alwaysHookCalled = false;
 
 		api.hooks.on(
@@ -466,7 +466,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(alwaysHookCalled).toBe(true);
 	});
 
-	test("should support nested hook calls", async () => {
+	it("should support nested hook calls", async () => {
 		const execution = [];
 
 		api.hooks.on(
@@ -486,7 +486,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		expect(execution).toContain("outer-before");
 	});
 
-	test("should handle hook errors gracefully", async () => {
+	it("should handle hook errors gracefully", async () => {
 		api.hooks.on(
 			"before",
 			() => {

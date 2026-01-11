@@ -1,9 +1,15 @@
 /**
  * @fileoverview Tests to verify that internal properties like api.hooks don't trigger hook execution.
+ *
+ * Original test: tests/test-hooks-internal-properties.mjs
+ * Original test count: 7 scenarios
+ * New test count: 7 scenarios × 16 configs = 112 tests
+ *
+ * @module tests/vitests/processed/hooks/hooks-internal-properties.test.vitest
  */
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'", ({ config }) => {
@@ -24,7 +30,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		}
 	});
 
-	test("should not trigger hooks when accessing api.hooks", () => {
+	it("should not trigger hooks when accessing api.hooks", () => {
 		let hookExecuted = false;
 
 		// Register a hook that matches everything
@@ -56,7 +62,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	test("should not trigger hooks when accessing api.__ctx", () => {
+	it("should not trigger hooks when accessing api.__ctx", () => {
 		let hookExecuted = false;
 
 		api.hooks.on(
@@ -75,7 +81,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	test("should not trigger hooks when accessing api.shutdown", () => {
+	it("should not trigger hooks when accessing api.shutdown", () => {
 		let hookExecuted = false;
 
 		api.hooks.on(
@@ -94,7 +100,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	test("should not trigger hooks when accessing api._impl", () => {
+	it("should not trigger hooks when accessing api._impl", () => {
 		let hookExecuted = false;
 
 		api.hooks.on(
@@ -113,7 +119,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	test("should not trigger hooks when calling api.hooks methods", () => {
+	it("should not trigger hooks when calling api.hooks methods", () => {
 		let hookExecuted = false;
 		let methodCallsExecuted = 0;
 
@@ -141,7 +147,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(methodCallsExecuted).toBe(0); // No actual API function calls yet
 	});
 
-	test("should only trigger hooks for actual API function calls", async () => {
+	it("should only trigger hooks for actual API function calls", async () => {
 		let hooksTriggeredPaths = [];
 
 		api.hooks.on(
@@ -165,7 +171,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hooksTriggeredPaths[0]).toMatch(/math\.add/);
 	});
 
-	test("should preserve hook functionality after accessing internal properties", async () => {
+	it("should preserve hook functionality after accessing internal properties", async () => {
 		let hookCalls = [];
 
 		// Access all internal properties first

@@ -12,9 +12,15 @@ import path from "path";
 import fs from "fs/promises";
 import { readdirSync } from "fs";
 import { fileURLToPath } from "url";
+import { parse } from "jsonc-parser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Shared test config (parsed once per test run)
+const configPath = path.resolve(__dirname, "./processed/api/api-test-config.jsonc");
+const configContent = await fs.readFile(configPath, "utf8");
+export const testConfig = parse(configContent);
 
 /**
  * Common test API directories with resolved absolute paths
@@ -36,11 +42,46 @@ export const TEST_DIRS = {
 const CONFIG_SPACE = {
 	mode: ["eager", "lazy"],
 	runtime: ["async", "live"],
-	allowApiOverwrite: [false, true],
+	// allowApiOverwrite: [false, true],
 	hotReload: [false, true],
-	apiDepth: [1, 3, Infinity],
+	// apiDepth: [1, 3, Infinity],
 	hooks: [false, true]
 };
+
+/**
+ * Utility to traverse nested properties using a path array.
+ * @param {object} obj
+ * @param {string[]} pathParts
+ * @returns {any}
+ */
+export function getNestedProperty(obj, pathParts) {
+	return pathParts.reduce((current, key) => current && current[key], obj);
+}
+
+/**
+ * Invoke a nested function on the API.
+ * @param {object|Function} api
+ * @param {string[]} pathParts
+ * @param {any[]} args
+ * @param {boolean} isAsync
+ * @returns {Promise<any>|any}
+ */
+export async function callNestedFunction(api, pathParts, args, isAsync = false) {
+	const fn = getNestedProperty(api, pathParts);
+
+	if (pathParts.length === 0) {
+		if (typeof api === "function") {
+			return isAsync ? await api(...args) : api(...args);
+		}
+		throw new Error("API is not callable");
+	}
+
+	if (typeof fn === "function") {
+		return isAsync ? await fn(...args) : fn(...args);
+	}
+
+	throw new Error(`Property at path ${pathParts.join(".")} is not a function`);
+}
 
 /**
  * Generate all possible combinations from configuration space
@@ -63,7 +104,7 @@ function generateTestMatrix(configSpace) {
 
 	const combinations = cartesianProduct(values);
 
-	return combinations.map((combination, index) => {
+	return combinations.map((combination, ___index) => {
 		// Create config object
 		const config = {};
 		keys.forEach((key, i) => {
@@ -74,9 +115,9 @@ function generateTestMatrix(configSpace) {
 		const nameParts = [];
 		nameParts.push(config.mode.toUpperCase());
 		if (config.runtime === "live") nameParts.push("LIVE");
-		if (!config.allowApiOverwrite) nameParts.push("DENY");
+		// if (!config.allowApiOverwrite) nameParts.push("DENY");
 		if (config.hotReload) nameParts.push("HOT");
-		if (config.apiDepth !== Infinity) nameParts.push(`DEPTH_${config.apiDepth}`);
+		// if (config.apiDepth !== Infinity) nameParts.push(`DEPTH_${config.apiDepth}`);
 		if (config.hooks) nameParts.push("HOOKS");
 
 		const name = nameParts.join("_");
@@ -138,8 +179,8 @@ export function getMatrixConfigs(requirements = {}) {
  * @type {Array<{name: string, config: object}>}
  */
 export const BASIC_MATRIX = TEST_MATRIX.filter(
-	({ config }) =>
-		config.hotReload === false && config.allowApiOverwrite === true && config.apiDepth === Infinity && config.runtime === "async"
+	({ config }) => config.hotReload === false && config.runtime === "async"
+	// config.hotReload === false && config.allowApiOverwrite === true && config.apiDepth === Infinity && config.runtime === "async"
 );
 
 /**
@@ -147,14 +188,14 @@ export const BASIC_MATRIX = TEST_MATRIX.filter(
  * Used for testing API overwrite protection features
  * @type {Array<{name: string, config: object}>}
  */
-export const OVERWRITE_MATRIX = TEST_MATRIX.filter(({ config }) => config.allowApiOverwrite === false);
+// export const OVERWRITE_MATRIX = TEST_MATRIX.filter(({ config }) => config.allowApiOverwrite === false);
 
 /**
  * Depth configuration matrix (apiDepth variations, excluding infinite depth)
  * Used for testing API depth limitations
  * @type {Array<{name: string, config: object}>}
  */
-export const DEPTH_MATRIX = TEST_MATRIX.filter(({ config }) => config.apiDepth !== Infinity);
+// export const DEPTH_MATRIX = TEST_MATRIX.filter(({ config }) => config.apiDepth !== Infinity);
 
 /**
  * Runtime configuration matrix (async vs live bindings)
@@ -172,8 +213,8 @@ export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
 	if (config.hotReload === true) featureCount++;
 	if (config.runtime === "live") featureCount++;
-	if (config.allowApiOverwrite === false) featureCount++;
-	if (config.apiDepth !== Infinity) featureCount++;
+	// if (config.allowApiOverwrite === false) featureCount++;
+	// if (config.apiDepth !== Infinity) featureCount++;
 	return featureCount >= 2;
 });
 

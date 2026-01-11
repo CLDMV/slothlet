@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 22:37:38 -08:00 (1762756658)
+ *	@Last modified time: 2026-01-10 17:38:56 -08:00 (1768095536)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -157,6 +157,26 @@ import path from "node:path";
 import { types as utilTypes } from "node:util";
 import { processModuleForAPI } from "@cldmv/slothlet/helpers/api_builder";
 import { multidefault_analyzeModules } from "@cldmv/slothlet/helpers/multidefault";
+
+/**
+ * Safely assign a string __slothletPath to targets when configurable.
+ * @param {Function|object} target - Value to tag.
+ * @param {string} pathString - Dot-delimited hook path.
+ */
+function lazy_setSlothletPath(target, pathString) {
+	if (!target || typeof pathString !== "string") return;
+	if (typeof target.__slothletPath === "string") return;
+	try {
+		Object.defineProperty(target, "__slothletPath", {
+			value: pathString,
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
+	} catch {
+		// Ignore when path cannot be defined (frozen, sealed, etc.)
+	}
+}
 
 /**
  * @function create
@@ -803,8 +823,14 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 			}
 			// If already materialized, return underlying value directly (supports chaining)
 			if (state.materialized) {
-				if (state.materialized && (typeof state.materialized === "object" || typeof state.materialized === "function"))
-					return state.materialized[prop];
+				if (state.materialized && (typeof state.materialized === "object" || typeof state.materialized === "function")) {
+					const resolved = state.materialized[prop];
+					if (typeof resolved === "function") {
+						const resolvedPath = pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}` : String(prop);
+						lazy_setSlothletPath(resolved, resolvedPath);
+					}
+					return resolved;
+				}
 				return undefined;
 			}
 			// Ensure materialization started
@@ -854,7 +880,10 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 						function lazy_handleResolvedValue(resolved) {
 							const value = resolved ? resolved[prop] : undefined;
 							if (typeof value === "function") {
-								// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
+								lazy_setSlothletPath(value, apiPath);
+							}
+							if (typeof value === "function") {
+								// Don't call runWithCtx here - let outer wrappers handle it once
 								return value.apply(this, args);
 							}
 							return value;
@@ -896,6 +925,11 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 												const value = state.materialized[prop];
 												const subValue = value ? value[subProp] : undefined;
 												if (subValue && typeof subValue[nextProp] === "function") {
+													const nextPath =
+														pathParts.length > 0
+															? `${pathParts.join(".")}.${String(prop)}.${String(subProp)}.${String(nextProp)}`
+															: String(nextProp);
+													lazy_setSlothletPath(subValue[nextProp], nextPath);
 													// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
 													return subValue[nextProp].apply(thisArg, args);
 												}
@@ -907,6 +941,11 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 												const value = resolved ? resolved[prop] : undefined;
 												const subValue = value ? value[subProp] : undefined;
 												if (subValue && typeof subValue[nextProp] === "function") {
+													const nextPath =
+														pathParts.length > 0
+															? `${pathParts.join(".")}.${String(prop)}.${String(subProp)}.${String(nextProp)}`
+															: String(nextProp);
+													lazy_setSlothletPath(subValue[nextProp], nextPath);
 													const ctx = instance.boundapi?.__ctx;
 													if (ctx) {
 														return runWithCtx(ctx, subValue[nextProp], thisArg, args);
@@ -924,6 +963,8 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 									if (state.materialized) {
 										const value = state.materialized[prop];
 										if (value && typeof value[subProp] === "function") {
+											const subPath = pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}.${String(subProp)}` : String(subProp);
+											lazy_setSlothletPath(value[subProp], subPath);
 											// Don't call runWithCtx here - let outer wrapper handle it to avoid double hook execution
 											return value[subProp].apply(thisArg, args);
 										}
@@ -950,6 +991,9 @@ function createFolderProxy({ subDirPath, key, parent, instance, depth, maxDepth,
 										function lazy_handleDeepResolvedValue(resolved) {
 											const value = resolved ? resolved[prop] : undefined;
 											if (value && typeof value[subProp] === "function") {
+												const subPath =
+													pathParts.length > 0 ? `${pathParts.join(".")}.${String(prop)}.${String(subProp)}` : String(subProp);
+												lazy_setSlothletPath(value[subProp], subPath);
 												// Get the ALS context from the instance
 												const ctx = instance.boundapi?.__ctx;
 												if (ctx) {

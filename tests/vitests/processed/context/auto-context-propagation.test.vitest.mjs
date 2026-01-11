@@ -6,27 +6,42 @@
  * Verifies that slothlet's AsyncLocalStorage-based context propagation works automatically
  * for TCP server events, including connection and data handlers.
  *
- * Original test: tests/test-auto-context-propagation.mjs
+ * Original test: tests/rewritten/test-auto-context-propagation.mjs
  * New test count: 20 tests (1 test × 20 matrix configs)
  *
- * @module tests/vitests/auto-context-propagation.test.vitest
+ * @module tests/vitests/processed/context/auto-context-propagation.test.vitest
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import net from "node:net";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
 describe("Auto Context Propagation", () => {
 	describe.each(getMatrixConfigs({}))("Config: '$name'", ({ name, config }) => {
-		it("should preserve context automatically in EventEmitter callbacks", async () => {
-			// Import slothlet and create an API instance with context
+		let api;
+		let serverHandle;
+
+		beforeEach(async () => {
 			const { default: slothlet } = await import("@cldmv/slothlet");
-			const api = await slothlet({
+			api = await slothlet({
 				dir: TEST_DIRS.API_TEST,
 				context: { user: "test-user", session: "auto-test-session" },
 				...config
 			});
+		});
 
+		afterEach(async () => {
+			if (serverHandle?.close) {
+				await serverHandle.close();
+			}
+			serverHandle = null;
+			if (api?.shutdown) {
+				await api.shutdown();
+			}
+			api = null;
+		});
+
+		it("should preserve context automatically in EventEmitter callbacks", async () => {
 			// Verify API setup
 			expect(api).toBeTruthy();
 			expect(api.__ctx).toBeTruthy();
@@ -51,6 +66,7 @@ describe("Auto Context Propagation", () => {
 			expect(serverResult).toBeTruthy();
 			expect(serverResult.port).toBeTruthy();
 			expect(typeof serverResult.close).toBe("function");
+			serverHandle = serverResult;
 
 			let responseData = null;
 

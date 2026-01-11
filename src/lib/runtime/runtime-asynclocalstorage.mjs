@@ -33,7 +33,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import util from "node:util";
-import { enableAlsForEventEmitters } from "@cldmv/slothlet/helpers/als-eventemitter";
+import { enableAlsForEventEmitters, setDefaultAls } from "@cldmv/slothlet/helpers/als-eventemitter";
 import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 
 const als = new AsyncLocalStorage();
@@ -54,6 +54,8 @@ export const sharedALS = new AsyncLocalStorage();
  */
 export const requestALS = new AsyncLocalStorage();
 
+// Ensure the EventEmitter patcher shares this ALS instance when callers omit it
+setDefaultAls(als);
 // Enable AsyncLocalStorage context propagation for all EventEmitter instances
 enableAlsForEventEmitters(als);
 
@@ -75,8 +77,10 @@ enableAlsForEventEmitters(als);
  * const result = runWithCtx(ctx, myFunction, this, [arg1, arg2]);
  */
 export const runWithCtx = (ctx, fn, thisArg, args) => {
-	// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
-	if (!ctx.hookManager?.enabled || !fn.__slothletPath) {
+	const path = typeof fn?.__slothletPath === "string" ? fn.__slothletPath : undefined;
+
+	// Fast-path: If hooks are disabled OR no valid __slothletPath (internal functions), execute directly
+	if (!ctx.hookManager?.enabled || !path) {
 		const runtime_runInALS = () => {
 			const result = Reflect.apply(fn, thisArg, args);
 			return result;
@@ -88,8 +92,15 @@ export const runWithCtx = (ctx, fn, thisArg, args) => {
 	const requestContext = requestALS.getStore();
 	const mergedCtx = requestContext ? { ...ctx, context: { ...ctx.context, ...requestContext } } : ctx;
 
-	// Extract function path for hook matching (only API functions have __slothletPath)
-	const path = fn.__slothletPath;
+	if (process.env.NODE_ENV === "development") {
+		if (fn.__slothletPath !== undefined && typeof fn.__slothletPath !== "string") {
+			console.log(`[DEBUG] runtime: __slothletPath is not a string; skipping hooks`, {
+				pathType: typeof fn.__slothletPath,
+				fnName: fn.name || "anonymous",
+				fnConstructor: fn.constructor?.name || "unknown"
+			});
+		}
+	}
 
 	/**
 	 * @function runtime_runInALS
