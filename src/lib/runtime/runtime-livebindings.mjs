@@ -356,10 +356,23 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 			if (result && typeof result === "object" && typeof result.then === "function") {
 				return result.then(
 					(resolvedResult) => {
-						// Execute after hooks with chaining, then always hooks
-						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult, ctx.self, ctx.context);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult, [], ctx.self, ctx.context);
-						return finalResult;
+						try {
+							// Execute after hooks with chaining, then always hooks
+							const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult, ctx.self, ctx.context);
+							ctx.hookManager.executeAlwaysHooks(path, finalResult, [], ctx.self, ctx.context);
+							return finalResult;
+						} catch (error) {
+							// Errors thrown inside after hooks during async resolution
+							if (!ctx.hookManager.reportedErrors.has(error)) {
+								ctx.hookManager.reportedErrors.add(error);
+								ctx.hookManager.executeErrorHooks(path, error, { type: "function" }, ctx.self, ctx.context);
+							}
+							ctx.hookManager.executeAlwaysHooks(path, undefined, [error], ctx.self, ctx.context);
+							if (!ctx.hookManager.suppressErrors) {
+								throw error;
+							}
+							return undefined;
+						}
 					},
 					(error) => {
 						// Execute error hooks for async function errors

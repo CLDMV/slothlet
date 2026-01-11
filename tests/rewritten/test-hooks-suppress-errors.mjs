@@ -22,7 +22,7 @@
  * node tests/test-hooks-suppress-errors.mjs
  */
 
-import slothlet from "../index.mjs";
+import slothlet from "../../index.mjs";
 
 let failedTests = 0;
 let passedTests = 0;
@@ -63,21 +63,19 @@ await runTest("DEFAULT: Before hook error throws", async () => {
 	let errorHookCalled = false;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		() => {
 			errorHookCalled = true;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	api.hooks.on(
-		"failing-before",
 		"before",
 		() => {
 			throw new Error("Before hook failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "failing-before", pattern: "math.add" }
 	);
 
 	let errorThrown = false;
@@ -103,22 +101,20 @@ await runTest("DEFAULT: Function error throws", async () => {
 	let errorHookCalled = false;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		() => {
 			errorHookCalled = true;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	// Make the function throw by injecting error in before hook
 	api.hooks.on(
-		"inject-throw",
 		"before",
 		() => {
 			throw new Error("Function failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "inject-throw", pattern: "math.add" }
 	);
 
 	let errorThrown = false;
@@ -144,21 +140,19 @@ await runTest("DEFAULT: After hook error throws", async () => {
 	let errorHookCalled = false;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		() => {
 			errorHookCalled = true;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	api.hooks.on(
-		"failing-after",
 		"after",
 		() => {
 			throw new Error("After hook failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "failing-after", pattern: "math.add" }
 	);
 
 	let errorThrown = false;
@@ -192,22 +186,20 @@ await runTest("SUPPRESS: Before hook error does NOT throw", async () => {
 	let errorContext = null;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		(context) => {
 			errorHookCalled = true;
 			errorContext = context;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	api.hooks.on(
-		"failing-before",
 		"before",
 		() => {
 			throw new Error("Before hook failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "failing-before", pattern: "math.add" }
 	);
 
 	// Should NOT throw
@@ -235,23 +227,21 @@ await runTest("SUPPRESS: Function error does NOT throw", async () => {
 	let errorContext = null;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		(context) => {
 			errorHookCalled = true;
 			errorContext = context;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	// Inject function error via before hook
 	api.hooks.on(
-		"inject-error",
 		"before",
 		() => {
 			throw new Error("Function execution failed");
 		},
-		{ pattern: "math.multiply" }
+		{ id: "inject-error", pattern: "math.multiply" }
 	);
 
 	// Should NOT throw
@@ -277,22 +267,20 @@ await runTest("SUPPRESS: After hook error does NOT throw", async () => {
 	let errorContext = null;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		(context) => {
 			errorHookCalled = true;
 			errorContext = context;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	api.hooks.on(
-		"failing-after",
 		"after",
 		() => {
 			throw new Error("After hook failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "failing-after", pattern: "math.add" }
 	);
 
 	// Should NOT throw
@@ -318,21 +306,19 @@ await runTest("SUPPRESS: Always hook error never throws (baseline behavior)", as
 	let errorHookCalled = false;
 
 	api.hooks.on(
-		"error-monitor",
 		"error",
 		() => {
 			errorHookCalled = true;
 		},
-		{ pattern: "**" }
+		{ id: "error-monitor", pattern: "**" }
 	);
 
 	api.hooks.on(
-		"failing-always",
 		"always",
 		() => {
 			throw new Error("Always hook failed");
 		},
-		{ pattern: "math.add" }
+		{ id: "failing-always", pattern: "math.add" }
 	);
 
 	// Should NOT throw (always hooks never throw)
@@ -377,24 +363,22 @@ await runTest("SUPPRESS: Multiple functions, some fail, some succeed", async () 
 	const errors = [];
 
 	api.hooks.on(
-		"error-collector",
 		"error",
 		(context) => {
 			errors.push({ path: context.path, message: context.error.message });
 		},
-		{ pattern: "**" }
+		{ id: "error-collector", pattern: "**" }
 	);
 
 	// Hook that fails only for add
 	api.hooks.on(
-		"fail-add",
 		"before",
 		({ path }) => {
 			if (path === "math.add") {
 				throw new Error("Add failed");
 			}
 		},
-		{ pattern: "**" }
+		{ id: "fail-add", pattern: "**" }
 	);
 
 	// Call multiple functions
@@ -422,12 +406,11 @@ await runTest("SUPPRESS: Works in eager + async runtime", async () => {
 	});
 
 	api.hooks.on(
-		"fail",
 		"before",
 		() => {
 			throw new Error("Test");
 		},
-		{ pattern: "**" }
+		{ id: "fail", pattern: "**" }
 	);
 	const result = await api.math.add(1, 2);
 	assert(result === undefined, "Should suppress in eager + async");
@@ -444,12 +427,11 @@ await runTest("SUPPRESS: Works in eager + live runtime", async () => {
 	});
 
 	api.hooks.on(
-		"fail",
 		"before",
 		() => {
 			throw new Error("Test");
 		},
-		{ pattern: "**" }
+		{ id: "fail", pattern: "**" }
 	);
 	const result = await api.math.add(1, 2);
 	assert(result === undefined, "Should suppress in eager + live");
@@ -466,12 +448,11 @@ await runTest("SUPPRESS: Works in lazy + async runtime", async () => {
 	});
 
 	api.hooks.on(
-		"fail",
 		"before",
 		() => {
 			throw new Error("Test");
 		},
-		{ pattern: "**" }
+		{ id: "fail", pattern: "**" }
 	);
 	const result = await api.math.add(1, 2);
 	assert(result === undefined, "Should suppress in lazy + async");
@@ -488,12 +469,11 @@ await runTest("SUPPRESS: Works in lazy + live runtime", async () => {
 	});
 
 	api.hooks.on(
-		"fail",
 		"before",
 		() => {
 			throw new Error("Test");
 		},
-		{ pattern: "**" }
+		{ id: "fail", pattern: "**" }
 	);
 	const result = await api.math.add(1, 2);
 	assert(result === undefined, "Should suppress in lazy + live");
@@ -548,37 +528,33 @@ await runTest("SUPPRESS: Multiple error hooks all receive error", async () => {
 	let hook3Called = false;
 
 	api.hooks.on(
-		"error1",
 		"error",
 		() => {
 			hook1Called = true;
 		},
-		{ pattern: "**" }
+		{ id: "error1", pattern: "**" }
 	);
 	api.hooks.on(
-		"error2",
 		"error",
 		() => {
 			hook2Called = true;
 		},
-		{ pattern: "math.*" }
+		{ id: "error2", pattern: "math.*" }
 	);
 	api.hooks.on(
-		"error3",
 		"error",
 		() => {
 			hook3Called = true;
 		},
-		{ pattern: "math.add" }
+		{ id: "error3", pattern: "math.add" }
 	);
 
 	api.hooks.on(
-		"fail",
 		"before",
 		() => {
 			throw new Error("Test");
 		},
-		{ pattern: "math.add" }
+		{ id: "fail", pattern: "math.add" }
 	);
 
 	await api.math.add(1, 2);

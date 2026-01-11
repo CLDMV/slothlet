@@ -144,7 +144,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 
 				const fullRegex = new RegExp(`^${regexString}$`);
 				const shouldMatch = ["**", "math.*", "*.add", "math.add"].includes(pattern);
-				expect(fullRegex.it(testPath)).toBe(shouldMatch);
+				expect(fullRegex.test(testPath)).toBe(shouldMatch);
 			}
 		}
 	});
