@@ -6,18 +6,18 @@
  * across all api_tests folders. Uses the inspect-api-structure tool
  * in child processes to avoid proxy/debugging conflicts.
  *
- * Original test: tests/test-all-api-structures.mjs
+ * Original test: tests/rewritten/test-all-api-structures.mjs
  * Original test count: 16 structure validation tests (8 folders × 2 modes)
  * New test count: 16 folders × 10 matrix pairs = 160 tests
  *
- * @module tests/vitests/all-api-structures.test.vitest
+ * @module tests/vitests/processed/api-structures/all-api-structures.test.vitest
  */
 
 import { describe, it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAllApiTestFoldersSync, getMatrixConfigs } from "./vitest-helper.mjs";
+import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../vitest-helper.mjs";
 
 describe("All API Structures Validation", () => {
 	/**
@@ -92,7 +92,7 @@ describe("All API Structures Validation", () => {
 	async function runInspection(folderName, config) {
 		return new Promise((resolve) => {
 			const currentFile = fileURLToPath(import.meta.url);
-			const rootDir = path.resolve(path.dirname(currentFile), "../..");
+			const rootDir = path.resolve(path.dirname(currentFile), "../../../..");
 			const inspectToolPath = path.join(rootDir, "tools", "inspect-api-structure.mjs");
 
 			// Build arguments for the inspection tool

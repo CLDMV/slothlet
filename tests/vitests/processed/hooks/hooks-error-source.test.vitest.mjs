@@ -14,15 +14,15 @@
  * - Works across all mode/runtime combinations
  *
  * Original test: tests/test-hooks-error-source.mjs
- * Original test count: 7 test scenarios
- * New test count: 7 test scenarios × 48 hook-enabled configs = 336 tests
+ * Original test count: 6 test scenarios
+ * New test count: 6 test scenarios × 48 hook-enabled configs = 288 tests
  *
- * @module tests/vitests/hooks-error-source.test.vitest
+ * @module tests/vitests/processed/hooks/hooks-error-source.test.vitest
  */
 
-import { describe, test, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
 const describe_each_matrix = getMatrixConfigs({ hooks: true });
 
@@ -44,7 +44,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 1: Error in before hook reports correct source
 	 */
-	test("should track error source from before hook correctly", async () => {
+	it("should track error source from before hook correctly", async () => {
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
@@ -99,7 +99,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 2: Error in sync function reports correct source
 	 */
-	test("should track error source from sync function correctly", async () => {
+	it("should track error source from sync function correctly", async () => {
 		// Create API instance (will use existing functions that can be made to throw via hooks)
 		const api = await slothlet({
 			...config,
@@ -153,7 +153,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 3: Error in after hook reports correct source
 	 */
-	test("should track error source from after hook correctly", async () => {
+	it("should track error source from after hook correctly", async () => {
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
@@ -208,7 +208,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 4: Error in always hook reports correct source (doesn't throw)
 	 */
-	test("should track error source from always hook correctly (non-throwing)", async () => {
+	it("should track error source from always hook correctly (non-throwing)", async () => {
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
@@ -258,7 +258,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 5: Multiple errors report each source correctly
 	 */
-	test("should track multiple error sources correctly", async () => {
+	it("should track multiple error sources correctly", async () => {
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
@@ -333,7 +333,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 	/**
 	 * Test 6: Works across mode/runtime combinations with basic validation
 	 */
-	test("should work consistently across different runtime configurations", async () => {
+	it("should work consistently across different runtime configurations", async () => {
 		// This test validates that error tracking works with the current matrix config
 		// rather than testing multiple configs (which is already covered by matrix)
 

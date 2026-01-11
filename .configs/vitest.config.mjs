@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-09 06:18:17 -08:00 (1767968297)
+ *	@Last modified time: 2026-01-09 19:52:57 -08:00 (1768017177)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -14,6 +14,8 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+	// pool: "forks",
+	pool: "threads",
 	resolve: {
 		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
 		conditions: [
@@ -30,6 +32,7 @@ export default defineConfig({
 		}
 	},
 	test: {
+		// maxWorkers: 4,
 		include: ["tests/**/*.vest.{js,mjs}", "tests/**/*.test.vitest.{js,mjs}"],
 		exclude: ["node_modules"],
 		environment: "node",
