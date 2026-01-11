@@ -37,9 +37,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const lastContext = { current: null };
 		api.hooks.on(
 			"error",
-			({ context }) => {
+			(errorContext) => {
 				flags.called = true;
-				lastContext.current = context;
+				lastContext.current = errorContext;
 			},
 			{ id: "error-monitor", pattern: "**" }
 		);
@@ -70,7 +70,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 			{ id: "failing-before", pattern: "math.add" }
 		);
 
-		await expect(api.math.add(2, 3)).rejects.toThrow("Before hook failed");
+		await expect(async () => await api.math.add(2, 3)).rejects.toThrow("Before hook failed");
 		expect(flags.called).toBe(true);
 	});
 
