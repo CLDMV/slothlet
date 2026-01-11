@@ -12,7 +12,7 @@
  * @module tests/vitests/processed/context/auto-context-propagation.test.vitest
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import net from "node:net";
 import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
 
@@ -22,6 +22,9 @@ describe("Auto Context Propagation", () => {
 		let serverHandle;
 
 		beforeEach(async () => {
+			void vi; // retain vi for optional resetModules mitigation
+			// NOTE: Keeping this commented to track prior mitigation. When enabled it forces fresh module graphs per config to avoid ALS/hook singletons leaking across matrix runs; left here as a reminder until per-instance isolation is fixed.
+			// await vi.resetModules();
 			const { default: slothlet } = await import("@cldmv/slothlet");
 			api = await slothlet({
 				dir: TEST_DIRS.API_TEST,

@@ -6,6 +6,12 @@ Migrating all tests to Vitest using matrix-based testing approach.
 
 **Hook tests were failing due to hook system changes. All issues have been fixed!**
 
+## ✅ Auto-Context Regression Fix (January 11, 2026)
+
+- Root cause: EventEmitter ALS patch was being disabled during shutdown and not re-enabled per instance; wrapped listeners also failed to refresh active ALS for nested registrations.
+- Fix: Re-enable `enableAlsForEventEmitters` for each instance and restore previous active ALS after wrapped listener execution.
+- Result: `tests/vitests/processed/context/auto-context-propagation.test.vitest.mjs` now passes 16/16 matrix configs (full run on January 11, 2026).
+
 ### ✅ Core Hook System Fixes
 
 1. **HookManager execution pipeline**: Fixed all hook execution methods to use correct parameter format

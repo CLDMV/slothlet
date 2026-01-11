@@ -37,6 +37,13 @@ import { EventEmitter } from "node:events";
 let defaultALS = new AsyncLocalStorage();
 let activeAls = defaultALS;
 
+// Allow runtime to refresh the active ALS without altering the default
+export function setActiveAls(alsInstance) {
+	if (alsInstance instanceof AsyncLocalStorage) {
+		activeAls = alsInstance;
+	}
+}
+
 /**
  * Allow runtime to inject the shared AsyncLocalStorage instance so EventEmitter
  * wrapping uses the same store as runWithCtx. Prevents context splits when
@@ -121,39 +128,33 @@ export function enableAlsForEventEmitters(als = defaultALS) {
 	 * context. If no active store exists, returns the original listener unchanged.
 	 */
 	function runtime_wrapListener(listener) {
-		// If there is no active store when registering, do not wrap (fast path)
-		const store = activeAls.getStore();
-		if (!store) return listener;
+		// Capture ALS instance and its current store at registration time
+		const alsInstance = activeAls;
+		const store = alsInstance.getStore();
 
-		// Create a resource now, under the active store
 		const resource = new AsyncResource("slothlet-als-listener");
-
-		// Track this resource globally for cleanup
 		globalResourceSet.add(resource);
 
-		/**
-		 * @function runtime_wrappedListener
-		 * @internal
-		 * @private
-		 * @param {...any} args - Arguments passed to the listener
-		 * @returns {any} Result of the original listener
-		 *
-		 * @description
-		 * The context-preserving wrapper that re-enters the AsyncLocalStorage
-		 * context using AsyncResource.runInAsyncScope().
-		 */
 		const runtime_wrappedListener = function (...args) {
-			return resource.runInAsyncScope(
-				() => {
+			const previousAls = activeAls;
+			if (alsInstance) setActiveAls(alsInstance);
+			try {
+				const resolvedStore = store || alsInstance.getStore();
+				if (!resolvedStore) {
 					return listener.apply(this, args);
-				},
-				this,
-				...args
-			);
+				}
+				// Re-enter the ALS store captured at registration, regardless of later ALS switches
+				return resource.runInAsyncScope(() => alsInstance.run(resolvedStore, () => listener.apply(this, args)), this, ...args);
+			} finally {
+				if (previousAls && previousAls !== alsInstance) {
+					setActiveAls(previousAls);
+				}
+			}
 		};
 
-		// Store reference to resource for cleanup
 		runtime_wrappedListener._slothletResource = resource;
+		runtime_wrappedListener._slothletAls = alsInstance;
+		runtime_wrappedListener._slothletStore = store;
 
 		return runtime_wrappedListener;
 	}
