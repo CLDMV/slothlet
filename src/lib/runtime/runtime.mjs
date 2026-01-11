@@ -12,16 +12,21 @@
  * @public
  */
 
-import { detectCurrentInstanceId, getInstanceData } from "@cldmv/slothlet/helpers/instance-manager";
+import {
+	detectCurrentInstanceId,
+	getInstanceData,
+	setActiveInstance,
+	getCurrentActiveInstanceId
+} from "@cldmv/slothlet/helpers/instance-manager";
 
 // Pre-load both runtimes at module load time
-const asyncRuntime = await import("@cldmv/slothlet/runtime/async");
+const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
 const liveBindingsRuntime = await import("@cldmv/slothlet/runtime/live");
+const asyncRuntimeCache = new Map(); // instanceId -> runtime facade
 
 // Detect runtime type from instance configuration (called on each access)
-function detectRuntimeType() {
-	// Get current instance ID from stack traces (same method as live bindings runtime)
-	const instanceId = detectCurrentInstanceId();
+function detectRuntimeType(preferredInstanceId) {
+	const instanceId = preferredInstanceId || detectCurrentInstanceId();
 
 	if (instanceId) {
 		const instanceData = getInstanceData(instanceId);
@@ -34,10 +39,19 @@ function detectRuntimeType() {
 	return "async";
 }
 
+function getAsyncRuntime(ctx) {
+	const preferredId = ctx?.instanceId || detectCurrentInstanceId() || "slothlet_async_default";
+	if (asyncRuntimeCache.has(preferredId)) return asyncRuntimeCache.get(preferredId);
+	const runtimeFactory = asyncRuntimeModule.createAsyncRuntime || ((params) => asyncRuntimeModule);
+	const runtimeInstance = runtimeFactory({ instanceId: preferredId, als: ctx?.als });
+	asyncRuntimeCache.set(preferredId, runtimeInstance);
+	return runtimeInstance;
+}
+
 // Get the appropriate runtime based on instance configuration
-function getCurrentRuntime() {
-	const runtimeType = detectRuntimeType();
-	return runtimeType === "live" ? liveBindingsRuntime : asyncRuntime;
+function getCurrentRuntime(ctx) {
+	const runtimeType = detectRuntimeType(ctx?.instanceId);
+	return runtimeType === "live" ? liveBindingsRuntime : getAsyncRuntime(ctx);
 }
 
 // Export proxies that dynamically select the correct runtime
@@ -195,12 +209,18 @@ export const reference = new Proxy(
 );
 
 export function runWithCtx(ctx, fn, thisArg, args) {
-	const runtime = getCurrentRuntime();
-	return runtime.runWithCtx(ctx, fn, thisArg, args);
+	const previous = getCurrentActiveInstanceId();
+	if (ctx?.instanceId) setActiveInstance(ctx.instanceId);
+	try {
+		const runtime = getCurrentRuntime(ctx);
+		return runtime.runWithCtx(ctx, fn, thisArg, args);
+	} finally {
+		setActiveInstance(previous);
+	}
 }
 
 export function makeWrapper(ctx) {
-	const runtime = getCurrentRuntime();
+	const runtime = getCurrentRuntime(ctx);
 	return runtime.makeWrapper(ctx);
 }
 
