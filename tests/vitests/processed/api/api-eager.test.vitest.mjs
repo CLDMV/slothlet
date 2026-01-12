@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { callNestedFunction, testConfig, getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
+import { callNestedFunction, testConfig, getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
  * Mock MD5 function for testing reference functionality

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-11 11:26:01 -08:00 (1768159561)
+ *	@Last modified time: 2026-01-11 19:05:37 -08:00 (1768187137)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1433,9 +1433,34 @@ const slothletObject = {
 			console.log("[DEBUG] reload: Starting hot reload...");
 		}
 
+		// Store old instanceId for cleanup before generating new one
+		const oldInstanceId = this.instanceId;
+
 		// Clear current API state while preserving structure
 		this.loaded = false;
 		this.api = null;
+
+		// Clean up old runtime state before creating new instance
+		if (this.runtime && typeof this.runtime.cleanup === "function" && oldInstanceId) {
+			try {
+				this.runtime.cleanup(oldInstanceId);
+			} catch (cleanupError) {
+				if (this.config.debug) {
+					console.warn("[slothlet] Warning: Runtime cleanup during reload failed:", cleanupError.message);
+				}
+			}
+		}
+
+		// Clean up old instance data
+		if (oldInstanceId) {
+			try {
+				await cleanupInstance(oldInstanceId);
+			} catch (cleanupError) {
+				if (this.config.debug) {
+					console.warn("[slothlet] Warning: Instance cleanup during reload failed:", cleanupError.message);
+				}
+			}
+		}
 
 		// Re-run initial load with stored config (this regenerates instanceId internally)
 		await this.load(this._initialLoadConfig);
@@ -1783,6 +1808,12 @@ const slothletObject = {
 				}
 				this.loaded = false;
 				this.api = null;
+
+				// Clear __ctx before reassigning boundapi to prevent stale references
+				if (this.boundapi && typeof this.boundapi === "object") {
+					delete this.boundapi.__ctx;
+				}
+
 				this.boundapi = {};
 				this.context = {};
 				this.reference = {};
@@ -1796,6 +1827,15 @@ const slothletObject = {
 				}
 
 				// Runtime cleanup handled by individual runtime modules
+
+				// Clean up AsyncLocalStorage runtime state to prevent memory leaks
+				if (this.runtime && typeof this.runtime.cleanup === "function") {
+					try {
+						this.runtime.cleanup(this.instanceId);
+					} catch (cleanupError) {
+						console.warn("[slothlet] Warning: Runtime cleanup failed:", cleanupError.message);
+					}
+				}
 
 				// Clean up instance data for live bindings runtime
 				if (this.instanceId) {

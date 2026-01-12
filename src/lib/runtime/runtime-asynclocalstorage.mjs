@@ -75,6 +75,30 @@ function runtime_getOrCreateState(instanceId, providedAls) {
 	return state;
 }
 
+/**
+ * Clean up runtime state for an instance.
+ * @param {string} instanceId - Instance ID to clean up
+ * @package
+ */
+function runtime_cleanupState(instanceId) {
+	const state = runtimeRegistry.get(instanceId);
+	if (state) {
+		// Disable both ALS instances to clear their stores
+		try {
+			state.als?.disable?.();
+		} catch (err) {
+			// Ignore errors from disable()
+		}
+		try {
+			state.requestALS?.disable?.();
+		} catch (err) {
+			// Ignore errors from disable()
+		}
+		// Remove from registry
+		runtimeRegistry.delete(instanceId);
+	}
+}
+
 // Initialize the EventEmitter patcher with a default ALS; active ALS is switched per-call in runWithCtx
 const defaultRuntimeState = runtime_getOrCreateState(DEFAULT_INSTANCE_ID);
 setDefaultAls(defaultRuntimeState.als);
@@ -985,12 +1009,26 @@ export const reference = runtime_createLiveBinding("reference");
 export { metadataAPI };
 
 /**
+ * Cleanup ALS runtime state for an instance.
+ * @param {string} instanceId - Instance ID to clean up
+ * @memberof module:@cldmv/slothlet.runtime
+ * @package
+ */
+export function cleanup(instanceId) {
+	if (instanceId) {
+		runtime_cleanupState(instanceId);
+	}
+}
+
+/**
  * Create a per-instance AsyncLocalStorage runtime facade.
  * @param {{ instanceId?: string, als?: AsyncLocalStorage }} params - Instance configuration.
- * @returns {{ runWithCtx: typeof runWithCtx, makeWrapper: typeof makeWrapper, getCtx: typeof getCtx, self: typeof self, context: typeof context, reference: typeof reference, sharedALS: AsyncLocalStorage, requestALS: AsyncLocalStorage, metadataAPI: typeof metadataAPI }} Runtime API bound to the provided instance ALS.
+ * @returns {{ runWithCtx: typeof runWithCtx, makeWrapper: typeof makeWrapper, getCtx: typeof getCtx, self: typeof self, context: typeof context, reference: typeof reference, sharedALS: AsyncLocalStorage, requestALS: AsyncLocalStorage, metadataAPI: typeof metadataAPI, cleanup: Function }} Runtime API bound to the provided instance ALS.
  * @example
  * const runtime = createAsyncRuntime({ instanceId: "abc", als: new AsyncLocalStorage() });
  * runtime.runWithCtx({ self: {}, context: {}, reference: {} }, fn, thisArg, args);
+ * // Later, clean up:
+ * runtime.cleanup();
  */
 export function createAsyncRuntime({ instanceId, als } = {}) {
 	const resolvedId = runtime_resolveInstanceId({ instanceId });
@@ -1006,7 +1044,8 @@ export function createAsyncRuntime({ instanceId, als } = {}) {
 		reference,
 		sharedALS: state.als,
 		requestALS: state.requestALS,
-		metadataAPI
+		metadataAPI,
+		cleanup: () => runtime_cleanupState(resolvedId)
 	};
 }
 

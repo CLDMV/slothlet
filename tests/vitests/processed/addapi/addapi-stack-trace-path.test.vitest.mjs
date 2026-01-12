@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS } from "../../vitest-helper.mjs";
+import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("Stack Trace Path Resolution", () => {
 	// addApi works on all configurations, no filtering needed
