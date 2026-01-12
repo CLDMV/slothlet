@@ -14,7 +14,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > Config: '$name'", ({ config }) => {

@@ -423,6 +423,27 @@ export function runWithCtx(ctx, fn, thisArg, args) {
  * @returns {function} A wrapper function that proxies the API
  */
 export function makeWrapper(ctx) {
+	const isMapOrSetLike = (value) => {
+		if (!value || (typeof value !== "object" && typeof value !== "function")) return false;
+		const tag = value[Symbol.toStringTag];
+		return value instanceof Map || value instanceof Set || tag === "Map" || tag === "Set";
+	};
+
+	const tagPathIfPossible = (value, pathString) => {
+		if (!value || typeof pathString !== "string") return;
+		if (typeof value.__slothletPath === "string") return;
+		try {
+			Object.defineProperty(value, "__slothletPath", {
+				value: pathString,
+				writable: false,
+				enumerable: false,
+				configurable: true
+			});
+		} catch {
+			// Ignore when property cannot be defined (frozen, sealed, etc.)
+		}
+	};
+
 	const cache = new WeakMap();
 
 	return function wrapperFunction(obj, currentPath = "") {
@@ -445,6 +466,13 @@ export function makeWrapper(ctx) {
 
 				// Build path for nested properties
 				const newPath = currentPath ? `${currentPath}.${String(prop)}` : String(prop);
+
+				// Avoid proxying Map/Set (and subclasses) so built-in accessors keep native receivers;
+				// still tag with __slothletPath for ownership tracking.
+				if (isMapOrSetLike(value)) {
+					tagPathIfPossible(value, newPath);
+					return value;
+				}
 
 				// Check if this is an internal slothlet property (should not have hooks)
 				const isInternalProperty = currentPath === "" && ["hooks", "__ctx", "shutdown", "_impl"].includes(String(prop));

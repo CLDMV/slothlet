@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-09 19:52:57 -08:00 (1768017177)
+ *	@Last modified time: 2026-01-11 16:56:11 -08:00 (1768179371)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -37,7 +37,7 @@ export default defineConfig({
 		exclude: ["node_modules"],
 		environment: "node",
 		globals: true,
-		globalSetup: ["./tests/vitests/global-setup.mjs"],
+		globalSetup: ["./tests/vitests/setup/global-setup.mjs"],
 		nodeOptions: ["--conditions=slothlet-dev"],
 		env: {
 			NODE_ENV: "development"
