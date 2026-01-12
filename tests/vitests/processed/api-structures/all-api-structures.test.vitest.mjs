@@ -17,7 +17,7 @@ import { describe, it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../vitest-helper.mjs";
+import { getAllApiTestFoldersSync, getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 
 describe("All API Structures Validation", () => {
 	/**

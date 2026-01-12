@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'", ({ config }) => {
 	let api;
 

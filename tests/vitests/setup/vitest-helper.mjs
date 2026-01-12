@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Shared test config (parsed once per test run)
-const configPath = path.resolve(__dirname, "./processed/api/api-test-config.jsonc");
+const configPath = path.resolve(__dirname, "./api-test-config.jsonc");
 const configContent = await fs.readFile(configPath, "utf8");
 export const testConfig = parse(configContent);
 
@@ -27,12 +27,12 @@ export const testConfig = parse(configContent);
  * @type {object}
  */
 export const TEST_DIRS = {
-	API_TEST: path.resolve(__dirname, "../../api_tests/api_test"),
-	API_TEST_CJS: path.resolve(__dirname, "../../api_tests/api_test_cjs"),
-	API_TEST_MIXED: path.resolve(__dirname, "../../api_tests/api_test_mixed"),
-	API_TEST_COLLECTIONS: path.resolve(__dirname, "../../api_tests/api_test_collections"),
-	API_TEST_ROOT_ISSUE: path.resolve(__dirname, "../../api_tests/api_test_root_issue"),
-	SMART_FLATTEN: path.resolve(__dirname, "../../api_tests/smart_flatten")
+	API_TEST: path.resolve(__dirname, "../../../api_tests/api_test"),
+	API_TEST_CJS: path.resolve(__dirname, "../../../api_tests/api_test_cjs"),
+	API_TEST_MIXED: path.resolve(__dirname, "../../../api_tests/api_test_mixed"),
+	API_TEST_COLLECTIONS: path.resolve(__dirname, "../../../api_tests/api_test_collections"),
+	API_TEST_ROOT_ISSUE: path.resolve(__dirname, "../../../api_tests/api_test_root_issue"),
+	SMART_FLATTEN: path.resolve(__dirname, "../../../api_tests/smart_flatten")
 };
 
 /**
@@ -235,7 +235,7 @@ export function getAllApiTestFoldersSync() {
 	try {
 		// Resolve api_tests directory relative to project root
 		const currentFile = fileURLToPath(import.meta.url);
-		const projectRoot = path.resolve(path.dirname(currentFile), "../..");
+		const projectRoot = path.resolve(path.dirname(currentFile), "../../..");
 		const apiTestsDir = path.join(projectRoot, "api_tests");
 		const entries = readdirSync(apiTestsDir, { withFileTypes: true });
 

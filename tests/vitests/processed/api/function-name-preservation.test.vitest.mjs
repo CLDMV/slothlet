@@ -13,11 +13,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("Function Name Preservation", () => {
-	let api;
-
 	// Test for each matrix configuration
 	describe.each(getMatrixConfigs({}))("Config: '$name'", ({ config }) => {
 		let api;
@@ -39,16 +37,16 @@ describe("Function Name Preservation", () => {
 			}
 		});
 
-		test("should have root API as callable function", async () => {
+		it("should have root API as callable function", async () => {
 			expect(typeof api, `${config.mode}: Root API should be callable function`).toBe("function");
 		});
 
-		test("should preserve root function names correctly", async () => {
+		it("should preserve root function names correctly", async () => {
 			expect(api.rootFunctionShout?.name, `${config.mode}: rootFunctionShout should have correct name`).toBe("rootFunctionShout");
 			expect(api.rootFunctionWhisper?.name, `${config.mode}: rootFunctionWhisper should have correct name`).toBe("rootFunctionWhisper");
 		});
 
-		test("should preserve math function names after materialization", async () => {
+		it("should preserve math function names after materialization", async () => {
 			// For lazy mode, materialize functions first
 			if (config.mode === "lazy") {
 				await api.math.add(2, 3);
@@ -59,7 +57,7 @@ describe("Function Name Preservation", () => {
 			expect(api.math?.multiply?.name, `${config.mode}: math.multiply should have correct name`).toBe("multiply");
 		});
 
-		test("should use function name preference over sanitized filename", async () => {
+		it("should use function name preference over sanitized filename", async () => {
 			// For lazy mode, materialize function first
 			if (config.mode === "lazy") {
 				await api.task.autoIP();
@@ -69,7 +67,7 @@ describe("Function Name Preservation", () => {
 			expect(api.task?.autoIP?.name, `${config.mode}: task.autoIP should use function name preference`).toBe("autoIP");
 		});
 
-		test("should preserve multi-defaults function names", async () => {
+		it("should preserve multi-defaults function names", async () => {
 			// For lazy mode, materialize functions first
 			if (config.mode === "lazy") {
 				await api.multi_defaults.key("TEST");
@@ -82,7 +80,7 @@ describe("Function Name Preservation", () => {
 			expect(api.multi_defaults?.volume?.name, `${config.mode}: multi_defaults.volume should use function name`).toBe("volume");
 		});
 
-		test("should maintain function identity after multiple calls", async () => {
+		it("should maintain function identity after multiple calls", async () => {
 			// Test that function names remain stable after multiple invocations
 			if (config.mode === "lazy") {
 				await api.math.add(1, 2);

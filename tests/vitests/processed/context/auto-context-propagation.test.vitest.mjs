@@ -14,7 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import net from "node:net";
-import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("Auto Context Propagation", () => {
 	describe.each(getMatrixConfigs({}))("Config: '$name'", ({ name, config }) => {

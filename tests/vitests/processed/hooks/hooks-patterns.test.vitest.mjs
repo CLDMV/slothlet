@@ -36,7 +36,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import slothlet from "@cldmv/slothlet";
 
 /**

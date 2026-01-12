@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test each configuration in the matrix
 describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'", ({ config }) => {

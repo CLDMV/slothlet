@@ -699,16 +699,16 @@ All 12 tests now use proper TEST_DIRS constants and achieve 100% success rates a
 
 ---
 
-#### #18 `test-map-set-proxy-fix.mjs` → `processed/context/map-set-proxy-fix.test.vitest.mjs` ✅ FINALIZED (Async pass, Live bug documented)
+#### #18 `test-map-set-proxy-fix.mjs` → `processed/context/map-set-proxy-fix.test.vitest.mjs` ✅ FINALIZED (Live Map/Set receiver fix)
 
 - **Original Test Scenarios**: Map/Set proxy behavior validation (original covered lazy vs eager)
-- **Matrix Tests**: Async runtime: 1 scenario × 8 configs × 2 tests = 16; Live runtime: 1 scenario × 8 configs with expected failure assertions (known bug)
-- **Test Result**: 24 executed, 0 failed - 100% SUCCESS RATE with live-binding limitation asserted (npm run vitest -- tests/vitests/processed/context/map-set-proxy-fix.test.vitest.mjs on Jan 11, 2026)
-- **Matrix Filtering**: ✅ Uses getMatrixConfigs({ runtime: "async" }) for positive coverage; getMatrixConfigs({ runtime: "live" }) asserts current failure mode (`Method get Map.prototype.size called on incompatible receiver #<Map>` / Set.size)
-- **Status**: ✅ FINALIZED - Async runtime passes; live-binding proxy bug captured via explicit failing-behavior assertion
+- **Matrix Tests**: 1 scenario × 16 configs × 2 tests = 32 (full matrix, async + live)
+- **Test Result**: 32 executed, 0 failed - 100% SUCCESS RATE including live bindings (npm run vitest -- tests/vitests/processed/context/map-set-proxy-fix.test.vitest.mjs on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) unfiltered (full matrix)
+- **Status**: ✅ FINALIZED - Live-binding Map/Set receiver issue fixed in runtime-livebindings (skip proxying Map/Set values)
 - **Audit Notes**:
-  - ✅ Verifies Map size/has/get/keys/values/entries/forEach and Set size/has/iterators/forEach via slothlet proxy for async runtime
-  - ⚠️ Live-binding limitation documented via expected throws; revisit when runtime-live bindings support Map/Set accessors
+  - ✅ Verifies Map size/has/get/keys/values/entries/forEach and Set size/has/iterators/forEach via slothlet proxy across all runtimes
+  - ✅ Live-binding Map/Set accessor compatibility restored by bypassing wrapper proxy for Map/Set instances
   - ✅ Original node:test file archived to tests/rewritten/test-map-set-proxy-fix.mjs
 
 ---
