@@ -10,14 +10,14 @@ Migrating all tests to Vitest using matrix-based testing approach.
 
 - Root cause: EventEmitter ALS patch was being disabled during shutdown and not re-enabled per instance; wrapped listeners also failed to refresh active ALS for nested registrations.
 - Fix: Re-enable `enableAlsForEventEmitters` for each instance and restore previous active ALS after wrapped listener execution.
-- Result: `tests/vitests/processed/context/auto-context-propagation.test.vitest.mjs` now passes 16/16 matrix configs (full run on January 11, 2026).
+- Result: `tests/vitests/suites/context/auto-context-propagation.test.vitest.mjs` now passes 16/16 matrix configs (full run on January 11, 2026).
 
 ## ✅ Vitest process suite relocation (January 11, 2026)
 
 - Moved remaining `tests/vitests/process/*.test.vitest.mjs` files into their processed subfolders:
-  - add-api, addapi-path-resolution → `tests/vitests/processed/addapi/`
-  - function-name-preservation → `tests/vitests/processed/api/`
-  - hooks-always-error-context, hooks-comprehensive → `tests/vitests/processed/hooks/`
+  - add-api, addapi-path-resolution → `tests/vitests/suites/addapi/`
+  - function-name-preservation → `tests/vitests/suites/api/`
+  - hooks-always-error-context, hooks-comprehensive → `tests/vitests/suites/hooks/`
 - Updated module headers accordingly; relative imports remain unchanged.
 
 ### ✅ Core Hook System Fixes
@@ -131,10 +131,10 @@ api.hooks.on(
 
 - `tests/vitests/hooks-always-error-context.test.vitest.mjs` - ✅ FIXED: Removed unused skipMixed destructuring
 - `tests/vitests/hooks-comprehensive.test.vitest.mjs` - ✅ FIXED: Only destructure config parameter
-- `tests/vitests/processed/hooks/hooks-error-source.test.vitest.mjs` - ✅ COMPLETE: Fixed all destructuring patterns, matrix filtering, uses { hooks: true } (original archived in tests/rewritten/test-hooks-error-source.mjs)
-- `tests/vitests/processed/hooks/hooks-execution.test.vitest.mjs` - ✅ COMPLETE: 160/160 tests passing, ALL HOOKS FIXED (original archived in tests/rewritten/test-hooks-execution.mjs)
-- `tests/vitests/processed/hooks/hooks-internal-properties.test.vitest.mjs` - ✅ FIXED: Only destructure config parameter (original archived in tests/rewritten/test-hooks-internal-properties.mjs)
-- `tests/vitests/processed/hooks/hooks-debug.test.vitest.mjs` - ✅ FIXED: Only destructure config parameter
+- `tests/vitests/suites/hooks/hooks-error-source.test.vitest.mjs` - ✅ COMPLETE: Fixed all destructuring patterns, matrix filtering, uses { hooks: true } (original archived in tests/rewritten/test-hooks-error-source.mjs)
+- `tests/vitests/suites/hooks/hooks-execution.test.vitest.mjs` - ✅ COMPLETE: 160/160 tests passing, ALL HOOKS FIXED (original archived in tests/rewritten/test-hooks-execution.mjs)
+- `tests/vitests/suites/hooks/hooks-internal-properties.test.vitest.mjs` - ✅ FIXED: Only destructure config parameter (original archived in tests/rewritten/test-hooks-internal-properties.mjs)
+- `tests/vitests/suites/hooks/hooks-debug.test.vitest.mjs` - ✅ FIXED: Only destructure config parameter
 
 **Files with \_\_\_ variable abuse requiring immediate fixes:**
 
@@ -678,7 +678,7 @@ All tests now use proper TEST_DIRS constants and achieve 100% success rates acro
 
 - **Original Test Scenarios**: 21 (reload()/reloadApi(), addApi/removeApi tracking, reference/context preservation, hooks, and concurrency)
 - **Matrix Tests**: 14 scenarios × 16 hot-reload configs = 224 (base + mixed API dirs); hooks preservation: 1 scenario × 8 hook-enabled configs = 8; targeted error/concurrency checks: 5 tests
-- **Test Result**: 237 executed, 0 failed - 100% SUCCESS RATE (npm run vitest -- tests/vitests/processed/hot-reload/hot-reload.test.vitest.mjs on Jan 11, 2026)
+- **Test Result**: 237 executed, 0 failed - 100% SUCCESS RATE (npm run vitest -- tests/vitests/suites/hot-reload/hot-reload.test.vitest.mjs on Jan 11, 2026)
 - **Matrix Filtering**: ✅ Uses getMatrixConfigs({ hotReload: true }) with base-dir variants; hooks test uses getMatrixConfigs({ hotReload: true, hooks: true })
 - **Status**: ✅ FINALIZED - Reload lifecycle, addApi/removeApi ownership tracking, context/reference preservation, nested reloads, and concurrent reload safety validated across hot reload configurations
 - **Audit Notes**:
@@ -693,7 +693,7 @@ All tests now use proper TEST_DIRS constants and achieve 100% success rates acro
 
 - **Original Test Scenarios**: Listener registration and cleanup across 8 manual configs
 - **Matrix Tests**: 1 scenario × 16 configs (full matrix)
-- **Test Result**: 16 executed, 0 failed - 100% SUCCESS RATE (npm run vitest -- tests/vitests/processed/listener-cleanup/listener-cleanup.test.vitest.mjs on Jan 11, 2026)
+- **Test Result**: 16 executed, 0 failed - 100% SUCCESS RATE (npm run vitest -- tests/vitests/suites/listener-cleanup/listener-cleanup.test.vitest.mjs on Jan 11, 2026)
 - **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) with TEST_DIRS.API_TEST
 - **Status**: ✅ FINALIZED - Verifies EventEmitter listeners and sample hooks are cleaned on shutdown across all modes/runtime/hook/hotReload combos
 - **Audit Notes**:
@@ -707,7 +707,7 @@ All tests now use proper TEST_DIRS constants and achieve 100% success rates acro
 
 - **Original Test Scenarios**: Map/Set proxy behavior validation (original covered lazy vs eager)
 - **Matrix Tests**: 1 scenario × 16 configs × 2 tests = 32 (full matrix, async + live)
-- **Test Result**: 32 executed, 0 failed - 100% SUCCESS RATE including live bindings (npm run vitest -- tests/vitests/processed/context/map-set-proxy-fix.test.vitest.mjs on Jan 11, 2026)
+- **Test Result**: 32 executed, 0 failed - 100% SUCCESS RATE including live bindings (npm run vitest -- tests/vitests/suites/context/map-set-proxy-fix.test.vitest.mjs on Jan 11, 2026)
 - **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) unfiltered (full matrix)
 - **Status**: ✅ FINALIZED - Live-binding Map/Set receiver issue fixed in runtime-livebindings (skip proxying Map/Set values)
 - **Audit Notes**:
@@ -721,7 +721,7 @@ All tests now use proper TEST_DIRS constants and achieve 100% success rates acro
 
 - **Original Test Scenarios**: Simple diagnostic test for api_test_mixed structure
 - **Matrix Tests**: 6 scenarios × 8 configs (hotReload:true only) = 48 tests
-- **Test Result**: 48 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit -- tests/vitests/processed/diagnostics/mixed-diagnostic.test.vitest.mjs on Jan 11, 2026)
+- **Test Result**: 48 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit -- tests/vitests/suites/diagnostics/mixed-diagnostic.test.vitest.mjs on Jan 11, 2026)
 - **Matrix Filtering**: ✅ Uses getMatrixConfigs({ hotReload: true }) with TEST_DIRS.API_TEST_MIXED
 - **Status**: ✅ FINALIZED - Verifies API structure (mathEsm, mathCjs), reload() availability and functionality
 - **Audit Notes**:
@@ -899,7 +899,7 @@ All tests now use proper TEST_DIRS constants and achieve 100% success rates acro
 
 - Split high-heap Vitest suites into smaller files grouped by scenario to reduce memory pressure and make reruns targeted: hooks-comprehensive, add-api, addapi-path-resolution, metadata-api, hooks-execution, hooks-patterns, hooks-internal-properties.
 - Standardize lifecycle hooks on beforeEach/afterEach where feasible; process suites add-api and addapi-path-resolution now follow the shared setup/teardown pattern.
-- Refresh tracker totals after each relocation; process suites now live under tests/vitests/processed/\* subfolders.
+- Refresh tracker totals after each relocation; process suites now live under tests/vitests/suites/\* subfolders.
 
 ---
 
