@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-06 17:27:53 -08:00 (1767749273)
+ *	@Last modified time: 2026-01-12 21:14:46 -08:00 (1768281286)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -914,10 +914,12 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 				if (mutateExisting) {
 					// Preserve references: recursively update nested objects, delete removed props, add new ones
-					console.log(
-						`[slothlet] Mutating existing object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
-							`clearing and copying new properties to preserve references.`
-					);
+					if (process.env.DEBUG_API_BUILDER === "1" || process.env.DEBUG_API_BUILDER === "true") {
+						console.log(
+							`[slothlet] Mutating existing object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+								`clearing and copying new properties to preserve references.`
+						);
+					}
 
 					// Determine if we should skip property deletion
 					let skipDeletion = true; // Default to safe behavior
@@ -962,12 +964,12 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 				if (mutateExisting) {
 					// Preserve references: recursively update nested objects, delete removed props, add new ones
-					console.log(
-						`[slothlet] Mutating existing function at API path "${normalizedApiPath}" final key "${finalKey}": ` +
-							`updating properties to preserve references.`
-					);
-
-					// Use unified recursive mutation helper
+					if (process.env.DEBUG_API_BUILDER === "1" || process.env.DEBUG_API_BUILDER === "true") {
+						console.log(
+							`[slothlet] Mutating existing function at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+								`updating properties to preserve references.`
+						);
+					}
 					await recursivelyMutateWithLazyPreservation(existing, newModules, {
 						instance,
 						skipDeletion: false
@@ -1040,10 +1042,12 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 					);
 					// Don't return - continue to merge properties onto function
 				}
-				console.log(
-					`[slothlet] Creating callable object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
-						`merging object properties onto existing function for shared module ownership.`
-				);
+				if (process.env.DEBUG_API_BUILDER === "1" || process.env.DEBUG_API_BUILDER === "true") {
+					console.log(
+						`[slothlet] Creating callable object at API path "${normalizedApiPath}" final key "${finalKey}": ` +
+							`merging object properties onto existing function for shared module ownership.`
+					);
+				}
 				// Continue to merge - properties will be added to the function below
 			} else if (existing !== null && typeof existing !== "object") {
 				throw new Error(
@@ -1056,10 +1060,12 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			const existingBound = currentBoundTarget[finalKey];
 			if (existingBound !== null && typeof existingBound === "function") {
 				// Same handling for bound target
-				console.log(
-					`[slothlet] Creating callable object in bound API at "${normalizedApiPath}" final key "${finalKey}": ` +
-						`merging object properties onto existing function.`
-				);
+				if (process.env.DEBUG_API_BUILDER === "1" || process.env.DEBUG_API_BUILDER === "true") {
+					console.log(
+						`[slothlet] Creating callable object in bound API at "${normalizedApiPath}" final key "${finalKey}": ` +
+							`merging object properties onto existing function.`
+					);
+				}
 			} else if (existingBound !== null && typeof existingBound !== "object") {
 				throw new Error(
 					`[slothlet] Cannot merge bound API at "${normalizedApiPath}": ` +

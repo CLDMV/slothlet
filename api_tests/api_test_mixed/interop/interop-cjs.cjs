@@ -77,17 +77,25 @@ const interopCjs =
 		 * console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 		 */
 		async testCrossCall(a, b) {
-			console.log("CJS Interop: Testing cross-module calls");
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log("CJS Interop: Testing cross-module calls");
+			}
 
 			// console.log(self);
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			// Try to call ESM math via self reference
 			if (self && self.mathEsm && typeof self.mathEsm.add === "function") {
-				console.log("CJS -> ESM call via self reference");
+				if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+					console.log("CJS -> ESM call via self reference");
+				}
 				const result = self.mathEsm.add(a, b);
-				console.log(`CJS received from ESM: ${result}`);
+				if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+					console.log(`CJS received from ESM: ${result}`);
+				}
 				return result;
 			} else {
 				throw new Error("ESM mathEsm.add not available via self");

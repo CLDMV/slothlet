@@ -86,7 +86,7 @@ export async function powerOffAll() {
  * @returns {Promise<Object>} TV status
  */
 export async function getStatus(tvId) {
-	console.log(`Mock: Getting status for TV ${tvId}`);
+	if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") console.log(`Mock: Getting status for TV ${tvId}`);
 	return {
 		tvId,
 		power: "on",
@@ -113,11 +113,13 @@ const LGTVControllers = new Proxy(
 	{},
 	{
 		get(target, prop) {
-			console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+				console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
 
 			// ✅ FIRST: Check if property exists on target (Slothlet-attached named exports)
 			if (prop in target) {
-				console.log(`📋 Found property "${String(prop)}" in target`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`📋 Found property "${String(prop)}" in target`);
 				return target[prop];
 			}
 
@@ -126,18 +128,20 @@ const LGTVControllers = new Proxy(
 			if (typeof prop === "string" && /^\d+$/.test(prop)) {
 				const index = parseInt(prop);
 				const tvId = `tv${index + 1}`; // Convert 0->tv1, 1->tv2, etc.
-				console.log(`🎯 Creating TVController for index ${index} → ${tvId}`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`🎯 Creating TVController for index ${index} → ${tvId}`);
 				return getTVController(tvId);
 			}
 
 			// Handle direct TV IDs (tv1, tv2, etc.)
 			if (typeof prop === "string" && prop.startsWith("tv")) {
-				console.log(`🎯 Creating TVController for TV ID: ${prop}`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`🎯 Creating TVController for TV ID: ${prop}`);
 				return getTVController(prop);
 			}
 
 			// Return undefined for invalid properties
-			console.log(`❓ Property "${String(prop)}" not found`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true") console.log(`❓ Property "${String(prop)}" not found`);
 			return undefined;
 		}
 	}

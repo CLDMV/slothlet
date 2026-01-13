@@ -42,10 +42,21 @@ function detectRuntimeType(preferredInstanceId) {
 function getAsyncRuntime(ctx) {
 	const preferredId = ctx?.instanceId || detectCurrentInstanceId() || "slothlet_async_default";
 	if (asyncRuntimeCache.has(preferredId)) return asyncRuntimeCache.get(preferredId);
-	const runtimeFactory = asyncRuntimeModule.createAsyncRuntime || ((params) => asyncRuntimeModule);
+	const runtimeFactory = asyncRuntimeModule.createAsyncRuntime || ((___params) => asyncRuntimeModule);
 	const runtimeInstance = runtimeFactory({ instanceId: preferredId, als: ctx?.als });
 	asyncRuntimeCache.set(preferredId, runtimeInstance);
 	return runtimeInstance;
+}
+
+/**
+ * Clean up cached runtime for an instance.
+ * @param {string} instanceId - Instance ID to clean up
+ * @package
+ */
+function cleanupRuntimeCache(instanceId) {
+	if (asyncRuntimeCache.has(instanceId)) {
+		asyncRuntimeCache.delete(instanceId);
+	}
 }
 
 // Get the appropriate runtime based on instance configuration
@@ -250,3 +261,25 @@ export const metadataAPI = new Proxy(
 		}
 	}
 );
+
+/**
+ * Clean up runtime cache for an instance (exported for cleanup)
+ * @param {string} instanceId - Instance ID to clean up
+ * @package
+ */
+export function cleanup(instanceId) {
+	// First, cleanup the runtime-specific resources (AsyncLocalStorage.disable(), etc.)
+	const cachedRuntime = asyncRuntimeCache.get(instanceId);
+	if (cachedRuntime && typeof cachedRuntime.cleanup === "function") {
+		cachedRuntime.cleanup();
+	}
+
+	// Also call live bindings cleanup if this is a live runtime
+	const runtimeType = detectRuntimeType(instanceId);
+	if (runtimeType === "live" && typeof liveBindingsRuntime.cleanup === "function") {
+		liveBindingsRuntime.cleanup(instanceId);
+	}
+
+	// Finally, clean up the cache entry
+	cleanupRuntimeCache(instanceId);
+}

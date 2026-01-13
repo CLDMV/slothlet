@@ -34,7 +34,8 @@ const LGTVControllers = new Proxy(
 	{},
 	{
 		get(target, prop) {
-			console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+				console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
 			// Handle numeric indices (0, 1, 2, 3 -> tv1, tv2, tv3, tv4)
 			if (typeof prop === "string" && /^\d+$/.test(prop)) {
 				const index = parseInt(prop);
@@ -53,7 +54,8 @@ const LGTVControllers = new Proxy(
 	}
 );
 
-console.log("🏗️ LGTVControllers proxy created during module initialization");
+if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+	console.log("🏗️ LGTVControllers proxy created during module initialization");
 
 /**
  * Default export of LGTVControllers proxy for pure proxy testing.

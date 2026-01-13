@@ -70,12 +70,16 @@ const mathCjs =
 		 * console.log(await api_test_mixed.mathCjs.multiply(2, 3)); // 6
 		 */
 		async multiply(a, b) {
-			console.log(`CJS Math: Multiplying ${a} * ${b}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Math: Multiplying ${a} * ${b}`);
+			}
 
 			// Get live bindings from runtime
 			const { context } = await import("@cldmv/slothlet/runtime");
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			return a * b;
 		},
@@ -114,12 +118,16 @@ const mathCjs =
 		 * console.log(await api_test_mixed.mathCjs.divide(10, 2)); // 5
 		 */
 		async divide(a, b) {
-			console.log(`CJS Math: Dividing ${a} / ${b}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Math: Dividing ${a} / ${b}`);
+			}
 
 			// Get live bindings from runtime
 			const { context } = await import("@cldmv/slothlet/runtime");
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			if (b === 0) throw new Error("Division by zero");
 			return a / b;

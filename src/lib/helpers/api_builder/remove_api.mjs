@@ -164,7 +164,9 @@ export async function removeApiByModuleId(instance, moduleId) {
 	}
 
 	if (!instance.config.hotReload) {
-		console.warn(`[slothlet] removeApi: hotReload is disabled. Module ID-based removal requires hotReload: true`);
+		if (process.env.DEBUG_API_BUILDER === "1" || process.env.DEBUG_API_BUILDER === "true") {
+			console.warn(`[slothlet] removeApi: hotReload is disabled. Module ID-based removal requires hotReload: true`);
+		}
 		return false;
 	}
 
