@@ -176,7 +176,7 @@
 		"shx": "^0.4.0",
 		"typescript": "^5.9.2",
 		"vest": "^5.4.6",
-		"vitest": "^3.2.4"
+		"vitest": "^4.0.17"
 	},
 	"repository": {
 		"type": "git",

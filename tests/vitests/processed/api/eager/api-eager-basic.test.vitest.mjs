@@ -1,6 +1,20 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/processed/api/eager/api-eager-basic.test.vitest.mjs
+ *	@Date: 2026-01-12 18:04:38 -08:00 (1768269878)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-12 18:11:33 -08:00 (1768270293)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { callNestedFunction, testConfig, getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { callNestedFunction, testConfig, getMatrixConfigs, TEST_DIRS } from "../../../setup/vitest-helper.mjs";
 
 /**
  * Mock MD5 function for testing reference functionality
@@ -11,13 +25,14 @@ function mockMd5(input) {
 	return "mock-md5-hash-" + input.length;
 }
 
-const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
+// Only EAGER config (no hooks, no hot, no live)
+const matrixConfigs = getMatrixConfigs({ mode: "eager", hooks: false, hotReload: false, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
-describe("API (lazy)", () => {
+describe("API (eager-basic)", () => {
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
 		let api;
-		const isLazy = true;
+		const isLazy = config.mode === "lazy";
 
 		beforeEach(async () => {
 			api = await slothlet({

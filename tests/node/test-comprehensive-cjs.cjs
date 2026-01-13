@@ -24,7 +24,20 @@ const slothlet = require("@cldmv/slothlet");
 
 const CJS_API_DIR = "../../api_tests/api_test_cjs";
 const MIXED_API_DIR = "../../api_tests/api_test_mixed";
-const NON_API_KEYS = new Set(["describe", "shutdown"]);
+const NON_API_KEYS = new Set([
+	"shutdown",
+	"addApi",
+	"removeApi",
+	"reload",
+	"reloadApi",
+	"run",
+	"scope",
+	"instanceId",
+	"context",
+	"reference",
+	"hooks",
+	"describe"
+]);
 
 /**
  * @function getApiContext

@@ -18,8 +18,9 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("Stack Trace Path Resolution", () => {
-	// addApi works on all configurations, no filtering needed
-	const matrixConfigs = getMatrixConfigs({});
+	// Stack trace path resolution is independent of most config options
+	// Test with minimal matrix: both modes, no hooks/hotReload needed
+	const matrixConfigs = getMatrixConfigs({ hotReload: false, hooks: false });
 
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
 		let api;

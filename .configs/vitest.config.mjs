@@ -6,16 +6,25 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-11 16:56:11 -08:00 (1768179371)
+ *	@Last modified time: 2026-01-12 16:35:24 -08:00 (1768264524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { defineConfig } from "vitest/config";
+import { DefaultReporter } from "vitest/reporters";
+
+export class CustomReporter extends DefaultReporter {
+	onPathsCollected(paths) {
+		super.onPathsCollected(paths);
+
+		this.renderSucceed = false;
+	}
+}
 
 export default defineConfig({
-	// pool: "forks",
-	pool: "threads",
+	pool: "forks",
+	// pool: "threads",
 	resolve: {
 		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
 		conditions: [
@@ -43,9 +52,16 @@ export default defineConfig({
 			NODE_ENV: "development"
 		},
 		testTimeout: 10000,
-		reporters: ["verbose"],
-		logHeapUsage: false,
+		// reporters: [new CustomReporter()],
+		reporters: [["default", { summary: false }]],
+		logHeapUsage: true,
+		// pool: "forks",
+		// poolOptions: {
+		// 	forks: {
+		// 		singleFork: false
+		// 	}
+		// },
 
-		silent: "passed-only"
+		silent: false
 	}
 });

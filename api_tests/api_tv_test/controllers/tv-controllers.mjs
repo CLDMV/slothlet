@@ -47,7 +47,8 @@ const SubfolderControllers = new Proxy(
 	{},
 	{
 		get(target, prop) {
-			console.log(`🔍 Subfolder Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+				console.log(`🔍 Subfolder Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
 
 			// First check if the property exists on the target (for attached named exports)
 			if (prop in target) {
@@ -72,7 +73,8 @@ const SubfolderControllers = new Proxy(
 	}
 );
 
-console.log("🏗️ SubfolderControllers proxy created during module initialization");
+if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+	console.log("🏗️ SubfolderControllers proxy created during module initialization");
 
 /**
  * Default export of SubfolderControllers proxy.

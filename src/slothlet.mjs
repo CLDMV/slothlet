@@ -141,6 +141,7 @@ import {
 	enableAlsForEventEmitters
 } from "@cldmv/slothlet/helpers/als-eventemitter";
 import { HookManager } from "@cldmv/slothlet/helpers/hooks";
+import { cleanup as cleanupRuntimeCache } from "@cldmv/slothlet/runtime";
 
 // import { wrapCjsFunction, createCjsModuleProxy, isCjsModule, setGlobalCjsInstanceId } from "@cldmv/slothlet/helpers/cjs-integration";
 
@@ -1444,6 +1445,8 @@ const slothletObject = {
 		if (this.runtime && typeof this.runtime.cleanup === "function" && oldInstanceId) {
 			try {
 				this.runtime.cleanup(oldInstanceId);
+				// Also clean up runtime cache
+				cleanupRuntimeCache(oldInstanceId);
 			} catch (cleanupError) {
 				if (this.config.debug) {
 					console.warn("[slothlet] Warning: Runtime cleanup during reload failed:", cleanupError.message);
@@ -1832,6 +1835,8 @@ const slothletObject = {
 				if (this.runtime && typeof this.runtime.cleanup === "function") {
 					try {
 						this.runtime.cleanup(this.instanceId);
+						// Also clean up runtime cache
+						cleanupRuntimeCache(this.instanceId);
 					} catch (cleanupError) {
 						console.warn("[slothlet] Warning: Runtime cleanup failed:", cleanupError.message);
 					}

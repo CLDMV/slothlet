@@ -171,13 +171,6 @@ describe("addApi Functionality", () => {
 		 * Requires hotReload for moduleId tracking
 		 */
 		it("should handle cross-module ownership based on config", async () => {
-			// Initialize slothlet with a base API directory first
-			const fullConfig = {
-				...config,
-				dir: TEST_DIRS.API_TEST // Base API to load first
-			};
-			api = await slothlet(fullConfig);
-
 			// Build addApi options based on config capabilities
 			const addApiOptions = { moduleId: "original-module" };
 			if (config.hotReload) {
