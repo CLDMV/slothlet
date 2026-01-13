@@ -32,6 +32,7 @@ export const TEST_DIRS = {
 	API_TEST_MIXED: path.resolve(__dirname, "../../../api_tests/api_test_mixed"),
 	API_TEST_COLLECTIONS: path.resolve(__dirname, "../../../api_tests/api_test_collections"),
 	API_TEST_ROOT_ISSUE: path.resolve(__dirname, "../../../api_tests/api_test_root_issue"),
+	API_TV_TEST: path.resolve(__dirname, "../../../api_tests/api_tv_test"),
 	SMART_FLATTEN: path.resolve(__dirname, "../../../api_tests/smart_flatten")
 };
 
@@ -171,6 +172,21 @@ export function getMatrixConfigs(requirements = {}) {
 
 		return true;
 	});
+}
+
+/**
+ * Run a test function with an existing API instance.
+ * Used for testing scenarios where functions are called from different files/contexts.
+ * @param {object} api - Slothlet API instance
+ * @param {Function} testFunction - Test function to run with the API
+ * @returns {Promise<void>}
+ * @example
+ * await runTestWithApi(api, async (api) => {
+ *   await api.addApi("test", "./path");
+ * });
+ */
+export async function runTestWithApi(api, testFunction) {
+	await testFunction(api);
 }
 
 /**

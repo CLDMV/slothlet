@@ -81,7 +81,7 @@ describe("addApi Path Resolution", () => {
 		 */
 		it("should resolve paths correctly through imported helper", async () => {
 			// Import dynamically to test resolution
-			const { runTestWithApi } = await import("../../../test-helper.mjs");
+			const { runTestWithApi } = await import("../../setup/vitest-helper.mjs");
 			await runTestWithApi(api, async (api) => {
 				await api.addApi("imported.helper", "../../../../api_tests/api_test", {}, {});
 			});
@@ -142,10 +142,10 @@ describe("addApi Path Resolution", () => {
 		});
 
 		/**
-		 * Test 9: Chain through test-helper.mjs then nested helper
+		 * Test 9: Chain through vitest-helper.mjs then nested helper
 		 */
 		it("should resolve paths correctly through chained helpers", async () => {
-			const { runTestWithApi } = await import("../../../test-helper.mjs");
+			const { runTestWithApi } = await import("../../setup/vitest-helper.mjs");
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await runTestWithApi(api, async (api) => {
 				await executeWithApi(api, async (api) => {

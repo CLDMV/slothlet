@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-08 16:08:38 -08:00 (1767917318)
+ *	@Last modified time: 2026-01-12 19:08:37 -08:00 (1768273717)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -326,7 +326,11 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 
 		// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
 		if (!ctx.hookManager?.enabled || !path) {
-			if (process.env.NODE_ENV === "development" && fn.__slothletPath !== undefined && typeof fn.__slothletPath !== "string") {
+			if (
+				(process.env.DEBUG_RUNTIME === "1" || process.env.DEBUG_RUNTIME === "true") &&
+				fn.__slothletPath !== undefined &&
+				typeof fn.__slothletPath !== "string"
+			) {
 				console.log(`[DEBUG] livebindings runtime: __slothletPath is not a string; skipping hooks`, {
 					pathType: typeof fn.__slothletPath,
 					fnName: fn.name || "anonymous",

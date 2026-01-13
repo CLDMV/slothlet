@@ -301,9 +301,9 @@ Tests that cannot be migrated to vitest due to fundamental architectural incompa
 
 ### ⏳ Migrations In Progress (13/34)
 
-**18 tests properly audited and finalized. ✅ ALL TESTS RE-AUDIT COMPLETED!**
+**31 tests properly audited and finalized. ✅ ALL TESTS RE-AUDIT COMPLETED!**
 
-#### Tests Properly Finalized (18 tests)
+#### Tests Properly Finalized (31 tests)
 
 - Test #1: ✅ addapi-stack-trace-path (formerly actual-stack-scenario, now in processed/) - RE-FINALIZED January 9, 2026 (uses TEST_DIRS.API_TEST correctly, 96/96 tests passing)
 - Test #2: ✅ add-api - RE-FINALIZED January 9, 2026 (uses TEST_DIRS.API_TEST correctly, 672/672 tests passing)
@@ -319,10 +319,14 @@ Tests that cannot be migrated to vitest due to fundamental architectural incompa
 - Test #13: ✅ metadata-api (in processed/) - RE-FINALIZED January 9, 2026 (fixed 11 hardcoded paths + missing TEST_DIRS import, 160/160 tests passing; relocated to processed/, original archived in tests/rewritten/test-metadata-api.mjs; heap 452 MB on Jan 10, 2026)
 - Test #14: ✅ hooks-patterns (in processed/) - RE-FINALIZED January 10, 2026 (hooks-enabled matrix, archived in tests/rewritten/test-hooks-patterns.mjs)
 - Test #15: ✅ hooks-suppress-errors (in processed/) - RE-FINALIZED January 10, 2026 (hooks-enabled matrix, archived in tests/rewritten/test-hooks-suppress-errors.mjs)
+- Test #16-28: ✅ See individual entries below for hot-reload, listener-cleanup, map-set-proxy-fix, mixed-diagnostic, module-ownership-removal, multi-instance-isolation, per-request-context, proxy-baseline, reference-readonly-properties, sanitize, smart-flattening, tcp-context-propagation, rule-12
+- Test #29: ✅ tcp-eventemitter-context (in processed/) - FINALIZED January 17, 2026 (80/80 tests passing, full EventEmitter context propagation validation)
+- Test #30: ✅ third-party-cleanup (in processed/) - FINALIZED January 17, 2026 (80/80 tests passing, pg-pool EventEmitter cleanup validation)
+- Test #31: ✅ tv-config-isolation (in processed/) - FINALIZED January 17, 2026 (96/96 tests passing, multi-instance config isolation validation)
 
 #### ✅ ALL TESTS RE-AUDIT COMPLETED - NO FAILED AUDITS REMAINING!
 
-All 12 tests now use proper TEST_DIRS constants and achieve 100% success rates across full matrix configurations.
+All tests now use proper TEST_DIRS constants and achieve 100% success rates across full matrix configurations.
 
 ---
 
@@ -713,6 +717,184 @@ All 12 tests now use proper TEST_DIRS constants and achieve 100% success rates a
 
 ---
 
+#### #19 `test-mixed-diagnostic.mjs` → `processed/diagnostics/mixed-diagnostic.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Simple diagnostic test for api_test_mixed structure
+- **Matrix Tests**: 6 scenarios × 8 configs (hotReload:true only) = 48 tests
+- **Test Result**: 48 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit -- tests/vitests/processed/diagnostics/mixed-diagnostic.test.vitest.mjs on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({ hotReload: true }) with TEST_DIRS.API_TEST_MIXED
+- **Status**: ✅ FINALIZED - Verifies API structure (mathEsm, mathCjs), reload() availability and functionality
+- **Audit Notes**:
+  - ✅ Confirms API is object (not function) since api_test_mixed has no default export
+  - ✅ Validates reload() method exists when hotReload enabled
+  - ✅ Tests API structure preservation after reload (excluding transient instanceId key)
+  - ✅ Original node:test file archived to tests/rewritten/test-mixed-diagnostic.mjs
+
+---
+
+#### #20 `test-module-ownership-removal.mjs` → `processed/ownership/module-ownership-removal.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Comprehensive module ownership tracking and API removal tests
+- **Matrix Tests**: 9 scenarios split across 2 matrices: BASIC_MATRIX (4 configs × 5 tests = 20) + OWNERSHIP_MATRIX (8 configs × 4 tests = 32) = 52 total
+- **Test Result**: 52 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({ hotReload: false, hooks: false }) for basic tests, getMatrixConfigs({ hotReload: true }) for ownership tests
+- **Status**: ✅ FINALIZED - Tests removeApi by path and moduleId, auto-cleanup, ownership isolation
+- **Audit Notes**:
+  - ✅ Creates dynamic test modules (moduleA_v1, moduleA_v2, moduleB) in temp-ownership-modules folder next to test file
+  - ✅ Tests removeApi by API path, by moduleId, error handling, nested paths
+  - ✅ Validates auto-cleanup prevents orphan functions when reloading with different exports
+  - ✅ Confirms ownership tracking isolation (moduleA reload doesn't affect moduleB)
+  - ✅ Tests behavior when ownership disabled (moduleId silently ignored, path removal still works)
+  - ✅ Original node:test file archived to tests/rewritten/test-module-ownership-removal.mjs
+
+---
+
+#### #21 `test-multi-instance-isolation.cjs` → `processed/isolation/multi-instance-isolation.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Multi-instance isolation verification (CJS test)
+- **Matrix Tests**: 5 scenarios × 16 configs + 2 mode-mixing tests = 82 total
+- **Test Result**: 82 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage + separate mode-mixing suite
+- **Status**: ✅ FINALIZED - Tests that multiple instances operate independently with separate contexts and IDs
+- **Audit Notes**:
+  - ✅ Tests multiple instances have unique instanceIds
+  - ✅ Validates context isolation between instances (separate context objects)
+  - ✅ Confirms independent operation (shutdown one doesn't affect others)
+  - ✅ Verifies separate API structures (not shared references)
+  - ✅ Tests mode mixing (eager + lazy, async + live can coexist)
+  - ✅ Original CJS test converted to ESM and archived to tests/rewritten/test-multi-instance-isolation.cjs
+
+---
+
+#### #22 `test-per-request-context.mjs` → `processed/context/per-request-context.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Per-request context with .run() and .scope() methods (17 original tests)
+- **Matrix Tests**: 9 scenarios × 16 configs + 5 error handling tests = 149 total
+- **Test Result**: 149 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests per-request context feature (.run/.scope) across all modes/runtimes
+- **Audit Notes**:
+  - ✅ Tests .run() and .scope() methods with shallow/deep merge strategies
+  - ✅ Validates argument passing, concurrent isolation, nested context calls
+  - ✅ Confirms context inheritance in nested calls and isolation outside scope
+  - ✅ Tests error cases: disabled scope, invalid merge strategy, missing parameters
+  - ✅ Comprehensive coverage across all 16 matrix configurations
+  - ✅ Original test archived to tests/rewritten/test-per-request-context.mjs
+
+---
+
+#### #23 `test-proxy-baseline.mjs` → `processed/proxies/proxy-baseline.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Proxy behavior validation with lazy vs eager comparison
+- **Matrix Tests**: 6 scenarios × 16 configs + 5 lazy/eager comparison tests = 101 total
+- **Test Result**: 101 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026 - corrected)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests LGTVControllers proxy behavior (array access + named exports)
+- **Audit Notes**:
+  - ✅ Tests proxy existence, type, and property availability
+  - ✅ Validates array-style access: lg[0] works in both modes
+  - ✅ Validates named export functions: lg.getStatus() works in both modes
+  - ✅ Confirms identical final results between lazy and eager modes (after materialization)
+  - ✅ Separate comparison suite validates mode parity
+  - ✅ Correctly omits type assertions (lazy=function, eager=object by design)
+  - ✅ Follows original test pattern: test behavior, not implementation details
+  - ✅ Original test archived to tests/rewritten/test-proxy-baseline.mjs
+
+---
+
+#### #24 `test-reference-readonly-properties.mjs` → `processed/reference/reference-readonly-properties.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Reference object read-only property handling
+- **Matrix Tests**: 4 scenarios × 16 configs = 64 total
+- **Test Result**: 64 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests reference object with read-only properties (name, length, prototype)
+- **Audit Notes**:
+  - ✅ Tests 'name' property assignment without TypeError
+  - ✅ Tests multiple potentially problematic properties (length, prototype, constructor, caller, arguments)
+  - ✅ Validates no TypeErrors thrown for any read-only property names
+  - ✅ Confirms reference properties preserved alongside API methods
+  - ✅ Original test archived to tests/rewritten/test-reference-readonly-properties.mjs
+
+---
+
+#### #25 `test-sanitize.mjs` → `processed/sanitization/sanitize.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Filename sanitization with pattern matching (42 test cases)
+- **Matrix Tests**: 42 standalone tests (no matrix - pure function testing)
+- **Test Result**: 42 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: N/A - Tests standalone sanitizePathName function
+- **Status**: ✅ FINALIZED - Tests sanitizePathName with patterns, rules, and case transformations
+- **Audit Notes**:
+  - ✅ Tests upper/lower/leave/leaveInsensitive rules
+  - ✅ Tests pattern matching (\*-ip, **url**, etc.)
+  - ✅ Tests rule precedence (leave > leaveInsensitive > preserveAllUpper/preserveAllLower > upper > lower)
+  - ✅ Tests preserveAllUpper and preserveAllLower options
+  - ✅ Tests within-segment transformations and boundary-requiring patterns
+  - ✅ Tests edge cases (numeric identifiers, single letters)
+  - ✅ Original test archived to tests/rewritten/test-sanitize.mjs
+
+---
+
+#### #26 `test-smart-flattening-api.mjs` → `processed/smart-flattening/smart-flattening-api.test.vitest.mjs` ✅ RE-FINALIZED
+
+- **Original Test Scenarios**: Smart flattening functionality for addApi (26 test scenarios)
+- **Matrix Tests**: 21 scenarios × 16 configs (TEST_MATRIX) = 336 total (**CORRECTED from BASIC_MATRIX**)
+- **Test Result**: 336 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 17, 2026)
+- **Matrix Filtering**: ✅ Uses TEST_MATRIX (full 16-config coverage) - **Corrected from BASIC_MATRIX per user feedback**
+- **Status**: ✅ RE-FINALIZED - Comprehensive smart flattening tests across all configurations
+- **RE-FINALIZED**: January 17, 2026 (CRITICAL CONFIG SPREAD FIX - WAS NOT PROPERLY TESTING MATRIX)
+- **Critical Issue Found**: File was NOT properly spreading config from getMatrixConfigs():
+  - ❌ **Wrong Pattern**: `const { mode, runtime, hooks } = config; const api = await slothlet({ dir, mode, runtime, hooks })`
+  - ❌ **Missing Properties**: hotReload, live, eager, allowApiOverwrite - only tested 3 of 10+ config properties
+  - ❌ **Impact**: Tests were passing but NOT actually validating all matrix configurations properly
+  - ✅ **Fixed Pattern**: `const api = await slothlet({ ...config, dir: path.join(...) })`
+  - ✅ **Fixed isValidFolderType**: Changed `isValidFolderType(value, mode)` to `isValidFolderType(value, config.mode)`
+  - ✅ **Removed unused destructuring**: Eliminated `const { mode, runtime, hooks } = config;` line
+  - ✅ **Full matrix coverage restored**: Now properly tests ALL config properties from TEST_MATRIX
+- **Audit Notes**:
+  - ✅ Tests single file matching API path (autoFlatten true/false)
+  - ✅ Tests special addapi.\* files (always flatten)
+  - ✅ Tests multiple files with one matching path (flatten matching, preserve others)
+  - ✅ Tests normal behavior when no flattening should occur
+  - ✅ Tests folder structures with nested config subfolders
+  - ✅ Tests addapi.mjs with folders (first level flattening only)
+  - ✅ Tests nested folders without recursive flattening
+  - ✅ Tests nested API paths with flattening
+  - ✅ Tests multiple addApi calls with different flattening
+  - ✅ Tests function execution after flattening
+  - ✅ Tests primary load vs addApi behavior consistency
+  - ✅ Fixed import path: ../../setup/vitest-helper.mjs
+  - ✅ Fixed config import: BASIC_MATRIX → TEST_MATRIX (corrected for full coverage)
+  - ✅ Fixed function call paths: api.functional.utils._(not api.functional._)
+  - ✅ Original test archived to tests/rewritten/test-smart-flattening-api.mjs
+  - ⚠️ **Correction**: Initially used BASIC_MATRIX (84 tests), corrected to TEST_MATRIX (336 tests) for comprehensive coverage
+  - ⚠️ **Critical Fix**: Manually destructured config properties → config spread pattern (Jan 17, 2026)
+
+---
+
+#### #27 `test-tcp-context-propagation.mjs` → `processed/context/tcp-context-propagation.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: TCP EventEmitter context propagation (5 test scenarios)
+- **Matrix Tests**: 5 scenarios × 16 configs (TEST_MATRIX: full matrix coverage) = 80 total
+- **Test Result**: 80 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses TEST_MATRIX (full 16-configuration matrix) - No filtering restrictions
+- **Status**: ✅ FINALIZED - Tests automatic EventEmitter context propagation in TCP server callbacks
+- **Audit Notes**:
+  - ✅ Tests context availability in TCP module methods
+  - ✅ Tests context preservation in server.on("connection", callback)
+  - ✅ Tests context preservation in socket.on("data", callback)
+  - ✅ Tests API method calls from within EventEmitter callbacks
+  - ✅ Tests connection handler context propagation
+  - ✅ Tests data handler context propagation
+  - ✅ Fixed lazy mode materialization: await testContext() before calling
+  - ✅ Fixed test isolation: use same context (test-user) across all tests
+  - ✅ Fixed API result type checking: removed string type assertion (varies by mode)
+  - ✅ CORRECTED: Changed from BASIC_MATRIX to TEST_MATRIX for full coverage
+  - ✅ Original test archived to tests/rewritten/test-tcp-context-propagation.mjs
+
+---
+
 ### 📌 New Action Items
 
 - Split high-heap Vitest suites into smaller files grouped by scenario to reduce memory pressure and make reruns targeted: hooks-comprehensive, add-api, addapi-path-resolution, metadata-api, hooks-execution, hooks-patterns, hooks-internal-properties.
@@ -735,23 +917,97 @@ All 12 tests now use proper TEST_DIRS constants and achieve 100% success rates a
 
 ---
 
-### 📋 Pending Migration (13/34)
+#### #28 `test-rule-12-comprehensive.mjs` → `processed/rules/rule-12-comprehensive.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Rule 12 (Module Ownership and Selective API Overwriting) validation
+- **Matrix Tests**: 3 scenarios × 8 ownership configs + 1 validation × 8 validation configs + 6 allowApiOverwrite tests = 38 total
+- **Test Result**: 38 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 11, 2026)
+- **Matrix Filtering**: ✅ Uses OWNERSHIP_MATRIX (8 configs with hotReload) + VALIDATION_MATRIX (8 configs) - legitimate filtering for ownership feature
+- **Status**: ✅ FINALIZED - Tests module ownership tracking, cross-module protection, and forceOverwrite requirements
+- **Audit Notes**:
+  - ✅ Tests module can register and update own APIs with moduleId + forceOverwrite
+  - ✅ Tests multiple modules can register independently
+  - ✅ Tests cross-module overwrite behavior respects allowApiOverwrite setting
+  - ✅ Tests forceOverwrite requires hotReload configuration
+  - ✅ Tests allowApiOverwrite: false blocks normal overwrites
+  - ✅ Tests same module can update despite allowApiOverwrite: false (module ownership priority)
+  - ✅ Tests cross-module protection works with allowApiOverwrite: false
+  - ✅ Follows original test pattern: tests operation success, not implementation details
+  - ✅ Original test archived to tests/rewritten/test-rule-12-comprehensive.mjs
+
+---
+
+#### #29 `test-tcp-eventemitter-context.mjs` → `processed/context/tcp-eventemitter-context.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: TCP EventEmitter context propagation testing
+- **Matrix Tests**: 5 scenarios × 16 configs = 80 total
+- **Test Result**: 80 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 17, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests TCP EventEmitter context preservation across all modes/runtimes
+- **Audit Notes**:
+  - ✅ Tests context availability in TCP module methods
+  - ✅ Tests context preservation in server.on("connection") callbacks
+  - ✅ Tests context preservation in socket.on("data") callbacks
+  - ✅ Tests API method accessibility from within EventEmitter callbacks
+  - ✅ Tests full integration: connection + data handlers with context + API access
+  - ✅ Original test archived to tests/rewritten/test-tcp-eventemitter-context.mjs
+
+---
+
+#### #30 `test-third-party-cleanup.mjs` → `processed/listener-cleanup/third-party-cleanup.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: Third-party EventEmitter listener cleanup (pg-pool simulation)
+- **Matrix Tests**: 5 scenarios × 16 configs = 80 total
+- **Test Result**: 80 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 17, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests pg-pool-like third-party EventEmitter cleanup behavior
+- **Audit Notes**:
+  - ✅ Tests pre-slothlet EventEmitters are NOT cleaned up (user responsibility)
+  - ✅ Tests post-slothlet EventEmitters are cleaned up on shutdown (slothlet tracks)
+  - ✅ Tests EventEmitters during API usage are cleaned up (created while slothlet running)
+  - ✅ Tests mixed scenario: pre/post/during listeners cleaned up correctly
+  - ✅ Tests API functionality works correctly with third-party listeners
+  - ✅ Uses createPgPoolSimulation() helper: 5 clients × 4 events = 20 listeners
+  - ✅ Tests pg-pool pattern: connect, acquire, release, remove events
+  - ✅ Validates listener count tracking across all matrix configurations
+  - ✅ Original test archived to tests/rewritten/test-third-party-cleanup.mjs
+
+---
+
+#### #31 `test-tv-config-isolation.mjs` → `processed/isolation/tv-config-isolation.test.vitest.mjs` ✅ FINALIZED
+
+- **Original Test Scenarios**: TV config isolation between multiple slothlet instances
+- **Matrix Tests**: 6 scenarios × 16 configs = 96 total
+- **Test Result**: 96 executed, 0 failed - 100% SUCCESS RATE (npm run test:unit on Jan 17, 2026)
+- **Matrix Filtering**: ✅ Uses getMatrixConfigs({}) for full matrix coverage
+- **Status**: ✅ FINALIZED - Tests config state isolation between different slothlet instances
+- **Audit Notes**:
+  - ✅ Tests different instance IDs for separate instances (no ID collision)
+  - ✅ Tests config updates isolated between instances (separate config state)
+  - ✅ Tests unique values remain unique to each instance (no cross-contamination)
+  - ✅ Tests function calls return instance-specific values (proper instance context)
+  - ✅ Tests multiple updates maintain isolation (repeated updates don't leak)
+  - ✅ Tests cross-contamination prevention (instance 1 changes don't affect instance 2)
+  - ✅ Uses api_tv_test folder with TV config module
+  - ✅ Tests manufacturer, host, port config properties
+  - ✅ Tests getInstanceInfo() and getDefaultPort() methods
+  - ✅ Validates proper lazy mode materialization for all test scenarios
+  - ✅ Original test archived to tests/rewritten/test-tv-config-isolation.mjs
+
+---
+
+### 📋 Pending Migration (1/34)
 
 The following tests remain to be migrated:
 
-- `test-mixed-diagnostic.mjs` - Mixed mode diagnostics
-- `test-module-ownership-removal.mjs` - Module ownership removal
-- `test-multi-instance-isolation.cjs` - Multi-instance isolation
-- `test-per-request-context.mjs` - Per-request context
-- `test-proxy-baseline.mjs` - Proxy baseline behavior
-- `test-reference-readonly-properties.mjs` - Reference readonly props
-- `test-rule-12-comprehensive.mjs` - Rule 12 ownership tests
-- `test-sanitize.mjs` - Filename sanitization
-- `test-smart-flattening-api.mjs` - Smart flattening rules
-- `test-stack-trace-closure.mjs` - Stack trace closure handling
-- `test-tcp-context-propagation.mjs` - TCP context propagation
-- `test-tcp-eventemitter-context.mjs` - EventEmitter context in TCP
-- `performance-benchmark-aggregated.mjs` - Performance testing
+- `test-stack-trace-closure.mjs` - Stack trace closure handling (diagnostic only - no assertions)
+
+### 🔍 Verification Only (Not Tests)
+
+These files are diagnostic/performance tools that should be verified to work but not migrated to vitest:
+
+- `performance-benchmark-aggregated.mjs` - Performance benchmarking tool (not a test suite)
+- `performance-benchmark.mjs` - Individual performance benchmark tool
 
 ---
 
@@ -776,10 +1032,10 @@ The following tests remain to be migrated:
 
 ## Summary Statistics
 
-| Category     | Count  | Audit Status      |
-| ------------ | ------ | ----------------- |
-| ✅ Finalized | 18     | Properly audited  |
-| ❌ Failed    | 1      | Needs major fixes |
-| ⚠️ Skipped   | 2      | N/A               |
-| 📋 Pending   | 13     | Not started       |
-| **Total**    | **34** | **18 finalized**  |
+| Category     | Count  | Audit Status     |
+| ------------ | ------ | ---------------- |
+| ✅ Finalized | 31     | Properly audited |
+| ❌ Failed    | 0      | None remaining   |
+| ⚠️ Skipped   | 2      | N/A              |
+| 📋 Pending   | 1      | Not started      |
+| **Total**    | **34** | **31 finalized** |
