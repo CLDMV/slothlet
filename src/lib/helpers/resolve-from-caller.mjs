@@ -134,6 +134,8 @@ export function getStack(skipFn) {
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
+// Get the slothlet package root (src/lib/helpers -> ../../.. = package root)
+const SLOTHLET_ROOT = path.resolve(THIS_DIR, "..", "..", "..");
 
 /* ---------- base selection (shared) ---------- */
 // Rule you specified:
@@ -260,14 +262,23 @@ function pickPrimaryBaseFile() {
 function isSlothletInternalFile(filePath) {
 	if (!filePath) return true;
 
-	// Skip any file in src/lib/ (slothlet internal structure)
-	if (filePath.includes(path.sep + "src" + path.sep + "lib" + path.sep)) return true;
+	// Normalize paths to use forward slashes for consistent comparison
+	const normalizedPath = path.normalize(filePath).replace(/\\/g, "/");
+	const normalizedRoot = path.normalize(SLOTHLET_ROOT).replace(/\\/g, "/");
+
+	// Check if file is within the slothlet package directory
+	if (!normalizedPath.startsWith(normalizedRoot + "/")) {
+		return false; // Not in slothlet directory at all
+	}
+
+	// Check if it's in the src/lib/ or dist/lib/ subdirectory (slothlet internals)
+	const relativePath = normalizedPath.substring(normalizedRoot.length + 1);
+	if (relativePath.startsWith("src/lib/") || relativePath.startsWith("dist/lib/")) {
+		return true;
+	}
 
 	// Skip any slothlet.mjs files
 	if (path.basename(filePath).toLowerCase() === "slothlet.mjs") return true;
-
-	// Skip files in the helpers directory
-	if (filePath.startsWith(THIS_DIR + path.sep)) return true;
 
 	return false;
 }
