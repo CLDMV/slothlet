@@ -24,6 +24,7 @@ Hooks work seamlessly across all loading modes (eager/lazy) and runtime types (a
 - [Short-Circuit Execution](#short-circuit-execution)
 - [Pattern Matching](#pattern-matching)
 - [Priority and Chaining](#priority-and-chaining)
+- [Hook Subsets](#hook-subsets)
 - [Runtime Control](#runtime-control)
 - [Hook Management](#hook-management)
 - [Error Handling](#error-handling)
@@ -314,6 +315,199 @@ api.hooks.on(
 	{ pattern: "math.*", priority: 100 }
 );
 ```
+
+## Hook Subsets
+
+Each hook type supports three execution subsets: `before`, `primary`, and `after`. Subsets provide fine-grained control over hook execution order within a single hook type.
+
+**Execution Order:**
+1. **`before` subset** - Runs first (e.g., initialization, setup)
+2. **`primary` subset** (default) - Main hook logic
+3. **`after` subset** - Runs last (e.g., cleanup, finalization)
+
+Within each subset, hooks execute by priority (higher first), then registration order.
+
+### Subset Use Cases
+
+```javascript
+// Authorization check (before subset) - must run before everything
+api.hooks.on(
+	"auth-check",
+	"before",
+	({ path, args, context }) => {
+		if (!context.user) {
+			throw new Error("Unauthorized");
+		}
+		return args;
+	},
+	{ pattern: "protected.*", subset: "before", priority: 2000 }
+);
+
+// Business logic validation (primary subset) - core validation
+api.hooks.on(
+	"validate-input",
+	"before",
+	({ args }) => {
+		if (args[0] < 0) {
+			throw new Error("Invalid input");
+		}
+		return args;
+	},
+	{ pattern: "math.*", subset: "primary", priority: 1000 }
+);
+
+// Logging (after subset) - happens after all other hooks
+api.hooks.on(
+	"audit-log",
+	"before",
+	({ path, args }) => {
+		console.log(`Executing ${path} with validated args:`, args);
+		return args;
+	},
+	{ pattern: "**", subset: "after", priority: 100 }
+);
+```
+
+### Subset Examples by Hook Type
+
+#### Before Hooks with Subsets
+
+```javascript
+// Security layer (before subset)
+api.hooks.on("before", securityHandler, {
+	id: "security",
+	subset: "before",
+	priority: 2000
+});
+
+// Business logic (primary subset)
+api.hooks.on("before", validationHandler, {
+	id: "validation",
+	subset: "primary",
+	priority: 1000
+});
+
+// Audit trail (after subset)
+api.hooks.on("before", auditHandler, {
+	id: "audit",
+	subset: "after",
+	priority: 500
+});
+```
+
+#### After Hooks with Subsets
+
+```javascript
+// Transform result early (before subset)
+api.hooks.on("after", transformHandler, {
+	subset: "before",
+	priority: 1000
+});
+
+// Cache result (primary subset)
+api.hooks.on("after", cacheHandler, {
+	subset: "primary",
+	priority: 500
+});
+
+// Log final result (after subset)
+api.hooks.on("after", logHandler, {
+	subset: "after",
+	priority: 100
+});
+```
+
+#### Always Hooks with Subsets
+
+```javascript
+// Cleanup resources (before subset)
+api.hooks.on("always", cleanupHandler, {
+	subset: "before"
+});
+
+// Update metrics (primary subset)
+api.hooks.on("always", metricsHandler, {
+	subset: "primary"
+});
+
+// Final notification (after subset)
+api.hooks.on("always", notifyHandler, {
+	subset: "after"
+});
+```
+
+#### Error Hooks with Subsets
+
+```javascript
+// Immediate error response (before subset)
+api.hooks.on("error", errorResponseHandler, {
+	subset: "before",
+	priority: 2000
+});
+
+// Error logging (primary subset)
+api.hooks.on("error", errorLogger, {
+	subset: "primary",
+	priority: 1000
+});
+
+// Error notification (after subset)
+api.hooks.on("error", errorNotifier, {
+	subset: "after",
+	priority: 500
+});
+```
+
+### Complete Execution Flow with Subsets
+
+```javascript
+const api = await slothlet({ dir: "./api", hooks: true });
+
+// Before hooks: before → primary → after subsets
+api.hooks.on("before", authHandler, { subset: "before", priority: 2000 });
+api.hooks.on("before", validationHandler, { subset: "primary", priority: 1000 });
+api.hooks.on("before", auditHandler, { subset: "after", priority: 500 });
+
+// After hooks: before → primary → after subsets
+api.hooks.on("after", transformHandler, { subset: "before", priority: 1000 });
+api.hooks.on("after", cacheHandler, { subset: "primary", priority: 500 });
+api.hooks.on("after", logHandler, { subset: "after", priority: 100 });
+
+// Always hooks: before → primary → after subsets
+api.hooks.on("always", cleanupHandler, { subset: "before" });
+api.hooks.on("always", metricsHandler, { subset: "primary" });
+api.hooks.on("always", notifyHandler, { subset: "after" });
+
+// Execution order when calling api.someFunction():
+// 1. Before hooks:
+//    - authHandler (before subset, priority 2000)
+//    - validationHandler (primary subset, priority 1000)
+//    - auditHandler (after subset, priority 500)
+// 2. Function execution
+// 3. After hooks:
+//    - transformHandler (before subset, priority 1000)
+//    - cacheHandler (primary subset, priority 500)
+//    - logHandler (after subset, priority 100)
+// 4. Always hooks:
+//    - cleanupHandler (before subset)
+//    - metricsHandler (primary subset)
+//    - notifyHandler (after subset)
+```
+
+### Subset Best Practices
+
+1. **`before` subset**: Use for critical pre-conditions that must run first (auth, security, initialization)
+2. **`primary` subset**: Use for main hook logic (validation, transformation, core business rules)
+3. **`after` subset**: Use for cleanup, logging, or actions that should run last (audit trails, notifications)
+
+4. **Default behavior**: If `subset` is not specified, hooks use `"primary"` by default
+
+5. **Combine with priority**: Within each subset, priority still controls execution order:
+   ```javascript
+   // Both in 'before' subset, but different priorities
+   api.hooks.on("before", authHandler, { subset: "before", priority: 2000 }); // Runs first
+   api.hooks.on("before", initHandler, { subset: "before", priority: 1000 }); // Runs second
+   ```
 
 ## Runtime Control
 

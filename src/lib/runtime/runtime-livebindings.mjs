@@ -326,17 +326,6 @@ export function runWithCtx(ctx, fn, thisArg, args) {
 
 		// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
 		if (!ctx.hookManager?.enabled || !path) {
-			if (
-				(process.env.DEBUG_RUNTIME === "1" || process.env.DEBUG_RUNTIME === "true") &&
-				fn.__slothletPath !== undefined &&
-				typeof fn.__slothletPath !== "string"
-			) {
-				console.log(`[DEBUG] livebindings runtime: __slothletPath is not a string; skipping hooks`, {
-					pathType: typeof fn.__slothletPath,
-					fnName: fn.name || "anonymous",
-					fnConstructor: fn.constructor?.name || "unknown"
-				});
-			}
 			return Reflect.apply(fn, thisArg, args);
 		}
 

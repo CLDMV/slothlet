@@ -58,7 +58,7 @@ export class HookManager {
 		this.enabledPatterns = new Set(); // Patterns currently enabled for execution
 		this.patternFilterActive = false; // Whether pattern filtering is in use
 		this.suppressErrors = options.suppressErrors || false;
-		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern}>
+		this.hooks = new Map(); // Map<name, {type, handler, priority, pattern, compiledPattern, subset}>
 		this.registrationOrder = 0; // Counter for maintaining registration order
 		this.reportedErrors = new WeakSet(); // Track errors that have been reported to prevent duplicate error hook calls
 	}
@@ -76,10 +76,13 @@ export class HookManager {
 	 * @param {string} [data.id] - Hook ID for debugging and removal (auto-generated if not provided)
 	 * @param {number} [data.priority=1000] - Execution priority (higher = earlier)
 	 * @param {string} [data.pattern] - Glob pattern for path filtering (uses defaultPattern if not provided)
+	 * @param {string} [data.subset="primary"] - Hook subset: "before", "primary", or "after" (defines execution phase within hook type)
 	 * @returns {string} Hook ID for later removal
 	 *
 	 * @description
-	 * Register a hook with optional priority and pattern filtering.
+	 * Register a hook with optional priority, pattern filtering, and subset control.
+	 * Subsets define execution order within a hook type: before → primary → after.
+	 * Within each subset, hooks execute by priority (higher first), then registration order.
 	 *
 	 * @example
 	 * // Register hook with priority
@@ -88,13 +91,23 @@ export class HookManager {
 	 * @example
 	 * // Register hook with custom ID and pattern
 	 * manager.on("before", handler, { id: "validator", pattern: "math.*", priority: 500 });
+	 *
+	 * @example
+	 * // Register hook in 'before' subset for early execution
+	 * manager.on("before", handler, { subset: "before", priority: 100 });
 	 */
 	on(type, handler, data = {}) {
 		const id = data.id || `hook_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 		const priority = data.priority ?? 1000;
 		const pattern = data.pattern || this.defaultPattern;
+		const subset = data.subset || "primary";
 		const compiledPattern = this._compilePattern(pattern);
 		const order = this.registrationOrder++;
+
+		// Validate subset
+		if (subset !== "before" && subset !== "primary" && subset !== "after") {
+			throw new Error(`Invalid hook subset "${subset}". Must be "before", "primary", or "after".`);
+		}
 
 		this.hooks.set(id, {
 			tag: id,
@@ -103,6 +116,7 @@ export class HookManager {
 			priority,
 			pattern,
 			compiledPattern,
+			subset,
 			order
 		});
 
@@ -222,6 +236,7 @@ export class HookManager {
 					type: hook.type,
 					priority: hook.priority,
 					pattern: hook.pattern,
+					subset: hook.subset,
 					order: hook.order
 				});
 			}
@@ -528,7 +543,8 @@ export class HookManager {
 	 * @returns {Array<object>} Sorted array of matching hooks
 	 *
 	 * @description
-	 * Get hooks matching type and path, sorted by priority (DESC) then order (ASC).
+	 * Get hooks matching type and path, sorted by subset (before → primary → after),
+	 * then priority (DESC), then order (ASC).
 	 *
 	 * @example
 	 * // Get matching hooks
@@ -553,15 +569,48 @@ export class HookManager {
 			matching.push({ ...hook, id: hookId });
 		}
 
-		// Sort: priority DESC, then order ASC
+		// Sort: subset (before → primary → after), then priority DESC, then order ASC
 		matching.sort((a, b) => {
+			// First: sort by subset
+			const subsetA = this._getSubsetOrder(a.subset || "primary");
+			const subsetB = this._getSubsetOrder(b.subset || "primary");
+			if (subsetA !== subsetB) {
+				return subsetA - subsetB; // before(0) < primary(1) < after(2)
+			}
+
+			// Second: sort by priority
 			if (a.priority !== b.priority) {
 				return b.priority - a.priority; // Higher priority first
 			}
+
+			// Third: sort by registration order
 			return a.order - b.order; // Earlier registration first
 		});
 
 		return matching;
+	}
+
+	/**
+	 * @function _getSubsetOrder
+	 * @internal
+	 * @private
+	 * @param {string} subset - Subset name ("before", "primary", or "after")
+	 * @returns {number} Sort order (0=before, 1=primary, 2=after)
+	 *
+	 * @description
+	 * Convert subset name to numeric sort order for consistent ordering.
+	 */
+	_getSubsetOrder(subset) {
+		switch (subset) {
+			case "before":
+				return 0;
+			case "primary":
+				return 1;
+			case "after":
+				return 2;
+			default:
+				return 1; // Default to primary
+		}
 	}
 
 	/**
