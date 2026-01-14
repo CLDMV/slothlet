@@ -9,13 +9,30 @@
  * Run with: node tests/performance-benchmark.mjs
  */
 
+// Set development environment to load from src/ instead of dist/
+process.env.NODE_ENV = "development";
+
+const envConditions = (process.env.NODE_OPTIONS ?? "")
+	.split(/\s+/u)
+	.filter(Boolean)
+	.filter((token) => token !== "--conditions=development|production");
+
+const requiredConditions = ["--conditions=slothlet-dev", "--conditions=development"];
+for (const condition of requiredConditions) {
+	if (!envConditions.includes(condition)) {
+		envConditions.push(condition);
+	}
+}
+
+process.env.NODE_OPTIONS = envConditions.join(" ");
+
 import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const API_DIR = join(__dirname, "../api_tests/api_test");
+const API_DIR = join(__dirname, "../../api_tests/api_test");
 
 const START_UP_TEST_COUNT = 10; // Number of iterations for startup time test
 const BENCHMARK_ITERATIONS = 100; // Number of iterations for benchmark tests

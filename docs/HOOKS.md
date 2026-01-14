@@ -265,16 +265,16 @@ Hooks support flexible pattern matching:
 
 ```javascript
 // Exact match
-api.hooks.on("hook1", "before", handler, { pattern: "math.add" });
+api.hooks.on("before", handler, { id: "hook1", pattern: "math.add" });
 
 // Wildcard: all functions in namespace
-api.hooks.on("hook2", "before", handler, { pattern: "math.*" });
+api.hooks.on("before", handler, { id: "hook2", pattern: "math.*" });
 
 // Wildcard: specific function in all namespaces
-api.hooks.on("hook3", "before", handler, { pattern: "*.add" });
+api.hooks.on("before", handler, { id: "hook3", pattern: "*.add" });
 
 // Global: all functions
-api.hooks.on("hook4", "before", handler, { pattern: "**" });
+api.hooks.on("before", handler, { id: "hook4", pattern: "**" });
 ```
 
 ## Priority and Chaining
@@ -323,7 +323,7 @@ Enable and disable hooks at runtime:
 const api = await slothlet({ dir: "./api", hooks: true });
 
 // Add hooks
-api.hooks.on("test", "before", handler, { pattern: "math.*" });
+api.hooks.on("before", handler, { id: "test", pattern: "math.*" });
 
 // Disable all hooks
 api.hooks.disable();
@@ -349,7 +349,7 @@ const afterHooks = api.hooks.list("after");
 const allHooks = api.hooks.list(); // All types
 
 // Remove specific hook by ID
-const id = api.hooks.on("temp", "before", handler, { pattern: "math.*" });
+const id = api.hooks.on("before", handler, { id: "temp", pattern: "math.*" });
 api.hooks.off(id);
 
 // Remove all hooks matching pattern
@@ -531,16 +531,16 @@ const api4 = await slothlet({ dir: "./api", lazy: true, runtime: "live", hooks: 
 
 ## API Reference
 
-### api.hooks.on(id, type, handler, options)
+### api.hooks.on(type, handler, options)
 
 Register a new hook.
 
 **Parameters:**
 
-- `id` (string): Unique identifier for the hook
 - `type` (string): Hook type - "before", "after", "always", or "error"
 - `handler` (function): Hook handler function
 - `options` (object): Hook configuration
+  - `id` (string): Optional unique identifier for the hook (auto-generated if not provided)
   - `pattern` (string): Pattern to match against function paths
   - `priority` (number): Execution priority (higher = earlier)
 
