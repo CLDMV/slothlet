@@ -227,6 +227,72 @@ function eager_wrapWithRunCtx(obj, instance) {
 */
 
 /**
+ * @function eager_assignSlothletPaths
+ * @internal
+ * @package
+ * @param {object|function} obj - Object or function to process
+ * @param {string} [path=""] - Current path in the API tree
+ * @param {Set} [visited=new Set()] - Set of visited objects to prevent cycles
+ *
+ * @description
+ * Recursively assigns __slothletPath to all functions in the API tree.
+ * This matches lazy mode behavior and prevents expensive runtime property assignment
+ * in the wrapper proxy, significantly improving performance.
+ *
+ * Performance impact: Without this, the wrapper's get trap calls Object.defineProperty
+ * on every function access, which is ~6-8x slower than reading an existing property.
+ *
+ * @example
+ * const api = { math: { add: function() {}, multiply: function() {} } };
+ * eager_assignSlothletPaths(api);
+ * // api.math.add.__slothletPath === "math.add"
+ * // api.math.multiply.__slothletPath === "math.multiply"
+ */
+export function eager_assignSlothletPaths(obj, path = "", visited = new Set()) {
+	// Prevent infinite recursion on circular references
+	if (visited.has(obj)) return;
+	visited.add(obj);
+
+	// Skip null, undefined, primitives
+	if (obj == null || (typeof obj !== "object" && typeof obj !== "function")) return;
+
+	// Skip internal properties that shouldn't have paths
+	const internalProps = ["hooks", "__ctx", "shutdown", "_impl", "__slothletPath"];
+
+	// If this is a function and doesn't have __slothletPath yet, assign it
+	if (typeof obj === "function" && path && !obj.__slothletPath) {
+		try {
+			Object.defineProperty(obj, "__slothletPath", {
+				value: path,
+				writable: false,
+				enumerable: false,
+				configurable: true
+			});
+		} catch {
+			// Ignore if property can't be defined (frozen objects, etc.)
+		}
+	}
+
+	// Recursively process properties (works for both objects and functions-with-properties)
+	try {
+		const keys = Object.keys(obj);
+		for (const key of keys) {
+			if (internalProps.includes(key)) continue;
+
+			try {
+				const value = obj[key];
+				const newPath = path ? `${path}.${key}` : key;
+				eager_assignSlothletPaths(value, newPath, visited);
+			} catch {
+				// Skip properties that throw on access
+			}
+		}
+	} catch {
+		// Skip objects that throw on Object.keys()
+	}
+}
+
+/**
  * @function create
  * @internal
  * @package
@@ -374,6 +440,9 @@ export async function create(dir, maxDepth = Infinity, currentDepth = 0) {
 			console.log(`[DEBUG] No root function - final API is object`);
 		}
 	}
+
+	// Note: __slothletPath assignment moved to slothlet.mjs after mutateLiveBindingFunction
+	// to ensure it's applied to the final boundapi object that gets wrapped
 
 	return finalApi;
 }
