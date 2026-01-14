@@ -446,7 +446,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (error) {
+			} catch (_) {
 				// Expected
 			}
 
@@ -468,7 +468,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (error) {
+			} catch (_) {
 				// Expected
 			}
 
@@ -515,7 +515,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (error) {
+			} catch (_) {
 				// Expected
 			}
 
@@ -571,7 +571,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (error) {
+			} catch (_) {
 				// Expected
 			}
 
@@ -622,7 +622,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (error) {
+			} catch (_) {
 				// Expected
 			}
 
