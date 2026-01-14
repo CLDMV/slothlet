@@ -619,6 +619,14 @@ const slothletObject = {
 		// Use recursive=true to support nested slothlet API structures
 		mutateLiveBindingFunction(this.boundapi, _boundapi, true);
 
+		// Assign __slothletPath to all functions in eager mode for performance
+		// This prevents expensive Object.defineProperty calls in the wrapper's get trap
+		// Lazy mode already assigns these during materialization
+		if (!this.config.lazy) {
+			const { eager_assignSlothletPaths } = await import("@cldmv/slothlet/modes/eager");
+			eager_assignSlothletPaths(this.boundapi);
+		}
+
 		this.updateBindings(this.context, this.reference, this.boundapi);
 
 		this.loaded = true;
