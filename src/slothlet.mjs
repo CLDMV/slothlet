@@ -572,7 +572,7 @@ const slothletObject = {
 		// Add hooks API to this.api if HookManager exists (BEFORE wrapping with runtime)
 		if (this.hookManager) {
 			const hooksApi = {
-				on: (name, type, handler, options) => this.hookManager.on(name, type, handler, options),
+				on: (type, handler, options) => this.hookManager.on(type, handler, options),
 				off: (idOrPattern) => this.hookManager.off(idOrPattern),
 				enable: (pattern) => this.hookManager.enable(pattern),
 				disable: (pattern) => this.hookManager.disable(pattern),
