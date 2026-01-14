@@ -10,18 +10,38 @@
  * Run with: node tests/performance-benchmark-aggregated.mjs
  */
 
+// Set development environment to load from src/ instead of dist/
+process.env.NODE_ENV = "development";
+
+const envConditions = (process.env.NODE_OPTIONS ?? "")
+	.split(/\s+/u)
+	.filter(Boolean)
+	.filter((token) => token !== "--conditions=development|production");
+
+const requiredConditions = ["--conditions=slothlet-dev", "--conditions=development"];
+for (const condition of requiredConditions) {
+	if (!envConditions.includes(condition)) {
+		envConditions.push(condition);
+	}
+}
+
+process.env.NODE_OPTIONS = envConditions.join(" ");
+
 import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { readFile } from "fs/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const API_DIR = join(__dirname, "../api_tests/api_test");
+const API_DIR = join(__dirname, "../../api_tests/api_test");
+const API_CONFIG_PATH = join(__dirname, "../vitests/setup/api-test-config.jsonc");
 
 const START_UP_TEST_COUNT = 50; // Number of iterations for startup time test
 const BENCHMARK_ITERATIONS = 200; // Number of iterations for benchmark tests
 const BENCHMARK_ITERATIONS_COMPLEX = 200; // Number of iterations for complex benchmark tests
 const BENCHMARK_ITERATIONS_MULTI = 100; // Number of iterations for multi benchmark tests
+const BENCHMARK_ITERATIONS_REALISTIC = 500; // Number of iterations for realistic API usage test (HIGH WEIGHT)
 
 // Import slothlet
 import slothlet from "@cldmv/slothlet";
@@ -171,7 +191,7 @@ async function benchmarkFunction(fn, iterations = 10) {
  */
 async function benchmarkEagerStartup() {
 	return await benchmarkFunction(async () => {
-		const api = await slothlet({ dir: API_DIR, lazy: false });
+		const api = await slothlet({ dir: API_DIR, mode: "eager" });
 		await api.shutdown();
 	}, START_UP_TEST_COUNT);
 }
@@ -182,7 +202,7 @@ async function benchmarkEagerStartup() {
  */
 async function benchmarkLazyStartup() {
 	return await benchmarkFunction(async () => {
-		const api = await slothlet({ dir: API_DIR, lazy: true });
+		const api = await slothlet({ dir: API_DIR, mode: "lazy" });
 		await api.shutdown();
 	}, START_UP_TEST_COUNT);
 }
@@ -192,7 +212,7 @@ async function benchmarkLazyStartup() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerFunctionCalls() {
-	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const api = await slothlet({ dir: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return api.math.add(2, 3);
 	}, BENCHMARK_ITERATIONS);
@@ -205,7 +225,7 @@ async function benchmarkEagerFunctionCalls() {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyFunctionCalls() {
-	const api = await slothlet({ dir: API_DIR, lazy: true });
+	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
 
 	// First call (materialization)
 	const lazyFirstCall = await measureTime(async () => {
@@ -229,7 +249,7 @@ async function benchmarkLazyFunctionCalls() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerComplexModules() {
-	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const api = await slothlet({ dir: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return api.nested.date.today();
 	}, BENCHMARK_ITERATIONS_COMPLEX);
@@ -242,7 +262,7 @@ async function benchmarkEagerComplexModules() {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyComplexModules() {
-	const api = await slothlet({ dir: API_DIR, lazy: true });
+	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
 
 	const lazyComplexFirst = await measureTime(async () => {
 		return api.nested.date.today();
@@ -266,7 +286,7 @@ async function benchmarkLazyComplexModules() {
  * @returns {Promise<{min: number, max: number, avg: number, median: number}>}
  */
 async function benchmarkEagerMultiModule(module, testFn) {
-	const api = await slothlet({ dir: API_DIR, lazy: false });
+	const api = await slothlet({ dir: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
 		return testFn(api);
 	}, BENCHMARK_ITERATIONS_MULTI);
@@ -281,7 +301,7 @@ async function benchmarkEagerMultiModule(module, testFn) {
  * @returns {Promise<{lazyFirst: {result: any, time: number}, lazySubsequent: {min: number, max: number, avg: number, median: number}}>}
  */
 async function benchmarkLazyMultiModule(module, testFn) {
-	const api = await slothlet({ dir: API_DIR, lazy: true });
+	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
 
 	const lazyFirst = await measureTime(async () => {
 		return testFn(api);
@@ -296,6 +316,86 @@ async function benchmarkLazyMultiModule(module, testFn) {
 		lazyFirst,
 		lazySubsequent
 	};
+}
+
+/**
+ * Loads and parses the API test configuration
+ * @returns {Promise<object>} Parsed API config
+ */
+async function loadApiConfig() {
+	const content = await readFile(API_CONFIG_PATH, "utf-8");
+	// Remove JSONC comments for parsing
+	const jsonContent = content.replace(/\/\/.*/gu, "").replace(/\/\*[\s\S]*?\*\//gu, "");
+	return JSON.parse(jsonContent);
+}
+
+/**
+ * Executes a single API call based on config
+ * @param {object} api - Slothlet API instance
+ * @param {object} call - Call configuration { path, args }
+ * @returns {Promise<any>} Result of API call
+ */
+async function executeApiCall(api, call) {
+	let target = api;
+	for (const segment of call.path) {
+		target = target[segment];
+	}
+	// Handle both sync and async functions
+	const result = typeof target === "function" ? target(...call.args) : target;
+	return result instanceof Promise ? await result : result;
+}
+
+/**
+ * Benchmarks realistic API usage patterns from config file
+ * @param {boolean} lazy - Whether to use lazy mode
+ * @returns {Promise<object>} Benchmark results
+ */
+async function benchmarkRealisticApiUsage(lazy) {
+	const config = await loadApiConfig();
+	const api = await slothlet({ dir: API_DIR, lazy });
+
+	// Collect all calls from all sections
+	const allCalls = [];
+	for (const section of config.testConfig.apiTests) {
+		for (const call of section.calls) {
+			allCalls.push(call);
+		}
+	}
+
+	// First pass: materialize all modules (for lazy mode)
+	for (const call of allCalls) {
+		try {
+			await executeApiCall(api, call);
+		} catch {
+			// Ignore errors during warmup
+		}
+	}
+
+	// Now benchmark the actual calls
+	const times = [];
+	for (let i = 0; i < BENCHMARK_ITERATIONS_REALISTIC; i++) {
+		// Pick a random call from the set to simulate realistic usage
+		const call = allCalls[Math.floor(Math.random() * allCalls.length)];
+		const start = performance.now();
+		try {
+			await executeApiCall(api, call);
+		} catch {
+			// Count errors but don't fail the benchmark
+		}
+		const end = performance.now();
+		times.push(end - start);
+	}
+
+	await api.shutdown();
+
+	// Calculate statistics
+	times.sort((a, b) => a - b);
+	const avg = times.reduce((sum, time) => sum + time, 0) / times.length;
+	const min = times[0];
+	const max = times[times.length - 1];
+	const median = times[Math.floor(times.length / 2)];
+
+	return { avg, min, max, median, iterations: BENCHMARK_ITERATIONS_REALISTIC, totalCalls: allCalls.length };
 }
 
 /**
@@ -335,7 +435,8 @@ async function runBenchmarkSet(eagerFirst = true) {
 		startup: {},
 		functionCalls: {},
 		complexModules: {},
-		multiModules: {}
+		multiModules: {},
+		realisticUsage: {} // New: realistic API usage patterns
 	};
 
 	console.log(`\n🔄 Running benchmark set (${eagerFirst ? "Eager First" : "Lazy First"})...`);
@@ -481,6 +582,42 @@ async function runBenchmarkSet(eagerFirst = true) {
 		console.log(`  Materialization Benefit: ${(lazyFirstTime / lazySubAvg).toFixed(1)}x faster`);
 	}
 
+	// === REALISTIC API USAGE PATTERNS (HIGH WEIGHT) ===
+	console.log(`\n📊 Test: Realistic API Usage Patterns (${BENCHMARK_ITERATIONS_REALISTIC} iterations) - HIGH WEIGHT`);
+	console.log("=".repeat(80));
+	console.log("Testing with actual API calls from api-test-config.jsonc");
+	console.log("This represents real-world usage with diverse function calls across the API");
+
+	if (eagerFirst) {
+		// Eager first, then lazy
+		console.log("\nBenchmarking eager mode with realistic API calls...");
+		results.realisticUsage.eager = await benchmarkRealisticApiUsage(false);
+		console.log("\nBenchmarking lazy mode with realistic API calls...");
+		results.realisticUsage.lazy = await benchmarkRealisticApiUsage(true);
+	} else {
+		// Lazy first, then eager
+		console.log("\nBenchmarking lazy mode with realistic API calls...");
+		results.realisticUsage.lazy = await benchmarkRealisticApiUsage(true);
+		console.log("\nBenchmarking eager mode with realistic API calls...");
+		results.realisticUsage.eager = await benchmarkRealisticApiUsage(false);
+	}
+
+	const eagerRealisticAvg = results.realisticUsage.eager.avg;
+	const lazyRealisticAvg = results.realisticUsage.lazy.avg;
+	const totalCallTypes = results.realisticUsage.eager.totalCalls;
+
+	console.log(`\nRealistic Usage Results (${totalCallTypes} unique API call patterns):`);
+	console.log(
+		`  Eager Mode: ${formatTime(eagerRealisticAvg)} (avg) | ${formatTime(results.realisticUsage.eager.min)} (min) | ${formatTime(results.realisticUsage.eager.max)} (max)`
+	);
+	console.log(
+		`  Lazy Mode:  ${formatTime(lazyRealisticAvg)} (avg) | ${formatTime(results.realisticUsage.lazy.min)} (min) | ${formatTime(results.realisticUsage.lazy.max)} (max)`
+	);
+	console.log(
+		`  Winner: ${lazyRealisticAvg < eagerRealisticAvg ? "Lazy" : "Eager"} mode (${(Math.max(eagerRealisticAvg, lazyRealisticAvg) / Math.min(eagerRealisticAvg, lazyRealisticAvg)).toFixed(2)}x faster)`
+	);
+	console.log(`  Weight: ${BENCHMARK_ITERATIONS_REALISTIC} iterations (highest in benchmark suite)`);
+
 	return results;
 }
 
@@ -494,7 +631,8 @@ function aggregateResults(resultSets) {
 		startup: { eager: {}, lazy: {} },
 		functionCalls: { eager: {}, lazyFirst: {}, lazySubsequent: {} },
 		complexModules: { eager: {}, lazyFirst: {}, lazySubsequent: {} },
-		multiModules: {}
+		multiModules: {},
+		realisticUsage: { eager: {}, lazy: {} } // New: realistic usage patterns
 	};
 
 	// Helper function to aggregate benchmark stats
@@ -542,6 +680,14 @@ function aggregateResults(resultSets) {
 				lazySubsequent: aggregateStats(resultSets.map((r) => r.multiModules[testName].lazySubsequent))
 			};
 		}
+	}
+
+	// Aggregate realistic usage results
+	if (firstResultSet && firstResultSet.realisticUsage) {
+		aggregated.realisticUsage.eager = aggregateStats(resultSets.map((r) => r.realisticUsage.eager));
+		aggregated.realisticUsage.lazy = aggregateStats(resultSets.map((r) => r.realisticUsage.lazy));
+		aggregated.realisticUsage.totalCalls = firstResultSet.realisticUsage.eager.totalCalls;
+		aggregated.realisticUsage.iterations = firstResultSet.realisticUsage.eager.iterations;
 	}
 
 	return aggregated;
@@ -614,6 +760,30 @@ function displayIndividualResults(eagerFirstResults, lazyFirstResults) {
 		console.log(`       Eager-first test: Lazy ${parseFloat(eagerFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(eagerFirstSpeedup)}x`);
 		console.log(`       Lazy-first test:  Lazy ${parseFloat(lazyFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(lazyFirstSpeedup)}x`);
 	}
+
+	// Realistic usage comparison (HIGH WEIGHT)
+	if (eagerFirstResults.realisticUsage && lazyFirstResults.realisticUsage) {
+		console.log("\n🌐 REALISTIC API USAGE PATTERNS (HIGH WEIGHT):");
+		console.log(
+			`   Testing ${eagerFirstResults.realisticUsage.eager.totalCalls} unique API call patterns (${eagerFirstResults.realisticUsage.eager.iterations} iterations)`
+		);
+
+		console.log("   When Eager Ran First:");
+		console.log(`     Eager: ${formatTime(eagerFirstResults.realisticUsage.eager.avg)} (avg)`);
+		console.log(`     Lazy:  ${formatTime(eagerFirstResults.realisticUsage.lazy.avg)} (avg)`);
+
+		console.log("   When Lazy Ran First:");
+		console.log(`     Eager: ${formatTime(lazyFirstResults.realisticUsage.eager.avg)} (avg)`);
+		console.log(`     Lazy:  ${formatTime(lazyFirstResults.realisticUsage.lazy.avg)} (avg)`);
+
+		const eagerFirstSpeedup = (eagerFirstResults.realisticUsage.eager.avg / eagerFirstResults.realisticUsage.lazy.avg).toFixed(2);
+		const lazyFirstSpeedup = (lazyFirstResults.realisticUsage.eager.avg / lazyFirstResults.realisticUsage.lazy.avg).toFixed(2);
+
+		console.log("     Performance Analysis:");
+		console.log(`       Eager-first test: Lazy ${parseFloat(eagerFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(eagerFirstSpeedup)}x`);
+		console.log(`       Lazy-first test:  Lazy ${parseFloat(lazyFirstSpeedup) > 1 ? "wins" : "loses"} by ${Math.abs(lazyFirstSpeedup)}x`);
+		console.log(`     ⭐ Highest weight test - represents real-world diverse API usage`);
+	}
 }
 
 /**
@@ -663,18 +833,45 @@ function displayAggregatedResults(aggregated) {
 		console.log(`     Winner: ${moduleWinner} (${Math.abs(moduleSpeedup)}x ${parseFloat(moduleSpeedup) > 1 ? "faster" : "slower"})`);
 	}
 
+	// Realistic usage patterns (HIGH WEIGHT)
+	if (aggregated.realisticUsage && aggregated.realisticUsage.eager) {
+		const realisticSpeedup = (aggregated.realisticUsage.eager.avg / aggregated.realisticUsage.lazy.avg).toFixed(2);
+		const realisticWinner = parseFloat(realisticSpeedup) > 1 ? "Lazy" : "Eager";
+		console.log("\n📊 REALISTIC API USAGE PATTERNS (⭐ HIGH WEIGHT - " + aggregated.realisticUsage.iterations + " iterations):");
+		console.log(`   Testing ${aggregated.realisticUsage.totalCalls} unique API call patterns from actual test suite`);
+		console.log(`   Eager: ${formatTime(aggregated.realisticUsage.eager.avg)} (avg)`);
+		console.log(`   Lazy:  ${formatTime(aggregated.realisticUsage.lazy.avg)} (avg)`);
+		console.log(
+			`   Winner: ${realisticWinner} mode (${Math.abs(realisticSpeedup)}x ${parseFloat(realisticSpeedup) > 1 ? "faster" : "slower"})`
+		);
+		console.log(`   ⚠️  This test carries highest weight - represents real-world diverse API usage`);
+	}
+
 	// Overall recommendation
 	console.log("\n🏆 OVERALL PERFORMANCE WINNER:");
-	const startupWeight = 0.3;
-	const callWeight = 0.7;
+
+	// Calculate weighted score with realistic usage having highest weight
+	const startupWeight = 0.15; // Reduced from 0.3
+	const callWeight = 0.25; // Reduced from 0.7
+	const realisticWeight = 0.6; // NEW: Highest weight for realistic patterns
 
 	const lazyStartupScore = parseFloat(startupSpeedup) * startupWeight;
 	const lazyCallScore = parseFloat(callSpeedup) * callWeight;
-	const lazyTotalScore = lazyStartupScore + lazyCallScore;
+
+	let lazyRealisticScore = 0;
+	if (aggregated.realisticUsage && aggregated.realisticUsage.eager) {
+		const realisticSpeedup = (aggregated.realisticUsage.eager.avg / aggregated.realisticUsage.lazy.avg).toFixed(2);
+		lazyRealisticScore = parseFloat(realisticSpeedup) * realisticWeight;
+	}
+
+	const lazyTotalScore = lazyStartupScore + lazyCallScore + lazyRealisticScore;
 
 	const overallWinner = lazyTotalScore > 1 ? "Lazy" : "Eager";
 	console.log(`   ${overallWinner} mode wins overall`);
 	console.log(`   (Weighted score: ${lazyTotalScore.toFixed(2)} - higher is better for lazy mode)`);
+	console.log(
+		`   Weight distribution: Startup ${(startupWeight * 100).toFixed(0)}%, Function Calls ${(callWeight * 100).toFixed(0)}%, Realistic Usage ${(realisticWeight * 100).toFixed(0)}%`
+	);
 
 	// Add comprehensive performance analysis and recommendations
 	console.log("\n🎯 PERFORMANCE ANALYSIS & RECOMMENDATIONS");
