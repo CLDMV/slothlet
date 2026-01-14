@@ -708,7 +708,7 @@ When building Slothlet API modules:
 - [ ] **Use proper JSDoc patterns** - One `@module` per folder, `@memberof` for secondary files
 - [ ] **Test cross-module access** via `self.otherModule.method()`
 - [ ] **Include context usage** if module needs user/session data
-- [ ] **Consider hooks** - Will functions be intercepted? Need error monitoring?
+- [ ] **Consider hooks** - Will functions be intercepted? Need error monitoring? Use hook subsets (before/primary/after) for execution order control
 - [ ] **Consider metadata** - Need authorization checks? Use `metadataAPI.caller()`
 - [ ] **Consider per-request context** - Need temporary context values? Use `api.run()` or `api.scope()`
 - [ ] **Consider EventEmitter propagation** - Context automatically flows through event callbacks
@@ -736,7 +736,7 @@ When building Slothlet API modules:
 
 ### 🔧 **Feature-Specific Documentation**
 
-- **[`docs/HOOKS.md`](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)** - Complete hook system documentation with patterns and examples
+- **[`docs/HOOKS.md`](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)** - Complete hook system documentation with 4 hook types, subsets (before/primary/after), pattern matching, priority ordering, and examples
 - **[`docs/METADATA.md`](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)** - Metadata system for function tagging, authorization, and security
 - **[`docs/CONTEXT-PROPAGATION.md`](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)** - EventEmitter context propagation and per-request context
 - **[`docs/PERFORMANCE.md`](https://github.com/CLDMV/slothlet/blob/master/docs/PERFORMANCE.md)** - Performance characteristics and mode comparisons
