@@ -86,9 +86,11 @@ async function main() {
 		results.forEach((result) => {
 			if (result.status === "FAILED") {
 				const stepCommands = {
+					"Clean Build Artifacts": "npm run build:cleanup",
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Distribution": "npm run build:dist",
+					"Node ViTest Suite": "npm run test:unit",
 					"Build TypeScript Types": "npm run build:types",
 					"Validate TypeScript": "npm run test:types"
 				};
@@ -109,10 +111,24 @@ async function main() {
  */
 async function runCommand(command, args) {
 	return new Promise((resolve) => {
-		const child = spawn(command, args, {
-			stdio: ["ignore", "pipe", "pipe"],
-			shell: true
-		});
+		// Use shell: true on Windows to find npm.cmd, but avoid the deprecation warning
+		// by not passing args when shell is true - instead construct a single command string
+		const isWindows = process.platform === "win32";
+		const needsShell = isWindows && (command === "npm" || command === "node");
+
+		let child;
+		if (needsShell) {
+			// On Windows, construct full command string for shell
+			const fullCommand = `${command} ${args.join(" ")}`;
+			child = spawn(fullCommand, [], {
+				stdio: ["ignore", "pipe", "pipe"],
+				shell: true
+			});
+		} else {
+			child = spawn(command, args, {
+				stdio: ["ignore", "pipe", "pipe"]
+			});
+		}
 
 		let stdout = "";
 		let stderr = "";

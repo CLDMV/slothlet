@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-11 19:05:37 -08:00 (1768187137)
+ *	@Last modified time: 2026-01-13 19:48:44 -08:00 (1768362524)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -623,7 +623,7 @@ const slothletObject = {
 		// This prevents expensive Object.defineProperty calls in the wrapper's get trap
 		// Lazy mode already assigns these during materialization
 		if (!this.config.lazy) {
-			const { eager_assignSlothletPaths } = await import("@cldmv/slothlet/modes/eager");
+			const { eager_assignSlothletPaths } = await import("@cldmv/slothlet/modes/slothlet_eager");
 			eager_assignSlothletPaths(this.boundapi);
 		}
 

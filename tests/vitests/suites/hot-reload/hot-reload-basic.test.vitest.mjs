@@ -54,6 +54,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 			await api.shutdown();
 		}
 		api = null;
+		// Allow any pending module operations to complete
+		await new Promise((resolve) => setTimeout(resolve, 100));
 	});
 
 	it("reloads API and regenerates instanceId", async () => {

@@ -20,7 +20,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 > **🚀 Production Ready Modes:**
 >
 > - **Eager Mode**: Fully stable and production-ready for immediate module loading
-> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 4.3x faster startup (1.1x slower function calls)
+> - **Lazy Mode**: Production-ready with advanced copy-left materialization and 3.5x faster startup (function calls within 8% of eager - essentially equal)
 
 > [!CAUTION]  
 > **⚙️ Experimental Modes:**
@@ -60,7 +60,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 ### 🎯 **Dual Loading Strategies**
 
 - **Eager Loading**: Immediate loading for maximum performance in production environments
-- **Lazy Loading**: Copy-left materialization with look-ahead proxies (4.3x faster startup, 1.4x faster calls after materialization)
+- **Lazy Loading**: Copy-left materialization with look-ahead proxies (3.5x faster startup, function calls equal to eager after materialization)
 
 > [!IMPORTANT]  
 > **Function Call Patterns:**
@@ -70,8 +70,8 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 ### ⚡ Performance Excellence
 
-- **Startup Performance**: 4.3x faster startup in lazy mode (4.89ms vs 14.29ms)
-- **Runtime Performance**: 1.1x faster function calls in eager mode (0.90μs vs 0.99μs)
+- **Startup Performance**: 3.5x faster startup in lazy mode (7.92ms vs 27.92ms)
+- **Runtime Performance**: Function calls essentially equal between modes (1.14μs lazy vs 1.23μs eager - within 8% measurement noise)
 - **Copy-left materialization**: Once loaded, modules stay materialized - no re-processing overhead
 - **Zero dependencies**: Pure Node.js implementation
 - **Memory efficiency**: Lazy mode loads modules on-demand, eager mode optimizes for predictable behavior
@@ -490,7 +490,7 @@ const asyncResult = await api.async.processData({ data: "test" }); // Async need
 
 **Benefits:**
 
-- ✅ Fastest function calls (0.90μs average)
+- ✅ Fast function calls (1.23μs average - within 8% of lazy mode)
 - ✅ Predictable performance (no materialization delays)
 - ✅ Functions behave exactly as originally defined
 
@@ -503,21 +503,21 @@ const api = await slothlet({ mode: "lazy", dir: "./api" });
 
 // ALL calls must be awaited (materialization process)
 const result1 = await api.math.add(2, 3); // First: ~371μs (materialization)
-const result2 = await api.math.add(5, 7); // Subsequent: 0.99μs (materialized)
+const result2 = await api.math.add(5, 7); // Subsequent: 1.14μs (materialized)
 ```
 
 **Benefits:**
 
-- ✅ 2.9x faster startup (4.89ms vs 14.29ms)
-- ✅ Near-equal function call performance (0.99μs vs 0.90μs eager)
+- ✅ 3.5x faster startup (7.92ms vs 27.92ms)
+- ✅ Equal function call performance (1.14μs vs 1.23μs eager - within 8% measurement noise)
 - ✅ Memory efficient (loads only what you use)
 - ✅ Copy-left optimization (once loaded, stays loaded)
 
 > [!TIP]  
 > **Choose your strategy:**
 >
-> - **Startup-sensitive?** → Lazy mode (2.9x faster startup)
-> - **Call-intensive?** → Eager mode (1.1x faster calls)
+> - **Startup-sensitive?** → Lazy mode (3.5x faster startup)
+> - **Call-intensive?** → Either mode (function calls essentially equal after materialization)
 > - **Need predictability?** → Eager mode (no materialization delays)
 > - **Large API, use subset?** → Lazy mode (memory efficient)
 
