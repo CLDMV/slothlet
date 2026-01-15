@@ -12,6 +12,67 @@
  */
 
 /**
+ * Creates a wrapper function that can have its implementation updated without
+ * changing its reference. Used for hot-reload support.
+ *
+ * @param {Function} fn - The function to wrap
+ * @returns {Function} Wrapper function with _impl property for updates
+ */
+function createFunctionWrapper(fn) {
+	// Create wrapper function that delegates to stored implementation
+	// Use the original function name if available
+	const funcName = fn.name || "anonymous";
+	const wrapper = {
+		[funcName]: function (...args) {
+			return wrapper[funcName]._impl.apply(this, args);
+		}
+	}[funcName];
+
+	// Store implementation and mark as wrapped
+	wrapper._impl = fn;
+	Object.defineProperty(wrapper, "_slothletWrapped", {
+		value: true,
+		writable: false,
+		enumerable: false,
+		configurable: false
+	});
+
+	// Copy properties from original function
+	const props = Object.keys(fn);
+	for (const prop of props) {
+		wrapper[prop] = fn[prop];
+	}
+
+	// Copy non-enumerable slothlet properties
+	if (fn.__owners) wrapper.__owners = fn.__owners;
+	if (fn.__slothletPath) wrapper.__slothletPath = fn.__slothletPath;
+	if (fn.__metadata) wrapper.__metadata = fn.__metadata;
+
+	return wrapper;
+}
+
+/**
+ * Recursively wraps all functions in an object for hot-reload support.
+ * @param {any} obj - Object to process
+ * @param {WeakSet} [visited] - Tracks visited objects to prevent loops
+ */
+function wrapFunctionsRecursively(obj, visited = new WeakSet()) {
+	if (!obj || typeof obj !== "object") return;
+	if (visited.has(obj)) return;
+	visited.add(obj);
+
+	for (const key of Object.keys(obj)) {
+		const value = obj[key];
+		// Only wrap if it's a function AND not already wrapped
+		if (typeof value === "function" && !value._slothletWrapped) {
+			obj[key] = createFunctionWrapper(value);
+		} else if (value && typeof value === "object") {
+			wrapFunctionsRecursively(value, visited);
+		}
+	}
+}
+
+/**
  * @fileoverview Dynamic API extension functionality for adding modules at runtime.
  * @module @cldmv/slothlet/lib/helpers/api_builder/add_api
  * @memberof module:@cldmv/slothlet.lib.helpers.api_builder
@@ -150,7 +211,7 @@ function removeOrphans(obj, visited = new WeakSet()) {
  * @returns {Promise<void>}
  */
 async function recursivelyMutateWithLazyPreservation(existingObj, newObj, options, visited = new WeakSet()) {
-	const { instance, skipDeletion = false } = options;
+	const { instance, skipDeletion = false, mutateExisting = false } = options;
 
 	// Prevent infinite loops
 	if (visited.has(existingObj)) return;
@@ -269,6 +330,58 @@ async function recursivelyMutateWithLazyPreservation(existingObj, newObj, option
 				if (existingValue.__materialized) {
 					await recursivelyMutateWithLazyPreservation(existingValue.__materialized, newValue, options, visited);
 				}
+				continue;
+			}
+		}
+
+		// CRITICAL: Check function-to-function updates FIRST, before object recursion
+		// Wrapped functions have __metadata, so they'd match the slothlet object check below
+		// and recurse into their properties instead of updating ._impl
+		if (typeof existingValue === "function" && typeof newValue === "function" && mutateExisting) {
+			// Both are functions and mutateExisting is true - update wrapper implementation if wrapped,
+			// otherwise we must replace the reference (cannot mutate function implementation)
+			if (existingValue._slothletWrapped) {
+				// Existing is wrapped - update its implementation
+				// If new value is also wrapped, extract its implementation; otherwise use it directly
+				const newImpl = newValue._slothletWrapped ? newValue._impl : newValue;
+
+				if (instance.config.debug) {
+					console.log(`[DEBUG] recursivelyMutate: Updating wrapped function implementation at "${key}"`);
+				}
+				existingValue._impl = newImpl;
+
+				// Copy properties from newValue to wrapper (excluding internal wrapper properties)
+				const newProps = Object.keys(newValue);
+				for (const prop of newProps) {
+					if (prop !== "_impl" && prop !== "_slothletWrapped") {
+						existingValue[prop] = newValue[prop];
+					}
+				}
+
+				// Merge ownership
+				if (newValue.__owners && Array.isArray(newValue.__owners)) {
+					if (!existingValue.__owners) {
+						Object.defineProperty(existingValue, "__owners", {
+							value: [...newValue.__owners],
+							writable: true,
+							enumerable: false,
+							configurable: true
+						});
+					} else {
+						for (const owner of newValue.__owners) {
+							if (!existingValue.__owners.includes(owner)) {
+								existingValue.__owners.push(owner);
+							}
+						}
+					}
+				}
+				continue; // Skip rest of checks - we've updated the wrapper
+			} else {
+				// Not wrapped - cannot update implementation without replacing reference
+				if (instance.config.debug) {
+					console.log(`[DEBUG] recursivelyMutate: Replacing function at "${key}" (not wrapped)`);
+				}
+				existingObj[key] = newValue;
 				continue;
 			}
 		}
@@ -462,7 +575,7 @@ async function recursivelyMutateWithLazyPreservation(existingObj, newObj, option
  * );
  */
 export async function addApiFromFolder({ apiPath, folderPath, instance, metadata = {}, options = {} }) {
-	const { forceOverwrite = false, mutateExisting = true, moduleId } = options;
+	const { forceOverwrite = false, mutateExisting = false, moduleId } = options;
 
 	// Rule 12: Module Ownership validation
 	if (forceOverwrite && !moduleId) {
@@ -544,7 +657,8 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 	}
 
 	// Track addApi call for hot reload (before any potential errors)
-	if (instance.config.hotReload) {
+	// Skip tracking if this is a rollback operation (mutateExisting is only used during rollback)
+	if (instance.config.hotReload && !mutateExisting) {
 		// Remove any previous entry for this apiPath/moduleId (if reloading)
 		// Use moduleId if available, otherwise use apiPath as identifier
 		const identifier = moduleId || apiPath;
@@ -552,12 +666,13 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 			const entryId = entry.options?.moduleId || entry.apiPath;
 			return entryId !== identifier;
 		});
-		// Add new entry with all options preserved
+		// Add new entry with all options preserved (except mutateExisting which is operation-specific)
+		const { mutateExisting: _, ...optionsToStore } = options || {};
 		instance._addApiHistory.push({
 			apiPath,
 			folderPath,
 			metadata: metadata ? { ...metadata } : {},
-			options: options ? { ...options } : {}
+			options: { ...optionsToStore }
 		});
 		// Remove from removal history if it was there (using same identifier)
 		if (moduleId) {
@@ -1146,6 +1261,9 @@ export async function addApiFromFolder({ apiPath, folderPath, instance, metadata
 
 		// When mutateExisting is true, use unified recursive mutation to preserve lazy proxy references
 		if (mutateExisting) {
+			// Wrap all functions in newModules to enable implementation updates without breaking references
+			wrapFunctionsRecursively(newModules);
+
 			// Determine if we should skip property deletion:
 			// - Without moduleId: always skip deletion (we're just merging, not doing tracked reload)
 			// - With moduleId: skip deletion if multiple modules contribute to this path

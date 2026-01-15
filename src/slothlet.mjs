@@ -288,7 +288,16 @@ function createFreshInstance() {
 		// Clone mutable containers to avoid cross-instance bleed
 		if (k === "config") instance[k] = { ...v };
 		else if (k === "boundapi" || k === "context" || k === "reference") instance[k] = {};
-		else instance[k] = v;
+		else if (k === "_moduleOwnership" || k === "_moduleApiPaths" || k === "_pathSegmentModules") {
+			// Clone Maps to prevent ownership bleed between instances
+			instance[k] = new Map();
+		} else if (k === "_addApiHistory") {
+			// Clone array to prevent history bleed between instances
+			instance[k] = [];
+		} else if (k === "_removeApiHistory") {
+			// Clone Set to prevent removal history bleed between instances
+			instance[k] = new Set();
+		} else instance[k] = v;
 	}
 	return instance;
 }
@@ -627,7 +636,49 @@ const slothletObject = {
 			eager_assignSlothletPaths(this.boundapi);
 		}
 
+		// Register ownership for initial core module functions
+		if (this.config.hotReload) {
+			this._registerInitialCoreOwnership(this.api, "");
+		}
+
 		this.updateBindings(this.context, this.reference, this.boundapi);
+
+		// Expose internal ownership tracking methods for testing
+		// Only exposed when SLOTHLET_INTERNAL_TEST_MODE environment variable is set
+		if (process.env.SLOTHLET_INTERNAL_TEST_MODE === "true") {
+			Object.defineProperties(this.boundapi, {
+				_getApiOwnership: {
+					value: this._getApiOwnership.bind(this),
+					enumerable: false,
+					writable: true,
+					configurable: true
+				},
+				_moduleApiPaths: {
+					value: this._moduleApiPaths,
+					enumerable: false,
+					writable: true,
+					configurable: true
+				},
+				_moduleOwnership: {
+					value: this._moduleOwnership,
+					enumerable: false,
+					writable: true,
+					configurable: true
+				},
+				_registerApiOwnership: {
+					value: this._registerApiOwnership.bind(this),
+					enumerable: false,
+					writable: true,
+					configurable: true
+				},
+				_getCurrentOwner: {
+					value: this._getCurrentOwner.bind(this),
+					enumerable: false,
+					writable: true,
+					configurable: true
+				}
+			});
+		}
 
 		this.loaded = true;
 
@@ -1206,11 +1257,18 @@ const slothletObject = {
 	_registerApiOwnership(apiPath, moduleId) {
 		if (!this.config.hotReload) return;
 
-		// Register apiPath -> Set<moduleId> (multiple modules can own same path)
+		// Register apiPath -> Array<moduleId> (multiple modules can own same path, last = current owner)
 		if (!this._moduleOwnership.has(apiPath)) {
-			this._moduleOwnership.set(apiPath, new Set());
+			this._moduleOwnership.set(apiPath, []);
 		}
-		this._moduleOwnership.get(apiPath).add(moduleId);
+		const owners = this._moduleOwnership.get(apiPath);
+		// If already present, remove it (we'll add to end to make it current)
+		const existingIndex = owners.indexOf(moduleId);
+		if (existingIndex !== -1) {
+			owners.splice(existingIndex, 1);
+		}
+		// Add to end (current owner)
+		owners.push(moduleId);
 
 		// Register moduleId -> apiPaths (bidirectional)
 		if (!this._moduleApiPaths.has(moduleId)) {
@@ -1219,7 +1277,7 @@ const slothletObject = {
 		this._moduleApiPaths.get(moduleId).add(apiPath);
 
 		if (this.config.debug) {
-			console.log(`[DEBUG] Registered ownership: ${apiPath} -> ${moduleId}`);
+			console.log(`[DEBUG] Registered ownership: ${apiPath} -> [${owners.join(", ")}] (current: ${moduleId})`);
 		}
 	},
 
@@ -1233,7 +1291,53 @@ const slothletObject = {
 	 */
 	_getApiOwnership(apiPath) {
 		if (!this.config.hotReload) return null;
-		return this._moduleOwnership.get(apiPath) || null;
+		const owners = this._moduleOwnership.get(apiPath);
+		return owners ? new Set(owners) : null;
+	},
+
+	/**
+	 * Gets the current owner (last in array) for the specified API path.
+	 * @memberof module:@cldmv/slothlet
+	 * @param {string} apiPath - The API path to check
+	 * @returns {string|null} Current owner moduleId, or null if unowned
+	 * @private
+	 * @internal
+	 */
+	_getCurrentOwner(apiPath) {
+		if (!this.config.hotReload) return null;
+		const owners = this._moduleOwnership.get(apiPath);
+		return owners && owners.length > 0 ? owners[owners.length - 1] : null;
+	},
+
+	/**
+	 * Recursively registers "core" ownership for all initial API functions and objects.
+	 * @memberof module:@cldmv/slothlet
+	 * @param {object} obj - The API object to traverse
+	 * @param {string} basePath - Current path prefix (e.g., "math.utils")
+	 * @param {WeakSet} visited - Visited objects to prevent infinite loops
+	 * @private
+	 * @internal
+	 */
+	_registerInitialCoreOwnership(obj, basePath, visited = new WeakSet()) {
+		if (!obj || typeof obj !== "object") return;
+
+		// Prevent infinite recursion from circular references
+		if (visited.has(obj)) return;
+		visited.add(obj);
+
+		// Register this path if it has functions or is a function itself
+		if (typeof obj === "function" || Object.values(obj).some((val) => typeof val === "function")) {
+			const apiPath = basePath || "root";
+			this._registerApiOwnership(apiPath, "core");
+		}
+
+		// Recursively register nested paths
+		for (const [key, value] of Object.entries(obj)) {
+			if (value && typeof value === "object") {
+				const newPath = basePath ? `${basePath}.${key}` : key;
+				this._registerInitialCoreOwnership(value, newPath, visited);
+			}
+		}
 	},
 
 	/**
@@ -1477,6 +1581,11 @@ const slothletObject = {
 		await this.load(this._initialLoadConfig);
 
 		// Replay all addApi calls that weren't removed
+		if (this.config.debug) {
+			console.log(
+				`[DEBUG] reload: Replaying ${this._addApiHistory.length} addApi entries, skipping ${this._removeApiHistory.size} removed modules`
+			);
+		}
 		for (const entry of this._addApiHistory) {
 			const { apiPath, folderPath, metadata, options } = entry;
 			const moduleId = options?.moduleId;
@@ -1484,13 +1593,13 @@ const slothletObject = {
 			// Skip if this module was explicitly removed
 			if (moduleId && this._removeApiHistory.has(moduleId)) {
 				if (this.config.debug) {
-					console.log(`[DEBUG] reload: Skipping removed module "${moduleId}"`);
+					console.log(`[DEBUG] reload: Skipping removed module "${moduleId}" (path: "${apiPath}")`);
 				}
 				continue;
 			}
 
 			if (this.config.debug) {
-				console.log(`[DEBUG] reload: Re-adding API at "${apiPath}" from "${folderPath}"`);
+				console.log(`[DEBUG] reload: Re-adding API at "${apiPath}" from "${folderPath}"${moduleId ? ` (moduleId: "${moduleId}")` : ""}`);
 			}
 
 			await this.addApi(apiPath, folderPath, metadata, options);
