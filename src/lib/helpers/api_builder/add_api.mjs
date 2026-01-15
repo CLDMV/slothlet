@@ -492,7 +492,22 @@ async function recursivelyMutateWithLazyPreservation(existingObj, newObj, option
 			if (instance.config.debug) {
 				console.log(`[DEBUG] recursivelyMutate: ASSIGNING existingObj["${key}"] = newValue (replacing reference!)`);
 			}
-			existingObj[key] = newValue;
+			// Use try-catch for concurrent operations that might hit read-only properties
+			try {
+				existingObj[key] = newValue;
+			} catch (err) {
+				// If property is read-only, use defineProperty to force the update
+				if (err.message && err.message.includes("read only")) {
+					Object.defineProperty(existingObj, key, {
+						value: newValue,
+						writable: true,
+						enumerable: true,
+						configurable: true
+					});
+				} else {
+					throw err;
+				}
+			}
 		}
 	}
 }
