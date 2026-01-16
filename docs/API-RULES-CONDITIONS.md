@@ -6,7 +6,7 @@
 - **Date**: January 3, 2026
 - **Purpose**: Foundation documentation mapping every conditional statement in slothlet API generation to exact source code locations
 - **Status**: ✅ **VERIFIED AND CURRENT** - All conditions verified against actual source code
-- **Cross-Reference Support**: Provides technical foundation for [API-RULES-v2.md](API-RULES-v2.md) and [API-FLATTENING-v2.md](API-FLATTENING-v2.md)
+- **Cross-Reference Support**: Provides technical foundation for [API-RULES.md](API-RULES.md) and [API-FLATTENING.md](API-FLATTENING.md)
 
 ---
 
@@ -15,11 +15,11 @@
 This is the **foundation level** of slothlet's three-tier documentation system:
 
 ```text
-📋 API-FLATTENING-v2.md (F##)     ← User Guide: "How flattening works"
+📋 API-FLATTENING.md (F##)     ← User Guide: "How flattening works"
      ↓ references
-📊 API-RULES-v2.md (1-12)         ← Maintainer Guide: "All API behaviors"
+📊 API-RULES.md (1-12)         ← Maintainer Guide: "All API behaviors"
      ↓ references
-🔧 API-RULES-CONDITIONS-v2.md     ← Developer/Debug Guide: "Exact code locations"
+🔧 API-RULES-CONDITIONS.md     ← Developer/Debug Guide: "Exact code locations"
 ```
 
 **Numbering System**: This document uses **C##** (C01, C02, etc.) for all conditions to avoid confusion with the other files' numbering systems.
@@ -85,7 +85,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Self-referential exports (where filename matches an exported property) never flatten to avoid infinite nesting  
 **Input**: `isSelfReferential` (boolean)  
 **Result**: `{ shouldFlatten: false, preserveAsNamespace: true, reason: "self-referential export" }`  
-**Used By**: [API-RULES Rule 6](API-RULES-v2.md#rule-6-self-referential-export-protection)
+**Used By**: [API-RULES Rule 6](API-RULES.md#rule-6-self-referential-export-protection)
 
 **Example**:
 
@@ -105,7 +105,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: In multi-default context, modules WITH default exports are preserved as namespaces to avoid conflicts  
 **Input**: `hasMultipleDefaultExports` (boolean), `moduleHasDefault` (boolean)  
 **Result**: `{ shouldFlatten: false, preserveAsNamespace: true, reason: "multi-default context with default export" }`  
-**Used By**: [API-RULES Rule 5](API-RULES-v2.md#rule-5-multi-default-export-mixed-pattern)
+**Used By**: [API-RULES Rule 5](API-RULES.md#rule-5-multi-default-export-mixed-pattern)
 
 **Example**:
 
@@ -125,7 +125,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: In multi-default context, modules WITHOUT default exports flatten to avoid empty namespaces  
 **Input**: `hasMultipleDefaultExports` (boolean), `moduleHasDefault` (boolean)  
 **Result**: `{ shouldFlatten: true, flattenToRoot: true, flattenToCategory: true, reason: "multi-default context without default export" }`  
-**Used By**: [API-RULES Rule 5](API-RULES-v2.md#rule-5-multi-default-export-mixed-pattern)
+**Used By**: [API-RULES Rule 5](API-RULES.md#rule-5-multi-default-export-mixed-pattern)
 
 **Example**:
 
@@ -145,7 +145,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: When module exports single named export matching filename, use the export directly  
 **Input**: `moduleKeys` (array), `apiPathKey` (string)  
 **Result**: `{ shouldFlatten: true, useAutoFlattening: true, reason: "auto-flatten single named export matching filename" }`  
-**Used By**: [API-RULES Rule 7](API-RULES-v2.md#rule-7-auto-flattening-single-named-export) | [FLATTENING F03](API-FLATTENING-v2.md#f03)
+**Used By**: [API-RULES Rule 7](API-RULES.md#rule-7-auto-flattening-single-named-export) | [FLATTENING F03](API-FLATTENING.md#f03)
 
 **Example**:
 
@@ -165,7 +165,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: When filename matches folder name and has named exports but no default, flatten to category level  
 **Input**: `categoryName` (string), `fileName` (string), `moduleHasDefault` (boolean), `moduleKeys` (array)  
 **Result**: `{ shouldFlatten: true, flattenToCategory: true, reason: "filename matches container, flatten to category" }`  
-**Used By**: [API-RULES Rule 1](API-RULES-v2.md#rule-1-filename-matches-container-flattening) | [FLATTENING F01](API-FLATTENING-v2.md#f01)
+**Used By**: [API-RULES Rule 1](API-RULES.md#rule-1-filename-matches-container-flattening) | [FLATTENING F01](API-FLATTENING.md#f01)
 
 **Example**:
 
@@ -217,7 +217,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Apply auto-flattening when single named export matches filename  
 **Input**: `decision.useAutoFlattening` (boolean from getFlatteningDecision)  
 **Result**: `apiAssignments[apiPathKey] = mod[moduleKeys[0]], flattened = true`  
-**Used By**: [API-RULES Rule 7](API-RULES-v2.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](API-RULES.md#rule-7-auto-flattening-single-named-export)
 
 **Example**:
 
@@ -237,7 +237,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Merge all named exports into target based on flattening decision  
 **Input**: `decision.flattenToRoot` or `decision.flattenToCategory` (boolean)  
 **Processing**: Loop assigns `apiAssignments[key] = mod[key], flattened = true`  
-**Used By**: [API-RULES Rule 1, 5](API-RULES-v2.md#rule-1-filename-matches-container-flattening)
+**Used By**: [API-RULES Rule 1, 5](API-RULES.md#rule-1-filename-matches-container-flattening)
 
 **Example**:
 
@@ -257,7 +257,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Self-referential non-function exports use direct property access  
 **Input**: `isSelfReferential` (boolean)  
 **Result**: `apiAssignments[apiPathKey] = mod[apiPathKey] || mod, namespaced = true`  
-**Used By**: [API-RULES Rule 6](API-RULES-v2.md#rule-6-self-referential-export-protection)
+**Used By**: [API-RULES Rule 6](API-RULES.md#rule-6-self-referential-export-protection)
 
 ---
 
@@ -290,7 +290,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Flatten when filename matches folder name and exports function (not at root level)  
 **Input**: `moduleName` (string), `categoryName` (string), `typeof mod` ("function"), `currentDepth > 0`  
 **Result**: `shouldFlatten: true, flattenType: "function-folder-match"`  
-**Used By**: [API-RULES Rule 2](API-RULES-v2.md#rule-2-filename-folder-match-flattening)
+**Used By**: [API-RULES Rule 2](API-RULES.md#rule-2-filename-folder-match-flattening)
 
 ---
 
@@ -303,7 +303,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Flatten default object exports when filename matches folder (handles both CJS and ESM uniformly)  
 **Input**: `analysis.hasDefault`, `analysis.defaultExportType === "object"`, filename/folder match, not root level  
 **Result**: `shouldFlatten: true, flattenType: "default-export-flatten"`  
-**Used By**: [API-RULES Rule 4](API-RULES-v2.md#rule-4-default-export-object-flattening)
+**Used By**: [API-RULES Rule 4](API-RULES.md#rule-4-default-export-object-flattening)
 
 ---
 
@@ -317,7 +317,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: When single named export matches filename, flatten the object contents  
 **Input**: Filename/category match, object type, single named export matching filename  
 **Result**: `shouldFlatten: true, flattenType: "object-auto-flatten"`  
-**Used By**: [API-RULES Rule 7](API-RULES-v2.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](API-RULES.md#rule-7-auto-flattening-single-named-export)
 
 ---
 
@@ -330,7 +330,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Avoid double nesting when file basename matches folder (e.g., nest/nest.mjs)  
 **Input**: `fileBaseName === categoryName` and has named exports  
 **Result**: `shouldFlatten: true, flattenType: "filename-folder-match-flatten"`  
-**Used By**: [API-RULES Rule 1, 2](API-RULES-v2.md#rule-1-filename-matches-container-flattening)
+**Used By**: [API-RULES Rule 1, 2](API-RULES.md#rule-1-filename-matches-container-flattening)
 
 ---
 
@@ -344,7 +344,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Eliminate intermediate namespace for generic filenames (singlefile, index, main, default)  
 **Input**: Single file, object export, generic filename pattern: `["singlefile", "index", "main", "default"]`  
 **Result**: `shouldFlatten: true, flattenType: "parent-level-flatten"`  
-**Used By**: [API-RULES Rule 8](API-RULES-v2.md#rule-8-generic-filename-parent-flattening)
+**Used By**: [API-RULES Rule 8](API-RULES.md#rule-8-generic-filename-parent-flattening)
 
 ---
 
@@ -357,7 +357,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Flatten when function name matches folder name (case-insensitive), prefer function name  
 **Input**: Function name matches folder name (case-insensitive check), not at root level  
 **Result**: `shouldFlatten: true, flattenType: "function-folder-match", preferredName: mod.name`  
-**Used By**: [API-RULES Rule 9](API-RULES-v2.md#rule-9-function-name-preservation)
+**Used By**: [API-RULES Rule 9](API-RULES.md#rule-9-function-name-preservation)
 
 ---
 
@@ -370,7 +370,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Use original function name instead of sanitized filename when they match semantically  
 **Input**: Function name matches filename semantically (case-insensitive, ignores sanitization differences)  
 **Result**: `shouldFlatten: false, preferredName: mod.name`  
-**Used By**: [API-RULES Rule 9](API-RULES-v2.md#rule-9-function-name-preservation)
+**Used By**: [API-RULES Rule 9](API-RULES.md#rule-9-function-name-preservation)
 
 ---
 
@@ -383,7 +383,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Flatten functions marked as default exports (not at root level)  
 **Input**: Function with no name, "default" name, or marked as default export  
 **Result**: `shouldFlatten: true, flattenType: "default-function", preferredName: categoryName`  
-**Used By**: [API-RULES Rule 4](API-RULES-v2.md#rule-4-default-export-object-flattening)
+**Used By**: [API-RULES Rule 4](API-RULES.md#rule-4-default-export-object-flattening)
 
 ---
 
@@ -396,7 +396,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Purpose**: Auto-flatten when module has single named export matching filename (final check for single-file case)  
 **Input**: Single named export with name matching module name  
 **Result**: `shouldFlatten: true, flattenType: "object-auto-flatten", preferredName: moduleName`  
-**Used By**: [API-RULES Rule 7](API-RULES-v2.md#rule-7-auto-flattening-single-named-export)
+**Used By**: [API-RULES Rule 7](API-RULES.md#rule-7-auto-flattening-single-named-export)
 
 ---
 
@@ -460,7 +460,7 @@ This document catalogs every conditional statement in slothlet's API generation 
 **Version**: 2.0  
 **Last Full Audit**: January 3, 2026  
 **Status**: ✅ **COMPLETE** - All conditions documented with technical details  
-**Cross-References**: Complete integration with API-RULES-v2.md and API-FLATTENING-v2.md  
+**Cross-References**: Complete integration with API-RULES.md and API-FLATTENING.md  
 **Next Review**: When source code conditions change or new features are added
 
 **Verification Commands**:
@@ -507,7 +507,7 @@ This section maps conditions to the higher-level documentation they support.
 **Version**: 2.0  
 **Last Full Audit**: January 3, 2026  
 **Lines Verified**: All line numbers manually verified against source code  
-**Cross-References**: Enhanced linking to API-RULES-v2.md and API-FLATTENING-v2.md  
+**Cross-References**: Enhanced linking to API-RULES.md and API-FLATTENING.md  
 **Links**: All GitHub-style links use `#Lxxx-Lyyy` format for precise navigation
 
 **Next Steps**:
@@ -520,7 +520,7 @@ This section maps conditions to the higher-level documentation they support.
 ## C19-C22: Rule 12 Module Ownership Conditions
 
 **Functionality**: Module ownership tracking and selective API overwriting validation  
-**Primary Rule**: [Rule 12 - Module Ownership and Selective API Overwriting](API-RULES-v2.md#rule-12-module-ownership-and-selective-api-overwriting)  
+**Primary Rule**: [Rule 12 - Module Ownership and Selective API Overwriting](API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting)  
 **Source Code**: [slothlet.mjs](../src/slothlet.mjs) (ownership tracking), [add_api.mjs](../src/lib/helpers/api_builder/add_api.mjs) (validation)
 
 ### C19: Configuration Validation Condition
@@ -601,8 +601,8 @@ if (currentTarget[finalKey] !== undefined && this._config.hotReload && options.m
 ## C33: AddApi Special File Detection
 
 **Category**: AddApi  
-**Related Rule**: [Rule 11](API-RULES-v2.md#rule-11-addapi-special-file-pattern)  
-**Flattening Guide**: [F06: AddApi Special File Pattern](API-FLATTENING-v2.md#f06-addapi-special-file-pattern)  
+**Related Rule**: [Rule 11](API-RULES.md#rule-11-addapi-special-file-pattern)  
+**Flattening Guide**: [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)  
 **Status**: ✅ **VERIFIED** (api_tests/api_smart_flatten_addapi)
 
 **Pattern**: Files named `addapi.mjs` loaded via `addApi()` method always flatten regardless of `autoFlatten` setting
