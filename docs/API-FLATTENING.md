@@ -14,17 +14,17 @@
 This is the **top level** of slothlet's three-tier documentation system:
 
 ```text
-📋 API-FLATTENING-v2.md (F##)     ← YOU ARE HERE: User-friendly guide
+📋 API-FLATTENING.md (F##)     ← YOU ARE HERE: User-friendly guide
      ↑ links from                  ↓ links to
-📊 API-RULES-v2.md (1-12)         ← Maintainer Guide: All API behaviors
+📊 API-RULES.md (1-12)         ← Maintainer Guide: All API behaviors
      ↑ links from                  ↓ links to
-🔧 API-RULES-CONDITIONS-v2.md     ← Developer Guide: Exact source code locations
+🔧 API-RULES-CONDITIONS.md     ← Developer Guide: Exact source code locations
 ```
 
 **Navigation:**
 
-- **⬇️ For Maintainers**: See [API-RULES-v2.md](API-RULES-v2.md) for complete behavior catalog with verified examples
-- **⬇️ For Developers**: See [API-RULES-CONDITIONS-v2.md](API-RULES-CONDITIONS-v2.md) for exact source code locations
+- **⬇️ For Maintainers**: See [API-RULES.md](API-RULES.md) for complete behavior catalog with verified examples
+- **⬇️ For Developers**: See [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md) for exact source code locations
 
 ---
 
@@ -48,13 +48,13 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 - [Advanced Scenarios](#advanced-scenarios)
 - [Cross-Reference Guide](#cross-reference-guide)
 
-> **Note**: This document covers the **7 flattening-specific patterns** (F01-F07) which are a subset of the **12 comprehensive API rules** (Rules 1-12) in [API-RULES-v2.md](API-RULES-v2.md). The complete rules cover ALL API behaviors including non-flattening cases.
+> **Note**: This document covers the **7 flattening-specific patterns** (F01-F07) which are a subset of the **12 comprehensive API rules** (Rules 1-12) in [API-RULES.md](API-RULES.md). The complete rules cover ALL API behaviors including non-flattening cases.
 
 ---
 
 ## The Seven Flattening Rules
 
-Slothlet applies seven distinct flattening rules to eliminate redundant nesting. These represent the **flattening-specific subset** of the [12 comprehensive API rules](API-RULES-v2.md):
+Slothlet applies seven distinct flattening rules to eliminate redundant nesting. These represent the **flattening-specific subset** of the [12 comprehensive API rules](API-RULES.md):
 
 **Mapping to Comprehensive Rules**:
 
@@ -72,7 +72,7 @@ Slothlet applies seven distinct flattening rules to eliminate redundant nesting.
 
 **When:** A folder contains a single file with a matching name (ignoring case and separators)  
 **Result:** File contents promoted to folder level  
-**Detailed Coverage**: [API-RULES Rule 1](API-RULES-v2.md#rule-1-filename-matches-container-flattening) | **Technical**: [CONDITIONS C05, C09b](API-RULES-CONDITIONS-v2.md#c05)
+**Detailed Coverage**: [API-RULES Rule 1](API-RULES.md#rule-1-filename-matches-container-flattening) | **Technical**: [CONDITIONS C05, C09b](API-RULES-CONDITIONS.md#c05)
 
 **Example:**
 
@@ -106,7 +106,7 @@ api.math.subtract(5, 2); // 3
 
 **When:** A folder contains only `index.mjs` or `index.cjs`  
 **Result:** Index file becomes transparent, content promoted to folder level  
-**Detailed Coverage**: [API-RULES Rule 8 Pattern A](API-RULES-v2.md#pattern-a-index-file-flattening) | **Technical**: [CONDITIONS C12, C21a](API-RULES-CONDITIONS-v2.md#c12)
+**Detailed Coverage**: [API-RULES Rule 8 Pattern A](API-RULES.md#pattern-a-index-file-flattening) | **Technical**: [CONDITIONS C12, C21a](API-RULES-CONDITIONS.md#c12)
 
 **Example:**
 
@@ -140,7 +140,7 @@ api.utils.validate(true); // true
 
 **When:** A folder has one file, that file has one named export, and the export name matches the folder name  
 **Result:** Export contents promoted directly to folder level  
-**Detailed Coverage**: [API-RULES Rule 7](API-RULES-v2.md#rule-7-auto-flattening-single-named-export) | **Technical**: [CONDITIONS C04, C09a, C18](API-RULES-CONDITIONS-v2.md#c04)
+**Detailed Coverage**: [API-RULES Rule 7](API-RULES.md#rule-7-auto-flattening-single-named-export) | **Technical**: [CONDITIONS C04, C09a, C18](API-RULES-CONDITIONS.md#c04)
 
 **Example:**
 
@@ -176,7 +176,7 @@ api.config.debug; // true
 
 **When:** Folder/file names match AND the file exports a default function/value  
 **Result:** Default function becomes callable at folder level with properties attached  
-**Detailed Coverage**: [API-RULES Rule 4](API-RULES-v2.md#rule-4-default-export-container-pattern) | **Technical**: [CONDITIONS C08c, C24](API-RULES-CONDITIONS-v2.md#c08c)
+**Detailed Coverage**: [API-RULES Rule 4](API-RULES.md#rule-4-default-export-container-pattern) | **Technical**: [CONDITIONS C08c, C24](API-RULES-CONDITIONS.md#c08c)
 
 **Example:**
 
@@ -212,7 +212,7 @@ api.logger.error("Error message"); // All properties preserved
 
 **When:** A folder has one file with a default export that should become a top-level callable  
 **Result:** Default export promoted to folder name, becoming a clean API entry point  
-**Detailed Coverage**: [API-RULES Rule 8 Pattern C](API-RULES-v2.md#pattern-c-single-default-export) | **Technical**: [CONDITIONS C08c, C11](API-RULES-CONDITIONS-v2.md#c08c)
+**Detailed Coverage**: [API-RULES Rule 8 Pattern C](API-RULES.md#pattern-c-single-default-export) | **Technical**: [CONDITIONS C08c, C11](API-RULES-CONDITIONS.md#c08c)
 
 **Example:**
 
@@ -244,7 +244,7 @@ api.processor("hello"); // "HELLO"
 
 **When:** Files named `addapi.mjs` loaded via `addApi()` method  
 **Result:** Always flatten regardless of `autoFlatten` setting - designed for seamless API extensions  
-**Detailed Coverage**: [API-RULES Rule 11](API-RULES-v2.md#rule-11-addapi-special-file-pattern) | **Technical**: [CONDITIONS C33](API-RULES-CONDITIONS-v2.md#c33)
+**Detailed Coverage**: [API-RULES Rule 11](API-RULES.md#rule-11-addapi-special-file-pattern) | **Technical**: [CONDITIONS C33](API-RULES-CONDITIONS.md#c33)
 
 **Example:**
 
@@ -296,7 +296,7 @@ api.plugins.configure(opts); // Clean integration
 
 **When:** Using `addApi()` with module ownership tracking for selective API overwriting  
 **Result:** Modules can only overwrite APIs they originally registered, enabling safe hot-reloading  
-**Detailed Coverage**: [API-RULES Rule 12](API-RULES-v2.md#rule-12-module-ownership-and-selective-api-overwriting) | **Technical**: [CONDITIONS C19-C22](API-RULES-CONDITIONS-v2.md#c19-c22)
+**Detailed Coverage**: [API-RULES Rule 12](API-RULES.md#rule-12-module-ownership-and-selective-api-overwriting) | **Technical**: [CONDITIONS C19-C22](API-RULES-CONDITIONS.md#c19-c22)
 
 **Example:**
 
@@ -673,7 +673,7 @@ api.math.math.add(1, 2); // Structure preserved to avoid confusion
 api.math.math.math.nested; // Self-referential structure clear
 ```
 
-**Cross-Reference**: [API-RULES Rule 6](API-RULES-v2.md#rule-6-self-referential-export-protection) | **Technical**: [CONDITIONS C01](API-RULES-CONDITIONS-v2.md#c01)
+**Cross-Reference**: [API-RULES Rule 6](API-RULES.md#rule-6-self-referential-export-protection) | **Technical**: [CONDITIONS C01](API-RULES-CONDITIONS.md#c01)
 
 ---
 
@@ -683,22 +683,22 @@ api.math.math.math.nested; // Self-referential structure clear
 
 | **For This Information**            | **Go To**                                                                           | **Focus**             |
 | ----------------------------------- | ----------------------------------------------------------------------------------- | --------------------- |
-| Complete rule catalog with examples | [API-RULES-v2.md](API-RULES-v2.md)                                                  | Maintainer reference  |
-| Exact source code locations         | [API-RULES-CONDITIONS-v2.md](API-RULES-CONDITIONS-v2.md)                            | Technical debugging   |
-| Verification status and test files  | [API-RULES-v2.md#verification-status](API-RULES-v2.md#verification-status)          | Implementation status |
-| Advanced multi-default handling     | [API-RULES-v2.md#rule-5](API-RULES-v2.md#rule-5-multi-default-export-mixed-pattern) | Complex scenarios     |
+| Complete rule catalog with examples | [API-RULES.md](API-RULES.md)                                                  | Maintainer reference  |
+| Exact source code locations         | [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md)                            | Technical debugging   |
+| Verification status and test files  | [API-RULES.md#verification-status](API-RULES.md#verification-status)          | Implementation status |
+| Advanced multi-default handling     | [API-RULES.md#rule-5](API-RULES.md#rule-5-multi-default-export-mixed-pattern) | Complex scenarios     |
 
 ### Rule Cross-References
 
 | Flattening Rule | API Rules                                                                                                | Technical Conditions                             | Test Verification                  |
 | --------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
-| **F01**         | [Rule 1](API-RULES-v2.md#rule-1)                                                                         | [C05, C09b](API-RULES-CONDITIONS-v2.md#c05)      | api_tests/api_test                 |
-| **F02**         | [Rule 8 Pattern A](API-RULES-v2.md#pattern-a-index-file-flattening)                                      | [C12, C21a](API-RULES-CONDITIONS-v2.md#c12)      | Multiple test files                |
-| **F03**         | [Rule 7](API-RULES-v2.md#rule-7)                                                                         | [C04, C09a, C18](API-RULES-CONDITIONS-v2.md#c04) | api_tests/api_test                 |
-| **F04**         | [Rule 4](API-RULES-v2.md#rule-4), [Rule 8 Pattern B](API-RULES-v2.md#pattern-b-default-export-promotion) | [C08c, C24](API-RULES-CONDITIONS-v2.md#c08c)     | api_tests/api_test + api_tv_test   |
-| **F05**         | [Rule 8 Pattern C](API-RULES-v2.md#pattern-c-single-default-export)                                      | [C08c, C11](API-RULES-CONDITIONS-v2.md#c08c)     | Multiple test files                |
-| **F06**         | [Rule 11](API-RULES-v2.md#rule-11)                                                                       | [C33](API-RULES-CONDITIONS-v2.md#c33)            | api_tests/api_smart_flatten_addapi |
-| **F07**         | [Rule 12](API-RULES-v2.md#rule-12) (related)                                                             | [C19-C22](API-RULES-CONDITIONS-v2.md#c19-c22)    | tests/test-rule-12.mjs             |
+| **F01**         | [Rule 1](API-RULES.md#rule-1)                                                                         | [C05, C09b](API-RULES-CONDITIONS.md#c05)      | api_tests/api_test                 |
+| **F02**         | [Rule 8 Pattern A](API-RULES.md#pattern-a-index-file-flattening)                                      | [C12, C21a](API-RULES-CONDITIONS.md#c12)      | Multiple test files                |
+| **F03**         | [Rule 7](API-RULES.md#rule-7)                                                                         | [C04, C09a, C18](API-RULES-CONDITIONS.md#c04) | api_tests/api_test                 |
+| **F04**         | [Rule 4](API-RULES.md#rule-4), [Rule 8 Pattern B](API-RULES.md#pattern-b-default-export-promotion) | [C08c, C24](API-RULES-CONDITIONS.md#c08c)     | api_tests/api_test + api_tv_test   |
+| **F05**         | [Rule 8 Pattern C](API-RULES.md#pattern-c-single-default-export)                                      | [C08c, C11](API-RULES-CONDITIONS.md#c08c)     | Multiple test files                |
+| **F06**         | [Rule 11](API-RULES.md#rule-11)                                                                       | [C33](API-RULES-CONDITIONS.md#c33)            | api_tests/api_smart_flatten_addapi |
+| **F07**         | [Rule 12](API-RULES.md#rule-12) (related)                                                             | [C19-C22](API-RULES-CONDITIONS.md#c19-c22)    | tests/test-rule-12.mjs             |
 
 ### Implementation Status
 
