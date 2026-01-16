@@ -21,6 +21,10 @@
 			"import": "./devcheck.mjs"
 		},
 		"./slothlet": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/slothlet.d.mts",
+				"import": "./src3/slothlet.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/slothlet.d.mts",
 				"import": "./src/slothlet.mjs"
@@ -29,6 +33,10 @@
 			"import": "./dist/slothlet.mjs"
 		},
 		"./runtime": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/runtime/runtime.d.mts",
+				"import": "./src3/lib/runtime/runtime.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
 				"import": "./src/lib/runtime/runtime.mjs"
@@ -37,6 +45,10 @@
 			"import": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src3/lib/runtime/runtime-asynclocalstorage.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
 				"import": "./src/lib/runtime/runtime-asynclocalstorage.mjs"
@@ -45,6 +57,10 @@
 			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src3/lib/runtime/runtime-livebindings.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
 				"import": "./src/lib/runtime/runtime-livebindings.mjs"
@@ -53,6 +69,10 @@
 			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/helpers/*.d.mts",
+				"import": "./src3/lib/helpers/*.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/helpers/*.d.mts",
 				"import": "./src/lib/helpers/*.mjs"
@@ -61,12 +81,76 @@
 			"import": "./dist/lib/helpers/*.mjs"
 		},
 		"./modes/*": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/modes/*.d.mts",
+				"import": "./src3/lib/modes/*.mjs"
+			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/modes/*.d.mts",
 				"import": "./src/lib/modes/*.mjs"
 			},
 			"types": "./types/dist/lib/modes/*.d.mts",
 			"import": "./dist/lib/modes/*.mjs"
+		},
+		"./builders/*": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/builders/*.d.mts",
+				"import": "./src3/lib/builders/*.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/builders/*.d.mts",
+				"import": "./src/lib/builders/*.mjs"
+			},
+			"types": "./types/dist/lib/builders/*.d.mts",
+			"import": "./dist/lib/builders/*.mjs"
+		},
+		"./handlers/*": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/handlers/*.d.mts",
+				"import": "./src3/lib/handlers/*.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/handlers/*.d.mts",
+				"import": "./src/lib/handlers/*.mjs"
+			},
+			"types": "./types/dist/lib/handlers/*.d.mts",
+			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"./errors": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/errors.d.mts",
+				"import": "./src3/lib/errors.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/errors.d.mts",
+				"import": "./src/lib/errors.mjs"
+			},
+			"types": "./types/dist/lib/errors.d.mts",
+			"import": "./dist/lib/errors.mjs"
+		},
+		"./i18n": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/i18n/translations.d.mts",
+				"import": "./src3/lib/i18n/translations.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/i18n/translations.d.mts",
+				"import": "./src/lib/i18n/translations.mjs"
+			},
+			"types": "./types/dist/lib/i18n/translations.d.mts",
+			"import": "./dist/lib/i18n/translations.mjs"
+		},
+		"./i18n/*": {
+			"slothlet-three-dev": {
+				"types": "./types/src3/lib/i18n/languages/*.d.mts",
+				"import": "./src3/lib/i18n/languages/*.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/i18n/languages/*.d.mts",
+				"import": "./src/lib/i18n/languages/*.mjs"
+			},
+			"types": "./types/dist/lib/i18n/languages/*.d.mts",
+			"import": "./dist/lib/i18n/languages/*.mjs"
 		}
 	},
 	"types": "./types/index.d.mts",
