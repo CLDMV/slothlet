@@ -1,0 +1,786 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/mxnet.mjs
+ *	@Date: 2025-10-16 11:39:52 -07:00 (1760639992)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2025-11-04 12:10:20 -08:00 (1762287020)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @file api/devices/mxnet.mjs - MXNet device control using @cldmv/mxnet-control
+ * @description Device control module for MXNet devices using the MXNet control package
+ */
+
+import { context, self } from "@cldmv/slothlet/runtime";
+
+/**
+ * Initializes MXNet device controller
+ * @param {Object} config - MXNet configuration
+ * @returns {Promise<MXNetController|null>} MXNet device instance or null if disabled
+ */
+export async function initialize(config) {
+	if (!config.enabled) {
+		self.event.emit("device.mxnet.info", {
+			message: "MXNet device disabled in configuration",
+			action: "skip"
+		});
+		return null;
+	}
+
+	try {
+		self.event.emit("device.mxnet.info", {
+			message: `Initializing MXNet device: ${config.host}:${config.port}`,
+			action: "initialize",
+			host: config.host,
+			port: config.port
+		});
+
+		const device = new MXNetController({
+			host: config.host,
+			port: config.port,
+			mac: config.mac || null,
+			timeout: config.timeout || 5000,
+			debug: true
+		});
+
+		// Set up event handlers for standardized device lifecycle events
+		setupMXNetEventHandlers(device);
+
+		// Update initial state
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.initialized = true;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		await device.connect();
+
+		self.event.emit("device.mxnet.success", {
+			message: `MXNet device initialized: ${config.host}:${config.port}`,
+			action: "initialize",
+			host: config.host,
+			port: config.port
+		});
+		return device;
+	} catch (error) {
+		self.event.emit("device.mxnet.error", {
+			message: "Failed to initialize MXNet device",
+			error: error.message,
+			action: "initialize"
+		});
+
+		// Update error state if state management is available
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.initialized = false;
+			self.state.mxnet.connected = false;
+			self.state.mxnet.ready = false;
+			self.state.mxnet.errorCount++;
+			self.state.mxnet.lastError = error.message;
+		}
+
+		return null;
+	}
+}
+
+/**
+ * Sets up event handlers for MXNet device lifecycle events
+ * @param {MXNetController} device - MXNet device instance
+ */
+function setupMXNetEventHandlers(device) {
+	// Handle initialized event (when device object is created)
+	device.on("initialized", (data) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.initialized = true;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: "MXNet device initialized",
+			action: "initialized",
+			data
+		});
+	});
+
+	// Handle connected event (TCP connection established)
+	device.on("connected", (data) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.connected = true;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.success", {
+			message: "MXNet device connected",
+			action: "connected",
+			data
+		});
+	});
+
+	// Handle ready event (device ready for commands)
+	device.on("ready", (data) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.ready = true;
+			self.state.mxnet.connected = true;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.success", {
+			message: "MXNet device ready for commands",
+			action: "ready",
+			data
+		});
+	});
+
+	// Handle disconnected event (connection lost)
+	device.on("disconnected", (data) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.connected = false;
+			self.state.mxnet.ready = false;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.error", {
+			message: "MXNet device disconnected",
+			action: "disconnected",
+			data
+		});
+	});
+
+	// Handle state changes (volume, mute, etc.)
+	device.on("state", (data) => {
+		if (self.state && self.state.mxnet) {
+			// Update our state object with device state
+			if (data.volume !== undefined) {
+				self.state.mxnet.volume = data.volume;
+			}
+			// For MXNet, mute and pseudoMute are the same thing
+			if (data.pseudoMuted !== undefined) {
+				self.state.mxnet.pseudoMute = data.pseudoMuted;
+				self.state.mxnet.muted = data.pseudoMuted; // Sync both properties
+			}
+			if (data.muted !== undefined) {
+				self.state.mxnet.muted = data.muted;
+				self.state.mxnet.pseudoMute = data.muted; // Sync both properties
+			}
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: "MXNet device state updated",
+			action: "state.update",
+			data
+		});
+	});
+
+	// Handle volume changes specifically
+	device.on("volume:changed", (data) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.volume = data.value;
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: `MXNet volume changed to ${data.value}`,
+			action: "volume.changed",
+			data
+		});
+	});
+
+	// Handle mute changes specifically
+	device.on("mute:changed", (data) => {
+		if (self.state && self.state.mxnet) {
+			// For MXNet, mute and pseudoMute are the same thing - sync both
+			self.state.mxnet.pseudoMute = data.value;
+			self.state.mxnet.muted = data.value;
+			if (data.restoreVolume !== undefined) {
+				self.state.mxnet.muteVolumeRestore = data.restoreVolume;
+			}
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: `MXNet mute ${data.value ? "enabled" : "disabled"}`,
+			action: "mute.changed",
+			data
+		});
+	});
+
+	// Handle errors
+	device.on("error", (error) => {
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.errorCount++;
+			self.state.mxnet.lastError = error.message || error.toString();
+			self.state.mxnet.lastSeen = Date.now();
+		}
+
+		self.event.emit("device.mxnet.error", {
+			message: "MXNet device error",
+			action: "error",
+			error: error.message || error.toString()
+		});
+	});
+}
+
+/**
+ * Power control object for MXNet operations
+ */
+export const power = {
+	/**
+	 * Powers on the MXNet device
+	 * @returns {Promise<Object>} Command result
+	 */
+	async on() {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "power.on"
+			});
+			return { success: false, command: "power.on", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await device.powerOn();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.mxnet) {
+				self.state.mxnet.power = "on";
+				self.state.mxnet.lastCommand = "power.on";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device power ON command sent (${responseTime}ms)`,
+				action: "power.on",
+				responseTime
+			});
+			return { success: true, command: "power.on", responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: "Failed to power on MXNet device",
+				error: error.message,
+				action: "power.on"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.mxnet) {
+				self.state.mxnet.errorCount++;
+				self.state.mxnet.lastError = error.message;
+			}
+
+			return { success: false, command: "power.on", error: error.message };
+		}
+	},
+
+	/**
+	 * Powers off the MXNet device
+	 * @returns {Promise<Object>} Command result
+	 */
+	async off() {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "power.off"
+			});
+			return { success: false, command: "power.off", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await device.powerOff();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.mxnet) {
+				self.state.mxnet.power = "off";
+				self.state.mxnet.lastCommand = "power.off";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device power OFF command sent (${responseTime}ms)`,
+				action: "power.off",
+				responseTime
+			});
+			return { success: true, command: "power.off", responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: "Failed to power off MXNet device",
+				error: error.message,
+				action: "power.off"
+			});
+
+			// Update error state if available
+			if (self.state && self.state.mxnet) {
+				self.state.mxnet.errorCount++;
+				self.state.mxnet.lastError = error.message;
+			}
+
+			return { success: false, command: "power.off", error: error.message };
+		}
+	}
+};
+
+/**
+ * Volume control object for MXNet operations
+ */
+export const volume = {
+	/**
+	 * Sets volume on MXNet device
+	 * @param {number} level - Volume level (0-100)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async set(level) {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "volume.set"
+			});
+			return { success: false, command: "volume.set", error: "Device not initialized" };
+		}
+
+		const normalizedVolume = Math.max(0, Math.min(100, level));
+
+		try {
+			const startTime = Date.now();
+			const result = await device.setVolume(normalizedVolume);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.mxnet) {
+				self.state.mxnet.volume = normalizedVolume;
+				self.state.mxnet.lastCommand = "volume.set";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device volume set to ${normalizedVolume} (${responseTime}ms)`,
+				action: "volume.set",
+				volume: normalizedVolume,
+				responseTime
+			});
+			return { success: true, command: "volume.set", volume: normalizedVolume, responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: "Failed to set volume on MXNet device",
+				action: "volume.set",
+				error: error.message,
+				details: error
+			});
+			return { success: false, command: "volume.set", error: error.message };
+		}
+	},
+
+	/**
+	 * Increases volume on MXNet device
+	 * @param {number} step - Volume step increase (default: 1)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async up(step = 1) {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "volume.up"
+			});
+			return { success: false, command: "volume.up", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await device.volumeUp(step);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available (approximate new volume)
+			if (self.state && self.state.mxnet) {
+				const currentVolume = self.state.mxnet.volume || 0;
+				const newVolume = Math.min(100, currentVolume + step);
+				self.state.mxnet.volume = newVolume;
+				self.state.mxnet.lastCommand = "volume.up";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device volume up +${step} (${responseTime}ms)`,
+				action: "volume.up",
+				step,
+				responseTime
+			});
+			return { success: true, command: "volume.up", step, responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: "Failed to increase volume on MXNet device",
+				action: "volume.up",
+				error: error.message,
+				details: error
+			});
+			return { success: false, command: "volume.up", error: error.message };
+		}
+	},
+
+	/**
+	 * Decreases volume on MXNet device
+	 * @param {number} step - Volume step decrease (default: 1)
+	 * @returns {Promise<Object>} Command result
+	 */
+	async down(step = 1) {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "volume.down"
+			});
+			return { success: false, command: "volume.down", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = await device.volumeDown(step);
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available (approximate new volume)
+			if (self.state && self.state.mxnet) {
+				const currentVolume = self.state.mxnet.volume || 0;
+				const newVolume = Math.max(0, currentVolume - step);
+				self.state.mxnet.volume = newVolume;
+				self.state.mxnet.lastCommand = "volume.down";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device volume down -${step} (${responseTime}ms)`,
+				action: "volume.down",
+				step,
+				responseTime
+			});
+			return { success: true, command: "volume.down", step, responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: "Failed to decrease volume on MXNet device",
+				action: "volume.down",
+				error: error.message,
+				details: error
+			});
+			return { success: false, command: "volume.down", error: error.message };
+		}
+	},
+
+	/**
+	 * Controls mute state of MXNet device
+	 * @param {boolean} state - True to mute, false to unmute
+	 * @returns {Promise<Object>} Command result
+	 */
+	async mute(state = true) {
+		const device = self.state?.mxnet?.instance;
+		if (!device) {
+			self.event.emit("device.mxnet.error", {
+				message: "MXNet device not initialized",
+				action: "volume.mute"
+			});
+			return { success: false, command: "volume.mute", error: "Device not initialized" };
+		}
+
+		try {
+			const startTime = Date.now();
+			const result = state ? await device.mute() : await device.unmute();
+			const responseTime = Date.now() - startTime;
+
+			// Update state if available
+			if (self.state && self.state.mxnet) {
+				// For MXNet, mute and pseudoMute are the same thing - sync both
+				self.state.mxnet.muted = state;
+				self.state.mxnet.pseudoMute = state;
+				self.state.mxnet.lastCommand = state ? "volume.mute" : "volume.unmute";
+				self.state.mxnet.lastCommandTime = Date.now();
+			}
+
+			self.event.emit("device.mxnet.success", {
+				message: `MXNet device ${state ? "muted" : "unmuted"} (${responseTime}ms)`,
+				action: state ? "volume.mute" : "volume.unmute",
+				muted: state,
+				responseTime
+			});
+			return { success: true, command: state ? "volume.mute" : "volume.unmute", muted: state, responseTime, result };
+		} catch (error) {
+			self.event.emit("device.mxnet.error", {
+				message: `Failed to ${state ? "mute" : "unmute"} MXNet device`,
+				action: state ? "volume.mute" : "volume.unmute",
+				error: error.message,
+				details: error
+			});
+			return { success: false, command: state ? "volume.mute" : "volume.unmute", error: error.message };
+		}
+	}
+};
+
+/**
+ * Gets MXNet device status information
+ * @param {boolean} fetch - If true, fetches fresh status from device. If false, returns cached state.
+ * @returns {Promise<Object>|Object} Device status information
+ */
+export async function status(fetch = false) {
+	const device = self.state?.mxnet?.instance;
+
+	// If not fetching, return current state
+	if (!fetch) {
+		return {
+			success: true,
+			command: "status",
+			cached: true,
+			status: self.state?.mxnet || {}
+		};
+	}
+
+	// Fetch fresh status from device
+	if (!device) {
+		self.event.emit("device.mxnet.error", {
+			message: "MXNet device not initialized",
+			action: "status"
+		});
+		return { success: false, command: "status", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.getStatus();
+		const responseTime = Date.now() - startTime;
+
+		// Update multiple state properties if available
+		if (self.state && self.state.mxnet && result) {
+			if (result.power !== undefined) {
+				self.state.mxnet.power = result.power;
+			}
+			if (result.volume !== undefined) {
+				self.state.mxnet.volume = result.volume;
+			}
+			if (result.muted !== undefined) {
+				// MXNet: mute and pseudoMute are the same thing, keep them synced
+				self.state.mxnet.muted = result.muted;
+				self.state.mxnet.pseudoMute = result.muted;
+			}
+			if (result.input !== undefined) {
+				self.state.mxnet.input = result.input;
+			}
+			if (result.temperature !== undefined) {
+				self.state.mxnet.temperature = result.temperature;
+			}
+			if (result.uptime !== undefined) {
+				self.state.mxnet.uptime = result.uptime;
+			}
+			if (result.firmwareVersion !== undefined) {
+				self.state.mxnet.firmwareVersion = result.firmwareVersion;
+			}
+
+			self.state.mxnet.lastCommand = "status";
+			self.state.mxnet.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: `MXNet device status retrieved (${responseTime}ms)`,
+			action: "status",
+			responseTime,
+			status: result
+		});
+		return { success: true, command: "status", responseTime, status: result };
+	} catch (error) {
+		self.event.emit("device.mxnet.error", {
+			message: "Failed to get status from MXNet device",
+			action: "status",
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "status", error: error.message };
+	}
+}
+
+/**
+ * Sends a raw command to MXNet device
+ * @param {string} command - Raw command string
+ * @returns {Promise<Object>} Command result
+ */
+export async function sendRawCommand(command) {
+	const device = self.state?.mxnet?.instance;
+	if (!device) {
+		self.event.emit("device.mxnet.error", {
+			message: "MXNet device not initialized",
+			action: "sendRawCommand"
+		});
+		return { success: false, command: "rawCommand", error: "Device not initialized" };
+	}
+
+	try {
+		const startTime = Date.now();
+		const result = await device.sendCommand(command);
+		const responseTime = Date.now() - startTime;
+
+		// Record command in state if available
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.lastCommand = `raw:${command}`;
+			self.state.mxnet.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.mxnet.info", {
+			message: `MXNet raw command '${command}' sent (${responseTime}ms)`,
+			action: "sendRawCommand",
+			command,
+			responseTime
+		});
+		return { success: true, command: "rawCommand", rawCommand: command, responseTime, result };
+	} catch (error) {
+		self.event.emit("device.mxnet.error", {
+			message: `Failed to send raw command '${command}' to MXNet device`,
+			action: "sendRawCommand",
+			command,
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "rawCommand", error: error.message };
+	}
+}
+
+/**
+ * Reconnects to MXNet device
+ * @param {MXNetController} device - MXNet device instance to reconnect
+ * @param {Object} config - MXNet configuration for reconnection
+ * @returns {Promise<MXNetController>} Reconnected device instance
+ */
+export async function reconnect(device, config) {
+	self.event.emit("device.mxnet.info", {
+		message: "Reconnecting MXNet device...",
+		action: "reconnect"
+	});
+
+	try {
+		// Disconnect existing connection if any
+		if (device && device.disconnect) {
+			await device.disconnect();
+		}
+
+		// Create new connection
+		const newDevice = new MXNetController({
+			host: config.host,
+			port: config.port,
+			mac: config.mac || null,
+			timeout: config.timeout || 5000
+		});
+
+		await newDevice.connect();
+
+		// Update state if available
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.connected = true;
+			self.state.mxnet.instance = newDevice;
+			self.state.mxnet.lastCommand = "reconnect";
+			self.state.mxnet.lastCommandTime = Date.now();
+		}
+
+		self.event.emit("device.mxnet.success", {
+			message: "MXNet device reconnected successfully",
+			action: "reconnect"
+		});
+		return newDevice;
+	} catch (error) {
+		// Update error state if available
+		if (self.state && self.state.mxnet) {
+			self.state.mxnet.connected = false;
+		}
+
+		self.event.emit("device.mxnet.error", {
+			message: "Failed to reconnect MXNet device",
+			action: "reconnect",
+			error: error.message,
+			details: error
+		});
+		return { success: false, command: "reconnect", error: error.message };
+	}
+}
+
+/**
+ * Performs a health check on the MXNet device
+ * @returns {Promise<Object>} Health check result
+ */
+export async function healthCheck() {
+	const device = self.state?.mxnet?.instance;
+
+	self.event.emit("device.mxnet.info", {
+		message: "Performing MXNet device health check...",
+		action: "healthCheck"
+	});
+
+	const healthResult = {
+		timestamp: new Date().toISOString(),
+		overall: "unknown",
+		checks: {}
+	};
+
+	try {
+		// Check basic connectivity
+		healthResult.checks.connectivity = {
+			status: device ? "pass" : "fail",
+			message: device ? "Device initialized" : "Device not initialized"
+		};
+
+		if (device) {
+			// Try to get status to verify communication
+			try {
+				const statusResult = await status(true);
+				healthResult.checks.communication = {
+					status: statusResult.success ? "pass" : "fail",
+					message: statusResult.success ? "Device responsive" : "Device communication failed",
+					responseTime: statusResult.responseTime
+				};
+			} catch (error) {
+				healthResult.checks.communication = {
+					status: "fail",
+					message: `Communication failed: ${error.message}`
+				};
+			}
+
+			// Check state management health if available
+			if (self.state && self.state.mxnet) {
+				healthResult.checks.stateHealth = {
+					status: "pass",
+					message: "State management available",
+					details: self.state.mxnet
+				};
+			}
+		}
+
+		// Determine overall health
+		const allChecks = Object.values(healthResult.checks);
+		const failedChecks = allChecks.filter((check) => check.status === "fail");
+
+		if (failedChecks.length === 0) {
+			healthResult.overall = "healthy";
+		} else if (failedChecks.length < allChecks.length) {
+			healthResult.overall = "degraded";
+		} else {
+			healthResult.overall = "unhealthy";
+		}
+
+		self.event.emit("device.mxnet.success", {
+			message: `MXNet health check completed: ${healthResult.overall}`,
+			action: "healthCheck",
+			overall: healthResult.overall
+		});
+		return healthResult;
+	} catch (error) {
+		healthResult.overall = "error";
+		healthResult.error = error.message;
+
+		self.event.emit("device.mxnet.error", {
+			message: "MXNet health check failed",
+			action: "healthCheck",
+			error: error.message,
+			details: error
+		});
+		return healthResult;
+	}
+}
