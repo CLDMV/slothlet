@@ -23,17 +23,34 @@ const configContent = await fs.readFile(configPath, "utf8");
 export const testConfig = parse(configContent);
 
 /**
+ * Determine which API test directory to use based on NODE_OPTIONS conditions
+ * - slothlet-three-dev (--conditions=slothlet-three-dev) → use api_tests_v3
+ * - slothlet-dev (--conditions=slothlet-dev or development) → use api_tests (v2/src)
+ * - default (production/dist) → use api_tests (v2/dist)
+ * @type {string}
+ */
+export const API_TEST_BASE = (() => {
+	const nodeOptions = process.env.NODE_OPTIONS || "";
+	if (nodeOptions.includes("slothlet-three-dev")) {
+		return "api_tests_v3";
+	}
+	// Default to v2 (api_tests) for both slothlet-dev and production
+	return "api_tests";
+})();
+
+/**
  * Common test API directories with resolved absolute paths
+ * Automatically switches between api_tests (v2) and api_tests_v3 based on NODE_OPTIONS conditions
  * @type {object}
  */
 export const TEST_DIRS = {
-	API_TEST: path.resolve(__dirname, "../../../api_tests/api_test"),
-	API_TEST_CJS: path.resolve(__dirname, "../../../api_tests/api_test_cjs"),
-	API_TEST_MIXED: path.resolve(__dirname, "../../../api_tests/api_test_mixed"),
-	API_TEST_COLLECTIONS: path.resolve(__dirname, "../../../api_tests/api_test_collections"),
-	API_TEST_ROOT_ISSUE: path.resolve(__dirname, "../../../api_tests/api_test_root_issue"),
-	API_TV_TEST: path.resolve(__dirname, "../../../api_tests/api_tv_test"),
-	SMART_FLATTEN: path.resolve(__dirname, "../../../api_tests/smart_flatten")
+	API_TEST: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test`),
+	API_TEST_CJS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_cjs`),
+	API_TEST_MIXED: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_mixed`),
+	API_TEST_COLLECTIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_collections`),
+	API_TEST_ROOT_ISSUE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_root_issue`),
+	API_TV_TEST: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_tv_test`),
+	SMART_FLATTEN: path.resolve(__dirname, `../../../${API_TEST_BASE}/smart_flatten`)
 };
 
 /**
@@ -252,7 +269,7 @@ export function getAllApiTestFoldersSync() {
 		// Resolve api_tests directory relative to project root
 		const currentFile = fileURLToPath(import.meta.url);
 		const projectRoot = path.resolve(path.dirname(currentFile), "../../..");
-		const apiTestsDir = path.join(projectRoot, "api_tests");
+		const apiTestsDir = path.join(projectRoot, API_TEST_BASE);
 		const entries = readdirSync(apiTestsDir, { withFileTypes: true });
 
 		// Get top-level folders (excluding smart_flatten)
@@ -269,7 +286,7 @@ export function getAllApiTestFoldersSync() {
 
 		return [...topLevelFolders, ...smartFlattenFolders].sort();
 	} catch (error) {
-		console.error("Error reading api_tests directories:", error);
+		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];
 	}
 }
@@ -280,7 +297,7 @@ export function getAllApiTestFoldersSync() {
  */
 export async function getAllApiTestFolders() {
 	try {
-		const apiTestsDir = "./api_tests";
+		const apiTestsDir = `./${API_TEST_BASE}`;
 		const entries = await fs.readdir(apiTestsDir, { withFileTypes: true });
 
 		// Get top-level folders (excluding smart_flatten)
@@ -297,7 +314,7 @@ export async function getAllApiTestFolders() {
 
 		return [...topLevelFolders, ...smartFlattenFolders].sort();
 	} catch (error) {
-		console.error("Error reading api_tests directories:", error);
+		console.error(`Error reading ${API_TEST_BASE} directories:`, error);
 		return [];
 	}
 }
