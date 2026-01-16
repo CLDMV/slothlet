@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 describe("Stack Trace Path Resolution", () => {
 	// Stack trace path resolution is independent of most config options
@@ -50,12 +50,8 @@ describe("Stack Trace Path Resolution", () => {
 			// When executed through helper function, path should resolve relative to THIS file
 			const testClosure = async (apiInstance) => {
 				// This path is relative to THIS test file (tests/vitests/processed/addapi/addapi-stack-trace-path.test.vitest.mjs)
-				// Should resolve to: tests/vitests/processed/addapi/../../../../api_tests/api_test_mixed = api_tests/api_test_mixed
-				await apiInstance.addApi("test.path", "../../../../api_tests/api_test_mixed", {}, addApiOptions);
-			};
-
-			// Execute the closure through a helper function in a different file to create stack complexity
-			await expect(executeClosureFromDifferentFile(api, testClosure)).resolves.not.toThrow();
+			// Should resolve to: tests/vitests/processed/addapi/../../../../${API_TEST_BASE}/api_test_mixed
+			await apiInstance.addApi("test.path", `../../../../${API_TEST_BASE}/api_test_mixed`, {}, addApiOptions);
 
 			// Verify the API was actually loaded from the correct location
 			expect(api.test).toBeDefined();

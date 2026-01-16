@@ -12,7 +12,7 @@ import { describe, test, expect } from "vitest";
 import slothlet from "../../../../index.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX } from "../../setup/vitest-helper.mjs";
+import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -34,10 +34,10 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 1-2 - $name", ({ name: ___name
 	test("Single file matching API path - autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, "../../../../api_tests/api_test")
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("config", path.join(__dirname, "../../../../api_tests/smart_flatten/api_smart_flatten_single"), {});
+		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
 
 		// Should flatten: api.config.{functions} not api.config.config.{functions}
 		expect(typeof api.config.getConfig).toBe("function");
@@ -56,10 +56,10 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 1-2 - $name", ({ name: ___name
 	test("Single file matching API path - autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, "../../../../api_tests/api_test")
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("config", path.join(__dirname, "../../../../api_tests/smart_flatten/api_smart_flatten_single"), {});
+		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
 
 		// Should flatten: Rule 7 auto-flattening always applies regardless of autoFlatten parameter
 		expect(typeof api.config.getConfig).toBe("function");
@@ -80,10 +80,10 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 1-2 - $name", ({ name: ___name
 	test("Special addapi.mjs file - autoFlatten=true", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, "../../../../api_tests/api_test")
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("plugins", path.join(__dirname, "../../../../api_tests/smart_flatten/api_smart_flatten_addapi"), {});
+		await api.addApi("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
 
 		// Should flatten: api.plugins.{functions} not api.plugins.addapi.{functions}
 		expect(typeof api.plugins.initializePlugin).toBe("function");
@@ -102,10 +102,10 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 1-2 - $name", ({ name: ___name
 	test("Special addapi.mjs file - autoFlatten=false", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, "../../../../api_tests/api_test")
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("plugins", path.join(__dirname, "../../../../api_tests/smart_flatten/api_smart_flatten_addapi"), {});
+		await api.addApi("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
 
 		// Should still flatten addapi files even when autoFlatten=false (special case)
 		expect(typeof api.plugins.initializePlugin).toBe("function");
