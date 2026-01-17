@@ -3,7 +3,7 @@
  * This module provides comprehensive tests to verify runtime isolation, context management, and live bindings.
  */
 
-import { self, context, reference, instanceId } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -59,9 +59,9 @@ export function verifyRuntime() {
 		results.contextTest.error = error.message;
 	}
 
-	// Test 3: Reference availability
+	// Test 3: Reference availability (accessed via self.slothlet.diag.reference)
 	try {
-		const referenceData = reference || {};
+		const referenceData = self?.slothlet?.diag?.reference || {};
 		results.referenceTest.data = referenceData;
 		results.referenceTest.available = typeof referenceData === "object" && referenceData !== null;
 		results.referenceTest.hasData = Object.keys(referenceData).length > 0;
@@ -73,7 +73,7 @@ export function verifyRuntime() {
 		results.referenceTest.error = error.message;
 	}
 
-	// Test 4: Runtime type detection using instanceId availability
+	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instanceId)
 	try {
 		// Try to access instanceId and detect if it's really available
 		let instanceIdValue = "undefined";
@@ -81,7 +81,8 @@ export function verifyRuntime() {
 
 		try {
 			// Try to coerce instanceId to string to see if it exists
-			instanceIdValue = String(instanceId);
+			const diagData = self?.slothlet?.diag?.inspect ? self.slothlet.diag.inspect() : null;
+			instanceIdValue = diagData?.instanceId ? String(diagData.instanceId) : "undefined";
 			// Check if it's actually available (not "undefined" or empty proxy)
 			hasInstanceId = instanceIdValue && instanceIdValue !== "undefined" && instanceIdValue !== "" && instanceIdValue !== "null";
 		} catch (_) {
@@ -96,6 +97,10 @@ export function verifyRuntime() {
 		// Detect runtime type from context.expectedRuntime (set by test harness)
 		// or fall back to heuristics
 		try {
+			console.log("DEBUG runtime-test: typeof context =", typeof context);
+			console.log("DEBUG runtime-test: context keys =", Object.keys(context || {}));
+			console.log("DEBUG runtime-test: context.expectedRuntime =", context?.expectedRuntime);
+
 			if (context && context.expectedRuntime) {
 				results.runtimeType = context.expectedRuntime;
 			} else {
@@ -109,7 +114,8 @@ export function verifyRuntime() {
 					results.runtimeType = "async";
 				}
 			}
-		} catch (_) {
+		} catch (error) {
+			console.log("DEBUG runtime-test: ERROR accessing context:", error.message);
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {

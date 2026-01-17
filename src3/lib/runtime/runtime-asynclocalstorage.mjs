@@ -143,37 +143,10 @@ export const context = new Proxy(
  * import { reference } from "@cldmv/slothlet/runtime/async";
  *
  * export function useReferenceData() {
- *   // Access reference object passed to slothlet config
- *   return reference.myUtilityFunction;
+ *   // Access reference object passed to slothlet config via self (merged into API)
+ *   return self.myUtilityFunction;
  * }
  */
-export const reference = new Proxy(
-	{},
-	{
-		get(_, prop) {
-			const ctx = asyncRuntime.getContext();
-			if (!ctx || !ctx.reference) {
-				return undefined;
-			}
-			return ctx.reference[prop];
-		},
-		ownKeys() {
-			const ctx = asyncRuntime.getContext();
-			if (!ctx || !ctx.reference) return [];
-			return Reflect.ownKeys(ctx.reference);
-		},
-		has(_, prop) {
-			const ctx = asyncRuntime.getContext();
-			if (!ctx || !ctx.reference) return false;
-			return prop in ctx.reference;
-		},
-		getOwnPropertyDescriptor(_, prop) {
-			const ctx = asyncRuntime.getContext();
-			if (!ctx || !ctx.reference) return undefined;
-			return Reflect.getOwnPropertyDescriptor(ctx.reference, prop);
-		}
-	}
-);
 
 /**
  * Current instance ID

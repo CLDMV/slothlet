@@ -20,10 +20,13 @@ export async function loadModule(filePath) {
 		const module = await import(fileUrl);
 		return module;
 	} catch (error) {
-		throw new SlothletError("MODULE_IMPORT_FAILED", {
-			modulePath: filePath,
-			error: error.message
-		});
+		throw await SlothletError.create(
+			"MODULE_IMPORT_FAILED",
+			{
+				modulePath: filePath
+			},
+			error
+		);
 	}
 }
 
@@ -40,10 +43,13 @@ export async function scanDirectory(dir, options = {}) {
 	try {
 		await stat(dir);
 	} catch (error) {
-		throw new SlothletError("INVALID_DIRECTORY", {
-			dir,
-			reason: error.message
-		});
+		throw await SlothletError.create(
+			"INVALID_DIRECTORY",
+			{
+				dir
+			},
+			error
+		);
 	}
 
 	const structure = {

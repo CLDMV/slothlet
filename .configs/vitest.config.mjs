@@ -22,13 +22,18 @@ export class CustomReporter extends DefaultReporter {
 	}
 }
 
+// Determine which slothlet version to use based on NODE_OPTIONS
+const nodeOptions = process.env.NODE_OPTIONS || "";
+const useV3 = nodeOptions.includes("slothlet-three-dev");
+const slothletCondition = useV3 ? "slothlet-three-dev" : "slothlet-dev";
+
 export default defineConfig({
 	pool: "forks",
 	// pool: "threads",
 	resolve: {
 		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
 		conditions: [
-			"slothlet-dev", // your custom branch
+			slothletCondition, // V2 (slothlet-dev) by default, V3 (slothlet-three-dev) if NODE_OPTIONS set
 			"module",
 			"browser",
 			"development|production" // keep the special one for other deps
@@ -37,7 +42,7 @@ export default defineConfig({
 	ssr: {
 		// Vitest often goes through SSR resolve pipeline even in node/jsdom tests
 		resolve: {
-			conditions: ["slothlet-dev", "node", "development|production"]
+			conditions: [slothletCondition, "node", "development|production"]
 		}
 	},
 	test: {
@@ -47,7 +52,7 @@ export default defineConfig({
 		environment: "node",
 		globals: true,
 		globalSetup: ["./tests/vitests/setup/global-setup.mjs"],
-		nodeOptions: ["--conditions=slothlet-dev"],
+		nodeOptions: [`--conditions=${slothletCondition}`],
 		env: {
 			NODE_ENV: "development"
 		},

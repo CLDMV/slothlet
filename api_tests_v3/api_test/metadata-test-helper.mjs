@@ -1,20 +1,21 @@
 /**
- * @fileoverview Helper functions for testing metadataAPI from within slothlet context.
+ * @fileoverview Helper functions for testing metadata API from within slothlet context.
  * @module api_test.metadataTestHelper
  * @memberof module:api_test
  * @public
  *
  * @description
- * Provides test helper functions that access metadataAPI from within the slothlet
- * execution context where runtime bindings (self, context, reference) are available.
+ * Provides test helper functions that access metadata API from within the slothlet
+ * execution context where runtime bindings (self, context) are available.
+ *
+ * In v3, metadata API is accessed via self.slothlet.metadata.*
  */
 
-// Import runtime bindings - these establish the execution context
-
-import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
+// Import runtime bindings
+import { self } from "@cldmv/slothlet/runtime";
 
 /**
- * Test helper that calls metadataAPI.get() from within slothlet context.
+ * Test helper that calls self.slothlet.metadata.get() from within slothlet context.
  *
  * @function getMetadata
  * @public
@@ -23,14 +24,14 @@ import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
  *
  * @description
  * This function runs inside the slothlet API context where runtime.self
- * is available, allowing metadataAPI.get() to access the API root.
+ * is available, allowing self.slothlet.metadata.get() to access the API root.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
  */
 export async function getMetadata(path) {
-	const result = await metadataAPI.get(path);
+	const result = await self.slothlet.metadata.get(path);
 	// Debug: Show what we got
 	if (process.env.SLOTHLET_DEBUG) {
 		console.log("[getMetadata] Result for", path, ":", result);
@@ -39,7 +40,7 @@ export async function getMetadata(path) {
 }
 
 /**
- * Test helper that calls metadataAPI.self() from within slothlet context.
+ * Test helper that calls self.slothlet.metadata.self() from within slothlet context.
  *
  * @function getSelfMetadata
  * @public
@@ -47,18 +48,18 @@ export async function getMetadata(path) {
  *
  * @description
  * Returns the metadata of this helper function itself, demonstrating
- * that metadataAPI.self() works within the slothlet context.
+ * that self.slothlet.metadata.self() works within the slothlet context.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getSelfMetadata();
  */
 export async function getSelfMetadata() {
-	return await metadataAPI.self();
+	return await self.slothlet.metadata.self();
 }
 
 /**
- * Test helper that simulates a caller detection scenario for metadataAPI.caller().
+ * Test helper that simulates a caller detection scenario for self.slothlet.metadata.caller().
  *
  * @function testCaller
  * @public
@@ -66,7 +67,7 @@ export async function getSelfMetadata() {
  *
  * @description
  * This function calls an inner function which checks its caller's metadata
- * using metadataAPI.caller(). Used to test the caller tracking functionality.
+ * using self.slothlet.metadata.caller(). Used to test the caller tracking functionality.
  *
  * @example
  * // From test file
@@ -76,7 +77,7 @@ export async function getSelfMetadata() {
 export async function testCaller() {
 	// Inner function that will check who called it
 	async function innerFunction() {
-		const callerMeta = await metadataAPI.caller();
+		const callerMeta = await self.slothlet.metadata.caller();
 		return { callerMeta };
 	}
 
@@ -100,7 +101,7 @@ export async function testCaller() {
  * const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
  */
 export async function verifyMetadata(path) {
-	const meta = await metadataAPI.get(path);
+	const meta = await self.slothlet.metadata.get(path);
 	return {
 		exists: meta !== null,
 		hasSourceFolder: meta?.sourceFolder !== undefined,

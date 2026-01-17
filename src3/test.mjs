@@ -14,7 +14,7 @@ try {
 	// Test 1: Basic load
 	console.log("Test 1: Loading API in eager mode...");
 	const api = await slothlet({
-		dir: resolve(__dirname, "../api_tests/api_test"),
+		dir: resolve(__dirname, "../api_tests_v3/api_test"),
 		mode: "eager",
 		runtime: "async"
 	});
@@ -59,27 +59,28 @@ try {
 
 	// Test 3: Context isolation
 	console.log("\nTest 3: Testing built-in API methods...");
-	console.log("   api.api exists:", typeof api.api === "object");
-	console.log("   api.reload exists:", typeof api.reload === "function");
-	console.log("   api.scope exists:", typeof api.scope === "function");
-	console.log("   api.run exists:", typeof api.run === "function");
+	console.log("   api.slothlet exists:", typeof api.slothlet === "object");
+	console.log("   api.slothlet.reload exists:", typeof api.slothlet?.reload === "function");
+	console.log("   api.slothlet.scope exists:", typeof api.slothlet?.scope === "function");
+	console.log("   api.slothlet.run exists:", typeof api.slothlet?.run === "function");
+	console.log("   api.shutdown exists:", typeof api.shutdown === "function");
 	console.log("✅ Built-in methods attached");
 
 	// Test 4: Diagnostics (when enabled)
 	console.log("\nTest 4: Testing diagnostics...");
 	const api_with_diag = await slothlet({
-		dir: resolve(__dirname, "../api_tests/api_test"),
+		dir: resolve(__dirname, "../api_tests_v3/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});
-	console.log("   api.diag exists:", typeof api_with_diag.diag === "object");
-	if (api_with_diag.diag) {
-		const diag = api_with_diag.diag.inspect();
+	console.log("   api.slothlet.diag exists:", typeof api_with_diag.slothlet.diag === "object");
+	if (api_with_diag.slothlet.diag) {
+		const diag = api_with_diag.slothlet.diag.inspect();
 		console.log("✅ Diagnostics enabled");
 		console.log("   Instance ID:", diag.instanceId);
-		console.log("   Active instances:", diag.context.activeInstances);
+		console.log("   Active instances:", diag.context?.activeInstances || "N/A");
 	}
-	await api_with_diag.api.shutdown();
+	await api_with_diag.slothlet.shutdown();
 
 	// Test 5: Error handling
 	console.log("\nTest 5: Testing error handling...");
@@ -92,29 +93,29 @@ try {
 
 	// Test 6: Shutdown
 	console.log("\nTest 6: Testing shutdown...");
-	await api.api.shutdown();
+	await api.slothlet.shutdown();
 	console.log("✅ Instance shut down successfully");
 
 	// Test 7: Multiple instances
 	console.log("\nTest 7: Testing multiple instances...");
 	const api1 = await slothlet({
-		dir: resolve(__dirname, "../api_tests/api_test"),
+		dir: resolve(__dirname, "../api_tests_v3/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});
 
 	const api2 = await slothlet({
-		dir: resolve(__dirname, "../api_tests/api_test"),
+		dir: resolve(__dirname, "../api_tests_v3/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});
 
 	console.log("✅ Multiple instances loaded");
-	console.log("   Instance 1 ID:", api1.diag.inspect().instanceId);
-	console.log("   Instance 2 ID:", api2.diag.inspect().instanceId);
+	console.log("   Instance 1 ID:", api1.slothlet.diag.inspect().instanceId);
+	console.log("   Instance 2 ID:", api2.slothlet.diag.inspect().instanceId);
 
-	await api1.api.shutdown();
-	await api2.api.shutdown();
+	await api1.slothlet.shutdown();
+	await api2.slothlet.shutdown();
 	console.log("✅ Both instances shut down");
 
 	console.log("\n✅ All tests passed!");

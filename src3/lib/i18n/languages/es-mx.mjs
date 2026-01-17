@@ -23,7 +23,7 @@ export const translations = {
 	// Module errors
 	MODULE_NOT_FOUND: "Módulo no encontrado: {modulePath}. {hint}",
 	MODULE_LOAD_ERROR: "Error al cargar el módulo: {modulePath}. Error: {error}. {hint}",
-	MODULE_LOAD_FAILED: "Error al cargar el módulo en '{modulePath}': {reason}. {hint}",
+	MODULE_LOAD_FAILED: "Error al cargar el módulo en '{modulePath}': {error}",
 	MODULE_NO_EXPORTS: "El módulo en '{modulePath}' (ID: {moduleId}) no tiene exportaciones válidas. {hint}",
 	MODULE_INVALID_EXPORT:
 		"Exportación inválida '{exportName}' en el módulo '{modulePath}'. Se recibió {exportType}, se esperaba {expected}.",

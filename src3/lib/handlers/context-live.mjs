@@ -31,7 +31,6 @@ export class LiveContextManager {
 			instanceId,
 			self: {},
 			context: {},
-			reference: {},
 			config: { ...config },
 			createdAt: Date.now()
 		};
@@ -129,7 +128,6 @@ export class LiveContextManager {
 		// Clear the store data
 		store.self = {};
 		store.context = {};
-		store.reference = {};
 
 		// Remove from instances map
 		this.instances.delete(instanceId);
