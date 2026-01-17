@@ -21,18 +21,14 @@ export async function buildAPI(options) {
 
 	// Validate inputs
 	if (!dir || typeof dir !== "string") {
-		throw new SlothletError("INVALID_CONFIG", {
-			option: "dir",
-			value: dir,
-			expected: "non-empty string path"
+		throw new SlothletError("INVALID_CONFIG_DIR_INVALID", {
+			value: dir
 		});
 	}
 
 	if (mode !== "eager" && mode !== "lazy") {
-		throw new SlothletError("INVALID_CONFIG", {
-			option: "mode",
-			value: mode,
-			expected: "'eager' or 'lazy'"
+		throw new SlothletError("INVALID_CONFIG_MODE_INVALID", {
+			value: mode
 		});
 	}
 
@@ -43,10 +39,8 @@ export async function buildAPI(options) {
 	} else if (mode === "lazy") {
 		rawAPI = await buildLazyAPI({ dir, ownership, config });
 	} else {
-		throw new SlothletError("INVALID_CONFIG", {
-			option: "mode",
-			value: mode,
-			expected: "'eager' or 'lazy'"
+		throw new SlothletError("INVALID_CONFIG_MODE_UNKNOWN", {
+			mode
 		});
 	}
 

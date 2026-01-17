@@ -77,4 +77,40 @@ export class SlothletError extends Error {
 			return this.message;
 		}
 	}
+
+	/**
+	 * Custom string representation
+	 * @returns {string} Formatted error string
+	 */
+	toString() {
+		return `${this.name} [${this.code}]: ${this.message}`;
+	}
+
+	/**
+	 * Custom inspect for console.log/console.error
+	 * @returns {string} Formatted error for display
+	 */
+	[Symbol.for("nodejs.util.inspect.custom")]() {
+		let output = `${this.name} [${this.code}]: ${this.message}\n`;
+
+		// Add context details (excluding stack which is shown below)
+		const contextKeys = Object.keys(this.context).filter((k) => k !== "stack");
+		if (contextKeys.length > 0) {
+			output += "\nContext:\n";
+			for (const key of contextKeys) {
+				const value = this.context[key];
+				if (typeof value === "string" && value.includes("\n")) {
+					output += `  ${key}:\n${value
+						.split("\n")
+						.map((line) => `    ${line}`)
+						.join("\n")}\n`;
+				} else {
+					output += `  ${key}: ${value}\n`;
+				}
+			}
+		}
+
+		output += `\n${this.stack}`;
+		return output;
+	}
 }

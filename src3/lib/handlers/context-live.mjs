@@ -90,9 +90,7 @@ export class LiveContextManager {
 	 */
 	getContext() {
 		if (!this.currentInstanceId) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT", {
-				hint: "No instance is currently active in live bindings mode"
-			});
+			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE");
 		}
 
 		const store = this.instances.get(this.currentInstanceId);

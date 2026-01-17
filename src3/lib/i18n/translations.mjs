@@ -52,7 +52,7 @@ async function i18n_loadLanguage(lang) {
 		loadedLanguages.set(lang, module);
 		return module;
 	} catch (___error) {
-		console.warn(`[slothlet i18n] Failed to load language '${lang}', falling back to en-us`);
+		console.warn(t("WARNING_LANGUAGE_LOAD_FAILED", { lang }));
 		if (lang !== "en-us") {
 			return i18n_loadLanguage("en-us");
 		}
@@ -70,7 +70,7 @@ export async function setLanguage(lang) {
 		await i18n_loadLanguage(lang);
 		currentLanguage = lang;
 	} catch (___error) {
-		console.warn(`[slothlet i18n] Language '${lang}' not available, using 'en-us'`);
+		console.warn(t("WARNING_LANGUAGE_UNAVAILABLE", { lang }));
 		currentLanguage = "en-us";
 		await i18n_loadLanguage("en-us");
 	}
@@ -146,3 +146,9 @@ initI18n().catch((___error) => {
 	// Silently fall back to en-us if initialization fails
 	currentLanguage = "en-us";
 });
+
+/**
+ * Shorthand for translate
+ * @public
+ */
+export const t = translate;

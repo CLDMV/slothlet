@@ -3,7 +3,7 @@
  * @module @cldmv/slothlet/modes/lazy
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { loadModule, hasValidExports, extractExports } from "@cldmv/slothlet/helpers/loader";
+import { loadModule, hasValidExports, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 
 /**
@@ -25,8 +25,7 @@ export async function buildLazyAPI(structure, decisions, ownership, ___config = 
 		if (!hasValidExports(module)) {
 			throw new SlothletError("MODULE_NO_EXPORTS", {
 				modulePath: file.path,
-				moduleId: file.moduleId,
-				hint: "Ensure module exports at least one function or object"
+				moduleId: file.moduleId
 			});
 		}
 
@@ -44,7 +43,7 @@ export async function buildLazyAPI(structure, decisions, ownership, ___config = 
 		}
 
 		// Merge exports into API
-		mergeExportsIntoAPI(api, exports, apiPath, file.name);
+		mergeExportsIntoAPI(api, exports, sanitizePropertyName(apiPath));
 	}
 
 	// Create lazy proxies for directories
@@ -73,11 +72,8 @@ function createLazyProxy(dir, decisions, ownership, apiPath) {
 
 	// Create target function (proxy must have callable target)
 	const target = function lazyFolder() {
-		throw new SlothletError("INVALID_CONFIG", {
-			option: "lazy proxy call",
-			value: "called before materialization",
-			expected: "access properties to trigger materialization",
-			hint: `Access a property on '${apiPath}' to load the module`
+		throw new SlothletError("INVALID_CONFIG_LAZY_NOT_READY", {
+			apiPath
 		});
 	};
 
@@ -111,11 +107,8 @@ function createLazyProxy(dir, decisions, ownership, apiPath) {
 		 * Function call - not supported before materialization
 		 */
 		apply(___target, ___thisArg, ___args) {
-			throw new SlothletError("INVALID_CONFIG", {
-				option: "lazy proxy call",
-				value: "called before materialization",
-				expected: "access properties to trigger materialization",
-				hint: `Access a property on '${apiPath}' to load the module`
+			throw new SlothletError("INVALID_CONFIG_LAZY_NOT_READY", {
+				apiPath
 			});
 		},
 
@@ -170,12 +163,7 @@ function materialize(dir, decisions, ownership, apiPath, state) {
 		for (const file of dir.children.files) {
 			// Use dynamic import with then() to make it synchronous-ish
 			// This is a limitation - proper lazy mode needs async materialization
-			throw new SlothletError("INVALID_CONFIG", {
-				option: "lazy mode",
-				value: "synchronous materialization not supported",
-				expected: "async materialization",
-				hint: "Lazy mode requires async operations - use eager mode for now or implement async getter pattern"
-			});
+			throw new SlothletError("INVALID_CONFIG_LAZY_ASYNC_REQUIRED");
 		}
 
 		state.materialized = materialized;
@@ -183,39 +171,5 @@ function materialize(dir, decisions, ownership, apiPath, state) {
 	} catch (error) {
 		state.inFlight = false;
 		throw error;
-	}
-}
-
-/**
- * Merge exports into API object
- * @param {Object} api - API object
- * @param {Object} exports - Module exports
- * @param {string} apiPath - API path
- * @param {string} fileName - Original file name
- * @private
- */
-function mergeExportsIntoAPI(api, exports, apiPath, fileName) {
-	const propName = sanitizePropertyName(fileName);
-
-	if (exports.default && Object.keys(exports).length === 1) {
-		// Only default export
-		api[propName] = exports.default;
-	} else if (!exports.default && Object.keys(exports).length > 0) {
-		// Only named exports - create namespace
-		api[propName] = {};
-		for (const [key, value] of Object.entries(exports)) {
-			if (key !== "default") {
-				api[propName][key] = value;
-			}
-		}
-	} else if (exports.default && Object.keys(exports).length > 1) {
-		// Mixed exports - default is callable, named are properties
-		const callable = exports.default;
-		for (const [key, value] of Object.entries(exports)) {
-			if (key !== "default") {
-				callable[key] = value;
-			}
-		}
-		api[propName] = callable;
 	}
 }

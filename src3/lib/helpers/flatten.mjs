@@ -145,7 +145,25 @@ export function processModuleForAPI(options) {
 
 	// C09: Flatten to root/category
 	if (decision.flattenToRoot || decision.flattenToCategory) {
-		// Merge all named exports
+		// If there's a default export with no named exports, use the default
+		if (mod.default && moduleKeys.length === 0) {
+			result.apiAssignments[apiPathKey] = mod.default;
+			result.flattened = true;
+			return result;
+		}
+
+		// If there's both default and named exports, merge named onto default
+		if (mod.default && moduleKeys.length > 0) {
+			const target = typeof mod.default === "function" ? mod.default : { ...mod.default };
+			for (const key of moduleKeys) {
+				target[key] = mod[key];
+			}
+			result.apiAssignments[apiPathKey] = target;
+			result.flattened = true;
+			return result;
+		}
+
+		// Only named exports - merge them
 		for (const key of moduleKeys) {
 			result.apiAssignments[key] = mod[key];
 		}
@@ -160,7 +178,44 @@ export function processModuleForAPI(options) {
 		return result;
 	}
 
+	// Check for single named export matching module name (flatten it)
+	if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey && !mod.default) {
+		result.apiAssignments[apiPathKey] = mod[moduleKeys[0]];
+		result.flattened = true;
+		return result;
+	}
+
 	// C09b: Traditional namespace preservation (default)
+	// For modules with default export only, use the default
+	if (mod.default && moduleKeys.length === 0) {
+		result.apiAssignments[apiPathKey] = mod.default;
+		result.namespaced = true;
+		return result;
+	}
+
+	// For modules with only named exports, create namespace
+	if (!mod.default && moduleKeys.length > 0) {
+		const namespace = {};
+		for (const key of moduleKeys) {
+			namespace[key] = mod[key];
+		}
+		result.apiAssignments[apiPathKey] = namespace;
+		result.namespaced = true;
+		return result;
+	}
+
+	// Mixed exports: merge named onto default
+	if (mod.default && moduleKeys.length > 0) {
+		const target = mod.default;
+		for (const key of moduleKeys) {
+			target[key] = mod[key];
+		}
+		result.apiAssignments[apiPathKey] = target;
+		result.namespaced = true;
+		return result;
+	}
+
+	// Fallback
 	result.apiAssignments[apiPathKey] = mod;
 	result.namespaced = true;
 	return result;
