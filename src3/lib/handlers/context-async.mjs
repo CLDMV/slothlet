@@ -81,9 +81,7 @@ export class AsyncContextManager {
 	getContext() {
 		const store = this.als.getStore();
 		if (!store) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT", {
-				hint: "Function must be called within slothlet API context"
-			});
+			throw new SlothletError("NO_ACTIVE_CONTEXT_ASYNC");
 		}
 		return store;
 	}

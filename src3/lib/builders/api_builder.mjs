@@ -3,6 +3,7 @@
  * @module @cldmv/slothlet/api_builder
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { t } from "@cldmv/slothlet/i18n";
 
 /**
  * Build final API with built-in methods attached
@@ -24,11 +25,12 @@ export function buildFinalAPI(options) {
 	};
 
 	if (conflicts.slothlet || conflicts.shutdown || conflicts.destroy) {
-		console.warn("[slothlet] Warning: User API conflicts with reserved properties:", {
-			slothlet: !!conflicts.slothlet,
-			shutdown: !!conflicts.shutdown,
-			destroy: !!conflicts.destroy
-		});
+		const properties = Object.entries(conflicts)
+			.filter(([_, hasConflict]) => hasConflict)
+			.map(([name]) => name)
+			.join(", ");
+
+		console.warn(t("WARNING_RESERVED_PROPERTY_CONFLICT", { properties }));
 	}
 
 	// Create slothlet namespace with all built-in methods
@@ -195,11 +197,33 @@ function createSlothletNamespace(instance, config, userApi) {
 	if (config.diagnostics === true) {
 		namespace.diag = {
 			/**
-			 * Get reference object (user API modules)
-			 * @returns {Object}
+			 * Describe API structure (like v2)
+			 * @param {boolean} [showAll=false] - If true, returns full API object; if false, returns top-level keys
+			 * @returns {Array|Object}
+			 */
+			describe: (showAll = false) => {
+				if (showAll) {
+					// Return full API structure (like v2 eager mode)
+					return { ...userApi };
+				}
+				// Return top-level keys (like v2)
+				return Reflect.ownKeys(userApi);
+			},
+
+			/**
+			 * Get reference object passed to slothlet initialization
+			 * @returns {Object|null}
 			 */
 			reference: () => {
-				return userApi;
+				return instance.reference;
+			},
+
+			/**
+			 * Get context object
+			 * @returns {Object}
+			 */
+			context: () => {
+				return instance.contextManager.tryGetContext();
 			},
 
 			/**
@@ -208,14 +232,6 @@ function createSlothletNamespace(instance, config, userApi) {
 			 */
 			inspect: () => {
 				return instance.getDiagnostics();
-			},
-
-			/**
-			 * Get context
-			 * @returns {Object}
-			 */
-			context: () => {
-				return instance.contextManager.tryGetContext();
 			}
 		};
 	}

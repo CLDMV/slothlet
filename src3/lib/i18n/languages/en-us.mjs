@@ -49,7 +49,30 @@ export const translations = {
 	INTERNAL_ERROR: "Internal error: {message}. {hint}",
 
 	// Generic
-	NOT_IMPLEMENTED: "Feature '{feature}' is not yet implemented. {hint}"
+	NOT_IMPLEMENTED: "Feature '{feature}' is not yet implemented. {hint}",
+
+	// Warnings
+	WARNING_RESERVED_PROPERTY_CONFLICT: "User API conflicts with reserved properties: {properties}",
+	WARNING_LANGUAGE_LOAD_FAILED: "Failed to load language '{lang}', falling back to en-us",
+	WARNING_LANGUAGE_UNAVAILABLE: "Language '{lang}' not available, using 'en-us'",
+	ERROR_RUNTIME_IMPORT_FAILED: "Failed to import runtime for metadata API: {error}",
+
+	// Runtime binding errors
+	RUNTIME_NO_ACTIVE_CONTEXT_SELF: "No active context - 'self' can only be accessed within slothlet API calls. {hint}",
+	RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT: "No active context - 'context' can only be modified within slothlet API calls. {hint}",
+
+	// Debug messages
+	DEBUG_MODE_ROOT_FILE: "[{mode}] Processing root file: {moduleName}",
+	DEBUG_MODE_ROOT_CONTRIBUTOR: "[{mode}] Root contributor detected: {functionName}",
+	DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED: "[{mode}] Root contributor pattern applied - function API with {properties} additional properties",
+	DEBUG_MODE_NESTED_FILE: "[{mode}] Processing nested file: {apiPath}",
+	DEBUG_MODE_PROCESSING_DIRECTORY: "[{mode}] Processing directory: {categoryName} (depth {currentDepth})",
+	DEBUG_MODE_MODULE_DECISION: "[{mode}] Module {moduleName}: {reason}",
+	DEBUG_MODE_FLATTENING: "[{mode}] Flattening {moduleName}: {flattenType}",
+	DEBUG_MODE_FOLDER_MATCH:
+		"[{mode}] Folder/folder.mjs check: moduleName={moduleName}, categoryName={categoryName}, hasAssignment={hasAssignment}, keys={assignmentKeys}",
+	DEBUG_MODE_FOLDER_DEFAULT: "[{mode}] Folder/folder.mjs pattern: {categoryName}/{moduleName} - using default export as category",
+	DEBUG_MODE_DIRECTORY: "[{mode}] Processing directory: {dirPath}"
 };
 
 /**

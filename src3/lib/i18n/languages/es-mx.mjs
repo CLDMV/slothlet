@@ -50,7 +50,24 @@ export const translations = {
 	INTERNAL_ERROR: "Error interno: {message}. {hint}",
 
 	// Generic
-	NOT_IMPLEMENTED: "La función '{feature}' aún no está implementada. {hint}"
+	NOT_IMPLEMENTED: "La función '{feature}' aún no está implementada. {hint}",
+
+	// Warnings
+	WARNING_RESERVED_PROPERTY_CONFLICT: "La API del usuario entra en conflicto con propiedades reservadas: {properties}",
+	WARNING_LANGUAGE_LOAD_FAILED: "Error al cargar el idioma '{lang}', usando en-us como alternativa",
+	WARNING_LANGUAGE_UNAVAILABLE: "El idioma '{lang}' no está disponible, usando 'en-us'",
+	ERROR_RUNTIME_IMPORT_FAILED: "Error al importar runtime para la API de metadatos: {error}",
+
+	// Runtime binding errors
+	RUNTIME_NO_ACTIVE_CONTEXT_SELF: "No hay contexto activo - 'self' solo se puede acceder dentro de llamadas API de slothlet. {hint}",
+	RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT:
+		"No hay contexto activo - 'context' solo se puede modificar dentro de llamadas API de slothlet. {hint}",
+
+	// Debug messages
+	DEBUG_EAGER_ROOT_FILE: "[eager] Archivo raíz: {moduleName}",
+	DEBUG_EAGER_PROCESSING_DIRECTORY: "[eager] Procesando directorio: {categoryName} (profundidad {currentDepth})",
+	DEBUG_EAGER_MODULE_DECISION: "[eager] Módulo {moduleName}: {reason}",
+	DEBUG_EAGER_FLATTENING: "[eager] Aplanando {moduleName}: {flattenType}"
 };
 
 /**

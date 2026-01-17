@@ -18,9 +18,11 @@
  * @module @cldmv/slothlet/tools/inspect-api-structure
  */
 
-import slothlet from "@cldmv/slothlet";
 import chalk from "chalk";
 import { pathToFileURL } from "url";
+
+// Dynamic import for v2 or v3
+let slothlet;
 
 /**
  * Display the structure of an object or function recursively.
@@ -221,19 +223,36 @@ async function forceMaterializeLazyFolders(api) {
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 8, lazy = true, slothletConfig = {} } = options;
+	const { maxDepth = 8, lazy = true, slothletConfig = {}, useV3 = false } = options;
 
-	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${lazy ? "lazy" : "eager"} mode) ===\n`));
+	// Import the appropriate version
+	if (!slothlet) {
+		if (useV3) {
+			const module = await import("@cldmv/slothlet/slothlet");
+			slothlet = module.slothlet;
+			console.log(chalk.cyan("Using v3 (src3/)"));
+		} else {
+			const module = await import("@cldmv/slothlet");
+			slothlet = module.default;
+			console.log(chalk.cyan("Using v2 (src/)"));
+		}
+	}
+
+	const mode = lazy ? "lazy" : "eager";
+	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
 
 	try {
-		const apiPath = `./api_tests/${apiName}`;
+		// Use different base paths for v2 vs v3
+		const basePath = useV3 ? "./api_tests_v3" : "./api_tests";
+		const apiPath = `${basePath}/${apiName}`;
 		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
-		// Build slothlet configuration
+		// Build slothlet configuration (both v2 and v3 use 'mode' now)
 		const config = {
 			dir: apiPath,
-			lazy: lazy,
-			...slothletConfig // Include any additional configuration parameters
+			mode: lazy ? "lazy" : "eager",
+			...(useV3 ? { runtime: slothletConfig.runtime || "async" } : {}),
+			...slothletConfig
 		};
 
 		console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
@@ -289,6 +308,9 @@ async function inspectApi(apiName, options = {}) {
 		if (typeof api.shutdown === "function") {
 			await api.shutdown();
 			console.log(chalk.green("✅ API instance shutdown cleanly"));
+		} else if (typeof api.slothlet?.shutdown === "function") {
+			await api.slothlet.shutdown();
+			console.log(chalk.green("✅ API instance shutdown cleanly (v3)"));
 		}
 	} catch (error) {
 		console.error(chalk.red("❌ Error loading API:"), error.message);
@@ -413,13 +435,15 @@ async function main() {
 		console.log("  node tools/inspect-api-structure.mjs <api-name> [options]");
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
-		console.log("  node tools/inspect-api-structure.mjs api_test_cjs --eager");
-		console.log("  node tools/inspect-api-structure.mjs api_test_mixed --lazy --allowApiOverwrite --hotReload");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager --v3 --runtime live");
 		console.log("\nOptions:");
 		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods        Show available methods for functions");
 		console.log("  --lazy                Use lazy loading mode (default)");
 		console.log("  --eager               Use eager loading mode");
+		console.log("  --v3                  Use v3 prototype (src3/) instead of v2 (src/)");
+		console.log("  --runtime <type>      Runtime type for v3: 'async' or 'live' (default: async)");
 		console.log("  --allowApiOverwrite   Allow API property overwriting");
 		console.log("  --hotReload           Enable hot reload and ownership tracking");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
@@ -439,14 +463,17 @@ async function main() {
 		} else if (args[i] === "--apiDepth" && i + 1 < args.length) {
 			slothletConfig.apiDepth = parseInt(args[i + 1], 10);
 			i++; // Skip next arg
+		} else if (args[i] === "--runtime" && i + 1 < args.length) {
+			slothletConfig.runtime = args[i + 1];
+			i++; // Skip next arg
 		} else if (args[i] === "--show-methods") {
 			options.showMethods = true;
 		} else if (args[i] === "--lazy") {
 			options.lazy = true;
-			slothletConfig.lazy = true;
 		} else if (args[i] === "--eager") {
 			options.lazy = false;
-			slothletConfig.lazy = false;
+		} else if (args[i] === "--v3") {
+			options.useV3 = true;
 		} else if (args[i] === "--allowApiOverwrite") {
 			slothletConfig.allowApiOverwrite = true;
 		} else if (args[i] === "--hotReload") {

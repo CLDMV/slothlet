@@ -14,7 +14,7 @@
  * export function myFunction() {
  *   return { api: self, data: context.userId };
  * }
- *
+import { SlothletError } from "@cldmv/slothlet/errors"; *
  * @example
  * // In your API module (CJS)
  * const { self, context } = require("@cldmv/slothlet/runtime/live");
@@ -48,7 +48,7 @@ export const self = new Proxy(
 		get(_, prop) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.self) {
-				throw new Error("No active context - self can only be accessed within slothlet API calls");
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
 			}
 			return ctx.self[prop];
 		},
@@ -102,7 +102,7 @@ export const context = new Proxy(
 		set(_, prop, value) {
 			const ctx = liveRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				throw new Error("No active context - context can only be modified within slothlet API calls");
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT");
 			}
 			ctx.context[prop] = value;
 			return true;

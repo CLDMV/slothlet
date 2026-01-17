@@ -38,9 +38,8 @@ export class OwnershipManager {
 		if (currentOwner && currentOwner.moduleId !== moduleId && !allowConflict) {
 			throw new SlothletError("OWNERSHIP_CONFLICT", {
 				apiPath,
-				currentOwner: currentOwner.moduleId,
-				newOwner: moduleId,
-				hint: "Use forceOverwrite: true or removeApi first"
+				existingModuleId: currentOwner.moduleId,
+				newModuleId: moduleId
 			});
 		}
 

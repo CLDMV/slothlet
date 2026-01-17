@@ -5,6 +5,7 @@
  */
 
 import { getStack, toFsPath } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { t } from "@cldmv/slothlet/i18n";
 
 // Runtime module import (lazy loaded on first use)
 let runtimeModule = null;
@@ -28,7 +29,7 @@ async function ensureRuntime() {
 				return module;
 			})
 			.catch((err) => {
-				console.error("[slothlet] Failed to import runtime for metadata API:", err.message);
+				console.error(t("ERROR_RUNTIME_IMPORT_FAILED", { error: err.message }));
 				runtimeModule = {}; // Empty object to prevent repeated imports
 				return {};
 			});

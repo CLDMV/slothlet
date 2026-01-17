@@ -25,6 +25,8 @@ class Slothlet {
 		this.wrapper = null;
 		this.contextManager = null;
 		this.isLoaded = false;
+		this.reference = null;
+		this.context = null;
 	}
 
 	/**
@@ -46,12 +48,7 @@ class Slothlet {
 	async load(config = {}) {
 		// Validate config
 		if (!config.dir) {
-			throw new SlothletError("INVALID_CONFIG", {
-				option: "dir",
-				value: config.dir,
-				expected: "non-empty string path",
-				hint: "Provide a directory path to load API from"
-			});
+			throw new SlothletError("INVALID_CONFIG_DIR_MISSING");
 		}
 
 		// Resolve relative paths from caller's context (like v2)
@@ -65,6 +62,10 @@ class Slothlet {
 			runtime: config.runtime || "async",
 			...config
 		};
+
+		// Store reference and context if provided
+		this.reference = config.reference || null;
+		this.context = config.context || null;
 
 		// Get appropriate context manager based on runtime
 		this.contextManager = getContextManager(this.config.runtime);
@@ -89,9 +90,10 @@ class Slothlet {
 		// Wrap API with context isolation
 		this.boundApi = this.wrapper.wrapAPI(this.api, this.instanceId);
 
-		// Set self reference
+		// Set self and reference in context store
 		store.self = this.boundApi;
-		store.reference = this.boundApi;
+		store.reference = this.reference || {}; // Use actual reference from config
+		store.context = this.context || {}; // Use actual context from config
 
 		this.isLoaded = true;
 
@@ -104,21 +106,13 @@ class Slothlet {
 	 */
 	async reload() {
 		if (!this.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG", {
-				option: "reload",
-				value: "not loaded",
-				expected: "loaded instance",
-				hint: "Cannot reload before initial load"
+			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+				operation: "reload"
 			});
 		}
 
 		// TODO: Implement full reload
-		throw new SlothletError("INVALID_CONFIG", {
-			option: "reload",
-			value: "not implemented",
-			expected: "implemented in future iteration",
-			hint: "Full reload deferred to next prototype iteration"
-		});
+		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL");
 	}
 
 	/**
@@ -155,11 +149,8 @@ class Slothlet {
 	 */
 	getAPI() {
 		if (!this.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG", {
-				option: "instance",
-				value: "not loaded",
-				expected: "loaded instance",
-				hint: "Call load() before accessing API"
+			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+				operation: "getAPI"
 			});
 		}
 		return this.boundApi;
