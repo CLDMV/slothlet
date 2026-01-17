@@ -43,11 +43,12 @@ if (existsSync(srcPath) && !isCI) {
 
 	// Parse conditions from NODE_OPTIONS
 	const hasSlothletDev = nodeOptions.indexOf("--conditions=slothlet-dev") !== -1;
+	const hasSlothletThreeDev = nodeOptions.indexOf("--conditions=slothlet-three-dev") !== -1;
 	const hasGenericDev = nodeOptions.indexOf("--conditions=development") !== -1;
 	const hasDevEnv = nodeEnv === "dev" || nodeEnv === "development";
 
 	// Only check if we're in the slothlet repo (not installed in node_modules)
-	if (!isInstalledPackage && !hasSlothletDev) {
+	if (!isInstalledPackage && !hasSlothletDev && !hasSlothletThreeDev) {
 		let errorMessage = "";
 
 		// Determine which error message to show based on current state

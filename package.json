@@ -12,6 +12,11 @@
 	"module": "./index.mjs",
 	"exports": {
 		".": {
+			"slothlet-three-dev": {
+				"types": "./types/index3.d.mts",
+				"import": "./index3.mjs",
+				"require": "./index3.cjs"
+			},
 			"types": "./types/index.d.mts",
 			"import": "./index.mjs",
 			"require": "./index.cjs"

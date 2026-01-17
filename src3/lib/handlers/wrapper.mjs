@@ -32,10 +32,21 @@ export class WrapperManager {
 
 		const wrapped = Array.isArray(api) ? [] : {};
 
-		for (const [key, value] of Object.entries(api)) {
+		// At root level, check for builtins using Object.getOwnPropertyDescriptors
+		// to catch non-enumerable properties
+		const keys = currentPath === "" ? Object.getOwnPropertyNames(api) : Object.keys(api);
+
+		for (const key of keys) {
+			const value = api[key];
 			const apiPath = currentPath ? `${currentPath}.${key}` : key;
 
-			if (typeof value === "function") {
+			// Skip wrapping built-in properties at root level (already bound)
+			const isBuiltin =
+				currentPath === "" && (key === "slothlet" || key === "shutdown" || key === "destroy" || key === "__slothletInstance");
+
+			if (isBuiltin) {
+				wrapped[key] = value; // Use as-is, already bound
+			} else if (typeof value === "function") {
 				wrapped[key] = this.wrapFunction(value, instanceId, apiPath);
 			} else if (value && typeof value === "object") {
 				wrapped[key] = this.wrapAPI(value, instanceId, apiPath, visited);

@@ -4,7 +4,7 @@
  * @memberof module:api_test
  */
 
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 const verboseSelfObject = process.env.SLOTHLET_SELF_OBJECT_DEBUG === "1" || process.env.SLOTHLET_SELF_OBJECT_DEBUG === "true";
 
@@ -97,7 +97,7 @@ export const selfObject =
 						if (instanceData) {
 							debugLog("[TEST] instanceData.self type:", typeof instanceData.self);
 							debugLog("[TEST] instanceData.context type:", typeof instanceData.context);
-							debugLog("[TEST] instanceData.reference type:", typeof instanceData.reference);
+							// NOTE: reference is no longer in instanceData, it's merged into the API
 							if (instanceData.self) {
 								debugLog("[TEST] instanceData.self keys:", Object.keys(instanceData.self));
 							}
@@ -114,8 +114,7 @@ export const selfObject =
 			debugLog("[TEST] Object.keys(self):", Object.keys(self));
 			debugLog("[TEST] typeof context:", typeof context);
 			debugLog("[TEST] Object.keys(context):", Object.keys(context || {}));
-			debugLog("[TEST] typeof reference:", typeof reference);
-			debugLog("[TEST] Object.keys(reference):", Object.keys(reference || {}));
+			// NOTE: reference is now merged into the API, access via self.* instead
 
 			if (self && self.math && typeof self.math.add === "function") {
 				debugLog("[TEST] About to call self.math.add with args:", a, b);

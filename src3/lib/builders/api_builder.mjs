@@ -11,11 +11,14 @@ import { t } from "@cldmv/slothlet/i18n";
  * @param {Object} options.userApi - User API object from mode builder
  * @param {Object} options.instance - Slothlet instance
  * @param {Object} options.config - Configuration
- * @returns {Object} Final API with built-ins attached
+ * @returns {Promise<Object>} Final API with built-ins attached
  * @public
  */
-export function buildFinalAPI(options) {
+export async function buildFinalAPI(options) {
 	const { userApi, instance, config } = options;
+
+	console.log("DEBUG buildFinalAPI: called with config.diagnostics =", config.diagnostics);
+	console.log("DEBUG buildFinalAPI: userApi keys before =", Object.keys(userApi));
 
 	// Check for conflicts with reserved names
 	const conflicts = {
@@ -34,7 +37,10 @@ export function buildFinalAPI(options) {
 	}
 
 	// Create slothlet namespace with all built-in methods
-	const slothletNamespace = createSlothletNamespace(instance, config, userApi);
+	const slothletNamespace = await createSlothletNamespace(instance, config, userApi);
+
+	console.log("DEBUG buildFinalAPI: slothletNamespace keys =", Object.keys(slothletNamespace));
+	console.log("DEBUG buildFinalAPI: slothletNamespace.diag exists =", !!slothletNamespace.diag);
 
 	// Create root-level convenience methods
 	const shutdownFn = createShutdownFunction(instance);
@@ -46,13 +52,17 @@ export function buildFinalAPI(options) {
 		destroy: null
 	});
 
+	console.log("DEBUG buildFinalAPI: userApi keys after attachBuiltins =", Object.keys(userApi));
+	console.log("DEBUG buildFinalAPI: userApi.slothlet exists =", !!userApi.slothlet);
+	console.log("DEBUG buildFinalAPI: userApi.slothlet.diag exists =", !!userApi.slothlet?.diag);
+
 	// Now create destroy with api reference so it can call api.shutdown()
 	const destroyWithApi = createDestroyFunction(instance, userApi);
 	Object.defineProperty(userApi, "destroy", {
 		value: destroyWithApi,
 		enumerable: true,
 		writable: false,
-		configurable: false
+		configurable: true
 	});
 
 	// Store instance reference (non-enumerable for internal use)
@@ -60,7 +70,7 @@ export function buildFinalAPI(options) {
 		value: instance,
 		enumerable: false,
 		writable: false,
-		configurable: false
+		configurable: true
 	});
 
 	return userApi;
@@ -71,11 +81,29 @@ export function buildFinalAPI(options) {
  * @param {Object} instance - Slothlet instance
  * @param {Object} config - Configuration
  * @param {Object} userApi - User API object (for reference diagnostic)
- * @returns {Object} Slothlet namespace object
+ * @returns {Promise<Object>} Slothlet namespace object
  * @private
  */
-function createSlothletNamespace(instance, config, userApi) {
+async function createSlothletNamespace(instance, config, userApi) {
+	// Read version from package.json
+	let version = "unknown";
+	try {
+		const pkgPath = new URL("../../../package.json", import.meta.url);
+		const { readFile } = await import("node:fs/promises");
+		const pkgContent = await readFile(pkgPath, "utf-8");
+		const pkg = JSON.parse(pkgContent);
+		version = pkg.version || "unknown";
+	} catch {
+		// Ignore - version will remain "unknown"
+	}
+
 	const namespace = {
+		/**
+		 * Slothlet version from package.json
+		 * @type {string}
+		 */
+		version,
+
 		/**
 		 * API control object for hot reload operations
 		 */
@@ -154,7 +182,7 @@ function createSlothletNamespace(instance, config, userApi) {
 		 * @param {Object} context - Context to use
 		 * @returns {*} Result of fn
 		 */
-		run: (fn, context = {}) => {
+		run: async (fn, context = {}) => {
 			if (config.runtime === "async") {
 				// Async mode: run with provided context
 				return instance.contextManager.runInContext(instance.instanceId, () => {
@@ -169,9 +197,8 @@ function createSlothletNamespace(instance, config, userApi) {
 					Object.assign(ctx.context, context);
 					return fn(ctx.self);
 				}
-				throw new SlothletError("CONTEXT_NOT_FOUND", {
-					instanceId: instance.instanceId,
-					hint: "No active context in live mode"
+				throw await SlothletError.create("CONTEXT_NOT_FOUND", {
+					instanceId: instance.instanceId
 				});
 			}
 		},
@@ -211,19 +238,19 @@ function createSlothletNamespace(instance, config, userApi) {
 			},
 
 			/**
-			 * Get reference object passed to slothlet initialization
+			 * Get reference object passed to slothlet initialization (merged into API)
 			 * @returns {Object|null}
 			 */
 			reference: () => {
-				return instance.reference;
+				return instance.reference || null;
 			},
 
 			/**
-			 * Get context object
+			 * Get context object (user-provided context from config)
 			 * @returns {Object}
 			 */
 			context: () => {
-				return instance.contextManager.tryGetContext();
+				return instance.context || {};
 			},
 
 			/**
@@ -300,11 +327,12 @@ function createDestroyFunction(instance, api) {
  */
 function attachBuiltins(userApi, builtins) {
 	// Attach slothlet namespace
+	// Note: Using configurable: true for vitest compatibility (worker reuse)
 	Object.defineProperty(userApi, "slothlet", {
 		value: builtins.slothlet,
 		enumerable: true,
 		writable: false,
-		configurable: false
+		configurable: true
 	});
 
 	// Attach root-level shutdown (convenience)
@@ -312,7 +340,7 @@ function attachBuiltins(userApi, builtins) {
 		value: builtins.shutdown,
 		enumerable: true,
 		writable: false,
-		configurable: false
+		configurable: true
 	});
 
 	// Note: destroy will be attached separately after api is built
@@ -322,7 +350,7 @@ function attachBuiltins(userApi, builtins) {
 			value: builtins.destroy,
 			enumerable: true,
 			writable: false,
-			configurable: false
+			configurable: true
 		});
 	}
 }

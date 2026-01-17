@@ -122,12 +122,14 @@ async function processRootFile(api, file, ownership, config) {
 			return null;
 		}
 	} catch (error) {
-		throw new SlothletError("MODULE_LOAD_FAILED", {
-			modulePath: file.path,
-			moduleId: file.moduleId,
-			error: error.message || error.toString(),
-			stack: error.stack
-		});
+		throw await SlothletError.create(
+			"MODULE_LOAD_FAILED",
+			{
+				modulePath: file.path,
+				moduleId: file.moduleId
+			},
+			error
+		);
 	}
 }
 
@@ -177,11 +179,18 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 				analysis
 			});
 		} catch (error) {
-			throw new SlothletError("MODULE_LOAD_FAILED", {
-				modulePath: file.path,
-				moduleId: file.moduleId,
-				error: error.message
-			});
+			// Re-throw SlothletErrors without double-wrapping
+			if (error.name === "SlothletError") {
+				throw error;
+			}
+			throw await SlothletError.create(
+				"MODULE_LOAD_FAILED",
+				{
+					modulePath: file.path,
+					moduleId: file.moduleId
+				},
+				error
+			);
 		}
 	}
 

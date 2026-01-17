@@ -32,7 +32,6 @@ export class AsyncContextManager {
 			instanceId,
 			self: {},
 			context: {},
-			reference: {},
 			config: { ...config },
 			createdAt: Date.now()
 		};
@@ -109,7 +108,6 @@ export class AsyncContextManager {
 		// Clear the store data
 		store.self = {};
 		store.context = {};
-		store.reference = {};
 
 		// Remove from instances map
 		this.instances.delete(instanceId);

@@ -23,7 +23,7 @@ export async function buildLazyAPI(structure, decisions, ownership, ___config = 
 		const module = await loadModule(file.path);
 
 		if (!hasValidExports(module)) {
-			throw new SlothletError("MODULE_NO_EXPORTS", {
+			throw await SlothletError.create("MODULE_NO_EXPORTS", {
 				modulePath: file.path,
 				moduleId: file.moduleId
 			});
