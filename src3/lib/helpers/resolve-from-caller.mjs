@@ -10,6 +10,16 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
+ * Calculate slothlet source directory path ONCE at module initialization.
+ * This file is at src3/lib/helpers/resolve-from-caller.mjs, so 2 levels up is src3/
+ * In other versions: src/lib/helpers/... -> src/ or dist/lib/helpers/... -> dist/
+ * @private
+ */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
+
+/**
  * Get V8 stack trace as CallSite array.
  * @param {Function} [skipFn] - Optional function to skip from stack trace
  * @returns {Array} Array of CallSite objects
@@ -62,18 +72,23 @@ function resolve_toFsPath(v) {
 function resolve_isSlothletInternal(filePath) {
 	if (!filePath) return true;
 
-	const normalized = path.normalize(filePath).replace(/\\/g, "/");
+	// Normalize path for comparison
+	const normalized = path.normalize(filePath);
+	const normalizedLibRoot = path.normalize(SLOTHLET_LIB_ROOT);
 
-	// Check for slothlet infrastructure files
-	if (normalized.includes("/src3/") || normalized.includes("/src/") || normalized.includes("/dist/")) {
-		// But not test files
-		if (normalized.includes("/test")) return false;
+	// Check if file is within the slothlet source directory (src3/, src/, or dist/)
+	if (normalized.startsWith(normalizedLibRoot)) {
 		return true;
 	}
 
-	// Skip slothlet.mjs, index.mjs, etc.
-	const basename = path.basename(filePath).toLowerCase();
-	if (basename === "slothlet.mjs" || basename === "index.mjs" || basename === "index.cjs") {
+	// Explicitly check for entry point files at any location
+	const basename = path.basename(normalized);
+	if (
+		basename === "index.mjs" ||
+		basename === "index.cjs" ||
+		basename === "index3.mjs" || // TODO: Remove index3.* once v3 is finalized
+		basename === "index3.cjs" // TODO: Remove index3.* once v3 is finalized
+	) {
 		return true;
 	}
 
@@ -139,6 +154,7 @@ export function resolvePathFromCaller(rel) {
 
 	// Find caller's base directory
 	const callerFile = resolve_findCallerBase();
+
 	if (!callerFile) {
 		// Fallback: resolve from current working directory
 		return path.resolve(process.cwd(), rel);

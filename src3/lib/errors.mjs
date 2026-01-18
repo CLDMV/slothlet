@@ -112,3 +112,41 @@ export class SlothletError extends Error {
 		};
 	}
 }
+
+/**
+ * Warning class for non-fatal issues with i18n support
+ * @public
+ */
+export class SlothletWarning {
+	/**
+	 * Create and emit a warning with automatic translation
+	 * @param {string} code - Warning code identifier
+	 * @param {Object} context - Additional context about the warning
+	 * @public
+	 */
+	constructor(code, context = {}) {
+		// Translate message synchronously
+		const translatedMessage = translate(code, context);
+
+		this.name = "SlothletWarning";
+		this.code = code;
+		this.message = translatedMessage;
+		this.context = context;
+
+		// Emit warning to console
+		console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+
+		// Show context if provided
+		if (Object.keys(context).length > 0) {
+			console.warn("Context:", context);
+		}
+	}
+
+	/**
+	 * Custom string representation
+	 * @returns {string} Formatted warning string
+	 */
+	toString() {
+		return `[${this.code}] ${this.name}: ${this.message}`;
+	}
+}
