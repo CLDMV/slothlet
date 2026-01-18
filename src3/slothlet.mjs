@@ -4,7 +4,6 @@
  */
 import { getContextManager } from "@cldmv/slothlet/handlers/context";
 import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
-import { WrapperManager } from "@cldmv/slothlet/handlers/wrapper";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { buildFinalAPI } from "@cldmv/slothlet/builders/api_builder";
 import { SlothletError } from "@cldmv/slothlet/errors";
@@ -22,7 +21,6 @@ class Slothlet {
 		this.api = null;
 		this.boundApi = null;
 		this.ownership = null;
-		this.wrapper = null;
 		this.contextManager = null;
 		this.isLoaded = false;
 		this.reference = null;
@@ -65,28 +63,26 @@ class Slothlet {
 		// Initialize ownership manager
 		this.ownership = new OwnershipManager();
 
-		// Build raw API
+		// Build raw API (with context manager and instance ID for unified wrapper)
+		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
 		this.api = await buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode,
 			ownership: this.ownership,
+			contextManager: this.contextManager,
+			instanceId: this.instanceID,
 			config: this.config
 		});
 
-		// Initialize wrapper manager with context manager AND instance reference
-		// This allows dynamic function lookups via ownership manager
-		this.wrapper = new WrapperManager(this.contextManager, this);
-
-		// Build final API with builtins attached FIRST
+		// Build final API with builtins attached
 		const apiWithBuiltins = await this.buildFinalAPI(this.api);
 
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
 		this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
 
-		// Then wrap the COMPLETE API (including builtins) just before returning to user
-		// The wrapper will use dynamic lookups via ownership manager
-		this.boundApi = this.wrapper.wrapAPI(apiWithBuiltins, this.instanceID);
+		// UnifiedWrapper already handles context binding, so no additional wrapping needed
+		this.boundApi = apiWithBuiltins;
 
 		// Set self and context in store
 		store.self = this.boundApi;
@@ -142,7 +138,6 @@ class Slothlet {
 		this.api = null;
 		this.boundApi = null;
 		this.ownership = null;
-		this.wrapper = null;
 		this.isLoaded = false;
 	}
 
