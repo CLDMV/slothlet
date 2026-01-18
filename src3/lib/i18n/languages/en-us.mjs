@@ -18,6 +18,8 @@ export const translations = {
 	INVALID_CONFIG_RELOAD_NOT_IMPL: "Reload functionality not yet implemented. This will be added in a future iteration.",
 	INVALID_CONFIG_LAZY_NOT_READY: "Cannot call function directly in lazy mode - access properties to trigger materialization first.",
 	INVALID_CONFIG_LAZY_ASYNC_REQUIRED: "Lazy mode requires async operations. Use eager mode for now or implement async getter pattern.",
+	INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED: "Failed to materialize lazy proxy for '{apiPath}'. Check that the module loads correctly.",
+	INVALID_CONFIG_NOT_A_FUNCTION: "Cannot call '{apiPath}' - not a function (got {actualType}). Check that the module exports a callable function.",
 	INVALID_CONFIG_dir: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",
 	INVALID_CONFIG_mode: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",
 	INVALID_CONFIG_runtime: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",

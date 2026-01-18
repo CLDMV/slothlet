@@ -1,9 +1,12 @@
 /**
- * @fileoverview Analyze all SlothletError usage and output to console
+ * @fileoverview Analyze all SlothletError and SlothletWarning usage and translations
  * Checks:
  * - Proper error construction (originalError passed when needed)
  * - Hint availability for each error code
  * - Stub vs real error classification
+ * - Translation availability for all error codes
+ * - Unused translations
+ * - Placeholder consistency between usage and translations
  */
 
 import { readFile, readdir, stat } from "node:fs/promises";
@@ -48,15 +51,15 @@ async function findMjsFiles(dir, files = []) {
 }
 
 /**
- * Parse SlothletError throws from file content
+ * Parse SlothletError and SlothletWarning throws from file content
  */
 function parseErrorThrows(content, filePath) {
 	const errors = [];
 
-	// Find throw statements by looking for the throw keyword + SlothletError
-	const throwStarts = [];
-	const throwPattern = /throw\s+(?:await\s+)?(?:new\s+)?SlothletError(?:\.create)?/g;
+	// Find throw statements for SlothletError and new SlothletWarning
+	const throwPattern = /(?:throw\s+(?:await\s+)?(?:new\s+)?SlothletError|new\s+SlothletWarning)(?:\.create)?/g;
 
+	const throwStarts = [];
 	let match;
 	while ((match = throwPattern.exec(content)) !== null) {
 		// Check if this match is inside a comment
@@ -285,4 +288,121 @@ console.log(`  OK: ${allErrors.length - errorsWithIssues.length}`);
 if (!VERBOSE && errorsWithIssues.length === 0) {
 	console.log(`\n✅ All errors are properly configured! Use --verbose to see all errors.`);
 }
+
+// ===== TRANSLATION ANALYSIS =====
+
+console.log("\n\n" + "=".repeat(80));
+console.log("=== Translation Analysis ===");
+console.log("=".repeat(80) + "\n");
+
+// Collect all error codes used in codebase
+const usedErrorCodes = new Set(allErrors.map((e) => e.errorCode));
+
+// Get all translation keys (excluding HINT_ and DEBUG_ keys)
+const translationKeys = Object.keys(translations).filter((k) => !k.startsWith("HINT_") && !k.startsWith("DEBUG_"));
+
+// Find missing translations
+const missingTranslations = [...usedErrorCodes].filter((code) => !translations[code]);
+
+// Find unused translations (translations that exist but are never used)
+const unusedTranslations = translationKeys.filter((key) => !usedErrorCodes.has(key));
+
+// Check placeholder consistency
+console.log("\n📋 Placeholder Consistency Check:\n");
+const placeholderIssues = [];
+
+for (const error of allErrors) {
+	const translation = translations[error.errorCode];
+	if (!translation) continue;
+
+	// Extract placeholders from translation (e.g., {apiPath}, {error})
+	const translationPlaceholders = (translation.match(/\{([^}]+)\}/g) || []).map((p) => p.slice(1, -1)).sort();
+
+	// Extract context keys from error usage (looks for object literal between first and second comma)
+	const contextMatch = error.fullMatch.match(/\([^,]+,\s*\{([^}]*)\}/);
+	let usedPlaceholders = [];
+	if (contextMatch) {
+		// Extract key names from object literal
+		const contextObj = contextMatch[1];
+		usedPlaceholders = (contextObj.match(/(\w+)\s*:/g) || []).map((m) => m.replace(":", "").trim()).sort();
+	}
+
+	// Compare placeholder arrays
+	const translationSet = new Set(translationPlaceholders);
+	const usedSet = new Set(usedPlaceholders);
+
+	const missingInUsage = translationPlaceholders.filter((p) => !usedSet.has(p));
+	const extraInUsage = usedPlaceholders.filter((p) => !translationSet.has(p));
+
+	if (missingInUsage.length > 0 || extraInUsage.length > 0) {
+		const relPath = relative(rootDir, error.filePath);
+		placeholderIssues.push({
+			code: error.errorCode,
+			file: `${relPath}:${error.lineNumber}`,
+			missingInUsage,
+			extraInUsage,
+			translationPlaceholders,
+			usedPlaceholders
+		});
+	}
+}
+
+if (placeholderIssues.length > 0) {
+	console.log(`❌ Found ${placeholderIssues.length} placeholder mismatches:\n`);
+	placeholderIssues.slice(0, Math.min(LIMIT, placeholderIssues.length)).forEach((issue, idx) => {
+		console.log(`[${idx + 1}] ${issue.code} (${issue.file})`);
+		if (issue.missingInUsage.length > 0) {
+			console.log(`    ⚠️  Translation expects but usage missing: ${issue.missingInUsage.join(", ")}`);
+		}
+		if (issue.extraInUsage.length > 0) {
+			console.log(`    ⚠️  Usage provides but translation doesn't use: ${issue.extraInUsage.join(", ")}`);
+		}
+		console.log(`    Translation: [${issue.translationPlaceholders.join(", ")}]`);
+		console.log(`    Usage:       [${issue.usedPlaceholders.join(", ")}]`);
+		console.log();
+	});
+} else {
+	console.log(`✅ All placeholders match between usage and translations\n`);
+}
+
+// Missing translations report
+if (missingTranslations.length > 0) {
+	console.log(`\n❌ Missing Translations (${missingTranslations.length}):\n`);
+	missingTranslations.forEach((code) => {
+		const locations = allErrors.filter((e) => e.errorCode === code).map((e) => {
+			const relPath = relative(rootDir, e.filePath);
+			return `${relPath}:${e.lineNumber}`;
+		});
+		console.log(`  ${code}`);
+		console.log(`    Used in: ${locations.join(", ")}`);
+	});
+	console.log();
+} else {
+	console.log(`\n✅ All error codes have translations\n`);
+}
+
+// Unused translations report
+if (unusedTranslations.length > 0) {
+	console.log(`\n⚠️  Unused Translations (${unusedTranslations.length}):\n`);
+	unusedTranslations.slice(0, Math.min(20, unusedTranslations.length)).forEach((key) => {
+		console.log(`  ${key}: "${translations[key].substring(0, 60)}${translations[key].length > 60 ? "..." : ""}"`);
+	});
+	if (unusedTranslations.length > 20) {
+		console.log(`  ... and ${unusedTranslations.length - 20} more`);
+	}
+	console.log(`\n  Note: These may be intentionally unused (templates, future use, etc.)`);
+	console.log();
+} else {
+	console.log(`\n✅ All translations are used\n`);
+}
+
+// Summary
+console.log("=".repeat(80));
+console.log("\nTranslation Summary:");
+console.log(`  Total Error Codes Used:      ${usedErrorCodes.size}`);
+console.log(`  Total Translations:          ${translationKeys.length}`);
+console.log(`  Missing Translations:        ${missingTranslations.length}`);
+console.log(`  Unused Translations:         ${unusedTranslations.length}`);
+console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
+
 console.log();
