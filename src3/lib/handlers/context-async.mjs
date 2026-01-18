@@ -65,8 +65,7 @@ export class AsyncContextManager {
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{
-						instanceID,
-						apiPath: fn.__slothletPath || "unknown"
+						instanceID
 					},
 					error
 				);
@@ -105,7 +104,12 @@ export class AsyncContextManager {
 	cleanup(instanceID) {
 		const store = this.instances.get(instanceID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID }, null, { validationError: true });
+			throw new SlothletError(
+				"CONTEXT_NOT_FOUND",
+				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				null,
+				{ validationError: true }
+			);
 		}
 
 		// Clear the store data

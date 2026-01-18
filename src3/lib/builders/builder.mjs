@@ -54,8 +54,7 @@ export async function buildAPI(options) {
 		throw new SlothletError(
 			"INVALID_CONFIG_MODE_UNKNOWN",
 			{
-				mode,
-				value: mode
+				mode
 			},
 			null,
 			{ validationError: true }

@@ -189,17 +189,15 @@ export async function processDirectory(api, directory, ownership, contextManager
 				"MODULE_LOAD_FAILED",
 				{
 					modulePath: file.path,
-					moduleId: file.moduleId,
-					error: error.message
+					moduleId: file.moduleId
 				},
 				error
 			);
 		}
 	}
 
-	// Check for multiple default exports in folder
-	const defaultCount = loadedModules.filter((m) => m.analysis.hasDefault).length;
-	const hasMultipleDefaults = defaultCount > 1;
+	// Calculate if there are multiple default exports in this directory
+	const hasMultipleDefaults = loadedModules.filter((m) => m.analysis.hasDefault).length > 1;
 
 	// Process each module with flattening logic
 	for (const { file, mod, moduleName, moduleKeys, analysis } of loadedModules) {

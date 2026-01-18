@@ -45,7 +45,7 @@ export const translations = {
 
 	// Runtime errors
 	RUNTIME_NO_ACTIVE_CONTEXT_SELF: "No active context - cannot access 'self'. Ensure you're calling from within a Slothlet API function.",
-	RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT: "No active context - 'context' can only be modified within slothlet API calls. {hint}",
+	RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT: "No active context - 'context' can only be modified within slothlet API calls.",
 	RUNTIME_ERROR: "Runtime error in {location}: {error}. {hint}",
 
 	// Ownership errors

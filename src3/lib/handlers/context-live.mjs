@@ -73,8 +73,7 @@ export class LiveContextManager {
 			throw new SlothletError(
 				"CONTEXT_EXECUTION_FAILED",
 				{
-					instanceID,
-					apiPath: fn.__slothletPath || "unknown"
+					instanceID
 				},
 				error
 			);
@@ -100,7 +99,8 @@ export class LiveContextManager {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
 				{
-					instanceID: this.currentInstanceId
+					instanceID: this.currentInstanceId,
+					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
 				},
 				null,
 				{ validationError: true }
@@ -130,7 +130,12 @@ export class LiveContextManager {
 	cleanup(instanceID) {
 		const store = this.instances.get(instanceID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID }, null, { validationError: true });
+			throw new SlothletError(
+				"CONTEXT_NOT_FOUND",
+				{ instanceID, availableInstances: Array.from(this.instances.keys()).join(", ") || "none" },
+				null,
+				{ validationError: true }
+			);
 		}
 
 		// Clear the store data

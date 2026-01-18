@@ -170,9 +170,16 @@ function analyzeError(error) {
 		return { status: "❌ DEPRECATED PATTERN", issues };
 	}
 
-	// Stub errors are fine (can have hardcoded hints)
+	// Stub errors should be tracked for replacement
 	if (error.isStub) {
-		return { status: "✅ OK (Stub)", issues: [] };
+		const stubHint = error.hasHardcodedHint
+			? "Has custom hint - preserve this when implementing the feature"
+			: "No custom hint - add proper hint when implementing";
+		return {
+			status: "⚠️  STUB (Needs Implementation)",
+			issues: [`📝 ${stubHint}. Remove stub:true and add proper error handling when feature is implemented.`],
+			isStubWarning: true
+		};
 	}
 
 	// Validation errors don't need originalError
@@ -193,14 +200,14 @@ function analyzeError(error) {
 		issues.push("Missing originalError parameter");
 	}
 
-	// Check if hardcoded hint exists (should use i18n instead)
-	if (error.hasHardcodedHint) {
-		issues.push("Has hardcoded hint (should use i18n)");
+	// Check if hardcoded hint exists (only allowed for stubs)
+	if (error.hasHardcodedHint && !error.isStub) {
+		issues.push("Has hardcoded hint - should use i18n instead (hint only allowed in stub errors)");
 	}
 
 	// Check if a hint exists in translations
 	const hasHint = checkHintExists(error.errorCode);
-	if (!hasHint && !error.hasHardcodedHint) {
+	if (!hasHint && !error.hasHardcodedHint && !error.isStub) {
 		issues.push("No hint in translations (needs HINT_ key)");
 	}
 
@@ -235,7 +242,15 @@ if (VERBOSE) {
 }
 
 // Filter to only errors with issues unless --verbose
-const errorsToShow = VERBOSE ? allErrors : allErrors.filter((e) => analyzeError(e).issues.length > 0);
+const errorsToShow = VERBOSE
+	? allErrors
+	: allErrors.filter((e) => {
+			const analysis = analyzeError(e);
+			return analysis.issues.length > 0 && !analysis.isStubWarning;
+		});
+
+// Separate stub warnings for summary
+const stubErrors = allErrors.filter((e) => analyzeError(e).isStubWarning);
 
 if (errorsToShow.length > 0) {
 	console.log(`Showing first ${Math.min(LIMIT, errorsToShow.length)} of ${errorsToShow.length} errors\n`);
@@ -285,8 +300,23 @@ console.log(`  Stubs: ${stubCount}`);
 console.log(`  With Issues: ${errorsWithIssues.length}`);
 console.log(`  OK: ${allErrors.length - errorsWithIssues.length}`);
 
-if (!VERBOSE && errorsWithIssues.length === 0) {
-	console.log(`\n✅ All errors are properly configured! Use --verbose to see all errors.`);
+if (stubCount > 0) {
+	console.log(`\n⚠️  ${stubCount} stub error(s) need implementation:`);
+	stubErrors.slice(0, 5).forEach((error) => {
+		const analysis = analyzeError(error);
+		const relPath = relative(rootDir, error.filePath);
+		console.log(`  - ${error.errorCode} (${relPath}:${error.lineNumber})`);
+		console.log(`    ${analysis.issues[0]}`);
+	});
+	if (stubCount > 5) {
+		console.log(`  ... and ${stubCount - 5} more. Use --verbose to see all.`);
+	}
+}
+
+if (!VERBOSE && errorsWithIssues.length === 0 && stubCount === 0) {
+	console.log(`\n✅ All errors are properly configured!`);
+} else if (!VERBOSE && errorsWithIssues.length === 0 && stubCount > 0) {
+	console.log(`\n✅ All non-stub errors are properly configured!`);
 }
 
 // ===== TRANSLATION ANALYSIS =====
@@ -374,17 +404,35 @@ for (const error of allErrors) {
 					const objectContent = contextParam.slice(1, -1).trim();
 
 					// Extract key names from object literal (both longhand and shorthand)
-					// Split by comma, but respect nested structures
+					// Split by comma, but respect nested structures (braces, brackets, parentheses, strings)
 					const properties = [];
 					let current = "";
 					let depth = 0;
+					let inString = false;
+					let stringChar = "";
 
 					for (let i = 0; i < objectContent.length; i++) {
 						const char = objectContent[i];
-						if (char === "{" || char === "[") depth++;
-						if (char === "}" || char === "]") depth--;
 
-						if (char === "," && depth === 0) {
+						// Track string boundaries
+						if ((char === '"' || char === "'" || char === "`") && (i === 0 || objectContent[i - 1] !== "\\")) {
+							if (inString && char === stringChar) {
+								inString = false;
+								stringChar = "";
+							} else if (!inString) {
+								inString = true;
+								stringChar = char;
+							}
+						}
+
+						// Track nesting depth (only when not in string)
+						if (!inString) {
+							if (char === "{" || char === "[" || char === "(") depth++;
+							if (char === "}" || char === "]" || char === ")") depth--;
+						}
+
+						// Split on commas only at depth 0 and outside strings
+						if (char === "," && depth === 0 && !inString) {
 							properties.push(current.trim());
 							current = "";
 						} else {
@@ -401,22 +449,34 @@ for (const error of allErrors) {
 							// Check for longhand (key: value)
 							const colonIdx = prop.indexOf(":");
 							if (colonIdx !== -1) {
-								return prop.substring(0, colonIdx).trim();
+								// Extract key only (left side of colon)
+								const key = prop.substring(0, colonIdx).trim();
+								// Extract just identifier, ignore computed property syntax
+								const identMatch = key.match(/^(\w+)/);
+								return identMatch ? identMatch[1] : key;
 							}
 							// Shorthand property (just identifier)
-							return prop.trim();
+							// Extract just the identifier, ignoring any inline expressions like || or ?.
+							// Match the first valid identifier
+							const identMatch = prop.match(/^(\w+)/);
+							return identMatch ? identMatch[1] : prop.trim();
 						})
 						.filter(Boolean);
 				}
 			}
 
-			// Check 4th parameter (options) for validationError/stub
-			// These should NOT be in usedPlaceholders since they're not context
+			// Check 4th parameter (options) for new API (rare, code is migrating)
 			if (params.length >= 4) {
-				const optionsParam = params[3];
-				// Remove validationError and stub from usedPlaceholders if they were extracted
+				// New API: options object in 4th param
+				// Remove validationError and stub from usedPlaceholders if in options
 				usedPlaceholders = usedPlaceholders.filter((p) => p !== "validationError" && p !== "stub");
 			}
+
+			// Special handling for metadata/system parameters:
+			// - stub: Flag extracted from context, marks placeholder errors needing work
+			// - validationError: Flag extracted from context, skips hint detection
+			// Note: 'hint' CAN be passed to override auto-detection, so don't filter it
+			usedPlaceholders = usedPlaceholders.filter((p) => p !== "stub" && p !== "validationError");
 
 			usedPlaceholders.sort();
 		}
@@ -426,16 +486,33 @@ for (const error of allErrors) {
 	const translationSet = new Set(translationPlaceholders);
 	const usedSet = new Set(usedPlaceholders);
 
-	const missingInUsage = translationPlaceholders.filter((p) => !usedSet.has(p));
+	// Special handling for {error} placeholder:
+	// - Non-validation errors: {error} is auto-added from originalError param, so ignore if missing from usage
+	// - Validation errors: Should NOT have {error} in translation (no originalError)
+	let missingInUsage = translationPlaceholders.filter((p) => !usedSet.has(p));
+	let validationErrorIssue = null;
+
+	if (error.isValidation && translationPlaceholders.includes("error")) {
+		validationErrorIssue = "Validation error should not have {error} in translation (no originalError param)";
+	} else if (!error.isValidation) {
+		// Filter out 'error' from missing - it's auto-added from originalError
+		missingInUsage = missingInUsage.filter((p) => p !== "error");
+	}
+
 	const extraInUsage = usedPlaceholders.filter((p) => !translationSet.has(p));
 
-	if (missingInUsage.length > 0 || extraInUsage.length > 0) {
+	// Check for forbidden placeholders (error/message should be in originalError param, not context)
+	const forbiddenInContext = usedPlaceholders.filter((p) => p === "error" || p === "message");
+
+	if (missingInUsage.length > 0 || extraInUsage.length > 0 || forbiddenInContext.length > 0 || validationErrorIssue) {
 		const relPath = relative(rootDir, error.filePath);
 		placeholderIssues.push({
 			code: error.errorCode,
 			file: `${relPath}:${error.lineNumber}`,
 			missingInUsage,
 			extraInUsage,
+			forbiddenInContext,
+			validationErrorIssue,
 			translationPlaceholders,
 			usedPlaceholders
 		});
@@ -446,6 +523,12 @@ if (placeholderIssues.length > 0) {
 	console.log(`❌ Found ${placeholderIssues.length} placeholder mismatches:\n`);
 	placeholderIssues.slice(0, Math.min(LIMIT, placeholderIssues.length)).forEach((issue, idx) => {
 		console.log(`[${idx + 1}] ${issue.code} (${issue.file})`);
+		if (issue.validationErrorIssue) {
+			console.log(`    🚫 ${issue.validationErrorIssue}`);
+		}
+		if (issue.forbiddenInContext && issue.forbiddenInContext.length > 0) {
+			console.log(`    🚫 FORBIDDEN in context (use 3rd param originalError instead): ${issue.forbiddenInContext.join(", ")}`);
+		}
 		if (issue.missingInUsage.length > 0) {
 			console.log(`    ⚠️  Translation expects but usage missing: ${issue.missingInUsage.join(", ")}`);
 		}
