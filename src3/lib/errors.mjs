@@ -32,7 +32,17 @@ export class SlothletError extends Error {
 		// Auto-detect and translate hint if originalError provided (skip for stubs/validations)
 		const skipHint = stub || validationError;
 		const hintKey = originalError && !skipHint ? detectHint(originalError, code) : undefined;
-		const translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
+		let translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
+
+		// For validation errors, still check for static HINT_ translation
+		if (!translatedHint && validationError) {
+			const staticHintKey = `HINT_${code}`;
+			const staticHint = translate(staticHintKey, enrichedContext);
+			// Only use it if it's not the fallback format (Error: HINT_...)
+			if (staticHint && !staticHint.startsWith("Error:")) {
+				translatedHint = staticHint;
+			}
+		}
 
 		super(translatedMessage);
 		this.name = "SlothletError";

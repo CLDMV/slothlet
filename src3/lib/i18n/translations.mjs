@@ -3,14 +3,30 @@
  * @module @cldmv/slothlet/i18n
  */
 
-/**
- * Loaded language modules cache
- * @private
- */
-const loadedLanguages = new Map();
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 /**
- * Current language (default: en-us)
+ * Get current directory path
+ * @private
+ */
+const translations_dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Default English translations (loaded synchronously)
+ * @private
+ */
+const defaultTranslations = JSON.parse(readFileSync(join(translations_dirname, "languages", "en-us.json"), "utf-8"));
+
+/**
+ * Current translations (merged language + defaults)
+ * @private
+ */
+let currentTranslations = defaultTranslations.translations;
+
+/**
+ * Current language code
  * @private
  */
 let currentLanguage = "en-us";
@@ -36,43 +52,47 @@ function i18n_detectLanguage() {
 }
 
 /**
- * Load a language module
+ * Load a language module synchronously
  * @param {string} lang - Language code (e.g., "en-us", "es-mx")
- * @returns {Promise<Object>} Language module with translations
+ * @returns {Object} Language translations
  * @private
  */
-async function i18n_loadLanguage(lang) {
-	if (loadedLanguages.has(lang)) {
-		return loadedLanguages.get(lang);
-	}
-
+function i18n_loadLanguageSync(lang) {
 	try {
-		// Import language module dynamically
-		const module = await import(`@cldmv/slothlet/i18n/${lang}`);
-		loadedLanguages.set(lang, module);
-		return module;
+		// Load language JSON file synchronously
+		const langFilePath = join(translations_dirname, "languages", `${lang}.json`);
+		const langData = JSON.parse(readFileSync(langFilePath, "utf-8"));
+		return langData.translations;
 	} catch (___error) {
-		console.warn(t("WARNING_LANGUAGE_LOAD_FAILED", { lang }));
-		if (lang !== "en-us") {
-			return i18n_loadLanguage("en-us");
-		}
-		throw ___error;
+		// If loading fails, return null to indicate failure
+		return null;
 	}
 }
 
 /**
- * Set current language
+ * Set current language (synchronous)
+ * Merges requested language translations over default English translations
  * @param {string} lang - Language code
  * @public
  */
-export async function setLanguage(lang) {
-	try {
-		await i18n_loadLanguage(lang);
-		currentLanguage = lang;
-	} catch (___error) {
-		console.warn(t("WARNING_LANGUAGE_UNAVAILABLE", { lang }));
+export function setLanguage(lang) {
+	// Always start with default English translations as base
+	currentTranslations = { ...defaultTranslations.translations };
+
+	// If not English, try to load and merge the requested language
+	if (lang !== "en-us") {
+		const langTranslations = i18n_loadLanguageSync(lang);
+		if (langTranslations) {
+			// Merge language translations over defaults (missing translations fall back to English)
+			currentTranslations = { ...currentTranslations, ...langTranslations };
+			currentLanguage = lang;
+		} else {
+			// If language load failed, warn and use English
+			console.warn(`Failed to load language '${lang}', falling back to English.`);
+			currentLanguage = "en-us";
+		}
+	} else {
 		currentLanguage = "en-us";
-		await i18n_loadLanguage("en-us");
 	}
 }
 
@@ -93,19 +113,12 @@ export function getLanguage() {
  * @public
  */
 export function translate(errorCode, params = {}) {
-	// Get already-loaded language (loaded at module init time)
-	const langModule = loadedLanguages.get(currentLanguage);
-	if (!langModule) {
-		// Fallback to raw code if language somehow not loaded
-		return `[${errorCode}]`;
-	}
-
-	const lang = langModule.translations;
-	let template = lang[errorCode];
+	// Use currentTranslations (already merged with defaults)
+	let template = currentTranslations[errorCode];
 
 	// Fallback to generic message if specific one not found
 	if (!template && errorCode.startsWith("INVALID_CONFIG_")) {
-		template = lang.INVALID_CONFIG_generic;
+		template = currentTranslations.INVALID_CONFIG_generic;
 	}
 
 	// Interpolate parameters
@@ -124,26 +137,30 @@ export function translate(errorCode, params = {}) {
 }
 
 /**
- * Initialize i18n system
+ * Initialize i18n system (synchronous)
  * @param {Object} options - Options
  * @param {string} [options.language] - Language code (auto-detect if not provided)
  * @public
  */
-export async function initI18n(options = {}) {
-	if (options.language) {
-		await setLanguage(options.language);
-	} else {
-		// Auto-detect from environment
-		const detected = i18n_detectLanguage();
-		await setLanguage(detected);
+export function initI18n(options = {}) {
+	try {
+		if (options.language) {
+			setLanguage(options.language);
+		} else {
+			// Auto-detect from environment
+			const detected = i18n_detectLanguage();
+			setLanguage(detected);
+		}
+	} catch (___error) {
+		// Silently fall back to en-us if initialization fails
+		console.warn("i18n initialization failed, using English:", ___error.message);
+		currentLanguage = "en-us";
+		currentTranslations = defaultTranslations.translations;
 	}
 }
 
-// Auto-initialize on first import (returns promise)
-initI18n().catch((___error) => {
-	// Silently fall back to en-us if initialization fails
-	currentLanguage = "en-us";
-});
+// Auto-initialize on first import (now synchronous)
+initI18n();
 
 /**
  * Shorthand for translate
