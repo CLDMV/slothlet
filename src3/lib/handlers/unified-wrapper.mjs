@@ -1,6 +1,6 @@
 /**
  * @fileoverview Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding
- * @module @cldmv/slothlet/helpers/unified-wrapper
+ * @module @cldmv/slothlet/handlers/unified-wrapper
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 
@@ -10,7 +10,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * - Lazy/eager mode materialization
  * - Recursive waiting proxy for deep lazy loading
  * - Context binding through contextManager
- * 
+ *
  * @class
  * @public
  */
@@ -94,7 +94,7 @@ export class UnifiedWrapper {
 	 * Create recursive waiting proxy for deep lazy loading
 	 * Builds property chain (e.g., ["advanced", "calc", "power"]) and waits for all parent
 	 * wrappers to materialize before accessing the final property.
-	 * 
+	 *
 	 * @param {Array<string>} propChain - Property chain being built
 	 * @returns {Proxy} Waiting proxy that chains property access
 	 * @private
@@ -218,7 +218,7 @@ export class UnifiedWrapper {
 	/**
 	 * Create main proxy for this wrapper
 	 * Handles lazy/eager mode logic, property access, and context binding
-	 * 
+	 *
 	 * @returns {Proxy} Main proxy for API
 	 * @public
 	 */
@@ -227,14 +227,14 @@ export class UnifiedWrapper {
 
 		// Use a function as target so the proxy can be callable
 		const target = function unifiedWrapperProxy() {};
-		
+
 		// Attach wrapper reference so we can access it from traps
 		target.__wrapper = self;
 
 		return new Proxy(target, {
 			get(target, prop, ___receiver) {
 				const wrapper = target.__wrapper;
-				
+
 				// Special properties - return directly from wrapper
 				if (prop === "__impl") return wrapper._impl;
 				if (prop === "__getState") return () => wrapper.__getState();
@@ -302,7 +302,7 @@ export class UnifiedWrapper {
 
 			apply(target, thisArg, args) {
 				const wrapper = target.__wrapper;
-				
+
 				// LAZY MODE: Trigger materialization if not materialized
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();
@@ -336,12 +336,9 @@ export class UnifiedWrapper {
 								}
 							} else if (!wrapper._state.inFlight) {
 								reject(
-									new SlothletError(
-										"INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED",
-										{ apiPath: wrapper.apiPath },
-										null,
-										{ validationError: true }
-									)
+									new SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
+										validationError: true
+									})
 								);
 							} else {
 								setImmediate(checkMaterialized);
@@ -374,7 +371,7 @@ export class UnifiedWrapper {
 
 			has(target, prop) {
 				const wrapper = target.__wrapper;
-				
+
 				// Trigger materialization if needed
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();
@@ -386,7 +383,7 @@ export class UnifiedWrapper {
 
 			ownKeys(target) {
 				const wrapper = target.__wrapper;
-				
+
 				// Trigger materialization if needed
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();

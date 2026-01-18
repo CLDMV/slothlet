@@ -7,7 +7,7 @@ import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
 import { processRootFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
-import { UnifiedWrapper } from "@cldmv/slothlet/helpers/unified-wrapper";
+import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
 

@@ -5,7 +5,7 @@
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { processRootFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
-import { UnifiedWrapper } from "@cldmv/slothlet/helpers/unified-wrapper";
+import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Build API in lazy mode (proxy-based deferred loading)
@@ -77,14 +77,7 @@ function createLazyWrapper(dir, ownership, contextManager, instanceId, apiPath, 
 		// Create lazy wrappers for subdirectories
 		for (const subdir of dir.children.directories || []) {
 			const propName = sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(
-				subdir,
-				ownership,
-				contextManager,
-				instanceId,
-				`${apiPath}.${propName}`,
-				config
-			);
+			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceId, `${apiPath}.${propName}`, config);
 		}
 
 		// Set the materialized implementation
