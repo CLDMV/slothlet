@@ -19,12 +19,15 @@ This is the **top level** of slothlet's three-tier documentation system:
 📊 API-RULES.md (1-12)         ← Maintainer Guide: All API behaviors
      ↑ links from                  ↓ links to
 🔧 API-RULES-CONDITIONS.md     ← Developer Guide: Exact source code locations
+                                   ↓ mapped in
+🗺️ API-RULE-MAPPING.md         ← Traceability Matrix: Rule # ↔ F## ↔ C##
 ```
 
 **Navigation:**
 
 - **⬇️ For Maintainers**: See [API-RULES.md](API-RULES.md) for complete behavior catalog with verified examples
 - **⬇️ For Developers**: See [API-RULES-CONDITIONS.md](API-RULES-CONDITIONS.md) for exact source code locations
+- **🗺️ Rule Mapping**: See [API-RULE-MAPPING.md](API-RULE-MAPPING.md) for complete Rule # ↔ F## ↔ C## traceability matrix
 
 ---
 

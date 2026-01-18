@@ -20,6 +20,8 @@ This is the **foundation level** of slothlet's three-tier documentation system:
 📊 API-RULES.md (1-12)         ← Maintainer Guide: "All API behaviors"
      ↓ references
 🔧 API-RULES-CONDITIONS.md     ← Developer/Debug Guide: "Exact code locations"
+     ↓ mapped in
+🗺️ API-RULE-MAPPING.md         ← Traceability Matrix: Rule # ↔ F## ↔ C##
 ```
 
 **Numbering System**: This document uses **C##** (C01, C02, etc.) for all conditions to avoid confusion with the other files' numbering systems.
@@ -37,6 +39,8 @@ This document catalogs every conditional statement in slothlet's API generation 
 - **Examples** showing the condition in action
 
 **Architecture Pattern**: The API generation system uses 3 core functions with 18 conditional statements that determine how file structures become API surfaces.
+
+**Rule Mapping**: See [API-RULE-MAPPING.md](API-RULE-MAPPING.md) for complete Rule # ↔ F## ↔ C## traceability matrix and automated test coverage validation.
 
 ---
 
