@@ -112,7 +112,7 @@ class Slothlet {
 		}
 
 		// TODO: Implement full reload
-		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL", { validationError: true });
+		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL", {}, null, { validationError: true });
 	}
 
 	/**

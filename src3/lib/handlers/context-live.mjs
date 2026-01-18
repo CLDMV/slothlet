@@ -24,7 +24,7 @@ export class LiveContextManager {
 	 */
 	initialize(instanceID, config = {}) {
 		if (this.instances.has(instanceID)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID, validationError: true });
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
 
 		const store = {
@@ -92,7 +92,7 @@ export class LiveContextManager {
 	 */
 	getContext() {
 		if (!this.currentInstanceId) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", { validationError: true });
+			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
 		}
 
 		const store = this.instances.get(this.currentInstanceId);

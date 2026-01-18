@@ -189,7 +189,8 @@ export async function processDirectory(api, directory, ownership, contextManager
 				"MODULE_LOAD_FAILED",
 				{
 					modulePath: file.path,
-					moduleId: file.moduleId
+					moduleId: file.moduleId,
+					error: error.message
 				},
 				error
 			);

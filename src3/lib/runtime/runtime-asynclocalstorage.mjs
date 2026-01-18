@@ -52,7 +52,7 @@ export const self = new Proxy(
 		get(_, prop) {
 			const ctx = asyncRuntime.getContext();
 			if (!ctx || !ctx.self) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", { validationError: true });
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			return ctx.self[prop];
 		},
@@ -107,7 +107,7 @@ export const context = new Proxy(
 		set(_, prop, value) {
 			const ctx = asyncRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", { validationError: true });
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
 			}
 			ctx.context[prop] = value;
 			return true;

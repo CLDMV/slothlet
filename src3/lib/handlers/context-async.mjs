@@ -25,7 +25,7 @@ export class AsyncContextManager {
 	 */
 	initialize(instanceID, config = {}) {
 		if (this.instances.has(instanceID)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID, validationError: true });
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID }, null, { validationError: true });
 		}
 
 		const store = {
