@@ -3,7 +3,7 @@
  * This module provides comprehensive tests to verify runtime isolation, context management, and live bindings.
  */
 
-import { self, context, reference, instanceId } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -59,9 +59,9 @@ export function verifyRuntime() {
 		results.contextTest.error = error.message;
 	}
 
-	// Test 3: Reference availability
+	// Test 3: Reference availability (accessed via diag API)
 	try {
-		const referenceData = reference || {};
+		const referenceData = self?.slothlet?.diag?.reference || {};
 		results.referenceTest.data = referenceData;
 		results.referenceTest.available = typeof referenceData === "object" && referenceData !== null;
 		results.referenceTest.hasData = Object.keys(referenceData).length > 0;
@@ -81,7 +81,7 @@ export function verifyRuntime() {
 
 		try {
 			// Try to coerce instanceId to string to see if it exists
-			instanceIdValue = String(instanceId);
+			instanceIdValue = String(self?.slothlet?.instanceID);
 			// Check if it's actually available (not "undefined" or empty proxy)
 			hasInstanceId = instanceIdValue && instanceIdValue !== "undefined" && instanceIdValue !== "" && instanceIdValue !== "null";
 		} catch (_) {

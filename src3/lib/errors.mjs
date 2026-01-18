@@ -11,16 +11,30 @@ import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";
  */
 export class SlothletError extends Error {
 	/**
-	 * Create a new SlothletError (use SlothletError.create() for async version with translations)
+	 * Create a new SlothletError with automatic translation and hint detection
 	 * @param {string} code - Error code identifier
 	 * @param {Object} context - Additional context about the error
+	 * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
+	 * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
 	 * @param {Error} [originalError] - The original error that caused this SlothletError
-	 * @param {string} [translatedMessage] - Pre-translated message
-	 * @param {string} [translatedHint] - Pre-translated hint
-	 * @private
+	 * @public
 	 */
-	constructor(code, context = {}, originalError = null, translatedMessage = null, translatedHint = null) {
-		super(translatedMessage || `[${code}]`);
+	constructor(code, context = {}, originalError = null) {
+		// Extract flags from context
+		const { validationError, stub, ...contextData } = context;
+
+		// Enrich context with originalError message if provided
+		const enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData;
+
+		// Translate message synchronously (translations already loaded at module init)
+		const translatedMessage = translate(code, enrichedContext);
+
+		// Auto-detect and translate hint if originalError provided (skip for stubs/validations)
+		const skipHint = stub || validationError;
+		const hintKey = originalError && !skipHint ? detectHint(originalError, code) : undefined;
+		const translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
+
+		super(translatedMessage);
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped
@@ -49,50 +63,6 @@ export class SlothletError extends Error {
 		});
 
 		Error.captureStackTrace(this, SlothletError);
-	}
-
-	/**
-	 * Create a SlothletError with translations (async factory method)
-	 * This method:
-	 * 1. Detects appropriate hint based on original error
-	 * 2. Translates error message
-	 * 3. Translates hint (if detected)
-	 * 4. Returns fully-translated error ready to throw
-	 *
-	 * @param {string} code - Error code identifier
-	 * @param {Object} context - Additional context about the error
-	 * @param {Error} [originalError] - The original error that caused this SlothletError
-	 * @returns {Promise<SlothletError>} Translated error instance
-	 * @public
-	 */
-	static async create(code, context = {}, originalError = null) {
-		// Auto-detect hint from original error
-		const hintKey = originalError ? detectHint(originalError, code) : undefined;
-
-		// Add error message to context if originalError provided
-		const enrichedContext = originalError ? { ...context, error: originalError.message } : context;
-
-		// Translate message and hint in parallel
-		const [translatedMessage, translatedHint] = await Promise.all([
-			translate(code, enrichedContext),
-			hintKey ? translate(hintKey, enrichedContext) : Promise.resolve(undefined)
-		]);
-
-		// Create error with translations
-		return new SlothletError(code, enrichedContext, originalError, translatedMessage, translatedHint);
-	}
-
-	/**
-	 * Get translated error message (async)
-	 * @returns {Promise<string>} Translated message
-	 * @public
-	 */
-	async getTranslatedMessage() {
-		try {
-			return await translate(this.code, this.context);
-		} catch (___error) {
-			return this.message;
-		}
 	}
 
 	/**

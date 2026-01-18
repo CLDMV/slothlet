@@ -18,44 +18,44 @@ let activeInstanceId = null;
 
 /**
  * Register an instance with its configuration
- * @param {string} instanceId - Instance identifier
+ * @param {string} instanceID - Instance identifier
  * @param {Object} config - Instance configuration
  * @param {Object} contextManager - Context manager for this instance
  * @public
  */
-export function registerInstance(instanceId, config, contextManager) {
-	instanceRegistry.set(instanceId, { config, contextManager });
+export function registerInstance(instanceID, config, contextManager) {
+	instanceRegistry.set(instanceID, { config, contextManager });
 }
 
 /**
  * Unregister an instance
- * @param {string} instanceId - Instance identifier
+ * @param {string} instanceID - Instance identifier
  * @public
  */
-export function unregisterInstance(instanceId) {
-	instanceRegistry.delete(instanceId);
-	if (activeInstanceId === instanceId) {
+export function unregisterInstance(instanceID) {
+	instanceRegistry.delete(instanceID);
+	if (activeInstanceId === instanceID) {
 		activeInstanceId = null;
 	}
 }
 
 /**
  * Get instance data
- * @param {string} instanceId - Instance identifier
+ * @param {string} instanceID - Instance identifier
  * @returns {Object|null} Instance data or null
  * @public
  */
-export function getInstanceData(instanceId) {
-	return instanceRegistry.get(instanceId) || null;
+export function getInstanceData(instanceID) {
+	return instanceRegistry.get(instanceID) || null;
 }
 
 /**
  * Set currently active instance (called by wrapper)
- * @param {string|null} instanceId - Instance identifier or null
+ * @param {string|null} instanceID - Instance identifier or null
  * @public
  */
-export function setActiveInstance(instanceId) {
-	activeInstanceId = instanceId;
+export function setActiveInstance(instanceID) {
+	activeInstanceId = instanceID;
 }
 
 /**

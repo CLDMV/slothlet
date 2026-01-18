@@ -4,19 +4,32 @@
  * @public
  */
 
+// Import context managers
+import { asyncRuntime, liveRuntime } from "@cldmv/slothlet/handlers/context";
+
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
 const liveRuntimeModule = await import("@cldmv/slothlet/runtime/live");
 
 /**
- * Determine which runtime to use
- * For now, default to async. Can be enhanced later to detect from context.
+ * Determine which runtime to use by checking which context manager has an active context
  * @returns {Object} Runtime module (async or live)
  * @private
  */
 function getCurrentRuntime() {
-	// TODO: Detect runtime from active context/configuration
-	// For now, always use async runtime
+	// Try live runtime first (synchronous check)
+	const liveCtx = liveRuntime.tryGetContext();
+	if (liveCtx) {
+		return liveRuntimeModule;
+	}
+
+	// Try async runtime (synchronous check)
+	const asyncCtx = asyncRuntime.tryGetContext();
+	if (asyncCtx) {
+		return asyncRuntimeModule;
+	}
+
+	// Default to async if no active context (will throw proper error)
 	return asyncRuntimeModule;
 }
 
@@ -77,6 +90,26 @@ export const context = new Proxy(
 			const runtime = getCurrentRuntime();
 			runtime.context[prop] = value;
 			return true;
+		}
+	}
+);
+
+/**
+ * Current instance ID
+ * Proxies to the appropriate runtime's instanceID export
+ * @type {Proxy}
+ * @public
+ */
+export const instanceID = new Proxy(
+	{},
+	{
+		get(_, prop) {
+			const runtime = getCurrentRuntime();
+			return runtime.instanceID ? runtime.instanceID[prop] : undefined;
+		},
+		has(_, prop) {
+			const runtime = getCurrentRuntime();
+			return runtime.instanceID ? prop in runtime.instanceID : false;
 		}
 	}
 );

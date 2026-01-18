@@ -32,9 +32,9 @@ export const translations = {
 	MODULE_INVALID_EXPORT: "Invalid export '{exportName}' in module '{modulePath}'. Got {exportType}, expected {expected}.",
 
 	// Context errors
-	CONTEXT_ALREADY_EXISTS: "Context for instance '{instanceId}' already exists. Cannot initialize twice.",
-	CONTEXT_NOT_FOUND: "Context not found for instance '{instanceId}'. Instance may have been shut down.",
-	CONTEXT_EXECUTION_FAILED: "Failed to execute in context for instance '{instanceId}': {error}",
+	CONTEXT_ALREADY_EXISTS: "Context for instance '{instanceID}' already exists. Cannot initialize twice.",
+	CONTEXT_NOT_FOUND: "Context not found for instance '{instanceID}'. Instance may have been shut down.",
+	CONTEXT_EXECUTION_FAILED: "Failed to execute in context for instance '{instanceID}': {error}",
 	NO_ACTIVE_CONTEXT: "No active context found. This operation requires an active Slothlet instance.",
 	NO_ACTIVE_CONTEXT_LIVE: "No active context - no instance is currently active in live bindings mode.",
 	NO_ACTIVE_CONTEXT_ASYNC: "No active context - function must be called within slothlet API context.",
@@ -89,7 +89,35 @@ export const translations = {
 		"The 'reference' export has been removed from '@cldmv/slothlet/runtime'. Reference objects are now merged directly into the API. Access them via 'self.*' instead (e.g., 'self.myRefProperty').",
 	HINT_MODULE_NOT_FOUND: "Ensure the module exists and the path is correct. Check for typos in the import statement.",
 	HINT_SYNTAX_ERROR:
-		"Check for syntax errors in the module file. Common issues: missing brackets, unclosed strings, or invalid JavaScript syntax."
+		"Check for syntax errors in the module file. Common issues: missing brackets, unclosed strings, or invalid JavaScript syntax.",
+	HINT_CONTEXT_NOT_FOUND:
+		"Ensure the slothlet instance is initialized and the context is created before accessing it. Check that you're using the correct instance ID.",
+	HINT_CONTEXT_ALREADY_EXISTS: "This context already exists. Check if you're trying to initialize the same instance twice.",
+	HINT_CONTEXT_EXECUTION_FAILED: "An error occurred while executing the function. Check the error details for more information.",
+	HINT_NO_ACTIVE_CONTEXT:
+		"No active context found. Ensure you're calling this function from within a slothlet context (async or live mode).",
+	HINT_NO_ACTIVE_CONTEXT_ASYNC: "No active context found. Ensure you're calling this function from within a slothlet async context.",
+	HINT_NO_ACTIVE_CONTEXT_LIVE: "No active context found. Ensure you're calling this function from within a slothlet live context.",
+	HINT_OWNERSHIP_INVALID_MODULE_ID: "The module ID is invalid. Ensure the module was loaded properly and the ID is correct.",
+	HINT_OWNERSHIP_INVALID_API_PATH: "The API path is invalid. Ensure the path format is correct.",
+	HINT_OWNERSHIP_CONFLICT: "An ownership conflict occurred. Use forceOverwrite: true to override or remove the existing API first.",
+	HINT_INVALID_CONFIG: "Check the configuration value and ensure it matches the expected type and format.",
+	HINT_INVALID_CONFIG_DIR_INVALID: "Ensure the directory path is a valid string and points to an existing directory.",
+	HINT_INVALID_CONFIG_MODE_INVALID: "Mode must be either 'eager' or 'lazy'.",
+	HINT_INVALID_CONFIG_MODE_UNKNOWN: "Unknown mode specified. Use 'eager' or 'lazy'.",
+	HINT_INVALID_CONFIG_DIR_MISSING: "The directory path is required but was not provided.",
+	HINT_MODULE_LOAD_FAILED: "Check the module file for errors. Ensure it has valid JavaScript syntax and exports.",
+	HINT_MODULE_IMPORT_FAILED: "Ensure the module file exists and can be imported. Check for syntax errors or missing dependencies.",
+	HINT_MODULE_NO_EXPORTS: "The module must export at least one function or object.",
+	HINT_INVALID_DIRECTORY: "Ensure the directory path is correct and the directory exists and is accessible.",
+	HINT_INVALID_CONFIG_LAZY_NOT_READY: "In lazy mode, access properties to trigger materialization before calling functions.",
+	HINT_INTERNAL_INVALID_STATE: "An internal state error occurred. This is likely a bug - please report it with details.",
+	HINT_INVALID_CONFIG_LAZY_ASYNC_REQUIRED: "Lazy mode requires async operations. Use eager mode or implement proper async patterns.",
+	HINT_RUNTIME_NO_ACTIVE_CONTEXT_SELF: "Cannot access 'self' outside of a slothlet API function context.",
+	HINT_RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT:
+		"Cannot access 'context' outside of a slothlet API function. Context can only be modified within slothlet API calls.",
+	HINT_INVALID_CONFIG_NOT_LOADED: "The instance must be loaded before performing this operation. Call load() first.",
+	HINT_INVALID_CONFIG_RELOAD_NOT_IMPL: "Reload functionality is not yet implemented. This will be added in a future iteration."
 };
 
 /**

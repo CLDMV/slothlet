@@ -21,15 +21,25 @@ export async function buildAPI(options) {
 
 	// Validate inputs
 	if (!dir || typeof dir !== "string") {
-		throw await SlothletError.create("INVALID_CONFIG_DIR_INVALID", {
-			value: dir
-		});
+		throw new SlothletError(
+			"INVALID_CONFIG_DIR_INVALID",
+			{
+				value: dir
+			},
+			null,
+			{ validationError: true }
+		);
 	}
 
 	if (mode !== "eager" && mode !== "lazy") {
-		throw await SlothletError.create("INVALID_CONFIG_MODE_INVALID", {
-			value: mode
-		});
+		throw new SlothletError(
+			"INVALID_CONFIG_MODE_INVALID",
+			{
+				value: mode
+			},
+			null,
+			{ validationError: true }
+		);
 	}
 
 	// Build based on mode - each mode handles its own scanning and flattening
@@ -39,9 +49,14 @@ export async function buildAPI(options) {
 	} else if (mode === "lazy") {
 		rawAPI = await buildLazyAPI({ dir, ownership, config });
 	} else {
-		throw await SlothletError.create("INVALID_CONFIG_MODE_UNKNOWN", {
-			mode
-		});
+		throw new SlothletError(
+			"INVALID_CONFIG_MODE_UNKNOWN",
+			{
+				mode
+			},
+			null,
+			{ validationError: true }
+		);
 	}
 
 	return rawAPI;

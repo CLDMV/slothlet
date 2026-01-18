@@ -60,6 +60,63 @@ export function normalizeMode(mode) {
 }
 
 /**
+ * Normalize debug configuration
+ * @param {boolean|Object} debug - Debug flag or object with targeted flags
+ * @returns {Object} Normalized debug object with all flags
+ * @public
+ */
+export function normalizeDebug(debug) {
+	if (!debug) {
+		return {
+			builder: false,
+			api: false,
+			index: false,
+			modes: false,
+			wrapper: false,
+			ownership: false,
+			context: false
+		};
+	}
+
+	// If debug is a boolean true, enable all debug flags
+	if (debug === true) {
+		return {
+			builder: true,
+			api: true,
+			index: true,
+			modes: true,
+			wrapper: true,
+			ownership: true,
+			context: true
+		};
+	}
+
+	// If debug is an object, merge with defaults
+	if (typeof debug === "object") {
+		return {
+			builder: debug.builder || false,
+			api: debug.api || false,
+			index: debug.index || false,
+			modes: debug.modes || false,
+			wrapper: debug.wrapper || false,
+			ownership: debug.ownership || false,
+			context: debug.context || false
+		};
+	}
+
+	// Unknown type, default to all false
+	return {
+		builder: false,
+		api: false,
+		index: false,
+		modes: false,
+		wrapper: false,
+		ownership: false,
+		context: false
+	};
+}
+
+/**
  * Transform and validate configuration
  * @param {Object} config - Raw configuration options
  * @returns {Object} Normalized configuration
@@ -69,7 +126,7 @@ export function normalizeMode(mode) {
 export function transformConfig(config = {}) {
 	// Validate required fields
 	if (!config.dir) {
-		throw new SlothletError("INVALID_CONFIG_DIR_MISSING");
+		throw new SlothletError("INVALID_CONFIG_DIR_MISSING", {}, null, { validationError: true });
 	}
 
 	// Resolve relative paths from caller's context
@@ -82,6 +139,7 @@ export function transformConfig(config = {}) {
 		runtime: normalizeRuntime(config.runtime),
 		reference: config.reference || null,
 		context: config.context || null,
+		debug: normalizeDebug(config.debug),
 		...config
 	};
 }

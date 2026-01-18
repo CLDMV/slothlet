@@ -15,10 +15,10 @@ export const translations = {
 	INVALID_CONFIG_generic: "Configuración inválida: '{option}' = '{value}'. Esperado: {expected}. {hint}",
 
 	// Context errors
-	CONTEXT_NOT_FOUND: "No se encontró contexto activo para la instancia {instanceId}. {hint}",
-	CONTEXT_ALREADY_EXISTS: "Ya existe un contexto para la instancia {instanceId}. {hint}",
+	CONTEXT_NOT_FOUND: "No se encontró contexto activo para la instancia {instanceID}. {hint}",
+	CONTEXT_ALREADY_EXISTS: "Ya existe un contexto para la instancia {instanceID}. {hint}",
 	NO_ACTIVE_CONTEXT: "No se encontró contexto de AsyncLocalStorage activo. {hint}",
-	CONTEXT_EXECUTION_FAILED: "Falló la ejecución en el contexto '{instanceId}' en la ruta '{apiPath}': {originalError}",
+	CONTEXT_EXECUTION_FAILED: "Falló la ejecución en el contexto '{instanceID}' en la ruta '{apiPath}': {originalError}",
 
 	// Module errors
 	MODULE_NOT_FOUND: "Módulo no encontrado: {modulePath}. {hint}",

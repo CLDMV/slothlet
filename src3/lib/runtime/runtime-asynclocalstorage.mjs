@@ -52,7 +52,7 @@ export const self = new Proxy(
 		get(_, prop) {
 			const ctx = asyncRuntime.getContext();
 			if (!ctx || !ctx.self) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF");
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", { validationError: true });
 			}
 			return ctx.self[prop];
 		},
@@ -107,7 +107,7 @@ export const context = new Proxy(
 		set(_, prop, value) {
 			const ctx = asyncRuntime.getContext();
 			if (!ctx || !ctx.context) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT");
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", { validationError: true });
 			}
 			ctx.context[prop] = value;
 			return true;
@@ -136,15 +136,13 @@ export const context = new Proxy(
  * @public
  *
  * @description
- * A proxy that provides access to the reference object passed during slothlet initialization.
- * This is the same as calling api.slothlet.diag.reference() but accessible from within modules.
+ * The reference object is merged directly into the API at initialization using the add API system.
+ * It is NOT available as a runtime export. Access it directly from the API or via api.slothlet.diag.reference().
  *
  * @example
- * import { reference } from "@cldmv/slothlet/runtime/async";
- *
+ * // Reference merged into API - access directly:
  * export function useReferenceData() {
- *   // Access reference object passed to slothlet config via self (merged into API)
- *   return self.myUtilityFunction;
+ *   return self.myData; // if reference had myData property
  * }
  */
 
@@ -158,29 +156,29 @@ export const context = new Proxy(
  * Useful for debugging and tracking which instance is handling a request.
  *
  * @example
- * import { instanceId } from "@cldmv/slothlet/runtime/async";
+ * import { instanceID } from "@cldmv/slothlet/runtime/async";
  *
  * export function getInstanceInfo() {
- *   return { instanceId };
+ *   return { instanceID };
  * }
  */
-export const instanceId = new Proxy(
+export const instanceID = new Proxy(
 	{},
 	{
 		get(_, prop) {
 			const ctx = asyncRuntime.getContext();
-			if (!ctx || !ctx.instanceId) {
+			if (!ctx || !ctx.instanceID) {
 				return undefined;
 			}
-			// If accessing the proxy directly (toString, valueOf), return the instanceId
+			// If accessing the proxy directly (toString, valueOf), return the instanceID
 			if (prop === Symbol.toPrimitive || prop === "toString" || prop === "valueOf") {
-				return () => ctx.instanceId;
+				return () => ctx.instanceID;
 			}
-			return ctx.instanceId[prop];
+			return ctx.instanceID[prop];
 		},
 		has(_, prop) {
 			const ctx = asyncRuntime.getContext();
-			return ctx && ctx.instanceId ? prop in ctx.instanceId : false;
+			return ctx && ctx.instanceID ? prop in ctx.instanceID : false;
 		}
 	}
 );

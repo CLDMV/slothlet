@@ -4,7 +4,7 @@
  */
 
 /**
- * Hint detection rules - pattern matching for common errors
+ * Hint detection rules - pattern matching for originalError messages
  * @private
  */
 const HINT_RULES = [
@@ -30,19 +30,17 @@ const HINT_RULES = [
  * @public
  */
 export function detectHint(error, errorCode) {
-	if (!error) {
-		return undefined;
-	}
-
-	const errorMessage = error.message || error.toString();
-
-	// Check each rule
-	for (const rule of HINT_RULES) {
-		if (rule.pattern.test(errorMessage)) {
-			return rule.hintKey;
+	// If we have an originalError, check pattern rules first
+	if (error) {
+		const errorMessage = error.message || error.toString();
+		for (const rule of HINT_RULES) {
+			if (rule.pattern.test(errorMessage)) {
+				return rule.hintKey;
+			}
 		}
 	}
 
-	// No hint found
-	return undefined;
+	// Convention: CONTEXT_NOT_FOUND → HINT_CONTEXT_NOT_FOUND
+	// Returns hint key even if it doesn't exist in translations (error system will check)
+	return `HINT_${errorCode}`;
 }

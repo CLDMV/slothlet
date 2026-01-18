@@ -11,7 +11,9 @@
 
 // Import runtime bindings - these establish the execution context
 
-import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
+// TODO: Bring over metadata system from v2 to v3
+// import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
+import { self as _ } from "@cldmv/slothlet/runtime";
 
 /**
  * Test helper that calls metadataAPI.get() from within slothlet context.
@@ -30,12 +32,14 @@ import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
  * const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
  */
 export async function getMetadata(path) {
-	const result = await metadataAPI.get(path);
-	// Debug: Show what we got
-	if (process.env.SLOTHLET_DEBUG) {
-		console.log("[getMetadata] Result for", path, ":", result);
-	}
-	return result;
+	// TODO: Bring over metadata system from v2 to v3
+	// const result = await metadataAPI.get(path);
+	// // Debug: Show what we got
+	// if (process.env.SLOTHLET_DEBUG) {
+	// 	console.log("[getMetadata] Result for", path, ":", result);
+	// }
+	// return result;
+	throw new Error("metadataAPI not yet implemented in v3 - TODO");
 }
 
 /**
@@ -54,7 +58,9 @@ export async function getMetadata(path) {
  * const meta = await api.metadataTestHelper.getSelfMetadata();
  */
 export async function getSelfMetadata() {
-	return await metadataAPI.self();
+	// TODO: Bring over metadata system from v2 to v3
+	// return await metadataAPI.self();
+	throw new Error("metadataAPI not yet implemented in v3 - TODO");
 }
 
 /**
@@ -74,14 +80,16 @@ export async function getSelfMetadata() {
  * console.log(result.callerMeta); // Should show testCaller's metadata
  */
 export async function testCaller() {
-	// Inner function that will check who called it
-	async function innerFunction() {
-		const callerMeta = await metadataAPI.caller();
-		return { callerMeta };
-	}
-
-	// Call inner function - it should see testCaller as the caller
-	return await innerFunction();
+	// TODO: Bring over metadata system from v2 to v3
+	// // Inner function that will check who called it
+	// async function innerFunction() {
+	// 	const callerMeta = await metadataAPI.caller();
+	// 	return { callerMeta };
+	// }
+	//
+	// // Call inner function - it should see testCaller as the caller
+	// return await innerFunction();
+	throw new Error("metadataAPI not yet implemented in v3 - TODO");
 }
 
 /**
@@ -100,10 +108,12 @@ export async function testCaller() {
  * const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
  */
 export async function verifyMetadata(path) {
-	const meta = await metadataAPI.get(path);
-	return {
-		exists: meta !== null,
-		hasSourceFolder: meta?.sourceFolder !== undefined,
-		metadata: meta
-	};
+	// TODO: Bring over metadata system from v2 to v3
+	// const meta = await metadataAPI.get(path);
+	// return {
+	// 	exists: meta !== null,
+	// 	hasSourceFolder: meta?.sourceFolder !== undefined,
+	// 	metadata: meta
+	// };
+	throw new Error("metadataAPI not yet implemented in v3 - TODO");
 }
