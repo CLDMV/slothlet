@@ -4,8 +4,8 @@
  * @memberof module:api_test
  */
 
-import { self, context } from "@cldmv/slothlet/runtime";
-// import { self, context, reference } from "@cldmv/slothlet/runtime";
+// import { self, context } from "@cldmv/slothlet/runtime";
+import { self, context, reference } from "@cldmv/slothlet/runtime";
 
 const verboseSelfObject = process.env.SLOTHLET_SELF_OBJECT_DEBUG === "1" || process.env.SLOTHLET_SELF_OBJECT_DEBUG === "true";
 

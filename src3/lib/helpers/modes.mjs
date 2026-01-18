@@ -27,10 +27,23 @@ import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
  * @returns {Promise<Function|null>} Root contributor function if found (only when isRoot=true)
  * @public
  */
-export async function processFiles(api, files, directory, ownership, contextManager, instanceId, config, currentDepth, mode, isRoot, recursive, populateDirectly = false) {
+export async function processFiles(
+	api,
+	files,
+	directory,
+	ownership,
+	contextManager,
+	instanceId,
+	config,
+	currentDepth,
+	mode,
+	isRoot,
+	recursive,
+	populateDirectly = false
+) {
 	let rootDefaultFunction = null;
-	const categoryName = (isRoot && !populateDirectly) ? null : sanitizePropertyName(directory.name);
-	const targetApi = (isRoot && !populateDirectly) ? api : (populateDirectly ? api : (api[categoryName] = api[categoryName] || {}));
+	const categoryName = isRoot && !populateDirectly ? null : sanitizePropertyName(directory.name);
+	let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
 
 	if (!isRoot && config.debug?.modes) {
 		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth }));
@@ -106,8 +119,18 @@ export async function processFiles(api, files, directory, ownership, contextMana
 			if (decision.useAutoFlattening) {
 				// C04: Single named export matches module name
 				moduleContent = mod[moduleName];
+			} else if (mod.default && moduleKeys.length > 0 && typeof mod.default === "function") {
+				// Hybrid pattern: default function + named exports
+				// Attach named exports as properties on the function (like logger(), logger.info())
+				moduleContent = mod.default;
+				for (const key of moduleKeys) {
+					moduleContent[key] = mod[key];
+				}
+			} else if (mod.default && moduleKeys.length === 0) {
+				// Only default export - use it directly (no need to wrap in object)
+				moduleContent = mod.default;
 			} else {
-				// Standard: collect all exports
+				// Multiple named exports or mixed default (non-function) + named
 				if (mod.default) moduleContent.default = mod.default;
 				for (const key of moduleKeys) {
 					moduleContent[key] = mod[key];
@@ -129,27 +152,59 @@ export async function processFiles(api, files, directory, ownership, contextMana
 						continue;
 					}
 				} else if (analysis.hasDefault) {
-					// Case 2: default export - replace category with the export
-					api[categoryName] = moduleContent.default || moduleContent;
+					// Case 2: folder/folder.mjs with default export
+					// Make the category callable by replacing it with wrapped function
+					// But DON'T continue - allow other files to attach properties later
+					// Example: logger/logger.mjs (default function) + logger/utils.mjs (named exports)
+					// Result: api.logger() callable + api.logger.utils.* from other files
+					const wrapper = new UnifiedWrapper({
+						mode,
+						apiPath: categoryName,
+						contextManager,
+						instanceId,
+						initialImpl: moduleContent,
+						ownership
+					});
+					
+					// Replace the empty object with the wrapped callable function
+					api[categoryName] = wrapper.createProxy();
+					// Update targetApi reference to point to the new function so other files can attach properties
+					targetApi = api[categoryName];
+					
 					if (ownership) {
 						ownership.register({ moduleId: file.moduleId, apiPath: categoryName, source: "core" });
 					}
-					continue;
+					
+					// DON'T continue - other files in this folder should attach as properties on the function
+					// Fall through to allow remaining modules to be processed
 				} else if (moduleKeys.length > 0) {
 					// Case 3: Multiple named exports - flatten to category level (Rule 6 - F01)
 					// Example: util/util.mjs with exports { size, secondFunc } → api.util.size(), api.util.secondFunc()
+					// OR: multi_func.mjs with exports { uniqueOne, uniqueTwo, multi_func: {...} } → flatten multi_func object + expose others
 					for (const key of moduleKeys) {
-						const wrapper = new UnifiedWrapper({
-							mode,
-							apiPath: `${categoryName}.${key}`,
-							contextManager,
-							instanceId,
-							initialImpl: mod[key],
-							ownership
-						});
-						targetApi[key] = wrapper.createProxy();
-						if (ownership) {
-							ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+						// Special handling: if this export is an object named the same as the folder, flatten it
+						if (key === moduleName && typeof mod[key] === "object" && mod[key] !== null && !Array.isArray(mod[key])) {
+							// Flatten object properties to category level
+							for (const [propKey, propValue] of Object.entries(mod[key])) {
+								targetApi[propKey] = propValue;
+								if (ownership) {
+									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
+								}
+							}
+						} else {
+							// Regular export - wrap and expose
+							const wrapper = new UnifiedWrapper({
+								mode,
+								apiPath: `${categoryName}.${key}`,
+								contextManager,
+								instanceId,
+								initialImpl: mod[key],
+								ownership
+							});
+							targetApi[key] = wrapper.createProxy();
+							if (ownership) {
+								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+							}
 						}
 					}
 					continue;
@@ -272,7 +327,7 @@ function createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceI
 			"lazy",
 			false, // Not root (for root contributor detection)
 			false, // Not recursive (create lazy wrappers for subdirs)
-			true   // Populate directly (don't nest under categoryName)
+			true // Populate directly (don't nest under categoryName)
 		);
 
 		// Set the materialized implementation
