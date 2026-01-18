@@ -318,13 +318,108 @@ for (const error of allErrors) {
 	// Extract placeholders from translation (e.g., {apiPath}, {error})
 	const translationPlaceholders = (translation.match(/\{([^}]+)\}/g) || []).map((p) => p.slice(1, -1)).sort();
 
-	// Extract context keys from error usage (looks for object literal between first and second comma)
-	const contextMatch = error.fullMatch.match(/\([^,]+,\s*\{([^}]*)\}/);
+	// Extract context keys from error usage
+	// SlothletError signature: new SlothletError(code, context = {}, originalError = null, options = { validationError, stub })
 	let usedPlaceholders = [];
-	if (contextMatch) {
-		// Extract key names from object literal
-		const contextObj = contextMatch[1];
-		usedPlaceholders = (contextObj.match(/(\w+)\s*:/g) || []).map((m) => m.replace(":", "").trim()).sort();
+
+	// Try to extract the full parameter list by finding balanced parentheses
+	const startIdx = error.fullMatch.indexOf("(");
+	if (startIdx !== -1) {
+		let depth = 0;
+		let endIdx = -1;
+		for (let i = startIdx; i < error.fullMatch.length; i++) {
+			if (error.fullMatch[i] === "(") depth++;
+			if (error.fullMatch[i] === ")") {
+				depth--;
+				if (depth === 0) {
+					endIdx = i;
+					break;
+				}
+			}
+		}
+
+		if (endIdx !== -1) {
+			const paramsContent = error.fullMatch.substring(startIdx + 1, endIdx);
+
+			// Split by top-level commas (not inside nested braces/parens)
+			const params = [];
+			let current = "";
+			let braceDepth = 0;
+			let parenDepth = 0;
+
+			for (let i = 0; i < paramsContent.length; i++) {
+				const char = paramsContent[i];
+				if (char === "{") braceDepth++;
+				if (char === "}") braceDepth--;
+				if (char === "(") parenDepth++;
+				if (char === ")") parenDepth--;
+
+				if (char === "," && braceDepth === 0 && parenDepth === 0) {
+					params.push(current.trim());
+					current = "";
+				} else {
+					current += char;
+				}
+			}
+			if (current.trim()) {
+				params.push(current.trim());
+			}
+
+			// Extract context from 2nd parameter (index 1)
+			if (params.length >= 2) {
+				const contextParam = params[1].trim();
+
+				// Only process if it's an object literal { ... }
+				if (contextParam.startsWith("{") && contextParam.endsWith("}")) {
+					const objectContent = contextParam.slice(1, -1).trim();
+
+					// Extract key names from object literal (both longhand and shorthand)
+					// Split by comma, but respect nested structures
+					const properties = [];
+					let current = "";
+					let depth = 0;
+
+					for (let i = 0; i < objectContent.length; i++) {
+						const char = objectContent[i];
+						if (char === "{" || char === "[") depth++;
+						if (char === "}" || char === "]") depth--;
+
+						if (char === "," && depth === 0) {
+							properties.push(current.trim());
+							current = "";
+						} else {
+							current += char;
+						}
+					}
+					if (current.trim()) {
+						properties.push(current.trim());
+					}
+
+					// Extract key from each property (either "key:" or just "key")
+					usedPlaceholders = properties
+						.map((prop) => {
+							// Check for longhand (key: value)
+							const colonIdx = prop.indexOf(":");
+							if (colonIdx !== -1) {
+								return prop.substring(0, colonIdx).trim();
+							}
+							// Shorthand property (just identifier)
+							return prop.trim();
+						})
+						.filter(Boolean);
+				}
+			}
+
+			// Check 4th parameter (options) for validationError/stub
+			// These should NOT be in usedPlaceholders since they're not context
+			if (params.length >= 4) {
+				const optionsParam = params[3];
+				// Remove validationError and stub from usedPlaceholders if they were extracted
+				usedPlaceholders = usedPlaceholders.filter((p) => p !== "validationError" && p !== "stub");
+			}
+
+			usedPlaceholders.sort();
+		}
 	}
 
 	// Compare placeholder arrays
