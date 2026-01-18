@@ -21,15 +21,16 @@ import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
  * @param {Object} config - Configuration
  * @param {number} currentDepth - Current recursion depth
  * @param {string} mode - Mode ("eager" or "lazy")
- * @param {boolean} isRoot - Whether processing root level files
+ * @param {boolean} isRoot - Whether processing root level files (enables root contributor detection)
  * @param {boolean} recursive - Whether to recurse into subdirectories
+ * @param {boolean} populateDirectly - Whether to populate api object directly (for lazy materialization)
  * @returns {Promise<Function|null>} Root contributor function if found (only when isRoot=true)
  * @public
  */
-export async function processFiles(api, files, directory, ownership, contextManager, instanceId, config, currentDepth, mode, isRoot, recursive) {
+export async function processFiles(api, files, directory, ownership, contextManager, instanceId, config, currentDepth, mode, isRoot, recursive, populateDirectly = false) {
 	let rootDefaultFunction = null;
-	const categoryName = isRoot ? null : sanitizePropertyName(directory.name);
-	const targetApi = isRoot ? api : (api[categoryName] = api[categoryName] || {});
+	const categoryName = (isRoot && !populateDirectly) ? null : sanitizePropertyName(directory.name);
+	const targetApi = (isRoot && !populateDirectly) ? api : (populateDirectly ? api : (api[categoryName] = api[categoryName] || {}));
 
 	if (!isRoot && config.debug?.modes) {
 		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth }));
@@ -96,6 +97,9 @@ export async function processFiles(api, files, directory, ownership, contextMana
 				console.log(await t("DEBUG_MODE_MODULE_DECISION", { mode, moduleName, reason: decision.reason }));
 			}
 
+			// Use preferred name from decision (Rule 9 - Function Name Preference)
+			const propertyName = decision.preferredName || moduleName;
+
 			// Build module content based on decision
 			let moduleContent = {};
 
@@ -131,61 +135,161 @@ export async function processFiles(api, files, directory, ownership, contextMana
 						ownership.register({ moduleId: file.moduleId, apiPath: categoryName, source: "core" });
 					}
 					continue;
+				} else if (moduleKeys.length > 0) {
+					// Case 3: Multiple named exports - flatten to category level (Rule 6 - F01)
+					// Example: util/util.mjs with exports { size, secondFunc } → api.util.size(), api.util.secondFunc()
+					for (const key of moduleKeys) {
+						const wrapper = new UnifiedWrapper({
+							mode,
+							apiPath: `${categoryName}.${key}`,
+							contextManager,
+							instanceId,
+							initialImpl: mod[key],
+							ownership
+						});
+						targetApi[key] = wrapper.createProxy();
+						if (ownership) {
+							ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+						}
+					}
+					continue;
 				}
+			}
+
+			// Regular files with only named exports (no default) - expose each export directly
+			// Example: get-http-status.mjs with export { getHTTPStatus } → api.util.getHTTPStatus()
+			// BUT: Only applies when there's a single named export OR when using special helper files
+			// Multi-export files (like url.mjs with multiple exports) should remain namespaced
+			if (!analysis.hasDefault && moduleKeys.length === 1 && !isRoot) {
+				const key = moduleKeys[0];
+				const wrapper = new UnifiedWrapper({
+					mode,
+					apiPath: `${categoryName}.${key}`,
+					contextManager,
+					instanceId,
+					initialImpl: mod[key],
+					ownership
+				});
+				targetApi[key] = wrapper.createProxy();
+				if (ownership) {
+					ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+				}
+				continue;
 			}
 
 			// Wrap in UnifiedWrapper
 			const wrapper = new UnifiedWrapper({
 				mode,
-				apiPath: isRoot ? moduleName : `${categoryName}.${moduleName}`,
+				apiPath: isRoot ? propertyName : `${categoryName}.${propertyName}`,
 				contextManager,
 				instanceId,
 				initialImpl: moduleContent,
 				ownership
 			});
 
-			targetApi[moduleName] = wrapper.createProxy();
+			targetApi[propertyName] = wrapper.createProxy();
 
 			if (ownership) {
-				const apiPath = isRoot ? moduleName : `${categoryName}.${moduleName}`;
+				const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 				ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
 			}
 		}
 	}
 
-	// Recurse into subdirectories (only if recursive flag is true)
-	if (recursive && directory?.children?.directories) {
-		for (const subDir of directory.children.directories) {
-			const subDirName = sanitizePropertyName(subDir.name);
-			const subDirApi = {};
-			await processFiles(
-				subDirApi,
-				subDir.children.files,
-				subDir,
-				ownership,
-				contextManager,
-				instanceId,
-				config,
-				currentDepth + 1,
-				mode,
-				false, // Not root
-				recursive // Pass through recursive flag
-			);
+	// Handle subdirectories based on mode
+	if (directory?.children?.directories) {
+		if (recursive) {
+			// Eager mode: recurse and process immediately
+			for (const subDir of directory.children.directories) {
+				const subDirName = sanitizePropertyName(subDir.name);
+				const subDirApi = {};
+				await processFiles(
+					subDirApi,
+					subDir.children.files,
+					subDir,
+					ownership,
+					contextManager,
+					instanceId,
+					config,
+					currentDepth + 1,
+					mode,
+					false, // Not root
+					recursive // Pass through recursive flag
+				);
 
-			// Wrap subdirectory
-			const wrapper = new UnifiedWrapper({
-				mode,
-				apiPath: `${categoryName}.${subDirName}`,
-				contextManager,
-				instanceId,
-				initialImpl: subDirApi[subDirName],
-				ownership
-			});
-			targetApi[subDirName] = wrapper.createProxy();
+				// Wrap subdirectory
+				const wrapper = new UnifiedWrapper({
+					mode,
+					apiPath: `${categoryName}.${subDirName}`,
+					contextManager,
+					instanceId,
+					initialImpl: subDirApi[subDirName],
+					ownership
+				});
+				targetApi[subDirName] = wrapper.createProxy();
+			}
+		} else {
+			// Lazy mode: create lazy wrappers for subdirectories
+			for (const subDir of directory.children.directories) {
+				const subDirName = sanitizePropertyName(subDir.name);
+				const apiPath = `${categoryName}.${subDirName}`;
+				targetApi[subDirName] = createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceId, apiPath, config);
+			}
 		}
 	}
 
 	return rootDefaultFunction;
+}
+
+/**
+ * Create lazy wrapper for subdirectory (lazy mode only)
+ * @param {Object} dir - Directory structure
+ * @param {Object} ownership - Ownership manager
+ * @param {Object} contextManager - Context manager
+ * @param {string} instanceId - Instance ID
+ * @param {string} apiPath - Current API path
+ * @param {Object} config - Configuration
+ * @returns {Proxy} Lazy unified wrapper
+ * @private
+ */
+function createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceId, apiPath, config) {
+	// Create materialization function
+	async function lazy_materializeFunc(wrapper) {
+		const materialized = {};
+
+		// Process files in this directory using unified processFiles
+		// IMPORTANT: populateDirectly=true to populate materialized object directly
+		// But isRoot=false so flattening logic knows we're inside a category
+		await processFiles(
+			materialized,
+			dir.children.files,
+			{ name: dir.name, children: dir.children },
+			ownership,
+			contextManager,
+			instanceId,
+			config,
+			0,
+			"lazy",
+			false, // Not root (for root contributor detection)
+			false, // Not recursive (create lazy wrappers for subdirs)
+			true   // Populate directly (don't nest under categoryName)
+		);
+
+		// Set the materialized implementation
+		wrapper.__setImpl(materialized);
+	}
+
+	// Create unified wrapper in lazy mode
+	const wrapper = new UnifiedWrapper({
+		mode: "lazy",
+		apiPath,
+		contextManager,
+		instanceId,
+		materializeFunc: lazy_materializeFunc,
+		ownership
+	});
+
+	return wrapper.createProxy();
 }
 
 /**

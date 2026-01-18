@@ -105,6 +105,26 @@ export function getFlatteningDecision(options) {
 		};
 	}
 
+	// Rule 4, Rule 9 - C16: Function name preference (check before default fallback)
+	// When function/export name matches filename (case-insensitive), preserve exact casing
+	const exportToCheck = typeof mod === "function" ? mod : (mod?.default && typeof mod.default === "function" ? mod.default : null);
+	
+	if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
+		// Check if function name relates to filename (case-insensitive, ignoring separators)
+		const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
+		const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+		const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
+
+		// Rule 9: Use exact function name to preserve casing (XMLParser vs xmlParser, getHTTPStatus vs getHttpStatus)
+		if (functionNameMatchesFilename) {
+			return {
+				preserveAsNamespace: true,
+				preferredName: exportToCheck.name, // Use exact function name
+				reason: "Preserving function name over filename"
+			};
+		}
+	}
+
 	// Rule 2 - C06: Single file context (INTENTIONALLY NOT IMPLEMENTED)
 	// Architectural decision: Would auto-flatten single file directories, but this reduces
 	// API path flexibility. Users should use C05 (filename matching) if they want flattening.
@@ -316,15 +336,20 @@ export function buildCategoryDecisions(options) {
 	}
 
 	// Rule 4, Rule 9 - C16: Function name preference
-	if (typeof mod === "function" && mod.name) {
-		const functionNameMatchesFilename =
-			mod.name.toLowerCase() === moduleName.toLowerCase() ||
-			mod.name.toLowerCase().replace(/[-_]/g, "") === moduleName.toLowerCase().replace(/[-_]/g, "");
+	// Always prefer function name over sanitized filename when function name exists
+	const exportToCheck = typeof mod === "function" ? mod : (mod?.default && typeof mod.default === "function" ? mod.default : null);
+	
+	if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
+		// Check if function name relates to filename (case-insensitive, ignoring separators)
+		const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
+		const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+		const functionNameMatchesFilename = normalizedFunctionName === normalizedModuleName;
 
+		// Rule 9: Always use function name to preserve casing (XMLParser vs xmlParser)
 		if (functionNameMatchesFilename) {
 			return {
 				shouldFlatten: false,
-				preferredName: mod.name,
+				preferredName: exportToCheck.name, // Use exact function name (preserves XMLParser, getHTTPStatus, etc.)
 				reason: "Preserving function name over filename"
 			};
 		}
