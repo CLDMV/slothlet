@@ -41,7 +41,7 @@ function ensureDevEnvFlags() {
 
 	process.env.NODE_ENV = "development";
 
-	const requiredConditions = ["slothlet-dev", "development"];
+	const requiredConditions = ["slothlet-three-dev", "development"];
 	const nextExecArgv = [...process.execArgv];
 	const envConditions = (process.env.NODE_OPTIONS ?? "")
 		.split(/\s+/u)
