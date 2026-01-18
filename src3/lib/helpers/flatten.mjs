@@ -107,8 +107,8 @@ export function getFlatteningDecision(options) {
 
 	// Rule 4, Rule 9 - C16: Function name preference (check before default fallback)
 	// When function/export name matches filename (case-insensitive), preserve exact casing
-	const exportToCheck = typeof mod === "function" ? mod : (mod?.default && typeof mod.default === "function" ? mod.default : null);
-	
+	const exportToCheck = typeof mod === "function" ? mod : mod?.default && typeof mod.default === "function" ? mod.default : null;
+
 	if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 		// Check if function name relates to filename (case-insensitive, ignoring separators)
 		const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
@@ -337,8 +337,8 @@ export function buildCategoryDecisions(options) {
 
 	// Rule 4, Rule 9 - C16: Function name preference
 	// Always prefer function name over sanitized filename when function name exists
-	const exportToCheck = typeof mod === "function" ? mod : (mod?.default && typeof mod.default === "function" ? mod.default : null);
-	
+	const exportToCheck = typeof mod === "function" ? mod : mod?.default && typeof mod.default === "function" ? mod.default : null;
+
 	if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
 		// Check if function name relates to filename (case-insensitive, ignoring separators)
 		const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");

@@ -236,18 +236,24 @@ describe("Rule Coverage Validation", () => {
 	test("Summary: All conditions accounted for", () => {
 		// Count UNIQUE conditions across all rules (some conditions appear in multiple rules)
 		const allConditions = new Set();
+		const allFPatterns = new Set();
 		for (const mapping of mappings) {
 			for (const condition of mapping.cConditions) {
 				allConditions.add(condition.toUpperCase());
+			}
+			for (const fPattern of mapping.fPatterns) {
+				allFPatterns.add(fPattern);
 			}
 		}
 		const expectedCount = allConditions.size;
 		const documentedCount = implementedConditions.length;
 
 		console.log(`\n📊 Rule Coverage Summary:`);
+		console.log(`   Rules mapped: ${mappings.length}`);
+		console.log(`   F## patterns: ${allFPatterns.size} (${[...allFPatterns].sort().join(", ")})`);
 		console.log(`   Expected C## conditions: ${expectedCount}`);
 		console.log(`   Documented C## conditions: ${documentedCount}`);
-		console.log(`   Rules mapped: ${mappings.length}`);
+		console.log(`   Unique C## conditions: ${[...allConditions].sort().join(", ")}`);
 
 		expect(documentedCount).toBeGreaterThanOrEqual(expectedCount);
 	});

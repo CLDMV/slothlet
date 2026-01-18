@@ -205,14 +205,27 @@ function analyzeError(error) {
 		issues.push("Has hardcoded hint - should use i18n instead (hint only allowed in stub errors)");
 	}
 
+	// Check if error code translation exists
+	const hasTranslation = checkTranslationExists(error.errorCode);
+	if (!hasTranslation && !error.isStub) {
+		issues.push("❌ Missing error translation (needs error code key in translations)");
+	}
+
 	// Check if a hint exists in translations
 	const hasHint = checkHintExists(error.errorCode);
 	if (!hasHint && !error.hasHardcodedHint && !error.isStub) {
-		issues.push("No hint in translations (needs HINT_ key)");
+		issues.push("❌ No hint in translations (needs HINT_ key)");
 	}
 
 	const status = issues.length === 0 ? "✅ OK" : "❌ Issues";
-	return { status, issues, hasHint };
+	return { status, issues, hasHint, hasTranslation };
+}
+
+/**
+ * Check if translation exists for error code
+ */
+function checkTranslationExists(errorCode) {
+	return translations.hasOwnProperty(errorCode);
 }
 
 /**
@@ -267,6 +280,7 @@ for (const error of errorsToShow) {
 	console.log(`\n[${shown + 1}] ${relPath}:${error.lineNumber}`);
 	console.log(`    Code: ${error.errorCode}`);
 	console.log(`    Status: ${analysis.status}`);
+	console.log(`    Has Translation: ${analysis.hasTranslation ? "✅ Yes" : "❌ No"}`);
 	console.log(`    Has Hint: ${analysis.hasHint ? "✅ Yes" : "❌ No"}`);
 
 	if (analysis.issues.length > 0) {

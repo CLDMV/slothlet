@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-17 21:30:12 -08:00 (1768714212)
+ *	@Last modified time: 2026-01-18 10:24:42 -08:00 (1768760682)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -339,10 +339,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Detect which version we're testing based on NODE_OPTIONS conditions
 	const nodeOptions = process.env.NODE_OPTIONS || "";
 	// FORCE V2 TO TEST RESOLVER
-	const apiTestDir = "../api_tests/api_test";
-	// const apiTestDir = nodeOptions.includes("slothlet-three-dev")
-	// 	? "../api_tests_v3/api_test"
-	// 	: "../api_tests/api_test";
+	// const apiTestDir = "../api_tests/api_test";
+	const apiTestDir = nodeOptions.includes("slothlet-three-dev") ? "../api_tests_v3/api_test" : "../api_tests/api_test";
 
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
@@ -354,7 +352,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// }
 	// const bound = await slothlet.create({ ...config, debug: true, dir: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
-	console.log("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n");
+	console.log(chalk.green("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n"));
 
 	// console.dir(bound, { depth: null });
 	verboseLog("bound api (before calls): ", bound);
@@ -362,7 +360,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// console.log(await bound.describe());
 	// console.dir(await bound.describe(), { depth: null });
 
-	console.log("\n===== DIRECT HELLO TEST START =====\n");
+	console.log(chalk.green("\n===== DIRECT HELLO TEST START =====\n"));
 	try {
 		let directResult;
 		if (awaitCalls) {
@@ -374,7 +372,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	} catch (e) {
 		console.error("Error during direct hello test:", e);
 	}
-	console.log("\n===== DIRECT HELLO TEST END =====\n");
+	console.log(chalk.green("\n===== DIRECT HELLO TEST END =====\n"));
 
 	// List of debug API calls to run
 	const tests = [
@@ -647,6 +645,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	let testCounter = 0;
 	const testBeforeOutput = 40;
 
+	console.log(chalk.green("\n===== TEST RUNNING START =====\n"));
+
 	for (const test of tests) {
 		verboseLog(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
 		for (const call of test.calls) {
@@ -807,6 +807,9 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		}
 	}
 	// await slothlet.shutdown();
+
+	console.log(chalk.green("\n===== TEST RUNNING END =====\n"));
+
 	if (awaitCalls) verboseLog("bound api (after calls): ", bound);
 	return bound;
 }

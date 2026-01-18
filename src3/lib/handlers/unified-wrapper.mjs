@@ -261,6 +261,11 @@ export class UnifiedWrapper {
 					value = wrapper.ownership.getCurrentValue(fullPath);
 				}
 
+				// Check target directly for attached properties (e.g., logger.utils from other files)
+				if (value === undefined && target[prop] !== undefined) {
+					value = target[prop];
+				}
+
 				// Fall back to __impl if ownership doesn't have it
 				if (value === undefined && wrapper._impl) {
 					value = wrapper._impl[prop];
@@ -271,8 +276,10 @@ export class UnifiedWrapper {
 					return undefined;
 				}
 
-				// Don't wrap UnifiedWrapper instances - return them directly
-				if (value && typeof value === "object" && value.__getState) {
+				// Don't wrap UnifiedWrapper proxies - return them directly
+				// Check for __wrapper (proxy) or __getState (raw wrapper)
+				// Functions are typeof "function", not "object", so check both
+				if (value && (typeof value === "object" || typeof value === "function") && (value.__wrapper || value.__getState)) {
 					return value;
 				}
 
