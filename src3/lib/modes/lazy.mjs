@@ -4,7 +4,7 @@
  */
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { processRootFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
+import { processFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -25,7 +25,19 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceId,
 	const structure = await scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
-	const rootDefaultFunction = await processRootFiles(api, structure.files, ownership, contextManager, instanceId, config, "lazy");
+	const rootDefaultFunction = await processFiles(
+		api,
+		structure.files,
+		null,
+		ownership,
+		contextManager,
+		instanceId,
+		config,
+		0,
+		"lazy",
+		true,
+		false
+	);
 
 	// Create unified wrappers for directories (with lazy materialization)
 	for (const directory of structure.directories) {

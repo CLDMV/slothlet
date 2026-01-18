@@ -8,7 +8,7 @@
 
 /**
  * Check if module is self-referential (exports itself under same name).
- * Condition C01 from API-RULES-CONDITIONS.md.
+ * Rule 6 - Condition C01 from API-RULES-CONDITIONS.md.
  * @param {object} mod - Module exports
  * @param {string} moduleName - Name of the module
  * @returns {boolean} True if self-referential
@@ -21,7 +21,7 @@ function flatten_checkSelfReferential(mod, moduleName) {
 
 /**
  * Check if this is a multi-default context (multiple default exports in folder).
- * Conditions C02-C03 from API-RULES-CONDITIONS.md.
+ * Rule 5 - Conditions C02-C03 from API-RULES-CONDITIONS.md.
  * @param {object} analysis - Export analysis
  * @param {boolean} hasMultipleDefaults - Whether folder has multiple defaults
  * @returns {object|null} Multi-default decision or null
@@ -30,7 +30,7 @@ function flatten_checkSelfReferential(mod, moduleName) {
 function flatten_checkMultiDefault(analysis, hasMultipleDefaults) {
 	if (!hasMultipleDefaults) return null;
 
-	// C02: Multi-default with default export - preserve namespace
+	// Rule 5 - C02: Multi-default with default export - preserve namespace
 	if (analysis.hasDefault) {
 		return {
 			preserveAsNamespace: true,
@@ -38,7 +38,7 @@ function flatten_checkMultiDefault(analysis, hasMultipleDefaults) {
 		};
 	}
 
-	// C03: Multi-default without default - flatten
+	// Rule 5 - C03: Multi-default without default - flatten
 	return {
 		flattenToRoot: true,
 		reason: "Multi-default context without default export"
@@ -47,7 +47,7 @@ function flatten_checkMultiDefault(analysis, hasMultipleDefaults) {
 
 /**
  * Check if single named export matches filename (auto-flatten case).
- * Condition C04 from API-RULES-CONDITIONS.md.
+ * Rule 7 (F02, F03) - Condition C04 from API-RULES-CONDITIONS.md.
  * @param {object} mod - Module exports
  * @param {string} moduleName - Name of the module
  * @param {array} moduleKeys - Keys of module exports
@@ -75,7 +75,7 @@ function flatten_checkAutoFlatten(mod, moduleName, moduleKeys) {
 export function getFlatteningDecision(options) {
 	const { mod, moduleName, categoryName, analysis, hasMultipleDefaults, moduleKeys } = options;
 
-	// C01: Self-referential check - preserve namespace
+	// Rule 6 - C01: Self-referential check - preserve namespace
 	if (flatten_checkSelfReferential(mod, moduleName)) {
 		return {
 			preserveAsNamespace: true,
@@ -83,13 +83,13 @@ export function getFlatteningDecision(options) {
 		};
 	}
 
-	// C02-C03: Multi-default context handling
+	// Rule 5 - C02, C03: Multi-default context handling
 	const multiDefaultDecision = flatten_checkMultiDefault(analysis, hasMultipleDefaults);
 	if (multiDefaultDecision) {
 		return multiDefaultDecision;
 	}
 
-	// C04: Auto-flatten single named export matching filename
+	// Rule 7 (F02, F03) - C04: Auto-flatten single named export matching filename
 	if (flatten_checkAutoFlatten(mod, moduleName, moduleKeys)) {
 		return {
 			useAutoFlattening: true,
@@ -97,7 +97,7 @@ export function getFlatteningDecision(options) {
 		};
 	}
 
-	// C05: Filename matches container - flatten to category
+	// Rule 1 (F01) - C05: Filename matches container - flatten to category
 	if (moduleName === categoryName) {
 		return {
 			flattenToCategory: true,
@@ -105,10 +105,11 @@ export function getFlatteningDecision(options) {
 		};
 	}
 
-	// C06: Single file context (DEPRECATED/COMMENTED OUT in source)
-	// Skipping as per source code
+	// Rule 2 - C06: Single file context (INTENTIONALLY NOT IMPLEMENTED)
+	// Architectural decision: Would auto-flatten single file directories, but this reduces
+	// API path flexibility. Users should use C05 (filename matching) if they want flattening.
 
-	// C07: Default fallback - preserve as namespace
+	// Rule 2 - C07: Default fallback - preserve as namespace
 	return {
 		preserveAsNamespace: true,
 		reason: "Default behavior - preserve namespace"
@@ -136,14 +137,14 @@ export function processModuleForAPI(options) {
 		namespaced: false
 	};
 
-	// C08: Auto-flattening
+	// Rule 7 (F02, F03) - C08: Auto-flattening
 	if (decision.useAutoFlattening) {
 		result.apiAssignments[apiPathKey] = mod[moduleKeys[0]];
 		result.flattened = true;
 		return result;
 	}
 
-	// C09: Flatten to root/category
+	// Rule 1 (F01) - C09: Flatten to root/category
 	if (decision.flattenToRoot || decision.flattenToCategory) {
 		// If there's a default export with no named exports, use the default
 		if (mod.default && moduleKeys.length === 0) {
@@ -171,7 +172,7 @@ export function processModuleForAPI(options) {
 		return result;
 	}
 
-	// C09a: Self-referential non-function
+	// Rule 6 - C09a: Self-referential non-function
 	if (isSelfReferential) {
 		result.apiAssignments[apiPathKey] = mod[apiPathKey] || mod;
 		result.namespaced = true;
@@ -185,7 +186,7 @@ export function processModuleForAPI(options) {
 		return result;
 	}
 
-	// C09b: Traditional namespace preservation (default)
+	// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation (default)
 	// For modules with default export only, use the default
 	if (mod.default && moduleKeys.length === 0) {
 		result.apiAssignments[apiPathKey] = mod.default;
@@ -246,7 +247,7 @@ export function buildCategoryDecisions(options) {
 		reason: "No flattening conditions met"
 	};
 
-	// C10: Single-file function folder match
+	// Rule 3 - C10: Single-file function folder match
 	if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
 		return {
 			shouldFlatten: true,
@@ -255,7 +256,7 @@ export function buildCategoryDecisions(options) {
 		};
 	}
 
-	// C11: Default export flattening
+	// Rule 8 (F02, F04, F05) - C11: Default export flattening
 	if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleName === categoryName && currentDepth > 0) {
 		return {
 			shouldFlatten: true,
@@ -264,7 +265,7 @@ export function buildCategoryDecisions(options) {
 		};
 	}
 
-	// C12: Object auto-flatten (single named export matching filename)
+	// Rule 7 (F02, F03) - C12: Object auto-flatten (single named export matching filename)
 	if (moduleName === categoryName && mod && typeof mod === "object" && !Array.isArray(mod) && currentDepth > 0) {
 		if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 			return {
@@ -275,7 +276,7 @@ export function buildCategoryDecisions(options) {
 		}
 	}
 
-	// C13: Filename-folder exact match flattening
+	// Rule 1 (F01) - C13: Filename-folder exact match flattening
 	if (fileBaseName === categoryName && moduleKeys.length > 0) {
 		return {
 			shouldFlatten: true,
@@ -284,7 +285,7 @@ export function buildCategoryDecisions(options) {
 		};
 	}
 
-	// C14: Parent-level flattening (generic filenames)
+	// Rule 10 (F02) - C14: Parent-level flattening (generic filenames)
 	if (moduleFiles.length === 1 && currentDepth > 0 && mod && typeof mod === "object" && !Array.isArray(mod)) {
 		const genericFilenames = ["singlefile", "index", "main", "default"];
 		const isGenericFilename = genericFilenames.includes(moduleName.toLowerCase());
@@ -298,7 +299,7 @@ export function buildCategoryDecisions(options) {
 		}
 	}
 
-	// C15: Function name matches folder
+	// Rule 9 - C15: Function name matches folder
 	if (typeof mod === "function" && mod.name && currentDepth > 0) {
 		const functionNameMatchesFolder =
 			mod.name.toLowerCase() === categoryName.toLowerCase() ||
@@ -314,7 +315,7 @@ export function buildCategoryDecisions(options) {
 		}
 	}
 
-	// C16: Function name preference
+	// Rule 4, Rule 9 - C16: Function name preference
 	if (typeof mod === "function" && mod.name) {
 		const functionNameMatchesFilename =
 			mod.name.toLowerCase() === moduleName.toLowerCase() ||
@@ -329,7 +330,7 @@ export function buildCategoryDecisions(options) {
 		}
 	}
 
-	// C17: Default function export flattening
+	// Rule 8 (F02, F04, F05) - C17: Default function export flattening
 	if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__slothletDefault === true) && currentDepth > 0) {
 		return {
 			shouldFlatten: true,
@@ -339,7 +340,7 @@ export function buildCategoryDecisions(options) {
 		};
 	}
 
-	// C18: Object auto-flatten (final check)
+	// Rule 7 (F02, F03) - C18: Object auto-flatten (final check)
 	if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 		return {
 			shouldFlatten: true,
