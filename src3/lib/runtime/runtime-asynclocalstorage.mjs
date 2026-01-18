@@ -69,15 +69,19 @@ export const self = new Proxy(
 		getOwnPropertyDescriptor(_, prop) {
 			const ctx = asyncRuntime.getContext();
 			if (!ctx || !ctx.self) return undefined;
-			return Reflect.getOwnPropertyDescriptor(ctx.self, prop);
+		const desc = Reflect.getOwnPropertyDescriptor(ctx.self, prop);
+		// If the property exists on ctx.self, return a descriptor that's always configurable
+		// to avoid proxy invariant violations (since the proxy target is an empty object)
+		if (desc) {
+			return { ...desc, configurable: true };
 		}
-	}
+		return undefined;	}
+}
 );
 
 /**
  * User-provided context object
- * @type {Proxy}
- * @public
+ * @type {Proxy} * @public
  *
  * @description
  * A proxy that provides access to user-provided context data (e.g., request data, user info).
