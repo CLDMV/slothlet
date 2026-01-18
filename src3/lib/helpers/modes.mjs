@@ -6,7 +6,7 @@ import path from "node:path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { getFlatteningDecision } from "@cldmv/slothlet/helpers/flatten";
+import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
@@ -165,16 +165,16 @@ export async function processFiles(
 						initialImpl: moduleContent,
 						ownership
 					});
-					
+
 					// Replace the empty object with the wrapped callable function
 					api[categoryName] = wrapper.createProxy();
 					// Update targetApi reference to point to the new function so other files can attach properties
 					targetApi = api[categoryName];
-					
+
 					if (ownership) {
 						ownership.register({ moduleId: file.moduleId, apiPath: categoryName, source: "core" });
 					}
-					
+
 					// DON'T continue - other files in this folder should attach as properties on the function
 					// Fall through to allow remaining modules to be processed
 				} else if (moduleKeys.length > 0) {
@@ -254,14 +254,61 @@ export async function processFiles(
 	// Handle subdirectories based on mode
 	if (directory?.children?.directories) {
 		if (recursive) {
-			// Eager mode: recurse and process immediately
+			// Eager mode: recurse into subdirectories
 			for (const subDir of directory.children.directories) {
 				const subDirName = sanitizePropertyName(subDir.name);
-				const subDirApi = {};
+				
+				// Check if this is a single-file folder that should flatten
+				if (subDir.children.files.length === 1 && subDir.children.directories.length === 0) {
+					const file = subDir.children.files[0];
+					const mod = await loadModule(file.path);
+					const exports = extractExports(mod);
+					const moduleName = sanitizePropertyName(file.name);
+					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+					const analysis = {
+						hasDefault: exports.default !== undefined,
+						hasNamed: moduleKeys.length > 0,
+						defaultExportType: exports.default ? typeof exports.default : null
+					};
+
+					// Apply buildCategoryDecisions for folder-level flattening
+					// Pass the actual module content (default if present, otherwise full exports)
+					const modContent = exports.default !== undefined ? exports.default : exports;
+					const categoryDecision = buildCategoryDecisions({
+						categoryName: subDirName,
+						mod: modContent,
+						moduleName,
+						fileBaseName: file.name,
+						analysis,
+						moduleKeys,
+						currentDepth: currentDepth + 1,
+						moduleFiles: subDir.children.files
+					});
+
+					if (categoryDecision.shouldFlatten) {
+						// Flatten: put the module content directly at targetApi[subDirName]
+						const wrapper = new UnifiedWrapper({
+							mode,
+							apiPath: `${categoryName}.${subDirName}`,
+							contextManager,
+							instanceId,
+							initialImpl: modContent,
+							ownership
+						});
+						targetApi[subDirName] = wrapper.createProxy();
+						if (ownership) {
+							ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${subDirName}`, source: "core" });
+						}
+						continue;
+					}
+				}
+
+				// Regular subdirectory processing
+				targetApi[subDirName] = targetApi[subDirName] || {};
 				await processFiles(
-					subDirApi,
+					targetApi[subDirName],
 					subDir.children.files,
-					subDir,
+					{ name: subDirName, children: subDir.children },
 					ownership,
 					contextManager,
 					instanceId,
@@ -269,19 +316,9 @@ export async function processFiles(
 					currentDepth + 1,
 					mode,
 					false, // Not root
-					recursive // Pass through recursive flag
+					recursive, // Pass through recursive flag
+					true // populateDirectly - put content directly into targetApi[subDirName]
 				);
-
-				// Wrap subdirectory
-				const wrapper = new UnifiedWrapper({
-					mode,
-					apiPath: `${categoryName}.${subDirName}`,
-					contextManager,
-					instanceId,
-					initialImpl: subDirApi[subDirName],
-					ownership
-				});
-				targetApi[subDirName] = wrapper.createProxy();
 			}
 		} else {
 			// Lazy mode: create lazy wrappers for subdirectories
