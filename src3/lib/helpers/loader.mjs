@@ -20,7 +20,7 @@ export async function loadModule(filePath) {
 		const module = await import(fileUrl);
 		return module;
 	} catch (error) {
-		throw await SlothletError.create(
+		throw new SlothletError(
 			"MODULE_IMPORT_FAILED",
 			{
 				modulePath: filePath
@@ -43,7 +43,7 @@ export async function scanDirectory(dir, options = {}) {
 	try {
 		await stat(dir);
 	} catch (error) {
-		throw await SlothletError.create(
+		throw new SlothletError(
 			"INVALID_DIRECTORY",
 			{
 				dir

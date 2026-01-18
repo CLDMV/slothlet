@@ -11,26 +11,27 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 export class OwnershipManager {
 	constructor() {
 		this.moduleToPath = new Map(); // moduleId → Set<apiPath>
-		this.pathToModule = new Map(); // apiPath → Array<{moduleId, source, timestamp}>
+		this.pathToModule = new Map(); // apiPath → Array<{moduleId, source, timestamp, value}>
 	}
 
 	/**
-	 * Register module ownership of API path
+	 * Register module ownership of API path with its value
 	 * @param {Object} options - Registration options
 	 * @param {string} options.moduleId - Module identifier
 	 * @param {string} options.apiPath - API path being registered
+	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
 	 * @param {boolean} [options.allowConflict=false] - Allow overwriting existing owner
 	 * @returns {Object} Registration entry
 	 * @public
 	 */
-	register({ moduleId, apiPath, source = "core", allowConflict = false }) {
+	register({ moduleId, apiPath, value, source = "core", allowConflict = false }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId });
+			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId, validationError: true });
 		}
 		if (!apiPath || typeof apiPath !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath });
+			throw new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath, validationError: true });
 		}
 
 		// Check for conflicts
@@ -57,7 +58,8 @@ export class OwnershipManager {
 		const entry = {
 			moduleId,
 			source,
-			timestamp: Date.now()
+			timestamp: Date.now(),
+			value
 		};
 
 		this.pathToModule.get(apiPath).push(entry);
@@ -144,6 +146,17 @@ export class OwnershipManager {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack || stack.length === 0) return null;
 		return stack[stack.length - 1];
+	}
+
+	/**
+	 * Get current value for API path
+	 * @param {string} apiPath - API path to check
+	 * @returns {*} Current value or undefined
+	 * @public
+	 */
+	getCurrentValue(apiPath) {
+		const owner = this.getCurrentOwner(apiPath);
+		return owner ? owner.value : undefined;
 	}
 
 	/**

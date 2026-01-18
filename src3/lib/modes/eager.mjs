@@ -6,6 +6,8 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
+import { processRootFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
+import { createOuterProxy } from "@cldmv/slothlet/helpers/proxy";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
 
@@ -19,118 +21,27 @@ import path from "node:path";
  */
 export async function buildEagerAPI({ dir, ownership, config = {} }) {
 	const api = {};
-	let rootDefaultFunction = null;
 
 	// Scan directory structure
 	const structure = await scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
-	for (const file of structure.files) {
-		const contributedFunction = await processRootFile(api, file, ownership, config);
+	const rootDefaultFunction = await processRootFiles(api, structure.files, ownership, config, "eager");
 
-		// If a root file contributes a default function, save it
-		if (contributedFunction && !rootDefaultFunction) {
-			rootDefaultFunction = contributedFunction;
-			if (config.debug) {
-				console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode: "eager", functionName: contributedFunction.name || "anonymous" }));
-			}
-		}
-	}
-
-	// Process directories
+	// Process directories - wrap in outer proxies for reload support
 	for (const directory of structure.directories) {
-		await processDirectory(api, directory, ownership, config, 1);
+		const categoryName = sanitizePropertyName(directory.name);
+		const categoryObj = {};
+		await processDirectory(categoryObj, directory, ownership, config, 1);
+
+		// Wrap category in outer proxy with immediate __impl
+		api[categoryName] = createOuterProxy(categoryName, categoryObj);
 	}
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
-	let finalApi;
-	if (rootDefaultFunction) {
-		// Merge all other API properties onto the root function
-		Object.assign(rootDefaultFunction, api);
-		finalApi = rootDefaultFunction;
-		if (config.debug) {
-			console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode: "eager", properties: Object.keys(api).length }));
-		}
-	} else {
-		// No root contributor - API is plain object
-		finalApi = api;
-	}
+	const finalApi = await applyRootContributor(api, rootDefaultFunction, config, "eager");
 
 	return finalApi;
-}
-
-/**
- * Process a root-level file
- * @param {Object} api - API object being built
- * @param {Object} file - File info from scanner
- * @param {Object} ownership - Ownership manager
- * @param {Object} config - Configuration
- * @returns {Function|null} Returns default function if module is a root contributor
- * @private
- */
-async function processRootFile(api, file, ownership, config) {
-	try {
-		const mod = await loadModule(file.path);
-		const moduleName = sanitizePropertyName(file.name);
-		const exports = extractExports(mod);
-
-		// Check if this is a root contributor (default function export)
-		// Root contributors become THE api (with other modules as properties)
-		const isRootContributor = exports.default && typeof exports.default === "function";
-
-		if (isRootContributor) {
-			// This is a root contributor - attach named exports to the default function
-			const defaultFunc = exports.default;
-			const namedExports = Object.keys(exports).filter((k) => k !== "default");
-
-			for (const key of namedExports) {
-				defaultFunc[key] = exports[key];
-			}
-
-			// Register ownership for the function itself
-			if (ownership) {
-				ownership.register({
-					moduleId: file.moduleId,
-					apiPath: moduleName,
-					source: "core"
-				});
-			}
-
-			if (config.debug) {
-				console.log(await t("DEBUG_MODE_ROOT_FILE", { mode: "eager", moduleName, isContributor: true }));
-			}
-
-			// Return the function to be used as root contributor
-			return defaultFunc;
-		} else {
-			// Not a root contributor - use normal merge logic
-			mergeExportsIntoAPI(api, exports, moduleName);
-
-			// Register ownership
-			if (ownership) {
-				ownership.register({
-					moduleId: file.moduleId,
-					apiPath: moduleName,
-					source: "core"
-				});
-			}
-
-			if (config.debug) {
-				console.log(await t("DEBUG_MODE_ROOT_FILE", { mode: "eager", moduleName, isContributor: false }));
-			}
-
-			return null;
-		}
-	} catch (error) {
-		throw await SlothletError.create(
-			"MODULE_LOAD_FAILED",
-			{
-				modulePath: file.path,
-				moduleId: file.moduleId
-			},
-			error
-		);
-	}
 }
 
 /**
@@ -146,7 +57,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 	const categoryName = sanitizePropertyName(directory.name);
 	const moduleFiles = directory.children.files;
 
-	if (config.debug) {
+	if (config.debug?.modes) {
 		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode: "eager", categoryName, currentDepth }));
 	}
 
@@ -183,7 +94,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 			if (error.name === "SlothletError") {
 				throw error;
 			}
-			throw await SlothletError.create(
+			throw new SlothletError(
 				"MODULE_LOAD_FAILED",
 				{
 					modulePath: file.path,
@@ -210,7 +121,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 			moduleKeys
 		});
 
-		if (config.debug) {
+		if (config.debug?.modes) {
 			console.log(await t("DEBUG_MODE_MODULE_DECISION", { mode: "eager", moduleName, reason: decision.reason }));
 		}
 
@@ -279,7 +190,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 			// Use the default (potentially with named exports merged) as the category itself
 			const assignedValue = result.apiAssignments[moduleName];
 
-			if (config.debug) {
+			if (config.debug?.modes) {
 				console.log(
 					await t("DEBUG_MODE_FOLDER_MATCH", {
 						mode: "eager",
@@ -303,7 +214,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 					});
 				}
 
-				if (config.debug) {
+				if (config.debug?.modes) {
 					console.log(await t("DEBUG_MODE_FOLDER_DEFAULT", { mode: "eager", categoryName, moduleName }));
 				}
 				// Skip normal assignments - we've replaced the category
@@ -312,7 +223,7 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 		}
 		// Apply flattening if needed
 		if (categoryDecision.shouldFlatten) {
-			if (config.debug) {
+			if (config.debug?.modes) {
 				console.log(await t("DEBUG_MODE_FLATTENING", { mode: "eager", moduleName, flattenType: categoryDecision.flattenType }));
 			}
 
@@ -339,8 +250,13 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 		}
 	}
 
-	// Recurse into subdirectories
+	// Recurse into subdirectories - wrap in outer proxies
 	for (const subDir of directory.children.directories) {
-		await processDirectory(api[categoryName], subDir, ownership, config, currentDepth + 1);
+		const subDirName = sanitizePropertyName(subDir.name);
+		const subDirObj = {};
+		await processDirectory(subDirObj, subDir, ownership, config, currentDepth + 1);
+
+		// Wrap subdirectory in outer proxy
+		api[categoryName][subDirName] = createOuterProxy(`${categoryName}.${subDirName}`, subDirObj);
 	}
 }

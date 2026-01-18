@@ -89,25 +89,23 @@ export function getLanguage() {
  * Translate error message with interpolation
  * @param {string} errorCode - Error code
  * @param {Object} params - Parameters for interpolation
- * @returns {Promise<string>} Translated message
+ * @returns {string} Translated message
  * @public
  */
-export async function translate(errorCode, params = {}) {
-	// Ensure language is loaded
-	const langModule = await i18n_loadLanguage(currentLanguage);
-	const lang = langModule.translations;
+export function translate(errorCode, params = {}) {
+	// Get already-loaded language (loaded at module init time)
+	const langModule = loadedLanguages.get(currentLanguage);
+	if (!langModule) {
+		// Fallback to raw code if language somehow not loaded
+		return `[${errorCode}]`;
+	}
 
+	const lang = langModule.translations;
 	let template = lang[errorCode];
 
 	// Fallback to generic message if specific one not found
 	if (!template && errorCode.startsWith("INVALID_CONFIG_")) {
 		template = lang.INVALID_CONFIG_generic;
-	}
-
-	// Fallback to English if not found
-	if (!template && currentLanguage !== "en-us") {
-		const enModule = await i18n_loadLanguage("en-us");
-		template = enModule.translations[errorCode] || enModule.translations.INTERNAL_ERROR;
 	}
 
 	// Interpolate parameters

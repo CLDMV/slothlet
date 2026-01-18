@@ -77,7 +77,7 @@ try {
 	if (api_with_diag.slothlet.diag) {
 		const diag = api_with_diag.slothlet.diag.inspect();
 		console.log("✅ Diagnostics enabled");
-		console.log("   Instance ID:", diag.instanceId);
+		console.log("   Instance ID:", diag.instanceID);
 		console.log("   Active instances:", diag.context?.activeInstances || "N/A");
 	}
 	await api_with_diag.slothlet.shutdown();
@@ -111,8 +111,8 @@ try {
 	});
 
 	console.log("✅ Multiple instances loaded");
-	console.log("   Instance 1 ID:", api1.slothlet.diag.inspect().instanceId);
-	console.log("   Instance 2 ID:", api2.slothlet.diag.inspect().instanceId);
+	console.log("   Instance 1 ID:", api1.slothlet.diag.inspect().instanceID);
+	console.log("   Instance 2 ID:", api2.slothlet.diag.inspect().instanceID);
 
 	await api1.slothlet.shutdown();
 	await api2.slothlet.shutdown();

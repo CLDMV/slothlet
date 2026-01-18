@@ -94,5 +94,4 @@ export const reference: object;
 export { metadataAPI };
 export type AsyncLocalStorageType = AsyncLocalStorage<any>;
 import { AsyncLocalStorage } from "node:async_hooks";
-import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 //# sourceMappingURL=runtime-asynclocalstorage.d.mts.map

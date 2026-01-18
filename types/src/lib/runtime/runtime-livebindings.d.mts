@@ -65,5 +65,4 @@ export namespace contextManager {
 }
 export { metadataAPI };
 import { AsyncLocalStorage } from "node:async_hooks";
-import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
 //# sourceMappingURL=runtime-livebindings.d.mts.map

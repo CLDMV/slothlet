@@ -13,47 +13,47 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 export class AsyncContextManager {
 	constructor() {
 		this.als = new AsyncLocalStorage();
-		this.instances = new Map(); // instanceId → context data
+		this.instances = new Map(); // instanceID → context data
 	}
 
 	/**
 	 * Initialize context for a new instance
-	 * @param {string} instanceId - Unique instance identifier
+	 * @param {string} instanceID - Unique instance identifier
 	 * @param {Object} config - Instance configuration
 	 * @returns {Object} Created context store
 	 * @public
 	 */
-	initialize(instanceId, config = {}) {
-		if (this.instances.has(instanceId)) {
-			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceId });
+	initialize(instanceID, config = {}) {
+		if (this.instances.has(instanceID)) {
+			throw new SlothletError("CONTEXT_ALREADY_EXISTS", { instanceID, validationError: true });
 		}
 
 		const store = {
-			instanceId,
+			instanceID,
 			self: {},
 			context: {},
 			config: { ...config },
 			createdAt: Date.now()
 		};
 
-		this.instances.set(instanceId, store);
+		this.instances.set(instanceID, store);
 		return store;
 	}
 
 	/**
 	 * Run function with instance context active
-	 * @param {string} instanceId - Instance to run in context of
+	 * @param {string} instanceID - Instance to run in context of
 	 * @param {Function} fn - Function to execute
 	 * @param {*} thisArg - this binding for function
 	 * @param {Array} args - Arguments to pass to function
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceId, fn, thisArg, args) {
-		const store = this.instances.get(instanceId);
+	runInContext(instanceID, fn, thisArg, args) {
+		const store = this.instances.get(instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
-				instanceId,
+				instanceID,
 				availableInstances: Array.from(this.instances.keys())
 			});
 		}
@@ -62,11 +62,14 @@ export class AsyncContextManager {
 			try {
 				return fn.apply(thisArg, args);
 			} catch (error) {
-				throw new SlothletError("CONTEXT_EXECUTION_FAILED", {
-					instanceId,
-					apiPath: fn.__slothletPath || "unknown",
-					originalError: error
-				});
+				throw new SlothletError(
+					"CONTEXT_EXECUTION_FAILED",
+					{
+						instanceID,
+						apiPath: fn.__slothletPath || "unknown"
+					},
+					error
+				);
 			}
 		});
 	}
@@ -80,7 +83,7 @@ export class AsyncContextManager {
 	getContext() {
 		const store = this.als.getStore();
 		if (!store) {
-			throw new SlothletError("NO_ACTIVE_CONTEXT_ASYNC");
+			throw new SlothletError("NO_ACTIVE_CONTEXT_ASYNC", {}, null, { validationError: true });
 		}
 		return store;
 	}
@@ -96,13 +99,13 @@ export class AsyncContextManager {
 
 	/**
 	 * Cleanup instance context
-	 * @param {string} instanceId - Instance to cleanup
+	 * @param {string} instanceID - Instance to cleanup
 	 * @public
 	 */
-	cleanup(instanceId) {
-		const store = this.instances.get(instanceId);
+	cleanup(instanceID) {
+		const store = this.instances.get(instanceID);
 		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceId });
+			throw new SlothletError("CONTEXT_NOT_FOUND", { instanceID }, null, { validationError: true });
 		}
 
 		// Clear the store data
@@ -110,7 +113,7 @@ export class AsyncContextManager {
 		store.context = {};
 
 		// Remove from instances map
-		this.instances.delete(instanceId);
+		this.instances.delete(instanceID);
 	}
 
 	/**
@@ -121,7 +124,7 @@ export class AsyncContextManager {
 	getDiagnostics() {
 		return {
 			type: "async",
-			activeStore: this.als.getStore()?.instanceId || null,
+			activeStore: this.als.getStore()?.instanceID || null,
 			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,

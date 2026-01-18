@@ -11,76 +11,109 @@ export class WrapperManager {
 	/**
 	 * Create wrapper manager
 	 * @param {Object} contextManager - Context manager instance
+	 * @param {Object} instance - Slothlet instance for ownership lookups
 	 */
-	constructor(contextManager) {
+	constructor(contextManager, instance = null) {
 		this.context = contextManager;
+		this.instance = instance;
 	}
 
 	/**
-	 * Wrap entire API object recursively
+	 * Create proxy-based wrapper for API with dynamic ownership lookups
 	 * @param {Object} api - API object to wrap
-	 * @param {string} instanceId - Instance ID for context
+	 * @param {string} instanceID - Instance ID for context
 	 * @param {string} [currentPath=""] - Current API path
-	 * @param {WeakSet} [visited=new WeakSet()] - Visited objects tracker
-	 * @returns {Object} Wrapped API object
+	 * @returns {Proxy} Proxied API object
 	 * @public
 	 */
-	wrapAPI(api, instanceId, currentPath = "", visited = new WeakSet()) {
-		if (!api || typeof api !== "object") return api;
-		if (visited.has(api)) return api; // Prevent circular refs
-		visited.add(api);
+	wrapAPI(api, instanceID, currentPath = "") {
+		const self = this;
+		const ownership = this.instance?.ownership;
 
-		const wrapped = Array.isArray(api) ? [] : {};
+		// Create proxy that intercepts property access
+		return new Proxy(api, {
+			get(target, prop, receiver) {
+				// Skip internal/special properties
+				if (
+					prop === "__slothletInstance" ||
+					prop === "userHooks" ||
+					typeof prop === "symbol" ||
+					prop === "constructor" ||
+					prop === "prototype"
+				) {
+					return Reflect.get(target, prop, receiver);
+				}
 
-		// At root level, check for builtins using Object.getOwnPropertyDescriptors
-		// to catch non-enumerable properties
-		const keys = currentPath === "" ? Object.getOwnPropertyNames(api) : Object.keys(api);
+				// Build full API path
+				const apiPath = currentPath ? `${currentPath}.${prop}` : prop;
 
-		for (const key of keys) {
-			const value = api[key];
-			const apiPath = currentPath ? `${currentPath}.${key}` : key;
+				// Check ownership first for dynamic updates (future add/remove API)
+				let value = ownership?.getCurrentValue(apiPath);
 
-			// Skip wrapping built-in properties at root level (already bound)
-			const isBuiltin =
-				currentPath === "" && (key === "slothlet" || key === "shutdown" || key === "destroy" || key === "__slothletInstance");
+				// Fall back to target if ownership doesn't have it
+				if (value === undefined) {
+					value = target[prop];
+				}
 
-			if (isBuiltin) {
-				wrapped[key] = value; // Use as-is, already bound
-			} else if (typeof value === "function") {
-				wrapped[key] = this.wrapFunction(value, instanceId, apiPath);
-			} else if (value && typeof value === "object") {
-				wrapped[key] = this.wrapAPI(value, instanceId, apiPath, visited);
-			} else {
-				wrapped[key] = value;
+				// Return undefined if property doesn't exist
+				if (value === undefined) {
+					return undefined;
+				}
+
+				// Built-in properties at root level - return as-is (already bound)
+				if (currentPath === "" && (prop === "slothlet" || prop === "shutdown" || prop === "destroy")) {
+					return value;
+				}
+
+				// Don't wrap thenables (lazy mode materialization proxies)
+				if (value && typeof value === "object" && value.__slothletThenable) {
+					return value;
+				}
+
+				// Wrap functions with context
+				if (typeof value === "function") {
+					return self.wrapFunction(value, instanceID, apiPath);
+				}
+
+				// Create nested proxy for objects
+				if (value && typeof value === "object" && !Array.isArray(value)) {
+					return self.wrapAPI(value, instanceID, apiPath);
+				}
+
+				// Return primitives and arrays as-is
+				return value;
+			},
+
+			// Handle callable APIs (when API itself is a function)
+			apply(target, thisArg, args) {
+				// Check ownership for current path function
+				let fn = ownership?.getCurrentValue(currentPath);
+				if (!fn || typeof fn !== "function") {
+					fn = target;
+				}
+
+				if (typeof fn === "function") {
+					return self.context.runInContext(instanceID, fn, thisArg, args);
+				}
+
+				throw new TypeError(`${currentPath || "api"} is not a function`);
 			}
-		}
-
-		// Preserve function properties if original was callable
-		if (typeof api === "function") {
-			const wrappedFn = this.wrapFunction(api, instanceId, currentPath);
-			Object.setPrototypeOf(wrapped, Object.getPrototypeOf(wrappedFn));
-			for (const key of Object.keys(wrapped)) {
-				wrappedFn[key] = wrapped[key];
-			}
-			return wrappedFn;
-		}
-
-		return wrapped;
+		});
 	}
 
 	/**
 	 * Wrap single function with context
 	 * @param {Function} fn - Function to wrap
-	 * @param {string} instanceId - Instance ID for context
+	 * @param {string} instanceID - Instance ID for context
 	 * @param {string} apiPath - API path for this function
 	 * @returns {Function} Wrapped function
 	 * @public
 	 */
-	wrapFunction(fn, instanceId, apiPath) {
+	wrapFunction(fn, instanceID, apiPath) {
 		const self = this;
 
 		const wrapped = function slothlet_wrapped(...args) {
-			return self.context.runInContext(instanceId, fn, this, args);
+			return self.context.runInContext(instanceID, fn, this, args);
 		};
 
 		// Preserve metadata
@@ -91,12 +124,19 @@ export class WrapperManager {
 
 		wrapped.__slothletPath = apiPath;
 		wrapped.__slothletOriginal = fn;
-		wrapped.__slothletInstanceId = instanceId;
+		wrapped.__slothletInstanceId = instanceID;
 
-		// Copy function properties
+		// Copy function properties (for functions with methods)
 		for (const key of Object.keys(fn)) {
 			if (key !== "name" && key !== "length") {
-				wrapped[key] = fn[key];
+				const desc = Object.getOwnPropertyDescriptor(fn, key);
+				if (desc && typeof fn[key] === "function") {
+					// Wrap nested functions
+					wrapped[key] = self.wrapFunction(fn[key], instanceID, `${apiPath}.${key}`);
+				} else {
+					// Copy non-function properties
+					wrapped[key] = fn[key];
+				}
 			}
 		}
 

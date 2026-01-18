@@ -17,48 +17,64 @@ import { t } from "@cldmv/slothlet/i18n";
 export async function buildFinalAPI(options) {
 	const { userApi, instance, config } = options;
 
-	console.log("DEBUG buildFinalAPI: called with config.diagnostics =", config.diagnostics);
-	console.log("DEBUG buildFinalAPI: userApi keys before =", Object.keys(userApi));
+	if (config.debug?.api) {
+		console.log("DEBUG buildFinalAPI: called with config.diagnostics =", config.diagnostics);
+		console.log("DEBUG buildFinalAPI: userApi keys before =", Object.keys(userApi));
+	}
 
-	// Check for conflicts with reserved names
-	const conflicts = {
-		slothlet: userApi.slothlet,
-		shutdown: userApi.shutdown,
-		destroy: userApi.destroy
+	// CRITICAL: Clone the API object to prevent cross-instance pollution from module cache
+	// The API modules are cached by Node.js and shared across instances
+	// We must create a new object before mutating it with builtins
+	const clonedApi =
+		typeof userApi === "function"
+			? Object.assign(function (...args) {
+					return userApi(...args);
+				}, userApi)
+			: Object.assign({}, userApi);
+
+	if (config.debug?.api) {
+		console.log("DEBUG buildFinalAPI: clonedApi keys =", Object.keys(clonedApi));
+	}
+
+	// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
+	// Store these on the instance so they can be updated during add/remove API operations
+	instance.userHooks = {
+		shutdown: typeof clonedApi.shutdown === "function" ? clonedApi.shutdown : null,
+		destroy: typeof clonedApi.destroy === "function" ? clonedApi.destroy : null
 	};
 
-	if (conflicts.slothlet || conflicts.shutdown || conflicts.destroy) {
-		const properties = Object.entries(conflicts)
-			.filter(([_, hasConflict]) => hasConflict)
-			.map(([name]) => name)
-			.join(", ");
-
-		console.warn(t("WARNING_RESERVED_PROPERTY_CONFLICT", { properties }));
+	// Warn if user has 'slothlet' property (reserved namespace)
+	if (clonedApi.slothlet) {
+		console.warn(t("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" }));
 	}
 
 	// Create slothlet namespace with all built-in methods
-	const slothletNamespace = await createSlothletNamespace(instance, config, userApi);
+	const slothletNamespace = await createSlothletNamespace(instance, config, clonedApi);
 
-	console.log("DEBUG buildFinalAPI: slothletNamespace keys =", Object.keys(slothletNamespace));
-	console.log("DEBUG buildFinalAPI: slothletNamespace.diag exists =", !!slothletNamespace.diag);
+	if (config.debug?.api) {
+		console.log("DEBUG buildFinalAPI: slothletNamespace keys =", Object.keys(slothletNamespace));
+		console.log("DEBUG buildFinalAPI: slothletNamespace.diag exists =", !!slothletNamespace.diag);
+	}
 
-	// Create root-level convenience methods
+	// Create root-level convenience methods (use getters for dynamic user hooks)
 	const shutdownFn = createShutdownFunction(instance);
 
-	// Attach built-ins to user API (except destroy which needs api reference)
-	attachBuiltins(userApi, {
+	// Attach built-ins to cloned API (except destroy which needs api reference)
+	attachBuiltins(clonedApi, {
 		slothlet: slothletNamespace,
 		shutdown: shutdownFn,
 		destroy: null
 	});
 
-	console.log("DEBUG buildFinalAPI: userApi keys after attachBuiltins =", Object.keys(userApi));
-	console.log("DEBUG buildFinalAPI: userApi.slothlet exists =", !!userApi.slothlet);
-	console.log("DEBUG buildFinalAPI: userApi.slothlet.diag exists =", !!userApi.slothlet?.diag);
+	if (config.debug?.api) {
+		console.log("DEBUG buildFinalAPI: clonedApi keys after attachBuiltins =", Object.keys(clonedApi));
+		console.log("DEBUG buildFinalAPI: clonedApi.slothlet exists =", !!clonedApi.slothlet);
+		console.log("DEBUG buildFinalAPI: clonedApi.slothlet.diag exists =", !!clonedApi.slothlet?.diag);
+	}
 
-	// Now create destroy with api reference so it can call api.shutdown()
-	const destroyWithApi = createDestroyFunction(instance, userApi);
-	Object.defineProperty(userApi, "destroy", {
+	// Now create destroy with dynamic user hooks
+	const destroyWithApi = createDestroyFunction(instance, clonedApi);
+	Object.defineProperty(clonedApi, "destroy", {
 		value: destroyWithApi,
 		enumerable: true,
 		writable: false,
@@ -66,14 +82,14 @@ export async function buildFinalAPI(options) {
 	});
 
 	// Store instance reference (non-enumerable for internal use)
-	Object.defineProperty(userApi, "__slothletInstance", {
+	Object.defineProperty(clonedApi, "__slothletInstance", {
 		value: instance,
 		enumerable: false,
 		writable: false,
 		configurable: true
 	});
 
-	return userApi;
+	return clonedApi;
 }
 
 /**
@@ -105,6 +121,12 @@ async function createSlothletNamespace(instance, config, userApi) {
 		version,
 
 		/**
+		 * Unique instance ID for this slothlet instance
+		 * @type {string}
+		 */
+		instanceID: instance.instanceID,
+
+		/**
 		 * API control object for hot reload operations
 		 */
 		api: {
@@ -118,7 +140,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 					option: "slothlet.api.add",
 					value: "not implemented",
 					expected: "implemented in future iteration",
-					hint: "Hot reload features deferred to next prototype iteration"
+					hint: "Hot reload features deferred to next prototype iteration",
+					stub: true
 				});
 			},
 
@@ -132,7 +155,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 					option: "slothlet.api.remove",
 					value: "not implemented",
 					expected: "implemented in future iteration",
-					hint: "Hot reload features deferred to next prototype iteration"
+					hint: "Hot reload features deferred to next prototype iteration",
+					stub: true
 				});
 			},
 
@@ -146,7 +170,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 					option: "slothlet.api.reload",
 					value: "not implemented",
 					expected: "implemented in future iteration",
-					hint: "Hot reload features deferred to next prototype iteration"
+					hint: "Hot reload features deferred to next prototype iteration",
+					stub: true
 				});
 			}
 		},
@@ -159,15 +184,20 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 */
 		scope: (fn, context) => {
 			if (typeof fn !== "function") {
-				throw new SlothletError("INVALID_CONFIG", {
-					option: "slothlet.scope",
-					value: typeof fn,
-					expected: "function",
-					hint: "First argument must be a function to execute in scope"
-				});
+				throw new SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: "slothlet.scope",
+						value: typeof fn,
+						expected: "function",
+						hint: "First argument must be a function to execute in scope"
+					},
+					null,
+					{ stub: true }
+				);
 			}
 
-			return instance.contextManager.runInContext(instance.instanceId, () => {
+			return instance.contextManager.runInContext(instance.instanceID, () => {
 				const ctx = instance.contextManager.getContext();
 				if (context && typeof context === "object") {
 					Object.assign(ctx.context, context);
@@ -185,7 +215,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 		run: async (fn, context = {}) => {
 			if (config.runtime === "async") {
 				// Async mode: run with provided context
-				return instance.contextManager.runInContext(instance.instanceId, () => {
+				return instance.contextManager.runInContext(instance.instanceID, () => {
 					const ctx = instance.contextManager.getContext();
 					Object.assign(ctx.context, context);
 					return fn(ctx.self);
@@ -197,9 +227,14 @@ async function createSlothletNamespace(instance, config, userApi) {
 					Object.assign(ctx.context, context);
 					return fn(ctx.self);
 				}
-				throw await SlothletError.create("CONTEXT_NOT_FOUND", {
-					instanceId: instance.instanceId
-				});
+				throw new SlothletError(
+					"CONTEXT_NOT_FOUND",
+					{
+						instanceID: instance.instanceID
+					},
+					null,
+					{ validationError: true }
+				);
 			}
 		},
 
@@ -238,20 +273,16 @@ async function createSlothletNamespace(instance, config, userApi) {
 			},
 
 			/**
-			 * Get reference object passed to slothlet initialization (merged into API)
-			 * @returns {Object|null}
+			 * Reference object passed to slothlet initialization (merged into API)
+			 * @type {Object|null}
 			 */
-			reference: () => {
-				return instance.reference || null;
-			},
+			reference: instance.reference || null,
 
 			/**
-			 * Get context object (user-provided context from config)
-			 * @returns {Object}
+			 * Context object (user-provided context from config)
+			 * @type {Object}
 			 */
-			context: () => {
-				return instance.context || {};
-			},
+			context: instance.context || {},
 
 			/**
 			 * Inspect instance state
@@ -268,26 +299,35 @@ async function createSlothletNamespace(instance, config, userApi) {
 
 /**
  * Create root-level shutdown function (convenience)
- * @param {Object} instance - Slothlet instance
- * @returns {Function} Shutdown function
+ * @param {Object} instance - Slothlet instance with userHooks property
+ * @returns {Function} Shutdown function that dynamically calls user hooks
  * @private
  */
 function createShutdownFunction(instance) {
 	return async () => {
+		// Call user's shutdown hook first if they provided one (check dynamically)
+		if (instance.userHooks?.shutdown && typeof instance.userHooks.shutdown === "function") {
+			await instance.userHooks.shutdown();
+		}
 		return instance.shutdown();
 	};
 }
 
 /**
  * Create root-level destroy function (permanent destruction)
- * @param {Object} instance - Slothlet instance
- * @param {Object} api - Full API object (with user's shutdown hook if present)
- * @returns {Function} Destroy function
+ * @param {Object} instance - Slothlet instance with userHooks property
+ * @param {Object} api - Full API object
+ * @returns {Function} Destroy function that dynamically calls user hooks
  * @private
  */
 function createDestroyFunction(instance, api) {
 	return async () => {
-		// First shutdown cleanly using api.shutdown() to trigger user's hook
+		// Call user's destroy hook first if they provided one (check dynamically)
+		if (instance.userHooks?.destroy && typeof instance.userHooks.destroy === "function") {
+			await instance.userHooks.destroy();
+		}
+
+		// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook)
 		if (api && typeof api.shutdown === "function") {
 			await api.shutdown();
 		} else {

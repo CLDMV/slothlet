@@ -73,7 +73,7 @@ export function verifyRuntime() {
 		results.referenceTest.error = error.message;
 	}
 
-	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instanceId)
+	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instanceID)
 	try {
 		// Try to access instanceId and detect if it's really available
 		let instanceIdValue = "undefined";
@@ -82,14 +82,14 @@ export function verifyRuntime() {
 		try {
 			// Try to coerce instanceId to string to see if it exists
 			const diagData = self?.slothlet?.diag?.inspect ? self.slothlet.diag.inspect() : null;
-			instanceIdValue = diagData?.instanceId ? String(diagData.instanceId) : "undefined";
+			instanceIdValue = diagData?.instanceID ? String(diagData.instanceID) : "undefined";
 			// Check if it's actually available (not "undefined" or empty proxy)
 			hasInstanceId = instanceIdValue && instanceIdValue !== "undefined" && instanceIdValue !== "" && instanceIdValue !== "null";
 		} catch (_) {
 			hasInstanceId = false;
 		}
 
-		results.instanceIdTest = {
+		results.instanceIDTest = {
 			available: hasInstanceId,
 			value: instanceIdValue
 		};
@@ -119,7 +119,7 @@ export function verifyRuntime() {
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {
-		results.instanceIdTest = { available: false, error: error.message };
+		results.instanceIDTest = { available: false, error: error.message };
 		results.runtimeType = "unknown";
 	}
 

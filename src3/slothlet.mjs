@@ -17,7 +17,7 @@ import { transformConfig } from "@cldmv/slothlet/helpers/config";
  */
 class Slothlet {
 	constructor() {
-		this.instanceId = null;
+		this.instanceID = null;
 		this.config = null;
 		this.api = null;
 		this.boundApi = null;
@@ -50,7 +50,7 @@ class Slothlet {
 		this.config = transformConfig(config);
 
 		// Generate instance ID
-		this.instanceId = generateId();
+		this.instanceID = generateId();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -60,7 +60,7 @@ class Slothlet {
 		this.contextManager = getContextManager(this.config.runtime);
 
 		// Initialize context
-		const store = this.contextManager.initialize(this.instanceId, this.config);
+		const store = this.contextManager.initialize(this.instanceID, this.config);
 
 		// Initialize ownership manager
 		this.ownership = new OwnershipManager();
@@ -73,20 +73,27 @@ class Slothlet {
 			config: this.config
 		});
 
-		// Initialize wrapper manager with appropriate context manager
-		this.wrapper = new WrapperManager(this.contextManager);
+		// Initialize wrapper manager with context manager AND instance reference
+		// This allows dynamic function lookups via ownership manager
+		this.wrapper = new WrapperManager(this.contextManager, this);
 
-		// Wrap user API with context isolation FIRST
-		const wrappedUserApi = this.wrapper.wrapAPI(this.api, this.instanceId);
+		// Build final API with builtins attached FIRST
+		const apiWithBuiltins = await this.buildFinalAPI(this.api);
 
-		// Then attach builtins on top (they don't need wrapping - already bound to instance)
-		this.boundApi = await this.buildFinalAPI(wrappedUserApi);
+		// Register all API paths with ownership manager AFTER building final API
+		// This ensures builtins (slothlet, shutdown, destroy) are also registered
+		this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
+
+		// Then wrap the COMPLETE API (including builtins) just before returning to user
+		// The wrapper will use dynamic lookups via ownership manager
+		this.boundApi = this.wrapper.wrapAPI(apiWithBuiltins, this.instanceID);
 
 		// Set self and context in store
 		store.self = this.boundApi;
 		store.context = this.context || {}; // User-provided context from config
 
-		// Merge reference object into API if provided
+		// TODO: Merge reference object using add API system for ownership tracking
+		// For now, directly assign to boundApi (will be replaced with proper add API)
 		if (this.reference && typeof this.reference === "object") {
 			Object.assign(this.boundApi, this.reference);
 		}
@@ -102,13 +109,14 @@ class Slothlet {
 	 */
 	async reload() {
 		if (!this.isLoaded) {
-			throw await SlothletError.create("INVALID_CONFIG_NOT_LOADED", {
-				operation: "reload"
+			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+				operation: "reload",
+				validationError: true
 			});
 		}
 
 		// TODO: Implement full reload
-		throw await SlothletError.create("INVALID_CONFIG_RELOAD_NOT_IMPL");
+		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL", { validationError: true });
 	}
 
 	/**
@@ -121,8 +129,8 @@ class Slothlet {
 		}
 
 		// Cleanup context
-		if (this.instanceId && this.contextManager) {
-			this.contextManager.cleanup(this.instanceId);
+		if (this.instanceID && this.contextManager) {
+			this.contextManager.cleanup(this.instanceID);
 		}
 
 		// Clear ownership
@@ -139,15 +147,61 @@ class Slothlet {
 	}
 
 	/**
+	 * Recursively register API structure with ownership manager
+	 * @param {Object} api - API object or value
+	 * @param {string} moduleId - Module identifier (owner)
+	 * @param {string} path - Current API path
+	 * @private
+	 */
+	registerAPIWithOwnership(api, moduleId, path) {
+		if (!api || typeof api !== "object") return;
+
+		// Register this level
+		if (path) {
+			this.ownership.register({
+				moduleId,
+				apiPath: path,
+				value: api,
+				source: "core",
+				allowConflict: true
+			});
+		}
+
+		// Recursively register children
+		for (const [key, value] of Object.entries(api)) {
+			const childPath = path ? `${path}.${key}` : key;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				this.ownership.register({
+					moduleId,
+					apiPath: childPath,
+					value,
+					source: "core",
+					allowConflict: true
+				});
+
+				// Recurse for objects (but not functions with properties - handle separately if needed)
+				if (typeof value === "object" && !Array.isArray(value)) {
+					this.registerAPIWithOwnership(value, moduleId, childPath);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Get current API
 	 * @returns {Object} Bound API object
 	 * @public
 	 */
 	getAPI() {
 		if (!this.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
-				operation: "getAPI"
-			});
+			throw new SlothletError(
+				"INVALID_CONFIG_NOT_LOADED",
+				{
+					operation: "getAPI"
+				},
+				null,
+				{ validationError: true }
+			);
 		}
 		return this.boundApi;
 	}
@@ -159,7 +213,7 @@ class Slothlet {
 	 */
 	getDiagnostics() {
 		return {
-			instanceId: this.instanceId,
+			instanceID: this.instanceID,
 			isLoaded: this.isLoaded,
 			config: this.config,
 			context: this.contextManager?.getDiagnostics() || null,
