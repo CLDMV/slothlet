@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-11 12:15:35 -08:00 (1768162535)
+ *	@Last modified time: 2026-01-17 21:30:12 -08:00 (1768714212)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -41,7 +41,17 @@ function ensureDevEnvFlags() {
 
 	process.env.NODE_ENV = "development";
 
-	const requiredConditions = ["slothlet-three-dev", "development"];
+	// Detect which slothlet version condition is already set, or default to v2
+	const allExecArgv = [...process.execArgv];
+	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const allConditions = [...allExecArgv, ...envOptions];
+
+	let slothletCondition = "slothlet-dev"; // default to v2
+	if (hasCondition(allConditions, "slothlet-three-dev")) {
+		slothletCondition = "slothlet-three-dev";
+	}
+
+	const requiredConditions = [slothletCondition, "development"];
 	const nextExecArgv = [...process.execArgv];
 	const envConditions = (process.env.NODE_OPTIONS ?? "")
 		.split(/\s+/u)
@@ -326,9 +336,17 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	let bound;
 	// if (awaitCalls) {
 
+	// Detect which version we're testing based on NODE_OPTIONS conditions
+	const nodeOptions = process.env.NODE_OPTIONS || "";
+	// FORCE V2 TO TEST RESOLVER
+	const apiTestDir = "../api_tests/api_test";
+	// const apiTestDir = nodeOptions.includes("slothlet-three-dev")
+	// 	? "../api_tests_v3/api_test"
+	// 	: "../api_tests/api_test";
+
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
+	bound = await slothlet({ ...config, dir: apiTestDir, reference: { md5 } });
 
 	// bound = await slothlet.create({ ...config, dir: "./api_test" });
 	// } else {

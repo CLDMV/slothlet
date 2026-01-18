@@ -134,12 +134,12 @@ export function transformConfig(config = {}) {
 
 	// Build normalized config
 	return {
+		...config,
 		dir: resolvedDir,
 		mode: normalizeMode(config.mode),
 		runtime: normalizeRuntime(config.runtime),
 		reference: config.reference || null,
 		context: config.context || null,
-		debug: normalizeDebug(config.debug),
-		...config
+		debug: normalizeDebug(config.debug)
 	};
 }

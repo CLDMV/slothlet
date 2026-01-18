@@ -3,9 +3,9 @@
  * @module @cldmv/slothlet/helpers/loader
  */
 import { readdir, stat } from "node:fs/promises";
-import { join, extname, basename } from "node:path";
+import { join, extname, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { getModuleId } from "@cldmv/slothlet/helpers/sanitize";
 
 /**
@@ -88,6 +88,14 @@ export async function scanDirectory(dir, options = {}) {
 				});
 			}
 		}
+	}
+
+	// Warn if directory is empty or has no loadable modules (valid for add-api workflows)
+	if (structure.files.length === 0 && structure.directories.length === 0) {
+		new SlothletWarning("WARN_DIRECTORY_EMPTY", {
+			dir,
+			resolvedPath: resolve(dir)
+		});
 	}
 
 	return structure;

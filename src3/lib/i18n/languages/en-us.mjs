@@ -53,6 +53,10 @@ export const translations = {
 	// Directory errors
 	INVALID_DIRECTORY: "Invalid directory '{dir}': {error}. Ensure the directory exists and is accessible.",
 
+	// Warnings
+	WARN_DIRECTORY_EMPTY:
+		"Directory '{dir}' (resolved: '{resolvedPath}') is empty or contains no loadable modules (.mjs, .cjs, .js files). This is valid for add-api workflows but may indicate a misconfigured path.",
+
 	// Function execution errors
 	FUNCTION_EXECUTION_FAILED: "Function at '{apiPath}' threw an error: {originalError}",
 

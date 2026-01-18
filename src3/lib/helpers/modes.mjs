@@ -2,8 +2,11 @@
  * @fileoverview Shared mode utilities - common logic for eager and lazy modes
  * @module @cldmv/slothlet/helpers/modes
  */
-import { loadModule, extractExports } from "@cldmv/slothlet/helpers/loader";
+import path from "node:path";
+import { SlothletError } from "@cldmv/slothlet/errors";
+import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
+import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
@@ -125,4 +128,229 @@ export async function applyRootContributor(api, rootFunction, config, mode) {
 		return rootFunction;
 	}
 	return api;
+}
+
+/**
+ * Universal directory processing function used by both eager and lazy modes
+ * For eager: deep dives and loads everything immediately
+ * For lazy: processes current level, returns proxies for subdirectories
+ * @param {Object} api - API object being built
+ * @param {Object} directory - Directory object with name, path, and children
+ * @param {Object} ownership - Ownership manager
+ * @param {Object} contextManager - Context manager
+ * @param {string} instanceId - Instance ID
+ * @param {Object} config - Configuration
+ * @param {number} currentDepth - Current recursion depth
+ * @param {string} mode - Mode ("eager" or "lazy")
+ * @returns {Promise<void>}
+ * @public
+ */
+export async function processDirectory(api, directory, ownership, contextManager, instanceId, config, currentDepth, mode = "eager") {
+	const categoryName = sanitizePropertyName(directory.name);
+	const moduleFiles = directory.children.files;
+
+	if (config.debug?.modes) {
+		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth }));
+	}
+
+	// Create category if it doesn't exist
+	if (!api[categoryName]) {
+		api[categoryName] = {};
+	}
+
+	// Load all modules in this directory
+	const loadedModules = [];
+	for (const file of moduleFiles) {
+		try {
+			const mod = await loadModule(file.path);
+			const exports = extractExports(mod);
+			const moduleName = sanitizePropertyName(file.name);
+
+			// Analyze exports
+			const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+			const analysis = {
+				hasDefault: exports.default !== undefined,
+				hasNamed: moduleKeys.length > 0,
+				defaultExportType: exports.default ? typeof exports.default : null
+			};
+
+			loadedModules.push({
+				file,
+				mod: exports,
+				moduleName,
+				moduleKeys,
+				analysis
+			});
+		} catch (error) {
+			if (error.name === "SlothletError") {
+				throw error;
+			}
+			throw new SlothletError(
+				"MODULE_LOAD_FAILED",
+				{
+					modulePath: file.path,
+					moduleId: file.moduleId
+				},
+				error
+			);
+		}
+	}
+
+	// Check for multiple default exports in folder
+	const defaultCount = loadedModules.filter((m) => m.analysis.hasDefault).length;
+	const hasMultipleDefaults = defaultCount > 1;
+
+	// Process each module with flattening logic
+	for (const { file, mod, moduleName, moduleKeys, analysis } of loadedModules) {
+		// Get flattening decision
+		const decision = getFlatteningDecision({
+			mod,
+			moduleName,
+			categoryName,
+			analysis,
+			hasMultipleDefaults,
+			moduleKeys
+		});
+
+		if (config.debug?.modes) {
+			console.log(await t("DEBUG_MODE_MODULE_DECISION", { mode, moduleName, reason: decision.reason }));
+		}
+
+		// Check for self-referential
+		const isSelfReferential = mod[moduleName] === mod;
+
+		// Process module for API
+		const result = processModuleForAPI({
+			mod,
+			decision,
+			apiPathKey: moduleName,
+			moduleKeys,
+			isSelfReferential
+		});
+
+		// Apply category-level decisions
+		const categoryDecision = buildCategoryDecisions({
+			categoryName,
+			mod,
+			moduleName,
+			fileBaseName: path.basename(file.path, path.extname(file.path)),
+			analysis,
+			moduleKeys,
+			currentDepth,
+			moduleFiles
+		});
+
+		// Determine final API path
+		let targetApi = api[categoryName];
+		let finalKey = moduleName;
+
+		// Special case: folder/folder.mjs with matching export
+		// Case 1: export const folder = {...} - flatten contents to category level
+		if (
+			moduleName === categoryName &&
+			moduleKeys.length === 1 &&
+			moduleKeys[0] === moduleName &&
+			!analysis.hasDefault &&
+			result.apiAssignments[moduleName]
+		) {
+			const exportedValue = result.apiAssignments[moduleName];
+			if (typeof exportedValue === "object" && exportedValue !== null) {
+				// Merge the exported object's properties directly into the category
+				for (const [key, value] of Object.entries(exportedValue)) {
+					targetApi[key] = value;
+
+					if (ownership) {
+						const apiPath = `${categoryName}.${key}`;
+						ownership.register({
+							moduleId: file.moduleId,
+							apiPath,
+							source: "core"
+						});
+					}
+				}
+				continue;
+			}
+		}
+
+		// Case 2: folder/folder.mjs with default export - replace category with the export
+		if (moduleName === categoryName && analysis.hasDefault) {
+			const assignedValue = result.apiAssignments[moduleName];
+
+			if (config.debug?.modes) {
+				console.log(
+					await t("DEBUG_MODE_FOLDER_MATCH", {
+						mode,
+						moduleName,
+						categoryName,
+						hasAssignment: !!assignedValue,
+						assignmentKeys: Object.keys(result.apiAssignments).join(", ")
+					})
+				);
+			}
+
+			if (assignedValue) {
+				api[categoryName] = assignedValue;
+
+				if (ownership) {
+					ownership.register({
+						moduleId: file.moduleId,
+						apiPath: categoryName,
+						source: "core"
+					});
+				}
+
+				if (config.debug?.modes) {
+					console.log(await t("DEBUG_MODE_FOLDER_DEFAULT", { mode, categoryName, moduleName }));
+				}
+				continue;
+			}
+		}
+
+		// Apply flattening if needed
+		if (categoryDecision.shouldFlatten) {
+			if (config.debug?.modes) {
+				console.log(await t("DEBUG_MODE_FLATTENING", { mode, moduleName, flattenType: categoryDecision.flattenType }));
+			}
+
+			if (categoryDecision.preferredName) {
+				finalKey = sanitizePropertyName(categoryDecision.preferredName);
+			}
+		}
+
+		// Merge API assignments
+		for (const [key, value] of Object.entries(result.apiAssignments)) {
+			const sanitizedKey = sanitizePropertyName(key);
+			targetApi[sanitizedKey] = value;
+
+			if (ownership) {
+				const apiPath = `${categoryName}.${sanitizedKey}`;
+				ownership.register({
+					moduleId: file.moduleId,
+					apiPath,
+					source: "core"
+				});
+			}
+		}
+	}
+
+	// Recurse into subdirectories
+	for (const subDir of directory.children.directories) {
+		const subDirName = sanitizePropertyName(subDir.name);
+		const subDirObj = {};
+		await processDirectory(subDirObj, subDir, ownership, contextManager, instanceId, config, currentDepth + 1, mode);
+
+		// Extract the actual content
+		const subDirContent = subDirObj[subDirName];
+
+		// Wrap subdirectory in unified wrapper
+		const wrapper = new UnifiedWrapper({
+			mode,
+			apiPath: `${categoryName}.${subDirName}`,
+			contextManager,
+			instanceId,
+			initialImpl: subDirContent,
+			ownership
+		});
+		api[categoryName][subDirName] = wrapper.createProxy();
+	}
 }
