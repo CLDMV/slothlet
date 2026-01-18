@@ -136,10 +136,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * @returns {Promise<void>}
 			 */
 			add: async (___options) => {
-				throw new SlothletError("INVALID_CONFIG", {
-					option: "slothlet.api.add",
-					value: "not implemented",
-					expected: "implemented in future iteration",
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.api.add",
 					hint: "Hot reload features deferred to next prototype iteration",
 					stub: true
 				});
@@ -151,10 +149,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * @returns {Promise<void>}
 			 */
 			remove: async (___options) => {
-				throw new SlothletError("INVALID_CONFIG", {
-					option: "slothlet.api.remove",
-					value: "not implemented",
-					expected: "implemented in future iteration",
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.api.remove",
 					hint: "Hot reload features deferred to next prototype iteration",
 					stub: true
 				});
@@ -166,10 +162,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * @returns {Promise<void>}
 			 */
 			reload: async (___options) => {
-				throw new SlothletError("INVALID_CONFIG", {
-					option: "slothlet.api.reload",
-					value: "not implemented",
-					expected: "implemented in future iteration",
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.api.reload",
 					hint: "Hot reload features deferred to next prototype iteration",
 					stub: true
 				});
@@ -184,24 +178,17 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 */
 		scope: (fn, context) => {
 			if (typeof fn !== "function") {
-				throw new SlothletError(
-					"INVALID_CONFIG",
-					{
-						option: "slothlet.scope",
-						value: typeof fn,
-						expected: "function",
-						hint: "First argument must be a function to execute in scope"
-					},
-					null,
-					{ stub: true }
-				);
+				throw new SlothletError("INVALID_CONFIG", {
+					option: "slothlet.scope",
+					value: typeof fn,
+					expected: "function",
+					hint: "First argument must be a function to execute in scope",
+					validationError: true
+				});
 			}
 
 			return instance.contextManager.runInContext(instance.instanceID, () => {
 				const ctx = instance.contextManager.getContext();
-				if (context && typeof context === "object") {
-					Object.assign(ctx.context, context);
-				}
 				return fn(ctx.self);
 			});
 		},
@@ -230,7 +217,8 @@ async function createSlothletNamespace(instance, config, userApi) {
 				throw new SlothletError(
 					"CONTEXT_NOT_FOUND",
 					{
-						instanceID: instance.instanceID
+						instanceID: instance.instanceID,
+						availableInstances: "none"
 					},
 					null,
 					{ validationError: true }
