@@ -5,7 +5,7 @@
 import { loadModule, extractExports } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper } from "@cldmv/slothlet/helpers/unified-wrapper";
+import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Process root files and detect root contributor pattern
@@ -63,14 +63,14 @@ export async function processRootFiles(api, files, ownership, contextManager, in
 			// Regular module - NOT a root contributor
 			// Root files should create their own namespace with their sanitized filename
 			// The file's exports become properties of that namespace
-			
+
 			const moduleContent = {};
-			
+
 			// Collect all exports (default and named)
 			if (exports.default) {
 				moduleContent.default = exports.default;
 			}
-			
+
 			const namedExports = Object.keys(exports).filter((k) => k !== "default");
 			for (const key of namedExports) {
 				moduleContent[key] = exports[key];
