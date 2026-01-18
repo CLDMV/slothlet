@@ -369,10 +369,12 @@ if (placeholderIssues.length > 0) {
 if (missingTranslations.length > 0) {
 	console.log(`\n❌ Missing Translations (${missingTranslations.length}):\n`);
 	missingTranslations.forEach((code) => {
-		const locations = allErrors.filter((e) => e.errorCode === code).map((e) => {
-			const relPath = relative(rootDir, e.filePath);
-			return `${relPath}:${e.lineNumber}`;
-		});
+		const locations = allErrors
+			.filter((e) => e.errorCode === code)
+			.map((e) => {
+				const relPath = relative(rootDir, e.filePath);
+				return `${relPath}:${e.lineNumber}`;
+			});
 		console.log(`  ${code}`);
 		console.log(`    Used in: ${locations.join(", ")}`);
 	});

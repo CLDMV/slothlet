@@ -19,7 +19,8 @@ export const translations = {
 	INVALID_CONFIG_LAZY_NOT_READY: "Cannot call function directly in lazy mode - access properties to trigger materialization first.",
 	INVALID_CONFIG_LAZY_ASYNC_REQUIRED: "Lazy mode requires async operations. Use eager mode for now or implement async getter pattern.",
 	INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED: "Failed to materialize lazy proxy for '{apiPath}'. Check that the module loads correctly.",
-	INVALID_CONFIG_NOT_A_FUNCTION: "Cannot call '{apiPath}' - not a function (got {actualType}). Check that the module exports a callable function.",
+	INVALID_CONFIG_NOT_A_FUNCTION:
+		"Cannot call '{apiPath}' - not a function (got {actualType}). Check that the module exports a callable function.",
 	INVALID_CONFIG_dir: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",
 	INVALID_CONFIG_mode: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",
 	INVALID_CONFIG_runtime: "Invalid configuration: '{option}' must be {expected}, got {value}. {hint}",
@@ -35,7 +36,8 @@ export const translations = {
 
 	// Context errors
 	CONTEXT_ALREADY_EXISTS: "Context for instance '{instanceID}' already exists. Cannot initialize twice.",
-	CONTEXT_NOT_FOUND: "Context not found for instance '{instanceID}'. Instance may have been shut down.",
+	CONTEXT_NOT_FOUND:
+		"Context not found for instance '{instanceID}'. Instance may have been shut down. Available instances: {availableInstances}",
 	CONTEXT_EXECUTION_FAILED: "Failed to execute in context for instance '{instanceID}': {error}",
 	NO_ACTIVE_CONTEXT: "No active context found. This operation requires an active Slothlet instance.",
 	NO_ACTIVE_CONTEXT_LIVE: "No active context - no instance is currently active in live bindings mode.",
@@ -116,6 +118,8 @@ export const translations = {
 	HINT_MODULE_IMPORT_FAILED: "Ensure the module file exists and can be imported. Check for syntax errors or missing dependencies.",
 	HINT_MODULE_NO_EXPORTS: "The module must export at least one function or object.",
 	HINT_INVALID_DIRECTORY: "Ensure the directory path is correct and the directory exists and is accessible.",
+	HINT_WARN_DIRECTORY_EMPTY:
+		"Check that the directory path is correct. Empty directories are valid for add-api workflows where modules will be added dynamically.",
 	HINT_INVALID_CONFIG_LAZY_NOT_READY: "In lazy mode, access properties to trigger materialization before calling functions.",
 	HINT_INTERNAL_INVALID_STATE: "An internal state error occurred. This is likely a bug - please report it with details.",
 	HINT_INVALID_CONFIG_LAZY_ASYNC_REQUIRED: "Lazy mode requires async operations. Use eager mode or implement proper async patterns.",

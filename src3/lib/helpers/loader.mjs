@@ -23,7 +23,8 @@ export async function loadModule(filePath) {
 		throw new SlothletError(
 			"MODULE_IMPORT_FAILED",
 			{
-				modulePath: filePath
+				modulePath: filePath,
+				error: error.message
 			},
 			error
 		);
@@ -46,7 +47,8 @@ export async function scanDirectory(dir, options = {}) {
 		throw new SlothletError(
 			"INVALID_DIRECTORY",
 			{
-				dir
+				dir,
+				error: error.message
 			},
 			error
 		);

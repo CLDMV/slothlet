@@ -28,10 +28,10 @@ export class OwnershipManager {
 	register({ moduleId, apiPath, value, source = "core", allowConflict = false }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId, validationError: true });
+			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
 		}
 		if (!apiPath || typeof apiPath !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath, validationError: true });
+			throw new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
 		}
 
 		// Check for conflicts
