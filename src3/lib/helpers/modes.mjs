@@ -5,18 +5,21 @@
 import { loadModule, extractExports } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { t } from "@cldmv/slothlet/i18n";
+import { UnifiedWrapper } from "@cldmv/slothlet/helpers/unified-wrapper";
 
 /**
  * Process root files and detect root contributor pattern
  * @param {Object} api - API object being built
  * @param {Array} files - Root files from scanner
  * @param {Object} ownership - Ownership manager
+ * @param {Object} contextManager - Context manager for wrapper
+ * @param {string} instanceId - Instance ID for wrapper
  * @param {Object} config - Configuration
  * @param {string} mode - Mode name for debug messages
  * @returns {Promise<Function|null>} Root contributor function if found
  * @public
  */
-export async function processRootFiles(api, files, ownership, config, mode) {
+export async function processRootFiles(api, files, ownership, contextManager, instanceId, config, mode) {
 	let rootDefaultFunction = null;
 
 	for (const file of files) {
@@ -57,31 +60,41 @@ export async function processRootFiles(api, files, ownership, config, mode) {
 				}
 			}
 		} else {
-			// Regular module - merge exports into API
-			const namedExports = Object.keys(exports).filter((k) => k !== "default");
-
+			// Regular module - NOT a root contributor
+			// Root files should create their own namespace with their sanitized filename
+			// The file's exports become properties of that namespace
+			
+			const moduleContent = {};
+			
+			// Collect all exports (default and named)
 			if (exports.default) {
-				// Has default export but not a function
-				api[moduleName] = exports.default;
-				if (ownership) {
-					ownership.register({
-						moduleId: file.moduleId,
-						apiPath: moduleName,
-						source: "core"
-					});
-				}
+				moduleContent.default = exports.default;
+			}
+			
+			const namedExports = Object.keys(exports).filter((k) => k !== "default");
+			for (const key of namedExports) {
+				moduleContent[key] = exports[key];
 			}
 
-			// Merge named exports at root level
-			for (const key of namedExports) {
-				api[key] = exports[key];
-				if (ownership) {
-					ownership.register({
-						moduleId: file.moduleId,
-						apiPath: key,
-						source: "core"
-					});
-				}
+			// Wrap in UnifiedWrapper with the file's sanitized name as the namespace
+			const wrapper = new UnifiedWrapper({
+				mode,
+				apiPath: moduleName,
+				contextManager,
+				instanceId,
+				initialImpl: moduleContent,
+				ownership
+			});
+
+			api[moduleName] = wrapper.createProxy();
+
+			// Register ownership
+			if (ownership) {
+				ownership.register({
+					moduleId: file.moduleId,
+					apiPath: moduleName,
+					source: "core"
+				});
 			}
 
 			if (config.debug?.modes) {

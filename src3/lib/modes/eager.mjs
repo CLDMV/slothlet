@@ -1,5 +1,5 @@
 /**
- * @fileoverview Eager mode implementation - loads all modules immediately with proper flattening
+ * @fileoverview Eager mode implementation - loads all modules immediately with unified wrapper
  * @module @cldmv/slothlet/modes/eager
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
@@ -7,35 +7,50 @@ import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
 import { processRootFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
-import { createOuterProxy } from "@cldmv/slothlet/helpers/proxy";
+import { UnifiedWrapper } from "@cldmv/slothlet/helpers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
 
 /**
  * Build API in eager mode (load all modules immediately)
- * @param {string} dir - Directory path to load from
- * @param {Object} ownership - Ownership manager
- * @param {Object} config - Configuration
+ * @param {Object} options - Build options
+ * @param {string} options.dir - Directory path to load from
+ * @param {Object} options.ownership - Ownership manager
+ * @param {Object} options.contextManager - Context manager for binding
+ * @param {string} options.instanceId - Slothlet instance ID
+ * @param {Object} options.config - Configuration
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, ownership, config = {} }) {
+export async function buildEagerAPI({ dir, ownership, contextManager, instanceId, config = {} }) {
 	const api = {};
 
 	// Scan directory structure
 	const structure = await scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
-	const rootDefaultFunction = await processRootFiles(api, structure.files, ownership, config, "eager");
+	const rootDefaultFunction = await processRootFiles(api, structure.files, ownership, contextManager, instanceId, config, "eager");
 
-	// Process directories - wrap in outer proxies for reload support
+	// Process directories - wrap in unified wrappers for reload support
 	for (const directory of structure.directories) {
 		const categoryName = sanitizePropertyName(directory.name);
 		const categoryObj = {};
-		await processDirectory(categoryObj, directory, ownership, config, 1);
+		await processDirectory(categoryObj, directory, ownership, contextManager, instanceId, config, 1);
 
-		// Wrap category in outer proxy with immediate __impl
-		api[categoryName] = createOuterProxy(categoryName, categoryObj);
+		// processDirectory creates structure like categoryObj.math = { ... }
+		// Extract the actual content (could be object, function, or function with properties)
+		const categoryContent = categoryObj[categoryName];
+
+		// Wrap category in unified wrapper (eager mode with immediate __impl)
+		const wrapper = new UnifiedWrapper({
+			mode: "eager",
+			apiPath: categoryName,
+			contextManager,
+			instanceId,
+			initialImpl: categoryContent,
+			ownership
+		});
+		api[categoryName] = wrapper.createProxy();
 	}
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
@@ -49,11 +64,13 @@ export async function buildEagerAPI({ dir, ownership, config = {} }) {
  * @param {Object} api - API object being built
  * @param {Object} directory - Directory info from scanner
  * @param {Object} ownership - Ownership manager
+ * @param {Object} contextManager - Context manager
+ * @param {string} instanceId - Instance ID
  * @param {Object} config - Configuration
  * @param {number} currentDepth - Current nesting depth
  * @private
  */
-async function processDirectory(api, directory, ownership, config, currentDepth) {
+async function processDirectory(api, directory, ownership, contextManager, instanceId, config, currentDepth) {
 	const categoryName = sanitizePropertyName(directory.name);
 	const moduleFiles = directory.children.files;
 
@@ -250,13 +267,25 @@ async function processDirectory(api, directory, ownership, config, currentDepth)
 		}
 	}
 
-	// Recurse into subdirectories - wrap in outer proxies
+	// Recurse into subdirectories - wrap in unified wrappers
 	for (const subDir of directory.children.directories) {
 		const subDirName = sanitizePropertyName(subDir.name);
 		const subDirObj = {};
-		await processDirectory(subDirObj, subDir, ownership, config, currentDepth + 1);
+		await processDirectory(subDirObj, subDir, ownership, contextManager, instanceId, config, currentDepth + 1);
 
-		// Wrap subdirectory in outer proxy
-		api[categoryName][subDirName] = createOuterProxy(`${categoryName}.${subDirName}`, subDirObj);
+		// processDirectory creates subDirObj.subDirName = { ... }
+		// Extract the actual content (could be object, function, or function with properties)
+		const subDirContent = subDirObj[subDirName];
+
+		// Wrap subdirectory in unified wrapper (eager mode)
+		const wrapper = new UnifiedWrapper({
+			mode: "eager",
+			apiPath: `${categoryName}.${subDirName}`,
+			contextManager,
+			instanceId,
+			initialImpl: subDirContent,
+			ownership
+		});
+		api[categoryName][subDirName] = wrapper.createProxy();
 	}
 }
