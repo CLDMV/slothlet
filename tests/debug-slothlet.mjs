@@ -136,6 +136,57 @@ export function compareApiShapes(
 ) {
 	const { maxDepth = 10 } = options;
 
+	/**
+	 * Normalizes wrapper proxies to their underlying implementation when available.
+	 * @param {unknown} value - Value to normalize for comparison.
+	 * @returns {unknown} Normalized value for comparison.
+	 */
+	const normalizeForCompare = (value) => {
+		if (value === null || value === undefined) {
+			return value;
+		}
+		const valueType = typeof value;
+		if (valueType !== "object" && valueType !== "function") {
+			return value;
+		}
+		const wrapper = value.__wrapper;
+		if (wrapper && typeof wrapper === "object") {
+			const impl = wrapper._impl;
+			const childCache = wrapper._childCache;
+			if (impl && typeof impl === "object") {
+				const descriptors = Object.getOwnPropertyDescriptors(impl);
+				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
+				if (childCache && childCache.size > 0) {
+					for (const [key, childValue] of childCache.entries()) {
+						if (!Object.prototype.hasOwnProperty.call(view, key)) {
+							Object.defineProperty(view, key, {
+								value: childValue,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
+						}
+					}
+				}
+				return view;
+			}
+			if ((impl === null || impl === undefined) && childCache && childCache.size > 0) {
+				const view = {};
+				for (const [key, childValue] of childCache.entries()) {
+					view[key] = childValue;
+				}
+				return view;
+			}
+			if (impl !== undefined && impl !== null) {
+				return impl;
+			}
+		}
+		return value;
+	};
+
+	a = normalizeForCompare(a);
+	b = normalizeForCompare(b);
+
 	// Initialize checkedPaths set on first call
 	if (checkedPaths === null) {
 		checkedPaths = new Set();
@@ -196,10 +247,18 @@ export function compareApiShapes(
 		};
 	}
 
+	/**
+	 * Collects keys for comparison without traversing noisy function prototype helpers.
+	 * @param {unknown} obj - Value to inspect for keys.
+	 * @returns {Array<string|symbol>} Keys to compare.
+	 */
 	const getAllKeys = (obj) => {
 		if (obj === null || obj === undefined) return [];
 		if (typeof obj === "function") {
-			return [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+			const allKeys = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+			return allKeys.filter((key) =>
+				!["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)
+			);
 		}
 		if (typeof obj === "object") {
 			return [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
@@ -226,18 +285,7 @@ export function compareApiShapes(
 		if (key === "instanceID") {
 			return true;
 		}
-		if (typeof key === "string") {
-			if (key.startsWith("__") || key.startsWith("_")) {
-				return true;
-			}
-			if (["apply", "bind", "call", "toString", "valueOf"].includes(key) && typeof obj === "function") {
-				return true;
-			}
-		}
-		return (
-			["constructor", "prototype", "__proto__", "__ctx", "_impl", "length", "name", "__slothletDefault"].includes(key) &&
-			typeof obj === "function"
-		);
+		return false;
 	};
 
 	const onlyInA = [...keysA].filter((k) => !keysB.has(k) && !shouldSkipKey(k, a)).map((k) => (currentPath ? `${currentPath}.${k}` : k));
@@ -253,16 +301,21 @@ export function compareApiShapes(
 		if (shouldSkipKey(key, a)) {
 			continue;
 		}
+		if (currentPath === "__slothletInstance" && key === "config") {
+			continue;
+		}
 
 		const valA = a[key];
 		const valB = b[key];
 		const fullPath = currentPath ? `${currentPath}.${key}` : key;
+		const normalizedValA = normalizeForCompare(valA);
+		const normalizedValB = normalizeForCompare(valB);
 
 		// Skip circular references dynamically by checking if the property value
 		// is the same object reference as any ancestor in the path
 		if (
-			(valA !== null && typeof valA === "object" && visitedA.has(valA)) ||
-			(valB !== null && typeof valB === "object" && visitedB.has(valB))
+			(normalizedValA !== null && typeof normalizedValA === "object" && visitedA.has(normalizedValA)) ||
+			(normalizedValB !== null && typeof normalizedValB === "object" && visitedB.has(normalizedValB))
 		) {
 			// This is a circular reference, skip it
 			continue;
@@ -271,15 +324,15 @@ export function compareApiShapes(
 		// Add this path to checked paths
 		checkedPaths.add(fullPath);
 
-		if (typeof valA === "function" && typeof valB === "function") {
+		if (typeof normalizedValA === "function" && typeof normalizedValB === "function") {
 			// Compare function signatures and implementations
 			// Safely extract function properties
-			const aName = typeof valA.name === "string" ? valA.name : "anonymous";
-			const bName = typeof valB.name === "string" ? valB.name : "anonymous";
-			const aLength = typeof valA.length === "number" ? valA.length : 0;
-			const bLength = typeof valB.length === "number" ? valB.length : 0;
+			const aName = typeof normalizedValA.name === "string" ? normalizedValA.name : "anonymous";
+			const bName = typeof normalizedValB.name === "string" ? normalizedValB.name : "anonymous";
+			const aLength = typeof normalizedValA.length === "number" ? normalizedValA.length : 0;
+			const bLength = typeof normalizedValB.length === "number" ? normalizedValB.length : 0;
 
-			if (aLength !== bLength) {
+			if (aLength !== bLength || normalizedValA.toString() !== normalizedValB.toString()) {
 				differingFunctions.push({
 					path: fullPath,
 					aSignature: `${aName}(${aLength} params)`,
@@ -290,42 +343,51 @@ export function compareApiShapes(
 			}
 
 			// Recursively compare function properties (functions can have properties too)
-			const funcComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
+			const funcComparison = compareApiShapes(
+				normalizedValA,
+				normalizedValB,
+				options,
+				fullPath,
+				currentDepth + 1,
+				checkedPaths,
+				visitedA,
+				visitedB
+			);
 			nestedDifferences.push(...funcComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...funcComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
 			nestedDifferences.push(...funcComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
 			nestedDifferences.push(...funcComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
 			nestedDifferences.push(...funcComparison.nestedDifferences);
 		} else if (
-			valA !== null &&
-			valB !== null &&
-			(typeof valA === "function" || typeof valA === "object") &&
-			(typeof valB === "function" || typeof valB === "object") &&
-			typeof valA !== typeof valB
+			typeof normalizedValA === "object" &&
+			typeof normalizedValB === "object" &&
+			normalizedValA !== null &&
+			normalizedValB !== null
 		) {
-			// Compare object-like values even if one is a function proxy and the other is an object
-			const nestedComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
-			nestedDifferences.push(...nestedComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
-			nestedDifferences.push(...nestedComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
-			nestedDifferences.push(...nestedComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
-			nestedDifferences.push(...nestedComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
-			nestedDifferences.push(...nestedComparison.nestedDifferences);
-		} else if (typeof valA === "object" && typeof valB === "object" && valA !== null && valB !== null) {
 			// Recursively compare nested objects
-			const nestedComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
+			const nestedComparison = compareApiShapes(
+				normalizedValA,
+				normalizedValB,
+				options,
+				fullPath,
+				currentDepth + 1,
+				checkedPaths,
+				visitedA,
+				visitedB
+			);
 			nestedDifferences.push(...nestedComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...nestedComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
 			nestedDifferences.push(...nestedComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
 			nestedDifferences.push(...nestedComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
 			nestedDifferences.push(...nestedComparison.nestedDifferences);
-		} else if (typeof valA !== typeof valB || valA !== valB) {
+		} else if (typeof normalizedValA !== typeof normalizedValB || normalizedValA !== normalizedValB) {
 			// Values differ in type or content
 			differingValues.push({
 				path: fullPath,
-				aValue: valA,
-				bValue: valB,
-				aType: typeof valA,
-				bType: typeof valB
+				aValue: normalizedValA,
+				bValue: normalizedValB,
+				aType: typeof normalizedValA,
+				bType: typeof normalizedValB
 			});
 		}
 	}
@@ -347,6 +409,58 @@ export function compareApiShapes(
 		nestedDifferences,
 		checkedPaths: currentDepth === 0 ? [...checkedPaths].sort() : []
 	};
+}
+
+/**
+ * Materializes all lazy wrappers reachable from a root value to normalize comparisons.
+ * @param {unknown} root - Root value to traverse for lazy wrapper materialization.
+ * @returns {Promise<void>} Resolves after traversal and materialization.
+ */
+async function materializeLazyWrappers(root) {
+	const visited = new WeakSet();
+	const queue = [root];
+
+	while (queue.length > 0) {
+		const current = queue.pop();
+		if (current === null || current === undefined) {
+			continue;
+		}
+		const currentType = typeof current;
+		if (currentType !== "object" && currentType !== "function") {
+			continue;
+		}
+		if (visited.has(current)) {
+			continue;
+		}
+		visited.add(current);
+
+		if (typeof current.__getState === "function" && typeof current.__materialize === "function") {
+			const state = current.__getState();
+			if (state && !state.materialized && !state.inFlight) {
+				await current.__materialize();
+			}
+		}
+
+		const keys = new Set([...Object.getOwnPropertyNames(current), ...Object.keys(current)]);
+		for (const key of keys) {
+			if (typeof key === "string") {
+				if (key.startsWith("__") || key.startsWith("_")) {
+					continue;
+				}
+				if (
+					currentType === "function" &&
+					["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)
+				) {
+					continue;
+				}
+			}
+			try {
+				queue.push(current[key]);
+			} catch (error) {
+				// Ignore getter errors during traversal
+			}
+		}
+	}
 }
 
 // Error tracking arrays (global to collect errors from both runs)
@@ -896,6 +1010,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
 
 	console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER & LAZY MODE TEST ====="));
+
+	await materializeLazyWrappers(_lazyBound);
 
 	const compared = compareApiShapes(_eagerBound, _lazyBound);
 

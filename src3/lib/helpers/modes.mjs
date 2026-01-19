@@ -65,6 +65,7 @@ export async function processFiles(
 	let rootDefaultFunction = null;
 	const categoryName = isRoot && !populateDirectly ? null : sanitizePropertyName(directory.name);
 	let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
+	const shouldWrap = !(mode === "lazy" && populateDirectly);
 
 	if (!isRoot && config.debug?.modes) {
 		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth }));
@@ -73,7 +74,7 @@ export async function processFiles(
 	// Load all modules
 	const loadedModules = [];
 	for (const file of files) {
-		if (categoryName === "string") {
+		if (config.debug?.modes && categoryName === "string") {
 			console.log(
 				`[PROCESS FILE] categoryName=${categoryName}, file=${file.name}, isRoot=${isRoot}, populateDirectly=${populateDirectly}, mode=${mode}`
 			);
@@ -102,7 +103,7 @@ export async function processFiles(
 
 	// Process each module
 	for (const { file, mod, moduleName, moduleKeys, analysis } of loadedModules) {
-		if (categoryName === "logger") {
+		if (config.debug?.modes && categoryName === "logger") {
 			console.log(
 				`[PROCESS MODULE] categoryName=logger, moduleName=${moduleName}, hasDefault=${analysis.hasDefault}, moduleKeys=${moduleKeys.join(",")}, targetApi type=${typeof targetApi}, targetApi callable=${typeof targetApi === "function"}`
 			);
@@ -175,28 +176,33 @@ export async function processFiles(
 					// Case 1: export const folder = {...} - wrap and use as category
 					const exportedValue = mod[moduleName];
 					if (typeof exportedValue === "object" && exportedValue !== null) {
-						if (categoryName === "string") {
+						if (config.debug?.modes && categoryName === "string") {
 							console.log(
 								`[SINGLE-FILE FOLDER] categoryName=${categoryName}, populateDirectly=${populateDirectly}, isRoot=${isRoot}, mode=${mode}, exportKeys=${Object.keys(exportedValue).join(",")}`
 							);
 						}
 
 						// CRITICAL: Wrap the object so all its functions get context wrapping
-						const wrapper = new UnifiedWrapper({
-							mode,
-							apiPath: categoryName,
-							contextManager,
-							instanceID,
-							initialImpl: cloneWrapperImpl(exportedValue, mode),
-							ownership
-						});
+						if (shouldWrap) {
+							const wrapper = new UnifiedWrapper({
+								mode,
+								apiPath: categoryName,
+								contextManager,
+								instanceID,
+								initialImpl: cloneWrapperImpl(exportedValue, mode),
+								ownership
+							});
 
-						// Replace targetApi reference with the wrapped proxy
-						// This allows other files in the folder to attach properties if needed
-						api[categoryName] = wrapper.createProxy();
-						targetApi = api[categoryName];
+							// Replace targetApi reference with the wrapped proxy
+							// This allows other files in the folder to attach properties if needed
+							api[categoryName] = wrapper.createProxy();
+							targetApi = api[categoryName];
+						} else {
+							api[categoryName] = exportedValue;
+							targetApi = api[categoryName];
+						}
 
-						if (categoryName === "string") {
+						if (config.debug?.modes && categoryName === "string") {
 							console.log(
 								`[SINGLE-FILE FOLDER] Set api.${categoryName} to wrapped proxy, impl keys=${Object.keys(exportedValue).join(",")}`
 							);
@@ -226,34 +232,43 @@ export async function processFiles(
 						}
 					}
 					moduleContent = callableModule;
-					const wrapper = new UnifiedWrapper({
-						mode,
-						apiPath: categoryName,
-						contextManager,
-						instanceID,
-						initialImpl: cloneWrapperImpl(moduleContent, mode),
-						ownership
-					});
+					if (shouldWrap) {
+						const wrapper = new UnifiedWrapper({
+							mode,
+							apiPath: categoryName,
+							contextManager,
+							instanceID,
+							initialImpl: cloneWrapperImpl(moduleContent, mode),
+							ownership
+						});
 
-					// Replace the empty object with the wrapped callable function
-					api[categoryName] = wrapper.createProxy();
-					// Update targetApi reference to point to the new function so other files can attach properties
-					targetApi = api[categoryName];
+						// Replace the empty object with the wrapped callable function
+						api[categoryName] = wrapper.createProxy();
+						// Update targetApi reference to point to the new function so other files can attach properties
+						targetApi = api[categoryName];
+					} else {
+						api[categoryName] = moduleContent;
+						targetApi = api[categoryName];
+					}
 
 					if (namedKeys.length > 0) {
 						for (const key of namedKeys) {
 							if (key === "default") {
 								continue;
 							}
-							const namedWrapper = new UnifiedWrapper({
-								mode,
-								apiPath: `${categoryName}.${key}`,
-								contextManager,
-								instanceID,
-								initialImpl: mod[key],
-								ownership
-							});
-							targetApi[key] = namedWrapper.createProxy();
+							if (shouldWrap) {
+								const namedWrapper = new UnifiedWrapper({
+									mode,
+									apiPath: `${categoryName}.${key}`,
+									contextManager,
+									instanceID,
+									initialImpl: mod[key],
+									ownership
+								});
+								targetApi[key] = namedWrapper.createProxy();
+							} else {
+								targetApi[key] = mod[key];
+							}
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
 							}
@@ -283,15 +298,19 @@ export async function processFiles(
 
 						// Add matching object's properties to category
 						for (const [propKey, propValue] of Object.entries(matchingObj)) {
-							const wrapper = new UnifiedWrapper({
-								mode,
-								apiPath: `${categoryName}.${propKey}`,
-								contextManager,
-								instanceID,
-								initialImpl: cloneWrapperImpl(propValue, mode),
-								ownership
-							});
-							targetApi[propKey] = wrapper.createProxy();
+							if (shouldWrap) {
+								const wrapper = new UnifiedWrapper({
+									mode,
+									apiPath: `${categoryName}.${propKey}`,
+									contextManager,
+									instanceID,
+									initialImpl: cloneWrapperImpl(propValue, mode),
+									ownership
+								});
+								targetApi[propKey] = wrapper.createProxy();
+							} else {
+								targetApi[propKey] = propValue;
+							}
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
 							}
@@ -300,6 +319,28 @@ export async function processFiles(
 						// Add other named exports from this file to category
 						for (const key of moduleKeys) {
 							if (key !== moduleName) {
+								if (shouldWrap) {
+									const wrapper = new UnifiedWrapper({
+										mode,
+										apiPath: `${categoryName}.${key}`,
+										contextManager,
+										instanceID,
+										initialImpl: cloneWrapperImpl(mod[key], mode),
+										ownership
+									});
+									targetApi[key] = wrapper.createProxy();
+								} else {
+									targetApi[key] = mod[key];
+								}
+								if (ownership) {
+									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+								}
+							}
+						}
+					} else {
+						// Regular multi-export file (no matching object)
+						for (const key of moduleKeys) {
+							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper({
 									mode,
 									apiPath: `${categoryName}.${key}`,
@@ -309,23 +350,9 @@ export async function processFiles(
 									ownership
 								});
 								targetApi[key] = wrapper.createProxy();
-								if (ownership) {
-									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
-								}
+							} else {
+								targetApi[key] = mod[key];
 							}
-						}
-					} else {
-						// Regular multi-export file (no matching object)
-						for (const key of moduleKeys) {
-							const wrapper = new UnifiedWrapper({
-								mode,
-								apiPath: `${categoryName}.${key}`,
-								contextManager,
-								instanceID,
-								initialImpl: cloneWrapperImpl(mod[key], mode),
-								ownership
-							});
-							targetApi[key] = wrapper.createProxy();
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
 							}
@@ -348,15 +375,19 @@ export async function processFiles(
 				if (normalizedKey === normalizedModuleName) {
 					// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
 					const preferredName = key;
-					const wrapper = new UnifiedWrapper({
-						mode,
-						apiPath: `${categoryName}.${preferredName}`,
-						contextManager,
-						instanceID,
-						initialImpl: cloneWrapperImpl(mod[key], mode),
-						ownership
-					});
-					targetApi[preferredName] = wrapper.createProxy();
+					if (shouldWrap) {
+						const wrapper = new UnifiedWrapper({
+							mode,
+							apiPath: `${categoryName}.${preferredName}`,
+							contextManager,
+							instanceID,
+							initialImpl: cloneWrapperImpl(mod[key], mode),
+							ownership
+						});
+						targetApi[preferredName] = wrapper.createProxy();
+					} else {
+						targetApi[preferredName] = mod[key];
+					}
 					if (ownership) {
 						ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${preferredName}`, source: "core" });
 					}
@@ -365,17 +396,21 @@ export async function processFiles(
 			}
 
 			// Wrap in UnifiedWrapper
-			const wrapper = new UnifiedWrapper({
-				mode,
-				apiPath: isRoot ? propertyName : `${categoryName}.${propertyName}`,
-				contextManager,
-				instanceID,
-				initialImpl: cloneWrapperImpl(moduleContent, mode),
-				ownership
-			});
+			if (shouldWrap) {
+				const wrapper = new UnifiedWrapper({
+					mode,
+					apiPath: isRoot ? propertyName : `${categoryName}.${propertyName}`,
+					contextManager,
+					instanceID,
+					initialImpl: cloneWrapperImpl(moduleContent, mode),
+					ownership
+				});
 
-			targetApi[propertyName] = wrapper.createProxy();
-			if (categoryName === "logger") {
+				targetApi[propertyName] = wrapper.createProxy();
+			} else {
+				targetApi[propertyName] = moduleContent;
+			}
+			if (config.debug?.modes && categoryName === "logger") {
 				console.log(
 					`[AFTER ASSIGN] targetApi type=${typeof targetApi}, propertyName=${propertyName}, has property=${propertyName in targetApi}, _impl type=${typeof targetApi.__wrapper?._impl}, _impl.utils=${typeof targetApi.__wrapper?._impl?.utils}`
 				);
@@ -388,11 +423,15 @@ export async function processFiles(
 	}
 
 	// Handle subdirectories based on mode
-	console.log(
-		`[SUBDIR CHECK] isRoot=${isRoot}, categoryName=${categoryName}, directory=${directory ? "exists" : "null"}, children=${directory?.children ? "exists" : "null"}, directories=${directory?.children?.directories ? directory.children.directories.length : "none"}`
-	);
+	if (config.debug?.modes) {
+		console.log(
+			`[SUBDIR CHECK] isRoot=${isRoot}, categoryName=${categoryName}, directory=${directory ? "exists" : "null"}, children=${directory?.children ? "exists" : "null"}, directories=${directory?.children?.directories ? directory.children.directories.length : "none"}`
+		);
+	}
 	if (directory?.children?.directories) {
-		console.log(`[SUBDIR FOUND] Processing ${directory.children.directories.length} subdirectories, recursive=${recursive}`);
+		if (config.debug?.modes) {
+			console.log(`[SUBDIR FOUND] Processing ${directory.children.directories.length} subdirectories, recursive=${recursive}`);
+		}
 		if (recursive) {
 			// Eager mode: recurse into subdirectories
 			for (const subDir of directory.children.directories) {
@@ -493,7 +532,9 @@ export async function processFiles(
 			for (const subDir of directory.children.directories) {
 				const subDirName = sanitizePropertyName(subDir.name);
 				const apiPath = categoryName ? `${categoryName}.${subDirName}` : subDirName;
-				console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
+				if (config.debug?.modes) {
+					console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
+				}
 				targetApi[subDirName] = createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config);
 			}
 		}
@@ -521,7 +562,9 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 	 * @private
 	 */
 	async function lazy_materializeFunc() {
-		console.log(`[MATERIALIZE FUNC] Starting for dir=${dir.name}, files=${dir.children.files?.length || 0}`);
+		if (config.debug?.modes) {
+			console.log(`[MATERIALIZE FUNC] Starting for dir=${dir.name}, files=${dir.children.files?.length || 0}`);
+		}
 		const categoryName = sanitizePropertyName(dir.name);
 
 		const materialized = {};
@@ -599,25 +642,33 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 			true // Populate directly (don't nest under categoryName)
 		);
 
-		console.log(`[MATERIALIZE FUNC] Returning impl for dir=${dir.name}, keys=${Object.keys(materialized).join(",")}`);
+		if (config.debug?.modes) {
+			console.log(`[MATERIALIZE FUNC] Returning impl for dir=${dir.name}, keys=${Object.keys(materialized).join(",")}`);
+		}
 		const materializedKeys = Object.keys(materialized);
 		// Check for folder/folder.mjs pattern - if materialized has a property matching the folder name,
 		// attach all other properties to it (e.g., logger/logger.mjs + logger/utils.mjs → logger function with .utils attached)
 		if (materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
-			console.log(`[FOLDER PATTERN MATCH] dir=${dir.name}, categoryName=${categoryName}, keys=${materializedKeys.join(",")}`);
+			if (config.debug?.modes) {
+				console.log(`[FOLDER PATTERN MATCH] dir=${dir.name}, categoryName=${categoryName}, keys=${materializedKeys.join(",")}`);
+			}
 			const mainValue = materialized[categoryName];
 			// Attach all other properties to the main value
 			for (const key of materializedKeys) {
 				if (key !== categoryName) {
-					console.log(`[FOLDER PATTERN ATTACH] ${categoryName}.${key} = ${typeof materialized[key]}`);
+					if (config.debug?.modes) {
+						console.log(`[FOLDER PATTERN ATTACH] ${categoryName}.${key} = ${typeof materialized[key]}`);
+					}
 					mainValue[key] = materialized[key];
 				}
 			}
-			console.log(
-				`[FOLDER PATTERN RETURN] Returning ${categoryName} with keys: ${Object.keys(mainValue)
-					.filter((k) => !k.startsWith("__"))
-					.join(",")}`
-			);
+			if (config.debug?.modes) {
+				console.log(
+					`[FOLDER PATTERN RETURN] Returning ${categoryName} with keys: ${Object.keys(mainValue)
+						.filter((k) => !k.startsWith("__"))
+						.join(",")}`
+				);
+			}
 			return mainValue;
 		}
 		if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {

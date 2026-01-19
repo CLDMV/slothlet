@@ -69,17 +69,25 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceID,
 function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
 	async function materializeFunc() {
-		console.log(`[LAZY.MJS materializeFunc] START for apiPath=${apiPath}, dir=${dir.name}`);
+		if (config.debug?.modes) {
+			console.log(`[LAZY.MJS materializeFunc] START for apiPath=${apiPath}, dir=${dir.name}`);
+		}
 		const materialized = {};
 
 		// Load files in directory
 		for (const file of dir.children.files) {
 			try {
-				console.log(`[LAZY.MJS] Loading file: ${file.name} from ${file.path}`);
+				if (config.debug?.modes) {
+					console.log(`[LAZY.MJS] Loading file: ${file.name} from ${file.path}`);
+				}
 				const mod = await loadModule(file.path);
-				console.log(`[LAZY.MJS] Loaded file: ${file.name}, extracting exports...`);
+				if (config.debug?.modes) {
+					console.log(`[LAZY.MJS] Loaded file: ${file.name}, extracting exports...`);
+				}
 				const exports = extractExports(mod);
-				console.log(`[LAZY.MJS] Extracted exports for ${file.name}:`, Object.keys(exports));
+				if (config.debug?.modes) {
+					console.log(`[LAZY.MJS] Extracted exports for ${file.name}:`, Object.keys(exports));
+				}
 				const moduleName = sanitizePropertyName(file.name);
 
 				// Register ownership
@@ -92,9 +100,13 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 				}
 
 				// Merge exports into materialized object
-				console.log(`[LAZY.MJS] Merging exports for ${file.name} into materialized...`);
+				if (config.debug?.modes) {
+					console.log(`[LAZY.MJS] Merging exports for ${file.name} into materialized...`);
+				}
 				mergeExportsIntoAPI(materialized, exports, moduleName);
-				console.log(`[LAZY.MJS] Merged exports for ${file.name}, materialized keys now:`, Object.keys(materialized));
+				if (config.debug?.modes) {
+					console.log(`[LAZY.MJS] Merged exports for ${file.name}, materialized keys now:`, Object.keys(materialized));
+				}
 			} catch (error) {
 				console.error(`[LAZY.MJS] ERROR loading ${file.name}:`, error.message);
 				throw error;
@@ -107,7 +119,9 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceID, `${apiPath}.${propName}`, config);
 		}
 
-		console.log(`[LAZY.MJS materializeFunc] DONE for apiPath=${apiPath}, keys=${Object.keys(materialized).join(",")}`);
+		if (config.debug?.modes) {
+			console.log(`[LAZY.MJS materializeFunc] DONE for apiPath=${apiPath}, keys=${Object.keys(materialized).join(",")}`);
+		}
 		// POC pattern: return the materialized implementation
 		return materialized;
 	}
