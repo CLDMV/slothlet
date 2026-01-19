@@ -70,7 +70,7 @@ class Slothlet {
 			mode: this.config.mode,
 			ownership: this.ownership,
 			contextManager: this.contextManager,
-			instanceId: this.instanceID,
+			instanceID: this.instanceID,
 			config: this.config
 		});
 

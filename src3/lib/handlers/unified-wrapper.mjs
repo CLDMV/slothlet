@@ -20,16 +20,16 @@ export class UnifiedWrapper {
 	 * @param {string} options.mode - "lazy" or "eager"
 	 * @param {string} options.apiPath - API path for this wrapper (e.g., "math.advanced.calc")
 	 * @param {Object} options.contextManager - Context manager for AsyncLocalStorage binding
-	 * @param {string} options.instanceId - Slothlet instance ID
+	 * @param {string} options.instanceID - Slothlet instance ID
 	 * @param {Object} [options.initialImpl=null] - Initial implementation (null for lazy mode)
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
 	 * @param {Object} [options.ownership=null] - Ownership manager
 	 */
-	constructor({ mode, apiPath, contextManager, instanceId, initialImpl = null, materializeFunc = null, ownership = null }) {
+	constructor({ mode, apiPath, contextManager, instanceID, initialImpl = null, materializeFunc = null, ownership = null }) {
 		this.mode = mode;
 		this.apiPath = apiPath;
 		this.contextManager = contextManager;
-		this.instanceId = instanceId;
+		this.instanceID = instanceID;
 		this._impl = initialImpl;
 		this._state = {
 			materialized: initialImpl !== null,
@@ -54,6 +54,9 @@ export class UnifiedWrapper {
 	 * @public
 	 */
 	__setImpl(newImpl) {
+		if (this.apiPath === "string") {
+			console.log(`[__setImpl] apiPath=${this.apiPath}, newImpl keys=${Object.keys(newImpl || {}).join(",")}`);
+		}
 		this._impl = newImpl;
 		this._state.materialized = true;
 		this._state.inFlight = false;
@@ -78,13 +81,32 @@ export class UnifiedWrapper {
 			return;
 		}
 
+		if (this.apiPath === "string") {
+			console.log(`[_materialize] START for apiPath=${this.apiPath}`);
+		}
+
 		this._state.inFlight = true;
 
 		try {
 			if (this._materializeFunc) {
-				await this._materializeFunc(this);
+				if (this.apiPath === "string") {
+					console.log(`[_materialize] Calling materializeFunc (no args, expects return value)...`);
+				}
+				// POC pattern: materializeFunc returns the implementation
+				const result = await this._materializeFunc();
+				this._impl = result;
+				this._state.materialized = true;
+				this._state.inFlight = false;
+				if (this.apiPath === "string") {
+					console.log(
+						`[_materialize] DONE! result=${typeof result}, result keys=${result ? Object.keys(result).join(",") : "null"}, impl keys=${this._impl ? Object.keys(this._impl).join(",") : "null"}`
+					);
+				}
 			}
 		} catch (error) {
+			if (this.apiPath === "string") {
+				console.log(`[_materialize] ERROR: ${error.message}`);
+			}
 			this._state.inFlight = false;
 			throw error;
 		}
@@ -138,7 +160,7 @@ export class UnifiedWrapper {
 
 				// Wrap final function with context if we have a context manager
 				if (typeof current === "function" && self.contextManager) {
-					return self.contextManager.runInContext(self.instanceId, current, thisArg, args);
+					return self.contextManager.runInContext(self.instanceID, current, thisArg, args);
 				}
 
 				// Not a function - error
@@ -173,7 +195,7 @@ export class UnifiedWrapper {
 
 		const self = this;
 		const wrapped = function slothlet_wrapped(...args) {
-			return self.contextManager.runInContext(self.instanceId, fn, this, args);
+			return self.contextManager.runInContext(self.instanceID, fn, this, args);
 		};
 
 		// Preserve metadata
@@ -184,7 +206,7 @@ export class UnifiedWrapper {
 
 		wrapped.__slothletPath = fnPath;
 		wrapped.__slothletOriginal = fn;
-		wrapped.__slothletInstanceId = this.instanceId;
+		wrapped.__slothletInstanceID = this.instanceID;
 
 		// Copy function properties (for functions with methods)
 		for (const key of Object.keys(fn)) {
@@ -236,6 +258,13 @@ export class UnifiedWrapper {
 			get(target, prop, ___receiver) {
 				const wrapper = target.__wrapper;
 
+				// DEBUG: Log all string-related access in lazy mode
+				if (wrapper.mode === "lazy" && (wrapper.apiPath === "string" || wrapper.apiPath.startsWith("string."))) {
+					console.log(
+						`[GET TRAP] mode=${wrapper.mode}, apiPath=${wrapper.apiPath}, prop=${String(prop)}, materialized=${wrapper._state.materialized}, impl=${wrapper._impl ? Object.keys(wrapper._impl).join(",") : "null"}`
+					);
+				}
+
 				// Special properties - return directly from wrapper
 				if (prop === "__impl") return wrapper._impl;
 				if (prop === "__getState") return () => wrapper.__getState();
@@ -247,6 +276,11 @@ export class UnifiedWrapper {
 
 				// LAZY MODE: Trigger materialization on first property access
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+					if (wrapper.apiPath === "string" || wrapper.apiPath.startsWith("string.")) {
+						console.log(
+							`[MATERIALIZATION TRIGGER] apiPath=${wrapper.apiPath}, prop=${String(prop)}, materializeFunc=${typeof wrapper._materializeFunc}`
+						);
+					}
 					wrapper._materialize();
 				}
 
@@ -262,18 +296,40 @@ export class UnifiedWrapper {
 					value = wrapper.ownership.getCurrentValue(fullPath);
 				}
 
-				// Check target directly for attached properties (e.g., logger.utils from other files)
+				// Check target for attached properties (e.g., logger.utils attached via set trap)
 				if (value === undefined && target[prop] !== undefined) {
+					console.log(`[GET TRAP] Found ${prop} on target, type=${typeof target[prop]}`);
 					value = target[prop];
 				}
 
-				// Fall back to __impl if ownership doesn't have it
+				// Get from __impl - properties are attached here by set trap
 				if (value === undefined && wrapper._impl) {
 					value = wrapper._impl[prop];
+					// DEBUG: Log lazy mode property access
+					if (wrapper.mode === "lazy" && wrapper.apiPath.includes("string")) {
+						console.log(
+							`[LAZY DEBUG] ${wrapper.apiPath}.${String(prop)} = ${typeof value} (impl keys: ${Object.keys(wrapper._impl || {}).join(", ")})`
+						);
+					}
 				}
 
+				// Log if utils is being accessed
+				if (prop === "utils") {
+					console.log(
+						`[GET TRAP utils] apiPath=${wrapper.apiPath}, value=${typeof value}, target.utils=${typeof target.utils}, target keys=${Object.keys(target).join(",")}`
+					);
+				}
+				// Log if logger is being accessed
+				if (prop === "logger") {
+					console.log(
+						`[GET TRAP logger] apiPath=${wrapper.apiPath}, value type=${typeof value}, value keys=${value && typeof value === "object" ? Object.keys(value).join(",") : "n/a"}`
+					);
+				}
 				// Return undefined if property doesn't exist
 				if (value === undefined) {
+					if (wrapper.mode === "lazy" && wrapper.apiPath.includes("string")) {
+						console.log(`[LAZY DEBUG] ${wrapper.apiPath}.${String(prop)} = undefined! (impl: ${wrapper._impl ? "exists" : "null"})`);
+					}
 					return undefined;
 				}
 
@@ -297,7 +353,7 @@ export class UnifiedWrapper {
 						mode: "eager",
 						apiPath: `${wrapper.apiPath}.${String(prop)}`,
 						contextManager: wrapper.contextManager,
-						instanceId: wrapper.instanceId,
+						instanceID: wrapper.instanceID,
 						initialImpl: value,
 						ownership: wrapper.ownership
 					});
@@ -325,14 +381,14 @@ export class UnifiedWrapper {
 								if (typeof impl === "function") {
 									// Wrap with context
 									if (wrapper.contextManager) {
-										resolve(wrapper.contextManager.runInContext(wrapper.instanceId, impl, thisArg, args));
+										resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args));
 									} else {
 										resolve(impl.apply(thisArg, args));
 									}
 								} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
 									// Object with default method
 									if (wrapper.contextManager) {
-										resolve(wrapper.contextManager.runInContext(wrapper.instanceId, impl.default, impl, args));
+										resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args));
 									} else {
 										resolve(impl.default.apply(impl, args));
 									}
@@ -368,7 +424,7 @@ export class UnifiedWrapper {
 				if (typeof impl === "function") {
 					// Wrap with context
 					if (wrapper.contextManager) {
-						return wrapper.contextManager.runInContext(wrapper.instanceId, impl, thisArg, args);
+						return wrapper.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args);
 					}
 					return impl.apply(thisArg, args);
 				}
@@ -377,7 +433,7 @@ export class UnifiedWrapper {
 				if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					// Call the default method
 					if (wrapper.contextManager) {
-						return wrapper.contextManager.runInContext(wrapper.instanceId, impl.default, impl, args);
+						return wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args);
 					}
 					return impl.default.apply(impl, args);
 				}
@@ -401,22 +457,61 @@ export class UnifiedWrapper {
 					wrapper._materialize();
 				}
 
-				if (!wrapper._impl) return false;
-				return prop in wrapper._impl;
-			},
-
-			ownKeys(target) {
-				const wrapper = target.__wrapper;
-
-				// Trigger materialization if needed
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
-					wrapper._materialize();
-				}
-
-				const implKeys = wrapper._impl ? Object.keys(wrapper._impl) : [];
-				const targetKeys = Object.getOwnPropertyNames(target);
-				return [...new Set([...implKeys, ...targetKeys])];
+			// Check both _impl and target for attached properties
+			const inImpl = wrapper._impl && prop in wrapper._impl;
+			const inTarget = Object.prototype.hasOwnProperty.call(target, prop);
+			if (prop === "utils") {
+				console.log(`[HAS TRAP utils] apiPath=${wrapper.apiPath}, inImpl=${inImpl}, inTarget=${inTarget}, target keys=${Object.keys(target).join(",")}`);
 			}
-		});
+			if (inImpl) return true;
+			return inTarget;
+		},
+			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				wrapper._materialize();
+			}
+
+			// Always include prototype descriptor from target since target is a function
+			if (prop === "prototype") {
+			return Object.getOwnPropertyDescriptor(target, "prototype");
+		}
+
+		// Return descriptor from implementation
+		if (wrapper._impl && prop in wrapper._impl) {
+			return Object.getOwnPropertyDescriptor(wrapper._impl, prop);
+		}
+
+		return undefined;
+	},
+
+ownKeys(target) {
+	const wrapper = target.__wrapper;
+
+	// Trigger materialization if needed
+	if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+		wrapper._materialize();
+	}
+
+	// Only return keys from implementation - target properties are internal
+	// Always include 'prototype' since target is a function
+	const implKeys = wrapper._impl ? Object.keys(wrapper._impl) : [];
+	return [...implKeys, "prototype"];
+},
+
+set(target, prop, value) {
+	const wrapper = target.__wrapper;
+
+	// Trigger materialization if needed
+	if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+		wrapper._materialize();
+	}
+
+	// Set property on the target (the proxy function itself)
+	// This allows attaching wrapper proxies to callable wrappers (e.g., logger.utils wrapper)
+	console.log(`[SET TRAP] prop=${prop}, setting on target, target is ${typeof target}, wrapper.apiPath=${wrapper.apiPath}`);
+	target[prop] = value;
+	console.log(`[SET TRAP] after set, target[${prop}] = ${typeof target[prop]}`);
+	return true;
+}
+});
 	}
 }

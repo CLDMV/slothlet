@@ -14,7 +14,7 @@ const instanceRegistry = new Map();
  * Currently active instance ID (set by wrapper during function calls)
  * @type {string|null}
  */
-let activeInstanceId = null;
+let activeInstanceID = null;
 
 /**
  * Register an instance with its configuration
@@ -34,8 +34,8 @@ export function registerInstance(instanceID, config, contextManager) {
  */
 export function unregisterInstance(instanceID) {
 	instanceRegistry.delete(instanceID);
-	if (activeInstanceId === instanceID) {
-		activeInstanceId = null;
+	if (activeInstanceID === instanceID) {
+		activeInstanceID = null;
 	}
 }
 
@@ -55,7 +55,7 @@ export function getInstanceData(instanceID) {
  * @public
  */
 export function setActiveInstance(instanceID) {
-	activeInstanceId = instanceID;
+	activeInstanceID = instanceID;
 }
 
 /**
@@ -63,8 +63,8 @@ export function setActiveInstance(instanceID) {
  * @returns {string|null} Active instance ID or null
  * @public
  */
-export function getActiveInstanceId() {
-	return activeInstanceId;
+export function getActiveInstanceID() {
+	return activeInstanceID;
 }
 
 /**
@@ -73,8 +73,8 @@ export function getActiveInstanceId() {
  * @public
  */
 export function detectRuntimeType() {
-	if (activeInstanceId) {
-		const data = instanceRegistry.get(activeInstanceId);
+	if (activeInstanceID) {
+		const data = instanceRegistry.get(activeInstanceID);
 		if (data && data.config && data.config.runtime) {
 			return data.config.runtime;
 		}
@@ -90,8 +90,8 @@ export function detectRuntimeType() {
  * @public
  */
 export function getActiveContextManager() {
-	if (activeInstanceId) {
-		const data = instanceRegistry.get(activeInstanceId);
+	if (activeInstanceID) {
+		const data = instanceRegistry.get(activeInstanceID);
 		return data ? data.contextManager : null;
 	}
 	return null;

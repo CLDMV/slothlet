@@ -17,26 +17,34 @@ import path from "node:path";
  * @param {string} options.dir - Directory path to load from
  * @param {Object} options.ownership - Ownership manager
  * @param {Object} options.contextManager - Context manager for binding
- * @param {string} options.instanceId - Slothlet instance ID
+ * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} options.config - Configuration
  * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, ownership, contextManager, instanceId, config = {}, maxDepth = Infinity }) {
+export async function buildEagerAPI({ dir, ownership, contextManager, instanceID, config = {}, maxDepth = Infinity }) {
 	const api = {};
 
 	// Scan directory structure
 	const structure = await scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
+	// Pass synthetic root directory with children.directories for consistent handling
+	const rootDirectory = {
+		name: ".",
+		children: {
+			files: structure.files,
+			directories: structure.directories
+		}
+	};
 	const rootDefaultFunction = await processFiles(
 		api,
 		structure.files,
-		null,
+		rootDirectory,
 		ownership,
 		contextManager,
-		instanceId,
+		instanceID,
 		config,
 		0,
 		"eager",
@@ -44,12 +52,7 @@ export async function buildEagerAPI({ dir, ownership, contextManager, instanceId
 		true
 	);
 
-	// Process directories (eager mode - recursive)
-	for (const directory of structure.directories) {
-		const categoryName = sanitizePropertyName(directory.name);
-		api[categoryName] = api[categoryName] || {};
-		await processFiles(api, directory.children.files, directory, ownership, contextManager, instanceId, config, 1, "eager", false, true);
-	}
+	// Directory processing is now handled by processFiles when recursive=true
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
 	const finalApi = await applyRootContributor(api, rootDefaultFunction, config, "eager");

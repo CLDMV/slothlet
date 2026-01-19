@@ -343,9 +343,7 @@ class UnifiedWrapper {
 							while (!current.__getState().materialized) {
 								const nextState = current.__getState();
 								if (!nextState.inFlight && !nextState.materialized) {
-									throw new Error(
-										`${wrapper.apiPath}.${propChain.join(".")} failed to materialize ${String(prop)}`
-									);
+									throw new Error(`${wrapper.apiPath}.${propChain.join(".")} failed to materialize ${String(prop)}`);
 								}
 								await new Promise((r) => setImmediate(r));
 							}
@@ -498,9 +496,8 @@ class UnifiedWrapper {
 		// CRITICAL: The proxy target type must match what __impl is/will be
 		// - If __impl is a function, use function target (allows typeof === "function" and calling)
 		// - Otherwise, use object target (90% of modules are objects)
-		const proxyTarget = (wrapper._impl && typeof wrapper._impl === "function") || wrapper.isCallable
-			? function unifiedProxyTarget() {}
-			: {};
+		const proxyTarget =
+			(wrapper._impl && typeof wrapper._impl === "function") || wrapper.isCallable ? function unifiedProxyTarget() {} : {};
 
 		wrapper._proxy = new Proxy(proxyTarget, {
 			get(target, prop, receiver) {
@@ -1245,7 +1242,6 @@ async function testMode(mode) {
 	console.log("logger.__getState():", api.logger.__getState());
 	console.log("logger.utils.__getState():", api.logger.utils.__getState?.());
 
-
 	// Test 8: Subsequent calls (should be synchronous even in lazy)
 	if (mode === "lazy") {
 		console.log("\n[TEST 8] Subsequent calls (lazy mode):");
@@ -1274,7 +1270,6 @@ async function testMode(mode) {
 	const ctx = contextManager.getContext();
 	console.log("Current context:", ctx ? ctx.instanceId : "none");
 	console.log("Context testData:", ctx ? ctx.testData : "none");
-
 
 	const totalTime = performance.now() - startTime;
 	console.log(`\n⏱️  Total ${mode.toUpperCase()} mode time: ${formatTime(totalTime)}`);
@@ -1443,9 +1438,7 @@ function dumpApiTree(name, api) {
 		const type = typeof node;
 		const implType = impl ? typeof impl : "null";
 		const implOwnKeys = impl && (typeof impl === "object" || typeof impl === "function") ? Reflect.ownKeys(impl) : [];
-		const wrapperOwnKeys = isWrapper
-			? ["__impl", "__setImpl", "__getState", "__materialize", "_impl", "_state"]
-			: Reflect.ownKeys(node);
+		const wrapperOwnKeys = isWrapper ? ["__impl", "__setImpl", "__getState", "__materialize", "_impl", "_state"] : Reflect.ownKeys(node);
 		const wrapperProps = {};
 		const implProps = {};
 

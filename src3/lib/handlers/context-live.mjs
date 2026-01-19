@@ -12,7 +12,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 export class LiveContextManager {
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
-		this.currentInstanceId = null; // Currently active instance
+		this.currentInstanceID = null; // Currently active instance
 	}
 
 	/**
@@ -38,8 +38,8 @@ export class LiveContextManager {
 		this.instances.set(instanceID, store);
 
 		// In live mode, automatically set as current if it's the first/only instance
-		if (!this.currentInstanceId) {
-			this.currentInstanceId = instanceID;
+		if (!this.currentInstanceID) {
+			this.currentInstanceID = instanceID;
 		}
 
 		return store;
@@ -64,8 +64,8 @@ export class LiveContextManager {
 		}
 
 		// Set current instance (synchronous)
-		const previousInstanceId = this.currentInstanceId;
-		this.currentInstanceId = instanceID;
+		const previousInstanceID = this.currentInstanceID;
+		this.currentInstanceID = instanceID;
 
 		try {
 			return fn.apply(thisArg, args);
@@ -79,7 +79,7 @@ export class LiveContextManager {
 			);
 		} finally {
 			// Restore previous instance
-			this.currentInstanceId = previousInstanceId;
+			this.currentInstanceID = previousInstanceID;
 		}
 	}
 
@@ -90,16 +90,16 @@ export class LiveContextManager {
 	 * @public
 	 */
 	getContext() {
-		if (!this.currentInstanceId) {
+		if (!this.currentInstanceID) {
 			throw new SlothletError("NO_ACTIVE_CONTEXT_LIVE", {}, null, { validationError: true });
 		}
 
-		const store = this.instances.get(this.currentInstanceId);
+		const store = this.instances.get(this.currentInstanceID);
 		if (!store) {
 			throw new SlothletError(
 				"CONTEXT_NOT_FOUND",
 				{
-					instanceID: this.currentInstanceId,
+					instanceID: this.currentInstanceID,
 					availableInstances: Array.from(this.instances.keys()).join(", ") || "none"
 				},
 				null,
@@ -116,10 +116,10 @@ export class LiveContextManager {
 	 * @public
 	 */
 	tryGetContext() {
-		if (!this.currentInstanceId) {
+		if (!this.currentInstanceID) {
 			return undefined;
 		}
-		return this.instances.get(this.currentInstanceId);
+		return this.instances.get(this.currentInstanceID);
 	}
 
 	/**
@@ -146,8 +146,8 @@ export class LiveContextManager {
 		this.instances.delete(instanceID);
 
 		// Clear current instance if it was this one
-		if (this.currentInstanceId === instanceID) {
-			this.currentInstanceId = null;
+		if (this.currentInstanceID === instanceID) {
+			this.currentInstanceID = null;
 		}
 	}
 
@@ -159,7 +159,7 @@ export class LiveContextManager {
 	getDiagnostics() {
 		return {
 			type: "live",
-			currentInstanceId: this.currentInstanceId,
+			currentInstanceID: this.currentInstanceID,
 			instances: Array.from(this.instances.entries()).map(([id, store]) => ({
 				id,
 				createdAt: store.createdAt,
