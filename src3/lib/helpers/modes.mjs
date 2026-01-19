@@ -11,6 +11,27 @@ import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
+ * Clone eager-mode module exports to avoid mutating import cache objects.
+ * @param {unknown} value - Value to clone for wrapping
+ * @param {string} mode - Current mode ("eager" or "lazy")
+ * @returns {unknown} Cloned value for eager mode, original otherwise
+ * @public
+ */
+function cloneWrapperImpl(value, mode) {
+	if (mode !== "eager") {
+		return value;
+	}
+	if (!value || typeof value !== "object") {
+		return value;
+	}
+	if (Array.isArray(value)) {
+		return value.slice();
+	}
+	const descriptors = Object.getOwnPropertyDescriptors(value);
+	return Object.create(Object.getPrototypeOf(value), descriptors);
+}
+
+/**
  * Universal file processing function for both root and nested directories
  * @param {Object} api - API object being built
  * @param {Array} files - Files to process
@@ -166,7 +187,7 @@ export async function processFiles(
 							apiPath: categoryName,
 							contextManager,
 							instanceID,
-							initialImpl: exportedValue,
+							initialImpl: cloneWrapperImpl(exportedValue, mode),
 							ownership
 						});
 
@@ -195,12 +216,22 @@ export async function processFiles(
 					// But DON'T continue - allow other files to attach properties later
 					// Example: logger/logger.mjs (default function) + logger/utils.mjs (named exports)
 					// Result: api.logger() callable + api.logger.utils.* from other files
+					const namedKeys = moduleKeys.length > 0 ? moduleKeys : Object.keys(mod).filter((key) => key !== "default");
+					const callableModule = typeof mod.default === "function" ? mod.default : moduleContent;
+					if (typeof callableModule === "function" && namedKeys.length > 0) {
+						for (const key of namedKeys) {
+							if (key !== "default" && callableModule[key] === undefined) {
+								callableModule[key] = mod[key];
+							}
+						}
+					}
+					moduleContent = callableModule;
 					const wrapper = new UnifiedWrapper({
 						mode,
 						apiPath: categoryName,
 						contextManager,
 						instanceID,
-						initialImpl: moduleContent,
+						initialImpl: cloneWrapperImpl(moduleContent, mode),
 						ownership
 					});
 
@@ -209,12 +240,33 @@ export async function processFiles(
 					// Update targetApi reference to point to the new function so other files can attach properties
 					targetApi = api[categoryName];
 
+					if (namedKeys.length > 0) {
+						for (const key of namedKeys) {
+							if (key === "default") {
+								continue;
+							}
+							const namedWrapper = new UnifiedWrapper({
+								mode,
+								apiPath: `${categoryName}.${key}`,
+								contextManager,
+								instanceID,
+								initialImpl: mod[key],
+								ownership
+							});
+							targetApi[key] = namedWrapper.createProxy();
+							if (ownership) {
+								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+							}
+						}
+					}
+
 					if (ownership) {
 						ownership.register({ moduleId: file.moduleId, apiPath: categoryName, source: "core" });
 					}
 
-					// DON'T continue - other files in this folder should attach as properties on the function
-					// Fall through to allow remaining modules to be processed				continue;				} else if (moduleKeys.length > 0) {
+					// Continue for this module; other files in the folder still process in later iterations
+					continue;
+				} else if (moduleKeys.length > 0) {
 					// Case 3: Multiple named exports - flatten to category level (Rule 6 - F01)
 					// Example: util/util.mjs with exports { size, secondFunc } → api.util.size(), api.util.secondFunc()
 					// OR: multi_func.mjs with exports { uniqueOne, uniqueTwo, multi_func: {...} } → flatten multi_func object + expose others
@@ -236,7 +288,7 @@ export async function processFiles(
 								apiPath: `${categoryName}.${propKey}`,
 								contextManager,
 								instanceID,
-								initialImpl: propValue,
+								initialImpl: cloneWrapperImpl(propValue, mode),
 								ownership
 							});
 							targetApi[propKey] = wrapper.createProxy();
@@ -253,7 +305,7 @@ export async function processFiles(
 									apiPath: `${categoryName}.${key}`,
 									contextManager,
 									instanceID,
-									initialImpl: mod[key],
+									initialImpl: cloneWrapperImpl(mod[key], mode),
 									ownership
 								});
 								targetApi[key] = wrapper.createProxy();
@@ -270,7 +322,7 @@ export async function processFiles(
 								apiPath: `${categoryName}.${key}`,
 								contextManager,
 								instanceID,
-								initialImpl: mod[key],
+								initialImpl: cloneWrapperImpl(mod[key], mode),
 								ownership
 							});
 							targetApi[key] = wrapper.createProxy();
@@ -301,7 +353,7 @@ export async function processFiles(
 						apiPath: `${categoryName}.${preferredName}`,
 						contextManager,
 						instanceID,
-						initialImpl: mod[key],
+						initialImpl: cloneWrapperImpl(mod[key], mode),
 						ownership
 					});
 					targetApi[preferredName] = wrapper.createProxy();
@@ -318,7 +370,7 @@ export async function processFiles(
 				apiPath: isRoot ? propertyName : `${categoryName}.${propertyName}`,
 				contextManager,
 				instanceID,
-				initialImpl: moduleContent,
+				initialImpl: cloneWrapperImpl(moduleContent, mode),
 				ownership
 			});
 
@@ -390,6 +442,13 @@ export async function processFiles(
 							} else if (exports.default !== undefined) {
 								// Default export - use it
 								implToWrap = exports.default;
+								if (typeof implToWrap === "function" && moduleKeys.length > 0) {
+									for (const key of moduleKeys) {
+										if (key !== "default" && implToWrap[key] === undefined) {
+											implToWrap[key] = exports[key];
+										}
+									}
+								}
 							} else {
 								// Fallback - use the whole module
 								implToWrap = modContent;
@@ -401,7 +460,7 @@ export async function processFiles(
 								apiPath: `${categoryName}.${subDirName}`,
 								contextManager,
 								instanceID,
-								initialImpl: implToWrap,
+								initialImpl: cloneWrapperImpl(implToWrap, mode),
 								ownership
 							});
 							targetApi[subDirName] = wrapper.createProxy();
@@ -414,9 +473,8 @@ export async function processFiles(
 				}
 
 				// Regular subdirectory processing
-				targetApi[subDirName] = targetApi[subDirName] || {};
 				await processFiles(
-					targetApi[subDirName],
+					targetApi,
 					subDir.children.files,
 					{ name: subDirName, children: subDir.children },
 					ownership,
@@ -427,7 +485,7 @@ export async function processFiles(
 					mode,
 					false, // Not root
 					recursive, // Pass through recursive flag
-					true // populateDirectly - put content directly into targetApi[subDirName]
+					false // populateDirectly - build on parent api
 				);
 			}
 		} else {
@@ -457,6 +515,11 @@ export async function processFiles(
  */
 export function createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
 	// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
+	/**
+	 * Materialize a lazy subdirectory into a concrete implementation object.
+	 * @returns {Promise<unknown>} Materialized implementation for this subdirectory
+	 * @private
+	 */
 	async function lazy_materializeFunc() {
 		console.log(`[MATERIALIZE FUNC] Starting for dir=${dir.name}, files=${dir.children.files?.length || 0}`);
 		const categoryName = sanitizePropertyName(dir.name);
