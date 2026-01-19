@@ -99,17 +99,7 @@
             configurable: true
           },
           advanced: {
-            value: {
-              square: [Function: square] { [length]: 1, [name]: 'square' },
-              cube: [Function: cube] { [length]: 1, [name]: 'cube' },
-              calc: {
-                power: [Function: power] { [length]: 2, [name]: 'power' },
-                factorial: [Function: factorial] {
-                  [length]: 1,
-                  [name]: 'factorial'
-                }
-              }
-            },
+            value: {},
             writable: true,
             enumerable: true,
             configurable: true
@@ -119,14 +109,7 @@
           "  add: [Function: add] { [length]: 2, [name]: 'add' },\n" +
           "  multiply: [Function: multiply] { [length]: 2, [name]: 'multiply' },\n" +
           "  divide: [Function: divide] { [length]: 2, [name]: 'divide' },\n" +
-          '  advanced: {\n' +
-          "    square: [Function: square] { [length]: 1, [name]: 'square' },\n" +
-          "    cube: [Function: cube] { [length]: 1, [name]: 'cube' },\n" +
-          '    calc: {\n' +
-          "      power: [Function: power] { [length]: 2, [name]: 'power' },\n" +
-          "      factorial: [Function: factorial] { [length]: 1, [name]: 'factorial' }\n" +
-          '    }\n' +
-          '  }\n' +
+          '  advanced: {}\n' +
           '}'
       },
       wrapperProps: {},
@@ -242,41 +225,9 @@
           wrapper: {
             materialized: null,
             inFlight: null,
-            ownKeys: [ 'square', 'cube', 'calc', [length]: 3 ],
-            descriptors: {
-              square: {
-                value: [Function: square] { [length]: 1, [name]: 'square' },
-                writable: true,
-                enumerable: true,
-                configurable: true
-              },
-              cube: {
-                value: [Function: cube] { [length]: 1, [name]: 'cube' },
-                writable: true,
-                enumerable: true,
-                configurable: true
-              },
-              calc: {
-                value: {
-                  power: [Function: power] { [length]: 2, [name]: 'power' },
-                  factorial: [Function: factorial] {
-                    [length]: 1,
-                    [name]: 'factorial'
-                  }
-                },
-                writable: true,
-                enumerable: true,
-                configurable: true
-              }
-            },
-            inspect: '{\n' +
-              "  square: [Function: square] { [length]: 1, [name]: 'square' },\n" +
-              "  cube: [Function: cube] { [length]: 1, [name]: 'cube' },\n" +
-              '  calc: {\n' +
-              "    power: [Function: power] { [length]: 2, [name]: 'power' },\n" +
-              "    factorial: [Function: factorial] { [length]: 1, [name]: 'factorial' }\n" +
-              '  }\n' +
-              '}'
+            ownKeys: [ [length]: 0 ],
+            descriptors: {},
+            inspect: '{}'
           },
           impl: {
             type: 'null',
@@ -284,187 +235,7 @@
             descriptors: null,
             inspect: 'null'
           },
-          wrapperProps: {
-            square: {
-              path: 'api.math.advanced.square',
-              type: 'function',
-              wrapper: {
-                materialized: null,
-                inFlight: null,
-                ownKeys: [ 'length', 'name', [length]: 2 ],
-                descriptors: {
-                  length: {
-                    value: 1,
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                  },
-                  name: {
-                    value: 'square',
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                  }
-                },
-                inspect: "[Function: square] { [length]: 1, [name]: 'square' }"
-              },
-              impl: {
-                type: 'null',
-                ownKeys: [ [length]: 0 ],
-                descriptors: null,
-                inspect: 'null'
-              },
-              wrapperProps: {
-                length: { type: 'number', value: 1 },
-                name: { type: 'string', value: 'square' }
-              },
-              implProps: {}
-            },
-            cube: {
-              path: 'api.math.advanced.cube',
-              type: 'function',
-              wrapper: {
-                materialized: null,
-                inFlight: null,
-                ownKeys: [ 'length', 'name', [length]: 2 ],
-                descriptors: {
-                  length: {
-                    value: 1,
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                  },
-                  name: {
-                    value: 'cube',
-                    writable: false,
-                    enumerable: false,
-                    configurable: true
-                  }
-                },
-                inspect: "[Function: cube] { [length]: 1, [name]: 'cube' }"
-              },
-              impl: {
-                type: 'null',
-                ownKeys: [ [length]: 0 ],
-                descriptors: null,
-                inspect: 'null'
-              },
-              wrapperProps: {
-                length: { type: 'number', value: 1 },
-                name: { type: 'string', value: 'cube' }
-              },
-              implProps: {}
-            },
-            calc: {
-              path: 'api.math.advanced.calc',
-              type: 'object',
-              wrapper: {
-                materialized: null,
-                inFlight: null,
-                ownKeys: [ 'power', 'factorial', [length]: 2 ],
-                descriptors: {
-                  power: {
-                    value: [Function: power] { [length]: 2, [name]: 'power' },
-                    writable: true,
-                    enumerable: true,
-                    configurable: true
-                  },
-                  factorial: {
-                    value: [Function: factorial] {
-                      [length]: 1,
-                      [name]: 'factorial'
-                    },
-                    writable: true,
-                    enumerable: true,
-                    configurable: true
-                  }
-                },
-                inspect: '{\n' +
-                  "  power: [Function: power] { [length]: 2, [name]: 'power' },\n" +
-                  "  factorial: [Function: factorial] { [length]: 1, [name]: 'factorial' }\n" +
-                  '}'
-              },
-              impl: {
-                type: 'null',
-                ownKeys: [ [length]: 0 ],
-                descriptors: null,
-                inspect: 'null'
-              },
-              wrapperProps: {
-                power: {
-                  path: 'api.math.advanced.calc.power',
-                  type: 'function',
-                  wrapper: {
-                    materialized: null,
-                    inFlight: null,
-                    ownKeys: [ 'length', 'name', [length]: 2 ],
-                    descriptors: {
-                      length: {
-                        value: 2,
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      },
-                      name: {
-                        value: 'power',
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      }
-                    },
-                    inspect: "[Function: power] { [length]: 2, [name]: 'power' }"
-                  },
-                  impl: {
-                    type: 'null',
-                    ownKeys: [ [length]: 0 ],
-                    descriptors: null,
-                    inspect: 'null'
-                  },
-                  wrapperProps: {
-                    length: { type: 'number', value: 2 },
-                    name: { type: 'string', value: 'power' }
-                  },
-                  implProps: {}
-                },
-                factorial: {
-                  path: 'api.math.advanced.calc.factorial',
-                  type: 'function',
-                  wrapper: {
-                    materialized: null,
-                    inFlight: null,
-                    ownKeys: [ 'length', 'name', [length]: 2 ],
-                    descriptors: {
-                      length: {
-                        value: 1,
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      },
-                      name: {
-                        value: 'factorial',
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      }
-                    },
-                    inspect: "[Function: factorial] { [length]: 1, [name]: 'factorial' }"
-                  },
-                  impl: {
-                    type: 'null',
-                    ownKeys: [ [length]: 0 ],
-                    descriptors: null,
-                    inspect: 'null'
-                  },
-                  wrapperProps: {
-                    length: { type: 'number', value: 1 },
-                    name: { type: 'string', value: 'factorial' }
-                  },
-                  implProps: {}
-                }
-              },
-              implProps: {}
-            }
-          },
+          wrapperProps: {},
           implProps: {}
         }
       }
@@ -665,11 +436,7 @@
                 [length]: 1,
                 [name]: 'logger_main',
                 [prototype]: [Circular *2],
-                utils: {
-                  debug: [Function: debug] { [length]: 1, [name]: 'debug' },
-                  error: [Function: error] { [length]: 1, [name]: 'error' },
-                  info: [Function: info] { [length]: 1, [name]: 'info' }
-                }
+                utils: {}
               }
             },
             writable: true,
@@ -677,11 +444,7 @@
             configurable: false
           },
           utils: {
-            value: {
-              debug: [Function: debug] { [length]: 1, [name]: 'debug' },
-              error: [Function: error] { [length]: 1, [name]: 'error' },
-              info: [Function: info] { [length]: 1, [name]: 'info' }
-            },
+            value: {},
             writable: true,
             enumerable: true,
             configurable: true
@@ -691,11 +454,7 @@
           '  [length]: 1,\n' +
           "  [name]: 'logger_main',\n" +
           '  [prototype]: { [constructor]: [Circular *1] },\n' +
-          '  utils: {\n' +
-          "    debug: [Function: debug] { [length]: 1, [name]: 'debug' },\n" +
-          "    error: [Function: error] { [length]: 1, [name]: 'error' },\n" +
-          "    info: [Function: info] { [length]: 1, [name]: 'info' }\n" +
-          '  }\n' +
+          '  utils: {}\n' +
           '}'
       },
       wrapperProps: {},
@@ -715,11 +474,7 @@
                   [length]: 1,
                   [name]: 'logger_main',
                   [prototype]: <ref *2> { [constructor]: [Circular *3] },
-                  utils: {
-                    debug: [Function: debug] { [length]: 1, [name]: 'debug' },
-                    error: [Function: error] { [length]: 1, [name]: 'error' },
-                    info: [Function: info] { [length]: 1, [name]: 'info' }
-                  }
+                  utils: {}
                 },
                 writable: true,
                 enumerable: false,
@@ -731,11 +486,7 @@
               '    [length]: 1,\n' +
               "    [name]: 'logger_main',\n" +
               '    [prototype]: [Circular *1],\n' +
-              '    utils: {\n' +
-              "      debug: [Function: debug] { [length]: 1, [name]: 'debug' },\n" +
-              "      error: [Function: error] { [length]: 1, [name]: 'error' },\n" +
-              "      info: [Function: info] { [length]: 1, [name]: 'info' }\n" +
-              '    }\n' +
+              '    utils: {}\n' +
               '  }\n' +
               '}'
           },
@@ -772,20 +523,7 @@
                         [length]: 1,
                         [name]: 'logger_main',
                         [prototype]: [Circular *2],
-                        utils: {
-                          debug: [Function: debug] {
-                            [length]: 1,
-                            [name]: 'debug'
-                          },
-                          error: [Function: error] {
-                            [length]: 1,
-                            [name]: 'error'
-                          },
-                          info: [Function: info] {
-                            [length]: 1,
-                            [name]: 'info'
-                          }
-                        }
+                        utils: {}
                       }
                     },
                     writable: true,
@@ -793,11 +531,7 @@
                     configurable: false
                   },
                   utils: {
-                    value: {
-                      debug: [Function: debug] { [length]: 1, [name]: 'debug' },
-                      error: [Function: error] { [length]: 1, [name]: 'error' },
-                      info: [Function: info] { [length]: 1, [name]: 'info' }
-                    },
+                    value: {},
                     writable: true,
                     enumerable: true,
                     configurable: true
@@ -807,11 +541,7 @@
                   '  [length]: 1,\n' +
                   "  [name]: 'logger_main',\n" +
                   '  [prototype]: { [constructor]: [Circular *1] },\n' +
-                  '  utils: {\n' +
-                  "    debug: [Function: debug] { [length]: 1, [name]: 'debug' },\n" +
-                  "    error: [Function: error] { [length]: 1, [name]: 'error' },\n" +
-                  "    info: [Function: info] { [length]: 1, [name]: 'info' }\n" +
-                  '  }\n' +
+                  '  utils: {}\n' +
                   '}'
               },
               impl: {
@@ -833,38 +563,9 @@
                   wrapper: {
                     materialized: null,
                     inFlight: null,
-                    ownKeys: [ 'debug', 'error', 'info', [length]: 3 ],
-                    descriptors: {
-                      debug: {
-                        value: [Function: debug] {
-                          [length]: 1,
-                          [name]: 'debug'
-                        },
-                        writable: true,
-                        enumerable: true,
-                        configurable: true
-                      },
-                      error: {
-                        value: [Function: error] {
-                          [length]: 1,
-                          [name]: 'error'
-                        },
-                        writable: true,
-                        enumerable: true,
-                        configurable: true
-                      },
-                      info: {
-                        value: [Function: info] { [length]: 1, [name]: 'info' },
-                        writable: true,
-                        enumerable: true,
-                        configurable: true
-                      }
-                    },
-                    inspect: '{\n' +
-                      "  debug: [Function: debug] { [length]: 1, [name]: 'debug' },\n" +
-                      "  error: [Function: error] { [length]: 1, [name]: 'error' },\n" +
-                      "  info: [Function: info] { [length]: 1, [name]: 'info' }\n" +
-                      '}'
+                    ownKeys: [ [length]: 0 ],
+                    descriptors: {},
+                    inspect: '{}'
                   },
                   impl: {
                     type: 'null',
@@ -872,113 +573,7 @@
                     descriptors: null,
                     inspect: 'null'
                   },
-                  wrapperProps: {
-                    debug: {
-                      path: 'api.logger.prototype.constructor.utils.debug',
-                      type: 'function',
-                      wrapper: {
-                        materialized: null,
-                        inFlight: null,
-                        ownKeys: [ 'length', 'name', [length]: 2 ],
-                        descriptors: {
-                          length: {
-                            value: 1,
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          },
-                          name: {
-                            value: 'debug',
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          }
-                        },
-                        inspect: "[Function: debug] { [length]: 1, [name]: 'debug' }"
-                      },
-                      impl: {
-                        type: 'null',
-                        ownKeys: [ [length]: 0 ],
-                        descriptors: null,
-                        inspect: 'null'
-                      },
-                      wrapperProps: {
-                        length: { type: 'number', value: 1 },
-                        name: { type: 'string', value: 'debug' }
-                      },
-                      implProps: {}
-                    },
-                    error: {
-                      path: 'api.logger.prototype.constructor.utils.error',
-                      type: 'function',
-                      wrapper: {
-                        materialized: null,
-                        inFlight: null,
-                        ownKeys: [ 'length', 'name', [length]: 2 ],
-                        descriptors: {
-                          length: {
-                            value: 1,
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          },
-                          name: {
-                            value: 'error',
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          }
-                        },
-                        inspect: "[Function: error] { [length]: 1, [name]: 'error' }"
-                      },
-                      impl: {
-                        type: 'null',
-                        ownKeys: [ [length]: 0 ],
-                        descriptors: null,
-                        inspect: 'null'
-                      },
-                      wrapperProps: {
-                        length: { type: 'number', value: 1 },
-                        name: { type: 'string', value: 'error' }
-                      },
-                      implProps: {}
-                    },
-                    info: {
-                      path: 'api.logger.prototype.constructor.utils.info',
-                      type: 'function',
-                      wrapper: {
-                        materialized: null,
-                        inFlight: null,
-                        ownKeys: [ 'length', 'name', [length]: 2 ],
-                        descriptors: {
-                          length: {
-                            value: 1,
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          },
-                          name: {
-                            value: 'info',
-                            writable: false,
-                            enumerable: false,
-                            configurable: true
-                          }
-                        },
-                        inspect: "[Function: info] { [length]: 1, [name]: 'info' }"
-                      },
-                      impl: {
-                        type: 'null',
-                        ownKeys: [ [length]: 0 ],
-                        descriptors: null,
-                        inspect: 'null'
-                      },
-                      wrapperProps: {
-                        length: { type: 'number', value: 1 },
-                        name: { type: 'string', value: 'info' }
-                      },
-                      implProps: {}
-                    }
-                  },
+                  wrapperProps: {},
                   implProps: {}
                 }
               },
@@ -1016,11 +611,7 @@
             value: <ref *4> [Function: subfolder_logger_main] {
               [length]: 1,
               [name]: 'subfolder_logger_main',
-              [prototype]: { [constructor]: [Circular *4] },
-              utils: {
-                trace: [Function: trace] { [length]: 1, [name]: 'trace' },
-                warn: [Function: warn] { [length]: 1, [name]: 'warn' }
-              }
+              [prototype]: { [constructor]: [Circular *4] }
             },
             writable: true,
             enumerable: true,
@@ -1031,11 +622,7 @@
           '  logger: <ref *1> [Function: subfolder_logger_main] {\n' +
           '    [length]: 1,\n' +
           "    [name]: 'subfolder_logger_main',\n" +
-          '    [prototype]: { [constructor]: [Circular *1] },\n' +
-          '    utils: {\n' +
-          "      trace: [Function: trace] { [length]: 1, [name]: 'trace' },\n" +
-          "      warn: [Function: warn] { [length]: 1, [name]: 'warn' }\n" +
-          '    }\n' +
+          '    [prototype]: { [constructor]: [Circular *1] }\n' +
           '  }\n' +
           '}'
       },
@@ -1047,7 +634,7 @@
           wrapper: {
             materialized: null,
             inFlight: null,
-            ownKeys: [ 'length', 'name', 'prototype', 'utils', [length]: 4 ],
+            ownKeys: [ 'length', 'name', 'prototype', [length]: 3 ],
             descriptors: {
               length: {
                 value: 1,
@@ -1066,35 +653,18 @@
                   [constructor]: <ref *4> [Function: subfolder_logger_main] {
                     [length]: 1,
                     [name]: 'subfolder_logger_main',
-                    [prototype]: [Circular *5],
-                    utils: {
-                      trace: [Function: trace] { [length]: 1, [name]: 'trace' },
-                      warn: [Function: warn] { [length]: 1, [name]: 'warn' }
-                    }
+                    [prototype]: [Circular *5]
                   }
                 },
                 writable: true,
                 enumerable: false,
                 configurable: false
-              },
-              utils: {
-                value: {
-                  trace: [Function: trace] { [length]: 1, [name]: 'trace' },
-                  warn: [Function: warn] { [length]: 1, [name]: 'warn' }
-                },
-                writable: true,
-                enumerable: true,
-                configurable: true
               }
             },
             inspect: '<ref *1> [Function: subfolder_logger_main] {\n' +
               '  [length]: 1,\n' +
               "  [name]: 'subfolder_logger_main',\n" +
-              '  [prototype]: { [constructor]: [Circular *1] },\n' +
-              '  utils: {\n' +
-              "    trace: [Function: trace] { [length]: 1, [name]: 'trace' },\n" +
-              "    warn: [Function: warn] { [length]: 1, [name]: 'warn' }\n" +
-              '  }\n' +
+              '  [prototype]: { [constructor]: [Circular *1] }\n' +
               '}'
           },
           impl: {
@@ -1118,14 +688,7 @@
                     value: <ref *4> [Function: subfolder_logger_main] {
                       [length]: 1,
                       [name]: 'subfolder_logger_main',
-                      [prototype]: <ref *5> { [constructor]: [Circular *4] },
-                      utils: {
-                        trace: [Function: trace] {
-                          [length]: 1,
-                          [name]: 'trace'
-                        },
-                        warn: [Function: warn] { [length]: 1, [name]: 'warn' }
-                      }
+                      [prototype]: <ref *5> { [constructor]: [Circular *4] }
                     },
                     writable: true,
                     enumerable: false,
@@ -1136,11 +699,7 @@
                   '  [constructor]: [Function: subfolder_logger_main] {\n' +
                   '    [length]: 1,\n' +
                   "    [name]: 'subfolder_logger_main',\n" +
-                  '    [prototype]: [Circular *1],\n' +
-                  '    utils: {\n' +
-                  "      trace: [Function: trace] { [length]: 1, [name]: 'trace' },\n" +
-                  "      warn: [Function: warn] { [length]: 1, [name]: 'warn' }\n" +
-                  '    }\n' +
+                  '    [prototype]: [Circular *1]\n' +
                   '  }\n' +
                   '}'
               },
@@ -1154,112 +713,6 @@
                 constructor: {
                   path: 'api.subfolder.logger.prototype.constructor',
                   cycle: true
-                }
-              },
-              implProps: {}
-            },
-            utils: {
-              path: 'api.subfolder.logger.utils',
-              type: 'object',
-              wrapper: {
-                materialized: null,
-                inFlight: null,
-                ownKeys: [ 'trace', 'warn', [length]: 2 ],
-                descriptors: {
-                  trace: {
-                    value: [Function: trace] { [length]: 1, [name]: 'trace' },
-                    writable: true,
-                    enumerable: true,
-                    configurable: true
-                  },
-                  warn: {
-                    value: [Function: warn] { [length]: 1, [name]: 'warn' },
-                    writable: true,
-                    enumerable: true,
-                    configurable: true
-                  }
-                },
-                inspect: '{\n' +
-                  "  trace: [Function: trace] { [length]: 1, [name]: 'trace' },\n" +
-                  "  warn: [Function: warn] { [length]: 1, [name]: 'warn' }\n" +
-                  '}'
-              },
-              impl: {
-                type: 'null',
-                ownKeys: [ [length]: 0 ],
-                descriptors: null,
-                inspect: 'null'
-              },
-              wrapperProps: {
-                trace: {
-                  path: 'api.subfolder.logger.utils.trace',
-                  type: 'function',
-                  wrapper: {
-                    materialized: null,
-                    inFlight: null,
-                    ownKeys: [ 'length', 'name', [length]: 2 ],
-                    descriptors: {
-                      length: {
-                        value: 1,
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      },
-                      name: {
-                        value: 'trace',
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      }
-                    },
-                    inspect: "[Function: trace] { [length]: 1, [name]: 'trace' }"
-                  },
-                  impl: {
-                    type: 'null',
-                    ownKeys: [ [length]: 0 ],
-                    descriptors: null,
-                    inspect: 'null'
-                  },
-                  wrapperProps: {
-                    length: { type: 'number', value: 1 },
-                    name: { type: 'string', value: 'trace' }
-                  },
-                  implProps: {}
-                },
-                warn: {
-                  path: 'api.subfolder.logger.utils.warn',
-                  type: 'function',
-                  wrapper: {
-                    materialized: null,
-                    inFlight: null,
-                    ownKeys: [ 'length', 'name', [length]: 2 ],
-                    descriptors: {
-                      length: {
-                        value: 1,
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      },
-                      name: {
-                        value: 'warn',
-                        writable: false,
-                        enumerable: false,
-                        configurable: true
-                      }
-                    },
-                    inspect: "[Function: warn] { [length]: 1, [name]: 'warn' }"
-                  },
-                  impl: {
-                    type: 'null',
-                    ownKeys: [ [length]: 0 ],
-                    descriptors: null,
-                    inspect: 'null'
-                  },
-                  wrapperProps: {
-                    length: { type: 'number', value: 1 },
-                    name: { type: 'string', value: 'warn' }
-                  },
-                  implProps: {}
                 }
               },
               implProps: {}
