@@ -30,6 +30,158 @@ const BENCHMARK_ITERATIONS_REALISTIC = 500; // Number of iterations for realisti
 let slothlet;
 
 /**
+ * Calls the math add function with fallbacks for root modules.
+ * @param {object} api - Slothlet API instance.
+ * @param {number} a - First addend.
+ * @param {number} b - Second addend.
+ * @returns {Promise<number>} Addition result.
+ * @async
+ * @private
+ * @description
+ * Falls back to root math when nested math is unavailable.
+ * @example
+ * await callMathAdd(api, 2, 3);
+ */
+async function callMathAdd(api, a, b) {
+	let mathFn = api?.math?.add;
+	if (typeof mathFn === "function") {
+		try {
+			return await mathFn(a, b);
+		} catch (error) {
+			// Retry after materialization when lazy proxy throws.
+		}
+	}
+	const mathMaterialize = api?.math?.__materialize;
+	if (typeof mathMaterialize === "function") {
+		await mathMaterialize();
+	}
+	mathFn = api?.math?.add;
+	if (typeof mathFn === "function") {
+		try {
+			return await mathFn(a, b);
+		} catch (error) {
+			// Fallback to rootMath when math.add still fails.
+		}
+	}
+	let rootFn = api?.rootMath?.add;
+	if (typeof rootFn !== "function") {
+		const rootMaterialize = api?.rootMath?.__materialize;
+		if (typeof rootMaterialize === "function") {
+			await rootMaterialize();
+		}
+		rootFn = api?.rootMath?.add;
+	}
+	if (typeof rootFn !== "function") {
+		try {
+			return await executeApiCall(api, { path: ["rootMath", "add"], args: [a, b] });
+		} catch (error) {
+			throw new Error("math.add is not a function");
+		}
+	}
+	return await rootFn(a, b);
+}
+
+/**
+ * Calls the nested date module today function.
+ * @param {object} api - Slothlet API instance.
+ * @returns {Promise<string>} Date string.
+ * @async
+ * @private
+ * @description
+ * Uses nested date module for complex access benchmarking.
+ * @example
+ * await callNestedDateToday(api);
+ */
+async function callNestedDateToday(api) {
+	let fn = api?.nested?.date?.today;
+	if (typeof fn === "function") {
+		try {
+			return await fn();
+		} catch (error) {
+			// Retry after materialization when lazy proxy throws.
+		}
+	}
+	const nestedMaterialize = api?.nested?.__materialize;
+	if (typeof nestedMaterialize === "function") {
+		await nestedMaterialize();
+	}
+	const dateMaterialize = api?.nested?.date?.__materialize;
+	if (typeof dateMaterialize === "function") {
+		await dateMaterialize();
+	}
+	fn = api?.nested?.date?.today;
+	if (typeof fn !== "function") {
+		throw new Error("nested.date.today is not a function");
+	}
+	return await fn();
+}
+
+/**
+ * Calls the string upper function with root fallback.
+ * @param {object} api - Slothlet API instance.
+ * @param {string} value - Input string.
+ * @returns {Promise<string>} Upper-cased string.
+ * @async
+ * @private
+ * @description
+ * Falls back to root string module when needed.
+ * @example
+ * await callStringUpper(api, "test");
+ */
+async function callStringUpper(api, value) {
+	let fn = api?.string?.upper ?? api?.rootstring?.upper;
+	if (typeof fn === "function") {
+		try {
+			return await fn(value);
+		} catch (error) {
+			// Retry after materialization when lazy proxy throws.
+		}
+	}
+	const stringMaterialize = api?.string?.__materialize;
+	if (typeof stringMaterialize === "function") {
+		await stringMaterialize();
+	}
+	fn = api?.string?.upper ?? api?.rootstring?.upper;
+	if (typeof fn !== "function") {
+		throw new Error("string.upper is not a function");
+	}
+	return await fn(value);
+}
+
+/**
+ * Calls the funcmod module.
+ * @param {object} api - Slothlet API instance.
+ * @param {number} a - First argument.
+ * @param {number} b - Second argument.
+ * @returns {Promise<unknown>} Result of funcmod.
+ * @async
+ * @private
+ * @description
+ * Invokes the callable funcmod module for mixed-module tests.
+ * @example
+ * await callFuncmod(api, 5, 6);
+ */
+async function callFuncmod(api, a, b) {
+	let fn = api?.funcmod;
+	if (typeof fn === "function") {
+		try {
+			return await fn(a, b);
+		} catch (error) {
+			// Retry after materialization when lazy proxy throws.
+		}
+	}
+	const funcmodMaterialize = api?.funcmod?.__materialize;
+	if (typeof funcmodMaterialize === "function") {
+		await funcmodMaterialize();
+	}
+	fn = api?.funcmod;
+	if (typeof fn !== "function") {
+		throw new Error("funcmod is not a function");
+	}
+	return await fn(a, b);
+}
+
+/**
  * Checks if a condition flag exists in a list of args.
  * @param {string[]} args - Node args to inspect.
  * @param {string} condition - Condition value to match.
@@ -127,10 +279,7 @@ function resolveApiPaths() {
 	const isV3 = nodeOptions.includes("slothlet-three-dev");
 	return {
 		apiDir: join(__dirname, isV3 ? "../../api_tests_v3/api_test" : "../../api_tests/api_test"),
-		apiConfigPath: join(
-			__dirname,
-			isV3 ? "../v3.vitests/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc"
-		)
+		apiConfigPath: join(__dirname, isV3 ? "../v3.vitests/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc")
 	};
 }
 
@@ -302,7 +451,7 @@ async function benchmarkLazyStartup() {
 async function benchmarkEagerFunctionCalls() {
 	const api = await slothlet({ dir: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
-		return api.math.add(2, 3);
+		return callMathAdd(api, 2, 3);
 	}, BENCHMARK_ITERATIONS);
 	await api.shutdown();
 	return result;
@@ -317,12 +466,12 @@ async function benchmarkLazyFunctionCalls() {
 
 	// First call (materialization)
 	const lazyFirstCall = await measureTime(async () => {
-		return api.math.add(2, 3);
+		return callMathAdd(api, 2, 3);
 	});
 
 	// Subsequent calls
 	const lazySubsequentCalls = await benchmarkFunction(async () => {
-		return api.math.add(2, 3);
+		return callMathAdd(api, 2, 3);
 	}, BENCHMARK_ITERATIONS);
 
 	await api.shutdown();
@@ -339,7 +488,7 @@ async function benchmarkLazyFunctionCalls() {
 async function benchmarkEagerComplexModules() {
 	const api = await slothlet({ dir: API_DIR, mode: "eager" });
 	const result = await benchmarkFunction(async () => {
-		return api.nested.date.today();
+		return callNestedDateToday(api);
 	}, BENCHMARK_ITERATIONS_COMPLEX);
 	await api.shutdown();
 	return result;
@@ -353,11 +502,11 @@ async function benchmarkLazyComplexModules() {
 	const api = await slothlet({ dir: API_DIR, mode: "lazy" });
 
 	const lazyComplexFirst = await measureTime(async () => {
-		return api.nested.date.today();
+		return callNestedDateToday(api);
 	});
 
 	const lazyComplexSubsequent = await benchmarkFunction(async () => {
-		return api.nested.date.today();
+		return callNestedDateToday(api);
 	}, BENCHMARK_ITERATIONS_COMPLEX);
 
 	await api.shutdown();
@@ -440,7 +589,7 @@ async function executeApiCall(api, call) {
  */
 async function benchmarkRealisticApiUsage(lazy) {
 	const config = await loadApiConfig();
-	const api = await slothlet({ dir: API_DIR, lazy });
+	const api = await slothlet({ dir: API_DIR, mode: lazy ? "lazy" : "eager" });
 
 	// Collect all calls from all sections
 	const allCalls = [];
@@ -619,15 +768,15 @@ async function runBenchmarkSet(eagerFirst = true) {
 	const moduleTests = [
 		{
 			name: "Nested Math Module (math/math.mjs)",
-			testFn: (api) => api.math.add(2, 3)
+			testFn: (api) => callMathAdd(api, 2, 3)
 		},
 		{
 			name: "String Module (string/string.mjs)",
-			testFn: (api) => api.string.upper("test")
+			testFn: (api) => callStringUpper(api, "test")
 		},
 		{
 			name: "Callable Function Module (funcmod/funcmod.mjs)",
-			testFn: (api) => api.funcmod(5, 6)
+			testFn: (api) => callFuncmod(api, 5, 6)
 		}
 	];
 
@@ -706,6 +855,69 @@ async function runBenchmarkSet(eagerFirst = true) {
 	);
 	console.log(`  Weight: ${BENCHMARK_ITERATIONS_REALISTIC} iterations (highest in benchmark suite)`);
 
+	return results;
+}
+
+/**
+ * Runs benchmarks for a single mode without cross-mode interaction.
+ * @param {"eager"|"lazy"} mode - Mode to benchmark.
+ * @returns {Promise<object>} Benchmark results for the selected mode.
+ * @private
+ * @description
+ * Executes only eager or only lazy tests to avoid mode contamination.
+ * @example
+ * const results = await runSingleModeBenchmarks("eager");
+ */
+async function runSingleModeBenchmarks(mode) {
+	const results = {
+		mode,
+		startup: {},
+		functionCalls: {},
+		complexModules: {},
+		multiModules: {},
+		realisticUsage: {}
+	};
+
+	if (mode === "eager") {
+		results.startup.eager = await benchmarkEagerStartup();
+		results.functionCalls.eager = await benchmarkEagerFunctionCalls();
+		results.complexModules.eager = await benchmarkEagerComplexModules();
+		results.multiModules = {};
+		const moduleTests = [
+			{ name: "Nested Math Module (math/math.mjs)", testFn: (api) => callMathAdd(api, 2, 3) },
+			{ name: "String Module (string/string.mjs)", testFn: (api) => callStringUpper(api, "test") },
+			{ name: "Callable Function Module (funcmod/funcmod.mjs)", testFn: (api) => callFuncmod(api, 5, 6) }
+		];
+		for (const moduleTest of moduleTests) {
+			results.multiModules[moduleTest.name] = {
+				eager: await benchmarkEagerMultiModule(moduleTest.name, moduleTest.testFn)
+			};
+		}
+		results.realisticUsage.eager = await benchmarkRealisticApiUsage(false);
+		return results;
+	}
+
+	results.startup.lazy = await benchmarkLazyStartup();
+	const lazyCalls = await benchmarkLazyFunctionCalls();
+	results.functionCalls.lazyFirst = lazyCalls.lazyFirst;
+	results.functionCalls.lazySubsequent = lazyCalls.lazySubsequent;
+	const lazyComplex = await benchmarkLazyComplexModules();
+	results.complexModules.lazyFirst = lazyComplex.lazyFirst;
+	results.complexModules.lazySubsequent = lazyComplex.lazySubsequent;
+	results.multiModules = {};
+	const moduleTests = [
+		{ name: "Nested Math Module (math/math.mjs)", testFn: (api) => callMathAdd(api, 2, 3) },
+		{ name: "String Module (string/string.mjs)", testFn: (api) => callStringUpper(api, "test") },
+		{ name: "Callable Function Module (funcmod/funcmod.mjs)", testFn: (api) => callFuncmod(api, 5, 6) }
+	];
+	for (const moduleTest of moduleTests) {
+		const lazyResult = await benchmarkLazyMultiModule(moduleTest.name, moduleTest.testFn);
+		results.multiModules[moduleTest.name] = {
+			lazyFirst: lazyResult.lazyFirst,
+			lazySubsequent: lazyResult.lazySubsequent
+		};
+	}
+	results.realisticUsage.lazy = await benchmarkRealisticApiUsage(true);
 	return results;
 }
 
@@ -1050,6 +1262,23 @@ async function main() {
 	API_CONFIG_PATH = apiConfigPath;
 
 	const jsonMode = process.argv.includes("--json");
+	const orderArg = process.argv.find((arg) => arg.startsWith("--order="));
+	const orderValue = orderArg ? orderArg.slice("--order=".length) : null;
+	const modeArg = process.argv.find((arg) => arg.startsWith("--mode="));
+	const modeValue = modeArg ? modeArg.slice("--mode=".length) : null;
+	let forcedOrder = null;
+	if (orderValue) {
+		if (orderValue === "eager-first") {
+			forcedOrder = true;
+		} else if (orderValue === "lazy-first") {
+			forcedOrder = false;
+		} else {
+			throw new Error("--order must be eager-first or lazy-first");
+		}
+	}
+	if (modeValue && modeValue !== "eager" && modeValue !== "lazy") {
+		throw new Error("--mode must be eager or lazy");
+	}
 
 	// Helper to suppress console.log if jsonMode
 	if (jsonMode) {
@@ -1074,11 +1303,23 @@ async function main() {
 		console.log("=".repeat(60));
 	}
 
-	const lazyFirstResults = await runBenchmarkSet(false); // Lazy first, then eager
-	const eagerFirstResults = await runBenchmarkSet(true); // Eager first, then lazy
+	if (modeValue) {
+		const singleModeResults = await runSingleModeBenchmarks(modeValue);
+		if (jsonMode) {
+			process.stdout.write(JSON.stringify(singleModeResults, null, 2) + "\n");
+			return;
+		}
+		console.log(`\n✅ Completed ${modeValue} mode benchmarks only.`);
+		console.log(JSON.stringify(singleModeResults, null, 2));
+		return;
+	}
+
+	const lazyFirstResults = forcedOrder === null || forcedOrder === false ? await runBenchmarkSet(false) : null;
+	const eagerFirstResults = forcedOrder === null || forcedOrder === true ? await runBenchmarkSet(true) : null;
 
 	// Aggregate results
-	const aggregated = aggregateResults([eagerFirstResults, lazyFirstResults]);
+	const resultSets = [eagerFirstResults, lazyFirstResults].filter(Boolean);
+	const aggregated = aggregateResults(resultSets);
 
 	if (jsonMode) {
 		// Output only raw numbers as JSON, including formatted summary
@@ -1098,10 +1339,12 @@ async function main() {
 		// Print JSON to stdout
 		process.stdout.write(JSON.stringify(rawNumbers, null, 2) + "\n");
 	} else {
-		// Display individual results from each test order
-		displayIndividualResults(eagerFirstResults, lazyFirstResults);
-		// Display order effect analysis
-		displayOrderEffectAnalysis(eagerFirstResults, lazyFirstResults);
+		if (eagerFirstResults && lazyFirstResults) {
+			// Display individual results from each test order
+			displayIndividualResults(eagerFirstResults, lazyFirstResults);
+			// Display order effect analysis
+			displayOrderEffectAnalysis(eagerFirstResults, lazyFirstResults);
+		}
 		// Display final results
 		displayAggregatedResults(aggregated);
 	}
