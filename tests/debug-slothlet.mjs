@@ -211,11 +211,28 @@ export function compareApiShapes(
 	const keysB = new Set(getAllKeys(b));
 
 	// Helper function to check if a key should be skipped
+	/**
+	 * Determines whether a key should be skipped during API shape comparison.
+	 * @param {string|symbol} key - Key being inspected.
+	 * @param {unknown} obj - Object or function containing the key.
+	 * @returns {boolean} True when the key should be ignored.
+	 */
 	const shouldSkipKey = (key, obj) => {
 		// Always skip internal path properties - these may differ between modes
 		// but don't affect user-facing API behavior
 		if (key === "__slothletPath") {
 			return true;
+		}
+		if (key === "instanceID") {
+			return true;
+		}
+		if (typeof key === "string") {
+			if (key.startsWith("__") || key.startsWith("_")) {
+				return true;
+			}
+			if (["apply", "bind", "call", "toString", "valueOf"].includes(key) && typeof obj === "function") {
+				return true;
+			}
 		}
 		return (
 			["constructor", "prototype", "__proto__", "__ctx", "_impl", "length", "name", "__slothletDefault"].includes(key) &&
@@ -262,7 +279,7 @@ export function compareApiShapes(
 			const aLength = typeof valA.length === "number" ? valA.length : 0;
 			const bLength = typeof valB.length === "number" ? valB.length : 0;
 
-			if (aLength !== bLength || valA.toString() !== valB.toString()) {
+			if (aLength !== bLength) {
 				differingFunctions.push({
 					path: fullPath,
 					aSignature: `${aName}(${aLength} params)`,
@@ -279,6 +296,20 @@ export function compareApiShapes(
 			nestedDifferences.push(...funcComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
 			nestedDifferences.push(...funcComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
 			nestedDifferences.push(...funcComparison.nestedDifferences);
+		} else if (
+			valA !== null &&
+			valB !== null &&
+			(typeof valA === "function" || typeof valA === "object") &&
+			(typeof valB === "function" || typeof valB === "object") &&
+			typeof valA !== typeof valB
+		) {
+			// Compare object-like values even if one is a function proxy and the other is an object
+			const nestedComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
+			nestedDifferences.push(...nestedComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
+			nestedDifferences.push(...nestedComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
+			nestedDifferences.push(...nestedComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
+			nestedDifferences.push(...nestedComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
+			nestedDifferences.push(...nestedComparison.nestedDifferences);
 		} else if (typeof valA === "object" && typeof valB === "object" && valA !== null && valB !== null) {
 			// Recursively compare nested objects
 			const nestedComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
