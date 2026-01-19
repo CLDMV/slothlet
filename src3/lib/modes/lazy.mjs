@@ -4,7 +4,7 @@
  */
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { processFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
+import { processFiles, applyRootContributor, createLazySubdirectoryWrapper } from "@cldmv/slothlet/helpers/modes";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -13,25 +13,33 @@ import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
  * @param {string} options.dir - Directory to build from
  * @param {Object} options.ownership - Ownership manager
  * @param {Object} options.contextManager - Context manager for binding
- * @param {string} options.instanceId - Slothlet instance ID
+ * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} [options.config={}] - Configuration
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({ dir, ownership, contextManager, instanceId, config = {} }) {
+export async function buildLazyAPI({ dir, ownership, contextManager, instanceID, config = {} }) {
 	const api = {};
 
 	// Scan directory structure
 	const structure = await scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
+	// Pass synthetic root directory with children.directories so processFiles can create lazy wrappers
+	const rootDirectory = {
+		name: ".",
+		children: {
+			files: structure.files,
+			directories: structure.directories
+		}
+	};
 	const rootDefaultFunction = await processFiles(
 		api,
 		structure.files,
-		null,
+		rootDirectory,
 		ownership,
 		contextManager,
-		instanceId,
+		instanceID,
 		config,
 		0,
 		"lazy",
@@ -39,11 +47,7 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceId,
 		false
 	);
 
-	// Create unified wrappers for directories (with lazy materialization)
-	for (const directory of structure.directories) {
-		const propName = sanitizePropertyName(directory.name);
-		api[propName] = createLazyWrapper(directory, ownership, contextManager, instanceId, propName, config);
-	}
+	// Lazy wrappers for directories are now created by processFiles when recursive=false
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
 	const finalApi = await applyRootContributor(api, rootDefaultFunction, config, "lazy");
@@ -56,44 +60,56 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceId,
  * @param {Object} dir - Directory structure
  * @param {Object} ownership - Ownership manager
  * @param {Object} contextManager - Context manager
- * @param {string} instanceId - Instance ID
+ * @param {string} instanceID - Instance ID
  * @param {string} apiPath - Current API path
  * @param {Object} config - Configuration
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, ownership, contextManager, instanceId, apiPath, config) {
-	// Create materialization function
-	async function materializeFunc(wrapper) {
+function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
+	// Create materialization function (POC pattern: returns implementation, no wrapper param)
+	async function materializeFunc() {
+		console.log(`[LAZY.MJS materializeFunc] START for apiPath=${apiPath}, dir=${dir.name}`);
 		const materialized = {};
 
 		// Load files in directory
 		for (const file of dir.children.files) {
-			const mod = await loadModule(file.path);
-			const exports = extractExports(mod);
-			const moduleName = sanitizePropertyName(file.name);
+			try {
+				console.log(`[LAZY.MJS] Loading file: ${file.name} from ${file.path}`);
+				const mod = await loadModule(file.path);
+				console.log(`[LAZY.MJS] Loaded file: ${file.name}, extracting exports...`);
+				const exports = extractExports(mod);
+				console.log(`[LAZY.MJS] Extracted exports for ${file.name}:`, Object.keys(exports));
+				const moduleName = sanitizePropertyName(file.name);
 
-			// Register ownership
-			if (ownership) {
-				ownership.register({
-					moduleId: file.moduleId,
-					apiPath: `${apiPath}.${moduleName}`,
-					source: "core"
-				});
+				// Register ownership
+				if (ownership) {
+					ownership.register({
+						moduleId: file.moduleId,
+						apiPath: `${apiPath}.${moduleName}`,
+						source: "core"
+					});
+				}
+
+				// Merge exports into materialized object
+				console.log(`[LAZY.MJS] Merging exports for ${file.name} into materialized...`);
+				mergeExportsIntoAPI(materialized, exports, moduleName);
+				console.log(`[LAZY.MJS] Merged exports for ${file.name}, materialized keys now:`, Object.keys(materialized));
+			} catch (error) {
+				console.error(`[LAZY.MJS] ERROR loading ${file.name}:`, error.message);
+				throw error;
 			}
-
-			// Merge exports into materialized object
-			mergeExportsIntoAPI(materialized, exports, moduleName);
 		}
 
 		// Create lazy wrappers for subdirectories
 		for (const subdir of dir.children.directories || []) {
 			const propName = sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceId, `${apiPath}.${propName}`, config);
+			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceID, `${apiPath}.${propName}`, config);
 		}
 
-		// Set the materialized implementation
-		wrapper.__setImpl(materialized);
+		console.log(`[LAZY.MJS materializeFunc] DONE for apiPath=${apiPath}, keys=${Object.keys(materialized).join(",")}`);
+		// POC pattern: return the materialized implementation
+		return materialized;
 	}
 
 	// Create unified wrapper in lazy mode
@@ -101,7 +117,7 @@ function createLazyWrapper(dir, ownership, contextManager, instanceId, apiPath, 
 		mode: "lazy",
 		apiPath,
 		contextManager,
-		instanceId,
+		instanceID,
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
 		ownership

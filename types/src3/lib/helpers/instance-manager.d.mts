@@ -30,7 +30,7 @@ export function setActiveInstance(instanceID: string | null): void;
  * @returns {string|null} Active instance ID or null
  * @public
  */
-export function getActiveInstanceId(): string | null;
+export function getActiveInstanceID(): string | null;
 /**
  * Detect current instance runtime type
  * @returns {string} Runtime type ("async" or "live")

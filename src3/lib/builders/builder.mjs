@@ -13,13 +13,13 @@ import { SlothletError } from "@cldmv/slothlet/errors";
  * @param {string} [options.mode="eager"] - Loading mode (eager or lazy)
  * @param {Object} options.ownership - Ownership manager
  * @param {Object} options.contextManager - Context manager for binding
- * @param {string} options.instanceId - Slothlet instance ID
+ * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} [options.config={}] - Configuration
  * @returns {Promise<Object>} Raw API object (unwrapped)
  * @public
  */
 export async function buildAPI(options) {
-	const { dir, mode = "eager", ownership, contextManager, instanceId, config = {} } = options;
+	const { dir, mode = "eager", ownership, contextManager, instanceID, config = {} } = options;
 
 	// Validate inputs
 	if (!dir || typeof dir !== "string") {
@@ -47,9 +47,9 @@ export async function buildAPI(options) {
 	// Build based on mode - each mode handles its own scanning and flattening
 	let rawAPI;
 	if (mode === "eager") {
-		rawAPI = await buildEagerAPI({ dir, ownership, contextManager, instanceId, config });
+		rawAPI = await buildEagerAPI({ dir, ownership, contextManager, instanceID, config });
 	} else if (mode === "lazy") {
-		rawAPI = await buildLazyAPI({ dir, ownership, contextManager, instanceId, config });
+		rawAPI = await buildLazyAPI({ dir, ownership, contextManager, instanceID, config });
 	} else {
 		throw new SlothletError(
 			"INVALID_CONFIG_MODE_UNKNOWN",

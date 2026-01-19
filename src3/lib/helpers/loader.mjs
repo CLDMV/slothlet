@@ -34,11 +34,12 @@ export async function loadModule(filePath) {
  * Scan directory for module files
  * @param {string} dir - Directory to scan
  * @param {Object} [options={}] - Scan options
+ * @param {boolean} [options.isRootScan=true] - Whether this is the root directory scan (shows empty dir warning)
  * @returns {Promise<Object>} Directory structure
  * @public
  */
 export async function scanDirectory(dir, options = {}) {
-	const { recursive = true, extensions = [".mjs", ".cjs", ".js"] } = options;
+	const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true } = options;
 
 	try {
 		await stat(dir);
@@ -64,7 +65,7 @@ export async function scanDirectory(dir, options = {}) {
 
 		if (entry.isDirectory()) {
 			if (recursive) {
-				const subStructure = await scanDirectory(fullPath, options);
+				const subStructure = await scanDirectory(fullPath, { ...options, isRootScan: false });
 				structure.directories.push({
 					path: fullPath,
 					name: entry.name,
@@ -90,8 +91,8 @@ export async function scanDirectory(dir, options = {}) {
 		}
 	}
 
-	// Warn if directory is empty or has no loadable modules (valid for add-api workflows)
-	if (structure.files.length === 0 && structure.directories.length === 0) {
+	// Warn if directory is empty or has no loadable modules (only for root scans or add-api workflows)
+	if (isRootScan && structure.files.length === 0 && structure.directories.length === 0) {
 		new SlothletWarning("WARN_DIRECTORY_EMPTY", {
 			dir,
 			resolvedPath: resolve(dir)
