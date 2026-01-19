@@ -10,23 +10,7 @@
  * Run with: node tests/performance-benchmark-aggregated.mjs
  */
 
-// Set development environment to load from src/ instead of dist/
-process.env.NODE_ENV = "development";
-
-const envConditions = (process.env.NODE_OPTIONS ?? "")
-	.split(/\s+/u)
-	.filter(Boolean)
-	.filter((token) => token !== "--conditions=development|production");
-
-const requiredConditions = ["--conditions=slothlet-dev", "--conditions=development"];
-for (const condition of requiredConditions) {
-	if (!envConditions.includes(condition)) {
-		envConditions.push(condition);
-	}
-}
-
-process.env.NODE_OPTIONS = envConditions.join(" ");
-
+import { spawn } from "node:child_process";
 import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -34,8 +18,8 @@ import { readFile } from "fs/promises";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const API_DIR = join(__dirname, "../../api_tests/api_test");
-const API_CONFIG_PATH = join(__dirname, "../vitests/setup/api-test-config.jsonc");
+let API_DIR = join(__dirname, "../../api_tests/api_test");
+let API_CONFIG_PATH = join(__dirname, "../vitests/setup/api-test-config.jsonc");
 
 const START_UP_TEST_COUNT = 50; // Number of iterations for startup time test
 const BENCHMARK_ITERATIONS = 200; // Number of iterations for benchmark tests
@@ -43,8 +27,112 @@ const BENCHMARK_ITERATIONS_COMPLEX = 200; // Number of iterations for complex be
 const BENCHMARK_ITERATIONS_MULTI = 100; // Number of iterations for multi benchmark tests
 const BENCHMARK_ITERATIONS_REALISTIC = 500; // Number of iterations for realistic API usage test (HIGH WEIGHT)
 
-// Import slothlet
-import slothlet from "@cldmv/slothlet";
+let slothlet;
+
+/**
+ * Checks if a condition flag exists in a list of args.
+ * @param {string[]} args - Node args to inspect.
+ * @param {string} condition - Condition value to match.
+ * @returns {boolean} True when condition is present.
+ * @private
+ * @description
+ * Normalizes condition lookups for NODE_OPTIONS and execArgv.
+ * @example
+ * hasCondition(["--conditions=slothlet-dev"], "slothlet-dev");
+ */
+function hasCondition(args, condition) {
+	return args.some((arg) => {
+		if (!arg.startsWith("--conditions=")) {
+			return false;
+		}
+		const conditions = arg.slice("--conditions=".length).split(/[|,]/u);
+		return conditions.includes(condition);
+	});
+}
+
+/**
+ * Ensures dev-only export conditions are enabled for this run.
+ * @returns {boolean} True if a child process was spawned.
+ * @private
+ * @description
+ * Re-executes the script with required NODE_OPTIONS conditions.
+ * @example
+ * if (ensureDevEnvFlags()) return;
+ */
+function ensureDevEnvFlags() {
+	process.env.NODE_ENV = "development";
+
+	const allExecArgv = [...process.execArgv];
+	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const allConditions = [...allExecArgv, ...envOptions];
+
+	let slothletCondition = "slothlet-dev";
+	if (hasCondition(allConditions, "slothlet-three-dev")) {
+		slothletCondition = "slothlet-three-dev";
+	}
+
+	const requiredConditions = [slothletCondition, "development"];
+	const nextExecArgv = [...process.execArgv];
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production");
+
+	let needsRespawn = process.env.NODE_ENV !== "development";
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		if (!hasCondition(nextExecArgv, condition)) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
+
+/**
+ * Resolves API test paths based on active slothlet conditions.
+ * @returns {{apiDir: string, apiConfigPath: string}} Resolved paths.
+ * @private
+ * @description
+ * Switches API fixtures and config between v2 and v3.
+ * @example
+ * const { apiDir, apiConfigPath } = resolveApiPaths();
+ */
+function resolveApiPaths() {
+	const nodeOptions = process.env.NODE_OPTIONS || "";
+	const isV3 = nodeOptions.includes("slothlet-three-dev");
+	return {
+		apiDir: join(__dirname, isV3 ? "../../api_tests_v3/api_test" : "../../api_tests/api_test"),
+		apiConfigPath: join(
+			__dirname,
+			isV3 ? "../v3.vitests/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc"
+		)
+	};
+}
 
 /**
  * Measures execution time of an async function
@@ -947,6 +1035,20 @@ function displayAggregatedResults(aggregated) {
 
 // Main execution with optional --json flag
 async function main() {
+	if (ensureDevEnvFlags()) {
+		return;
+	}
+
+	const module = await import("@cldmv/slothlet");
+	slothlet = module?.default ?? module?.slothlet ?? module;
+	if (typeof slothlet !== "function") {
+		throw new Error("slothlet entrypoint did not export a callable function");
+	}
+
+	const { apiDir, apiConfigPath } = resolveApiPaths();
+	API_DIR = apiDir;
+	API_CONFIG_PATH = apiConfigPath;
+
 	const jsonMode = process.argv.includes("--json");
 
 	// Helper to suppress console.log if jsonMode

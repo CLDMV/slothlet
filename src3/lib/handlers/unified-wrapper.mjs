@@ -4,6 +4,12 @@
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 
+const wrapperDebugEnabled =
+	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
+	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
  * - __impl pattern for reload support
@@ -76,7 +82,7 @@ export class UnifiedWrapper {
 	 * @public
 	 */
 	__setImpl(newImpl) {
-		if (this.apiPath === "string") {
+		if (wrapperDebugEnabled && this.apiPath === "string") {
 			console.log(`[__setImpl] apiPath=${this.apiPath}, newImpl keys=${Object.keys(newImpl || {}).join(",")}`);
 		}
 		this._impl = newImpl;
@@ -108,7 +114,7 @@ export class UnifiedWrapper {
 			return;
 		}
 
-		if (this.apiPath === "string") {
+		if (wrapperDebugEnabled && this.apiPath === "string") {
 			console.log(`[_materialize] START for apiPath=${this.apiPath}`);
 		}
 
@@ -116,7 +122,7 @@ export class UnifiedWrapper {
 
 		try {
 			if (this._materializeFunc) {
-				if (this.apiPath === "string") {
+				if (wrapperDebugEnabled && this.apiPath === "string") {
 					console.log(`[_materialize] Calling materializeFunc (no args, expects return value)...`);
 				}
 				// POC pattern: materializeFunc returns the implementation
@@ -126,14 +132,14 @@ export class UnifiedWrapper {
 				this._adoptImplChildren();
 				this._state.materialized = true;
 				this._state.inFlight = false;
-				if (this.apiPath === "string") {
+				if (wrapperDebugEnabled && this.apiPath === "string") {
 					console.log(
 						`[_materialize] DONE! result=${typeof result}, result keys=${result ? Object.keys(result).join(",") : "null"}, impl keys=${this._impl ? Object.keys(this._impl).join(",") : "null"}`
 					);
 				}
 			}
 		} catch (error) {
-			if (this.apiPath === "string") {
+			if (wrapperDebugEnabled && this.apiPath === "string") {
 				console.log(`[_materialize] ERROR: ${error.message}`);
 			}
 			this._state.inFlight = false;
