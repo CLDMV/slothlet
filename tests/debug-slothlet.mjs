@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-18 10:24:42 -08:00 (1768760682)
+ *	@Last modified time: 2026-01-18 16:17:20 -08:00 (1768781840)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -824,8 +824,32 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	if (typeof slothlet !== "function") {
 		throw new Error("slothlet entrypoint did not export a callable function");
 	}
-	// Command line param: e/eager or l/lazy
-	// const modeArg = process.argv.find((arg) => arg === "e" || arg === "eager" || arg === "l" || arg === "lazy");
+	
+	// Check for mode-specific arguments
+	const eagerOnly = process.argv.includes("--eager");
+	const lazyOnly = process.argv.includes("--lazy");
+	
+	if (eagerOnly && lazyOnly) {
+		throw new Error("Cannot specify both --eager and --lazy. Choose one or neither.");
+	}
+
+	if (eagerOnly) {
+		console.log("\n" + chalk.yellowBright.bold("===== EAGER MODE TEST ONLY ====="));
+		console.log(chalk.cyanBright("Running EAGER mode tests...\n"));
+		await runDebug({ mode: "eager" }, "EAGER", false);
+		console.log(chalk.cyanBright("FINISHED EAGER mode tests...\n"));
+		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER MODE TEST ====="));
+		return;
+	}
+	
+	if (lazyOnly) {
+		console.log("\n" + chalk.yellowBright.bold("===== LAZY MODE TEST ONLY ====="));
+		console.log(chalk.cyanBright("Running LAZY mode tests...\n"));
+		await runDebug({ mode: "lazy" }, "LAZY", true);
+		console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
+		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED LAZY MODE TEST ====="));
+		return;
+	}
 
 	console.log("\n" + chalk.yellowBright.bold("===== EAGER & LAZY MODE TEST ====="));
 	console.log(chalk.cyanBright("Running EAGER & LAZY mode tests...\n"));
@@ -833,10 +857,12 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	let label = "EAGER";
 	let awaitCalls = false;
 	const _eagerBound = await runDebug({ mode: "eager" }, label, awaitCalls);
+	console.log(chalk.cyanBright("FINISHED EAGER mode tests...\n"));
 
 	label = "LAZY";
 	awaitCalls = true;
 	const _lazyBound = await runDebug({ mode: "lazy" }, label, awaitCalls);
+	console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
 
 	console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER & LAZY MODE TEST ====="));
 
