@@ -225,7 +225,8 @@ export class UnifiedWrapper {
 	createProxy() {
 		const self = this;
 
-		// Use a function as target so the proxy can be callable
+		// Always use a function as target so the proxy remains callable and property access works correctly
+		// We'll handle typeof checks through Symbol.toStringTag
 		const target = function unifiedWrapperProxy() {};
 
 		// Attach wrapper reference so we can access it from traps
@@ -328,6 +329,13 @@ export class UnifiedWrapper {
 									} else {
 										resolve(impl.apply(thisArg, args));
 									}
+								} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+									// Object with default method
+									if (wrapper.contextManager) {
+										resolve(wrapper.contextManager.runInContext(wrapper.instanceId, impl.default, impl, args));
+									} else {
+										resolve(impl.default.apply(impl, args));
+									}
 								} else {
 									reject(
 										new SlothletError(
@@ -363,6 +371,15 @@ export class UnifiedWrapper {
 						return wrapper.contextManager.runInContext(wrapper.instanceId, impl, thisArg, args);
 					}
 					return impl.apply(thisArg, args);
+				}
+
+				// Check if impl is an object with a 'default' method
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					// Call the default method
+					if (wrapper.contextManager) {
+						return wrapper.contextManager.runInContext(wrapper.instanceId, impl.default, impl, args);
+					}
+					return impl.default.apply(impl, args);
 				}
 
 				throw new SlothletError(

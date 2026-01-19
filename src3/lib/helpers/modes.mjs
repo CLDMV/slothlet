@@ -140,11 +140,26 @@ export async function processFiles(
 			// Special case: folder/folder.mjs pattern (only for nested, not root)
 			if (!isRoot && moduleName === categoryName) {
 				if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
-					// Case 1: export const folder = {...} - flatten to category
+					// Case 1: export const folder = {...} - wrap and use as category
 					const exportedValue = mod[moduleName];
 					if (typeof exportedValue === "object" && exportedValue !== null) {
-						for (const [key, value] of Object.entries(exportedValue)) {
-							targetApi[key] = value;
+						// CRITICAL: Wrap the object so all its functions get context wrapping
+						const wrapper = new UnifiedWrapper({
+							mode,
+							apiPath: categoryName,
+							contextManager,
+							instanceId,
+							initialImpl: exportedValue,
+							ownership
+						});
+
+						// Replace targetApi reference with the wrapped proxy
+						// This allows other files in the folder to attach properties if needed
+						api[categoryName] = wrapper.createProxy();
+						targetApi = api[categoryName];
+
+						// Register each property for ownership tracking
+						for (const key of Object.keys(exportedValue)) {
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
 							}
@@ -181,18 +196,53 @@ export async function processFiles(
 					// Case 3: Multiple named exports - flatten to category level (Rule 6 - F01)
 					// Example: util/util.mjs with exports { size, secondFunc } → api.util.size(), api.util.secondFunc()
 					// OR: multi_func.mjs with exports { uniqueOne, uniqueTwo, multi_func: {...} } → flatten multi_func object + expose others
-					for (const key of moduleKeys) {
-						// Special handling: if this export is an object named the same as the folder, flatten it
-						if (key === moduleName && typeof mod[key] === "object" && mod[key] !== null && !Array.isArray(mod[key])) {
-							// Flatten object properties to category level
-							for (const [propKey, propValue] of Object.entries(mod[key])) {
-								targetApi[propKey] = propValue;
+
+					// Check if this specific file has a matching object export
+					const hasMatchingObject = moduleKeys.some(
+						(key) => key === moduleName && typeof mod[key] === "object" && mod[key] !== null && !Array.isArray(mod[key])
+					);
+
+					if (hasMatchingObject) {
+						// This file has export const folder = {...}
+						// Flatten the object's properties AND add other exports to category
+						const matchingObj = mod[moduleName];
+
+						// Add matching object's properties to category
+						for (const [propKey, propValue] of Object.entries(matchingObj)) {
+							const wrapper = new UnifiedWrapper({
+								mode,
+								apiPath: `${categoryName}.${propKey}`,
+								contextManager,
+								instanceId,
+								initialImpl: propValue,
+								ownership
+							});
+							targetApi[propKey] = wrapper.createProxy();
+							if (ownership) {
+								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
+							}
+						}
+
+						// Add other named exports from this file to category
+						for (const key of moduleKeys) {
+							if (key !== moduleName) {
+								const wrapper = new UnifiedWrapper({
+									mode,
+									apiPath: `${categoryName}.${key}`,
+									contextManager,
+									instanceId,
+									initialImpl: mod[key],
+									ownership
+								});
+								targetApi[key] = wrapper.createProxy();
 								if (ownership) {
-									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
+									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
 								}
 							}
-						} else {
-							// Regular export - wrap and expose
+						}
+					} else {
+						// Regular multi-export file (no matching object)
+						for (const key of moduleKeys) {
 							const wrapper = new UnifiedWrapper({
 								mode,
 								apiPath: `${categoryName}.${key}`,
@@ -213,23 +263,31 @@ export async function processFiles(
 
 			// Regular files with only named exports (no default) - expose each export directly
 			// Example: get-http-status.mjs with export { getHTTPStatus } → api.util.getHTTPStatus()
-			// BUT: Only applies when there's a single named export OR when using special helper files
-			// Multi-export files (like url.mjs with multiple exports) should remain namespaced
+			// BUT: Only applies when the export name matches the file name (auto-flattening)
+			// This prevents helper.mjs with 'export const utilities' from being flattened incorrectly
 			if (!analysis.hasDefault && moduleKeys.length === 1 && !isRoot) {
 				const key = moduleKeys[0];
-				const wrapper = new UnifiedWrapper({
-					mode,
-					apiPath: `${categoryName}.${key}`,
-					contextManager,
-					instanceId,
-					initialImpl: mod[key],
-					ownership
-				});
-				targetApi[key] = wrapper.createProxy();
-				if (ownership) {
-					ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+				// Only auto-flatten if the export name matches the module name (case-insensitive, ignore separators)
+				const normalizedKey = key.toLowerCase().replace(/[-_]/g, "");
+				const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+
+				if (normalizedKey === normalizedModuleName) {
+					// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
+					const preferredName = key;
+					const wrapper = new UnifiedWrapper({
+						mode,
+						apiPath: `${categoryName}.${preferredName}`,
+						contextManager,
+						instanceId,
+						initialImpl: mod[key],
+						ownership
+					});
+					targetApi[preferredName] = wrapper.createProxy();
+					if (ownership) {
+						ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${preferredName}`, source: "core" });
+					}
+					continue;
 				}
-				continue;
 			}
 
 			// Wrap in UnifiedWrapper
@@ -257,49 +315,71 @@ export async function processFiles(
 			// Eager mode: recurse into subdirectories
 			for (const subDir of directory.children.directories) {
 				const subDirName = sanitizePropertyName(subDir.name);
-				
-				// Check if this is a single-file folder that should flatten
+
+				// Check if this is a single-file folder that might need special handling
 				if (subDir.children.files.length === 1 && subDir.children.directories.length === 0) {
 					const file = subDir.children.files[0];
-					const mod = await loadModule(file.path);
-					const exports = extractExports(mod);
 					const moduleName = sanitizePropertyName(file.name);
-					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
-					const analysis = {
-						hasDefault: exports.default !== undefined,
-						hasNamed: moduleKeys.length > 0,
-						defaultExportType: exports.default ? typeof exports.default : null
-					};
+					const genericFilenames = ["singlefile", "index", "main", "default"];
+					const isGeneric = genericFilenames.includes(moduleName.toLowerCase());
+					const filenameMatchesFolder = moduleName === subDirName;
 
-					// Apply buildCategoryDecisions for folder-level flattening
-					// Pass the actual module content (default if present, otherwise full exports)
-					const modContent = exports.default !== undefined ? exports.default : exports;
-					const categoryDecision = buildCategoryDecisions({
-						categoryName: subDirName,
-						mod: modContent,
-						moduleName,
-						fileBaseName: file.name,
-						analysis,
-						moduleKeys,
-						currentDepth: currentDepth + 1,
-						moduleFiles: subDir.children.files
-					});
+					// Only apply folder-level flattening for specific cases:
+					// 1. Generic filenames (singlefile, index, main, default)
+					// 2. Filename matches folder name
+					// 3. Has default export (checked below)
+					if (isGeneric || filenameMatchesFolder) {
+						const mod = await loadModule(file.path);
+						const exports = extractExports(mod);
+						const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
+						const analysis = {
+							hasDefault: exports.default !== undefined,
+							hasNamed: moduleKeys.length > 0,
+							defaultExportType: exports.default ? typeof exports.default : null
+						};
 
-					if (categoryDecision.shouldFlatten) {
-						// Flatten: put the module content directly at targetApi[subDirName]
-						const wrapper = new UnifiedWrapper({
-							mode,
-							apiPath: `${categoryName}.${subDirName}`,
-							contextManager,
-							instanceId,
-							initialImpl: modContent,
-							ownership
+						const modContent = exports.default !== undefined ? exports.default : exports;
+						const categoryDecision = buildCategoryDecisions({
+							categoryName: subDirName,
+							mod: modContent,
+							moduleName,
+							fileBaseName: file.name,
+							analysis,
+							moduleKeys,
+							currentDepth: currentDepth + 1,
+							moduleFiles: subDir.children.files
 						});
-						targetApi[subDirName] = wrapper.createProxy();
-						if (ownership) {
-							ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${subDirName}`, source: "core" });
+
+						if (categoryDecision.shouldFlatten) {
+							// For filename-folder match with named export, extract the matching export
+							// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
+							let implToWrap;
+							if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
+								// Named export matches folder name - use that specific export
+								implToWrap = exports[subDirName];
+							} else if (exports.default !== undefined) {
+								// Default export - use it
+								implToWrap = exports.default;
+							} else {
+								// Fallback - use the whole module
+								implToWrap = modContent;
+							}
+
+							// Flatten: put the module content directly at targetApi[subDirName]
+							const wrapper = new UnifiedWrapper({
+								mode,
+								apiPath: `${categoryName}.${subDirName}`,
+								contextManager,
+								instanceId,
+								initialImpl: implToWrap,
+								ownership
+							});
+							targetApi[subDirName] = wrapper.createProxy();
+							if (ownership) {
+								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${subDirName}`, source: "core" });
+							}
+							continue;
 						}
-						continue;
 					}
 				}
 
