@@ -96,6 +96,8 @@ class UnifiedWrapper {
 		this.instanceId = options.instanceId;
 		this.isCallable = typeof options.isCallable === "boolean" ? options.isCallable : false;
 		this._childCache = new Map();
+		this._proxy = null;
+		this._invalid = false;
 
 		// __impl pattern (replaceable implementation)
 		this._impl = options.initialImpl || null;
@@ -120,13 +122,14 @@ class UnifiedWrapper {
 	 * @returns {void}
 	 *
 	 * @description
-	 * Replaces the implementation and clears cached child wrappers.
+	 * Replaces the implementation and updates cached child wrappers.
 	 *
 	 * @example
 	 * wrapper.__setImpl(nextImpl);
 	 */
 	__setImpl(newImpl) {
 		this._impl = newImpl;
+		this._invalid = false;
 		this._adoptImplChildren();
 		if (this.mode === "lazy") {
 			this._state.materialized = true;
@@ -144,7 +147,7 @@ class UnifiedWrapper {
 	 * @returns {Promise<void>}
 	 *
 	 * @description
-	 * Runs the lazy materializer and resets cached child wrappers on success.
+	 * Runs the lazy materializer and updates cached child wrappers on success.
 	 *
 	 * @example
 	 * await wrapper._materialize();
@@ -159,6 +162,7 @@ class UnifiedWrapper {
 		try {
 			const result = await this._materializeFunc();
 			this._impl = result;
+			this._invalid = false;
 			this._adoptImplChildren();
 			this._state.materialized = true;
 			this._state.inFlight = false; // Set here so nested access works
@@ -173,8 +177,25 @@ class UnifiedWrapper {
 	 * @returns {void}
 	 *
 	 * @description
-	 * Moves own configurable children off the impl into child wrappers so impl
-	 * only represents the current path, not its descendants.
+	 * Invalidates this wrapper so existing references break when the parent
+	 * implementation no longer exposes this path.
+	 *
+	 * @example
+	 * wrapper.__invalidate();
+	 */
+	__invalidate() {
+		this._invalid = true;
+		this._impl = null;
+		this._childCache.clear();
+	}
+
+	/**
+	 * @private
+	 * @returns {void}
+	 *
+	 * @description
+	 * Moves own children off the impl into child wrappers so impl only represents
+	 * the current path, not its descendants.
 	 *
 	 * @example
 	 * wrapper._adoptImplChildren();
@@ -184,11 +205,13 @@ class UnifiedWrapper {
 		const ownKeys = Reflect.ownKeys(this._impl);
 		const internalKeys = new Set(["__impl", "__setImpl", "__getState", "__materialize", "_impl", "_state"]);
 		const observedKeys = new Set();
+		const skipKeys = typeof this._impl === "function" ? new Set(["length", "name", "prototype"]) : null;
 
 		for (const key of ownKeys) {
 			if (internalKeys.has(key)) continue;
+			if (skipKeys && typeof key === "string" && skipKeys.has(key)) continue;
 			const descriptor = Object.getOwnPropertyDescriptor(this._impl, key);
-			if (!descriptor || !descriptor.configurable) continue;
+			if (!descriptor) continue;
 
 			const value = this._impl[key];
 			observedKeys.add(key);
@@ -202,12 +225,18 @@ class UnifiedWrapper {
 			const wrapped = this._createChildWrapper(key, value);
 			if (wrapped) {
 				this._childCache.set(key, wrapped);
-				delete this._impl[key];
+				if (descriptor.configurable) {
+					delete this._impl[key];
+				}
 			}
 		}
 
 		for (const key of this._childCache.keys()) {
 			if (!observedKeys.has(key)) {
+				const existing = this._childCache.get(key);
+				if (existing && typeof existing.__invalidate === "function") {
+					existing.__invalidate();
+				}
 				this._childCache.delete(key);
 			}
 		}
@@ -220,14 +249,13 @@ class UnifiedWrapper {
 	 * @returns {function|object|undefined}
 	 *
 	 * @description
-	 * Creates a child wrapper proxy for an impl property when the value is an
-	 * object or function.
+	 * Creates a child wrapper proxy for an impl property, including primitives.
 	 *
 	 * @example
 	 * const child = wrapper._createChildWrapper("add", fn);
 	 */
 	_createChildWrapper(key, value) {
-		if (!value || (typeof value !== "function" && (typeof value !== "object" || Array.isArray(value)))) {
+		if (value === undefined) {
 			return undefined;
 		}
 
@@ -465,6 +493,7 @@ class UnifiedWrapper {
 	 */
 	createProxy() {
 		const wrapper = this;
+		if (wrapper._proxy) return wrapper._proxy;
 
 		// CRITICAL: The proxy target type must match what __impl is/will be
 		// - If __impl is a function, use function target (allows typeof === "function" and calling)
@@ -473,7 +502,7 @@ class UnifiedWrapper {
 			? function unifiedProxyTarget() {}
 			: {};
 
-		return new Proxy(proxyTarget, {
+		wrapper._proxy = new Proxy(proxyTarget, {
 			get(target, prop, receiver) {
 				// Internal methods - return from wrapper
 				if (
@@ -481,13 +510,20 @@ class UnifiedWrapper {
 					prop === "__setImpl" ||
 					prop === "__getState" ||
 					prop === "__materialize" ||
+					prop === "__invalidate" ||
 					prop === "_impl" ||
-					prop === "_state"
+					prop === "_state" ||
+					prop === "_invalid"
 				) {
 					if (prop === "__setImpl") return wrapper.__setImpl.bind(wrapper);
 					if (prop === "__getState") return wrapper.__getState.bind(wrapper);
 					if (prop === "__materialize") return wrapper.__materialize.bind(wrapper);
+					if (prop === "__invalidate") return wrapper.__invalidate.bind(wrapper);
 					return wrapper[prop];
+				}
+
+				if (wrapper._invalid) {
+					return undefined;
 				}
 
 				// Lazy mode: trigger materialization if needed
@@ -513,33 +549,19 @@ class UnifiedWrapper {
 				const value = impl[prop];
 				if (value === undefined) return undefined;
 
-				// Check if value is a UnifiedWrapper (nested lazy module that hasn't materialized yet)
-				// Return it directly - it will handle its own lazy materialization when accessed
-				// NOTE: Check for __getState, not typeof === "object", because lazy wrappers have function targets
-				if (value && value.__getState) {
-					return value;
+				const wrapped = wrapper._createChildWrapper(prop, value);
+				if (wrapped) {
+					wrapper._childCache.set(prop, wrapped);
+					return wrapped;
 				}
 
-				// Wrap functions and plain objects in unified wrappers
-				if ((value && typeof value === "function") || (value && typeof value === "object" && !Array.isArray(value))) {
-					const nestedWrapper = new UnifiedWrapper({
-						mode: "eager", // Values from __impl are already loaded
-						apiPath: wrapper.apiPath ? `${wrapper.apiPath}.${String(prop)}` : String(prop),
-						contextManager: wrapper.contextManager,
-						instanceId: wrapper.instanceId,
-						initialImpl: value,
-						isCallable: typeof value === "function"
-					});
-					const nestedProxy = nestedWrapper.createProxy();
-					wrapper._childCache.set(prop, nestedProxy);
-					return nestedProxy;
-				}
-
-				// Primitives and arrays
 				return value;
 			},
 
 			apply(target, thisArg, args) {
+				if (wrapper._invalid) {
+					throw new TypeError(`${wrapper.apiPath || "api"} is invalidated`);
+				}
 				// Lazy mode: trigger materialization if needed
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();
@@ -595,6 +617,8 @@ class UnifiedWrapper {
 				return Array.from(keys);
 			}
 		});
+
+		return wrapper._proxy;
 	}
 }
 
@@ -1374,6 +1398,18 @@ async function testImplReplacement(mode, api) {
 		const afterUtils2 = mode === "lazy" ? await ref2("after-utils-2") : ref2("after-utils-2");
 		console.log("after utils impl replace ref:", afterUtils1);
 		console.log("after utils impl replace ref2:", afterUtils2);
+
+		const orphanedUtils = api.logger.utils;
+		api.logger.__setImpl(() => "logger without utils");
+		const orphanedRead = orphanedUtils?.error ? orphanedUtils.error("should-not-run") : undefined;
+		console.log("orphaned utils access after removal:", orphanedRead ?? "undefined");
+
+		api.logger.__setImpl(await loadLoggerModule(new ContextManager(), "restored", "eager"));
+		const restoredUtils = api.logger.utils;
+		const restoredResult = mode === "lazy" ? await restoredUtils.error("restored") : restoredUtils.error("restored");
+		console.log("restored utils error:", restoredResult);
+		const orphanedAfterRestore = orphanedUtils?.error ? orphanedUtils.error("orphaned") : undefined;
+		console.log("orphaned utils after restore:", orphanedAfterRestore ?? "undefined");
 	} catch (err) {
 		console.log("❌ Impl replacement test failed:", err.message);
 		console.log("Stack:", err.stack);
@@ -1388,6 +1424,7 @@ async function testImplReplacement(mode, api) {
  *
  * @description
  * Builds a raw tree object that captures wrapper and impl details without filtering.
+ * POC-only: do not use this dump in production.
  *
  * @example
  * console.log(util.inspect(dumpApiTree("api", api), { depth: null, showHidden: true }));
