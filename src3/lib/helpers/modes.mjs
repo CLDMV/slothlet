@@ -715,9 +715,9 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 			instanceID,
 			config,
 			0,
-			"lazy",
+			"eager",
 			false, // Not root (for root contributor detection)
-			false, // Not recursive (create lazy wrappers for subdirs)
+			true, // Recursive (materialize subdirectories for this wrapper)
 			true // Populate directly (don't nest under categoryName)
 		);
 

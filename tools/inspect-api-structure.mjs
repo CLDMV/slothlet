@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-19 17:54:38 -08:00 (1768874078)
+ *	@Last modified time: 2026-01-19 21:19:01 -08:00 (1768886341)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,11 +19,78 @@
  */
 
 import chalk from "chalk";
+import { spawn } from "node:child_process";
 import { pathToFileURL } from "url";
 import util from "node:util";
 
 // Dynamic import for v2 or v3
 let slothlet;
+
+/**
+ * Ensure slothlet dev conditions are set for the requested version.
+ * @param {boolean} useV3 - Whether to force v3 dev condition.
+ * @returns {boolean} True if a child process was spawned.
+ */
+function ensureDevEnvFlags(useV3) {
+	/**
+	 * @param {string[]} args
+	 * @param {string} condition
+	 * @returns {boolean}
+	 */
+	const hasCondition = (args, condition) =>
+		args.some((arg) => arg.startsWith("--conditions=") && arg.slice("--conditions=".length).split(/[|,]/u).includes(condition));
+
+	process.env.NODE_ENV = "development";
+
+	const desiredCondition = useV3 ? "slothlet-three-dev" : "slothlet-dev";
+	const conflictingCondition = useV3 ? "slothlet-dev" : "slothlet-three-dev";
+	const requiredConditions = [desiredCondition, "development"];
+
+	const allExecArgv = [...process.execArgv];
+	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const allConditions = [...allExecArgv, ...envOptions];
+
+	const nextExecArgv = [...process.execArgv].filter((arg) => !arg.includes(`--conditions=${conflictingCondition}`));
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production")
+		.filter((token) => token !== `--conditions=${conflictingCondition}`);
+
+	let needsRespawn = process.env.NODE_ENV !== "development";
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		if (!hasCondition(nextExecArgv, condition)) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
 
 /**
  * Display the structure of an object or function recursively.
@@ -144,10 +211,16 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 /**
  * Force materialization of lazy folders by directly accessing their properties.
  * @param {any} api - The API object to materialize
+ * @param {boolean} useV3 - Whether v3 behavior should be used
  * @returns {Promise<void>}
  */
-async function forceMaterializeLazyFolders(api) {
-	if (!api || typeof api !== "object") return;
+async function forceMaterializeLazyFolders(api, useV3) {
+	if (!api) return;
+	if (useV3) {
+		if (typeof api !== "object" && typeof api !== "function") return;
+	} else if (typeof api !== "object") {
+		return;
+	}
 
 	console.log(chalk.gray("  Searching for lazy folders..."));
 
@@ -160,9 +233,23 @@ async function forceMaterializeLazyFolders(api) {
 		}
 
 		try {
+			if (useV3) {
+				const value = api[key];
+				if (value && typeof value.__getState === "function" && typeof value.__materialize === "function") {
+					const state = value.__getState();
+					if (!state.materialized) {
+						await value.__materialize();
+					}
+				}
+			}
 			// Check if property descriptor indicates a lazy folder
 			const descriptor = Object.getOwnPropertyDescriptor(api, key);
-			if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
+			if (
+				descriptor &&
+				"value" in descriptor &&
+				typeof descriptor.value === "function" &&
+				(descriptor.value.name?.includes("lazy") || (useV3 && typeof descriptor.value.__materialize === "function"))
+			) {
 				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
 
 				try {
@@ -198,7 +285,10 @@ async function forceMaterializeLazyFolders(api) {
 
 					// Check if it's now materialized
 					const newValue = api[key];
-					if (typeof newValue === "object" && newValue !== null) {
+					const v3State = useV3 && typeof newValue?.__getState === "function" ? newValue.__getState() : null;
+					if (useV3 && v3State?.materialized) {
+						console.log(chalk.green(`  ✅ Successfully materialized ${key} (v3 wrapper)`));
+					} else if (typeof newValue === "object" && newValue !== null) {
 						console.log(chalk.green(`  ✅ Successfully materialized ${key} to object with keys: ${Object.keys(newValue).join(", ")}`));
 					} else {
 						console.log(chalk.yellow(`  ⚠️ ${key} still appears to be a function after access attempts`));
@@ -229,6 +319,9 @@ async function inspectApi(apiName, options = {}) {
 
 	// Import the appropriate version
 	if (!slothlet) {
+		if (ensureDevEnvFlags(useV3)) {
+			return;
+		}
 		if (useV3) {
 			const module = await import("@cldmv/slothlet/slothlet");
 			slothlet = module.slothlet;
@@ -278,17 +371,19 @@ async function inspectApi(apiName, options = {}) {
 
 		// Force materialization of lazy folders if in lazy mode
 		if (lazy) {
-			await forceMaterializeLazyFolders(api);
+			await forceMaterializeLazyFolders(api, useV3);
 			console.log(chalk.green("✅ Lazy folders materialized\n"));
 		} else {
 			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
 		}
 
 		if (raw) {
-			await api?.math?.add(2, 4);
-			console.log(api);
-			// const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
-			// console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
+			// await api?.math?.add(2, 4);
+			// console.log(api);
+			// console.log(api.utilities.helpers);
+			// process.exit(0);
+			const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
+			console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
 			} else if (typeof api.slothlet?.shutdown === "function") {
@@ -297,7 +392,8 @@ async function inspectApi(apiName, options = {}) {
 			return;
 		}
 
-		console.log(api);
+		const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
+		console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
 
 		// Display basic info
 		console.log(chalk.bold("API Type:"), typeof api);
@@ -471,6 +567,7 @@ async function main() {
 		console.log("  --eager               Use eager loading mode");
 		console.log("  --raw                 Output raw API via console.log only");
 		console.log("  --v3                  Use v3 prototype (src3/) instead of v2 (src/)");
+		console.log("  --v2                  Force v2 (src/) even when v3 conditions are set");
 		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
 		console.log("  --allowApiOverwrite   Allow API property overwriting");
 		console.log("  --hotReload           Enable hot reload and ownership tracking");
@@ -504,6 +601,8 @@ async function main() {
 			options.raw = true;
 		} else if (args[i] === "--v3") {
 			options.useV3 = true;
+		} else if (args[i] === "--v2") {
+			options.useV3 = false;
 		} else if (args[i] === "--allowApiOverwrite") {
 			slothletConfig.allowApiOverwrite = true;
 		} else if (args[i] === "--hotReload") {

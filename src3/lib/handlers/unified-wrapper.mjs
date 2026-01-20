@@ -449,7 +449,9 @@ export class UnifiedWrapper {
 		}
 
 		const isCallable = wrapper.mode === "lazy" || typeof wrapper._impl === "function" || wrapper.isCallable;
-		const proxyTarget = isCallable ? createNamedProxyTarget(wrapper.apiPath, "unifiedWrapperProxy") : {};
+		const nameHint =
+			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
+		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
 		proxyTarget.__wrapper = wrapper;
 		wrapper._proxyTarget = proxyTarget;
 		for (const [key, value] of wrapper._childCache.entries()) {
@@ -473,6 +475,7 @@ export class UnifiedWrapper {
 			if (prop === "__getState") return wrapper.__getState.bind(wrapper);
 			if (prop === "__setImpl") return wrapper.__setImpl.bind(wrapper);
 			if (prop === "__materialize") return wrapper.__materialize.bind(wrapper);
+			if (prop === "_materialize") return wrapper.__materialize.bind(wrapper);
 			if (prop === "__invalidate") return wrapper.__invalidate.bind(wrapper);
 			if (prop === "__slothletPath") return wrapper.apiPath;
 			if (prop === "__wrapper") return wrapper;
