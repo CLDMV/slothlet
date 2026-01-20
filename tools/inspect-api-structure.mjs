@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-19 17:19:12 -08:00 (1768871952)
+ *	@Last modified time: 2026-01-19 17:54:38 -08:00 (1768874078)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -21,7 +21,6 @@
 import chalk from "chalk";
 import { pathToFileURL } from "url";
 import util from "node:util";
-import { util } from "util";
 
 // Dynamic import for v2 or v3
 let slothlet;
@@ -277,28 +276,25 @@ async function inspectApi(apiName, options = {}) {
 			console.log(chalk.green("✅ API loaded successfully"));
 		}
 
+		// Force materialization of lazy folders if in lazy mode
+		if (lazy) {
+			await forceMaterializeLazyFolders(api);
+			console.log(chalk.green("✅ Lazy folders materialized\n"));
+		} else {
+			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
+		}
+
 		if (raw) {
 			await api?.math?.add(2, 4);
 			console.log(api);
-			console.log(util.inspect(api, { showHidden: true, depth: null }));
+			// const inspectDepth = Number.isFinite(maxDepth) ? maxDepth : null;
+			// console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
 			} else if (typeof api.slothlet?.shutdown === "function") {
 				await api.slothlet.shutdown();
 			}
 			return;
-		}
-
-		// Force materialization of lazy folders if in lazy mode
-		if (lazy) {
-			const depth = Number.isFinite(maxDepth) ? maxDepth : null;
-			const previousDepth = util.inspect.defaultOptions.depth;
-			util.inspect.defaultOptions.depth = depth;
-			console.log(api);
-			util.inspect.defaultOptions.depth = previousDepth;
-			console.log(chalk.green("✅ Lazy folders materialized\n"));
-		} else {
-			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
 		}
 
 		console.log(api);
