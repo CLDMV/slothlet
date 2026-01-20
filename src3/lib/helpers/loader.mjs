@@ -7,6 +7,7 @@ import { join, extname, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { getModuleId } from "@cldmv/slothlet/helpers/sanitize";
+import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
 
 /**
  * Load a single module
@@ -209,6 +210,9 @@ export function mergeExportsIntoAPI(target, exports, propertyName) {
 		if (typeof exports.default === "function") {
 			const callable = ensureNamedDefaultFunction(exports.default, propertyName);
 			for (const key of exportKeys) {
+				if (!shouldAttachNamedExport(key, exports[key], callable, exports.default)) {
+					continue;
+				}
 				callable[key] = exports[key];
 			}
 			target[propertyName] = callable;

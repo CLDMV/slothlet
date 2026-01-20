@@ -63,3 +63,28 @@ export function isAbsolutePath(path) {
 	// Unix: /
 	return /^([a-zA-Z]:\\|\\\\|\/)/i.test(path);
 }
+
+/**
+ * Decide whether a named export should be attached to a callable default export.
+ * @param {string} key - Named export key.
+ * @param {unknown} value - Named export value.
+ * @param {Function} defaultFunc - Wrapped callable default export.
+ * @param {Function} originalDefault - Original default export.
+ * @returns {boolean} True if the export should be attached.
+ * @public
+ */
+export function shouldAttachNamedExport(key, value, defaultFunc, originalDefault) {
+	if (!key || key === "default") {
+		return false;
+	}
+	if (value === defaultFunc || value === originalDefault) {
+		return false;
+	}
+	if (typeof defaultFunc === "function" && key === defaultFunc.name) {
+		return false;
+	}
+	if (typeof originalDefault === "function" && key === originalDefault.name) {
+		return false;
+	}
+	return true;
+}

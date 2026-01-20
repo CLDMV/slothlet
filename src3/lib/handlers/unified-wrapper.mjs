@@ -266,6 +266,9 @@ export class UnifiedWrapper {
 				continue;
 			}
 			const value = this._impl[key];
+			if (value === this._impl) {
+				continue;
+			}
 			observedKeys.add(key);
 			const existing = this._childCache.get(key);
 			if (existing && typeof existing.__setImpl === "function") {
@@ -456,7 +459,7 @@ export class UnifiedWrapper {
 			value: wrapper,
 			writable: false,
 			enumerable: false,
-			configurable: false
+			configurable: true
 		});
 		wrapper._proxyTarget = proxyTarget;
 		for (const [key, value] of wrapper._childCache.entries()) {
@@ -671,7 +674,7 @@ export class UnifiedWrapper {
 
 			if (prop === "__wrapper") {
 				return {
-					configurable: false,
+					configurable: true,
 					enumerable: false,
 					value: wrapper,
 					writable: false
@@ -725,12 +728,6 @@ export class UnifiedWrapper {
 				keys.add(key);
 			}
 			keys.delete("__wrapper");
-
-			keys.add("__impl");
-			keys.add("__setImpl");
-			keys.add("__getState");
-			keys.add("__materialize");
-			keys.add("__invalidate");
 
 			return Array.from(keys);
 		};

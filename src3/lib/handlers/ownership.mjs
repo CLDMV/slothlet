@@ -68,10 +68,15 @@ export class OwnershipManager {
 	}
 
 	/**
-	 * Unregister module and return affected paths
-	 * @param {string} moduleId - Module to unregister
-	 * @returns {Object} Unregistration results with removed and rolled back paths
+	 * @param {string} moduleId - Module to unregister.
+	 * @returns {{ removed: string[], rolledBack: Record<string, string>[] }} Removal summary.
 	 * @public
+	 *
+	 * @description
+	 * Removes all paths owned by the provided moduleId and reports removals and rollbacks.
+	 *
+	 * @example
+	 * const result = ownership.unregister("module-a");
 	 */
 	unregister(moduleId) {
 		const paths = this.moduleToPath.get(moduleId);
@@ -90,7 +95,7 @@ export class OwnershipManager {
 			} else if (result.action === "restore") {
 				rolledBack.push({
 					apiPath,
-					restoredTo: result.moduleId
+					restoredTo: result.restoreModuleId
 				});
 			}
 		}
@@ -101,38 +106,52 @@ export class OwnershipManager {
 	}
 
 	/**
-	 * Remove specific moduleId from apiPath ownership
-	 * @param {string} apiPath - API path to modify
-	 * @param {string} moduleId - Module to remove
-	 * @returns {Object} Action taken (none, delete, or restore)
-	 * @private
+	 * @param {string} apiPath - API path to modify.
+	 * @param {string|null} [moduleId=null] - Module to remove (defaults to current owner).
+	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
+	 * restoreModuleId: string|null }} Action taken for the path.
+	 * @public
+	 *
+	 * @description
+	 * Removes a module owner from a specific API path. If the current owner is removed and
+	 * previous owners exist, the path is restored to the previous owner.
+	 *
+	 * @example
+	 * const result = ownership.removePath("plugins.tools", "module-a");
 	 */
-	removePath(apiPath, moduleId) {
+	removePath(apiPath, moduleId = null) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack) {
-			return { action: "none" };
+			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 
 		// Find and remove entry
-		const index = stack.findIndex((entry) => entry.moduleId === moduleId);
+		const index = moduleId ? stack.findIndex((entry) => entry.moduleId === moduleId) : stack.length - 1;
 		if (index === -1) {
-			return { action: "none" };
+			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
-
-		stack.splice(index, 1);
+		const [removed] = stack.splice(index, 1);
+		const removedModuleId = removed?.moduleId || null;
+		if (removedModuleId && this.moduleToPath.has(removedModuleId)) {
+			const pathSet = this.moduleToPath.get(removedModuleId);
+			pathSet.delete(apiPath);
+			if (pathSet.size === 0) {
+				this.moduleToPath.delete(removedModuleId);
+			}
+		}
 
 		// If stack empty, delete path entirely
 		if (stack.length === 0) {
 			this.pathToModule.delete(apiPath);
-			return { action: "delete" };
+			return { action: "delete", removedModuleId, restoreModuleId: null };
 		}
 
 		// Otherwise, restore to previous owner
 		const previous = stack[stack.length - 1];
 		return {
 			action: "restore",
-			moduleId: previous.moduleId,
-			source: previous.source
+			removedModuleId,
+			restoreModuleId: previous.moduleId
 		};
 	}
 

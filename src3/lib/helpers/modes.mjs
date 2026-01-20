@@ -9,6 +9,7 @@ import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
 
 /**
  * Build a safe function name for debug output from an API path or module name.
@@ -193,6 +194,9 @@ export async function processFiles(
 			// Root contributor: default function with named exports attached
 			const defaultFunc = ensureNamedExportFunction(mod.default, moduleName);
 			for (const key of moduleKeys) {
+				if (!shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
+					continue;
+				}
 				defaultFunc[key] = mod[key];
 			}
 
@@ -235,6 +239,9 @@ export async function processFiles(
 				// Attach named exports as properties on the function (like logger(), logger.info())
 				moduleContent = ensureNamedExportFunction(mod.default, propertyName);
 				for (const key of moduleKeys) {
+					if (!shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+						continue;
+					}
 					moduleContent[key] = mod[key];
 				}
 			} else if (mod.default && moduleKeys.length === 0) {
@@ -304,7 +311,10 @@ export async function processFiles(
 					const callableModule = typeof mod.default === "function" ? ensureNamedExportFunction(mod.default, categoryName) : moduleContent;
 					if (typeof callableModule === "function" && namedKeys.length > 0) {
 						for (const key of namedKeys) {
-							if (key !== "default" && callableModule[key] === undefined) {
+							if (!shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
+								continue;
+							}
+							if (callableModule[key] === undefined) {
 								callableModule[key] = mod[key];
 							}
 						}
@@ -687,6 +697,9 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 						// Attach named exports as properties on the function
 						if (typeof implToWrap === "function" && moduleKeys.length > 0) {
 							for (const key of moduleKeys) {
+								if (!shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
+									continue;
+								}
 								implToWrap[key] = exports[key];
 							}
 						}
