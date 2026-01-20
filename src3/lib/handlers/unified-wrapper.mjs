@@ -84,6 +84,7 @@ export class UnifiedWrapper {
 				: typeof initialImpl === "function" || (initialImpl && typeof initialImpl.default === "function");
 		this._childCache = new Map();
 		this._proxy = null;
+		this._proxyTarget = null;
 		this._invalid = false;
 		this._impl = initialImpl;
 		this._state = {
@@ -214,6 +215,17 @@ export class UnifiedWrapper {
 		this._invalid = true;
 		this._impl = null;
 		this._childCache.clear();
+		if (this._proxyTarget && (typeof this._proxyTarget === "object" || typeof this._proxyTarget === "function")) {
+			for (const key of Reflect.ownKeys(this._proxyTarget)) {
+				if (key === "__wrapper") {
+					continue;
+				}
+				const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
+				if (descriptor?.configurable) {
+					delete this._proxyTarget[key];
+				}
+			}
+		}
 	}
 
 	/**
@@ -267,6 +279,9 @@ export class UnifiedWrapper {
 			const wrapped = this._createChildWrapper(key, value);
 			if (wrapped) {
 				this._childCache.set(key, wrapped);
+				if (this._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+					this._proxyTarget[key] = wrapped;
+				}
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
@@ -280,6 +295,12 @@ export class UnifiedWrapper {
 					existing.__invalidate();
 				}
 				this._childCache.delete(key);
+				if (this._proxyTarget && Object.prototype.hasOwnProperty.call(this._proxyTarget, key)) {
+					const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
+					if (descriptor?.configurable) {
+						delete this._proxyTarget[key];
+					}
+				}
 			}
 		}
 	}
@@ -430,6 +451,12 @@ export class UnifiedWrapper {
 		const isCallable = wrapper.mode === "lazy" || typeof wrapper._impl === "function" || wrapper.isCallable;
 		const proxyTarget = isCallable ? createNamedProxyTarget(wrapper.apiPath, "unifiedWrapperProxy") : {};
 		proxyTarget.__wrapper = wrapper;
+		wrapper._proxyTarget = proxyTarget;
+		for (const [key, value] of wrapper._childCache.entries()) {
+			if (typeof key === "string" || typeof key === "symbol") {
+				proxyTarget[key] = value;
+			}
+		}
 
 		/**
 		 * @private
