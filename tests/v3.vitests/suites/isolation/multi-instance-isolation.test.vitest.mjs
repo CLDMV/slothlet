@@ -4,6 +4,8 @@
  * @memberof tests.vitests
  */
 
+// TODO(v3): Align multi-instance isolation expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

@@ -25,6 +25,8 @@
  * @module tests/vitests/processed/hooks/hooks-execution.test.vitest
  */
 
+// TODO(v3): Align hook execution expectations with v3 slothlet namespace behavior.
+
 import { describe, it, beforeEach, afterEach, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -53,7 +55,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should execute higher priority hooks first", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("hook1");
@@ -61,7 +63,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "hook1", pattern: "**", priority: 100 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("hook2");
@@ -77,7 +79,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should execute hooks in registration order for same priority", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("first");
@@ -85,7 +87,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "first", pattern: "**", priority: 100 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("second");
@@ -101,7 +103,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should handle before hooks returning undefined", async () => {
 		let hookCalled = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookCalled = true;
@@ -117,7 +119,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	});
 
 	it("should handle before hooks returning modified args array", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				return [args[0] * 2, args[1] * 2];
@@ -131,7 +133,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	});
 
 	it("should handle before hooks returning single value", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				return 42; // Should be wrapped in array
@@ -147,7 +149,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should chain multiple before hooks with transformations", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				execution.push("hook1");
@@ -160,7 +162,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			}
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				execution.push("hook2");
@@ -182,7 +184,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should execute after hooks in reverse priority order", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				execution.push("hook1");
@@ -191,7 +193,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "hook1", pattern: "math.add", priority: 100 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				execution.push("hook2");
@@ -210,7 +212,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		let _ = false;
 		let ___ = null;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ error }) => {
 				_ = true;
@@ -221,14 +223,14 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 
 		// We can't easily test actual errors with the current API structure
 		// so this test verifies the hook would be set up correctly
-		expect(api.hooks).toBeDefined();
-		expect(typeof api.hooks.on).toBe("function");
+		expect(api.slothlet.hooks).toBeDefined();
+		expect(typeof api.slothlet.hooks.on).toBe("function");
 	});
 
 	it("should handle async hooks with promises", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			async ({ args }) => {
 				execution.push("async-start");
@@ -250,7 +252,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		let mathHookCalled = false;
 		let allHookCalled = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				mathHookCalled = true;
@@ -258,7 +260,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "math-only", pattern: "math.*" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				allHookCalled = true;
@@ -275,7 +277,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should support hook enable/disable", async () => {
 		let hookCalled = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookCalled = true;
@@ -284,7 +286,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		);
 
 		// Disable hook
-		api.hooks.off("test-hook");
+		api.slothlet.hooks.off("test-hook");
 
 		await api.math.add(2, 3);
 
@@ -294,7 +296,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should support hook removal by ID", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("hook1");
@@ -302,7 +304,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "hook1", pattern: "**" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("hook2");
@@ -311,7 +313,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		);
 
 		// Remove one hook
-		api.hooks.off("hook1");
+		api.slothlet.hooks.off("hook1");
 
 		await api.math.add(2, 3);
 
@@ -321,7 +323,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should support clearing all hooks", async () => {
 		let hooksCalled = 0;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hooksCalled++;
@@ -329,7 +331,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "hook1", pattern: "**" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hooksCalled++;
@@ -338,7 +340,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		);
 
 		// Clear all hooks
-		api.hooks.clear();
+		api.slothlet.hooks.clear();
 
 		await api.math.add(2, 3);
 
@@ -348,7 +350,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should handle multiple before hooks with mixed return types", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("undefined-hook");
@@ -357,7 +359,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "undefined-hook", pattern: "math.add", priority: 300 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				execution.push("array-hook");
@@ -366,7 +368,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "array-hook", pattern: "math.add", priority: 200 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				execution.push("value-hook");
@@ -383,16 +385,16 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 
 	it("should support hook configuration with boolean", async () => {
 		// Test that hooks can be enabled/disabled with boolean config
-		expect(api.hooks).toBeDefined();
-		expect(typeof api.hooks.on).toBe("function");
-		expect(typeof api.hooks.off).toBe("function");
-		expect(typeof api.hooks.clear).toBe("function");
+		expect(api.slothlet.hooks).toBeDefined();
+		expect(typeof api.slothlet.hooks.on).toBe("function");
+		expect(typeof api.slothlet.hooks.off).toBe("function");
+		expect(typeof api.slothlet.hooks.clear).toBe("function");
 	});
 
 	it("should propagate context through hooks", async () => {
 		let receivedContext = null;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ context }) => {
 				receivedContext = context;
@@ -409,35 +411,35 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		const execution = [];
 
 		// Multiple hooks with different priorities
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("p50");
 			},
 			{ id: "p50", pattern: "**", priority: 50 }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("p200");
 			},
 			{ id: "p200", pattern: "**", priority: 200 }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("p100-1");
 			},
 			{ id: "p100-1", pattern: "**", priority: 100 }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("p100-2");
 			},
 			{ id: "p100-2", pattern: "**", priority: 100 }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				execution.push("p300");
@@ -453,7 +455,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should handle always hooks regardless of success/failure", async () => {
 		let alwaysHookCalled = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			() => {
 				alwaysHookCalled = true;
@@ -469,7 +471,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	it("should support nested hook calls", async () => {
 		const execution = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			async ({ path }) => {
 				execution.push("outer-before");
@@ -487,7 +489,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	});
 
 	it("should handle hook errors gracefully", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Hook error");

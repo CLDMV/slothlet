@@ -14,6 +14,8 @@
  * @module tests/vitests/processed/addapi/addapi-path-resolution.test.vitest
  */
 
+// TODO(v3): Confirm addApi path resolution via v3 slothlet namespace.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
@@ -25,7 +27,7 @@ describe("addApi Path Resolution", () => {
 	 * Helper function in the same file - simulates passing addApi through a layer
 	 */
 	async function helperInSameFile(api, path, metadata, options) {
-		return await api.addApi("helper.same", path, metadata, options);
+		return await api.slothlet.api.add({ apiPath: "helper.same", folderPath: path, metadata, options });
 	}
 
 	/**
@@ -33,7 +35,7 @@ describe("addApi Path Resolution", () => {
 	 */
 	async function deeplyNestedHelper(api, path, metadata, options) {
 		async function innerHelper(api, path, metadata, options) {
-			return await api.addApi("helper.nested", path, metadata, options);
+			return await api.slothlet.api.add({ apiPath: "helper.nested", folderPath: path, metadata, options });
 		}
 		return await innerHelper(api, path, metadata, options);
 	}
@@ -47,13 +49,13 @@ describe("addApi Path Resolution", () => {
 		});
 
 		beforeEach(async () => {
-			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST });
+			api = await slothlet({ ...config, diagnostics: true, dir: TEST_DIRS.API_TEST });
 		});
 		/**
 		 * Test 1: Direct addApi call from test file
 		 */
 		it("should resolve paths correctly for direct addApi call", async () => {
-			await api.addApi("direct.test", `../../../../${API_TEST_BASE}/api_test_mixed`);
+			await api.slothlet.api.add({ apiPath: "direct.test", folderPath: `../../../../${API_TEST_BASE}/api_test_mixed` });
 			expect(api.direct).toBeDefined();
 			expect(api.direct.test).toBeDefined();
 		});
@@ -83,7 +85,7 @@ describe("addApi Path Resolution", () => {
 			// Import dynamically to test resolution
 			const { runTestWithApi } = await import("../../setup/vitest-helper.mjs");
 			await runTestWithApi(api, async (api) => {
-				await api.addApi("imported.helper", `../../../../${API_TEST_BASE}/api_test`, {}, {});
+				await api.slothlet.api.add({ apiPath: "imported.helper", folderPath: `../../../../${API_TEST_BASE}/api_test` });
 			});
 			expect(api.imported).toBeDefined();
 			expect(api.imported.helper).toBeDefined();
@@ -95,7 +97,7 @@ describe("addApi Path Resolution", () => {
 		it("should resolve paths correctly through nested directory helper", async () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await executeWithApi(api, async (api) => {
-				await api.addApi("nested.dir.helper", `../../../../${API_TEST_BASE}/api_test_collections`, {}, {});
+				await api.slothlet.api.add({ apiPath: "nested.dir.helper", folderPath: `../../../../${API_TEST_BASE}/api_test_collections` });
 			});
 			expect(api.nested).toBeDefined();
 			expect(api.nested.dir).toBeDefined();
@@ -149,7 +151,7 @@ describe("addApi Path Resolution", () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await runTestWithApi(api, async (api) => {
 				await executeWithApi(api, async (api) => {
-					await api.addApi("chain.test", `../../../../${API_TEST_BASE}/api_test_collections`, {}, {});
+					await api.slothlet.api.add({ apiPath: "chain.test", folderPath: `../../../../${API_TEST_BASE}/api_test_collections` });
 				});
 			});
 			expect(api.chain).toBeDefined();

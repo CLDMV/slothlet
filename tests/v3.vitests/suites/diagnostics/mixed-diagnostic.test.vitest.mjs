@@ -4,6 +4,8 @@
  * @memberof tests.vitests
  */
 
+// TODO(v3): Align mixed diagnostics expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -39,7 +41,7 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 			dir: TEST_DIRS.API_TEST_MIXED
 		});
 
-		expect(typeof api.reload).toBe("function");
+		expect(typeof api.slothlet.api.reload).toBe("function");
 	});
 
 	it("should expose mathEsm API", async () => {
@@ -68,7 +70,7 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 			dir: TEST_DIRS.API_TEST_MIXED
 		});
 
-		await expect(api.reload()).resolves.not.toThrow();
+		await expect(api.slothlet.api.reload()).resolves.not.toThrow();
 	});
 
 	it("should maintain API structure after reload", async () => {
@@ -78,7 +80,7 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 		});
 
 		const beforeKeys = Object.keys(api).filter((k) => k !== "instanceId");
-		await api.reload();
+		await api.slothlet.api.reload();
 		const afterKeys = Object.keys(api).filter((k) => k !== "instanceId");
 
 		expect(afterKeys.sort()).toEqual(beforeKeys.sort());

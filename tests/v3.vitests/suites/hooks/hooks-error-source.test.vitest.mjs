@@ -20,6 +20,8 @@
  * @module tests/vitests/processed/hooks/hooks-error-source.test.vitest
  */
 
+// TODO(v3): Align hook error source expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -55,7 +57,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContext = {
@@ -68,7 +70,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// Before hook that throws
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Validation failed");
@@ -111,7 +113,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContext = {
@@ -124,7 +126,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// Before hook that simulates function error by throwing in function execution
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Function error");
@@ -164,7 +166,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContext = {
@@ -177,7 +179,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// After hook that throws
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			() => {
 				throw new Error("Cleanup failed");
@@ -219,7 +221,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContext = {
@@ -232,7 +234,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// Always hook that throws (but doesn't propagate)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			() => {
 				throw new Error("Always hook failed");
@@ -269,7 +271,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const errorContexts = [];
 
 		// Error hook to capture all contexts
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContexts.push({
@@ -282,7 +284,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// Before hook that throws
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Before failed");
@@ -291,7 +293,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		);
 
 		// Always hook that throws (but doesn't propagate)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			() => {
 				throw new Error("Always failed");
@@ -346,7 +348,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 
 		let errorContext = null;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ path, error, source }) => {
 				errorContext = {
@@ -358,7 +360,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 			{ id: "error-monitor", pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Test error");

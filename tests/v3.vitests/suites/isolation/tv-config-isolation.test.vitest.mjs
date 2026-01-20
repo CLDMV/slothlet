@@ -26,6 +26,8 @@
  * - Function calls return instance-specific values
  */
 
+// TODO(v3): Align TV config isolation expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";

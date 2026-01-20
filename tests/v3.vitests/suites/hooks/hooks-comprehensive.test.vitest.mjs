@@ -15,6 +15,8 @@
  * - All mode/runtime combinations
  */
 
+// TODO(v3): Align comprehensive hook expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -48,7 +50,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		const modifications = [];
 
 		// Hook 1: Double the first argument (priority 300)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook1");
@@ -58,7 +60,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 2: Add 10 to second argument (priority 200)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook2");
@@ -68,7 +70,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 3: Swap arguments (priority 100)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook3");
@@ -93,7 +95,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 	test("should chain multiple before hooks for argument modifications (objects)", async () => {
 		// Hook 1: Add property 'a'
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -105,7 +107,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 2: Add property 'b'
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -117,7 +119,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 3: Add property 'c'
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -130,7 +132,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 		// Hook 4: Verify all properties (priority 50)
 		let verified = false;
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -148,7 +150,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	test("should modify args through 5 hooks in sequence", async () => {
 		// Create 5 hooks that each multiply by 2
 		for (let i = 0; i < 5; i++) {
-			api.hooks.on("before", ({ args }) => [args[0] * 2, args[1]], {
+			api.slothlet.hooks.on("before", ({ args }) => [args[0] * 2, args[1]], {
 				id: `multiply-hook-${i}`,
 				priority: 500 - i * 100,
 				pattern: "math.add"
@@ -164,7 +166,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		const transformations = [];
 
 		// Hook 1: Double result (priority 300)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook1");
@@ -174,7 +176,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 2: Add 10 (priority 200)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook2");
@@ -184,7 +186,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Hook 3: Negate (priority 100)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook3");
@@ -208,21 +210,21 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 	test("should chain multiple after hooks for result transformations (objects)", async () => {
 		// Hook 1: Wrap in object
-		api.hooks.on("after", ({ result }) => ({ value: result }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ value: result }), {
 			id: "wrap-result",
 			priority: 300,
 			pattern: "math.add"
 		});
 
 		// Hook 2: Add metadata
-		api.hooks.on("after", ({ result }) => ({ ...result, meta: "processed" }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ ...result, meta: "processed" }), {
 			id: "add-metadata",
 			priority: 200,
 			pattern: "math.add"
 		});
 
 		// Hook 3: Add timestamp
-		api.hooks.on("after", ({ result }) => ({ ...result, timestamp: Date.now() }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ ...result, timestamp: Date.now() }), {
 			id: "add-timestamp",
 			priority: 100,
 			pattern: "math.add"
@@ -238,7 +240,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	test("should transform result through 5 hooks in sequence", async () => {
 		// Create 5 hooks that each multiply by 2
 		for (let i = 0; i < 5; i++) {
-			api.hooks.on("after", ({ result }) => result * 2, {
+			api.slothlet.hooks.on("after", ({ result }) => result * 2, {
 				id: `transform-hook-${i}`,
 				priority: 500 - i * 100,
 				pattern: "math.add"
@@ -255,7 +257,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		let shortCircuitExecuted = false;
 
 		// Hook to detect if function was called
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			() => {
 				functionCalled = true;
@@ -264,7 +266,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Short-circuit hook
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				shortCircuitExecuted = true;
@@ -283,7 +285,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	test("should support before hook short-circuit with object", async () => {
 		const shortCircuitValue = { data: "bypassed", computed: true };
 
-		api.hooks.on("before", () => shortCircuitValue, {
+		api.slothlet.hooks.on("before", () => shortCircuitValue, {
 			id: "short-circuit-obj",
 			priority: 200,
 			pattern: "math.add"
@@ -294,7 +296,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	});
 
 	test("should support before hook short-circuit with string", async () => {
-		api.hooks.on("before", () => "intercepted", {
+		api.slothlet.hooks.on("before", () => "intercepted", {
 			id: "short-circuit-string",
 			priority: 200,
 			pattern: "math.add"
@@ -305,7 +307,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	});
 
 	test("should support before hook short-circuit with null", async () => {
-		api.hooks.on("before", () => null, {
+		api.slothlet.hooks.on("before", () => null, {
 			id: "short-circuit-null",
 			priority: 200,
 			pattern: "math.add"
@@ -316,14 +318,14 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	});
 
 	test("should support before hook short-circuit with 0", async () => {
-		api.hooks.on("before", () => 0, { id: "short-circuit-zero", priority: 200, pattern: "math.add" });
+		api.slothlet.hooks.on("before", () => 0, { id: "short-circuit-zero", priority: 200, pattern: "math.add" });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(0);
 	});
 
 	test("should support before hook short-circuit with false", async () => {
-		api.hooks.on("before", () => false, {
+		api.slothlet.hooks.on("before", () => false, {
 			id: "short-circuit-false",
 			priority: 200,
 			pattern: "math.add"
@@ -337,10 +339,10 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		let alwaysExecuted = false;
 
 		// Short-circuit hook
-		api.hooks.on("before", () => 99, { id: "short-circuit", priority: 200, pattern: "math.add" });
+		api.slothlet.hooks.on("before", () => 99, { id: "short-circuit", priority: 200, pattern: "math.add" });
 
 		// Always hook
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ result }) => {
 				alwaysExecuted = true;
@@ -356,7 +358,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	test("should execute always hooks after normal completion", async () => {
 		let alwaysExecuted = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ result }) => {
 				alwaysExecuted = true;
@@ -370,7 +372,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	});
 
 	test("should not allow always hooks to modify result", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			() => {
 				return 999; // This should be ignored
@@ -397,7 +399,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		});
 
 		// Error-throwing before hook
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Before hook error");
@@ -406,7 +408,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Error handler
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ error }) => {
 				errorCaught = true;
@@ -436,7 +438,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		});
 
 		// Error-throwing before hook
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Test error");
@@ -446,7 +448,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 		// Multiple error handlers
 		for (let i = 0; i < 3; i++) {
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"error",
 				() => {
 					errorHandlers.push(i);
@@ -463,21 +465,21 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 	test("should handle mixed scenario: args modified, short-circuit, result transformed", async () => {
 		// Modify args first
-		api.hooks.on("before", ({ args }) => [args[0] * 2, args[1] * 2], {
+		api.slothlet.hooks.on("before", ({ args }) => [args[0] * 2, args[1] * 2], {
 			id: "modify-args",
 			priority: 300,
 			pattern: "math.add"
 		});
 
 		// Short-circuit with modified args
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => args[0] + args[1] + 100, // Should use modified args
 			{ id: "short-circuit", priority: 200, pattern: "math.add" }
 		);
 
 		// After hook (won't execute due to short-circuit)
-		api.hooks.on("after", ({ result }) => result * 10, {
+		api.slothlet.hooks.on("after", ({ result }) => result * 10, {
 			id: "transform-result",
 			priority: 100,
 			pattern: "math.add"
@@ -492,21 +494,21 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 	test("should handle before hooks modifying args with after hooks chaining transforms", async () => {
 		// Before hook: multiply args
-		api.hooks.on("before", ({ args }) => [args[0] * 3, args[1] * 3], {
+		api.slothlet.hooks.on("before", ({ args }) => [args[0] * 3, args[1] * 3], {
 			id: "multiply-args",
 			priority: 200,
 			pattern: "math.add"
 		});
 
 		// After hook 1: double result
-		api.hooks.on("after", ({ result }) => result * 2, {
+		api.slothlet.hooks.on("after", ({ result }) => result * 2, {
 			id: "double-result",
 			priority: 200,
 			pattern: "math.add"
 		});
 
 		// After hook 2: add 10
-		api.hooks.on("after", ({ result }) => result + 10, { id: "add-ten", priority: 100, pattern: "math.add" });
+		api.slothlet.hooks.on("after", ({ result }) => result + 10, { id: "add-ten", priority: 100, pattern: "math.add" });
 
 		// Call with (2, 3)
 		// After multiply-args: (6, 9)
@@ -530,7 +532,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 		let hookExecuted = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookExecuted = true;
@@ -557,7 +559,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 
 		let hookExecuted = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookExecuted = true;
@@ -572,7 +574,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		expect(result).toBe(5);
 
 		// Enable hooks using the correct API
-		api.hooks.enable();
+		api.slothlet.hooks.enable();
 		hookExecuted = false;
 
 		// Hooks enabled
@@ -582,7 +584,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 	});
 
 	test("should support pattern-specific hook enabling", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				return [args[0] * 10, args[1] * 10];
@@ -591,10 +593,10 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		);
 
 		// Disable all hooks first
-		api.hooks.disable();
+		api.slothlet.hooks.disable();
 
 		// Enable only math.* pattern
-		api.hooks.enable("math.*");
+		api.slothlet.hooks.enable("math.*");
 
 		// Should work since pattern is enabled
 		// (2 * 10) + (3 * 10) = 50

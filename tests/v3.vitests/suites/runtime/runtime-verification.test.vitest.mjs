@@ -9,6 +9,8 @@
  * comprehensive verification of runtime behavior.
  */
 
+// TODO(v3): Align runtime verification expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

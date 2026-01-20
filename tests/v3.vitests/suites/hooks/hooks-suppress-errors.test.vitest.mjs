@@ -5,6 +5,8 @@
  * @module tests/vitests/processed/hooks/hooks-suppress-errors.test.vitest
  */
 
+// TODO(v3): Align hooks suppressErrors expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -35,7 +37,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	function registerErrorHook() {
 		const flags = { called: false };
 		const lastContext = { current: null };
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			(errorContext) => {
 				flags.called = true;
@@ -62,7 +64,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags } = registerErrorHook();
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Before hook failed");
@@ -79,7 +81,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Before hook failed");
@@ -100,7 +102,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Function execution failed");
@@ -120,7 +122,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			() => {
 				throw new Error("After hook failed");
@@ -141,7 +143,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags } = registerErrorHook();
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			() => {
 				throw new Error("Always hook failed");
@@ -167,7 +169,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const errors = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			(context) => {
 				errors.push({ path: context.path, message: context.error.message });
@@ -175,7 +177,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 			{ id: "error-collector", pattern: "**" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				if (path === "math.add") {
@@ -208,11 +210,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		const suppressed = await api.math.add(1, 2);
 		expect(suppressed).toBeUndefined();
 
-		api.hooks.disable();
+		api.slothlet.hooks.disable();
 		const normal = await api.math.add(1, 2);
 		expect(normal).toBe(3);
 
-		api.hooks.enable();
+		api.slothlet.hooks.enable();
 		const suppressedAgain = await api.math.add(1, 2);
 		expect(suppressedAgain).toBeUndefined();
 	});
@@ -222,21 +224,21 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const flags = { all: [] };
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			() => {
 				flags.all.push("h1");
 			},
 			{ id: "error1", pattern: "**" }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			() => {
 				flags.all.push("h2");
 			},
 			{ id: "error2", pattern: "math.*" }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			() => {
 				flags.all.push("h3");
@@ -244,7 +246,7 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 			{ id: "error3", pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Test");

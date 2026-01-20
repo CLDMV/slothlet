@@ -9,6 +9,8 @@
  * - Sequential hook execution
  */
 
+// TODO(v3): Align after-hook chaining expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -38,7 +40,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 	test("should chain multiple after hooks for result transformations (primitives)", async () => {
 		const transformations = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook1");
@@ -47,7 +49,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 			{ id: "hook1-double", priority: 300, pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook2");
@@ -56,7 +58,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 			{ id: "hook2-add10", priority: 200, pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"after",
 			({ result }) => {
 				transformations.push("hook3");
@@ -75,19 +77,19 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 	});
 
 	test("should chain multiple after hooks for result transformations (objects)", async () => {
-		api.hooks.on("after", ({ result }) => ({ value: result }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ value: result }), {
 			id: "wrap-result",
 			priority: 300,
 			pattern: "math.add"
 		});
 
-		api.hooks.on("after", ({ result }) => ({ ...result, meta: "processed" }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ ...result, meta: "processed" }), {
 			id: "add-metadata",
 			priority: 200,
 			pattern: "math.add"
 		});
 
-		api.hooks.on("after", ({ result }) => ({ ...result, timestamp: Date.now() }), {
+		api.slothlet.hooks.on("after", ({ result }) => ({ ...result, timestamp: Date.now() }), {
 			id: "add-timestamp",
 			priority: 100,
 			pattern: "math.add"
@@ -102,7 +104,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 
 	test("should transform result through 5 hooks in sequence", async () => {
 		for (let i = 0; i < 5; i++) {
-			api.hooks.on("after", ({ result }) => result * 2, {
+			api.slothlet.hooks.on("after", ({ result }) => result * 2, {
 				id: `transform-hook-${i}`,
 				priority: 500 - i * 100,
 				pattern: "math.add"

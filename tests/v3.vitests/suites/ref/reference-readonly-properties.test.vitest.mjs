@@ -13,6 +13,8 @@
  * Tests the fix for TypeError when reference object contains read-only properties like 'name'
  */
 
+// TODO(v3): Align reference property expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -36,39 +38,39 @@ describe.each(getMatrixConfigs())("Reference Readonly Properties > Config: '$nam
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TV_TEST,
-				reference: {
-					version: "2.5.6",
-					name: "test-package" // This used to cause TypeError: Cannot assign to read only property 'name'
-				}
-			});
-
-			expect(api).toBeDefined();
-			expect(api.version).toBe("2.5.6");
-			expect(api.name).toBe("test-package");
+			reference: {
+				version: "2.5.6",
+				name: "test-package" // This used to cause TypeError: Cannot assign to read only property 'name'
+			}
 		});
+
+		expect(api).toBeDefined();
+		expect(api.version).toBe("2.5.6");
+		expect(api.name).toBe("test-package");
+	});
 
 	it("should handle reference with multiple potentially problematic properties", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TV_TEST,
-				reference: {
-					version: "1.0.0",
-					name: "another-package",
-					author: "test-author",
-					description: "test description",
-					length: 42, // Another potentially problematic property
-					prototype: { custom: "value" } // Another potentially problematic property
-				}
-			});
-
-			expect(api).toBeDefined();
-			expect(api.version).toBe("1.0.0");
-			expect(api.name).toBe("another-package");
-			expect(api.author).toBe("test-author");
-			expect(api.description).toBe("test description");
-			expect(api.length).toBe(42);
-			expect(api.prototype).toEqual({ custom: "value" });
+			reference: {
+				version: "1.0.0",
+				name: "another-package",
+				author: "test-author",
+				description: "test description",
+				length: 42, // Another potentially problematic property
+				prototype: { custom: "value" } // Another potentially problematic property
+			}
 		});
+
+		expect(api).toBeDefined();
+		expect(api.version).toBe("1.0.0");
+		expect(api.name).toBe("another-package");
+		expect(api.author).toBe("test-author");
+		expect(api.description).toBe("test description");
+		expect(api.length).toBe(42);
+		expect(api.prototype).toEqual({ custom: "value" });
+	});
 
 	it("should not throw TypeError for any read-only property names", async () => {
 		// This test verifies that the fix prevents TypeErrors

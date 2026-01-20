@@ -8,6 +8,8 @@
  * @module tests/vitests/processed/listener-cleanup/listener-cleanup.test.vitest
  */
 
+// TODO(v3): Align listener cleanup expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
 import slothlet from "@cldmv/slothlet";
@@ -72,9 +74,9 @@ describe.each(getMatrixConfigs({}))("Listener Cleanup - $name", ({ config }) => 
 		emitter3.prependListener("priority", handler1);
 
 		if (config.hooks) {
-			api.hooks.on("before", () => undefined, { pattern: "**" });
-			api.hooks.on("after", ({ result }) => result, { pattern: "**" });
-			api.hooks.on("always", () => undefined, { pattern: "**" });
+			api.slothlet.hooks.on("before", () => undefined, { pattern: "**" });
+			api.slothlet.hooks.on("after", ({ result }) => result, { pattern: "**" });
+			api.slothlet.hooks.on("always", () => undefined, { pattern: "**" });
 		}
 
 		// Trigger listeners to ensure they are active.

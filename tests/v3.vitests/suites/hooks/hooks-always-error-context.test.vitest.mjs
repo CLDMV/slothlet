@@ -13,6 +13,8 @@
  * for unified logging, metrics, and monitoring.
  */
 
+// TODO(v3): Align always-hook error context expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -45,7 +47,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 	test("should provide empty errors array on success execution", async () => {
 		let alwaysContext = null;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
@@ -68,7 +70,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		let alwaysContext = null;
 
 		// Before hook short-circuits
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				return 99; // Short-circuit
@@ -76,7 +78,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			{ id: "short-circuit", pattern: "math.add", priority: 200 }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ result, hasError, errors }) => {
 				alwaysContext = { result, hasError, errors };
@@ -107,7 +109,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
@@ -144,7 +146,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		});
 
 		// Single always hook handles both success and error logging
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ path, result, hasError, errors }) => {
 				if (hasError) {
@@ -205,7 +207,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			// suppressErrors: false (default)
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ path, result, hasError, errors, self, context }) => {
 				alwaysContext = { path, result, hasError, errors, self, context };
@@ -245,7 +247,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ hasError }) => {
 				metrics.calls++;
@@ -287,7 +289,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"always",
 			({ path, hasError, errors }) => {
 				if (hasError) {

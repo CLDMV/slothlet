@@ -4,6 +4,8 @@
  * Original test: tests/rewritten/test-hooks-debug.mjs
  * @module tests/vitests/processed/hooks/hooks-debug.test.vitest
  */
+
+// TODO(v3): Align hooks debug expectations with v3 slothlet namespace behavior.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -27,9 +29,9 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 
 	it("should expose hook management API", () => {
 		// Verify hooks API exists
-		expect(api.hooks).toBeDefined();
-		expect(typeof api.hooks.on).toBe("function");
-		expect(typeof api.hooks.list).toBe("function");
+		expect(api.slothlet.hooks).toBeDefined();
+		expect(typeof api.slothlet.hooks.on).toBe("function");
+		expect(typeof api.slothlet.hooks.list).toBe("function");
 
 		// Verify internal context
 		expect(api.__ctx).toBeDefined();
@@ -39,7 +41,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 
 	it("should register and list hooks correctly", () => {
 		// Register a test hook
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"test-hook",
 			"before",
 			() => {
@@ -49,7 +51,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		);
 
 		// Verify hook was registered
-		const hooksList = api.hooks.list();
+		const hooksList = api.slothlet.hooks.list();
 		expect(hooksList).toBeDefined();
 		expect(Array.isArray(hooksList) || typeof hooksList === "object").toBe(true);
 
@@ -87,7 +89,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		const manager = api.__ctx.hookManager;
 
 		// Register a hook and verify pattern compilation
-		api.hooks.on("pattern-test-hook", "before", () => {}, { pattern: "math.*" });
+		api.slothlet.hooks.on("pattern-test-hook", "before", () => {}, { pattern: "math.*" });
 
 		// Check compiled patterns - hooks might be in a map or array
 		let foundTestHook = false;
@@ -106,7 +108,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 
 		// If no hooks structure found, at least verify the hook was registered
 		if (!foundTestHook) {
-			const hooksList = api.hooks.list();
+			const hooksList = api.slothlet.hooks.list();
 			expect(hooksList).toBeDefined();
 			// The hook should be registered in some form
 		}
