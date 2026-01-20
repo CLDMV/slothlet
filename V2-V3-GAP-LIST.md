@@ -1,6 +1,6 @@
 # V2 vs V3 Gap List (Working)
 
-Last updated: 2026-01-19
+Last updated: 2026-01-20
 
 ## Sources Reviewed
 
@@ -38,6 +38,22 @@ Last updated: 2026-01-19
      - Pattern-filtered execution: enable/disable specific path patterns
      - Cleanup: hook manager cleanup on shutdown to avoid leaks
      - Debug hooks/tests: hooks debug logging + internal property tests (see hooks test suite)
+
+2. Hot reload system (add/remove/reload API components)
+   - V2 provides runtime API hot reload; V3 exposes stubs that throw NOT_IMPLEMENTED.
+   - Current V3 stubs: slothlet.api.add (addApi), slothlet.api.remove (removeApi), slothlet.api.reload
+   - Evidence: src3/lib/builders/api_builder.mjs (stubs with NOT_IMPLEMENTED)
+   - Related scope note: src3/README.md (hot reload deferred)
+
+3. Metadata tagging pipeline for addApi-loaded modules
+   - V2 tags functions loaded via addApi with immutable metadata and exposes metadata via metadataAPI from @cldmv/slothlet/runtime (docs/METADATA.md).
+   - V3 needs the new api.slothlet.metadata.* / self.slothlet.metadata.* surface plus tagging pipeline wired into addApi (beyond the stubbed hot reload surface in #2).
+   - Evidence: docs/METADATA.md (feature surface), src3/lib/handlers/metadata.mjs (metadata handlers only).
+
+4. Context propagation features (EventEmitter + class instance wrapping)
+   - V2 documents automatic EventEmitter and class instance propagation (docs/CONTEXT-PROPAGATION.md).
+   - V3 context managers provide ALS/live context, but no EventEmitter/class wrapping in src3.
+   - Evidence: docs/CONTEXT-PROPAGATION.md; no EventEmitter-related implementation in src3.
 
 ## Verified Parity (via inspect-api-structure, eager)
 

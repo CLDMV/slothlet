@@ -1,9 +1,18 @@
 /**
- * @fileoverview API builder - attaches built-in methods under slothlet namespace
- * @module @cldmv/slothlet/api_builder
+ * @fileoverview Builds the final API object and attaches the slothlet built-in namespace.
+ * @module @cldmv/slothlet/builders/api_builder
+ * @package
+ *
+ * @description
+ * Clones the user API, attaches built-in helpers, and wires lifecycle utilities for
+ * each Slothlet instance.
+ *
+ * @example
+ * const api = await buildFinalAPI({ userApi, instance, config });
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { t } from "@cldmv/slothlet/i18n";
+import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/helpers/hot_reload";
 
 /**
  * Build final API with built-in methods attached
@@ -93,12 +102,18 @@ export async function buildFinalAPI(options) {
 }
 
 /**
- * Create slothlet namespace with all built-in methods
- * @param {Object} instance - Slothlet instance
- * @param {Object} config - Configuration
- * @param {Object} userApi - User API object (for reference diagnostic)
- * @returns {Promise<Object>} Slothlet namespace object
+ * @param {object} instance - Slothlet instance.
+ * @param {object} config - Configuration.
+ * @param {object} userApi - User API object (for diagnostics).
+ * @returns {Promise<object>} Slothlet namespace object.
  * @private
+ *
+ * @description
+ * Builds the slothlet namespace with version metadata, API controls, and lifecycle
+ * helpers for the current instance.
+ *
+ * @example
+ * const namespace = await createSlothletNamespace(instance, config, api);
  */
 async function createSlothletNamespace(instance, config, userApi) {
 	// Read version from package.json
@@ -131,42 +146,90 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 */
 		api: {
 			/**
-			 * Add new API module at runtime
-			 * @param {Object} ___options - Add options
+			 * @param {Record<string, unknown>} [options={}] - Add options.
 			 * @returns {Promise<void>}
+			 * @public
+			 *
+			 * @description
+			 * Adds API modules from a folder into the current instance at runtime.
+			 *
+			 * @example
+			 * await api.slothlet.api.add({ apiPath: "plugins", folderPath: "./plugins" });
 			 */
-			add: async (___options) => {
-				throw new SlothletError("NOT_IMPLEMENTED", {
-					feature: "slothlet.api.add",
-					hint: "Hot reload features deferred to next prototype iteration",
-					stub: true
+			add: async function slothlet_api_add(options = {}) {
+				if (!options || typeof options !== "object") {
+					throw new SlothletError("INVALID_CONFIG", {
+						option: "slothlet.api.add",
+						value: typeof options,
+						expected: "object",
+						validationError: true
+					});
+				}
+
+				const { apiPath, folderPath, metadata = {}, options: addOptions = {} } = options;
+				return addApiComponent({
+					instance,
+					apiPath,
+					folderPath,
+					metadata,
+					options: addOptions
 				});
 			},
 
 			/**
-			 * Remove API module
-			 * @param {Object} ___options - Remove options
+			 * @param {string|Record<string, unknown>} [options={}] - Remove options or apiPath.
 			 * @returns {Promise<void>}
+			 * @public
+			 *
+			 * @description
+			 * Removes API modules by apiPath or moduleId from the current instance.
+			 *
+			 * @example
+			 * await api.slothlet.api.remove({ apiPath: "plugins.tools" });
 			 */
-			remove: async (___options) => {
-				throw new SlothletError("NOT_IMPLEMENTED", {
-					feature: "slothlet.api.remove",
-					hint: "Hot reload features deferred to next prototype iteration",
-					stub: true
-				});
+			remove: async function slothlet_api_remove(options = {}) {
+				if (typeof options === "string") {
+					return removeApiComponent({ instance, apiPath: options });
+				}
+				if (!options || typeof options !== "object") {
+					throw new SlothletError("INVALID_CONFIG", {
+						option: "slothlet.api.remove",
+						value: typeof options,
+						expected: "object",
+						validationError: true
+					});
+				}
+
+				const { apiPath, moduleId } = options;
+				return removeApiComponent({ instance, apiPath, moduleId });
 			},
 
 			/**
-			 * Reload specific API module (preserves references)
-			 * @param {Object} ___options - Reload options
+			 * @param {string|Record<string, unknown>} [options={}] - Reload options or apiPath.
 			 * @returns {Promise<void>}
+			 * @public
+			 *
+			 * @description
+			 * Reloads API modules recorded through add operations, preserving references.
+			 *
+			 * @example
+			 * await api.slothlet.api.reload({ apiPath: "plugins" });
 			 */
-			reload: async (___options) => {
-				throw new SlothletError("NOT_IMPLEMENTED", {
-					feature: "slothlet.api.reload",
-					hint: "Hot reload features deferred to next prototype iteration",
-					stub: true
-				});
+			reload: async function slothlet_api_reload(options = {}) {
+				if (typeof options === "string") {
+					return reloadApiComponent({ instance, apiPath: options });
+				}
+				if (!options || typeof options !== "object") {
+					throw new SlothletError("INVALID_CONFIG", {
+						option: "slothlet.api.reload",
+						value: typeof options,
+						expected: "object",
+						validationError: true
+					});
+				}
+
+				const { apiPath, moduleId } = options;
+				return reloadApiComponent({ instance, apiPath, moduleId });
 			}
 		},
 
