@@ -6,9 +6,9 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-24 14:51:51 -07:00 (1761342711)
+ *	@Last modified time: 2026-01-19 17:19:12 -08:00 (1768871952)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -20,6 +20,8 @@
 
 import chalk from "chalk";
 import { pathToFileURL } from "url";
+import util from "node:util";
+import { util } from "util";
 
 // Dynamic import for v2 or v3
 let slothlet;
@@ -219,52 +221,81 @@ async function forceMaterializeLazyFolders(api) {
  * @param {object} [options] - Options for display
  * @param {number} [options.maxDepth=8] - Maximum depth to traverse
  * @param {boolean} [options.showMethods=false] - Whether to show available methods for functions
+ * @param {boolean} [options.raw=false] - Output only the raw API via console.log
  * @param {object} [options.slothletConfig] - Configuration for slothlet initialization
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 8, lazy = true, slothletConfig = {}, useV3 = false } = options;
+	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {}, useV3 = false } = options;
 
 	// Import the appropriate version
 	if (!slothlet) {
 		if (useV3) {
 			const module = await import("@cldmv/slothlet/slothlet");
 			slothlet = module.slothlet;
-			console.log(chalk.cyan("Using v3 (src3/)"));
+			if (!raw) {
+				console.log(chalk.cyan("Using v3 (src3/)"));
+			}
 		} else {
 			const module = await import("@cldmv/slothlet");
 			slothlet = module.default;
-			console.log(chalk.cyan("Using v2 (src/)"));
+			if (!raw) {
+				console.log(chalk.cyan("Using v2 (src/)"));
+			}
 		}
 	}
 
 	const mode = lazy ? "lazy" : "eager";
-	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
+	if (!raw) {
+		console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
+	}
 
 	try {
 		// Use different base paths for v2 vs v3
 		const basePath = useV3 ? "./api_tests_v3" : "./api_tests";
 		const apiPath = `${basePath}/${apiName}`;
-		console.log(chalk.gray(`Loading from: ${apiPath}`));
+		if (!raw) {
+			console.log(chalk.gray(`Loading from: ${apiPath}`));
+		}
 
 		// Build slothlet configuration (both v2 and v3 use 'mode' now)
 		const config = {
 			dir: apiPath,
 			mode: lazy ? "lazy" : "eager",
-			...(useV3 ? { runtime: slothletConfig.runtime || "async" } : {}),
+			...(slothletConfig.runtime ? { runtime: slothletConfig.runtime } : {}),
 			...slothletConfig
 		};
 
-		console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
+		if (!raw) {
+			console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
+		}
 
 		// Load the API
 		const api = await slothlet(config);
 
-		console.log(chalk.green("✅ API loaded successfully"));
+		if (!raw) {
+			console.log(chalk.green("✅ API loaded successfully"));
+		}
+
+		if (raw) {
+			await api?.math?.add(2, 4);
+			console.log(api);
+			console.log(util.inspect(api, { showHidden: true, depth: null }));
+			if (typeof api.shutdown === "function") {
+				await api.shutdown();
+			} else if (typeof api.slothlet?.shutdown === "function") {
+				await api.slothlet.shutdown();
+			}
+			return;
+		}
 
 		// Force materialization of lazy folders if in lazy mode
 		if (lazy) {
-			await forceMaterializeLazyFolders(api);
+			const depth = Number.isFinite(maxDepth) ? maxDepth : null;
+			const previousDepth = util.inspect.defaultOptions.depth;
+			util.inspect.defaultOptions.depth = depth;
+			console.log(api);
+			util.inspect.defaultOptions.depth = previousDepth;
 			console.log(chalk.green("✅ Lazy folders materialized\n"));
 		} else {
 			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
@@ -442,8 +473,9 @@ async function main() {
 		console.log("  --show-methods        Show available methods for functions");
 		console.log("  --lazy                Use lazy loading mode (default)");
 		console.log("  --eager               Use eager loading mode");
+		console.log("  --raw                 Output raw API via console.log only");
 		console.log("  --v3                  Use v3 prototype (src3/) instead of v2 (src/)");
-		console.log("  --runtime <type>      Runtime type for v3: 'async' or 'live' (default: async)");
+		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
 		console.log("  --allowApiOverwrite   Allow API property overwriting");
 		console.log("  --hotReload           Enable hot reload and ownership tracking");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
@@ -472,6 +504,8 @@ async function main() {
 			options.lazy = true;
 		} else if (args[i] === "--eager") {
 			options.lazy = false;
+		} else if (args[i] === "--raw") {
+			options.raw = true;
 		} else if (args[i] === "--v3") {
 			options.useV3 = true;
 		} else if (args[i] === "--allowApiOverwrite") {
@@ -487,6 +521,9 @@ async function main() {
 	options.slothletConfig = slothletConfig;
 
 	await inspectApi(apiName, options);
+	if (options.raw) {
+		return;
+	}
 
 	await inspectApi(apiName, options);
 }

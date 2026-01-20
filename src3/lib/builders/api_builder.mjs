@@ -292,13 +292,16 @@ async function createSlothletNamespace(instance, config, userApi) {
  * @private
  */
 function createShutdownFunction(instance) {
-	return async () => {
-		// Call user's shutdown hook first if they provided one (check dynamically)
-		if (instance.userHooks?.shutdown && typeof instance.userHooks.shutdown === "function") {
-			await instance.userHooks.shutdown();
+	const shutdownFunction = {
+		shutdown: async () => {
+			// Call user's shutdown hook first if they provided one (check dynamically)
+			if (instance.userHooks?.shutdown && typeof instance.userHooks.shutdown === "function") {
+				await instance.userHooks.shutdown();
+			}
+			return instance.shutdown();
 		}
-		return instance.shutdown();
-	};
+	}.shutdown;
+	return shutdownFunction;
 }
 
 /**
@@ -309,42 +312,45 @@ function createShutdownFunction(instance) {
  * @private
  */
 function createDestroyFunction(instance, api) {
-	return async () => {
-		// Call user's destroy hook first if they provided one (check dynamically)
-		if (instance.userHooks?.destroy && typeof instance.userHooks.destroy === "function") {
-			await instance.userHooks.destroy();
-		}
+	const destroyFunction = {
+		destroy: async () => {
+			// Call user's destroy hook first if they provided one (check dynamically)
+			if (instance.userHooks?.destroy && typeof instance.userHooks.destroy === "function") {
+				await instance.userHooks.destroy();
+			}
 
-		// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook)
-		if (api && typeof api.shutdown === "function") {
-			await api.shutdown();
-		} else {
-			// Fallback if api.shutdown not available
-			await instance.shutdown();
-		}
+			// Then shutdown cleanly using wrapped api.shutdown() (which calls user's shutdown hook)
+			if (api && typeof api.shutdown === "function") {
+				await api.shutdown();
+			} else {
+				// Fallback if api.shutdown not available
+				await instance.shutdown();
+			}
 
-		// Then try to destroy the API object itself
-		// Note: This can't truly delete properties from the returned object
-		// but we can mark it as destroyed and prevent further use
-		instance.isDestroyed = true;
+			// Then try to destroy the API object itself
+			// Note: This can't truly delete properties from the returned object
+			// but we can mark it as destroyed and prevent further use
+			instance.isDestroyed = true;
 
-		// Clear all references we can from both api and instance.api
-		const objectsToClear = [api, instance.api].filter((obj) => obj && typeof obj === "object");
+			// Clear all references we can from both api and instance.api
+			const objectsToClear = [api, instance.api].filter((obj) => obj && typeof obj === "object");
 
-		for (const obj of objectsToClear) {
-			const keys = Object.keys(obj);
-			for (const key of keys) {
-				try {
-					delete obj[key];
-				} catch (_) {
-					// Some properties may not be deletable
+			for (const obj of objectsToClear) {
+				const keys = Object.keys(obj);
+				for (const key of keys) {
+					try {
+						delete obj[key];
+					} catch (_) {
+						// Some properties may not be deletable
+					}
 				}
 			}
-		}
 
-		// Clear instance.api reference
-		instance.api = null;
-	};
+			// Clear instance.api reference
+			instance.api = null;
+		}
+	}.destroy;
+	return destroyFunction;
 }
 
 /**
