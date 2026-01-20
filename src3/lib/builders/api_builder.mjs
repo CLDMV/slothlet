@@ -234,6 +234,129 @@ async function createSlothletNamespace(instance, config, userApi) {
 		},
 
 		/**
+		 * Hooks API (stubbed until v3 hooks are implemented).
+		 * @type {object}
+		 */
+		hooks: {
+			/**
+			 * @param {string} _tag - Hook tag.
+			 * @param {string} _type - Hook type.
+			 * @param {function} _handler - Hook handler.
+			 * @param {Record<string, unknown>} [_options={}] - Hook options.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook registration until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.on("before", "before", () => undefined, { pattern: "**" });
+			 */
+			on: async function slothlet_hooks_on(_tag, _type, _handler, _options = {}) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.on",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			},
+
+			/**
+			 * @param {string} _nameOrPattern - Hook name or pattern.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook removal until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.off("before");
+			 */
+			off: async function slothlet_hooks_off(_nameOrPattern) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.off",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			},
+
+			/**
+			 * @param {string} [_pattern] - Optional enable pattern.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook enabling until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.enable("**");
+			 */
+			enable: async function slothlet_hooks_enable(_pattern) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.enable",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			},
+
+			/**
+			 * @param {string} [_pattern] - Optional disable pattern.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook disabling until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.disable("**");
+			 */
+			disable: async function slothlet_hooks_disable(_pattern) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.disable",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			},
+
+			/**
+			 * @param {string} [_type] - Optional hook type filter.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook clearing until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.clear("before");
+			 */
+			clear: async function slothlet_hooks_clear(_type) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.clear",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			},
+
+			/**
+			 * @param {string} [_type] - Optional hook type filter.
+			 * @returns {never}
+			 * @public
+			 *
+			 * @description
+			 * Stub for hook listing until hooks are implemented in v3.
+			 *
+			 * @example
+			 * api.slothlet.hooks.list("before");
+			 */
+			list: async function slothlet_hooks_list(_type) {
+				throw new SlothletError("NOT_IMPLEMENTED", {
+					feature: "slothlet.hooks.list",
+					hint: "Hooks system deferred to next prototype iteration",
+					stub: true
+				});
+			}
+		},
+
+		/**
 		 * Create per-request scope with custom context
 		 * @param {Function} fn - Function to run in scope
 		 * @param {Object} context - Custom context
