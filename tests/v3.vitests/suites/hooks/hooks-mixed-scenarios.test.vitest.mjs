@@ -10,6 +10,8 @@
  * - Runtime enable/disable
  */
 
+// TODO(v3): Align mixed hook scenario expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -49,7 +51,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			}
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Before hook error");
@@ -57,7 +59,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			{ id: "error-hook", priority: 200, pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"error",
 			({ error }) => {
 				errorCaught = true;
@@ -85,7 +87,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			}
 		});
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				throw new Error("Test error");
@@ -94,7 +96,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		);
 
 		for (let i = 0; i < 3; i++) {
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"error",
 				() => {
 					errorHandlers.push(i);
@@ -110,15 +112,15 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should handle mixed scenario: args modified, short-circuit, result transformed", async () => {
-		api.hooks.on("before", ({ args }) => [args[0] * 2, args[1] * 2], {
+		api.slothlet.hooks.on("before", ({ args }) => [args[0] * 2, args[1] * 2], {
 			id: "modify-args",
 			priority: 300,
 			pattern: "math.add"
 		});
 
-		api.hooks.on("before", ({ args }) => args[0] + args[1] + 100, { id: "short-circuit", priority: 200, pattern: "math.add" });
+		api.slothlet.hooks.on("before", ({ args }) => args[0] + args[1] + 100, { id: "short-circuit", priority: 200, pattern: "math.add" });
 
-		api.hooks.on("after", ({ result }) => result * 10, {
+		api.slothlet.hooks.on("after", ({ result }) => result * 10, {
 			id: "transform-result",
 			priority: 100,
 			pattern: "math.add"
@@ -129,19 +131,19 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should handle before hooks modifying args with after hooks chaining transforms", async () => {
-		api.hooks.on("before", ({ args }) => [args[0] * 3, args[1] * 3], {
+		api.slothlet.hooks.on("before", ({ args }) => [args[0] * 3, args[1] * 3], {
 			id: "multiply-args",
 			priority: 200,
 			pattern: "math.add"
 		});
 
-		api.hooks.on("after", ({ result }) => result * 2, {
+		api.slothlet.hooks.on("after", ({ result }) => result * 2, {
 			id: "double-result",
 			priority: 200,
 			pattern: "math.add"
 		});
 
-		api.hooks.on("after", ({ result }) => result + 10, { id: "add-ten", priority: 100, pattern: "math.add" });
+		api.slothlet.hooks.on("after", ({ result }) => result + 10, { id: "add-ten", priority: 100, pattern: "math.add" });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(40);
@@ -159,7 +161,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 
 		let hookExecuted = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookExecuted = true;
@@ -185,7 +187,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 
 		let hookExecuted = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				hookExecuted = true;
@@ -198,7 +200,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		expect(hookExecuted).toBe(false);
 		expect(result).toBe(5);
 
-		api.hooks.enable();
+		api.slothlet.hooks.enable();
 		hookExecuted = false;
 
 		result = await api.math.add(2, 3);
@@ -207,7 +209,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should support pattern-specific hook enabling", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				return [args[0] * 10, args[1] * 10];
@@ -215,8 +217,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			{ id: "pattern-test", priority: 100, pattern: "math.*" }
 		);
 
-		api.hooks.disable();
-		api.hooks.enable("math.*");
+		api.slothlet.hooks.disable();
+		api.slothlet.hooks.enable("math.*");
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(50);

@@ -6,6 +6,8 @@
  *              core's original function should be restored if it existed.
  */
 
+// TODO(v3): Verify ownership diagnostics surface for v3 tests.
+
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -15,6 +17,26 @@ import slothlet from "@cldmv/slothlet";
 
 // Use OWNERSHIP_MATRIX for configs that require hotReload + ownership tracking
 const OWNERSHIP_MATRIX = getMatrixConfigs({ hotReload: true });
+
+/**
+ * @param {object} api - Slothlet API instance.
+ * @param {string} apiPath - API path to inspect.
+ * @returns {Set<string>} Module owners for the path.
+ */
+function getOwners(api, apiPath) {
+	const ownership = api.__slothletInstance?.ownership;
+	if (!ownership) return new Set();
+	return new Set(ownership.getPathHistory(apiPath).map((entry) => entry.moduleId));
+}
+
+/**
+ * @param {object} api - Slothlet API instance.
+ * @param {string} apiPath - API path to inspect.
+ * @returns {string|undefined} Current owner moduleId.
+ */
+function getCurrentOwner(api, apiPath) {
+	return api.__slothletInstance?.ownership?.getCurrentOwner(apiPath)?.moduleId;
+}
 
 describe("Ownership Tracking on Cross-Module Replacement", () => {
 	beforeAll(() => {
@@ -55,7 +77,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 						dir: coreDir, // Start with core directory
 						allowApiOverwrite: true
 					};
-					const api = await slothlet(mergedConfig);
+					const api = await slothlet({ ...mergedConfig, diagnostics: true });
 
 					// Verify core loaded correctly
 					expect(api.feature).toBeDefined();
@@ -63,58 +85,58 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(await api.feature.doSomething()).toBe("core-implementation");
 
 					// Check initial ownership - should be "core"
-					const initialOwnership = api._getApiOwnership("feature");
+					const initialOwnership = getOwners(api, "feature");
 					expect(initialOwnership).toBeDefined();
-					expect(initialOwnership.has("core")).toBe(true);
+					expect(initialOwnership.has("base")).toBe(true);
 					expect(initialOwnership.size).toBe(1);
 
 					// Load v1 with moduleId (overwrites core)
-					await api.addApi("feature", v1Dir, {}, { moduleId: "module-v1" });
+					await api.slothlet.api.add({ apiPath: "feature", folderPath: v1Dir, options: { moduleId: "module-v1" } });
 
 					// Verify v1 replaced core's implementation
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
 
 					// Check ownership - should accumulate: core + v1 (v1 is current)
-					const ownershipAfterV1 = api._getApiOwnership("feature");
+					const ownershipAfterV1 = getOwners(api, "feature");
 					expect(ownershipAfterV1.size).toBe(2);
-					expect(ownershipAfterV1.has("core")).toBe(true);
+					expect(ownershipAfterV1.has("base")).toBe(true);
 					expect(ownershipAfterV1.has("module-v1")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v1");
+					expect(getCurrentOwner(api, "feature")).toBe("module-v1");
 
 					// Load v2 with different moduleId (cross-module overwrite)
-					await api.addApi("feature", v2Dir, {}, { moduleId: "module-v2" });
+					await api.slothlet.api.add({ apiPath: "feature", folderPath: v2Dir, options: { moduleId: "module-v2" } });
 
 					// Verify v2 replaced v1's implementation
 					expect(await api.feature.doSomething()).toBe("v2-implementation");
 
 					// Check ownership - should accumulate: core + v1 + v2 (v2 is current)
-					const ownershipAfterV2 = api._getApiOwnership("feature");
+					const ownershipAfterV2 = getOwners(api, "feature");
 					expect(ownershipAfterV2.size).toBe(3);
-					expect(ownershipAfterV2.has("core")).toBe(true);
+					expect(ownershipAfterV2.has("base")).toBe(true);
 					expect(ownershipAfterV2.has("module-v1")).toBe(true);
 					expect(ownershipAfterV2.has("module-v2")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v2");
+					expect(getCurrentOwner(api, "feature")).toBe("module-v2");
 
 					// Remove v2 - should rollback to v1
-					await api.removeApi({ moduleId: "module-v2" });
+					await api.slothlet.api.remove({ moduleId: "module-v2" });
 
 					// Verify rollback to v1
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
-					const ownershipAfterV2Removed = api._getApiOwnership("feature");
+					const ownershipAfterV2Removed = getOwners(api, "feature");
 					expect(ownershipAfterV2Removed.size).toBe(2);
-					expect(ownershipAfterV2Removed.has("core")).toBe(true);
+					expect(ownershipAfterV2Removed.has("base")).toBe(true);
 					expect(ownershipAfterV2Removed.has("module-v1")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v1");
+					expect(getCurrentOwner(api, "feature")).toBe("module-v1");
 
 					// Remove v1 - should rollback to core
-					await api.removeApi({ moduleId: "module-v1" });
+					await api.slothlet.api.remove({ moduleId: "module-v1" });
 
 					// Verify rollback to core
 					expect(await api.feature.doSomething()).toBe("core-implementation");
-					const finalOwnership = api._getApiOwnership("feature");
+					const finalOwnership = getOwners(api, "feature");
 					expect(finalOwnership.size).toBe(1);
-					expect(finalOwnership.has("core")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("core");
+					expect(finalOwnership.has("base")).toBe(true);
+					expect(getCurrentOwner(api, "feature")).toBe("base");
 
 					await api.shutdown();
 				} finally {
@@ -150,10 +172,10 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 						dir: tempBase, // Use unique temp directory instead of shared api_tests/api_test
 						allowApiOverwrite: true
 					};
-					const api = await slothlet(mergedConfig);
+					const api = await slothlet({ ...mergedConfig, diagnostics: true });
 
 					// Load v1 with moduleId
-					await api.addApi("test", v1Dir, {}, { moduleId: "module-v1" });
+					await api.slothlet.api.add({ apiPath: "test", folderPath: v1Dir, options: { moduleId: "module-v1" } });
 
 					// Verify v1 loaded correctly (path is test.feature.doSomething due to filename)
 					expect(api.test).toBeDefined();
@@ -162,11 +184,11 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(await api.test.feature.doSomething()).toBe("v1-implementation");
 
 					// Check ownership - should only be v1
-					const ownershipAfterV1 = api._getApiOwnership("test");
+					const ownershipAfterV1 = getOwners(api, "test");
 					expect(ownershipAfterV1.has("module-v1")).toBe(true);
 
 					// Load v2 with different moduleId (cross-module overwrite)
-					await api.addApi("test", v2Dir, {}, { moduleId: "module-v2" });
+					await api.slothlet.api.add({ apiPath: "test", folderPath: v2Dir, options: { moduleId: "module-v2" } });
 
 					// Verify v2 replaced v1's implementation
 					expect(api.test.feature).toBeDefined();
@@ -175,7 +197,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 					// CORRECTED: Ownership should accumulate for hot reload rollback support
 					// When v2 overwrites v1, both should be tracked so v1 can be restored if v2 is removed
-					const ownershipAfterV2 = api._getApiOwnership("test");
+					const ownershipAfterV2 = getOwners(api, "test");
 					expect(ownershipAfterV2).toBeDefined();
 					expect(ownershipAfterV2.size).toBe(2); // Both v1 and v2 should be tracked
 					expect(ownershipAfterV2.has("module-v2")).toBe(true);
@@ -214,11 +236,11 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 						dir: tempBase, // Use unique temp directory instead of shared api_tests/api_test
 						allowApiOverwrite: true
 					};
-					const api = await slothlet(mergedConfig);
+					const api = await slothlet({ ...mergedConfig, diagnostics: true });
 
 					// Load both modules
-					await api.addApi("merged", v1Dir, {}, { moduleId: "module-v1" });
-					await api.addApi("merged", v2Dir, {}, { moduleId: "module-v2" });
+					await api.slothlet.api.add({ apiPath: "merged", folderPath: v1Dir, options: { moduleId: "module-v1" } });
+					await api.slothlet.api.add({ apiPath: "merged", folderPath: v2Dir, options: { moduleId: "module-v2" } });
 
 					// Check ownership - both should be owners since they contribute different properties
 					// Ownership is registered at the API path level (merged)

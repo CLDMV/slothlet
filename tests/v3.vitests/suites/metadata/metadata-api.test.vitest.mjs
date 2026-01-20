@@ -7,6 +7,8 @@
  *
  * @module tests/vitests/processed/metadata/metadata-api.test.vitest
  */
+
+// TODO(v3): Align metadata API expectations with v3 slothlet namespace behavior.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -41,7 +43,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 
 	it("should attach metadata to functions via addApi", async () => {
 		const testPath = TEST_DIRS.API_TEST_MIXED;
-		await api.addApi("metaTest", testPath, {
+		await api.slothlet.api.add("metaTest", testPath, {
 			testKey: "testValue",
 			author: "vitest"
 		});
@@ -57,7 +59,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 
 	it("should automatically add sourceFolder to metadata", async () => {
 		const testPath = TEST_DIRS.API_TEST_MIXED;
-		await api.addApi("autoFolder", testPath, {
+		await api.slothlet.api.add("autoFolder", testPath, {
 			testKey: "testValue"
 		});
 
@@ -70,7 +72,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 	});
 
 	it("should make metadata immutable for primitive values", async () => {
-		await api.addApi("immutable", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("immutable", TEST_DIRS.API_TEST_MIXED, {
 			count: 42,
 			name: "original"
 		});
@@ -97,7 +99,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 	});
 
 	it("should make metadata immutable for object values", async () => {
-		await api.addApi("immutableObj", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("immutableObj", TEST_DIRS.API_TEST_MIXED, {
 			config: { version: "1.0", debug: false },
 			tags: ["math", "core"]
 		});
@@ -131,7 +133,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 			return; // metadataAPI may not be available
 		}
 
-		await api.addApi("pathLookup", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("pathLookup", TEST_DIRS.API_TEST_MIXED, {
 			lookup: "success"
 		});
 
@@ -151,7 +153,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 			return; // metadataAPI may not be available
 		}
 
-		await api.addApi("callerTest", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("callerTest", TEST_DIRS.API_TEST_MIXED, {
 			caller: "vitest"
 		});
 
@@ -170,7 +172,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 			return; // metadataAPI may not be available
 		}
 
-		await api.addApi("selfTest", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("selfTest", TEST_DIRS.API_TEST_MIXED, {
 			introspection: true
 		});
 
@@ -183,7 +185,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 	});
 
 	it("should preserve metadata across function calls", async () => {
-		await api.addApi("preserve", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("preserve", TEST_DIRS.API_TEST_MIXED, {
 			callCount: 0,
 			persistent: true
 		});
@@ -200,7 +202,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 	});
 
 	it("should work with different API paths", async () => {
-		await api.addApi("multiPath", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("multiPath", TEST_DIRS.API_TEST_MIXED, {
 			pathType: "mixed"
 		});
 
@@ -220,7 +222,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 	});
 
 	it("should handle metadata for nested API structures", async () => {
-		await api.addApi("nested", TEST_DIRS.API_TEST_MIXED, {
+		await api.slothlet.api.add("nested", TEST_DIRS.API_TEST_MIXED, {
 			level: "nested",
 			depth: 1
 		});

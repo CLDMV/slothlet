@@ -21,6 +21,8 @@
  * - Null values are treated as test failures
  */
 
+// TODO(v3): Align proxy baseline expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

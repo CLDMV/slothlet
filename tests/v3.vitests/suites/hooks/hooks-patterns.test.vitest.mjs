@@ -35,6 +35,8 @@
  * DEBUG=true npx vitest --run tests/test-hooks-patterns.vitest.mjs
  */
 
+// TODO(v3): Align hook pattern matching expectations with v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import slothlet from "@cldmv/slothlet";
@@ -72,7 +74,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 		let capturedPath = "";
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				called = true;
@@ -100,7 +102,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Multi-level wildcard (**) matches any depth", async () => {
 		const paths = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));
@@ -126,7 +128,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 		let capturedPath = "";
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				called = true;
@@ -152,7 +154,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match either math or string
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));
@@ -172,7 +174,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match all EXCEPT math.*
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));
@@ -197,21 +199,21 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let count = 0;
 
 		// Register multiple hooks with same pattern
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				count++;
 			},
 			{ pattern: "math.*" }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				count++;
 			},
 			{ pattern: "math.*" }
 		);
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				count++;
@@ -228,7 +230,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Wildcard with exact suffix (*.create)", async () => {
 		let called = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				called = true;
@@ -251,7 +253,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// {a,b}.{c,d} should expand to: a.c, a.d, b.c, b.d
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));
@@ -271,7 +273,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 
 		// Match any top-level call
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				called = true;
@@ -295,7 +297,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match any.anything.under.here (needs at least 2 dots)
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));
@@ -313,7 +315,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Empty pattern matches nothing", async () => {
 		let called = false;
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				called = true;
@@ -331,7 +333,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 
 		// Should throw error for deep nesting (correct behavior)
 		expect(() => {
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					// Hook registered but may not be called
@@ -348,7 +350,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 
 		// Pattern with dots should be escaped properly
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				called = true;
@@ -363,7 +365,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Multiple patterns matching same path", async () => {
 		const calls = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				calls.push("pattern1");
@@ -371,7 +373,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 			{ pattern: "math.*" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				calls.push("pattern2");
@@ -379,7 +381,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 			{ pattern: "*.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			() => {
 				calls.push("pattern3");
@@ -397,15 +399,15 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	});
 
 	it("list() returns registered patterns", async () => {
-		api.hooks.on("before", () => {}, { pattern: "math.*" });
-		api.hooks.on("after", () => {}, { pattern: "*.add" });
-		api.hooks.on("error", () => {}, { pattern: "**" });
+		api.slothlet.hooks.on("before", () => {}, { pattern: "math.*" });
+		api.slothlet.hooks.on("after", () => {}, { pattern: "*.add" });
+		api.slothlet.hooks.on("error", () => {}, { pattern: "**" });
 
-		const allHooks = api.hooks.list();
+		const allHooks = api.slothlet.hooks.list();
 		expect(allHooks).toHaveProperty("registeredHooks");
 		expect(allHooks.registeredHooks).toHaveLength(3);
 
-		const beforeHooks = api.hooks.list("before");
+		const beforeHooks = api.slothlet.hooks.list("before");
 		expect(beforeHooks).toHaveProperty("registeredHooks");
 		expect(beforeHooks.registeredHooks).toHaveLength(1);
 		expect(beforeHooks.registeredHooks[0].pattern).toBe("math.*");
@@ -438,7 +440,7 @@ describe("Hook Pattern Edge Cases", () => {
 		const paths = [];
 
 		// Match everything
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ path }) => {
 				paths.push(toHookPath(path));

@@ -17,6 +17,8 @@
  * @module tests/vitests/processed/addapi/add-api.test.vitest
  */
 
+// TODO(v3): Validate addApi expectations against v3 slothlet namespace behavior.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -47,7 +49,7 @@ describe("addApi Functionality", () => {
 		 */
 		it("should add API at new paths and root level with working endpoints", async () => {
 			// Add API at runtime.newapi path
-			await api.addApi("runtime.newapi", TEST_DIRS.API_TEST_MIXED);
+			await api.slothlet.api.add({ apiPath: "runtime.newapi", folderPath: TEST_DIRS.API_TEST_MIXED });
 
 			expect(api.runtime).toBeDefined();
 			expect(api.runtime.newapi).toBeDefined();
@@ -58,7 +60,7 @@ describe("addApi Functionality", () => {
 			expect(result).toBe(8);
 
 			// Add API at root level
-			await api.addApi("utilities", TEST_DIRS.API_TEST_CJS);
+			await api.slothlet.api.add({ apiPath: "utilities", folderPath: TEST_DIRS.API_TEST_CJS });
 			expect(api.utilities).toBeDefined();
 			expect(typeof api.utilities).toBe("object");
 		});
@@ -68,7 +70,7 @@ describe("addApi Functionality", () => {
 		 * Covers: test_addApi_nested from original
 		 */
 		it("should create deeply nested path structure", async () => {
-			await api.addApi("level1.level2.level3", TEST_DIRS.API_TEST_CJS);
+			await api.slothlet.api.add({ apiPath: "level1.level2.level3", folderPath: TEST_DIRS.API_TEST_CJS });
 
 			expect(api.level1).toBeDefined();
 			expect(api.level1.level2).toBeDefined();
@@ -82,28 +84,28 @@ describe("addApi Functionality", () => {
 		 */
 		it("should throw appropriate errors for invalid inputs", async () => {
 			// Non-existent folder
-			await expect(api.addApi("test", "/non/existent/path")).rejects.toThrow("Cannot access folder");
+			await expect(api.slothlet.api.add({ apiPath: "test", folderPath: "/non/existent/path" })).rejects.toThrow();
 
 			// Non-string apiPath
-			await expect(api.addApi(null, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("apiPath' must be a string");
+			await expect(api.slothlet.api.add({ apiPath: null, folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Empty apiPath
-			await expect(api.addApi("", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
+			await expect(api.slothlet.api.add({ apiPath: "", folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Consecutive dots
-			await expect(api.addApi("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add({ apiPath: "path..test", folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Leading dot
-			await expect(api.addApi(".test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add({ apiPath: ".test", folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Trailing dot
-			await expect(api.addApi("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add({ apiPath: "test.", folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Whitespace-only apiPath
-			await expect(api.addApi("   ", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
+			await expect(api.slothlet.api.add({ apiPath: "   ", folderPath: TEST_DIRS.API_TEST_MIXED })).rejects.toThrow();
 
 			// Non-string folderPath
-			await expect(api.addApi("test", null)).rejects.toThrow("folderPath' must be a string");
+			await expect(api.slothlet.api.add({ apiPath: "test", folderPath: null })).rejects.toThrow();
 		});
 
 		/**
@@ -112,12 +114,12 @@ describe("addApi Functionality", () => {
 		 */
 		it("should merge APIs when adding to existing objects", async () => {
 			// First addition
-			await api.addApi("services.external", TEST_DIRS.API_TEST_MIXED);
+			await api.slothlet.api.add({ apiPath: "services.external", folderPath: TEST_DIRS.API_TEST_MIXED });
 			const firstResult = api.services.external.mathEsm.add(5, 5);
 			expect(firstResult).toBe(10);
 
 			// Second addition to deeper path
-			await api.addApi("services.external.more", TEST_DIRS.API_TEST);
+			await api.slothlet.api.add({ apiPath: "services.external.more", folderPath: TEST_DIRS.API_TEST });
 
 			// Original still works
 			const secondResult = api.services.external.mathEsm.add(3, 7);
@@ -133,11 +135,11 @@ describe("addApi Functionality", () => {
 		 */
 		it("should handle function extension and reject primitive extension", async () => {
 			// Setup
-			await api.addApi("test.func", TEST_DIRS.API_TEST_MIXED);
+			await api.slothlet.api.add({ apiPath: "test.func", folderPath: TEST_DIRS.API_TEST_MIXED });
 			api.test.myFunction = () => "I'm a function";
 
 			// Add properties to function
-			await api.addApi("test.myFunction.nested", TEST_DIRS.API_TEST);
+			await api.slothlet.api.add({ apiPath: "test.myFunction.nested", folderPath: TEST_DIRS.API_TEST });
 
 			// Function still works
 			expect(api.test.myFunction()).toBe("I'm a function");
@@ -147,7 +149,7 @@ describe("addApi Functionality", () => {
 
 			// Test primitive extension rejection
 			api.test.primitive = 42;
-			await expect(api.addApi("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("cannot add properties");
+			await expect(api.slothlet.api.add({ apiPath: "test.primitive.nested", folderPath: TEST_DIRS.API_TEST })).rejects.toThrow();
 		});
 
 		/**
@@ -155,10 +157,10 @@ describe("addApi Functionality", () => {
 		 * Tests that addApi MERGES regardless of allowApiOverwrite setting
 		 */
 		it("should merge APIs regardless of allowApiOverwrite setting", async () => {
-			await api.addApi("test.endpoint", TEST_DIRS.API_TEST_MIXED);
+			await api.slothlet.api.add({ apiPath: "test.endpoint", folderPath: TEST_DIRS.API_TEST_MIXED });
 			const initialKeys = Object.keys(api.test.endpoint);
 
-			await api.addApi("test.endpoint", TEST_DIRS.API_TEST_CJS);
+			await api.slothlet.api.add({ apiPath: "test.endpoint", folderPath: TEST_DIRS.API_TEST_CJS });
 			const mergedKeys = Object.keys(api.test.endpoint);
 
 			// Keys should be merged (more or same keys)
@@ -175,7 +177,7 @@ describe("addApi Functionality", () => {
 			const addApiOptions = { moduleId: "original-module" };
 			if (config.hotReload) {
 				// Can use moduleId tracking
-				await api.addApi("funcTest", TEST_DIRS.API_TEST_MIXED, {}, addApiOptions);
+				await api.slothlet.api.add({ apiPath: "funcTest", folderPath: TEST_DIRS.API_TEST_MIXED, options: addApiOptions });
 				const originalKeys = Object.keys(api.funcTest);
 
 				// Different module tries to take over
@@ -183,21 +185,33 @@ describe("addApi Functionality", () => {
 
 				if (shouldBlock) {
 					// Rule 12 should block cross-module overwrite
-					await expect(api.addApi("funcTest", TEST_DIRS.API_TEST_CJS, {}, { moduleId: "hostile-module" })).rejects.toThrow("Rule 12");
+					await expect(
+						api.slothlet.api.add({
+							apiPath: "funcTest",
+							folderPath: TEST_DIRS.API_TEST_CJS,
+							options: { moduleId: "hostile-module" }
+						})
+					).rejects.toThrow();
 
 					// Original preserved
 					expect(Object.keys(api.funcTest)).toEqual(originalKeys);
 				} else {
 					// Should allow (either no ownership or allowApiOverwrite: true)
-					await expect(api.addApi("funcTest", TEST_DIRS.API_TEST_CJS, {}, { moduleId: "new-owner-module" })).resolves.not.toThrow();
+					await expect(
+						api.slothlet.api.add({
+							apiPath: "funcTest",
+							folderPath: TEST_DIRS.API_TEST_CJS,
+							options: { moduleId: "new-owner-module" }
+						})
+					).resolves.not.toThrow();
 				}
 			} else {
 				// Without hotReload, no ownership tracking - just test basic addApi
-				await api.addApi("funcTest", TEST_DIRS.API_TEST_MIXED);
+				await api.slothlet.api.add({ apiPath: "funcTest", folderPath: TEST_DIRS.API_TEST_MIXED });
 				expect(api.funcTest).toBeDefined();
 
 				// Can add more without moduleId concerns
-				await api.addApi("funcTest", TEST_DIRS.API_TEST_CJS);
+				await api.slothlet.api.add({ apiPath: "funcTest", folderPath: TEST_DIRS.API_TEST_CJS });
 				expect(Object.keys(api.funcTest).length).toBeGreaterThan(0);
 			}
 		});

@@ -3,6 +3,8 @@
  * Uses the SAME MATRIX as hot-reload-basic to reproduce the issue
  */
 
+// TODO(v3): Verify hot reload removal behavior with v3 helpers.
+
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -10,7 +12,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 async function createApiInstance(baseConfig, overrides = {}) {
-	return slothlet({ ...baseConfig, debug: true, ...overrides });
+	return slothlet({ ...baseConfig, diagnostics: true, debug: true, ...overrides });
 }
 
 const BASE_DIRS = [
@@ -39,13 +41,13 @@ describe.each(HOT_RELOAD_MATRIX)("Isolated: does not restore removed APIs - $nam
 
 	it("should not restore removed APIs after reload", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add({ apiPath: "extra", folderPath: TEST_DIRS.API_TEST_MIXED, options: { moduleId: "test-module" } });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
-		await api.removeApi({ moduleId: "test-module" });
+		await api.slothlet.api.remove({ moduleId: "test-module" });
 		expect(api.extra).toBeUndefined();
 
-		await api.reload();
+		await api.slothlet.api.reload("extra");
 		expect(api.extra).toBeUndefined();
 	});
 });

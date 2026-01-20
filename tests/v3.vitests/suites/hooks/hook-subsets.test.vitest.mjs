@@ -8,6 +8,8 @@
  * @module tests/vitests/suites/hooks/hook-subsets.test.vitest
  */
 
+// TODO(v3): Align hook subset expectations with v3 slothlet namespace behavior.
+
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -43,11 +45,11 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 	it("debug: check hook configuration", async () => {
 		api = await createApiInstance(config);
 		console.log("Config:", config);
-		console.log("HookManager enabled (__ctx):", api.__ctx?.hookManager?.enabled);
-		console.log("Hooks API available:", !!api.hooks);
+		console.log("HookManager enabled (__slothletInstance):", api.__slothletInstance?.hookManager?.enabled);
+		console.log("Hooks API available:", !!api.slothlet.hooks);
 		console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
 		console.log("math.add.__slothletPath:", api.math.add.__slothletPath);
-		expect(api.hooks).toBeDefined();
+		expect(api.slothlet.hooks).toBeDefined();
 	});
 
 	describe("Before Hooks Subset Ordering", () => {
@@ -55,13 +57,13 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			api = await createApiInstance(config);
 
 			// Verify hooks are enabled
-			expect(api.hooks).toBeDefined();
-			expect(api.hooks.list).toBeTypeOf("function");
+			expect(api.slothlet.hooks).toBeDefined();
+			expect(api.slothlet.hooks.list).toBeTypeOf("function");
 
 			const executionOrder = [];
 
 			// Register hooks in reverse order to test sorting
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					executionOrder.push("after-subset");
@@ -70,7 +72,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				{ subset: "after", priority: 1000 }
 			);
 
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					executionOrder.push("primary-subset");
@@ -79,7 +81,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				{ subset: "primary", priority: 1000 }
 			);
 
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					executionOrder.push("before-subset");
@@ -99,14 +101,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			const executionOrder = [];
 
 			// Before subset with different priorities
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("before-low");
 				},
 				{ subset: "before", priority: 100 }
 			);
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("before-high");
@@ -115,14 +117,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 
 			// Primary subset with different priorities
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("primary-low");
 				},
 				{ subset: "primary", priority: 100 }
 			);
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("primary-high");
@@ -131,14 +133,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 
 			// After subset with different priorities
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("after-low");
 				},
 				{ subset: "after", priority: 100 }
 			);
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("after-high");
@@ -157,21 +159,21 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			const executionOrder = [];
 
 			// All same subset and priority - should execute in registration order
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("first");
 				},
 				{ subset: "primary", priority: 1000 }
 			);
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("second");
 				},
 				{ subset: "primary", priority: 1000 }
 			);
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("third");
@@ -189,17 +191,17 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			const executionOrder = [];
 
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("before-subset");
 				},
 				{ subset: "before" }
 			);
-			api.hooks.on("before", () => {
+			api.slothlet.hooks.on("before", () => {
 				executionOrder.push("no-subset");
 			}); // Should default to primary
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("after-subset");
@@ -216,7 +218,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			api = await createApiInstance(config);
 
 			// Before subset: add 10 to first arg
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					return [args[0] + 10, args[1]];
@@ -225,7 +227,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 
 			// Primary subset: multiply first arg by 2
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					return [args[0] * 2, args[1]];
@@ -234,7 +236,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 
 			// After subset: add 1 to first arg
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				({ args }) => {
 					return [args[0] + 1, args[1]];
@@ -255,7 +257,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			const executionOrder = [];
 
 			// Before subset hook short-circuits
-			api.hooks.on(
+			api.slothlet.hooks.on(
 				"before",
 				() => {
 					executionOrder.push("before-subset");
@@ -271,7 +273,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 					executionOrder.push("primary-subset");
 				},
 				{ subset: "primary" }
-			);
+					api.slothlet.hooks.on(
 			api.hooks.on(
 				"before",
 				() => {
@@ -280,7 +282,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				{ subset: "after" }
 			);
 
-			const result = await api.math.add(2, 3);
+					api.slothlet.hooks.on(
 
 			expect(result).toBe(999);
 			expect(executionOrder).toEqual(["before-subset"]);
@@ -289,7 +291,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 	describe("After Hooks Subset Ordering", () => {
 		it("executes subsets in order: before → primary → after", async () => {
-			api = await createApiInstance(config);
+					api.slothlet.hooks.on(
 
 			const executionOrder = [];
 
@@ -309,14 +311,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 					return result;
 				},
 				{ subset: "primary" }
-			);
+					api.slothlet.hooks.on(
 
 			api.hooks.on(
 				"after",
 				({ result }) => {
 					executionOrder.push("before-subset");
 					return result;
-				},
+					api.slothlet.hooks.on(
 				{ subset: "before" }
 			);
 
@@ -325,14 +327,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			expect(executionOrder).toEqual(["before-subset", "primary-subset", "after-subset"]);
 		});
 
-		it("chains result transformations across subsets", async () => {
+					api.slothlet.hooks.on(
 			api = await createApiInstance(config);
 
 			// Before subset: add 10
 			api.hooks.on("after", ({ result }) => result + 10, { subset: "before" });
 
 			// Primary subset: multiply by 2
-			api.hooks.on("after", ({ result }) => result * 2, { subset: "primary" });
+					api.slothlet.hooks.on(
 
 			// After subset: add 5
 			api.hooks.on("after", ({ result }) => result + 5, { subset: "after" });
@@ -341,14 +343,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			// (1 + 2) = 3
 			// 3 + 10 = 13
-			// 13 * 2 = 26
+					api.slothlet.hooks.on(
 			// 26 + 5 = 31
 			expect(result).toBe(31);
 		});
 
 		it("respects priority within subsets for result transformation", async () => {
 			api = await createApiInstance(config);
-
+					api.slothlet.hooks.on(
 			const executionOrder = [];
 
 			// Before subset with different priorities
@@ -367,21 +369,21 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 					executionOrder.push("before-low");
 					return result + 2;
 				},
-				{ subset: "before", priority: 100 }
+					api.slothlet.hooks.on(
 			);
 
 			const result = await api.math.add(10, 0);
 
 			// 10 + 1 = 11 (before-high)
 			// 11 + 2 = 13 (before-low)
-			expect(result).toBe(13);
+					api.slothlet.hooks.on(
 			expect(executionOrder).toEqual(["before-high", "before-low"]);
 		});
 	});
 
 	describe("Always Hooks Subset Ordering", () => {
 		it("executes subsets in order: before → primary → after", async () => {
-			api = await createApiInstance(config);
+					api.slothlet.hooks.on(
 
 			const executionOrder = [];
 
@@ -399,17 +401,17 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				},
 				{ subset: "primary" }
 			);
-			api.hooks.on(
+					api.slothlet.hooks.on(
 				"always",
 				() => {
 					executionOrder.push("before-subset");
 				},
 				{ subset: "before" }
 			);
-
+					api.slothlet.hooks.on("before", () => {
 			await api.math.add(2, 3);
 
-			expect(executionOrder).toEqual(["before-subset", "primary-subset", "after-subset"]);
+					api.slothlet.hooks.on(
 		});
 
 		it("executes all subsets even when function throws", async () => {
@@ -426,7 +428,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 			api.hooks.on(
 				"always",
-				() => {
+					api.slothlet.hooks.on(
 					executionOrder.push("primary");
 				},
 				{ subset: "primary" }
@@ -435,7 +437,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				"always",
 				() => {
 					executionOrder.push("after");
-				},
+					api.slothlet.hooks.on(
 				{ subset: "after" }
 			);
 
@@ -444,7 +446,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 				throw new Error("Test error");
 			});
 
-			try {
+					api.slothlet.hooks.on(
 				await api.math.add(2, 3);
 			} catch (_) {
 				// Expected
@@ -465,7 +467,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			api.hooks.on("before", () => {
 				throw new Error("Test error");
 			});
-
+					api.slothlet.hooks.on(
 			try {
 				await api.math.add(2, 3);
 			} catch (_) {
@@ -475,14 +477,14 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			expect(contexts).toEqual([
 				{ subset: "before", hasError: true },
 				{ subset: "primary", hasError: true },
-				{ subset: "after", hasError: true }
+					api.slothlet.hooks.on(
 			]);
 		});
 	});
 
 	describe("Error Hooks Subset Ordering", () => {
 		it("executes subsets in order: before → primary → after", async () => {
-			api = await createApiInstance(config);
+					api.slothlet.hooks.on(
 
 			const executionOrder = [];
 
@@ -503,7 +505,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			api.hooks.on(
 				"error",
 				() => {
-					executionOrder.push("before-subset");
+					api.slothlet.hooks.on(
 				},
 				{ subset: "before" }
 			);
@@ -512,7 +514,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			api.hooks.on("before", () => {
 				throw new Error("Test error");
 			});
-
+					api.slothlet.hooks.on(
 			try {
 				await api.math.add(2, 3);
 			} catch (_) {
@@ -521,7 +523,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			expect(executionOrder).toEqual(["before-subset", "primary-subset", "after-subset"]);
 		});
-
+					api.slothlet.hooks.on(
 		it("all subsets receive error context with source info", async () => {
 			api = await createApiInstance(config);
 
@@ -539,13 +541,13 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 			);
 
 			api.hooks.on(
-				"error",
+					api.slothlet.hooks.on("after", ({ result }) => result + 10, { subset: "before" });
 				(ctx) =>
 					errorContexts.push({
-						subset: "primary",
+					api.slothlet.hooks.on("after", ({ result }) => result * 2, { subset: "primary" });
 						errorType: ctx.errorType,
 						sourceType: ctx.source.type
-					}),
+					api.slothlet.hooks.on("after", ({ result }) => result + 5, { subset: "after" });
 				{ subset: "primary" }
 			);
 
@@ -562,7 +564,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			// Trigger error in before hook
 			api.hooks.on(
-				"before",
+					api.slothlet.hooks.on(
 				() => {
 					throw new Error("Test error");
 				},
@@ -571,7 +573,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			try {
 				await api.math.add(2, 3);
-			} catch (_) {
+					api.slothlet.hooks.on(
 				// Expected
 			}
 

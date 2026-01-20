@@ -9,6 +9,8 @@
  * - Sequential hook execution
  */
 
+// TODO(v3): Align before-hook chaining expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
@@ -38,7 +40,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 	test("should chain multiple before hooks for argument modifications (primitives)", async () => {
 		const modifications = [];
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook1");
@@ -47,7 +49,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 			{ id: "hook1-double", priority: 300, pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook2");
@@ -56,7 +58,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 			{ id: "hook2-add10", priority: 200, pattern: "math.add" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				modifications.push("hook3");
@@ -75,7 +77,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 	});
 
 	test("should chain multiple before hooks for argument modifications (objects)", async () => {
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -86,7 +88,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 			{ id: "add-a", priority: 300, pattern: "**" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -97,7 +99,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 			{ id: "add-b", priority: 200, pattern: "**" }
 		);
 
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {
@@ -109,7 +111,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 		);
 
 		let verified = false;
-		api.hooks.on(
+		api.slothlet.hooks.on(
 			"before",
 			({ args }) => {
 				if (typeof args[0] === "object") {

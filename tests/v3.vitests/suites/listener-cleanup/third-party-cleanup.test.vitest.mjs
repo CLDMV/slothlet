@@ -26,8 +26,10 @@
  * - EventEmitters created during API usage should be cleaned up
  */
 
+// TODO(v3): Align listener cleanup expectations with v3 slothlet namespace behavior.
+
 import { describe, test, expect } from "vitest";
-import slothlet from "../../../../index.mjs";
+import slothlet from "@cldmv/slothlet";
 import { EventEmitter } from "node:events";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
