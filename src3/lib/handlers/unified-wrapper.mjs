@@ -452,7 +452,12 @@ export class UnifiedWrapper {
 		const nameHint =
 			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
 		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
-		proxyTarget.__wrapper = wrapper;
+		Object.defineProperty(proxyTarget, "__wrapper", {
+			value: wrapper,
+			writable: false,
+			enumerable: false,
+			configurable: false
+		});
 		wrapper._proxyTarget = proxyTarget;
 		for (const [key, value] of wrapper._childCache.entries()) {
 			if (typeof key === "string" || typeof key === "symbol") {
@@ -664,6 +669,15 @@ export class UnifiedWrapper {
 				wrapper._materialize();
 			}
 
+			if (prop === "__wrapper") {
+				return {
+					configurable: false,
+					enumerable: false,
+					value: wrapper,
+					writable: false
+				};
+			}
+
 			if (prop === "prototype" && typeof target === "function") {
 				return Object.getOwnPropertyDescriptor(target, "prototype");
 			}
@@ -710,6 +724,7 @@ export class UnifiedWrapper {
 			for (const key of wrapper._childCache.keys()) {
 				keys.add(key);
 			}
+			keys.delete("__wrapper");
 
 			keys.add("__impl");
 			keys.add("__setImpl");
