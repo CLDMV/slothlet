@@ -8,6 +8,25 @@ import { processFiles, applyRootContributor, createLazySubdirectoryWrapper } fro
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
+ * Create a named async materialization function for clearer debug output.
+ * @param {string} apiPath - API path to derive the function name from.
+ * @param {function} handler - Async handler that performs materialization.
+ * @returns {function} Named async materialization function.
+ */
+function createNamedMaterializeFunc(apiPath, handler) {
+	const safePath = String(apiPath || "api")
+		.replace(/\./g, "__")
+		.replace(/[^A-Za-z0-9_$]/g, "_");
+	const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
+	const funcName = `${normalized}__lazy_materializeFunc`;
+	return {
+		[funcName]: async function (...args) {
+			return handler(...args);
+		}
+	}[funcName];
+}
+
+/**
  * Build API in lazy mode (proxy-based deferred loading)
  * @param {Object} options - Build options
  * @param {string} options.dir - Directory to build from
@@ -68,7 +87,7 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceID,
  */
 function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
-	async function materializeFunc() {
+	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
 		if (config.debug?.modes) {
 			console.log(`[LAZY.MJS materializeFunc] START for apiPath=${apiPath}, dir=${dir.name}`);
 		}
@@ -124,7 +143,7 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 		}
 		// POC pattern: return the materialized implementation
 		return materialized;
-	}
+	});
 
 	// Create unified wrapper in lazy mode
 	const wrapper = new UnifiedWrapper({

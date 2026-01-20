@@ -154,6 +154,35 @@ export function extractExports(module) {
  * @public
  */
 export function mergeExportsIntoAPI(target, exports, propertyName) {
+	/**
+	 * Ensure default export functions have a meaningful name for debug output.
+	 * @param {Function} fn - Default export function.
+	 * @param {string} nameHint - Property name to use as the function name.
+	 * @returns {Function} Named function or original if already named.
+	 */
+	function ensureNamedDefaultFunction(fn, nameHint) {
+		if (typeof fn !== "function") {
+			return fn;
+		}
+		if (fn.name && fn.name !== "default") {
+			return fn;
+		}
+		const safeName = String(nameHint || "default").replace(/[^A-Za-z0-9_$]/g, "_") || "default";
+		const wrapped = {
+			[safeName]: function (...args) {
+				return fn(...args);
+			}
+		}[safeName];
+		const descriptors = Object.getOwnPropertyDescriptors(fn);
+		for (const [key, descriptor] of Object.entries(descriptors)) {
+			if (key === "name" || key === "length" || key === "prototype") {
+				continue;
+			}
+			Object.defineProperty(wrapped, key, descriptor);
+		}
+		return wrapped;
+	}
+
 	const exportKeys = Object.keys(exports).filter((k) => k !== "default");
 
 	// Case 1: Single named export matching property name - flatten it
@@ -164,7 +193,7 @@ export function mergeExportsIntoAPI(target, exports, propertyName) {
 
 	// Case 2: Only default export
 	if (exports.default && exportKeys.length === 0) {
-		target[propertyName] = exports.default;
+		target[propertyName] = ensureNamedDefaultFunction(exports.default, propertyName);
 		return;
 	}
 
@@ -178,7 +207,7 @@ export function mergeExportsIntoAPI(target, exports, propertyName) {
 	if (exports.default && exportKeys.length > 0) {
 		// If default is a function, attach named exports as properties
 		if (typeof exports.default === "function") {
-			const callable = exports.default;
+			const callable = ensureNamedDefaultFunction(exports.default, propertyName);
 			for (const key of exportKeys) {
 				callable[key] = exports[key];
 			}

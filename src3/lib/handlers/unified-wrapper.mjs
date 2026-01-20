@@ -3,12 +3,42 @@
  * @module @cldmv/slothlet/handlers/unified-wrapper
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
+import util from "node:util";
 
 const wrapperDebugEnabled =
 	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
 	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+
+/**
+ * Build a safe function name for debugging and inspection output.
+ * @param {string} apiPath - API path to derive a name from.
+ * @param {string} fallback - Fallback name when a safe name cannot be derived.
+ * @returns {string} Safe function name.
+ */
+function getSafeFunctionName(apiPath, fallback) {
+	const parts = String(apiPath || "")
+		.split(".")
+		.filter((part) => part && part !== "null");
+	const baseName = parts.length > 0 ? parts[parts.length - 1] : "";
+	let safeName = String(baseName || "").replace(/[^A-Za-z0-9_$]/g, "_");
+	if (!safeName || !/^[A-Za-z_$]/.test(safeName[0])) {
+		safeName = safeName ? `_${safeName}` : "";
+	}
+	return safeName || fallback;
+}
+
+/**
+ * Create a named proxy target function for clearer debug output.
+ * @param {string} nameHint - Name hint derived from apiPath.
+ * @param {string} fallback - Fallback function name if nameHint is unusable.
+ * @returns {Function} Named proxy target function.
+ */
+function createNamedProxyTarget(nameHint, fallback) {
+	const safeName = getSafeFunctionName(nameHint, fallback);
+	return { [safeName]: function () {} }[safeName];
+}
 
 /**
  * Unified wrapper class that handles all proxy concerns in one place:
@@ -62,9 +92,18 @@ export class UnifiedWrapper {
 		};
 		this._materializeFunc = materializeFunc;
 		this.ownership = ownership;
+		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		if (initialImpl !== null) {
 			this._adoptImplChildren();
 		}
+	}
+
+	/**
+	 * Custom inspect output for Node.js util.inspect.
+	 * @returns {string} Debug-friendly wrapper label.
+	 */
+	[util.inspect.custom]() {
+		return this.displayName;
 	}
 
 	/**
@@ -305,14 +344,14 @@ export class UnifiedWrapper {
 	 */
 	_createWaitingProxy(propChain = []) {
 		const wrapper = this;
-		const waitingTarget = function waitingProxyTarget() {};
+		const waitingTarget = createNamedProxyTarget(`${wrapper.apiPath}_waitingProxy`, "waitingProxyTarget");
 
 		return new Proxy(waitingTarget, {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
 				if (typeof prop === "symbol") return undefined;
 				if (prop === "length") return 0;
-				if (prop === "name") return "unifiedWrapperProxy";
+				if (prop === "name") return waitingTarget.name || "waitingProxyTarget";
 				if (prop === "toString") return Function.prototype.toString.bind(waitingTarget);
 				if (prop === "valueOf") return Function.prototype.valueOf.bind(waitingTarget);
 				return wrapper._createWaitingProxy([...propChain, prop]);
@@ -389,7 +428,7 @@ export class UnifiedWrapper {
 		}
 
 		const isCallable = wrapper.mode === "lazy" || typeof wrapper._impl === "function" || wrapper.isCallable;
-		const proxyTarget = isCallable ? function unifiedWrapperProxy() {} : {};
+		const proxyTarget = isCallable ? createNamedProxyTarget(wrapper.apiPath, "unifiedWrapperProxy") : {};
 		proxyTarget.__wrapper = wrapper;
 
 		/**
@@ -417,7 +456,7 @@ export class UnifiedWrapper {
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (typeof prop === "symbol") return undefined;
 			if (prop === "length") return 0;
-			if (prop === "name") return "unifiedWrapperProxy";
+			if (prop === "name") return target.name || "unifiedWrapperProxy";
 			if (prop === "toString") return Function.prototype.toString.bind(target);
 			if (prop === "valueOf") return Function.prototype.valueOf.bind(target);
 
@@ -665,7 +704,10 @@ export class UnifiedWrapper {
 			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 				wrapper._materialize();
 			}
-
+			const internalKeys = new Set(["__impl", "__setImpl", "__getState", "__materialize", "__invalidate", "_impl", "_state", "_invalid"]);
+			if (!internalKeys.has(prop)) {
+				wrapper._childCache.set(prop, value);
+			}
 			target[prop] = value;
 			return true;
 		};

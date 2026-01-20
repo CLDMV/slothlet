@@ -11,6 +11,66 @@ import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
+ * Build a safe function name for debug output from an API path or module name.
+ * @param {string} name - Name hint to sanitize.
+ * @param {string} fallback - Fallback name if the hint is unusable.
+ * @returns {string} Safe function name.
+ */
+function getSafeFunctionName(name, fallback) {
+	const safeBase = String(name || "").replace(/[^A-Za-z0-9_$]/g, "_");
+	const normalized = safeBase && /^[A-Za-z_$]/.test(safeBase[0]) ? safeBase : safeBase ? `_${safeBase}` : "";
+	return normalized || fallback;
+}
+
+/**
+ * Create a named wrapper for default export functions when they are anonymous.
+ * @param {Function} fn - Original function.
+ * @param {string} nameHint - Name to apply if fn is anonymous or named "default".
+ * @returns {Function} Named function (original if already named).
+ */
+function ensureNamedExportFunction(fn, nameHint) {
+	if (typeof fn !== "function") {
+		return fn;
+	}
+	if (fn.name && fn.name !== "default") {
+		return fn;
+	}
+	const safeName = getSafeFunctionName(nameHint, "default");
+	const wrapped = {
+		[safeName]: function (...args) {
+			return fn(...args);
+		}
+	}[safeName];
+	const descriptors = Object.getOwnPropertyDescriptors(fn);
+	for (const [key, descriptor] of Object.entries(descriptors)) {
+		if (key === "name" || key === "length" || key === "prototype") {
+			continue;
+		}
+		Object.defineProperty(wrapped, key, descriptor);
+	}
+	return wrapped;
+}
+
+/**
+ * Create a named async materialization function for lazy subdirectories.
+ * @param {string} apiPath - API path to derive the function name from.
+ * @param {Function} handler - Async handler that performs materialization.
+ * @returns {Function} Named async materialization function.
+ */
+function createNamedMaterializeFunc(apiPath, handler) {
+	const safePath = String(apiPath || "api")
+		.replace(/\./g, "__")
+		.replace(/[^A-Za-z0-9_$]/g, "_");
+	const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
+	const funcName = `${normalized}__lazy_materializeFunc`;
+	return {
+		[funcName]: async function (...args) {
+			return handler(...args);
+		}
+	}[funcName];
+}
+
+/**
  * Clone eager-mode module exports to avoid mutating import cache objects.
  * @param {unknown} value - Value to clone for wrapping
  * @param {string} mode - Current mode ("eager" or "lazy")
@@ -67,6 +127,24 @@ export async function processFiles(
 	let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
 	const shouldWrap = !(mode === "lazy" && populateDirectly);
 
+	if (!isRoot && shouldWrap && !populateDirectly) {
+		const existingTarget = api[categoryName];
+		if (existingTarget && existingTarget.__wrapper) {
+			targetApi = existingTarget;
+		} else if (existingTarget === undefined || (typeof existingTarget === "object" && existingTarget !== null)) {
+			const wrapper = new UnifiedWrapper({
+				mode,
+				apiPath: categoryName,
+				contextManager,
+				instanceID,
+				initialImpl: cloneWrapperImpl(existingTarget || {}, mode),
+				ownership
+			});
+			api[categoryName] = wrapper.createProxy();
+			targetApi = api[categoryName];
+		}
+	}
+
 	if (!isRoot && config.debug?.modes) {
 		console.log(await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth }));
 	}
@@ -113,7 +191,7 @@ export async function processFiles(
 
 		if (isRootContributor) {
 			// Root contributor: default function with named exports attached
-			const defaultFunc = mod.default;
+			const defaultFunc = ensureNamedExportFunction(mod.default, moduleName);
 			for (const key of moduleKeys) {
 				defaultFunc[key] = mod[key];
 			}
@@ -155,13 +233,13 @@ export async function processFiles(
 			} else if (mod.default && moduleKeys.length > 0 && typeof mod.default === "function") {
 				// Hybrid pattern: default function + named exports
 				// Attach named exports as properties on the function (like logger(), logger.info())
-				moduleContent = mod.default;
+				moduleContent = ensureNamedExportFunction(mod.default, propertyName);
 				for (const key of moduleKeys) {
 					moduleContent[key] = mod[key];
 				}
 			} else if (mod.default && moduleKeys.length === 0) {
 				// Only default export - use it directly (no need to wrap in object)
-				moduleContent = mod.default;
+				moduleContent = ensureNamedExportFunction(mod.default, propertyName);
 			} else {
 				// Multiple named exports or mixed default (non-function) + named
 				if (mod.default) moduleContent.default = mod.default;
@@ -223,7 +301,7 @@ export async function processFiles(
 					// Example: logger/logger.mjs (default function) + logger/utils.mjs (named exports)
 					// Result: api.logger() callable + api.logger.utils.* from other files
 					const namedKeys = moduleKeys.length > 0 ? moduleKeys : Object.keys(mod).filter((key) => key !== "default");
-					const callableModule = typeof mod.default === "function" ? mod.default : moduleContent;
+					const callableModule = typeof mod.default === "function" ? ensureNamedExportFunction(mod.default, categoryName) : moduleContent;
 					if (typeof callableModule === "function" && namedKeys.length > 0) {
 						for (const key of namedKeys) {
 							if (key !== "default" && callableModule[key] === undefined) {
@@ -496,7 +574,7 @@ export async function processFiles(
 							// Flatten: put the module content directly at targetApi[subDirName]
 							const wrapper = new UnifiedWrapper({
 								mode,
-								apiPath: `${categoryName}.${subDirName}`,
+								apiPath: categoryName ? `${categoryName}.${subDirName}` : subDirName,
 								contextManager,
 								instanceID,
 								initialImpl: cloneWrapperImpl(implToWrap, mode),
@@ -504,7 +582,8 @@ export async function processFiles(
 							});
 							targetApi[subDirName] = wrapper.createProxy();
 							if (ownership) {
-								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${subDirName}`, source: "core" });
+								const apiPath = categoryName ? `${categoryName}.${subDirName}` : subDirName;
+								ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
 							}
 							continue;
 						}
@@ -561,7 +640,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 	 * @returns {Promise<unknown>} Materialized implementation for this subdirectory
 	 * @private
 	 */
-	async function lazy_materializeFunc() {
+	const lazy_materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
 		if (config.debug?.modes) {
 			console.log(`[MATERIALIZE FUNC] Starting for dir=${dir.name}, files=${dir.children.files?.length || 0}`);
 		}
@@ -603,7 +682,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 					if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 						implToWrap = exports[categoryName];
 					} else if (exports.default !== undefined) {
-						implToWrap = exports.default;
+						implToWrap = ensureNamedExportFunction(exports.default, categoryName);
 						// Hybrid pattern: default function + named exports
 						// Attach named exports as properties on the function
 						if (typeof implToWrap === "function" && moduleKeys.length > 0) {
@@ -685,7 +764,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 
 		// POC pattern: return the materialized implementation
 		return materialized;
-	}
+	});
 
 	// Create unified wrapper in lazy mode
 	const wrapper = new UnifiedWrapper({
