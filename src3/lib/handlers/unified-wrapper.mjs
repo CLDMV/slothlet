@@ -297,6 +297,12 @@ export class UnifiedWrapper {
 	 * @returns {Proxy} Waiting proxy that chains property access
 	 * @private
 	 */
+	/**
+	 * Create a waiting proxy that resolves a property chain after lazy materialization.
+	 * @private
+	 * @param {Array<string|symbol>} [propChain=[]] - Property chain to resolve.
+	 * @returns {Proxy} Proxy that waits for materialization before applying calls.
+	 */
 	_createWaitingProxy(propChain = []) {
 		const wrapper = this;
 		const waitingTarget = function waitingProxyTarget() {};
@@ -304,10 +310,16 @@ export class UnifiedWrapper {
 		return new Proxy(waitingTarget, {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
+				if (typeof prop === "symbol") return undefined;
+				if (prop === "length") return 0;
+				if (prop === "name") return "unifiedWrapperProxy";
+				if (prop === "toString") return Function.prototype.toString.bind(waitingTarget);
+				if (prop === "valueOf") return Function.prototype.valueOf.bind(waitingTarget);
 				return wrapper._createWaitingProxy([...propChain, prop]);
 			},
 
 			async apply(___target, ___thisArg, args) {
+				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					await wrapper._materialize();
 				}
@@ -320,7 +332,7 @@ export class UnifiedWrapper {
 
 				for (const prop of propChain) {
 					if (!current) {
-						throw new Error(`${wrapper.apiPath}.${propChain.join(".")} - cannot access ${String(prop)} of undefined`);
+						throw new Error(`${wrapper.apiPath}.${chainLabel} - cannot access ${String(prop)} of undefined`);
 					}
 
 					if (current && current.__wrapper && current.__getState) {
@@ -332,7 +344,7 @@ export class UnifiedWrapper {
 							while (!current.__getState().materialized) {
 								const nextState = current.__getState();
 								if (!nextState.inFlight && !nextState.materialized) {
-									throw new Error(`${wrapper.apiPath}.${propChain.join(".")} failed to materialize ${String(prop)}`);
+									throw new Error(`${wrapper.apiPath}.${chainLabel} failed to materialize ${String(prop)}`);
 								}
 								await new Promise((resolve) => setImmediate(resolve));
 							}
@@ -358,7 +370,7 @@ export class UnifiedWrapper {
 					return current(...args);
 				}
 
-				throw new Error(`${wrapper.apiPath}.${propChain.join(".")} is not a function`);
+				throw new Error(`${wrapper.apiPath}.${chainLabel} is not a function`);
 			}
 		});
 	}
@@ -403,6 +415,11 @@ export class UnifiedWrapper {
 			if (prop === "_invalid") return wrapper._invalid;
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
+			if (typeof prop === "symbol") return undefined;
+			if (prop === "length") return 0;
+			if (prop === "name") return "unifiedWrapperProxy";
+			if (prop === "toString") return Function.prototype.toString.bind(target);
+			if (prop === "valueOf") return Function.prototype.valueOf.bind(target);
 
 			if (wrapper._invalid) {
 				return undefined;
