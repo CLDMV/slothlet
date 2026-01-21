@@ -129,6 +129,11 @@ function generateTestMatrix(configSpace) {
 			config[key] = combination[i];
 		});
 
+		// Enable diagnostics for non-mutate configs to expose api.slothlet.api/reload/hooks for testing
+		if (config.allowMutation === false) {
+			config.diagnostics = true;
+		}
+
 		// Generate descriptive name
 		const nameParts = [];
 		nameParts.push(config.mode.toUpperCase());

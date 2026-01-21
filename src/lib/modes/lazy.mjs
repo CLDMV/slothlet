@@ -153,7 +153,8 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 		instanceID,
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
-		ownership
+		ownership,
+		materializeOnCreate: config.backgroundMaterialize
 	});
 
 	return wrapper.createProxy();

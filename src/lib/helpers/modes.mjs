@@ -286,7 +286,8 @@ export async function processFiles(
 								contextManager,
 								instanceID,
 								initialImpl: cloneWrapperImpl(exportedValue, mode),
-								ownership
+								ownership,
+								materializeOnCreate: config.backgroundMaterialize
 							});
 
 							// Replace targetApi reference with the wrapped proxy
@@ -338,7 +339,8 @@ export async function processFiles(
 							contextManager,
 							instanceID,
 							initialImpl: cloneWrapperImpl(moduleContent, mode),
-							ownership
+							ownership,
+							materializeOnCreate: config.backgroundMaterialize
 						});
 
 						// Replace the empty object with the wrapped callable function
@@ -362,7 +364,8 @@ export async function processFiles(
 									contextManager,
 									instanceID,
 									initialImpl: mod[key],
-									ownership
+									ownership,
+									materializeOnCreate: config.backgroundMaterialize
 								});
 								if (safeAssign(targetApi, key, namedWrapper.createProxy(), config)) {
 									targetApi[key] = namedWrapper.createProxy();
@@ -408,7 +411,8 @@ export async function processFiles(
 									contextManager,
 									instanceID,
 									initialImpl: cloneWrapperImpl(propValue, mode),
-									ownership
+									ownership,
+									materializeOnCreate: config.backgroundMaterialize
 								});
 								if (safeAssign(targetApi, propKey, wrapper.createProxy(), config)) {
 									targetApi[propKey] = wrapper.createProxy();
@@ -433,7 +437,8 @@ export async function processFiles(
 										contextManager,
 										instanceID,
 										initialImpl: cloneWrapperImpl(mod[key], mode),
-										ownership
+										ownership,
+										materializeOnCreate: config.backgroundMaterialize
 									});
 									if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
 										targetApi[key] = wrapper.createProxy();
@@ -458,7 +463,8 @@ export async function processFiles(
 									contextManager,
 									instanceID,
 									initialImpl: cloneWrapperImpl(mod[key], mode),
-									ownership
+									ownership,
+									materializeOnCreate: config.backgroundMaterialize
 								});
 								if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
 									targetApi[key] = wrapper.createProxy();
@@ -497,7 +503,8 @@ export async function processFiles(
 							contextManager,
 							instanceID,
 							initialImpl: cloneWrapperImpl(mod[key], mode),
-							ownership
+							ownership,
+							materializeOnCreate: config.backgroundMaterialize
 						});
 						if (safeAssign(targetApi, preferredName, wrapper.createProxy(), config)) {
 							targetApi[preferredName] = wrapper.createProxy();
@@ -522,7 +529,8 @@ export async function processFiles(
 					contextManager,
 					instanceID,
 					initialImpl: cloneWrapperImpl(moduleContent, mode),
-					ownership
+					ownership,
+					materializeOnCreate: config.backgroundMaterialize
 				});
 
 				targetApi[propertyName] = wrapper.createProxy();
@@ -619,7 +627,8 @@ export async function processFiles(
 								contextManager,
 								instanceID,
 								initialImpl: cloneWrapperImpl(implToWrap, mode),
-								ownership
+								ownership,
+								materializeOnCreate: config.backgroundMaterialize
 							});
 							targetApi[subDirName] = wrapper.createProxy();
 							if (ownership) {
@@ -689,7 +698,8 @@ export async function processFiles(
 						contextManager,
 						instanceID,
 						initialImpl: cloneWrapperImpl(defaultFunc, mode),
-						ownership
+						ownership,
+						materializeOnCreate: config.backgroundMaterialize
 					});
 					if (safeAssign(targetApi, moduleName, wrapper.createProxy(), config)) {
 						targetApi[moduleName] = wrapper.createProxy();

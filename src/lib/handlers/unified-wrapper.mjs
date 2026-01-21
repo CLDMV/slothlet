@@ -73,11 +73,12 @@ export class UnifiedWrapper {
 	 * 	instanceID
 	 * });
 	 */
-	constructor({ mode, apiPath, contextManager, instanceID, initialImpl = null, materializeFunc = null, ownership = null, isCallable }) {
+	constructor({ mode, apiPath, contextManager, instanceID, initialImpl = null, materializeFunc = null, ownership = null, isCallable, materializeOnCreate = false }) {
 		this.mode = mode;
 		this.apiPath = apiPath;
 		this.contextManager = contextManager;
 		this.instanceID = instanceID;
+		this.materializeOnCreate = materializeOnCreate;
 		this.isCallable =
 			typeof isCallable === "boolean"
 				? isCallable
@@ -461,7 +462,20 @@ export class UnifiedWrapper {
 			return wrapper._proxy;
 		}
 
-		const isCallable = wrapper.mode === "lazy" || typeof wrapper._impl === "function" || wrapper.isCallable;
+		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
+		// This triggers background loading to populate impl before proxy creation
+		if (wrapper.materializeOnCreate && wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper._materializeFunc) {
+			wrapper._materializeFunc(); // Fire-and-forget background materialization
+		}
+
+		// Determine if this wrapper represents a callable (function)
+		// For eager mode or materialized lazy: check actual impl
+		// For unmaterialized lazy: default to function (standard lazy behavior)
+		const isCallable = wrapper.isCallable || 
+		                   typeof wrapper._impl === "function" || 
+		                   (wrapper._impl && typeof wrapper._impl.default === "function") ||
+		                   (wrapper.mode === "lazy" && !wrapper._state.materialized);
+		
 		const nameHint =
 			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
 		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
@@ -502,6 +516,17 @@ export class UnifiedWrapper {
 			if (prop === "_invalid") return wrapper._invalid;
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
+			if (prop === Symbol.toStringTag) {
+				// Return "Object" for object exports, "Function" for function exports
+				const impl = wrapper._impl;
+				if (typeof impl === "function") {
+					return "Function";
+				}
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					return "Function";
+				}
+				return "Object";
+			}
 			if (typeof prop === "symbol") return undefined;
 			if (prop === "length") {
 				// Return actual function length from impl

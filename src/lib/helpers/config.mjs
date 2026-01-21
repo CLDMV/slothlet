@@ -146,6 +146,7 @@ export function transformConfig(config = {}) {
 		allowMutation: config.allowMutation !== false,
 		allowInitialOverwrite: config.allowInitialOverwrite !== false,
 		allowAddApiOverwrite: config.allowAddApiOverwrite !== false,
+		backgroundMaterialize: config.backgroundMaterialize === true,
 		silent: config.silent === true
 	};
 }

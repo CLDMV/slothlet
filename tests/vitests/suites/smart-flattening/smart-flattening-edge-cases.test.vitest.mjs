@@ -141,8 +141,17 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`)
 		});
 
+		// const ___ = primaryApi.config.name;
+
 		// Primary load should preserve structure (no smart flattening)
-		expect(typeof primaryApi.config).toBe("object");
+		// Access a property to force materialization in lazy mode, then check structure
+
+		if (config.lazy) {
+			// In lazy mode, trigger materialization by accessing a child property
+			await primaryApi.config.getConfig();
+		}
+		const configType = typeof primaryApi.config;
+		expect(configType).toBe("object");
 
 		const addApiInstance = await slothlet({
 			...config,

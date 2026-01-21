@@ -1,0 +1,117 @@
+﻿
+> @cldmv/slothlet@2.11.0 debug
+> node tests/debug-slothlet.mjs --lazy
+
+
+===== LAZY MODE TEST ONLY =====
+Running LAZY mode tests...
+
+
+===== DEBUG MODE: LAZY (awaited) =====
+
+
+===== DIRECT HELLO TEST START =====
+
+await bound.multi_func.beta.hello() beta hello
+
+===== DIRECT HELLO TEST END =====
+
+
+===== TEST RUNNING START =====
+
+await bound("World") Hello, World!
+await bound.rootFunctionShout("World") HELLO, WORLD!
+await bound.rootFunctionWhisper("World") hello, world.
+await bound.rootMath.add(2, 3) 5
+await bound.rootMath.multiply(2, 3) 6
+await bound.rootstring.upper("abc") ABC
+await bound.rootstring.reverse("abc") cba
+await bound.string.upper("abc") ABC
+await bound.string.reverse("abc") cba
+await bound.math.add(2, 3) 5
+await bound.math.multiply(2, 3) 6
+await bound.multi_func.alpha("alpha") alpha: alpha
+await bound.multi_func.beta.hello() beta hello
+await bound.multi_func.uniqueOne("uniqueOne") uniqueOne: uniqueOne
+await bound.multi_func.uniqueTwo("uniqueTwo") uniqueTwo: uniqueTwo
+await bound.multi_func.uniqueThree("uniqueThree") uniqueThree: uniqueThree
+await bound.multi_func.multi_func_hello() beta hello
+await bound.multi.alpha.hello() alpha hello
+await bound.multi.beta.world() beta world
+await bound.multi_defaults.key("ENTER") Sent key: ENTER
+await bound.multi_defaults.power() Power toggled
+await bound.multi_defaults.volume(50) Volume set to 50
+await bound.multi_defaults.key.press("ESC") Key pressed: ESC
+await bound.multi_defaults.power.on() Power on
+await bound.multi_defaults.volume.up() Volume up by 1
+await bound.nested.date.today() 2025-08-15
+await bound.objectDefaultMethod("Hello World") INFO: Hello World
+await bound.objectDefaultMethod.info("Test") INFO: Test
+await bound.objectDefaultMethod.warn("Test") WARN: Test
+await bound.objectDefaultMethod.error("Test") ERROR: Test
+await bound.funcmod(5, 6) Hello, 5!
+await bound.logger("Test log message") [LOG] 2026-01-21T08:11:17.773Z: Test log message
+await bound.logger.utils.debug("Debug message") [DEBUG] 2026-01-21T08:11:17.773Z: Debug message
+await bound.logger.utils.error("Error message") [ERROR] 2026-01-21T08:11:17.773Z: Error message
+await bound.util.size(123) size
+await bound.util.secondFunc(123) secondFunc
+await bound.util.url.cleanEndpoint("sites_list", "default", {}, false, false) cleanEndpoint
+await bound.util.url.buildUrlWithParams("10.0.0.1", {"foo":"bar"}) buildUrlWithParams
+await bound.util.extract.data() data
+await bound.util.extract.section() section
+await bound.util.extract.NVRSection() NVRSection
+await bound.util.extract.parseDeviceName() parseDeviceName
+await bound.util.controller.getDefault() getDefault
+await bound.util.controller.detectEndpointType() detectEndpointType
+await bound.util.controller.detectDeviceType() detectDeviceType
+await bound.advanced.selfObject.addViaSelf(2, 3) 5
+await bound.advanced.selfObject.addViaSelf(2, 3) 5
+await bound.advanced.nest3("slothlet") Hello, slothlet!
+await bound.advanced.nest.alpha("slothlet") alpha: slothlet
+await bound.advanced.nest2.alpha.hello() alpha hello
+await bound.advanced.nest2.beta.world() beta world
+await bound.advanced.nest4.beta("singlefile") Hello, singlefile!
+await bound.exportDefault() exportDefault default
+await bound.exportDefault.extra() extra method overridden
+await bound.task.autoIP() testAutoIP
+await bound.tcp.testContext() {
+  selfAvailable: true,
+  selfKeys: [
+    'rootFunctionShout',   'rootFunctionWhisper',
+    'config',              'metadataTestHelper',
+    'requestContext',      'rootMath',
+    'rootstring',          'runtimeTest',
+    'advanced',            'exportDefault',
+    'funcmod',             'logger',
+    'math',                'mixed',
+    'multi',               'multi_defaults',
+    'multi_func',          'nested',
+    'objectDefaultMethod', 'singletest',
+    'string',              'task',
+    'tcp',                 'util',
+    'utilities',           'slothlet',
+    'shutdown',            'destroy',
+    'md5'
+  ],
+  contextAvailable: false,
+  contextData: {},
+  contextUser: undefined,
+  timestamp: '2026-01-21T08:11:17.787Z'
+}
+await bound.utilities.helpers.parse("{\"test\":true}") { test: true }
+await bound.mixed("test message") Mixed default: test message
+await bound.mixed.mixedNamed("test value") Mixed named: test value
+await bound.mixed.mixedAnother(5) 10
+await bound.singletest.helper.utilities.format("test input") Formatted: test input
+await bound.singletest.helper.utilities.parse("test value") Parsed: test value
+await bound.task.parseJSON("{\"key\": \"value\"}") { key: 'value' }
+await bound.util.getHTTPStatus(200) 200 OK
+await bound.util.XMLParser("<root><item>test</item></root>") { root: '<item>test</item>' }
+await bound.empty undefined
+
+===== TEST RUNNING END =====
+
+FINISHED LAZY mode tests...
+
+
+===== COMPLETED LAZY MODE TEST =====
