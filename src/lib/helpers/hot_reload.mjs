@@ -75,6 +75,7 @@ function normalizeApiPath(apiPath) {
 	if (!apiPath || typeof apiPath !== "string") {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath,
+			reason: "must be a non-empty string",
 			validationError: true
 		});
 	}
@@ -84,6 +85,7 @@ function normalizeApiPath(apiPath) {
 	if (parts.length === 0 || parts.some((part) => part.trim() === "")) {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath: normalized,
+			reason: "contains empty path segments",
 			validationError: true
 		});
 	}
@@ -91,6 +93,7 @@ function normalizeApiPath(apiPath) {
 	if (parts[0] === "slothlet" || normalized === "shutdown" || normalized === "destroy") {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath: normalized,
+			reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
 			validationError: true
 		});
 	}
@@ -213,6 +216,7 @@ function ensureParentPath(root, parts) {
 		}
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath: parts.slice(0, i + 1).join("."),
+			reason: "path segment does not exist or is not traversable",
 			validationError: true
 		});
 	}
@@ -365,6 +369,7 @@ async function setValueAtPath(root, parts, value, options) {
 	if (existing !== undefined && !options.allowOverwrite && !options.mutateExisting) {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath: parts.join("."),
+			reason: "path already exists and overwrite is not allowed",
 			validationError: true
 		});
 	}
@@ -775,6 +780,7 @@ export async function removeApiComponent(params) {
 	if (!apiPath) {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath,
+			reason: "apiPath is required for removeApi operation",
 			validationError: true
 		});
 	}

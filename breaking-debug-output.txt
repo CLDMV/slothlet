@@ -1,0 +1,52 @@
+﻿
+> @cldmv/slothlet@2.11.0 debug
+> node tests/debug-slothlet.mjs --lazy
+
+
+===== LAZY MODE TEST ONLY =====
+Running LAZY mode tests...
+
+
+===== DEBUG MODE: LAZY (awaited) =====
+
+
+===== DIRECT HELLO TEST START =====
+
+await bound.multi_func.beta.hello() beta hello
+
+===== DIRECT HELLO TEST END =====
+
+
+===== TEST RUNNING START =====
+
+await bound("World") overwrite-test-1
+npm : Error calling bound.rootFunctionShout("World"): TypeError: bound.rootFunctionShout is not a function
+At line:1 char:99
++ ... -conditions=slothlet-three-dev"; npm run debug -- --lazy 2>&1 | Out-F ...
++                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error calling b... not a function:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:7)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
+Error calling bound.rootFunctionWhisper("World"): TypeError: bound.rootFunctionWhisper is not a function
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:7)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
+Error calling bound.rootMath.add(2, 3): TypeError: bound.rootMath.add is not a function
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:16)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
+Error calling bound.rootMath.multiply(2, 3): TypeError: bound.rootMath.multiply is not a function
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:16)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
+Error calling bound.rootstring.upper("abc"): TypeError: bound.rootstring.upper is not a function
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:18)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
+Error calling bound.rootstring.reverse("abc"): TypeError: bound.rootstring.reverse is not a function
+    at eval (eval at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23), <anonymous>:1:18)
+    at runDebug (file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:877:23)
+    at async file:///P:/Dropbox/Sync/Documents/CLDMV/node/slothlet/tests/debug-slothlet.mjs:1007:3
