@@ -33,7 +33,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		expect(api.__ctx.als).toBeDefined();
 		expect(api.__ctx.instanceId).toBeDefined();
 
-		const instanceId = api.instanceId;
+		const instanceId = api.slothlet.instanceID;
 
 		// Verify instance is in the registry
 		const { getInstanceData } = await import("@cldmv/slothlet/helpers/instance-manager");
@@ -86,7 +86,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const als1 = api1.__ctx.als;
-		const instanceId1 = api1.instanceId;
+		const instanceId1 = api1.slothlet.instanceID;
 
 		await api1.shutdown();
 
@@ -98,7 +98,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		});
 
 		const als2 = api2.__ctx.als;
-		const instanceId2 = api2.instanceId;
+		const instanceId2 = api2.slothlet.instanceID;
 
 		// Different instances should have different instance IDs
 		expect(instanceId2).not.toBe(instanceId1);
@@ -138,7 +138,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		await api.shutdown();
 
 		// Reload should work and recreate the API
-		await api.reload();
+		await api.slothlet.reload();
 
 		// API should work again after reload
 		const result2 = await api.math.add(3, 4);
@@ -158,12 +158,12 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		const { getInstanceData } = await import("@cldmv/slothlet/helpers/instance-manager");
 
 		// Track instance IDs across reloads
-		const instanceIds = [api.instanceId];
+		const instanceIds = [api.slothlet.instanceID];
 
 		// Perform multiple reloads
 		for (let i = 0; i < 3; i++) {
-			await api.reload();
-			instanceIds.push(api.instanceId);
+			await api.slothlet.reload();
+			instanceIds.push(api.slothlet.instanceID);
 		}
 
 		// All instance IDs should be different
@@ -177,7 +177,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		}
 
 		// Current instance should still exist
-		const currentData = getInstanceData(api.instanceId);
+		const currentData = getInstanceData(api.slothlet.instanceID);
 		expect(currentData).toBeDefined();
 
 		// API should still work after multiple reloads

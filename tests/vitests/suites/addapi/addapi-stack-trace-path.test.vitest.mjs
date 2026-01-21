@@ -51,7 +51,7 @@ describe("Stack Trace Path Resolution", () => {
 			const testClosure = async (apiInstance) => {
 				// This path is relative to THIS test file (tests/vitests/processed/addapi/addapi-stack-trace-path.test.vitest.mjs)
 			// Should resolve to: tests/vitests/processed/addapi/../../../../${API_TEST_BASE}/api_test_mixed
-			await apiInstance.addApi("test.path", `../../../../${API_TEST_BASE}/api_test_mixed`, {}, addApiOptions);
+			await apiInstance.slothlet.api.add("test.path", `../../../../${API_TEST_BASE}/api_test_mixed`, {}, addApiOptions);
 
 			// Verify the API was actually loaded from the correct location
 			expect(api.test).toBeDefined();

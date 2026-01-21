@@ -60,8 +60,8 @@ class Slothlet {
 		// Initialize context
 		const store = this.contextManager.initialize(this.instanceID, this.config);
 
-		// Initialize ownership manager
-		this.ownership = new OwnershipManager();
+		// Initialize ownership manager (only if mutations allowed)
+		this.ownership = this.config.allowMutation ? new OwnershipManager() : null;
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
@@ -79,7 +79,9 @@ class Slothlet {
 
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
-		this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
+		if (this.ownership) {
+			this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
+		}
 
 		// UnifiedWrapper already handles context binding, so no additional wrapping needed
 		this.boundApi = apiWithBuiltins;

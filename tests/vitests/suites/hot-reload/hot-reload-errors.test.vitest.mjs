@@ -30,39 +30,39 @@ const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({ hotReload: true })[0].config,
 describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when hotReload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.reload()).rejects.toThrow("hotReload must be enabled");
+		await expect(api.slothlet.reload()).rejects.toThrow("hotReload must be enabled");
 		await api.shutdown();
 	});
 
 	it("rejects invalid reloadApi arguments", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
-		await expect(api.reloadApi(123)).rejects.toThrow("must be a string");
-		await expect(api.reloadApi("")).rejects.toThrow("non-empty");
-		await expect(api.reloadApi("   ")).rejects.toThrow("non-whitespace");
+		await expect(api.slothlet.api.reload(123)).rejects.toThrow("must be a string");
+		await expect(api.slothlet.api.reload("")).rejects.toThrow("non-empty");
+		await expect(api.slothlet.api.reload("   ")).rejects.toThrow("non-whitespace");
 
 		await api.shutdown();
 	});
 
 	it("rejects reloadApi when hotReload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.reloadApi("test")).rejects.toThrow("hotReload must be enabled");
+		await expect(api.slothlet.api.reload("test")).rejects.toThrow("hotReload must be enabled");
 		await api.shutdown();
 	});
 
 	it("allows reloadApi on non-existent paths without throwing", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
-		await expect(api.reloadApi("nonExistentPath")).resolves.toBeUndefined();
+		await expect(api.slothlet.api.reload("nonExistentPath")).resolves.toBeUndefined();
 		await api.shutdown();
 	});
 
 	it("handles concurrent reloadApi operations", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
-		await api.addApi("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
-		await api.addApi("extra2", TEST_DIRS.API_TEST, {}, { moduleId: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, {}, { moduleId: "module-2" });
 
-		await expect(Promise.all([api.reloadApi("extra1"), api.reloadApi("extra2")])).resolves.toBeDefined();
+		await expect(Promise.all([api.slothlet.api.reload("extra1"), api.slothlet.api.reload("extra2")])).resolves.toBeDefined();
 
 		expect(api.extra1?.mathCjs).toBeTypeOf("object");
 		expect(api.extra2?.math?.add).toBeTypeOf("function");

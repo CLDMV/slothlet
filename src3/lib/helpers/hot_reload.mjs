@@ -539,14 +539,26 @@ async function restoreApiPath(instance, apiPath, moduleId) {
 			deletePath(instance.boundApi, parts);
 			return;
 		}
-		await setValueAtPath(instance.api, parts, baseValue, {
-			mutateExisting: true,
-			allowOverwrite: true
-		});
-		await setValueAtPath(instance.boundApi, parts, baseValue, {
-			mutateExisting: true,
-			allowOverwrite: true
-		});
+		await setValueAtPath(
+			instance.api,
+			parts,
+			baseValue,
+			{
+				mutateExisting: true,
+				allowOverwrite: true
+			},
+			instance
+		);
+		await setValueAtPath(
+			instance.boundApi,
+			parts,
+			baseValue,
+			{
+				mutateExisting: true,
+				allowOverwrite: true
+			},
+			instance
+		);
 	}
 }
 
@@ -603,28 +615,42 @@ export async function addApiComponent(params) {
 		config: instance.config
 	});
 
-	await setValueAtPath(instance.api, parts, newApi, {
-		mutateExisting: !!options.mutateExisting,
-		allowOverwrite
-	});
-	await setValueAtPath(instance.boundApi, parts, newApi, {
-		mutateExisting: !!options.mutateExisting,
-		allowOverwrite
-	});
+	await setValueAtPath(
+		instance.api,
+		parts,
+		newApi,
+		{
+			mutateExisting: !!options.mutateExisting,
+			allowOverwrite
+		},
+		instance
+	);
+	await setValueAtPath(
+		instance.boundApi,
+		parts,
+		newApi,
+		{
+			mutateExisting: !!options.mutateExisting,
+			allowOverwrite
+		},
+		instance
+	);
 
 	if (instance.ownership && moduleId) {
 		registerOwnership(instance.ownership, moduleId, normalizedPath, newApi);
 	}
 
-	const state = getHotReloadState(instance);
-	if (options.recordHistory !== false) {
-		state.addHistory.push({
-			apiPath: normalizedPath,
-			folderPath: resolvedFolderPath,
-			metadata,
-			options: { ...options, moduleId },
-			moduleId
-		});
+	if (instance.ownership) {
+		const state = getHotReloadState(instance);
+		if (options.recordHistory !== false) {
+			state.addHistory.push({
+				apiPath: normalizedPath,
+				folderPath: resolvedFolderPath,
+				metadata,
+				options: { ...options, moduleId },
+				moduleId
+			});
+		}
 	}
 
 	if (moduleId) {
@@ -672,14 +698,26 @@ export async function removeApiComponent(params) {
 		if (ownershipResult.action === "restore") {
 			const restoredValue = instance.ownership?.getCurrentValue?.(normalizedPath);
 			if (restoredValue !== undefined) {
-				await setValueAtPath(instance.api, pathParts, restoredValue, {
-					mutateExisting: true,
-					allowOverwrite: true
-				});
-				await setValueAtPath(instance.boundApi, pathParts, restoredValue, {
-					mutateExisting: true,
-					allowOverwrite: true
-				});
+				await setValueAtPath(
+					instance.api,
+					pathParts,
+					restoredValue,
+					{
+						mutateExisting: true,
+						allowOverwrite: true
+					},
+					instance
+				);
+				await setValueAtPath(
+					instance.boundApi,
+					pathParts,
+					restoredValue,
+					{
+						mutateExisting: true,
+						allowOverwrite: true
+					},
+					instance
+				);
 				return;
 			}
 			await restoreApiPath(instance, normalizedPath, ownershipResult.restoreModuleId);
@@ -704,14 +742,26 @@ export async function removeApiComponent(params) {
 			const { parts } = normalizeApiPath(rollback.apiPath);
 			const restoredValue = instance.ownership?.getCurrentValue?.(rollback.apiPath);
 			if (restoredValue !== undefined) {
-				await setValueAtPath(instance.api, parts, restoredValue, {
-					mutateExisting: true,
-					allowOverwrite: true
-				});
-				await setValueAtPath(instance.boundApi, parts, restoredValue, {
-					mutateExisting: true,
-					allowOverwrite: true
-				});
+				await setValueAtPath(
+					instance.api,
+					parts,
+					restoredValue,
+					{
+						mutateExisting: true,
+						allowOverwrite: true
+					},
+					instance
+				);
+				await setValueAtPath(
+					instance.boundApi,
+					parts,
+					restoredValue,
+					{
+						mutateExisting: true,
+						allowOverwrite: true
+					},
+					instance
+				);
 			} else {
 				await restoreApiPath(instance, rollback.apiPath, rollback.restoredTo);
 			}
@@ -744,14 +794,26 @@ export async function removeApiComponent(params) {
 	if (ownershipResult.action === "restore") {
 		const restoredValue = instance.ownership?.getCurrentValue?.(normalizedPath);
 		if (restoredValue !== undefined) {
-			await setValueAtPath(instance.api, parts, restoredValue, {
-				mutateExisting: true,
-				allowOverwrite: true
-			});
-			await setValueAtPath(instance.boundApi, parts, restoredValue, {
-				mutateExisting: true,
-				allowOverwrite: true
-			});
+			await setValueAtPath(
+				instance.api,
+				parts,
+				restoredValue,
+				{
+					mutateExisting: true,
+					allowOverwrite: true
+				},
+				instance
+			);
+			await setValueAtPath(
+				instance.boundApi,
+				parts,
+				restoredValue,
+				{
+					mutateExisting: true,
+					allowOverwrite: true
+				},
+				instance
+			);
 			return;
 		}
 		await restoreApiPath(instance, normalizedPath, ownershipResult.restoreModuleId);

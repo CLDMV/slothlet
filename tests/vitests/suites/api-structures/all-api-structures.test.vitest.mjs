@@ -37,18 +37,16 @@ describe("All API Structures Validation", () => {
 				// Match all config parameters except mode
 				return (
 					lazy.config.runtime === eagerConfig.config.runtime &&
-					lazy.config.allowApiOverwrite === eagerConfig.config.allowApiOverwrite &&
-					lazy.config.hotReload === eagerConfig.config.hotReload &&
-					lazy.config.apiDepth === eagerConfig.config.apiDepth &&
-					lazy.config.hooks === eagerConfig.config.hooks
-				);
-			});
+				lazy.config.allowAddApiOverwrite === eagerConfig.config.allowAddApiOverwrite &&
+				lazy.config.hotReload === eagerConfig.config.hotReload &&
+				lazy.config.apiDepth === eagerConfig.config.apiDepth &&
+				lazy.config.hooks === eagerConfig.config.hooks
+			);
+		});
 
-			if (lazyConfig) {
-				// Create a descriptive base name from config parameters
-				const baseName = `${eagerConfig.config.runtime}_${eagerConfig.config.allowApiOverwrite ? "overwrite" : "nooverwrite"}_${eagerConfig.config.hotReload ? "hotreload" : "nohotreload"}_depth${eagerConfig.config.apiDepth}_${eagerConfig.config.hooks ? "hooks" : "nohooks"}`;
-
-				matrixPairs.push({
+		if (lazyConfig) {
+			// Create a descriptive base name from config parameters
+			const baseName = `${eagerConfig.config.runtime}_${eagerConfig.config.allowAddApiOverwrite ? "overwrite" : "nooverwrite"}_${eagerConfig.config.hotReload ? "hotreload" : "nohotreload"}_depth${eagerConfig.config.apiDepth}_${eagerConfig.config.hooks ? "hooks" : "nohooks"}`;
 					name: baseName,
 					lazy: lazyConfig,
 					eager: eagerConfig

@@ -45,7 +45,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 
 	it("should allow module to register and update its own APIs", async () => {
 		// Register moduleA - use absolute paths relative to current test directory
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins.moduleA",
 			TEST_DIRS.API_TEST_MIXED,
 			{},
@@ -58,7 +58,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		expect(api.plugins.moduleA).toBeDefined();
 
 		// Update moduleA (hot-reload)
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins.moduleA",
 			TEST_DIRS.API_TEST,
 			{},
@@ -72,7 +72,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 	});
 
 	it("should allow registering different modules independently", async () => {
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins.moduleB",
 			TEST_DIRS.API_TEST_COLLECTIONS,
 			{},
@@ -85,9 +85,9 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		expect(api.plugins.moduleB).toBeDefined();
 	});
 
-	it("should handle cross-module overwrite based on allowApiOverwrite setting", async () => {
+	it("should handle cross-module overwrite based on allowAddApiOverwrite setting", async () => {
 		// Register moduleC first
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins.moduleC",
 			TEST_DIRS.API_TEST,
 			{},
@@ -97,10 +97,10 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			}
 		);
 
-		// Default allowApiOverwrite is true, so cross-module should succeed
-		// If allowApiOverwrite were false, this would throw
+		// Default allowAddApiOverwrite is true, so cross-module should succeed
+		// If allowAddApiOverwrite were false, this would throw
 		await expect(
-			api.addApi(
+			api.slothlet.api.add(
 				"plugins.moduleC",
 				TEST_DIRS.API_TEST_MIXED,
 				{},
@@ -134,7 +134,7 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 
 	it("should require hotReload when using forceOverwrite", async () => {
 		try {
-			await api.addApi(
+			await api.slothlet.api.add(
 				"test.path",
 				TEST_DIRS.API_TEST,
 				{},
@@ -173,16 +173,16 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
 		// First addApi should work
-		await api.addApi("normal.test", TEST_DIRS.API_TEST);
+		await api.slothlet.api.add("normal.test", TEST_DIRS.API_TEST);
 		const originalApi = api.normal.test;
 
 		// Second addApi should be silently skipped (not throw)
-		await api.addApi("normal.test", TEST_DIRS.API_TEST_MIXED);
+		await api.slothlet.api.add("normal.test", TEST_DIRS.API_TEST_MIXED);
 
 		// Verify API was NOT overwritten
 		expect(api.normal.test).toBe(originalApi);
@@ -195,12 +195,12 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
 		// Register with moduleId
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.test",
 			TEST_DIRS.API_TEST,
 			{},
@@ -211,7 +211,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		);
 
 		// Same module should be able to update
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.test",
 			TEST_DIRS.API_TEST_MIXED,
 			{},
@@ -233,12 +233,12 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
 		// Register with moduleId
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.cross",
 			TEST_DIRS.API_TEST,
 			{},
@@ -250,7 +250,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 
 		// Different module should be blocked
 		try {
-			await api.addApi(
+			await api.slothlet.api.add(
 				"ownership.cross",
 				TEST_DIRS.API_TEST_COLLECTIONS,
 				{},
@@ -265,21 +265,21 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		}
 	});
 
-	it("should block normal overwrites when allowApiOverwrite: false (lazy mode)", async () => {
+	it("should block normal overwrites when allowAddApiOverwrite: false (lazy mode)", async () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
-		await api.addApi("normal.test2", TEST_DIRS.API_TEST);
+		await api.slothlet.api.add("normal.test2", TEST_DIRS.API_TEST);
 		const originalApi = api.normal.test2;
 
-		await api.addApi("normal.test2", TEST_DIRS.API_TEST_MIXED);
+		await api.slothlet.api.add("normal.test2", TEST_DIRS.API_TEST_MIXED);
 
 		expect(api.normal.test2).toBe(originalApi);
 	});
@@ -291,11 +291,11 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.test2",
 			TEST_DIRS.API_TEST,
 			{},
@@ -305,7 +305,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			}
 		);
 
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.test2",
 			TEST_DIRS.API_TEST_MIXED,
 			{},
@@ -326,11 +326,11 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
 			hotReload: true,
-			allowApiOverwrite: false
+			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
-		await api.addApi(
+		await api.slothlet.api.add(
 			"ownership.cross2",
 			TEST_DIRS.API_TEST,
 			{},
@@ -341,7 +341,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		);
 
 		try {
-			await api.addApi(
+			await api.slothlet.api.add(
 				"ownership.cross2",
 				TEST_DIRS.API_TEST_COLLECTIONS,
 				{},
