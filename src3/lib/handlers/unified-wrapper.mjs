@@ -374,10 +374,20 @@ export class UnifiedWrapper {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
 				if (typeof prop === "symbol") return undefined;
-				if (prop === "length") return 0;
+				if (prop === "length") {
+					// For waiting proxies in lazy mode, we can't know the length until materialized
+					// Return 0 as a placeholder - the actual length will be available after materialization
+					return 0;
+				}
 				if (prop === "name") return waitingTarget.name || "waitingProxyTarget";
-				if (prop === "toString") return Function.prototype.toString.bind(waitingTarget);
-				if (prop === "valueOf") return Function.prototype.valueOf.bind(waitingTarget);
+				if (prop === "toString") {
+					// For waiting proxies, we can't access impl yet, so use target
+					return Function.prototype.toString.bind(waitingTarget);
+				}
+				if (prop === "valueOf") {
+					// For waiting proxies, we can't access impl yet, so use target
+					return Function.prototype.valueOf.bind(waitingTarget);
+				}
 				return wrapper._createWaitingProxy([...propChain, prop]);
 			},
 
@@ -493,10 +503,51 @@ export class UnifiedWrapper {
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (typeof prop === "symbol") return undefined;
-			if (prop === "length") return 0;
-			if (prop === "name") return target.name || "unifiedWrapperProxy";
-			if (prop === "toString") return Function.prototype.toString.bind(target);
-			if (prop === "valueOf") return Function.prototype.valueOf.bind(target);
+			if (prop === "length") {
+				// Return actual function length from impl
+				const impl = wrapper._impl;
+				if (typeof impl === "function") {
+					return impl.length;
+				}
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					return impl.default.length;
+				}
+				return 0;
+			}
+			if (prop === "name") {
+				// Return name derived from API path, not the internal function name
+				// This ensures consistency: api.logger should report as "logger", not "log"
+				if (wrapper.apiPath) {
+					const pathParts = wrapper.apiPath.split(".");
+					const lastPart = pathParts[pathParts.length - 1];
+					if (lastPart) {
+						return lastPart;
+					}
+				}
+				return target.name || "unifiedWrapperProxy";
+			}
+			if (prop === "toString") {
+				// Return toString bound to the actual impl, not the proxy target
+				const impl = wrapper._impl;
+				if (typeof impl === "function") {
+					return impl.toString.bind(impl);
+				}
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					return impl.default.toString.bind(impl.default);
+				}
+				return Function.prototype.toString.bind(target);
+			}
+			if (prop === "valueOf") {
+				// Return valueOf bound to the actual impl, not the proxy target
+				const impl = wrapper._impl;
+				if (typeof impl === "function") {
+					return impl.valueOf.bind(impl);
+				}
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					return impl.default.valueOf.bind(impl.default);
+				}
+				return Function.prototype.valueOf.bind(target);
+			}
 
 			if (wrapper._invalid) {
 				return undefined;

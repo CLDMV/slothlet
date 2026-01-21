@@ -26,11 +26,13 @@ const verbose =
 /**
  * Force dev-only resolution for this run by re-executing with required conditions.
  * Ensures src exports load even if the parent shell lacks flags; scope is limited to this process.
+ * @param {boolean} [forceV3=false] - If true, forces v3 (slothlet-three-dev) condition regardless of current environment.
  * @returns {boolean} True if a child process was spawned and the current process should stop.
  * @example
  * if (ensureDevEnvFlags()) return;
+ * if (ensureDevEnvFlags(true)) return; // Force v3
  */
-function ensureDevEnvFlags() {
+function ensureDevEnvFlags(forceV3 = false) {
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition
@@ -47,7 +49,9 @@ function ensureDevEnvFlags() {
 	const allConditions = [...allExecArgv, ...envOptions];
 
 	let slothletCondition = "slothlet-dev"; // default to v2
-	if (hasCondition(allConditions, "slothlet-three-dev")) {
+	if (forceV3) {
+		slothletCondition = "slothlet-three-dev";
+	} else if (hasCondition(allConditions, "slothlet-three-dev")) {
 		slothletCondition = "slothlet-three-dev";
 	}
 
@@ -256,9 +260,7 @@ export function compareApiShapes(
 		if (obj === null || obj === undefined) return [];
 		if (typeof obj === "function") {
 			const allKeys = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
-			return allKeys.filter((key) =>
-				!["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)
-			);
+			return allKeys.filter((key) => !["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key));
 		}
 		if (typeof obj === "object") {
 			return [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
@@ -326,19 +328,26 @@ export function compareApiShapes(
 
 		if (typeof normalizedValA === "function" && typeof normalizedValB === "function") {
 			// Compare function signatures and implementations
-			// Safely extract function properties
-			const aName = typeof normalizedValA.name === "string" ? normalizedValA.name : "anonymous";
-			const bName = typeof normalizedValB.name === "string" ? normalizedValB.name : "anonymous";
-			const aLength = typeof normalizedValA.length === "number" ? normalizedValA.length : 0;
-			const bLength = typeof normalizedValB.length === "number" ? normalizedValB.length : 0;
+			// Extract name, length, and toString from ORIGINAL proxies, not normalized impls
+			// This ensures we get the API-path-derived names and actual impl toString
+			const aName = typeof valA.name === "string" ? valA.name : "anonymous";
+			const bName = typeof valB.name === "string" ? valB.name : "anonymous";
+			const aLength = typeof valA.length === "number" ? valA.length : 0;
+			const bLength = typeof valB.length === "number" ? valB.length : 0;
 
-			if (aLength !== bLength || normalizedValA.toString() !== normalizedValB.toString()) {
+			// Call toString through the proxy to get the actual impl's toString
+			const aToString = typeof valA.toString === "function" ? valA.toString() : normalizedValA.toString();
+			const bToString = typeof valB.toString === "function" ? valB.toString() : normalizedValB.toString();
+
+			if (aLength !== bLength || aToString !== bToString) {
 				differingFunctions.push({
 					path: fullPath,
 					aSignature: `${aName}(${aLength} params)`,
 					bSignature: `${bName}(${bLength} params)`,
 					aLength: aLength,
-					bLength: bLength
+					bLength: bLength,
+					aToString: aToString.substring(0, 100),
+					bToString: bToString.substring(0, 100)
 				});
 			}
 
@@ -447,10 +456,7 @@ async function materializeLazyWrappers(root) {
 				if (key.startsWith("__") || key.startsWith("_")) {
 					continue;
 				}
-				if (
-					currentType === "function" &&
-					["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)
-				) {
+				if (currentType === "function" && ["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)) {
 					continue;
 				}
 			}
@@ -960,20 +966,28 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 }
 
 (async () => {
-	if (ensureDevEnvFlags()) {
+	// Check for --v3 flag to force v3 environment
+	const useV3 = process.argv.includes("--v3");
+
+	if (ensureDevEnvFlags(useV3)) {
 		return;
 	}
+
+	if (useV3) {
+		console.log(chalk.magentaBright("\n🔧 Running with V3 environment (slothlet-three-dev)\n"));
+	}
+
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself
 	slothlet = module?.default ?? module?.slothlet ?? module;
 	if (typeof slothlet !== "function") {
 		throw new Error("slothlet entrypoint did not export a callable function");
 	}
-	
+
 	// Check for mode-specific arguments
 	const eagerOnly = process.argv.includes("--eager");
 	const lazyOnly = process.argv.includes("--lazy");
-	
+
 	if (eagerOnly && lazyOnly) {
 		throw new Error("Cannot specify both --eager and --lazy. Choose one or neither.");
 	}
@@ -986,7 +1000,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER MODE TEST ====="));
 		return;
 	}
-	
+
 	if (lazyOnly) {
 		console.log("\n" + chalk.yellowBright.bold("===== LAZY MODE TEST ONLY ====="));
 		console.log(chalk.cyanBright("Running LAZY mode tests...\n"));
@@ -1100,6 +1114,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		console.log(chalk.yellowBright("⚠️  Function signature differences:"));
 		compared.differingFunctions.forEach((diff) => {
 			console.log(`  - ${diff.path}: ${diff.aSignature} [eager] vs ${diff.bSignature} [lazy]`);
+			if (diff.aToString && diff.bToString) {
+				console.log(chalk.gray(`    Eager toString: ${diff.aToString}`));
+				console.log(chalk.gray(`    Lazy toString:  ${diff.bToString}`));
+			}
 		});
 		console.log();
 	}
