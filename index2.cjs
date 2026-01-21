@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /index3.cjs
+ *	@Filename: /index2.cjs
  *	@Date: 2025-11-09 11:15:17 -08:00 (1762715717)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-16 17:19:07 -08:00 (1768612747)
+ *	@Last modified time: 2026-01-20 20:06:03 -08:00 (1768968363)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -50,7 +50,7 @@
  */
 async function slothlet(options = {}) {
 	// Dynamic import of ESM entry point - single source of truth
-	const { default: esmSlothlet } = await import("./index3.mjs");
+	const { default: esmSlothlet } = await import("./index2.mjs");
 	return esmSlothlet(options);
 }
 

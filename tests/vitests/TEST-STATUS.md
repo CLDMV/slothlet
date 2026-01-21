@@ -1,6 +1,6 @@
 # V3 Vitest Status
 
-Relative base: tests/v3.vitests
+Relative base: tests/vitests
 
 | Test (relative) | Feature Category | V3 Updated | Status | Notes |
 | --- | --- | --- | --- | --- |

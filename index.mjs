@@ -3,34 +3,72 @@
  * @module @cldmv/slothlet
  */
 
-/**
- * Normalize runtime input to internal standard format.
- * @function normalizeRuntimeType
- * @param {string} runtime - Input runtime type (various formats accepted)
- * @returns {string} Normalized runtime type ("async" or "live")
- * @internal
- * @private
- */
-function normalizeRuntimeType(runtime) {
-	if (!runtime || typeof runtime !== "string") {
-		return "async"; // Default to AsyncLocalStorage
+// Custom uncaught exception handler for SlothletError
+process.on("uncaughtException", (error) => {
+	if (error.name === "SlothletError") {
+		console.error("\n================================================================================");
+		console.error(`ERROR [${error.code}]: ${error.message}`);
+
+		// Extract and show file/line from original error stack if available
+		const stackToUse = error.originalError?.stack || error.stack;
+		if (stackToUse) {
+			const stackLines = stackToUse.split("\n");
+			// For import errors, try to extract from the error message first (more accurate)
+			if (
+				error.originalError?.message?.includes("does not provide an export") ||
+				error.originalError?.message?.includes("Cannot find module")
+			) {
+				// Extract file path from context (modulePath is the file that failed to import)
+				const failedFile = error.context?.modulePath;
+				if (failedFile) {
+					console.error(`\n📍 Location: ${failedFile} (import statement)`);
+				}
+			} else {
+				// Otherwise extract from stack trace
+				const firstStackLine = stackLines[1]; // First line after error message
+				if (firstStackLine) {
+					// Extract file:line info from stack trace (format: "at function (file:line:col)")
+					const match = firstStackLine.match(/\((.+?):(\d+):(\d+)\)/) || firstStackLine.match(/at (.+?):(\d+):(\d+)/);
+					if (match) {
+						console.error(`\n📍 Location: ${match[1]}:${match[2]}`);
+					}
+				}
+			}
+		}
+
+		if (error.hint) {
+			console.error("\n💡 Hint:");
+			console.error(`  ${error.hint}`);
+		}
+
+		// Show minimal context (filter out error/hint/originalError which are already shown)
+		const contextKeys = Object.keys(error.context || {}).filter((k) => k !== "error" && k !== "hint" && k !== "originalError");
+		if (contextKeys.length > 0) {
+			console.error("\nDetails:");
+			for (const key of contextKeys) {
+				const value = error.context[key];
+				const displayValue = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+				console.error(`  ${key}: ${displayValue}`);
+			}
+		}
+
+		// Show clean stack trace (prefer original error's stack)
+		const stackForDisplay = error.originalError?.stack || error.stack;
+		if (stackForDisplay) {
+			console.error("\nStack Trace:");
+			const stackLines = stackForDisplay.split("\n").slice(1); // Skip first line (error message)
+			for (const line of stackLines) {
+				console.error(`  ${line.trim()}`);
+			}
+		}
+
+		console.error("================================================================================\n");
+		process.exit(1);
 	}
 
-	const normalized = runtime.toLowerCase().trim();
-
-	// AsyncLocalStorage runtime variants
-	if (normalized === "async" || normalized === "asynclocal" || normalized === "asynclocalstorage") {
-		return "async";
-	}
-
-	// Live bindings runtime variants
-	if (normalized === "live" || normalized === "livebindings" || normalized === "experimental") {
-		return "live";
-	}
-
-	// Default to async for unknown values
-	return "async";
-}
+	// Re-throw other errors to let Node.js handle them
+	throw error;
+});
 
 // Development environment check (must happen before slothlet imports)
 const devcheckPromise = (async () => {
@@ -70,29 +108,20 @@ export default async function slothlet(options = {}) {
 	// Wait for devcheck to complete before proceeding
 	await devcheckPromise;
 
+	if (options.debug?.index) {
+		console.log("DEBUG index3.mjs: loading slothlet from @cldmv/slothlet/slothlet");
+	}
+
 	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 
-	const build = mod.slothlet ?? mod.default;
+	const slothlet = mod.slothlet ?? mod.default;
 
-	const api = await build(options);
-
-	// Use the same runtime selection logic as slothlet.mjs
-	const normalizedRuntime = normalizeRuntimeType(options.runtime);
-	let runtimeModule;
-	if (normalizedRuntime === "live") {
-		runtimeModule = await import("@cldmv/slothlet/runtime/live");
-	} else {
-		// Default to AsyncLocalStorage runtime (original master branch implementation)
-		runtimeModule = await import("@cldmv/slothlet/runtime/async");
+	if (options.debug?.index) {
+		console.log("DEBUG index3.mjs: loaded slothlet, calling it now");
 	}
-	const { makeWrapper } = runtimeModule;
 
-	// Prefer an explicit instance context the internal attached to the API (api.__ctx),
-	// else fall back to module-level pieces if you expose them.
-	const ctx = api?.__ctx ?? { self: mod.self, context: mod.context, reference: mod.reference };
-
-	return makeWrapper(ctx)(api);
+	return slothlet(options);
 }
 
 /**

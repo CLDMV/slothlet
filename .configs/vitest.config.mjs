@@ -24,8 +24,8 @@ export class CustomReporter extends DefaultReporter {
 
 // Determine which slothlet version to use based on NODE_OPTIONS
 const nodeOptions = process.env.NODE_OPTIONS || "";
-const useV3 = nodeOptions.includes("slothlet-three-dev");
-const slothletCondition = useV3 ? "slothlet-three-dev" : "slothlet-dev";
+const useV2 = nodeOptions.includes("slothlet-two-dev");
+const slothletCondition = useV2 ? "slothlet-two-dev" : "slothlet-dev";
 
 export default defineConfig({
 	pool: "forks",
@@ -33,7 +33,7 @@ export default defineConfig({
 	resolve: {
 		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
 		conditions: [
-			slothletCondition, // V2 (slothlet-dev) by default, V3 (slothlet-three-dev) if NODE_OPTIONS set
+			slothletCondition, // V3 (slothlet-dev) by default, V2 (slothlet-two-dev) if NODE_OPTIONS set
 			"module",
 			"browser",
 			"development|production" // keep the special one for other deps

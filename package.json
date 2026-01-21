@@ -12,10 +12,10 @@
 	"module": "./index.mjs",
 	"exports": {
 		".": {
-			"slothlet-three-dev": {
-				"types": "./types/index3.d.mts",
-				"import": "./index3.mjs",
-				"require": "./index3.cjs"
+			"slothlet-two-dev": {
+				"types": "./types/index2.d.mts",
+				"import": "./index2.mjs",
+				"require": "./index2.cjs"
 			},
 			"types": "./types/index.d.mts",
 			"import": "./index.mjs",
@@ -26,9 +26,9 @@
 			"import": "./devcheck.mjs"
 		},
 		"./slothlet": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/slothlet.d.mts",
-				"import": "./src3/slothlet.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/slothlet.d.mts",
+				"import": "./src2/slothlet.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/slothlet.d.mts",
@@ -38,9 +38,9 @@
 			"import": "./dist/slothlet.mjs"
 		},
 		"./runtime": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/runtime/runtime.d.mts",
-				"import": "./src3/lib/runtime/runtime.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/runtime/runtime.d.mts",
+				"import": "./src2/lib/runtime/runtime.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime.d.mts",
@@ -50,9 +50,9 @@
 			"import": "./dist/lib/runtime/runtime.mjs"
 		},
 		"./runtime/async": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/runtime/runtime-asynclocalstorage.d.mts",
-				"import": "./src3/lib/runtime/runtime-asynclocalstorage.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/runtime/runtime-asynclocalstorage.d.mts",
+				"import": "./src2/lib/runtime/runtime-asynclocalstorage.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-asynclocalstorage.d.mts",
@@ -62,9 +62,9 @@
 			"import": "./dist/lib/runtime/runtime-asynclocalstorage.mjs"
 		},
 		"./runtime/live": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/runtime/runtime-livebindings.d.mts",
-				"import": "./src3/lib/runtime/runtime-livebindings.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/runtime/runtime-livebindings.d.mts",
+				"import": "./src2/lib/runtime/runtime-livebindings.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/runtime/runtime-livebindings.d.mts",
@@ -74,9 +74,9 @@
 			"import": "./dist/lib/runtime/runtime-livebindings.mjs"
 		},
 		"./helpers/*": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/helpers/*.d.mts",
-				"import": "./src3/lib/helpers/*.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/helpers/*.d.mts",
+				"import": "./src2/lib/helpers/*.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/helpers/*.d.mts",
@@ -86,9 +86,9 @@
 			"import": "./dist/lib/helpers/*.mjs"
 		},
 		"./modes/*": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/modes/*.d.mts",
-				"import": "./src3/lib/modes/*.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/modes/*.d.mts",
+				"import": "./src2/lib/modes/*.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/modes/*.d.mts",
@@ -98,9 +98,9 @@
 			"import": "./dist/lib/modes/*.mjs"
 		},
 		"./builders/*": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/builders/*.d.mts",
-				"import": "./src3/lib/builders/*.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/builders/*.d.mts",
+				"import": "./src2/lib/builders/*.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/builders/*.d.mts",
@@ -110,9 +110,9 @@
 			"import": "./dist/lib/builders/*.mjs"
 		},
 		"./handlers/*": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/handlers/*.d.mts",
-				"import": "./src3/lib/handlers/*.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/handlers/*.d.mts",
+				"import": "./src2/lib/handlers/*.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/handlers/*.d.mts",
@@ -122,9 +122,9 @@
 			"import": "./dist/lib/handlers/*.mjs"
 		},
 		"./errors": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/errors.d.mts",
-				"import": "./src3/lib/errors.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/errors.d.mts",
+				"import": "./src2/lib/errors.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/errors.d.mts",
@@ -134,9 +134,9 @@
 			"import": "./dist/lib/errors.mjs"
 		},
 		"./i18n": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/i18n/translations.d.mts",
-				"import": "./src3/lib/i18n/translations.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/i18n/translations.d.mts",
+				"import": "./src2/lib/i18n/translations.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/i18n/translations.d.mts",
@@ -146,9 +146,9 @@
 			"import": "./dist/lib/i18n/translations.mjs"
 		},
 		"./i18n/*": {
-			"slothlet-three-dev": {
-				"types": "./types/src3/lib/i18n/languages/*.d.mts",
-				"import": "./src3/lib/i18n/languages/*.mjs"
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/i18n/languages/*.d.mts",
+				"import": "./src2/lib/i18n/languages/*.mjs"
 			},
 			"slothlet-dev": {
 				"types": "./types/src/lib/i18n/languages/*.d.mts",

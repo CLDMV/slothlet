@@ -25,7 +25,7 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 		}
 		api = null;
 
-		const slothletModule = await import("@cldmv/slothlet");
+		const slothletModule = await import("../../../../index2.mjs");
 		slothlet = slothletModule.default;
 	});
 
@@ -118,7 +118,7 @@ describe("Runtime Implementation Verification", () => {
 	let instances = [];
 
 	beforeEach(async () => {
-		const slothletModule = await import("@cldmv/slothlet");
+		const slothletModule = await import("../../../../index2.mjs");
 		slothlet = slothletModule.default;
 		instances = [];
 	});

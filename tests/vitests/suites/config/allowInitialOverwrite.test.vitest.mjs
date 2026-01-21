@@ -7,11 +7,11 @@
  * - allowInitialOverwrite: true (default) → later files can overwrite earlier ones
  * - allowInitialOverwrite: false → later files cannot overwrite, keeps first version
  *
- * @module tests/v3.vitests/config/allowInitialOverwrite.test.vitest
+ * @module tests/vitests/config/allowInitialOverwrite.test.vitest
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import slothlet from "@cldmv/slothlet";
+import slothlet from "../../../../index2.mjs";
 import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test with full matrix since initial overwrite behavior is independent of mode/runtime

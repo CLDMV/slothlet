@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect } from "vitest";
-import slothlet from "../../../../index.mjs";
+import slothlet from "../../../../index2.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";

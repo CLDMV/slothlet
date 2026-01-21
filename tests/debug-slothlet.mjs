@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-18 16:17:20 -08:00 (1768781840)
+ *	@Last modified time: 2026-01-20 20:06:03 -08:00 (1768968363)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -26,13 +26,13 @@ const verbose =
 /**
  * Force dev-only resolution for this run by re-executing with required conditions.
  * Ensures src exports load even if the parent shell lacks flags; scope is limited to this process.
- * @param {boolean} [forceV3=false] - If true, forces v3 (slothlet-three-dev) condition regardless of current environment.
+ * @param {boolean} [forceV2=false] - If true, forces v2 (slothlet-two-dev) condition regardless of current environment.
  * @returns {boolean} True if a child process was spawned and the current process should stop.
  * @example
  * if (ensureDevEnvFlags()) return;
- * if (ensureDevEnvFlags(true)) return; // Force v3
+ * if (ensureDevEnvFlags(true)) return; // Force v2
  */
-function ensureDevEnvFlags(forceV3 = false) {
+function ensureDevEnvFlags(forceV2 = false) {
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition
@@ -48,11 +48,11 @@ function ensureDevEnvFlags(forceV3 = false) {
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
 	const allConditions = [...allExecArgv, ...envOptions];
 
-	let slothletCondition = "slothlet-dev"; // default to v2
-	if (forceV3) {
-		slothletCondition = "slothlet-three-dev";
-	} else if (hasCondition(allConditions, "slothlet-three-dev")) {
-		slothletCondition = "slothlet-three-dev";
+	let slothletCondition = "slothlet-dev"; // default to v3
+	if (forceV2) {
+		slothletCondition = "slothlet-two-dev";
+	} else if (hasCondition(allConditions, "slothlet-two-dev")) {
+		slothletCondition = "slothlet-two-dev";
 	}
 
 	const requiredConditions = [slothletCondition, "development"];
@@ -491,7 +491,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	const nodeOptions = process.env.NODE_OPTIONS || "";
 	// FORCE V2 TO TEST RESOLVER
 	// const apiTestDir = "../api_tests/api_test";
-	const apiTestDir = nodeOptions.includes("slothlet-three-dev") ? "../api_tests_v3/api_test" : "../api_tests/api_test";
+	const apiTestDir = nodeOptions.includes("slothlet-two-dev") ? "../api_tests_v2/api_test" : "../api_tests/api_test";
 
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
@@ -966,18 +966,18 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 }
 
 (async () => {
-	// Check for --v3 flag to force v3 environment
-	const useV3 = process.argv.includes("--v3");
+	// Check for --v2 flag to force v2 environment
+	const useV2 = process.argv.includes("--v2");
 
-	if (ensureDevEnvFlags(useV3)) {
+	if (ensureDevEnvFlags(useV2)) {
 		return;
 	}
 
-	if (useV3) {
-		console.log(chalk.magentaBright("\n🔧 Running with V3 environment (slothlet-three-dev)\n"));
+	if (useV2 || nodeOptions.includes("slothlet-two-dev")) {
+		console.log(chalk.magentaBright("\n🔧 Running with V2 environment (slothlet-two-dev)\n"));
 	}
 
-	const module = await import("@cldmv/slothlet");
+	const module = await import("../index2.mjs");
 	// Prefer default export, fallback to named, then module itself
 	slothlet = module?.default ?? module?.slothlet ?? module;
 	if (typeof slothlet !== "function") {

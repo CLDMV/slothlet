@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import slothlet from "@cldmv/slothlet";
+import slothlet from "../../../../index2.mjs";
 import { getMatrixConfigs, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 describe("addApi Path Resolution", () => {
