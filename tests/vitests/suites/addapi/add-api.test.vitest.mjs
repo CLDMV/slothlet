@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import slothlet from "../../../../index2.mjs";
+import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("addApi Functionality", () => {

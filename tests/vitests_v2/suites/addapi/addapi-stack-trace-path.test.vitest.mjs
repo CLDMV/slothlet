@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import slothlet from "../../../../index2.mjs";
+import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 describe("Stack Trace Path Resolution", () => {

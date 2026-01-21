@@ -111,7 +111,7 @@ describe.each(BASIC_MATRIX)("Basic API Removal > Config: '$name'", ({ config }) 
 	let api;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 	});
 
@@ -212,7 +212,7 @@ describe.each(OWNERSHIP_MATRIX)("Module Ownership > Config: '$name'", ({ config 
 	let api;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 	});
 

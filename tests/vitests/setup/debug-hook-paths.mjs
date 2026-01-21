@@ -13,7 +13,7 @@
  */
 
 import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";
-import slothlet from "../../../index2.mjs";
+import slothlet from "@cldmv/slothlet";
 
 /**
  * Run hook-path debugging across the full hook-enabled test matrix.

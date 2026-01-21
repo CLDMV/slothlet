@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-20 20:06:03 -08:00 (1768968363)
+ *	@Last modified time: 2026-01-20 22:11:28 -08:00 (1768975888)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -977,7 +977,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		console.log(chalk.magentaBright("\n🔧 Running with V2 environment (slothlet-two-dev)\n"));
 	}
 
-	const module = await import("../index2.mjs");
+	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself
 	slothlet = module?.default ?? module?.slothlet ?? module;
 	if (typeof slothlet !== "function") {
