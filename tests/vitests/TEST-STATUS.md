@@ -25,7 +25,7 @@ Relative base: tests/vitests
 | suites/api/lazy/api-lazy-hot.test.vitest.mjs | Core API + Hot Reload | No | untested | |
 | suites/api/lazy/api-lazy-live.test.vitest.mjs | Core API + Live Binding | No | untested | |
 | suites/api-structures/all-api-structures.test.vitest.mjs | Core API | No | untested | |
-| suites/config/background-materialize.test.vitest.mjs | Config | No | ❌ fail (2026-01-21 07:35:00) | 8/24 tests pass, 16 fail - backgroundMaterialize config has race condition: typeof checks complete before async materialization finishes, causing inverted results (false→object, true→function) |
+| suites/config/background-materialize.test.vitest.mjs | Config | No | ❌ fail (2026-01-21 07:35:00) | 8/24 tests pass, 16 fail - Feature cannot work: lazy mode loads ALL modules during initialization (processFiles calls loadModule for flattening analysis), so wrappers are pre-materialized before backgroundMaterialize logic runs. Architecture issue: not truly lazy at top level. |
 | suites/context/als-cleanup.test.vitest.mjs | Context Management | No | untested | |
 | suites/context/auto-context-propagation.test.vitest.mjs | Context Management | No | untested | |
 | suites/context/map-set-proxy-fix.test.vitest.mjs | Context Management | No | untested | |

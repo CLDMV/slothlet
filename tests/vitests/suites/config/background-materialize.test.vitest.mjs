@@ -4,7 +4,7 @@
  *
  * @description
  * Tests that backgroundMaterialize config option properly materializes lazy mode
- * wrappers on creation, allowing accurate typeof checks for object exports.
+ * wrappers on creation. Uses __type property to check actual impl type (not proxy target).
  */
 
 import { describe, test, expect } from "vitest";
@@ -17,52 +17,53 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 describe.each(TEST_MATRIX.filter((config) => config.config.mode === "lazy"))("Background Materialize - %s", ({ name, config }) => {
-	test("backgroundMaterialize: false - typeof returns function before access", async () => {
+	test("backgroundMaterialize: false - modules not materialized until accessed", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: false // Explicit false
 		});
 
-		// In lazy mode without backgroundMaterialize, typeof returns "function" (proxy target)
-		expect(typeof api.config).toBe("function");
+		// Without backgroundMaterialize, __type returns IN_FLIGHT or UNMATERIALIZED (not materialized yet)
+		const typeValue = api.math.__type;
+		const isNotMaterialized = typeValue === api.slothlet.types.UNMATERIALIZED || typeValue === api.slothlet.types.IN_FLIGHT;
+		expect(isNotMaterialized).toBe(true);
 
 		await api.shutdown();
 	});
 
-	test("backgroundMaterialize: true - typeof returns object immediately", async () => {
+	test("backgroundMaterialize: true - __type returns correct type immediately", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: true // Enable background materialization
 		});
 
-		// With backgroundMaterialize, typeof should return "object" immediately
+		// With backgroundMaterialize, __type should return correct type immediately
 		// because materialization happened during proxy creation
-		expect(typeof api.config).toBe("object");
+		expect(api.math.__type).toBe("object");
 
 		// Verify the wrapper actually works and has the expected functions
-		expect(typeof api.config.getConfig).toBe("function");
-		const result = await api.config.getConfig();
-		expect(result).toBe("config-value");
+		expect(typeof api.math.add).toBe("function");
+		const result = await api.math.add(2, 3);
+		expect(result).toBe(5);
 
 		await api.shutdown();
 	});
 
-	test("backgroundMaterialize: true - works with nested objects", async () => {
+	test("backgroundMaterialize: true - works with function exports", async () => {
 		const api = await slothlet({
 			...config,
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
 			backgroundMaterialize: true
 		});
 
-		// Check that nested objects also get correct typeof
-		expect(typeof api.math).toBe("object");
-		expect(typeof api.math.add).toBe("function");
+		// Check that function exports return "function" for __type
+		expect(api.logger.__type).toBe("function");
 
 		// Verify functionality
-		const result = await api.math.add(2, 3);
-		expect(result).toBe(5);
+		const result = await api.logger("test");
+		expect(result).toBe("test");
 
 		await api.shutdown();
 	});

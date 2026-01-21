@@ -13,6 +13,7 @@
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { t } from "@cldmv/slothlet/i18n";
 import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/helpers/hot_reload";
+import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Build final API with built-in methods attached
@@ -140,6 +141,20 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 * @type {string}
 		 */
 		instanceID: instance.instanceID,
+
+		/**
+		 * Type state symbols for checking __type property values
+		 * @type {Object}
+		 * @property {symbol} UNMATERIALIZED - Module not loaded yet
+		 * @property {symbol} IN_FLIGHT - Materialization in progress
+		 * @public
+		 *
+		 * @example
+		 * if (api.math.__type === api.slothlet.types.IN_FLIGHT) {
+		 *   console.log("Math module is loading...");
+		 * }
+		 */
+		types: TYPE_STATES,
 
 		/**
 		 * API control object for hot reload operations

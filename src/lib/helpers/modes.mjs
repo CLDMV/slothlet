@@ -874,7 +874,8 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 		contextManager,
 		instanceID,
 		materializeFunc: lazy_materializeFunc,
-		ownership
+		ownership,
+		materializeOnCreate: config.backgroundMaterialize
 	});
 
 	return wrapper.createProxy();
