@@ -12,6 +12,15 @@ const wrapperDebugEnabled =
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
 
 /**
+ * Symbols for __type property states
+ * @public
+ */
+export const TYPE_STATES = {
+	UNMATERIALIZED: Symbol("unmaterialized"),
+	IN_FLIGHT: Symbol("inFlight")
+};
+
+/**
  * Build a safe function name for debugging and inspection output.
  * @param {string} apiPath - API path to derive a name from.
  * @param {string} fallback - Fallback name when a safe name cannot be derived.
@@ -463,9 +472,9 @@ export class UnifiedWrapper {
 		}
 
 		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
-		// This triggers background loading to populate impl before proxy creation
+		// This triggers background loading - typeof will still return "function" but first access is faster
 		if (wrapper.materializeOnCreate && wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper._materializeFunc) {
-			wrapper._materializeFunc(); // Fire-and-forget background materialization
+			wrapper._materialize(); // Fire-and-forget background materialization
 		}
 
 		// Determine if this wrapper represents a callable (function)
@@ -504,6 +513,33 @@ export class UnifiedWrapper {
 		 */
 		const getTrap = (target, prop, receiver) => {
 			if (prop === "__impl") return wrapper._impl;
+			if (prop === "__type") {
+				// Trigger materialization if needed
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+					wrapper._materialize();
+				}
+				
+				// Return state symbols for lazy mode if not ready
+				if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
+					return TYPE_STATES.IN_FLIGHT;
+				}
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized) {
+					return TYPE_STATES.UNMATERIALIZED;
+				}
+				
+				// Return typeof the actual impl (not the proxy target)
+				const impl = wrapper._impl;
+				if (typeof impl === "function") {
+					return "function";
+				}
+				if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					return "function";
+				}
+				if (impl && typeof impl === "object") {
+					return "object";
+				}
+				return "undefined";
+			}
 			if (prop === "__getState") return wrapper.__getState.bind(wrapper);
 			if (prop === "__setImpl") return wrapper.__setImpl.bind(wrapper);
 			if (prop === "__materialize") return wrapper.__materialize.bind(wrapper);
