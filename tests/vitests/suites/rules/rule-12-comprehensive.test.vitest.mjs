@@ -28,7 +28,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 	let api;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
@@ -117,7 +117,7 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 	let api;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 		api = await slothlet({
 			...config,
@@ -167,7 +167,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should block normal overwrites when allowApiOverwrite: false (eager mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
@@ -189,7 +189,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should allow same module to update despite allowApiOverwrite: false (eager mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
@@ -227,7 +227,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should block cross-module overwrites when allowApiOverwrite: false (eager mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
@@ -266,7 +266,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should block normal overwrites when allowAddApiOverwrite: false (lazy mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
@@ -285,7 +285,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should allow same module to update despite allowApiOverwrite: false (lazy mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
@@ -320,7 +320,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 	});
 
 	it("should block cross-module overwrites when allowApiOverwrite: false (lazy mode)", async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,

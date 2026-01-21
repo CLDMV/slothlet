@@ -27,7 +27,7 @@
  */
 
 import { describe, test, expect } from "vitest";
-import slothlet from "../../../../index.mjs";
+import slothlet from "@cldmv/slothlet";
 import { EventEmitter } from "node:events";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 

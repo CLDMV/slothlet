@@ -10,7 +10,7 @@ import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { slothlet as rawSlothlet } from "@cldmv/slothlet/slothlet";
-import wrappedSlothlet from "../../index2.mjs";
+import wrappedSlothlet from "@cldmv/slothlet";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

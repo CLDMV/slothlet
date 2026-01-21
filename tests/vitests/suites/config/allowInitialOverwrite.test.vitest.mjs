@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import slothlet from "../../../../index2.mjs";
+import slothlet from "@cldmv/slothlet";
 import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test with full matrix since initial overwrite behavior is independent of mode/runtime

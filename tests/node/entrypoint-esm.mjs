@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import slothlet from "../../index.mjs";
+import slothlet from "@cldmv/slothlet";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
