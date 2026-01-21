@@ -72,7 +72,7 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 		await mathAdd?.(1, 2);
 
 		hookCalled = false;
-		await api.reload();
+		await api.slothlet.reload();
 
 		const mathAddAfter = getMathAdd(api, config.dir);
 		await mathAddAfter?.(3, 4);

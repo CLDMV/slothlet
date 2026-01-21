@@ -62,7 +62,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		expect(mathAdd).toBeTypeOf("function");
 
 		await api.shutdown();
-		await api.reload();
+		await api.slothlet.reload();
 
 		const mathAddAfter = getMathAdd(api, config.dir);
 		expect(await mathAddAfter(10, 20)).toBe(30);
@@ -70,11 +70,11 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reloads a specific API path without affecting siblings", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
-		await api.addApi("extra2", TEST_DIRS.API_TEST, {}, { moduleId: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, {}, { moduleId: "module-2" });
 
 		const extra1Ref = api.extra1;
-		await api.reloadApi("extra1");
+		await api.slothlet.api.reload("extra1");
 
 		expect(api.extra1).toBe(extra1Ref);
 		expect(api.extra2?.math?.add).toBeTypeOf("function");
@@ -82,10 +82,10 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reloads combined modules on the same path", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("features", TEST_DIRS.API_TEST, {}, { moduleId: "core" });
-		await api.addApi("features", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra", forceOverwrite: true });
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST, {}, { moduleId: "core" });
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra", forceOverwrite: true });
 
-		await api.reloadApi("features");
+		await api.slothlet.api.reload("features");
 
 		expect(api.features?.math?.add).toBeTypeOf("function");
 	});
@@ -95,7 +95,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		api.context.userId = 123;
 		api.context.session = "abc";
 
-		await api.reload();
+		await api.slothlet.reload();
 
 		expect(api.context.userId).toBe(123);
 		expect(api.context.session).toBe("abc");
@@ -106,7 +106,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		api.reference.customUtil = () => "test";
 		api.reference.constant = 42;
 
-		await api.reload();
+		await api.slothlet.reload();
 
 		expect(api.reference.customUtil()).toBe("test");
 		expect(api.reference.constant).toBe(42);
@@ -114,10 +114,10 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("reloads nested API paths while preserving siblings", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("features.core", TEST_DIRS.API_TEST, {}, { moduleId: "core" });
-		await api.addApi("features.extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra" });
+		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, {}, { moduleId: "core" });
+		await api.slothlet.api.add("features.extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra" });
 
-		await api.reloadApi("features.core");
+		await api.slothlet.api.reload("features.core");
 
 		expect(api.features?.core?.math?.add).toBeTypeOf("function");
 		expect(api.features?.extra?.mathCjs).toBeTypeOf("object");
@@ -125,7 +125,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 
 	it("preserves deep references when mutateExisting is used", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("deep", TEST_DIRS.API_TEST, {}, { moduleId: "deep-test" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, {}, { moduleId: "deep-test" });
 
 		if (config.mode === "lazy") {
 			await api.deep.math.add(1, 1);
@@ -134,7 +134,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		const mathRef = api.deep?.math;
 		const addRef = api.deep?.math?.add;
 
-		await api.reloadApi("deep");
+		await api.slothlet.api.reload("deep");
 
 		expect(api.deep?.math).toBe(mathRef);
 		expect(api.deep?.math?.add).toBe(addRef);

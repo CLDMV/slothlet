@@ -68,7 +68,7 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 			dir: TEST_DIRS.API_TEST_MIXED
 		});
 
-		await expect(api.reload()).resolves.not.toThrow();
+		await expect(api.slothlet.reload()).resolves.not.toThrow();
 	});
 
 	it("should maintain API structure after reload", async () => {
@@ -77,9 +77,9 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 			dir: TEST_DIRS.API_TEST_MIXED
 		});
 
-		const beforeKeys = Object.keys(api).filter((k) => k !== "instanceId");
-		await api.reload();
-		const afterKeys = Object.keys(api).filter((k) => k !== "instanceId");
+		const beforeKeys = Object.keys(api).filter((k) => k !== "slothlet");
+		await api.slothlet.reload();
+		const afterKeys = Object.keys(api).filter((k) => k !== "slothlet");
 
 		expect(afterKeys.sort()).toEqual(beforeKeys.sort());
 	});

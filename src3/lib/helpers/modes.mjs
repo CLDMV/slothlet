@@ -78,6 +78,39 @@ function cloneWrapperImpl(value, mode) {
 }
 
 /**
+ * Check if a property assignment should be allowed during initial load.
+ * Emits warning if assignment is blocked by config.
+ * @param {Object} targetApi - Target API object
+ * @param {string} propertyName - Property name to assign
+ * @param {unknown} value - Value being assigned
+ * @param {Object} config - Slothlet configuration
+ * @returns {boolean} True if assignment should proceed, false to skip
+ */
+function safeAssign(targetApi, propertyName, value, config) {
+	// Check if property already exists
+	const existing = targetApi[propertyName];
+	if (existing === undefined) {
+		return true; // No conflict, allow assignment
+	}
+
+	// Check if initial overwrites are allowed
+	if (!config.allowInitialOverwrite) {
+		// Emit warning unless silent mode is enabled
+		if (!config.silent) {
+			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
+			if (isWrapper) {
+				console.warn(`Cannot replace wrapped property "${propertyName}" during initial load (allowInitialOverwrite: false)`);
+			} else {
+				console.warn(`Cannot overwrite property "${propertyName}" during initial load (allowInitialOverwrite: false)`);
+			}
+		}
+		return false; // Skip assignment
+	}
+
+	return true; // Allow assignment
+}
+
+/**
  * Universal file processing function for both root and nested directories
  * @param {Object} api - API object being built
  * @param {Array} files - Files to process
@@ -338,9 +371,13 @@ export async function processFiles(
 									initialImpl: mod[key],
 									ownership
 								});
-								targetApi[key] = namedWrapper.createProxy();
+								if (safeAssign(targetApi, key, namedWrapper.createProxy(), config)) {
+									targetApi[key] = namedWrapper.createProxy();
+								}
 							} else {
-								targetApi[key] = mod[key];
+								if (safeAssign(targetApi, key, mod[key], config)) {
+									targetApi[key] = mod[key];
+								}
 							}
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
@@ -380,9 +417,13 @@ export async function processFiles(
 									initialImpl: cloneWrapperImpl(propValue, mode),
 									ownership
 								});
-								targetApi[propKey] = wrapper.createProxy();
+								if (safeAssign(targetApi, propKey, wrapper.createProxy(), config)) {
+									targetApi[propKey] = wrapper.createProxy();
+								}
 							} else {
-								targetApi[propKey] = propValue;
+								if (safeAssign(targetApi, propKey, propValue, config)) {
+									targetApi[propKey] = propValue;
+								}
 							}
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
@@ -401,9 +442,13 @@ export async function processFiles(
 										initialImpl: cloneWrapperImpl(mod[key], mode),
 										ownership
 									});
-									targetApi[key] = wrapper.createProxy();
+									if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
+										targetApi[key] = wrapper.createProxy();
+									}
 								} else {
-									targetApi[key] = mod[key];
+									if (safeAssign(targetApi, key, mod[key], config)) {
+										targetApi[key] = mod[key];
+									}
 								}
 								if (ownership) {
 									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
@@ -422,9 +467,13 @@ export async function processFiles(
 									initialImpl: cloneWrapperImpl(mod[key], mode),
 									ownership
 								});
-								targetApi[key] = wrapper.createProxy();
+								if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
+									targetApi[key] = wrapper.createProxy();
+								}
 							} else {
-								targetApi[key] = mod[key];
+								if (safeAssign(targetApi, key, mod[key], config)) {
+									targetApi[key] = mod[key];
+								}
 							}
 							if (ownership) {
 								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
@@ -457,9 +506,13 @@ export async function processFiles(
 							initialImpl: cloneWrapperImpl(mod[key], mode),
 							ownership
 						});
-						targetApi[preferredName] = wrapper.createProxy();
+						if (safeAssign(targetApi, preferredName, wrapper.createProxy(), config)) {
+							targetApi[preferredName] = wrapper.createProxy();
+						}
 					} else {
-						targetApi[preferredName] = mod[key];
+						if (safeAssign(targetApi, preferredName, mod[key], config)) {
+							targetApi[preferredName] = mod[key];
+						}
 					}
 					if (ownership) {
 						ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${preferredName}`, source: "core" });

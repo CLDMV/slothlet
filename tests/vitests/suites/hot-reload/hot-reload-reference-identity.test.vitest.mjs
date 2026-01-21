@@ -57,7 +57,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		api = await createApiInstance(config);
 		const apiRef = api;
 
-		await api.reload();
+		await api.slothlet.reload();
 
 		// Root API reference is always preserved
 		expect(api).toBe(apiRef);
@@ -65,7 +65,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves function references across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
 
 		// Get function references
 		const mathCjsRef = api.extra?.mathCjs;
@@ -73,7 +73,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		const mathEsmRef = api.extra?.mathEsm;
 		const addRef = api.extra?.mathEsm?.add;
 
-		await api.reloadApi("extra");
+		await api.slothlet.api.reload("extra");
 
 		// Same references after reloadApi
 		expect(api.extra?.mathCjs).toBe(mathCjsRef);
@@ -84,7 +84,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves nested object and function references across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("deep", TEST_DIRS.API_TEST, {}, { moduleId: "deep-module" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, {}, { moduleId: "deep-module" });
 
 		// In lazy mode, access properties to materialize them before getting references
 		if (config.mode === "lazy") {
@@ -99,7 +99,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		const mathRef = api.deep?.math;
 		const addFuncRef = api.deep?.math?.add;
 
-		await api.reloadApi("deep");
+		await api.slothlet.api.reload("deep");
 
 		// Same references after reloadApi
 		expect(api.deep?.util).toBe(utilRef);
@@ -111,14 +111,14 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves mixed export references (default + named) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("extra", TEST_DIRS.API_TEST, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, {}, { moduleId: "test-module" });
 
 		// Mixed exports: default function + named exports as properties
 		const mixedRef = api.extra?.mixed;
 		const mixedNamedRef = api.extra?.mixed?.mixedNamed;
 		const mixedAnotherRef = api.extra?.mixed?.mixedAnother;
 
-		await api.reloadApi("extra");
+		await api.slothlet.api.reload("extra");
 
 		// Same references after reloadApi
 		expect(api.extra?.mixed).toBe(mixedRef);
@@ -128,7 +128,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves all reference types across reloadApi() in comprehensive test", async () => {
 		api = await createApiInstance(config);
-		await api.addApi("comprehensive", TEST_DIRS.API_TEST, {}, { moduleId: "comp-module" });
+		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, {}, { moduleId: "comp-module" });
 
 		// Capture references for ALL entity types
 		const refs = {
@@ -157,7 +157,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 			config: api.comprehensive?.config
 		};
 
-		await api.reloadApi("comprehensive");
+		await api.slothlet.api.reload("comprehensive");
 
 		// Verify ALL references are preserved
 		expect(api.comprehensive?.math).toBe(refs.math);

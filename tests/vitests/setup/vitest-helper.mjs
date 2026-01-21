@@ -61,7 +61,7 @@ const CONFIG_SPACE = {
 	mode: ["eager", "lazy"],
 	runtime: ["async", "live"],
 	// allowApiOverwrite: [false, true],
-	hotReload: [false, true],
+	allowMutation: [false, true],
 	// apiDepth: [1, 3, Infinity],
 	hooks: [false, true]
 };
@@ -134,7 +134,7 @@ function generateTestMatrix(configSpace) {
 		nameParts.push(config.mode.toUpperCase());
 		if (config.runtime === "live") nameParts.push("LIVE");
 		// if (!config.allowApiOverwrite) nameParts.push("DENY");
-		if (config.hotReload) nameParts.push("HOT");
+		if (config.allowMutation) nameParts.push("MUTATE");
 		// if (config.apiDepth !== Infinity) nameParts.push(`DEPTH_${config.apiDepth}`);
 		if (config.hooks) nameParts.push("HOOKS");
 
@@ -154,11 +154,12 @@ function generateTestMatrix(configSpace) {
 export const TEST_MATRIX = generateTestMatrix(CONFIG_SPACE);
 
 /**
- * Ownership-enabled configurations only (hotReload: true)
- * Used for tests that specifically need module ownership tracking
+ * Ownership-enabled configurations (all configs in v3 support ownership via allowMutation)
+ * In v3, ownership/mutation is controlled by allowMutation config (defaults to true)
+ * This matrix is kept for compatibility but returns full matrix since ownership is always available
  * @type {Array<{name: string, config: object}>}
  */
-export const OWNERSHIP_MATRIX = TEST_MATRIX.filter(({ config }) => config.hotReload);
+export const OWNERSHIP_MATRIX = TEST_MATRIX;
 
 /**
  * Get filtered matrix configurations based on test requirements
@@ -167,7 +168,7 @@ export const OWNERSHIP_MATRIX = TEST_MATRIX.filter(({ config }) => config.hotRel
  *
  * @example
  * // Test needs hot reload functionality
- * const hotReloadConfigs = getMatrixConfigs({ hotReload: true });
+ * const allowMutationConfigs = getMatrixConfigs({ allowMutation: true });
  *
  * @example
  * // Test needs live bindings with overwrite protection
@@ -207,14 +208,11 @@ export async function runTestWithApi(api, testFunction) {
 }
 
 /**
- * Basic configurations without advanced features (no hot reload, default overwrite, infinite depth)
- * Used for simple functionality tests that don't need ownership/overwrite features
+ * Basic configurations without advanced features (no mutation, async runtime)
+ * Used for simple functionality tests that don't need mutation/live binding features
  * @type {Array<{name: string, config: object}>}
  */
-export const BASIC_MATRIX = TEST_MATRIX.filter(
-	({ config }) => config.hotReload === false && config.runtime === "async"
-	// config.hotReload === false && config.allowApiOverwrite === true && config.apiDepth === Infinity && config.runtime === "async"
-);
+export const BASIC_MATRIX = TEST_MATRIX.filter(({ config }) => config.allowMutation === false && config.runtime === "async");
 
 /**
  * Overwrite configuration matrix (allowApiOverwrite true/false)
@@ -244,7 +242,7 @@ export const RUNTIME_MATRIX = TEST_MATRIX.filter(({ config }) => config.runtime 
  */
 export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
-	if (config.hotReload === true) featureCount++;
+	if (config.allowMutation === true) featureCount++;
 	if (config.runtime === "live") featureCount++;
 	// if (config.allowApiOverwrite === false) featureCount++;
 	// if (config.apiDepth !== Infinity) featureCount++;

@@ -140,6 +140,12 @@ export function transformConfig(config = {}) {
 		runtime: normalizeRuntime(config.runtime),
 		reference: config.reference || null,
 		context: config.context || null,
-		debug: normalizeDebug(config.debug)
+		debug: normalizeDebug(config.debug),
+		diagnostics: config.diagnostics === true,
+		hooks: config.hooks === true,
+		allowMutation: config.allowMutation !== false,
+		allowInitialOverwrite: config.allowInitialOverwrite !== false,
+		allowAddApiOverwrite: config.allowAddApiOverwrite !== false,
+		silent: config.silent === true
 	};
 }

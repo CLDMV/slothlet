@@ -146,7 +146,10 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 */
 		api: {
 			/**
-			 * @param {Record<string, unknown>} [options={}] - Add options.
+			 * @param {string} apiPath - API path to add modules to.
+			 * @param {string} folderPath - Folder path containing modules.
+			 * @param {Record<string, unknown>} [metadata={}] - Metadata object.
+			 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
 			 * @returns {Promise<void>}
 			 * @public
 			 *
@@ -154,30 +157,26 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * Adds API modules from a folder into the current instance at runtime.
 			 *
 			 * @example
-			 * await api.slothlet.api.add({ apiPath: "plugins", folderPath: "./plugins" });
+			 * await api.slothlet.api.add("plugins", "./plugins");
 			 */
-			add: async function slothlet_api_add(options = {}) {
-				if (!options || typeof options !== "object") {
-					throw new SlothletError("INVALID_CONFIG", {
-						option: "slothlet.api.add",
-						value: typeof options,
-						expected: "object",
+			add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
+				if (!config.allowMutation) {
+					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
+						operation: "api.add",
 						validationError: true
 					});
 				}
-
-				const { apiPath, folderPath, metadata = {}, options: addOptions = {} } = options;
 				return addApiComponent({
 					instance,
 					apiPath,
 					folderPath,
 					metadata,
-					options: addOptions
+					options
 				});
 			},
 
 			/**
-			 * @param {string|Record<string, unknown>} [options={}] - Remove options or apiPath.
+			 * @param {string} pathOrModuleId - API path or module ID to remove.
 			 * @returns {Promise<void>}
 			 * @public
 			 *
@@ -185,27 +184,20 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * Removes API modules by apiPath or moduleId from the current instance.
 			 *
 			 * @example
-			 * await api.slothlet.api.remove({ apiPath: "plugins.tools" });
+			 * await api.slothlet.api.remove("plugins.tools");
 			 */
-			remove: async function slothlet_api_remove(options = {}) {
-				if (typeof options === "string") {
-					return removeApiComponent({ instance, apiPath: options });
-				}
-				if (!options || typeof options !== "object") {
-					throw new SlothletError("INVALID_CONFIG", {
-						option: "slothlet.api.remove",
-						value: typeof options,
-						expected: "object",
+			remove: async function slothlet_api_remove(pathOrModuleId) {
+				if (!config.allowMutation) {
+					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
+						operation: "api.remove",
 						validationError: true
 					});
 				}
-
-				const { apiPath, moduleId } = options;
-				return removeApiComponent({ instance, apiPath, moduleId });
+				return removeApiComponent({ instance, pathOrModuleId });
 			},
 
 			/**
-			 * @param {string|Record<string, unknown>} [options={}] - Reload options or apiPath.
+			 * @param {string} pathOrModuleId - API path or module ID to reload.
 			 * @returns {Promise<void>}
 			 * @public
 			 *
@@ -213,23 +205,16 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * Reloads API modules recorded through add operations, preserving references.
 			 *
 			 * @example
-			 * await api.slothlet.api.reload({ apiPath: "plugins" });
+			 * await api.slothlet.api.reload("plugins");
 			 */
-			reload: async function slothlet_api_reload(options = {}) {
-				if (typeof options === "string") {
-					return reloadApiComponent({ instance, apiPath: options });
-				}
-				if (!options || typeof options !== "object") {
-					throw new SlothletError("INVALID_CONFIG", {
-						option: "slothlet.api.reload",
-						value: typeof options,
-						expected: "object",
+			reload: async function slothlet_api_reload(pathOrModuleId) {
+				if (!config.allowMutation) {
+					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
+						operation: "api.reload",
 						validationError: true
 					});
 				}
-
-				const { apiPath, moduleId } = options;
-				return reloadApiComponent({ instance, apiPath, moduleId });
+				return reloadApiComponent({ instance, pathOrModuleId });
 			}
 		},
 
@@ -417,6 +402,12 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 * @returns {Promise<void>}
 		 */
 		reload: async () => {
+			if (!config.allowMutation) {
+				throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
+					operation: "reload",
+					validationError: true
+				});
+			}
 			return instance.reload();
 		},
 
@@ -428,6 +419,18 @@ async function createSlothletNamespace(instance, config, userApi) {
 			return instance.shutdown();
 		}
 	};
+
+	// Remove mutation methods when allowMutation is false (unless diagnostics mode)
+	if (!config.allowMutation && config.diagnostics !== true) {
+		delete namespace.api;
+		delete namespace.reload;
+	}
+
+	// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
+	// Note: Hooks are not yet implemented in v3, but the config option is ready
+	if (!config.hooks && config.diagnostics !== true) {
+		delete namespace.hooks;
+	}
 
 	// Add diagnostics if enabled
 	if (config.diagnostics === true) {

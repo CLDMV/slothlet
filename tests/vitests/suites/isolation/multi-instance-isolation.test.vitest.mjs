@@ -43,9 +43,9 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 		});
 		instances.push(api2);
 
-		expect(api1.instanceId).toBeDefined();
-		expect(api2.instanceId).toBeDefined();
-		expect(api1.instanceId).not.toBe(api2.instanceId);
+		expect(api1.slothlet.instanceID).toBeDefined();
+		expect(api2.slothlet.instanceID).toBeDefined();
+		expect(api1.slothlet.instanceID).not.toBe(api2.slothlet.instanceID);
 	});
 
 	it("should isolate instance context between multiple instances", async () => {
@@ -187,7 +187,7 @@ describe("Multi-Instance Mode Mixing", () => {
 		expect(lazyResult).toBe(5);
 
 		// Verify they're different instances
-		expect(eagerApi.instanceId).not.toBe(lazyApi.instanceId);
+		expect(eagerApi.slothlet.instanceID).not.toBe(lazyApi.slothlet.instanceID);
 	});
 
 	it("should allow async and live runtime instances to coexist", async () => {
@@ -217,6 +217,6 @@ describe("Multi-Instance Mode Mixing", () => {
 		expect(liveResult).toBe(5);
 
 		// Verify they're different instances
-		expect(asyncApi.instanceId).not.toBe(liveApi.instanceId);
+		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);
 	});
 });
