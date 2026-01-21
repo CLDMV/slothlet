@@ -8,7 +8,7 @@
  * Second version of conflict function - attempts to overwrite
  * @returns {string} Version identifier
  */
-export default function overwriteTest() {
+export function overwriteTest() {
 	return "overwrite-test-2";
 }
 

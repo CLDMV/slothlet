@@ -7,7 +7,7 @@
  * First version of conflict function
  * @returns {string} Version identifier
  */
-export default function overwriteTest() {
+export function overwriteTest() {
 	return "overwrite-test-1";
 }
 

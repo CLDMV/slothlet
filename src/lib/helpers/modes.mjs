@@ -142,6 +142,7 @@ export async function processFiles(
 	populateDirectly = false
 ) {
 	let rootDefaultFunction = null;
+	const rootContributors = []; // Track all root-level default exports for multi-detection
 	const categoryName = isRoot && !populateDirectly ? null : sanitizePropertyName(directory.name);
 	let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
 	const shouldWrap = !(mode === "lazy" && populateDirectly);
@@ -209,7 +210,7 @@ export async function processFiles(
 		const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function";
 
 		if (isRootContributor) {
-			// Root contributor: default function with named exports attached
+			// Build the function with named exports attached
 			const defaultFunc = ensureNamedExportFunction(mod.default, moduleName);
 			for (const key of moduleKeys) {
 				if (!shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
@@ -218,16 +219,8 @@ export async function processFiles(
 				defaultFunc[key] = mod[key];
 			}
 
-			if (ownership) {
-				ownership.register({ moduleId: file.moduleId, apiPath: moduleName, source: "core" });
-			}
-
-			if (!rootDefaultFunction) {
-				rootDefaultFunction = defaultFunc;
-				if (config.debug?.modes) {
-					console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode, functionName: defaultFunc.name || "anonymous" }));
-				}
-			}
+			// Track root-level default function exports for post-processing
+			rootContributors.push({ moduleName, file, defaultFunc });
 		} else {
 			// Regular module - apply flattening decisions
 			const decision = getFlatteningDecision({
@@ -663,6 +656,53 @@ export async function processFiles(
 					console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
 				}
 				targetApi[subDirName] = createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config);
+			}
+		}
+	}
+
+	// Post-process root contributors based on count
+	if (isRoot && rootContributors.length > 0) {
+		if (rootContributors.length === 1) {
+			// Single root contributor: make it the root callable (don't namespace)
+			const { moduleName, file, defaultFunc } = rootContributors[0];
+			rootDefaultFunction = defaultFunc;
+			if (config.debug?.modes) {
+				console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode, functionName: defaultFunc.name || "anonymous" }));
+			}
+			if (ownership) {
+				ownership.register({ moduleId: file.moduleId, apiPath: moduleName, source: "core" });
+			}
+		} else {
+			// Multiple root contributors: namespace ALL of them and warn
+			console.warn(
+				`[SLOTHLET WARNING] Multiple root-level default function exports detected: ${rootContributors.map((rc) => rc.moduleName).join(", ")}. ` +
+					`Each has been namespaced by filename (e.g., api.${rootContributors[0].moduleName}()). ` +
+					`Consider using a single root-level default export or moving files to subdirectories.`
+			);
+
+			for (const { moduleName, file, defaultFunc } of rootContributors) {
+				// Wrap in UnifiedWrapper if needed
+				if (shouldWrap) {
+					const wrapper = new UnifiedWrapper({
+						mode,
+						apiPath: moduleName,
+						contextManager,
+						instanceID,
+						initialImpl: cloneWrapperImpl(defaultFunc, mode),
+						ownership
+					});
+					if (safeAssign(targetApi, moduleName, wrapper.createProxy(), config)) {
+						targetApi[moduleName] = wrapper.createProxy();
+					}
+				} else {
+					if (safeAssign(targetApi, moduleName, defaultFunc, config)) {
+						targetApi[moduleName] = defaultFunc;
+					}
+				}
+
+				if (ownership) {
+					ownership.register({ moduleId: file.moduleId, apiPath: moduleName, source: "core" });
+				}
 			}
 		}
 	}

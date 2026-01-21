@@ -973,6 +973,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		return;
 	}
 
+	const nodeOptions = process.env.NODE_OPTIONS || "";
 	if (useV2 || nodeOptions.includes("slothlet-two-dev")) {
 		console.log(chalk.magentaBright("\n🔧 Running with V2 environment (slothlet-two-dev)\n"));
 	}
