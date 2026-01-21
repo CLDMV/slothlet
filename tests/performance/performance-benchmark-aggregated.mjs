@@ -219,8 +219,8 @@ function ensureDevEnvFlags() {
 	const allConditions = [...allExecArgv, ...envOptions];
 
 	let slothletCondition = "slothlet-dev";
-	if (hasCondition(allConditions, "slothlet-three-dev")) {
-		slothletCondition = "slothlet-three-dev";
+	if (hasCondition(allConditions, "slothlet-two-dev")) {
+		slothletCondition = "slothlet-two-dev";
 	}
 
 	const requiredConditions = [slothletCondition, "development"];
@@ -276,10 +276,10 @@ function ensureDevEnvFlags() {
  */
 function resolveApiPaths() {
 	const nodeOptions = process.env.NODE_OPTIONS || "";
-	const isV3 = nodeOptions.includes("slothlet-three-dev");
+	const isV2 = nodeOptions.includes("slothlet-two-dev");
 	return {
-		apiDir: join(__dirname, isV3 ? "../../api_tests_v3/api_test" : "../../api_tests/api_test"),
-		apiConfigPath: join(__dirname, isV3 ? "../v3.vitests/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc")
+		apiDir: join(__dirname, isV2 ? "../../api_tests_v2/api_test" : "../../api_tests/api_test"),
+		apiConfigPath: join(__dirname, isV2 ? "../vitests_v2/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc")
 	};
 }
 
@@ -1251,7 +1251,7 @@ async function main() {
 		return;
 	}
 
-	const module = await import("@cldmv/slothlet");
+	const module = await import("../../index2.mjs");
 	slothlet = module?.default ?? module?.slothlet ?? module;
 	if (typeof slothlet !== "function") {
 		throw new Error("slothlet entrypoint did not export a callable function");

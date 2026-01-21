@@ -20,7 +20,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const slothlet = require("@cldmv/slothlet");
+const slothlet = require("../../index2.cjs");
 
 const CJS_API_DIR = "../../api_tests/api_test_cjs";
 const MIXED_API_DIR = "../../api_tests/api_test_mixed";

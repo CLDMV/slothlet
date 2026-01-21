@@ -40,7 +40,7 @@ const BENCHMARK_ITERATIONS_COMPLEX = 100; // Number of iterations for complex be
 const BENCHMARK_ITERATIONS_MULTI = 50; // Number of iterations for multi benchmark tests
 
 // Import slothlet
-import slothlet from "@cldmv/slothlet";
+import slothlet from "../../index2.mjs";
 
 /**
  * Measures execution time of an async function

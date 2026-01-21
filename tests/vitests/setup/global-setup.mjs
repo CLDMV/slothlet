@@ -20,7 +20,7 @@ function ensureDevEnvFlags() {
 		process.env.NODE_ENV = "development";
 	}
 
-	const devFlag = "--conditions=slothlet-three-dev";
+	const devFlag = "--conditions=slothlet-two-dev";
 	const current = process.env.NODE_OPTIONS || "";
 	if (!current.includes(devFlag)) {
 		const next = current ? `${current} ${devFlag}` : devFlag;

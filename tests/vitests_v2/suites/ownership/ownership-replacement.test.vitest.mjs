@@ -11,7 +11,7 @@ import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import slothlet from "@cldmv/slothlet";
+import slothlet from "../../../../index2.mjs";
 
 // Use OWNERSHIP_MATRIX for configs that require hotReload + ownership tracking
 const OWNERSHIP_MATRIX = getMatrixConfigs({ hotReload: true });

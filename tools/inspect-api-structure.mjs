@@ -1,6 +1,19 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/inspect-api-structure.mjs
+ *	@Date: 2026-01-10 20:37:02 -08:00 (1768106222)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-20 20:18:13 -08:00 (1768969093)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/inspect-api-structure.mjs
  *	@Date: 2025-10-23 11:11:42 -07:00 (1761243102)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -22,16 +35,14 @@ import chalk from "chalk";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "url";
 import util from "node:util";
-
-// Dynamic import for v2 or v3
-let slothlet;
+import slothlet from "@cldmv/slothlet";
 
 /**
  * Ensure slothlet dev conditions are set for the requested version.
- * @param {boolean} useV3 - Whether to force v3 dev condition.
+ * @param {boolean} useV2 - Whether to force v2 dev condition.
  * @returns {boolean} True if a child process was spawned.
  */
-function ensureDevEnvFlags(useV3) {
+function ensureDevEnvFlags(useV2) {
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition
@@ -42,8 +53,8 @@ function ensureDevEnvFlags(useV3) {
 
 	process.env.NODE_ENV = "development";
 
-	const desiredCondition = useV3 ? "slothlet-three-dev" : "slothlet-dev";
-	const conflictingCondition = useV3 ? "slothlet-dev" : "slothlet-three-dev";
+	const desiredCondition = useV2 ? "slothlet-two-dev" : "slothlet-dev";
+	const conflictingCondition = useV2 ? "slothlet-dev" : "slothlet-two-dev";
 	const requiredConditions = [desiredCondition, "development"];
 
 	const allExecArgv = [...process.execArgv];
@@ -211,12 +222,12 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
 /**
  * Force materialization of lazy folders by directly accessing their properties.
  * @param {any} api - The API object to materialize
- * @param {boolean} useV3 - Whether v3 behavior should be used
+ * @param {boolean} useV2 - Whether v2 behavior should be used
  * @returns {Promise<void>}
  */
-async function forceMaterializeLazyFolders(api, useV3) {
+async function forceMaterializeLazyFolders(api, useV2) {
 	if (!api) return;
-	if (useV3) {
+	if (useV2) {
 		if (typeof api !== "object" && typeof api !== "function") return;
 	} else if (typeof api !== "object") {
 		return;
@@ -233,7 +244,7 @@ async function forceMaterializeLazyFolders(api, useV3) {
 		}
 
 		try {
-			if (useV3) {
+			if (useV2) {
 				const value = api[key];
 				if (value && typeof value.__getState === "function" && typeof value.__materialize === "function") {
 					const state = value.__getState();
@@ -248,7 +259,7 @@ async function forceMaterializeLazyFolders(api, useV3) {
 				descriptor &&
 				"value" in descriptor &&
 				typeof descriptor.value === "function" &&
-				(descriptor.value.name?.includes("lazy") || (useV3 && typeof descriptor.value.__materialize === "function"))
+				(descriptor.value.name?.includes("lazy") || (useV2 && typeof descriptor.value.__materialize === "function"))
 			) {
 				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
 
@@ -285,9 +296,9 @@ async function forceMaterializeLazyFolders(api, useV3) {
 
 					// Check if it's now materialized
 					const newValue = api[key];
-					const v3State = useV3 && typeof newValue?.__getState === "function" ? newValue.__getState() : null;
-					if (useV3 && v3State?.materialized) {
-						console.log(chalk.green(`  ✅ Successfully materialized ${key} (v3 wrapper)`));
+					const v2State = useV2 && typeof newValue?.__getState === "function" ? newValue.__getState() : null;
+					if (useV2 && v2State?.materialized) {
+						console.log(chalk.green(`  ✅ Successfully materialized ${key} (v2 wrapper)`));
 					} else if (typeof newValue === "object" && newValue !== null) {
 						console.log(chalk.green(`  ✅ Successfully materialized ${key} to object with keys: ${Object.keys(newValue).join(", ")}`));
 					} else {
@@ -315,40 +326,25 @@ async function forceMaterializeLazyFolders(api, useV3) {
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {}, useV3 = false } = options;
+	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {}, useV2 = false } = options;
 
-	// Import the appropriate version
-	if (!slothlet) {
-		if (ensureDevEnvFlags(useV3)) {
-			return;
-		}
-		if (useV3) {
-			const module = await import("@cldmv/slothlet/slothlet");
-			slothlet = module.slothlet;
-			if (!raw) {
-				console.log(chalk.cyan("Using v3 (src3/)"));
-			}
-		} else {
-			const module = await import("@cldmv/slothlet");
-			slothlet = module.default;
-			if (!raw) {
-				console.log(chalk.cyan("Using v2 (src/)"));
-			}
-		}
+	// Ensure correct environment is set (will respawn if needed)
+	if (ensureDevEnvFlags(useV2)) {
+		return;
 	}
 
 	const mode = lazy ? "lazy" : "eager";
 	if (!raw) {
-		console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
+		const version = useV2 ? "v2 (src2/)" : "v3 (src/)";
+		console.log(chalk.cyan(`Using ${version}`));
 	}
+	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
 
 	try {
 		// Use different base paths for v2 vs v3
-		const basePath = useV3 ? "./api_tests_v3" : "./api_tests";
+		const basePath = useV2 ? "./api_tests_v2" : "./api_tests";
 		const apiPath = `${basePath}/${apiName}`;
-		if (!raw) {
-			console.log(chalk.gray(`Loading from: ${apiPath}`));
-		}
+		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
 		// Build slothlet configuration (both v2 and v3 use 'mode' now)
 		const config = {
@@ -358,20 +354,16 @@ async function inspectApi(apiName, options = {}) {
 			...slothletConfig
 		};
 
-		if (!raw) {
-			console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
-		}
+		console.log(chalk.gray(`Configuration:`, JSON.stringify(config, null, 2)));
 
 		// Load the API
 		const api = await slothlet(config);
 
-		if (!raw) {
-			console.log(chalk.green("✅ API loaded successfully"));
-		}
+		console.log(chalk.green("✅ API loaded successfully"));
 
 		// Force materialization of lazy folders if in lazy mode
 		if (lazy) {
-			await forceMaterializeLazyFolders(api, useV3);
+			await forceMaterializeLazyFolders(api, useV2);
 			console.log(chalk.green("✅ Lazy folders materialized\n"));
 		} else {
 			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
@@ -559,20 +551,24 @@ async function main() {
 		console.log("\nExamples:");
 		console.log("  node tools/inspect-api-structure.mjs api_test");
 		console.log("  node tools/inspect-api-structure.mjs api_test --eager");
-		console.log("  node tools/inspect-api-structure.mjs api_test --eager --v3 --runtime live");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager --allowMutation --runtime live");
+		console.log("  node tools/inspect-api-structure.mjs api_test --eager --v2 --runtime live --allowApiOverwrite");
 		console.log("\nOptions:");
 		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods        Show available methods for functions");
 		console.log("  --lazy                Use lazy loading mode (default)");
 		console.log("  --eager               Use eager loading mode");
 		console.log("  --raw                 Output raw API via console.log only");
-		console.log("  --v3                  Use v3 prototype (src3/) instead of v2 (src/)");
-		console.log("  --v2                  Force v2 (src/) even when v3 conditions are set");
+		console.log("  --v2                  Use v2 (src2/) instead of v3 (src/)");
 		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
-		console.log("  --allowApiOverwrite   Allow API property overwriting");
-		console.log("  --hotReload           Enable hot reload and ownership tracking");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
 		console.log("  --debug               Enable debug mode");
+		console.log("\nV3 Options (src/):");
+		console.log("  --allowMutation       Allow runtime mutation of API properties");
+		console.log("  --hooks               Enable lifecycle hooks");
+		console.log("\nV2 Options (src2/):");
+		console.log("  --allowApiOverwrite   Allow API property overwriting");
+		console.log("  --hotReload           Enable hot reload and ownership tracking");
 		return;
 	}
 
@@ -599,14 +595,16 @@ async function main() {
 			options.lazy = false;
 		} else if (args[i] === "--raw") {
 			options.raw = true;
-		} else if (args[i] === "--v3") {
-			options.useV3 = true;
 		} else if (args[i] === "--v2") {
-			options.useV3 = false;
+			options.useV2 = true;
 		} else if (args[i] === "--allowApiOverwrite") {
 			slothletConfig.allowApiOverwrite = true;
 		} else if (args[i] === "--hotReload") {
 			slothletConfig.hotReload = true;
+		} else if (args[i] === "--allowMutation") {
+			slothletConfig.allowMutation = true;
+		} else if (args[i] === "--hooks") {
+			slothletConfig.hooks = true;
 		} else if (args[i] === "--debug") {
 			slothletConfig.debug = true;
 		}
@@ -614,11 +612,6 @@ async function main() {
 
 	// Pass slothlet configuration as part of options
 	options.slothletConfig = slothletConfig;
-
-	await inspectApi(apiName, options);
-	if (options.raw) {
-		return;
-	}
 
 	await inspectApi(apiName, options);
 }

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Test script for src3 prototype
+ * @fileoverview Test script for v3 (src/)
  */
 import slothlet from "./slothlet.mjs";
 import { resolve, dirname } from "node:path";
@@ -8,13 +8,13 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-console.log("🧪 Testing Slothlet Prototype (src3)\n");
+console.log("🧪 Testing Slothlet V3 (src/)\n");
 
 try {
 	// Test 1: Basic load
 	console.log("Test 1: Loading API in eager mode...");
 	const api = await slothlet({
-		dir: resolve(__dirname, "../api_tests_v3/api_test"),
+		dir: resolve(__dirname, "../api_tests/api_test"),
 		mode: "eager",
 		runtime: "async"
 	});
@@ -69,7 +69,7 @@ try {
 	// Test 4: Diagnostics (when enabled)
 	console.log("\nTest 4: Testing diagnostics...");
 	const api_with_diag = await slothlet({
-		dir: resolve(__dirname, "../api_tests_v3/api_test"),
+		dir: resolve(__dirname, "../api_tests/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});
@@ -99,13 +99,13 @@ try {
 	// Test 7: Multiple instances
 	console.log("\nTest 7: Testing multiple instances...");
 	const api1 = await slothlet({
-		dir: resolve(__dirname, "../api_tests_v3/api_test"),
+		dir: resolve(__dirname, "../api_tests/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});
 
 	const api2 = await slothlet({
-		dir: resolve(__dirname, "../api_tests_v3/api_test"),
+		dir: resolve(__dirname, "../api_tests/api_test"),
 		mode: "eager",
 		diagnostics: true
 	});

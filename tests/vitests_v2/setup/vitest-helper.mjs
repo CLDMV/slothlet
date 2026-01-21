@@ -24,23 +24,23 @@ export const testConfig = parse(configContent);
 
 /**
  * Determine which API test directory to use based on NODE_OPTIONS conditions
- * - slothlet-three-dev (--conditions=slothlet-three-dev) → use api_tests_v3
- * - slothlet-dev (--conditions=slothlet-dev or development) → use api_tests (v2/src)
- * - default (production/dist) → use api_tests (v2/dist)
+ * - slothlet-two-dev (--conditions=slothlet-two-dev) → use api_tests_v2
+ * - slothlet-dev (--conditions=slothlet-dev or development) → use api_tests (v3/src)
+ * - default (production/dist) → use api_tests (v3/dist)
  * @type {string}
  */
 export const API_TEST_BASE = (() => {
 	const nodeOptions = process.env.NODE_OPTIONS || "";
-	if (nodeOptions.includes("slothlet-three-dev")) {
-		return "api_tests_v3";
+	if (nodeOptions.includes("slothlet-two-dev")) {
+		return "api_tests_v2";
 	}
-	// Default to v2 (api_tests) for both slothlet-dev and production
+	// Default to v3 (api_tests) for both slothlet-dev and production
 	return "api_tests";
 })();
 
 /**
  * Common test API directories with resolved absolute paths
- * Automatically switches between api_tests (v2) and api_tests_v3 based on NODE_OPTIONS conditions
+ * Automatically switches between api_tests (v3) and api_tests_v2 based on NODE_OPTIONS conditions
  * @type {object}
  */
 export const TEST_DIRS = {
