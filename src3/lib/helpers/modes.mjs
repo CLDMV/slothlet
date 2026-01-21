@@ -25,31 +25,16 @@ function getSafeFunctionName(name, fallback) {
 
 /**
  * Create a named wrapper for default export functions when they are anonymous.
+ * NOTE: This function is now a pass-through since UnifiedWrapper handles name/length/toString
+ * through its proxy get trap. Wrapping is no longer needed and causes toString mismatches.
  * @param {Function} fn - Original function.
- * @param {string} nameHint - Name to apply if fn is anonymous or named "default".
- * @returns {Function} Named function (original if already named).
+ * @param {string} nameHint - Name to apply if fn is anonymous or named "default" (unused).
+ * @returns {Function} Original function unmodified.
  */
 function ensureNamedExportFunction(fn, nameHint) {
-	if (typeof fn !== "function") {
-		return fn;
-	}
-	if (fn.name && fn.name !== "default") {
-		return fn;
-	}
-	const safeName = getSafeFunctionName(nameHint, "default");
-	const wrapped = {
-		[safeName]: function (...args) {
-			return fn(...args);
-		}
-	}[safeName];
-	const descriptors = Object.getOwnPropertyDescriptors(fn);
-	for (const [key, descriptor] of Object.entries(descriptors)) {
-		if (key === "name" || key === "length" || key === "prototype") {
-			continue;
-		}
-		Object.defineProperty(wrapped, key, descriptor);
-	}
-	return wrapped;
+	// UnifiedWrapper now handles name, length, and toString through proxy get trap
+	// No wrapping needed - return original function as-is
+	return fn;
 }
 
 /**
