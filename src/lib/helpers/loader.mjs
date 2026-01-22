@@ -12,13 +12,16 @@ import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
 /**
  * Load a single module
  * @param {string} filePath - Path to module file
+ * @param {string} [instanceID] - Slothlet instance ID for cache busting
  * @returns {Promise<Object>} Loaded module
  * @public
  */
-export async function loadModule(filePath) {
+export async function loadModule(filePath, instanceID) {
 	try {
 		const fileUrl = pathToFileURL(filePath).href;
-		const module = await import(fileUrl);
+		// Cache bust using instanceID to prevent cross-instance pollution
+		const cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
+		const module = await import(cacheBustedUrl);
 		return module;
 	} catch (error) {
 		throw new SlothletError(

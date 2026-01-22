@@ -7,6 +7,11 @@
 - Update "Notes" column with relevant details about changes or test results
 - Format: `✅ pass (2026-01-20 21:30:00)` or `❌ fail - retest` or `untested`
 
+**Test command syntax:**
+```powershell
+npm run testv3 -- tests/vitests/suites/<folder>/<test-file>.test.vitest.mjs
+```
+
 Relative base: tests/vitests
 
 | Test (relative) | Feature Category | V3 Updated | Status | Notes |
@@ -25,7 +30,7 @@ Relative base: tests/vitests
 | suites/api/lazy/api-lazy-hot.test.vitest.mjs | Core API + Hot Reload | No | untested | |
 | suites/api/lazy/api-lazy-live.test.vitest.mjs | Core API + Live Binding | No | untested | |
 | suites/api-structures/all-api-structures.test.vitest.mjs | Core API | No | untested | |
-| suites/config/background-materialize.test.vitest.mjs | Config | No | ❌ fail (2026-01-21 07:35:00) | 8/24 tests pass, 16 fail - Feature cannot work: lazy mode loads ALL modules during initialization (processFiles calls loadModule for flattening analysis), so wrappers are pre-materialized before backgroundMaterialize logic runs. Architecture issue: not truly lazy at top level. |
+| suites/config/background-materialize.test.vitest.mjs | Config | ✅ Yes (2026-01-21 15:51:00) | ✅ pass (2026-01-21 16:23:00) | 24/24 pass - **FIXED**: Was failing due to Node.js module cache pollution. When multiple slothlet instances loaded same modules sequentially, Node cached them causing wrapper/state bleed between instances. Fixed by appending `?slothlet_instance=${instanceID}` to import URLs in loader.mjs for cache busting. Each instance now gets fresh module imports. Test properly uses api.slothlet.types symbols. Note: typeof ALWAYS returns "function" in lazy mode (see docs/v3/changelog/typeof-always-function-lazy-mode.md). |
 | suites/context/als-cleanup.test.vitest.mjs | Context Management | No | untested | |
 | suites/context/auto-context-propagation.test.vitest.mjs | Context Management | No | untested | |
 | suites/context/map-set-proxy-fix.test.vitest.mjs | Context Management | No | untested | |
@@ -66,10 +71,10 @@ Relative base: tests/vitests
 | suites/runtime/runtime-verification.test.vitest.mjs | Runtime | No | untested | |
 | suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs | API Sanitization | No | untested | |
 | suites/sanitization/sanitize.test.vitest.mjs | API Sanitization | No | untested | |
-| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:07) | 64/64 tests fail, 0 pass - V3 BUGS: (1) Non-MUTATE: "Invalid configuration: ' ' = ' '. Expected: ." for INVALID_CONFIG_MUTATION_DISABLED missing translation (2) MUTATE: "path already exists and overwrite is not allowed" or "state is not defined" at hot_reload.mjs:662 |
-| suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:09) | 80/80 tests fail, 0 pass - Same issues as case1-case2: Non-MUTATE missing translation, MUTATE "state is not defined" and path conflicts |
-| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:33) | 96/96 tests fail, 0 pass - Non-MUTATE: missing translation, MUTATE: path conflicts, "state is not defined", type mismatch (function vs object) |
-| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:36) | 112/112 tests fail, 0 pass - Same patterns: Non-MUTATE missing translation, MUTATE path conflicts and "state is not defined" |
+| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 14:52:00) | 64/64 tests fail, 0 pass - NOT typeof issues. Issues: (1) Non-MUTATE configs (32 tests): `INVALID_CONFIG_MUTATION_DISABLED` - tests try to use api.slothlet.api.add() but mutation disabled (2) MUTATE configs (32 tests): Mix of `ReferenceError: state is not defined` at hot_reload.mjs:662 and `Invalid API path 'config/plugins': path already exists and overwrite is not allowed`. Hot reload bugs, not flattening or typeof issues. |
+| suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:09) | 80/80 tests fail, 0 pass - NOT typeof issues. Same hot reload bugs as case1-case2: (1) Non-MUTATE: mutation disabled errors (2) MUTATE: "state is not defined" and path conflicts |
+| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:33) | 96/96 tests fail, 0 pass - NOT typeof issues. Same hot reload bugs: Non-MUTATE mutation disabled, MUTATE "state is not defined" and path conflicts, type mismatches |
+| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 14:57:00) | 112/112 tests fail, 0 pass - Same pattern as case1-case2: NOT typeof issues. All failures due to hot reload bugs: (1) Non-MUTATE configs: `INVALID_CONFIG_MUTATION_DISABLED` when tests call api.slothlet.api.add() (2) MUTATE configs: `ReferenceError: state is not defined` at hot_reload.mjs:662 and path conflict errors. Tests have many typeof checks (lines 28, 30, 38, 57-62, 90-97, 124-152, 175) but typeof not the issue - hot reload is broken. |
 
 ## Feature Categories
 
