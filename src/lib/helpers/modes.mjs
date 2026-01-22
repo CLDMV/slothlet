@@ -179,7 +179,7 @@ export async function processFiles(
 		}
 
 		try {
-			const mod = await loadModule(file.path);
+			const mod = await loadModule(file.path, instanceID);
 			const exports = extractExports(mod);
 			const moduleName = sanitizePropertyName(file.name);
 			const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
@@ -577,7 +577,7 @@ export async function processFiles(
 					// 2. Filename matches folder name
 					// 3. Has default export (checked below)
 					if (isGeneric || filenameMatchesFolder) {
-						const mod = await loadModule(file.path);
+						const mod = await loadModule(file.path, instanceID);
 						const exports = extractExports(mod);
 						const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 						const analysis = {
@@ -755,7 +755,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 			const filenameMatchesFolder = moduleName === categoryName;
 
 			if (isGeneric || filenameMatchesFolder) {
-				const mod = await loadModule(file.path);
+				const mod = await loadModule(file.path, instanceID);
 				const exports = extractExports(mod);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {

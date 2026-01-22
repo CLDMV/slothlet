@@ -99,7 +99,7 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 				if (config.debug?.modes) {
 					console.log(`[LAZY.MJS] Loading file: ${file.name} from ${file.path}`);
 				}
-				const mod = await loadModule(file.path);
+				const mod = await loadModule(file.path, instanceID);
 				if (config.debug?.modes) {
 					console.log(`[LAZY.MJS] Loaded file: ${file.name}, extracting exports...`);
 				}
