@@ -148,7 +148,7 @@ function normalizeCollision(collision) {
 ## Completion Status
 
 **Phase 1-4: ✅ COMPLETE** (Commit: 9b3dc19)  
-**Phase 5: ✅ COMPLETE** (Commit: TBD - January 23, 2026)  
+**Phase 5: ✅ COMPLETE** (Commit: 20b349b - January 23, 2026)  
   - All 240 collision config tests passing
   - Fixed ownership.register() signature to use collisionMode instead of allowConflict
   - Updated all 15 call sites across codebase
