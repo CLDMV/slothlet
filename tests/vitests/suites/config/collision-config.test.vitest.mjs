@@ -13,7 +13,7 @@
  * - error: Throw error on collision
  * 
  * Tests both contexts:
- * - collision.initial: During buildAPI (initial load) using overwrite-test-1.mjs and overwrite-test-2.mjs
+ * - collision.initial: During buildAPI (initial load) - math.mjs file collides with math/ folder
  * - collision.addApi: During api.add() operations using math-collision.mjs from api_test_collections
  *
  * @module tests/vitests/config/collision-config.test.vitest
@@ -120,7 +120,54 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 		});
 	});
+	describe("collision.initial modes", () => {
+		// math.mjs file collides with math/ folder during initial load
+		// Both try to create api.math, triggering collision.initial behavior
 
+		it("merge mode: should merge file and folder exports", async () => {
+			api = await createApiInstance(config, { 
+				collision: { initial: "merge", addApi: "merge" }
+			});
+			
+			const math = getMath(api, config.dir);
+			expect(math).toBeDefined();
+			expect(math.add).toBeTypeOf("function");
+			
+			// Should have both folder and file exports merged
+			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			// Result could be from folder (5) or file (1005) depending on load order
+			expect([5, 1005]).toContain(result);
+		});
+
+		it("skip mode: should keep first loaded (folder or file)", async () => {
+			api = await createApiInstance(config, { 
+				collision: { initial: "skip", addApi: "merge" }
+			});
+			
+			const math = getMath(api, config.dir);
+			expect(math).toBeDefined();
+			expect(math.add).toBeTypeOf("function");
+		});
+
+		it("replace mode: should allow last loaded to replace", async () => {
+			api = await createApiInstance(config, { 
+				collision: { initial: "replace", addApi: "merge" }
+			});
+			
+			const math = getMath(api, config.dir);
+			expect(math).toBeDefined();
+			expect(math.add).toBeTypeOf("function");
+		});
+
+		it("error mode: should throw error on collision during buildAPI", async () => {
+			// Error mode should throw when math.mjs collides with math/ folder
+			await expect(
+				createApiInstance(config, { 
+					collision: { initial: "error", addApi: "merge" }
+				})
+			).rejects.toThrow();
+		});
+	});
 	// NOTE: collision.initial tests removed because files don't actually collide during initial buildAPI
 	// Each file gets its own namespace, so there's no collision to test
 	// collision.initial would only apply in custom scenarios not representable in simple file loading
