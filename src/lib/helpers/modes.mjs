@@ -950,14 +950,13 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 						implToWrap = modContent;
 					}
 
-					if (ownership) {
-						ownership.register({
-							moduleId: file.moduleId,
-							apiPath,
-							source: "core",
-							allowConflict: shouldAllowOwnershipConflict(config, "initial")
-						});
-					}
+					// OWNERSHIP NOTE: Do NOT register ownership here during lazy materialization
+					// Ownership is registered AFTER buildAPI completes via registerAPIWithOwnership()
+					// in slothlet.mjs. Registering here causes conflicts because:
+					// 1. Initial build registers entire API tree with moduleId="base"
+					// 2. Lazy materialization would try to re-register with file-specific moduleId
+					// 3. Different moduleIds trigger OWNERSHIP_CONFLICT unless allowConflict=true
+					// The collision config should be respected via registerAPIWithOwnership, not here
 
 					return implToWrap;
 				}

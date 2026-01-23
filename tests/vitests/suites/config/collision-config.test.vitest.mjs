@@ -97,10 +97,12 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		it("should apply string collision mode to both contexts", async () => {
 			api = await createApiInstance(config, { collision: "skip" });
 
-			// Skip mode - API should load successfully
+			// Skip mode - API should load and function should work
 			const math = getMath(api, config.dir);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
+			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			expect([5, 1005]).toContain(result);
 		});
 
 		it("should normalize collision mode case-insensitively", async () => {
@@ -147,6 +149,10 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const math = getMath(api, config.dir);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
+
+			// Verify the function works (whichever loaded first)
+			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			expect([5, 1005]).toContain(result);
 		});
 	});
 	// NOTE: collision.initial tests removed because files don't actually collide during initial buildAPI
