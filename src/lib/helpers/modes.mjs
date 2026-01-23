@@ -145,10 +145,13 @@ export async function processFiles(
 	// Helper to build full apiPath with prefix
 	const buildApiPath = (path) => {
 		if (!apiPathPrefix) return path;
-		// Don't double-prefix: if path already starts with prefix, don't prepend again
-		if (path === apiPathPrefix || path.startsWith(`${apiPathPrefix}.`)) {
-			return path;
+		// Anti-double-prefix: if path already contains the prefix in a dotted chain, don't prepend again
+		// Example: if prefix="config" and path="config.get", return "config.get" (don't make "config.config.get")
+		// But if prefix="config" and path="config" (matching subdirectory name), still add prefix for "config.config"
+		if (path.startsWith(`${apiPathPrefix}.`)) {
+			return path; // Already has prefix in chain
 		}
+		// Always add prefix - even if names match, they represent different levels
 		return `${apiPathPrefix}.${path}`;
 	};
 
@@ -295,7 +298,8 @@ export async function processFiles(
 			}
 
 			// Special case: folder/folder.mjs pattern (only for nested, not root)
-			if (!isRoot && moduleName === categoryName) {
+		// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
+		if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
 				if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
 					// Case 1: export const folder = {...} - wrap and use as category
 					const exportedValue = mod[moduleName];
@@ -643,7 +647,8 @@ export async function processFiles(
 							moduleFiles: subDir.children.files
 						});
 
-						if (categoryDecision.shouldFlatten) {
+					// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
+					if (categoryDecision.shouldFlatten && !apiPathPrefix) {
 							console.log(`[FOLDER-LEVEL FLATTEN] Flattening "${subDirName}" folder, SKIPPING regular processFiles recursion`);
 							// For filename-folder match with named export, extract the matching export
 							// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
@@ -699,7 +704,8 @@ export async function processFiles(
 					mode,
 					false, // Not root
 					recursive, // Pass through recursive flag
-					false // populateDirectly - build on parent api
+					false, // populateDirectly - build on parent api
+					apiPathPrefix // Pass through apiPathPrefix to subdirectories
 				);
 			}
 		} else {
