@@ -394,49 +394,86 @@ async function mutateApiValue(existingValue, nextValue, options) {
  * @param {object} options - Assignment options.
  * @param {boolean} options.mutateExisting - Mutate existing values in place.
  * @param {boolean} options.allowOverwrite - Allow overwriting existing values.
+ * @param {string} [options.collisionMode] - Collision handling mode (skip/warn/replace/merge/error).
+ * @param {object} [instance] - Slothlet instance for accessing config.
  * @returns {Promise<void>}
- * @throws {SlothletError} When overwrite is not allowed.
+ * @throws {SlothletError} When overwrite is not allowed or collision mode is "error".
  * @private
  *
  * @description
- * Writes a new value at the requested path, optionally mutating existing objects.
+ * Writes a new value at the requested path with configurable collision handling.
+ * Supports five collision modes:
+ * - skip: Silently ignore collision, keep existing
+ * - warn: Warn about collision, keep existing
+ * - replace: Replace existing value completely
+ * - merge: Merge properties (preserve original + add new)
+ * - error: Throw error on collision
  *
  * @example
- * await setValueAtPath(api, ["plugins"], newApi, { mutateExisting: true, allowOverwrite: true });
+ * await setValueAtPath(api, ["plugins"], newApi, { 
+ *   mutateExisting: true, 
+ *   allowOverwrite: true,
+ *   collisionMode: "merge" 
+ * });
  */
-async function setValueAtPath(root, parts, value, options) {
+async function setValueAtPath(root, parts, value, options, instance) {
 	const parent = ensureParentPath(root, parts);
 	const finalKey = parts[parts.length - 1];
 	const existing = parent ? parent[finalKey] : undefined;
+	const collisionMode = options.collisionMode || "merge";
 
-	console.log(`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, options:`, options);
+	console.log(`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, collisionMode=${collisionMode}, options:`, options);
 
-	if (existing !== undefined && !options.allowOverwrite && !options.mutateExisting) {
-		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
-			apiPath: parts.join("."),
-			reason: "path already exists and overwrite is not allowed",
-			validationError: true
-		});
+	// Handle collision based on mode
+	if (existing !== undefined) {
+		if (collisionMode === "error") {
+			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				apiPath: parts.join("."),
+				reason: "path already exists and collision mode is 'error'",
+				validationError: true,
+				collisionMode: "error"
+			});
+		}
+		
+		if (collisionMode === "skip") {
+			console.log(`[setValueAtPath] Skipping collision at ${parts.join(".")} (mode: skip)`);
+			return;
+		}
+		
+		if (collisionMode === "warn") {
+			if (instance && !instance.config?.silent) {
+				console.warn(`[slothlet] Warning: Path collision at ${parts.join(".")} - keeping existing value`);
+			}
+			return;
+		}
+		
+		if (collisionMode === "replace") {
+			console.log(`[setValueAtPath] Replacing value at ${parts.join(".")} (mode: replace)`);
+			parent[finalKey] = value;
+			return;
+		}
+		
+		// Default: merge mode
+		if (collisionMode === "merge") {
+			const existingIsObject = typeof existing === "object" || typeof existing === "function";
+			const valueIsObject = typeof value === "object" || typeof value === "function";
+			
+			if (existingIsObject && valueIsObject) {
+				console.log("[setValueAtPath] Merging properties (mode: merge)");
+				await mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true });
+				return;
+			} else {
+				// Can't merge primitives - log warning and keep existing
+				if (instance && !instance.config?.silent) {
+					console.warn(`[slothlet] Warning: Cannot merge primitive values at ${parts.join(".")} - keeping existing`);
+				}
+				return;
+			}
+		}
 	}
 
-	if (existing !== undefined && options.mutateExisting) {
-		console.log("[setValueAtPath] mutateExisting=true: calling mutateApiValue");
-		await mutateApiValue(existing, value, { removeMissing: false });
-		return;
-	}
-
-	// NEW: When allowOverwrite is true and existing is a wrapper/object, merge instead of replace
-	// Check for wrappers or objects (typeof value might be 'function' for callable wrappers)
-	const existingIsObject = typeof existing === "object" || typeof existing === "function";
-	const valueIsObject = typeof value === "object" || typeof value === "function";
-
-	if (existing !== undefined && options.allowOverwrite && existingIsObject && valueIsObject) {
-		console.log("[setValueAtPath] allowOverwrite + both objects/wrappers: calling mutateApiValue to merge");
-		await mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true });
-		return;
-	}
-
-	console.log(`[setValueAtPath] No merge conditions met - replacing: parent["${finalKey}"] = value`);
+	// No collision - simple assignment
+	console.log(`[setValueAtPath] No collision - assigning: parent["${finalKey}"] = value`);
 	parent[finalKey] = value;
 }
 
@@ -660,12 +697,19 @@ export async function addApiComponent(params) {
 
 	const { apiPath: normalizedPath, parts } = normalizeApiPath(apiPath);
 	const resolvedFolderPath = await resolveFolderPath(folderPath);
+	
+	// Determine collision handling based on config.collision.addApi
+	const collisionMode = instance.config.collision.addApi || "merge";
 	const allowOverwrite = !!(
 		options.forceOverwrite ||
 		options.allowOverwrite ||
-		options.mutateExisting ||
-		instance.config.allowAddApiOverwrite
+		(collisionMode === "replace" || collisionMode === "merge")
 	);
+	const mutateExisting = !!(
+		options.mutateExisting ||
+		(collisionMode === "merge")
+	);
+	
 	const moduleId = options.moduleId ? String(options.moduleId) : buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 	if ((options.forceOverwrite || options.allowOverwrite) && !moduleId) {
 		throw new SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
@@ -752,8 +796,9 @@ export async function addApiComponent(params) {
 		parts,
 		apiToMerge,
 		{
-			mutateExisting: !!(options.mutateExisting || instance.config.allowAddApiOverwrite),
-			allowOverwrite
+			mutateExisting,
+			allowOverwrite,
+			collisionMode
 		},
 		instance
 	);
@@ -763,8 +808,9 @@ export async function addApiComponent(params) {
 		parts,
 		apiToMerge,
 		{
-			mutateExisting: !!(options.mutateExisting || instance.config.allowAddApiOverwrite),
-			allowOverwrite
+			mutateExisting,
+			allowOverwrite,
+			collisionMode
 		},
 		instance
 	);

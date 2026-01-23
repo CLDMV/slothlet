@@ -1,12 +1,25 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/inspect-api-structure.mjs
+ *	@Date: 2026-01-21 00:12:03 -08:00 (1768983123)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-22 19:39:44 -08:00 (1769139584)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/inspect-api-structure.mjs
  *	@Date: 2026-01-10 20:37:02 -08:00 (1768106222)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-20 20:18:13 -08:00 (1768969093)
+ *	@Last modified time: 2026-01-22 19:36:52 -08:00 (1769139412)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -545,7 +558,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 async function main() {
 	const args = process.argv.slice(2);
 
-	if (args.length === 0) {
+	if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
 		console.log(chalk.bold("Usage:"));
 		console.log("  node tools/inspect-api-structure.mjs <api-name> [options]");
 		console.log("\nExamples:");

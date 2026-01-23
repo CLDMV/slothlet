@@ -1,0 +1,221 @@
+# Remove allowMutation and Implement Unified Collision Config
+
+**Date**: January 22, 2026  
+**Status**: In Progress  
+**Breaking Change**: Yes (v3.x.x)
+
+## Overview
+
+Remove the `allowMutation` config option entirely and implement a unified collision configuration system that provides consistent, granular control over how collisions are handled during initial load and `api.add()` operations.
+
+## Rationale
+
+### Problems with Current System
+
+1. **Three separate flags with different purposes**:
+   - `allowMutation` (default: true) - Master switch for all mutations
+   - `allowInitialOverwrite` (default: true) - Controls file collisions during initial load
+   - `allowAddApiOverwrite` (default: false) - Poorly named, sets default for api.add()
+
+2. **Inconsistent behavior**:
+   - Initial load and api.add() have different defaults
+   - No explicit "merge" option (it's implied by other flags)
+   - allowMutation is a blunt instrument that disables all mutation features
+
+3. **Limited expressiveness**:
+   - Can't easily set "error on collision" mode
+   - Can't configure different behaviors for initial vs addApi
+   - "merge" behavior exists but isn't explicitly configurable
+
+### Benefits of New System
+
+1. **Unified options**: Both contexts use same set of collision modes
+2. **Explicit merge**: "merge" is now a first-class option (and the default)
+3. **Granular control**: Different behaviors for initial load vs api.add()
+4. **Clearer intent**: "skip" | "warn" | "replace" | "merge" | "error"
+5. **Simpler API**: One collision config replaces three flags
+
+## Design
+
+### Collision Config Structure
+
+```javascript
+{
+  collision: {
+    initial: "merge",  // During buildAPI
+    addApi: "merge"    // During api.add()
+  }
+}
+```
+
+### Valid Collision Modes
+
+- **"skip"** - Silently ignore collision, keep existing value
+- **"warn"** - Warn about collision, keep existing value
+- **"replace"** - Replace existing value completely
+- **"merge"** - Merge properties (preserve original + add new)
+- **"error"** - Throw error on collision
+
+### Default Behavior
+
+- **Default**: `{ initial: "merge", addApi: "merge" }`
+- **Shorthand**: `collision: "merge"` applies to both contexts
+- **Backward compatible**: Old flags map to new system during migration period
+
+### normalizeCollision() Function
+
+```javascript
+function normalizeCollision(collision) {
+    const validModes = ["skip", "warn", "replace", "merge", "error"];
+    const defaultMode = "merge";
+    
+    // String shorthand applies to both contexts
+    if (typeof collision === "string") {
+        const normalized = collision.toLowerCase();
+        const mode = validModes.includes(normalized) ? normalized : defaultMode;
+        return { initial: mode, addApi: mode };
+    }
+    
+    // Object allows per-context control
+    if (collision && typeof collision === "object") {
+        const validateMode = (m) => {
+            if (!m) return defaultMode;
+            const normalized = String(m).toLowerCase();
+            return validModes.includes(normalized) ? normalized : defaultMode;
+        };
+        return {
+            initial: validateMode(collision.initial),
+            addApi: validateMode(collision.addApi)
+        };
+    }
+    
+    // Default: merge for both
+    return { initial: defaultMode, addApi: defaultMode };
+}
+```
+
+## Implementation Checklist
+
+### Phase 1: Add normalizeCollision()
+
+- [x] Create normalizeCollision() function in config.mjs
+- [ ] Add unit tests for normalizeCollision()
+- [ ] Update transformConfig() to use collision config
+
+### Phase 2: Update Initial Load (modes.mjs)
+
+- [ ] Replace allowInitialOverwrite check with collision.initial
+- [ ] Implement all collision modes: skip, warn, replace, merge, error
+- [ ] Current only does warn/skip - need to add replace, merge, error
+
+### Phase 3: Update api.add() (hot_reload.mjs)
+
+- [ ] Replace allowAddApiOverwrite with collision.addApi
+- [ ] Update allowOverwrite calculation to use collision.addApi
+- [ ] Implement collision modes in setValueAtPath
+- [ ] Current merge logic handles "merge" mode already
+
+### Phase 4: Remove allowMutation
+
+- [ ] Remove allowMutation check from api.add() (line 178)
+- [ ] Remove allowMutation check from api.remove() (line 208)
+- [ ] Remove allowMutation check from api.reload() (line 228)
+- [ ] Remove allowMutation check from namespace.reload() (line 422)
+- [ ] Remove OwnershipManager conditional creation (slothlet.mjs line 64)
+- [ ] Remove mutation method deletion (api_builder.mjs lines 440-443)
+- [ ] Update config defaults (remove allowMutation line)
+
+### Phase 5: Testing
+
+- [ ] Create tmp test for collision config scenarios
+- [ ] Test each collision mode (skip, warn, replace, merge, error)
+- [ ] Test both contexts (initial, addApi)
+- [ ] Test shorthand string format
+- [ ] Test object format with different per-context modes
+- [ ] Run full vitest suite for regression testing
+- [ ] Create API comparison dump before/after changes
+
+### Phase 6: Documentation
+
+- [ ] Update README.md with collision config examples
+- [ ] Document migration from old flags
+- [ ] Add examples of each collision mode
+- [ ] Update API documentation
+- [ ] Add to BREAKING-CHANGES-V3.md
+
+## Migration Guide
+
+### Old System → New System
+
+```javascript
+// OLD: allowMutation = false (immutable mode)
+{ allowMutation: false }
+
+// NEW: Set both to "error"
+{ collision: "error" }
+
+// OLD: allowInitialOverwrite = false
+{ allowInitialOverwrite: false }
+
+// NEW: Skip collisions during initial load
+{ collision: { initial: "skip", addApi: "merge" } }
+
+// OLD: allowAddApiOverwrite = true
+{ allowAddApiOverwrite: true }
+
+// NEW: Replace on collision during api.add()
+{ collision: { initial: "merge", addApi: "replace" } }
+```
+
+## Files to Modify
+
+1. **src/lib/helpers/config.mjs**
+   - Add normalizeCollision() function
+   - Update transformConfig() to use collision
+   - Remove allowMutation, allowInitialOverwrite, allowAddApiOverwrite
+
+2. **src/lib/builders/api_builder.mjs**
+   - Remove allowMutation checks (lines 178, 208, 228, 422)
+   - Remove mutation method deletion (lines 440-443)
+
+3. **src/slothlet.mjs**
+   - Remove conditional OwnershipManager creation (line 64)
+   - Always create OwnershipManager (it's lightweight)
+
+4. **src/lib/helpers/hot_reload.mjs**
+   - Update allowOverwrite calculation (line 667)
+   - Use collision.addApi instead of allowAddApiOverwrite
+   - Implement collision modes in relevant functions
+
+5. **src2/lib/modes/slothlet_eager.mjs** (if it exists)
+   - Update collision handling for initial load
+   - Implement all collision modes
+
+## Test Strategy
+
+### Unit Tests
+
+- normalizeCollision() with various inputs
+- Each collision mode in isolation
+- Both contexts (initial, addApi)
+
+### Integration Tests
+
+- Initial load with collisions
+- api.add() with collisions
+- Mixed collision scenarios
+- Error handling
+
+### Regression Tests
+
+- Full vitest suite must pass
+- API comparison before/after
+- Performance benchmarks unchanged
+
+## Notes
+
+- OwnershipManager is lightweight, no need to conditionally create
+- Merge logic already works correctly (fixed in previous commit)
+- "merge" mode preserves original properties while adding new ones
+- "replace" mode is the old allowOverwrite behavior
+- "error" mode replaces allowMutation=false for immutable scenarios

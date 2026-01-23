@@ -93,21 +93,50 @@ function safeAssign(targetApi, propertyName, value, config) {
 		return true; // No conflict, allow assignment
 	}
 
-	// Check if initial overwrites are allowed
-	if (!config.allowInitialOverwrite) {
-		// Emit warning unless silent mode is enabled
-		if (!config.silent) {
-			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
-			if (isWrapper) {
-				console.warn(`Cannot replace wrapped property "${propertyName}" during initial load (allowInitialOverwrite: false)`);
-			} else {
-				console.warn(`Cannot overwrite property "${propertyName}" during initial load (allowInitialOverwrite: false)`);
-			}
+	// Handle collision based on config.collision.initial mode
+	const collisionMode = config.collision?.initial || "merge";
+	
+	if (collisionMode === "error") {
+		throw new SlothletError("COLLISION_ERROR", {
+			propertyName,
+			apiPath,
+			reason: `Property "${propertyName}" already exists and collision mode is 'error'`,
+			validationError: true
+		});
+	}
+	
+	if (collisionMode === "skip") {
+		if (!config.silent && config.debug?.api) {
+			console.log(`[slothlet] Skipping collision at "${propertyName}" (mode: skip)`);
 		}
 		return false; // Skip assignment
 	}
-
-	return true; // Allow assignment
+	
+	if (collisionMode === "warn") {
+		if (!config.silent) {
+			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
+			console.warn(`[slothlet] Warning: Property collision at "${propertyName}" - keeping existing (mode: warn)`);
+			if (isWrapper) {
+				console.warn(`  Existing is a wrapper at apiPath="${apiPath}"`);
+			}
+		}
+		return false; // Keep existing
+	}
+	
+	if (collisionMode === "replace") {
+		if (!config.silent && config.debug?.api) {
+			console.log(`[slothlet] Replacing "${propertyName}" (mode: replace)`);
+		}
+		return true; // Allow replacement
+	}
+	
+	// Default: merge mode
+	// For initial load, merge isn't truly possible (no mutateApiValue available here)
+	// So we log and allow the assignment (which may merge at wrapper level if supported)
+	if (!config.silent && config.debug?.api) {
+		console.log(`[slothlet] Allowing assignment at "${propertyName}" (mode: merge)`);
+	}
+	return true;
 }
 
 /**
@@ -298,8 +327,8 @@ export async function processFiles(
 			}
 
 			// Special case: folder/folder.mjs pattern (only for nested, not root)
-		// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
-		if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
+			// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
+			if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
 				if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
 					// Case 1: export const folder = {...} - wrap and use as category
 					const exportedValue = mod[moduleName];
@@ -647,8 +676,8 @@ export async function processFiles(
 							moduleFiles: subDir.children.files
 						});
 
-					// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
-					if (categoryDecision.shouldFlatten && !apiPathPrefix) {
+						// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
+						if (categoryDecision.shouldFlatten && !apiPathPrefix) {
 							console.log(`[FOLDER-LEVEL FLATTEN] Flattening "${subDirName}" folder, SKIPPING regular processFiles recursion`);
 							// For filename-folder match with named export, extract the matching export
 							// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
