@@ -47,7 +47,7 @@
 		"WARNING_RESERVED_PROPERTY_CONFLICT": "User API conflicts with reserved properties: {properties}",
 		"WARNING_LANGUAGE_LOAD_FAILED": "Failed to load language '{lang}', falling back to English.",
 		"WARNING_LANGUAGE_UNAVAILABLE": "Language '{lang}' is not available, using English.",
-		"ERROR_RUNTIME_IMPORT_FAILED": "Failed to import runtime for metadata API.",
+		"ERROR_RUNTIME_IMPORT_FAILED": "Failed to dynamically import runtime module.",
 		"DEBUG_MODE_ROOT_FILE": "[{mode}] Processing root file: {moduleName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR": "[{mode}] Root contributor detected: {functionName}",
 		"DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED": "[{mode}] Root contributor pattern applied - function API with {properties} additional properties",
@@ -92,7 +92,7 @@
 		"HINT_INVALID_CONFIG_NOT_LOADED": "The instance must be loaded before performing this operation. Call load() first.",
 		"HINT_INVALID_CONFIG_RELOAD_NOT_IMPL": "Reload functionality is not yet implemented. This will be added in a future iteration.",
 		"HINT_WARNING_RESERVED_PROPERTY_CONFLICT": "The 'slothlet' property name is reserved for built-in API methods. Rename your API module or property to avoid conflicts with slothlet.shutdown(), slothlet.api.*, etc.",
-		"HINT_ERROR_RUNTIME_IMPORT_FAILED": "Failed to dynamically import the runtime module. This is needed for metadata API functionality. Check that @cldmv/slothlet/runtime export is available."
+		"HINT_ERROR_RUNTIME_IMPORT_FAILED": "The runtime module could not be loaded. This may occur if @cldmv/slothlet/runtime export is unavailable or there's a circular dependency. Some features requiring runtime access may be limited."
 	},
 	"metadata": {
 		"code": "en-us",
