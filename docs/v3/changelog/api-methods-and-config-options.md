@@ -24,9 +24,14 @@ This document provides comprehensive reference for all `api.slothlet.*` methods 
 - `mutateExisting` (boolean): Allow merging into existing API paths instead of requiring empty paths. Default: `false`
 - `moduleId` (string): Unique identifier for ownership tracking. Default: auto-generated
 
+**Collision Handling:**
+- Uses `collision.addApi` config option to determine behavior on path conflicts
+- Modes: `"skip"`, `"warn"`, `"replace"`, `"merge"` (default), `"error"`
+- Can be overridden per-call with `options.mutateExisting` and `options.allowOverwrite`
+
 **Dependencies:**
-- Requires `allowMutation: true` in initial config
-- Falls back to `allowAddApiOverwrite` config if no explicit options provided
+- No longer requires `allowMutation: true` (v3 allows runtime modifications by default)
+- Collision behavior controlled by `collision.addApi` config option
 
 **Examples:**
 ```javascript
@@ -75,7 +80,7 @@ await api.slothlet.api.remove("config-v1");
 - `pathOrModuleId` (string): API path or module ID to reload
 
 **Dependencies:**
-- Requires `allowMutation: true` in initial config
+- No longer requires `allowMutation: true` (v3 allows runtime modifications by default)
 - Only works on modules previously added via `api.add()`
 
 **Examples:**
@@ -94,7 +99,7 @@ await api.slothlet.api.reload("config-v1");
 **Purpose:** Performs a full reload of the entire slothlet instance, creating new API references.
 
 **Dependencies:**
-- Requires `allowMutation: true` in initial config
+- No longer requires `allowMutation: true` (v3 allows runtime modifications by default)
 
 **Examples:**
 ```javascript
@@ -175,27 +180,116 @@ await api.slothlet.run(() => {
   - `"async"`: Uses AsyncLocalStorage for per-request context
   - `"live"`: Uses live bindings (experimental)
 
-### Mutation Controls
+### Collision Configuration
 
-#### `allowMutation`
-- **Type:** `boolean`
-- **Default:** `true`
-- **Purpose:** Enables/disables runtime API modification methods
-- **Controls:** `api.slothlet.api.*`, `api.slothlet.reload()`
-- **When `false`:** Removes `api`, `reload` properties from `api.slothlet`
+#### `collision`
+- **Type:** `string | object`
+- **Default:** `"merge"` (applies to both contexts)
+- **Purpose:** Unified collision handling configuration for API path conflicts
+- **Added:** v3.0.0
+- **Replaces:** `allowInitialOverwrite`, `allowAddApiOverwrite` (v2 flags)
 
-#### `allowInitialOverwrite`
-- **Type:** `boolean`
-- **Default:** `true`
-- **Purpose:** Allows overwriting existing files during initial API build
-- **Use Case:** Multiple modules claiming same API path during startup
+**String Shorthand:**
+```javascript
+{ collision: "merge" }  // Applies to both initial and addApi contexts
+```
 
-#### `allowAddApiOverwrite`
-- **Type:** `boolean`
-- **Default:** `false`
-- **Purpose:** Allows `api.slothlet.api.add()` to overwrite existing API paths
-- **Behavior:** Sets default `mutateExisting: true` for all add operations
-- **Alternative:** Use `mutateExisting: true` in individual add calls
+**Object Format (per-context control):**
+```javascript
+{
+  collision: {
+    initial: "merge",  // During initial API build
+    addApi: "merge"    // During api.slothlet.api.add()
+  }
+}
+```
+
+**Valid Collision Modes:**
+
+- **`"skip"`** - Silently ignore collision, keep existing value
+  - Use case: Preserve first-loaded module, ignore duplicates
+  - No warnings or errors, collision silently ignored
+
+- **`"warn"`** - Warn about collision, keep existing value
+  - Use case: Development/debugging mode
+  - Logs warning to console, keeps existing value
+
+- **`"replace"`** - Replace existing value completely
+  - Use case: Plugin system where later modules override earlier ones
+  - Completely overwrites existing API path with new value
+
+- **`"merge"`** (default) - Merge properties (preserve original + add new)
+  - Use case: Most common - combine functionality from multiple sources
+  - Preserves existing properties, adds new ones
+  - For wrapper conflicts, syncs child implementations
+
+- **`"error"`** - Throw error on collision
+  - Use case: Strict immutable mode, prevent any overwrites
+  - Throws `SlothletError` with `OWNERSHIP_CONFLICT` code
+
+**Examples:**
+```javascript
+// Development mode - merge everything
+const api = await slothlet({
+  dir: "./api",
+  collision: "merge"
+});
+
+// Strict mode - no collisions allowed
+const api = await slothlet({
+  dir: "./api",
+  collision: "error"
+});
+
+// Different per-context
+const api = await slothlet({
+  dir: "./api",
+  collision: {
+    initial: "skip",    // First file wins during startup
+    addApi: "replace"   // Later plugins override
+  }
+});
+
+// Case-insensitive and validated
+const api = await slothlet({
+  dir: "./api",
+  collision: "MERGE"  // Normalized to "merge"
+});
+```
+
+**Migration from v2:**
+```javascript
+// OLD v2 flags:
+{
+  allowInitialOverwrite: true,
+  allowAddApiOverwrite: false
+}
+
+// NEW v3 collision config:
+{
+  collision: {
+    initial: "merge",
+    addApi: "skip"
+  }
+}
+```
+
+### Deprecated Mutation Controls (v2 compatibility)
+
+#### `allowMutation` (REMOVED in v3)
+- **v2 Behavior:** Enabled/disabled runtime API modification methods
+- **v3 Change:** Runtime modifications always available via `api.slothlet.api.*`
+- **Migration:** Remove this flag - use `collision: "error"` for immutable mode
+
+#### `allowInitialOverwrite` (REMOVED in v3)
+- **v2 Behavior:** Allowed overwriting during initial API build
+- **v3 Replacement:** Use `collision.initial` mode
+- **Migration:** `allowInitialOverwrite: true` → `collision.initial: "merge"`
+
+#### `allowAddApiOverwrite` (REMOVED in v3)
+- **v2 Behavior:** Allowed `api.add()` to overwrite existing paths
+- **v3 Replacement:** Use `collision.addApi` mode
+- **Migration:** `allowAddApiOverwrite: true` → `collision.addApi: "replace"`
 
 ### Hot Reload Features
 
@@ -269,7 +363,7 @@ await api.slothlet.run(() => {
 ```javascript
 const api = await slothlet({
   dir: "./api",
-  allowMutation: false  // No runtime modifications
+  collision: "error"  // Strict immutable mode
 });
 ```
 
@@ -278,7 +372,7 @@ const api = await slothlet({
 const api = await slothlet({
   dir: "./api",
   hotReload: true,
-  allowMutation: true,
+  collision: "merge",  // Default merge behavior
   debug: { api: true, ownership: true }
 });
 ```
@@ -290,7 +384,7 @@ const api = await slothlet({
   mode: "eager",  // Faster calls
   runtime: "async",  // Stable context
   silent: true,  // No console output
-  allowMutation: false  // Immutable
+  collision: "error"  // Strict mode
 });
 ```
 
@@ -299,8 +393,10 @@ const api = await slothlet({
 const api = await slothlet({
   dir: "./core-api",
   hotReload: true,
-  allowMutation: true,
-  allowAddApiOverwrite: true  // Allow plugin overwrites
+  collision: {
+    initial: "merge",    // Merge core modules
+    addApi: "replace"    // Plugins override core
+  }
 });
 
 // Add plugins at runtime
@@ -309,14 +405,14 @@ await api.slothlet.api.add("plugins", "./plugins");
 
 ## Troubleshooting
 
-### "Cannot perform 'api.add' - mutation is disabled"
-**Cause:** `allowMutation: false` in config
-**Solution:** Set `allowMutation: true` or remove mutation-dependent code
+### "Ownership conflict" or collision errors
+**Cause:** Collision mode set to `"error"` or ownership conflict with `"warn"` mode
+**Solution:** Use `collision: "merge"` or `collision: "replace"` mode for your use case
 
-### "Ownership conflict"
-**Cause:** Multiple modules claiming same API path with different ownership
-**Solution:** Use `allowAddApiOverwrite: true` in config, or use `mutateExisting: true` in add options
+### API methods added via `api.add()` are undefined
+**Cause:** Collision mode `"skip"` or `"warn"` kept existing value instead of merging
+**Solution:** Use `collision.addApi: "merge"` or `"replace"` mode
 
-### API methods undefined
-**Cause:** `allowMutation: false` removes `api.slothlet.api` object
-**Solution:** Set `allowMutation: true` or avoid mutation operations
+### Path collision silently ignored
+**Cause:** Collision mode set to `"skip"`
+**Solution:** Use `collision: "merge"` or `"warn"` to see conflicts
