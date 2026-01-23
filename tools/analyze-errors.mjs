@@ -250,9 +250,22 @@ for (const filePath of files) {
 	allErrors.push(...errors);
 }
 
+// Also find direct t() usage for warnings, debug, and other translations
+const directTranslationUsage = new Set();
+for (const filePath of files) {
+	const content = await readFile(filePath, "utf-8");
+	// Match t("KEY", ...) or t('KEY', ...)
+	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
+	let match;
+	while ((match = tCallPattern.exec(content)) !== null) {
+		directTranslationUsage.add(match[1]);
+	}
+}
+
 console.log(`Found ${allErrors.length} error throws\n`);
 if (VERBOSE) {
 	console.log(`Available hints: ${hintKeys.join(", ")}\n`);
+	console.log(`Direct t() usage: ${directTranslationUsage.size} translation keys\n`);
 }
 
 // Filter to only errors with issues unless --verbose
@@ -340,11 +353,11 @@ console.log("\n\n" + "=".repeat(80));
 console.log("=== Translation Analysis ===");
 console.log("=".repeat(80) + "\n");
 
-// Collect all error codes used in codebase
-const usedErrorCodes = new Set(allErrors.map((e) => e.errorCode));
+// Collect all error codes used in codebase (from SlothletError + direct t() calls)
+const usedErrorCodes = new Set([...allErrors.map((e) => e.errorCode), ...directTranslationUsage]);
 
-// Get all translation keys (excluding HINT_ and DEBUG_ keys)
-const translationKeys = Object.keys(translations).filter((k) => !k.startsWith("HINT_") && !k.startsWith("DEBUG_"));
+// Get all translation keys (excluding HINT_ keys, but including DEBUG_ since they can be used directly)
+const translationKeys = Object.keys(translations).filter((k) => !k.startsWith("HINT_"));
 
 // Find missing translations
 const missingTranslations = [...usedErrorCodes].filter((code) => !translations[code]);
