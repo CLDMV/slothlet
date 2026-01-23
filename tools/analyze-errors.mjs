@@ -26,7 +26,7 @@ const VERBOSE = process.argv.includes("--verbose");
 const translationsPath = join(srcDir, "lib/i18n/languages/en-us.json");
 const translationsRaw = await readFile(translationsPath, "utf-8");
 const translationsData = JSON.parse(translationsRaw);
-const translations = translationsData.slothletError || {};
+const translations = translationsData.translations || {};
 
 // Find all hint keys
 const hintKeys = Object.keys(translations).filter((k) => k.startsWith("HINT_"));
