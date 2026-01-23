@@ -1061,5 +1061,3 @@ export async function applyRootContributor(api, rootFunction, config, mode) {
 	}
 	return api;
 }
-
-
