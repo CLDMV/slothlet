@@ -67,7 +67,7 @@
 		"HINT_NO_ACTIVE_CONTEXT_LIVE": "No active context found. Ensure you're calling this function from within a slothlet live context.",
 		"HINT_OWNERSHIP_INVALID_MODULE_ID": "The module ID is invalid. Ensure the module was loaded properly and the ID is correct.",
 		"HINT_OWNERSHIP_INVALID_API_PATH": "The API path is invalid. Ensure the path format is correct.",
-		"HINT_OWNERSHIP_CONFLICT": "An ownership conflict occurred. Use forceOverwrite: true to override or remove the existing API first.",
+		"HINT_OWNERSHIP_CONFLICT": "Path is already owned by another module. Options: (1) Use forceOverwrite: true in api.add() options, (2) Set collision config to 'merge' or 'replace', (3) Call api.slothlet.api.remove() first to clear the path.",
 		"HINT_INVALID_CONFIG": "Check the configuration value and ensure it matches the expected type and format.",
 		"HINT_INVALID_CONFIG_DIR_INVALID": "Ensure the directory path is a valid string and points to an existing directory.",
 		"HINT_INVALID_CONFIG_MODE_INVALID": "Mode must be either 'eager' or 'lazy'.",

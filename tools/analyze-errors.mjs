@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootDir = join(__dirname, "..");
-const src3Dir = join(rootDir, "src3");
+const srcDir = join(rootDir, "src");
 
 // CLI args
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
@@ -23,9 +23,10 @@ const LIMIT = limitArg ? parseInt(limitArg.split("=")[1], 10) : 10;
 const VERBOSE = process.argv.includes("--verbose");
 
 // Load translations to check hints
-const translationsPath = join(src3Dir, "lib/i18n/languages/en-us.mjs");
-const translationsModule = await import(`file://${translationsPath}`);
-const translations = translationsModule.translations;
+const translationsPath = join(srcDir, "lib/i18n/languages/en-us.json");
+const translationsRaw = await readFile(translationsPath, "utf-8");
+const translationsData = JSON.parse(translationsRaw);
+const translations = translationsData.slothletError || {};
 
 // Find all hint keys
 const hintKeys = Object.keys(translations).filter((k) => k.startsWith("HINT_"));
@@ -240,7 +241,7 @@ function checkHintExists(errorCode) {
 // Main execution
 console.log("\n=== SlothletError Analysis ===\n");
 
-const files = await findMjsFiles(src3Dir);
+const files = await findMjsFiles(srcDir);
 const allErrors = [];
 
 for (const filePath of files) {

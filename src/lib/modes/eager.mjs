@@ -24,7 +24,16 @@ import path from "node:path";
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, ownership, contextManager, instanceID, config = {}, maxDepth = Infinity, apiPathPrefix = "" }) {
+export async function buildEagerAPI({
+	dir,
+	ownership,
+	contextManager,
+	instanceID,
+	config = {},
+	maxDepth = Infinity,
+	apiPathPrefix = "",
+	collisionContext = "initial"
+}) {
 	const api = {};
 
 	// Scan directory structure
@@ -52,7 +61,8 @@ export async function buildEagerAPI({ dir, ownership, contextManager, instanceID
 		true, // isRoot
 		true, // recursive - MUST be true to process subdirectories!
 		false, // populateDirectly - keep false
-		apiPathPrefix
+		apiPathPrefix,
+		collisionContext
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

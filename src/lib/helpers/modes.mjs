@@ -78,6 +78,24 @@ function cloneWrapperImpl(value, mode) {
 }
 
 /**
+ * Helper to determine if collision mode allows ownership conflicts
+ * @param {Object} config - Slothlet configuration
+ * @param {string} collisionContext - Either 'initial' or 'addApi'
+ * @returns {boolean} True if ownership conflicts should be allowed
+ */
+function shouldAllowOwnershipConflict(config, collisionContext = "initial") {
+	const collisionMode = config.collision?.[collisionContext] || "merge";
+	// Allow ownership conflicts for modes that overwrite/merge:
+	// - "merge": needs to merge properties
+	// - "replace": needs to replace value
+	// Block for modes that prevent overwrite:
+	// - "skip": silently keeps existing
+	// - "warn": warns but keeps existing
+	// - "error": throws OWNERSHIP_CONFLICT (this IS the collision error)
+	return collisionMode === "merge" || collisionMode === "replace";
+}
+
+/**
  * Check if a property assignment should be allowed during initial load.
  * Emits warning if assignment is blocked by config.
  * @param {Object} targetApi - Target API object
@@ -86,32 +104,32 @@ function cloneWrapperImpl(value, mode) {
  * @param {Object} config - Slothlet configuration
  * @returns {boolean} True if assignment should proceed, false to skip
  */
-function safeAssign(targetApi, propertyName, value, config) {
+function safeAssign(targetApi, propertyName, value, config, collisionContext = "initial", apiPath = "") {
 	// Check if property already exists
 	const existing = targetApi[propertyName];
 	if (existing === undefined) {
 		return true; // No conflict, allow assignment
 	}
 
-	// Handle collision based on config.collision.initial mode
-	const collisionMode = config.collision?.initial || "merge";
-	
+	// Handle collision based on collision context (initial or addApi)
+	const collisionMode = config.collision?.[collisionContext] || "merge";
+
 	if (collisionMode === "error") {
 		throw new SlothletError("COLLISION_ERROR", {
 			propertyName,
-			apiPath,
+			apiPath: apiPath || propertyName,
 			reason: `Property "${propertyName}" already exists and collision mode is 'error'`,
 			validationError: true
 		});
 	}
-	
+
 	if (collisionMode === "skip") {
 		if (!config.silent && config.debug?.api) {
 			console.log(`[slothlet] Skipping collision at "${propertyName}" (mode: skip)`);
 		}
 		return false; // Skip assignment
 	}
-	
+
 	if (collisionMode === "warn") {
 		if (!config.silent) {
 			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
@@ -122,14 +140,14 @@ function safeAssign(targetApi, propertyName, value, config) {
 		}
 		return false; // Keep existing
 	}
-	
+
 	if (collisionMode === "replace") {
 		if (!config.silent && config.debug?.api) {
 			console.log(`[slothlet] Replacing "${propertyName}" (mode: replace)`);
 		}
 		return true; // Allow replacement
 	}
-	
+
 	// Default: merge mode
 	// For initial load, merge isn't truly possible (no mutateApiValue available here)
 	// So we log and allow the assignment (which may merge at wrapper level if supported)
@@ -169,7 +187,8 @@ export async function processFiles(
 	isRoot,
 	recursive,
 	populateDirectly = false,
-	apiPathPrefix = ""
+	apiPathPrefix = "",
+	collisionContext = "initial"
 ) {
 	// Helper to build full apiPath with prefix
 	const buildApiPath = (path) => {
@@ -365,7 +384,12 @@ export async function processFiles(
 						// Register each property for ownership tracking
 						for (const key of Object.keys(exportedValue)) {
 							if (ownership) {
-								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+								ownership.register({
+									moduleId: file.moduleId,
+									apiPath: `${categoryName}.${key}`,
+									source: "core",
+									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+								});
 							}
 						}
 						continue;
@@ -424,22 +448,32 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, key, namedWrapper.createProxy(), config)) {
+								if (safeAssign(targetApi, key, namedWrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
 									targetApi[key] = namedWrapper.createProxy();
 								}
 							} else {
-								if (safeAssign(targetApi, key, mod[key], config)) {
+								if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
 									targetApi[key] = mod[key];
 								}
 							}
 							if (ownership) {
-								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+								ownership.register({
+									moduleId: file.moduleId,
+									apiPath: `${categoryName}.${key}`,
+									source: "core",
+									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+								});
 							}
 						}
 					}
 
 					if (ownership) {
-						ownership.register({ moduleId: file.moduleId, apiPath: categoryName, source: "core" });
+						ownership.register({
+							moduleId: file.moduleId,
+							apiPath: categoryName,
+							source: "core",
+							allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+						});
 					}
 
 					// Continue for this module; other files in the folder still process in later iterations
@@ -471,16 +505,21 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, propKey, wrapper.createProxy(), config)) {
+								if (safeAssign(targetApi, propKey, wrapper.createProxy(), config, collisionContext, `${categoryName}.${propKey}`)) {
 									targetApi[propKey] = wrapper.createProxy();
 								}
 							} else {
-								if (safeAssign(targetApi, propKey, propValue, config)) {
+								if (safeAssign(targetApi, propKey, propValue, config, collisionContext, `${categoryName}.${propKey}`)) {
 									targetApi[propKey] = propValue;
 								}
 							}
 							if (ownership) {
-								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${propKey}`, source: "core" });
+								ownership.register({
+									moduleId: file.moduleId,
+									apiPath: `${categoryName}.${propKey}`,
+									source: "core",
+									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+								});
 							}
 						}
 
@@ -497,16 +536,21 @@ export async function processFiles(
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
+									if (safeAssign(targetApi, key, wrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
 										targetApi[key] = wrapper.createProxy();
 									}
 								} else {
-									if (safeAssign(targetApi, key, mod[key], config)) {
+									if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
 										targetApi[key] = mod[key];
 									}
 								}
 								if (ownership) {
-									ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+									ownership.register({
+										moduleId: file.moduleId,
+										apiPath: `${categoryName}.${key}`,
+										source: "core",
+										allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+									});
 								}
 							}
 						}
@@ -526,19 +570,24 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
+								if (safeAssign(targetApi, key, wrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
 									targetApi[key] = wrapper.createProxy();
 									console.log(`[FLATTEN MULTI-EXPORT] ✓ Assigned "${key}" to targetApi, keys after: ${Object.keys(targetApi)}`);
 								} else {
 									console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
 								}
 							} else {
-								if (safeAssign(targetApi, key, mod[key], config)) {
+								if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
 									targetApi[key] = mod[key];
 								}
 							}
 							if (ownership) {
-								ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${key}`, source: "core" });
+								ownership.register({
+									moduleId: file.moduleId,
+									apiPath: `${categoryName}.${key}`,
+									source: "core",
+									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+								});
 							}
 						}
 					}
@@ -569,16 +618,21 @@ export async function processFiles(
 							ownership,
 							materializeOnCreate: config.backgroundMaterialize
 						});
-						if (safeAssign(targetApi, preferredName, wrapper.createProxy(), config)) {
+						if (safeAssign(targetApi, preferredName, wrapper.createProxy(), config, collisionContext, preferredName)) {
 							targetApi[preferredName] = wrapper.createProxy();
 						}
 					} else {
-						if (safeAssign(targetApi, preferredName, mod[key], config)) {
+						if (safeAssign(targetApi, preferredName, mod[key], config, collisionContext, preferredName)) {
 							targetApi[preferredName] = mod[key];
 						}
 					}
 					if (ownership) {
-						ownership.register({ moduleId: file.moduleId, apiPath: `${categoryName}.${preferredName}`, source: "core" });
+						ownership.register({
+							moduleId: file.moduleId,
+							apiPath: `${categoryName}.${preferredName}`,
+							source: "core",
+							allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+						});
 					}
 					continue;
 				}
@@ -611,7 +665,12 @@ export async function processFiles(
 			}
 			if (ownership) {
 				const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
-				ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
+				ownership.register({
+					moduleId: file.moduleId,
+					apiPath,
+					source: "core",
+					allowConflict: shouldAllowOwnershipConflict(config, "initial")
+				});
 			}
 		}
 	}
@@ -713,7 +772,12 @@ export async function processFiles(
 							targetApi[subDirName] = wrapper.createProxy();
 							if (ownership) {
 								const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
-								ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
+								ownership.register({
+									moduleId: file.moduleId,
+									apiPath,
+									source: "core",
+									allowConflict: shouldAllowOwnershipConflict(config, "initial")
+								});
 							}
 							continue;
 						}
@@ -760,7 +824,12 @@ export async function processFiles(
 				console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode, functionName: defaultFunc.name || "anonymous" }));
 			}
 			if (ownership) {
-				ownership.register({ moduleId: file.moduleId, apiPath: moduleName, source: "core" });
+				ownership.register({
+					moduleId: file.moduleId,
+					apiPath: moduleName,
+					source: "core",
+					allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+				});
 			}
 		} else {
 			// Multiple root contributors: namespace ALL of them and warn
@@ -782,17 +851,22 @@ export async function processFiles(
 						ownership,
 						materializeOnCreate: config.backgroundMaterialize
 					});
-					if (safeAssign(targetApi, moduleName, wrapper.createProxy(), config)) {
+					if (safeAssign(targetApi, moduleName, wrapper.createProxy(), config, collisionContext, moduleName)) {
 						targetApi[moduleName] = wrapper.createProxy();
 					}
 				} else {
-					if (safeAssign(targetApi, moduleName, defaultFunc, config)) {
+					if (safeAssign(targetApi, moduleName, defaultFunc, config, collisionContext, moduleName)) {
 						targetApi[moduleName] = defaultFunc;
 					}
 				}
 
 				if (ownership) {
-					ownership.register({ moduleId: file.moduleId, apiPath: moduleName, source: "core" });
+					ownership.register({
+						moduleId: file.moduleId,
+						apiPath: moduleName,
+						source: "core",
+						allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+					});
 				}
 			}
 		}
@@ -877,7 +951,12 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 					}
 
 					if (ownership) {
-						ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
+						ownership.register({
+							moduleId: file.moduleId,
+							apiPath,
+							source: "core",
+							allowConflict: shouldAllowOwnershipConflict(config, "initial")
+						});
 					}
 
 					return implToWrap;
@@ -982,3 +1061,5 @@ export async function applyRootContributor(api, rootFunction, config, mode) {
 	}
 	return api;
 }
+
+

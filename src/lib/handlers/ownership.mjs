@@ -40,7 +40,8 @@ export class OwnershipManager {
 			throw new SlothletError("OWNERSHIP_CONFLICT", {
 				apiPath,
 				existingModuleId: currentOwner.moduleId,
-				newModuleId: moduleId
+				newModuleId: moduleId,
+				validationError: true
 			});
 		}
 

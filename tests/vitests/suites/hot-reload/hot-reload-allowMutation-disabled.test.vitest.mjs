@@ -4,10 +4,10 @@
  * @description
  * NOTE: allowMutation config option has been REMOVED in v3.
  * This test file is kept for backward compatibility testing only.
- * 
+ *
  * The allowMutation flag has been replaced by the collision configuration system.
  * To disable mutations, use: collision: "error"
- * 
+ *
  * These tests now verify that:
  * - Passing allowMutation is ignored (no effect)
  * - Mutation methods are always available
@@ -68,11 +68,9 @@ describe.each(MATRIX_CONFIGS)("allowMutation config (DEPRECATED) - $name", ({ co
 		api = await createApiInstance(config, { collision: "error" });
 
 		expect(api.slothlet.api).toBeDefined();
-		
+
 		// Trying to add with collision mode "error" should throw
-		await expect(
-			api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })
-		).rejects.toThrow();
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow();
 	});
 
 	it("should allow mutations with collision: merge (default)", async () => {
@@ -80,7 +78,7 @@ describe.each(MATRIX_CONFIGS)("allowMutation config (DEPRECATED) - $name", ({ co
 
 		expect(api.slothlet.api).toBeDefined();
 		expect(api.slothlet.reload).toBeTypeOf("function");
-		
+
 		// Should be able to add without errors
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-test" });
 		expect(api.extra).toBeDefined();
