@@ -146,8 +146,12 @@ function normalizeCollision(collision) {
   - [x] Update configuration patterns to use collision config
   - [x] Update troubleshooting with collision-specific examples
   - [x] Add migration guide from v2 flags
-- [ ] Update README.md with collision config examples
-- [ ] Add to BREAKING-CHANGES-V3.md
+- [x] Add to BREAKING-CHANGES-V3.md
+  - [x] Document removal of allowMutation/allowInitialOverwrite/allowAddApiOverwrite
+  - [x] Document new unified collision configuration system
+  - [x] Add migration examples for all old flags
+  - [x] Add to high priority migration checklist
+- [ ] Update README.md with collision config examples (deferred)
 
 ## Completion Status
 
@@ -157,11 +161,12 @@ function normalizeCollision(collision) {
   - Fixed ownership.register() signature to use collisionMode instead of allowConflict
   - Updated all 15 call sites across codebase
   - Created getOwnershipCollisionMode() helper to derive mode from config
-**Phase 6: ✅ COMPLETE** (Commit: [pending] - January 23, 2026)
+**Phase 6: ✅ COMPLETE** (Commit: 3db314a + [pending] - January 23, 2026)
   - Comprehensive collision config documentation in docs\v3\changelog\api-methods-and-config-options.md
   - Documented all 5 collision modes with examples
   - Added migration guide from v2 flags
   - Updated configuration patterns and troubleshooting sections
+  - Added complete breaking change documentation to BREAKING-CHANGES-V3.md
 
 ## Migration Guide
 
