@@ -12,7 +12,9 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+
+const FULL_MATRIX = getMatrixConfigs({});
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -26,7 +28,7 @@ async function materialize(func, ...args) {
 	}
 }
 
-describe.each(TEST_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name, config }) => {
+describe.each(FULL_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name, config }) => {
 	// ========================================================================
 	// CASE 3: MULTIPLE FILES WITH ONE MATCHING API PATH
 	// ========================================================================
@@ -37,7 +39,7 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
+		await api.slothlet.api.add("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
 
 		// Should flatten utils.mjs contents to root level
 		expect(typeof api.utils.utilFunction).toBe("function");
@@ -67,7 +69,7 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
+		await api.slothlet.api.add("utils", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
 
 		// Should flatten utils.mjs due to Rule 7 (always applies)
 		expect(typeof api.utils.utilFunction).toBe("function");
@@ -90,7 +92,7 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
+		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
 
 		// Should NOT flatten since no files match "services"
 		expect(typeof api.services.auth).toBe("object");
@@ -110,7 +112,7 @@ describe.each(TEST_MATRIX)("Smart Flattening Case 3-4 - $name", ({ name: ___name
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
+		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_none`), {});
 
 		// Should behave same as autoFlatten=true when no files match
 		expect(typeof api.services.auth).toBe("object");

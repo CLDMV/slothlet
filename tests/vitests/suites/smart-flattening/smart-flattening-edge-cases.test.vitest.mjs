@@ -16,7 +16,9 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+
+const FULL_MATRIX = getMatrixConfigs({});
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -42,7 +44,7 @@ async function materialize(func, ...args) {
 	}
 }
 
-describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___name, config }) => {
+describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___name, config }) => {
 	test("Nested API paths with flattening", async () => {
 		const api = await slothlet({
 			...config,

@@ -181,12 +181,14 @@ async function createSlothletNamespace(instance, config, userApi) {
 						validationError: true
 					});
 				}
+				// Filter out internal options that shouldn't be user-controllable
+				const { recordHistory, ...filteredOptions } = options;
 				return addApiComponent({
 					instance,
 					apiPath,
 					folderPath,
 					metadata,
-					options
+					options: filteredOptions
 				});
 			},
 

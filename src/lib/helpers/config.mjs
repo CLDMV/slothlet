@@ -145,7 +145,7 @@ export function transformConfig(config = {}) {
 		hooks: config.hooks === true,
 		allowMutation: config.allowMutation !== false,
 		allowInitialOverwrite: config.allowInitialOverwrite !== false,
-		allowAddApiOverwrite: config.allowAddApiOverwrite !== false,
+		allowAddApiOverwrite: config.allowAddApiOverwrite === true,
 		backgroundMaterialize: config.backgroundMaterialize === true,
 		silent: config.silent === true
 	};

@@ -158,7 +158,7 @@ export const TEST_MATRIX = generateTestMatrix(CONFIG_SPACE);
  * Used for tests that specifically need module ownership tracking
  * @type {Array<{name: string, config: object}>}
  */
-export const OWNERSHIP_MATRIX = TEST_MATRIX.filter(({ config }) => config.hotReload);
+export const OWNERSHIP_MATRIX = getMatrixConfigs({ hotReload: true });
 
 /**
  * Get filtered matrix configurations based on test requirements
@@ -211,10 +211,7 @@ export async function runTestWithApi(api, testFunction) {
  * Used for simple functionality tests that don't need ownership/overwrite features
  * @type {Array<{name: string, config: object}>}
  */
-export const BASIC_MATRIX = TEST_MATRIX.filter(
-	({ config }) => config.hotReload === false && config.runtime === "async"
-	// config.hotReload === false && config.allowApiOverwrite === true && config.apiDepth === Infinity && config.runtime === "async"
-);
+export const BASIC_MATRIX = getMatrixConfigs({ hotReload: false, runtime: "async" });
 
 /**
  * Overwrite configuration matrix (allowApiOverwrite true/false)
@@ -235,7 +232,7 @@ export const BASIC_MATRIX = TEST_MATRIX.filter(
  * Used for testing runtime binding system differences
  * @type {Array<{name: string, config: object}>}
  */
-export const RUNTIME_MATRIX = TEST_MATRIX.filter(({ config }) => config.runtime === "live");
+export const RUNTIME_MATRIX = getMatrixConfigs({ runtime: "live" });
 
 /**
  * Complex feature combination matrix (multiple non-default features enabled)

@@ -37,7 +37,7 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({ dir, ownership, contextManager, instanceID, config = {} }) {
+export async function buildLazyAPI({ dir, ownership, contextManager, instanceID, config = {}, apiPathPrefix = "" }) {
 	const api = {};
 
 	// Scan directory structure
@@ -63,7 +63,9 @@ export async function buildLazyAPI({ dir, ownership, contextManager, instanceID,
 		0,
 		"lazy",
 		true,
-		false
+		false, // populateDirectly - keep false, the real issue is elsewhere
+		false,
+		apiPathPrefix
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false

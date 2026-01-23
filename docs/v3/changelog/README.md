@@ -19,6 +19,14 @@ This directory contains documentation for new features and changes introduced in
   - Solves typeof limitation where lazy proxies always return `"function"`
   - Essential for testing and debugging lazy mode behavior
 
+### API Methods and Configuration Reference
+
+- **[API Methods and Configuration Options](./api-methods-and-config-options.md)** - Comprehensive reference for all runtime API methods and configuration options
+  - Complete `api.slothlet.*` method documentation with parameters and options
+  - All initialization config options with defaults and behavior
+  - Dependencies between config options and API capabilities
+  - Common usage patterns and troubleshooting guide
+
 ## Usage Summary
 
 ```javascript
@@ -60,3 +68,4 @@ Each feature has its own detailed documentation file:
   - Added `backgroundMaterialize` config option
   - Added `__type` property and `TYPE_STATES` symbols
   - Unified wrapper architecture improvements
+  - Added comprehensive API methods and configuration reference

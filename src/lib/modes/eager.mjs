@@ -20,10 +20,11 @@ import path from "node:path";
  * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} options.config - Configuration
  * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
+ * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, ownership, contextManager, instanceID, config = {}, maxDepth = Infinity }) {
+export async function buildEagerAPI({ dir, ownership, contextManager, instanceID, config = {}, maxDepth = Infinity, apiPathPrefix = "" }) {
 	const api = {};
 
 	// Scan directory structure
@@ -48,8 +49,10 @@ export async function buildEagerAPI({ dir, ownership, contextManager, instanceID
 		config,
 		0,
 		"eager",
-		true,
-		true
+		true, // isRoot
+		true, // recursive - MUST be true to process subdirectories!
+		false, // populateDirectly - keep false
+		apiPathPrefix
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

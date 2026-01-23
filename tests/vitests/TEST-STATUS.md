@@ -12,6 +12,8 @@
 npm run testv3 -- tests/vitests/suites/<folder>/<test-file>.test.vitest.mjs
 ```
 
+**Note:** `[_materialize]` debug output appears in test runs because `SLOTHLET_DEBUG_WRAPPER=1` is set in the environment. This is intentional for debugging and not an error.
+
 Relative base: tests/vitests
 
 | Test (relative) | Feature Category | V3 Updated | Status | Notes |
@@ -71,7 +73,7 @@ Relative base: tests/vitests
 | suites/runtime/runtime-verification.test.vitest.mjs | Runtime | No | untested | |
 | suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs | API Sanitization | No | untested | |
 | suites/sanitization/sanitize.test.vitest.mjs | API Sanitization | No | untested | |
-| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 14:52:00) | 64/64 tests fail, 0 pass - NOT typeof issues. Issues: (1) Non-MUTATE configs (32 tests): `INVALID_CONFIG_MUTATION_DISABLED` - tests try to use api.slothlet.api.add() but mutation disabled (2) MUTATE configs (32 tests): Mix of `ReferenceError: state is not defined` at hot_reload.mjs:662 and `Invalid API path 'config/plugins': path already exists and overwrite is not allowed`. Hot reload bugs, not flattening or typeof issues. |
+| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-21 17:05:00) | ❌ fail (2026-01-21 17:05:00) | 32/32 tests fail, 0 pass - **TEST BUGS FIXED**: (1) Changed from TEST_MATRIX to getMatrixConfigs({ allowMutation: true }) (2) Added { mutateExisting: true } to api.add() calls to allow merging onto existing paths. **SRC BUG**: Functions undefined after api.add() - api.config.getConfig, api.plugins.initializePlugin all undefined. Hot reload addApiComponent not properly merging/flattening dynamically added APIs. File exports exist (getConfig, setConfig, validateConfig in config.mjs) but don't appear on API after add operation. |
 | suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:09) | 80/80 tests fail, 0 pass - NOT typeof issues. Same hot reload bugs as case1-case2: (1) Non-MUTATE: mutation disabled errors (2) MUTATE: "state is not defined" and path conflicts |
 | suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 05:37:33) | 96/96 tests fail, 0 pass - NOT typeof issues. Same hot reload bugs: Non-MUTATE mutation disabled, MUTATE "state is not defined" and path conflicts, type mismatches |
 | suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 14:57:00) | 112/112 tests fail, 0 pass - Same pattern as case1-case2: NOT typeof issues. All failures due to hot reload bugs: (1) Non-MUTATE configs: `INVALID_CONFIG_MUTATION_DISABLED` when tests call api.slothlet.api.add() (2) MUTATE configs: `ReferenceError: state is not defined` at hot_reload.mjs:662 and path conflict errors. Tests have many typeof checks (lines 28, 30, 38, 57-62, 90-97, 124-152, 175) but typeof not the issue - hot reload is broken. |

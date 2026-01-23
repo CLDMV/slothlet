@@ -14,7 +14,9 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+
+const FULL_MATRIX = getMatrixConfigs({});
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -40,14 +42,18 @@ async function materialize(func, ...args) {
 	}
 }
 
-describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name, config }) => {
+describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name, config }) => {
 	test("Folder with config subfolder containing config.mjs", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`), {});
+		await api.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`)
+		);
 
 		// Root level files should be namespaced by filename
 		expect(typeof api.config.main).toBe("object");
@@ -73,10 +79,15 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing different named files", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_different`), {});
+		await api.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_different`),
+			{}
+		);
 
 		// Root level files should be namespaced by filename
 		expect(typeof api.config.utils).toBe("object");
@@ -103,10 +114,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Addapi.mjs with folders - only first level flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins",
 			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_with_folders`),
 			{}
@@ -158,10 +170,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Nested folders - no recursive flattening", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("nested", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
+		await api.slothlet.api.add("nested", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
 
 		// Root level files should be namespaced by filename
 		expect(typeof api.nested.root).toBe("object");
@@ -198,10 +211,15 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing config.mjs (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`), {});
+		await api.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`),
+			{}
+		);
 
 		// Should have both root level files and config subfolder properly namespaced
 		expect(typeof api.config.main).toBe("object");
@@ -224,10 +242,15 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Folder with config subfolder containing different named files (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_different`), {});
+		await api.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_different`),
+			{}
+		);
 
 		// Should have utils.mjs namespaced and config subfolder contents flattened to root level
 		expect(typeof api.config.utils).toBe("object");
@@ -252,10 +275,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 	test("Nested folder structure - flattening only at first level (duplicate)", async () => {
 		const api = await slothlet({
 			...config,
-			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`),
+			allowAddApiOverwrite: true
 		});
 
-		await api.addApi("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
+		await api.slothlet.api.add("services", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_nested`), {});
 
 		// Should have root level function properly namespaced
 		expect(typeof api.services.root).toBe("object");
