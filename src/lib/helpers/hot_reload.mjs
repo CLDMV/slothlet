@@ -344,9 +344,25 @@ async function mutateApiValue(existingValue, nextValue, options) {
 		return;
 	}
 
-	// If existing is a wrapper but next is not, update the wrapper's impl
+	// If existing is a wrapper but next is a plain object with children,
+	// merge each child into the wrapper instead of replacing
 	if (isWrapperProxy(existingValue) && !isWrapperProxy(nextValue)) {
+		if (nextValue && typeof nextValue === "object") {
+			console.log(`[mutateApiValue] Merging plain object children into existing wrapper`);
+			console.log(`[mutateApiValue] nextValue keys:`, Object.keys(nextValue));
+			// Merge each child from nextValue into the existing wrapper
+			await mergeApiObjects(existingValue, nextValue, {
+				removeMissing: options.removeMissing,
+				mutateExisting: true,
+				allowOverwrite: true,
+				syncWrapper
+			});
+			return;
+		}
+		
+		// Fallback: if nextValue is not an object, try __setImpl
 		if (existingValue.__setImpl) {
+			console.log(`[mutateApiValue] Using __setImpl fallback`);
 			existingValue.__setImpl(nextValue?.__impl ?? nextValue);
 			return;
 		}
