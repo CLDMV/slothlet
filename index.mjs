@@ -108,18 +108,10 @@ export default async function slothlet(options = {}) {
 	// Wait for devcheck to complete before proceeding
 	await devcheckPromise;
 
-	if (options.debug?.index) {
-		console.log("DEBUG index3.mjs: loading slothlet from @cldmv/slothlet/slothlet");
-	}
-
 	// Dynamic imports after environment check
 	const mod = await import("@cldmv/slothlet/slothlet");
 
 	const slothlet = mod.slothlet ?? mod.default;
-
-	if (options.debug?.index) {
-		console.log("DEBUG index3.mjs: loaded slothlet, calling it now");
-	}
 
 	return slothlet(options);
 }

@@ -139,8 +139,19 @@ export async function processFiles(
 	mode,
 	isRoot,
 	recursive,
-	populateDirectly = false
+	populateDirectly = false,
+	apiPathPrefix = ""
 ) {
+	// Helper to build full apiPath with prefix
+	const buildApiPath = (path) => {
+		if (!apiPathPrefix) return path;
+		// Don't double-prefix: if path already starts with prefix, don't prepend again
+		if (path === apiPathPrefix || path.startsWith(`${apiPathPrefix}.`)) {
+			return path;
+		}
+		return `${apiPathPrefix}.${path}`;
+	};
+
 	let rootDefaultFunction = null;
 	const rootContributors = []; // Track all root-level default exports for multi-detection
 	const categoryName = isRoot && !populateDirectly ? null : sanitizePropertyName(directory.name);
@@ -150,18 +161,29 @@ export async function processFiles(
 	if (!isRoot && shouldWrap && !populateDirectly) {
 		const existingTarget = api[categoryName];
 		if (existingTarget && existingTarget.__wrapper) {
+			console.log(
+				`[CATEGORY REUSE] Reusing existing wrapper for categoryName="${categoryName}", apiPath="${existingTarget.__wrapper.apiPath}"`
+			);
 			targetApi = existingTarget;
 		} else if (existingTarget === undefined || (typeof existingTarget === "object" && existingTarget !== null)) {
+			// If existingTarget is a wrapper proxy, don't try to clone it - use empty object
+			// The wrapper will be populated with new children during file processing
+			const initialImpl = existingTarget && existingTarget.__wrapper ? {} : cloneWrapperImpl(existingTarget || {}, mode);
+
+			console.log(`[CATEGORY WRAPPER CREATED] categoryName="${categoryName}", apiPath="${buildApiPath(categoryName)}"`);
 			const wrapper = new UnifiedWrapper({
 				mode,
-				apiPath: categoryName,
+				apiPath: buildApiPath(categoryName),
 				contextManager,
 				instanceID,
-				initialImpl: cloneWrapperImpl(existingTarget || {}, mode),
+				initialImpl,
 				ownership
 			});
 			api[categoryName] = wrapper.createProxy();
+			console.log(`[CATEGORY WRAPPER ASSIGNED] api["${categoryName}"] is now a wrapper`);
 			targetApi = api[categoryName];
+			console.log(`[CATEGORY CREATED] Created new category wrapper for categoryName="${categoryName}", apiPath="${wrapper.apiPath}"`);
+			console.log(`[CATEGORY CREATED] targetApi is wrapper: ${!!targetApi.__wrapper}, targetApi keys: ${Object.keys(targetApi)}`);
 		}
 	}
 
@@ -208,6 +230,12 @@ export async function processFiles(
 		}
 		// Check for root contributor (only at root level)
 		const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function";
+
+		if (moduleName === "config" || moduleKeys.some((k) => k.includes("Config") || k.includes("config"))) {
+			console.log(
+				`[FILE PROCESSING] module="${moduleName}", category="${categoryName || "(none)"}", isRoot=${isRoot}, hasDefault=${analysis.hasDefault}, moduleKeys=[${moduleKeys.join(", ")}]`
+			);
+		}
 
 		if (isRootContributor) {
 			// Build the function with named exports attached
@@ -282,11 +310,7 @@ export async function processFiles(
 						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper({
 								mode,
-								apiPath: categoryName,
-								contextManager,
-								instanceID,
-								initialImpl: cloneWrapperImpl(exportedValue, mode),
-								ownership,
+								apiPath: buildApiPath(categoryName),
 								materializeOnCreate: config.backgroundMaterialize
 							});
 
@@ -335,7 +359,7 @@ export async function processFiles(
 					if (shouldWrap) {
 						const wrapper = new UnifiedWrapper({
 							mode,
-							apiPath: categoryName,
+							apiPath: buildApiPath(categoryName),
 							contextManager,
 							instanceID,
 							initialImpl: cloneWrapperImpl(moduleContent, mode),
@@ -360,7 +384,7 @@ export async function processFiles(
 							if (shouldWrap) {
 								const namedWrapper = new UnifiedWrapper({
 									mode,
-									apiPath: `${categoryName}.${key}`,
+									apiPath: buildApiPath(`${categoryName}.${key}`),
 									contextManager,
 									instanceID,
 									initialImpl: mod[key],
@@ -407,7 +431,7 @@ export async function processFiles(
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper({
 									mode,
-									apiPath: `${categoryName}.${propKey}`,
+									apiPath: buildApiPath(`${categoryName}.${propKey}`),
 									contextManager,
 									instanceID,
 									initialImpl: cloneWrapperImpl(propValue, mode),
@@ -433,7 +457,7 @@ export async function processFiles(
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper({
 										mode,
-										apiPath: `${categoryName}.${key}`,
+										apiPath: buildApiPath(`${categoryName}.${key}`),
 										contextManager,
 										instanceID,
 										initialImpl: cloneWrapperImpl(mod[key], mode),
@@ -455,11 +479,14 @@ export async function processFiles(
 						}
 					} else {
 						// Regular multi-export file (no matching object)
+						console.log(`[FLATTEN MULTI-EXPORT] File "${moduleName}" in category "${categoryName}", has ${moduleKeys.length} exports`);
+						console.log(`[FLATTEN MULTI-EXPORT] targetApi is wrapper: ${!!targetApi.__wrapper}, keys before: ${Object.keys(targetApi)}`);
 						for (const key of moduleKeys) {
+							console.log(`[FLATTEN MULTI-EXPORT] Assigning export "${key}" to targetApi`);
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper({
 									mode,
-									apiPath: `${categoryName}.${key}`,
+									apiPath: buildApiPath(`${categoryName}.${key}`),
 									contextManager,
 									instanceID,
 									initialImpl: cloneWrapperImpl(mod[key], mode),
@@ -468,6 +495,9 @@ export async function processFiles(
 								});
 								if (safeAssign(targetApi, key, wrapper.createProxy(), config)) {
 									targetApi[key] = wrapper.createProxy();
+									console.log(`[FLATTEN MULTI-EXPORT] ✓ Assigned "${key}" to targetApi, keys after: ${Object.keys(targetApi)}`);
+								} else {
+									console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
 								}
 							} else {
 								if (safeAssign(targetApi, key, mod[key], config)) {
@@ -499,7 +529,7 @@ export async function processFiles(
 					if (shouldWrap) {
 						const wrapper = new UnifiedWrapper({
 							mode,
-							apiPath: `${categoryName}.${preferredName}`,
+							apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 							contextManager,
 							instanceID,
 							initialImpl: cloneWrapperImpl(mod[key], mode),
@@ -523,9 +553,10 @@ export async function processFiles(
 
 			// Wrap in UnifiedWrapper
 			if (shouldWrap) {
+				const localPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 				const wrapper = new UnifiedWrapper({
 					mode,
-					apiPath: isRoot ? propertyName : `${categoryName}.${propertyName}`,
+					apiPath: buildApiPath(localPath),
 					contextManager,
 					instanceID,
 					initialImpl: cloneWrapperImpl(moduleContent, mode),
@@ -533,6 +564,9 @@ export async function processFiles(
 					materializeOnCreate: config.backgroundMaterialize
 				});
 
+				console.log(
+					`[FILE WRAPPER ASSIGNMENT] propertyName="${propertyName}", apiPath="${buildApiPath(localPath)}", overwriting="${propertyName in targetApi ? (targetApi[propertyName]?.__wrapper ? "wrapper" : "value") : "nothing"}"`
+				);
 				targetApi[propertyName] = wrapper.createProxy();
 			} else {
 				targetApi[propertyName] = moduleContent;
@@ -555,13 +589,21 @@ export async function processFiles(
 			`[SUBDIR CHECK] isRoot=${isRoot}, categoryName=${categoryName}, directory=${directory ? "exists" : "null"}, children=${directory?.children ? "exists" : "null"}, directories=${directory?.children?.directories ? directory.children.directories.length : "none"}`
 		);
 	}
+	console.log(
+		`[DIRECTORY CHECK] directory.children exists: ${!!directory?.children}, directories exists: ${!!directory?.children?.directories}, length: ${directory?.children?.directories?.length || 0}`
+	);
 	if (directory?.children?.directories) {
+		console.log(`[DIRECTORY CHECK PASSED] Will check recursive flag: ${recursive}`);
 		if (config.debug?.modes) {
 			console.log(`[SUBDIR FOUND] Processing ${directory.children.directories.length} subdirectories, recursive=${recursive}`);
 		}
 		if (recursive) {
 			// Eager mode: recurse into subdirectories
+			console.log(`[SUBDIRECTORY LOOP] directory.children.directories.length=${directory.children.directories.length}`);
 			for (const subDir of directory.children.directories) {
+				console.log(
+					`[PROCESSING SUBDIRECTORY] name="${subDir.name}", fileCount=${subDir.children.files.length}, subdirCount=${subDir.children.directories.length}`
+				);
 				const subDirName = sanitizePropertyName(subDir.name);
 
 				// Check if this is a single-file folder that might need special handling
@@ -577,6 +619,9 @@ export async function processFiles(
 					// 2. Filename matches folder name
 					// 3. Has default export (checked below)
 					if (isGeneric || filenameMatchesFolder) {
+						console.log(
+							`[FOLDER-LEVEL FLATTEN CHECK] subDir="${subDirName}", file="${moduleName}", isGeneric=${isGeneric}, filenameMatches=${filenameMatchesFolder}`
+						);
 						const mod = await loadModule(file.path, instanceID);
 						const exports = extractExports(mod);
 						const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
@@ -599,6 +644,7 @@ export async function processFiles(
 						});
 
 						if (categoryDecision.shouldFlatten) {
+							console.log(`[FOLDER-LEVEL FLATTEN] Flattening "${subDirName}" folder, SKIPPING regular processFiles recursion`);
 							// For filename-folder match with named export, extract the matching export
 							// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
 							let implToWrap;
@@ -623,7 +669,7 @@ export async function processFiles(
 							// Flatten: put the module content directly at targetApi[subDirName]
 							const wrapper = new UnifiedWrapper({
 								mode,
-								apiPath: categoryName ? `${categoryName}.${subDirName}` : subDirName,
+								apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
 								contextManager,
 								instanceID,
 								initialImpl: cloneWrapperImpl(implToWrap, mode),
@@ -632,7 +678,7 @@ export async function processFiles(
 							});
 							targetApi[subDirName] = wrapper.createProxy();
 							if (ownership) {
-								const apiPath = categoryName ? `${categoryName}.${subDirName}` : subDirName;
+								const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 								ownership.register({ moduleId: file.moduleId, apiPath, source: "core" });
 							}
 							continue;
@@ -694,7 +740,7 @@ export async function processFiles(
 				if (shouldWrap) {
 					const wrapper = new UnifiedWrapper({
 						mode,
-						apiPath: moduleName,
+						apiPath: buildApiPath(moduleName),
 						contextManager,
 						instanceID,
 						initialImpl: cloneWrapperImpl(defaultFunc, mode),
@@ -818,7 +864,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 			0,
 			"eager",
 			false, // Not root (for root contributor detection)
-			true, // Recursive (materialize subdirectories for this wrapper)
+			false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
 			true // Populate directly (don't nest under categoryName)
 		);
 

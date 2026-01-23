@@ -82,7 +82,17 @@ export class UnifiedWrapper {
 	 * 	instanceID
 	 * });
 	 */
-	constructor({ mode, apiPath, contextManager, instanceID, initialImpl = null, materializeFunc = null, ownership = null, isCallable, materializeOnCreate = false }) {
+	constructor({
+		mode,
+		apiPath,
+		contextManager,
+		instanceID,
+		initialImpl = null,
+		materializeFunc = null,
+		ownership = null,
+		isCallable,
+		materializeOnCreate = false
+	}) {
 		this.mode = mode;
 		this.apiPath = apiPath;
 		this.contextManager = contextManager;
@@ -105,7 +115,17 @@ export class UnifiedWrapper {
 		this.ownership = ownership;
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		if (initialImpl !== null) {
+			const implKeys = Object.keys(initialImpl || {});
+			if (apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+				console.log(`[UnifiedWrapper constructor] apiPath="${apiPath}": _impl has ${implKeys.length} keys:`, implKeys.slice(0, 5));
+			}
 			this._adoptImplChildren();
+			if (apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+				console.log(
+					`[UnifiedWrapper constructor] apiPath="${apiPath}": after adopt, _childCache size=${this._childCache.size}, keys:`,
+					Array.from(this._childCache.keys()).slice(0, 5)
+				);
+			}
 		}
 	}
 
@@ -480,11 +500,12 @@ export class UnifiedWrapper {
 		// Determine if this wrapper represents a callable (function)
 		// For eager mode or materialized lazy: check actual impl
 		// For unmaterialized lazy: default to function (standard lazy behavior)
-		const isCallable = wrapper.isCallable || 
-		                   typeof wrapper._impl === "function" || 
-		                   (wrapper._impl && typeof wrapper._impl.default === "function") ||
-		                   (wrapper.mode === "lazy" && !wrapper._state.materialized);
-		
+		const isCallable =
+			wrapper.isCallable ||
+			typeof wrapper._impl === "function" ||
+			(wrapper._impl && typeof wrapper._impl.default === "function") ||
+			(wrapper.mode === "lazy" && !wrapper._state.materialized);
+
 		const nameHint =
 			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
 		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
@@ -518,7 +539,7 @@ export class UnifiedWrapper {
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();
 				}
-				
+
 				// Return state symbols for lazy mode if not ready
 				if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
 					return TYPE_STATES.IN_FLIGHT;
@@ -526,7 +547,7 @@ export class UnifiedWrapper {
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized) {
 					return TYPE_STATES.UNMATERIALIZED;
 				}
-				
+
 				// Return typeof the actual impl (not the proxy target)
 				const impl = wrapper._impl;
 				if (typeof impl === "function") {

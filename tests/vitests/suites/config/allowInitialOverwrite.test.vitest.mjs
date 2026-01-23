@@ -12,10 +12,10 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test with full matrix since initial overwrite behavior is independent of mode/runtime
-const MATRIX_CONFIGS = TEST_MATRIX;
+const MATRIX_CONFIGS = getMatrixConfigs({});
 
 describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	let api = null;

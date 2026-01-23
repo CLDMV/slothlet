@@ -23,6 +23,7 @@ import path from "node:path";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
+import { mergeApiObjects } from "@cldmv/slothlet/helpers/api_assignment";
 
 const hotReloadState = new WeakMap();
 
@@ -260,33 +261,53 @@ function isWrapperProxy(value) {
  * await syncWrapper(existingProxy, nextProxy);
  */
 async function syncWrapper(existingProxy, nextProxy) {
+	console.log(`[syncWrapper ENTRY] existingProxy apiPath:`, existingProxy?.__wrapper?.apiPath);
+	console.log(`[syncWrapper ENTRY] nextProxy apiPath:`, nextProxy?.__wrapper?.apiPath);
+
 	if (!isWrapperProxy(existingProxy) || !isWrapperProxy(nextProxy)) {
 		return false;
 	}
 
 	const existingWrapper = existingProxy.__wrapper || existingProxy;
 	const nextWrapper = nextProxy.__wrapper || nextProxy;
-	const existingState = existingProxy.__getState ? existingProxy.__getState() : existingWrapper._state;
-	const nextState = nextProxy.__getState ? nextProxy.__getState() : nextWrapper._state;
 
+	console.log(`[syncWrapper] existingWrapper.apiPath: ${existingWrapper.apiPath}`);
+	console.log(`[syncWrapper] nextWrapper.apiPath: ${nextWrapper.apiPath}`);
+
+	// Copy materialize function if present (lazy mode support)
 	if (nextWrapper._materializeFunc) {
 		existingWrapper._materializeFunc = nextWrapper._materializeFunc;
 	}
 
-	if (nextState?.materialized) {
-		if (nextProxy.__materialize) {
-			await nextProxy.__materialize();
+	// THE ACTUAL FIX: Transfer _childCache entries directly
+	// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
+	// We need to transfer the child wrappers from nextWrapper to existingWrapper
+	if (nextWrapper._childCache && existingWrapper._childCache) {
+		console.log(
+			`[syncWrapper] Before merge - existing cache size: ${existingWrapper._childCache.size}, next cache size: ${nextWrapper._childCache.size}`
+		);
+		console.log(`[syncWrapper] Next wrapper _impl keys:`, Object.keys(nextWrapper._impl || {}));
+		console.log(`[syncWrapper] Next wrapper _childCache keys:`, Array.from(nextWrapper._childCache.keys()));
+
+		// Clear existing cache first
+		existingWrapper._childCache.clear();
+
+		// Transfer all child wrappers from next to existing
+		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
+		for (const [key, childValue] of nextWrapper._childCache.entries()) {
+			existingWrapper._childCache.set(key, childValue);
+			if (existingWrapper._proxyTarget) {
+				existingWrapper._proxyTarget[key] = childValue;
+			}
 		}
-		if (existingProxy.__setImpl) {
-			existingProxy.__setImpl(nextProxy.__impl);
-		}
-	} else if (existingState?.materialized && nextProxy.__materialize) {
-		await nextProxy.__materialize();
-		if (existingProxy.__setImpl) {
-			existingProxy.__setImpl(nextProxy.__impl);
-		}
-	} else if (existingProxy.__setImpl && nextProxy.__impl !== undefined) {
-		existingProxy.__setImpl(nextProxy.__impl);
+
+		console.log(`[syncWrapper] After merge - existing cache size: ${existingWrapper._childCache.size}`);
+	}
+
+	// Mark as materialized
+	if (existingWrapper._state) {
+		existingWrapper._state.materialized = true;
+		existingWrapper._state.inFlight = false;
 	}
 
 	return true;
@@ -302,45 +323,44 @@ async function syncWrapper(existingProxy, nextProxy) {
  * @private
  *
  * @description
- * Mutates objects and wrapper proxies in place to preserve references during reload.
+ * Uses unified mergeApiObjects logic from api_assignment.mjs to ensure consistent
+ * merge behavior between initial build and hot reload.
  *
  * @example
  * await mutateApiValue(existing, next, { removeMissing: true });
  */
 async function mutateApiValue(existingValue, nextValue, options) {
+	console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
+	console.log(`[mutateApiValue] existing isWrapper: ${isWrapperProxy(existingValue)}, next isWrapper: ${isWrapperProxy(nextValue)}`);
+
 	if (existingValue === nextValue) {
 		return;
 	}
 
-	if (isWrapperProxy(existingValue)) {
-		if (isWrapperProxy(nextValue)) {
-			await syncWrapper(existingValue, nextValue);
-			return;
-		}
+	// If both are wrapper proxies, sync them
+	if (isWrapperProxy(existingValue) && isWrapperProxy(nextValue)) {
+		console.log(`[mutateApiValue] Both are wrappers - calling syncWrapper`);
+		await syncWrapper(existingValue, nextValue);
+		return;
+	}
 
+	// If existing is a wrapper but next is not, update the wrapper's impl
+	if (isWrapperProxy(existingValue) && !isWrapperProxy(nextValue)) {
 		if (existingValue.__setImpl) {
 			existingValue.__setImpl(nextValue?.__impl ?? nextValue);
 			return;
 		}
 	}
 
+	// Use unified merge logic for objects
 	if (existingValue && typeof existingValue === "object" && nextValue && typeof nextValue === "object") {
-		const nextKeys = new Set(Object.keys(nextValue));
-		for (const key of nextKeys) {
-			if (Object.prototype.hasOwnProperty.call(existingValue, key)) {
-				await mutateApiValue(existingValue[key], nextValue[key], options);
-			} else {
-				existingValue[key] = nextValue[key];
-			}
-		}
-
-		if (options.removeMissing) {
-			for (const key of Object.keys(existingValue)) {
-				if (!nextKeys.has(key)) {
-					delete existingValue[key];
-				}
-			}
-		}
+		await mergeApiObjects(existingValue, nextValue, {
+			removeMissing: options.removeMissing,
+			mutateExisting: true,
+			allowOverwrite: true,
+			syncWrapper
+		});
+		return;
 	}
 }
 
@@ -375,7 +395,7 @@ async function setValueAtPath(root, parts, value, options) {
 	}
 
 	if (existing !== undefined && options.mutateExisting) {
-		await mutateApiValue(existing, value, { removeMissing: true });
+		await mutateApiValue(existing, value, { removeMissing: false });
 		return;
 	}
 
@@ -602,7 +622,12 @@ export async function addApiComponent(params) {
 
 	const { apiPath: normalizedPath, parts } = normalizeApiPath(apiPath);
 	const resolvedFolderPath = await resolveFolderPath(folderPath);
-	const allowOverwrite = !!(options.forceOverwrite || options.allowOverwrite || options.mutateExisting);
+	const allowOverwrite = !!(
+		options.forceOverwrite ||
+		options.allowOverwrite ||
+		options.mutateExisting ||
+		instance.config.allowAddApiOverwrite
+	);
 	const moduleId = options.moduleId ? String(options.moduleId) : buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 	if ((options.forceOverwrite || options.allowOverwrite) && !moduleId) {
 		throw new SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
@@ -614,35 +639,97 @@ export async function addApiComponent(params) {
 	const newApi = await buildAPI({
 		dir: resolvedFolderPath,
 		mode: instance.config.mode,
-		ownership: null,
+		ownership: instance.ownership,
 		contextManager: instance.contextManager,
 		instanceID: instance.instanceID,
-		config: instance.config
+		config: instance.config,
+		apiPathPrefix: normalizedPath
 	});
+
+	console.log("\n=== [addApiComponent] buildAPI RETURN STRUCTURE ===");
+	console.log("Top-level keys:", Object.keys(newApi));
+
+	// Check if flattened children exist as top-level keys with dotted names
+	const dottedKeys = Object.keys(newApi).filter((k) => k.includes("."));
+	if (dottedKeys.length > 0) {
+		console.log("FOUND DOTTED KEYS (flattened children as siblings!):", dottedKeys);
+	}
+
+	// Walk through ALL top-level entries to see the full structure
+	for (const [key, value] of Object.entries(newApi)) {
+		if (value?.__wrapper) {
+			console.log(`\n[${key}] is a wrapper:`);
+			console.log("  apiPath:", value.__wrapper.apiPath);
+			console.log("  _impl keys:", Object.keys(value.__wrapper._impl || {}));
+			console.log("  _childCache size:", value.__wrapper._childCache?.size);
+			console.log("  _childCache keys:", Array.from(value.__wrapper._childCache?.keys() || []));
+
+			// Check properties accessible via the proxy
+			const proxyProps = Object.keys(value).filter((k) => k !== "__wrapper");
+			console.log("  Proxy properties:", proxyProps);
+
+			// For each proxy property, check if it's a wrapper
+			for (const prop of proxyProps.slice(0, 3)) {
+				// First 3 to avoid spam
+				const child = value[prop];
+				if (child?.__wrapper) {
+					console.log(`    [${prop}] -> wrapper apiPath="${child.__wrapper.apiPath}"`);
+				}
+			}
+		} else {
+			console.log(`\n[${key}] is NOT a wrapper:`, typeof value);
+		}
+	}
+	console.log("=== END buildAPI RETURN STRUCTURE ===\n");
+
+	// Extract nested API if buildAPI returned { [apiPath]: {...} } structure
+	// This happens when the folder contains a file matching the target path name
+	// Example: api.add("config", folder) where folder has config.mjs
+	// buildAPI returns { config: {...} }, we want just {...}
+	let apiToMerge = newApi;
+	const finalKey = parts[parts.length - 1];
+	const newApiKeys = Object.keys(newApi);
+	console.log(`[addApiComponent] finalKey: ${finalKey}, newApiKeys:`, newApiKeys);
+	console.log(`[addApiComponent] newApi[${finalKey}] isWrapper:`, isWrapperProxy(newApi[finalKey]));
+
+	// ALWAYS extract the final key if it exists in newApi, regardless of how many keys
+	// This ensures we're merging the wrapper itself, not its siblings
+	if (newApi[finalKey] !== undefined) {
+		apiToMerge = newApi[finalKey];
+		console.log(`[addApiComponent] Extracted ${finalKey}, isWrapper:`, isWrapperProxy(apiToMerge));
+		if (instance.config.debug?.api) {
+			console.log(`[hot_reload] Extracted ${finalKey} from newApi:`, Object.keys(apiToMerge || {}));
+		}
+	}
+
+	if (instance.config.debug?.api) {
+		console.log(`[hot_reload] apiToMerge keys:`, Object.keys(apiToMerge));
+	}
 
 	await setValueAtPath(
 		instance.api,
 		parts,
-		newApi,
+		apiToMerge,
 		{
-			mutateExisting: !!options.mutateExisting,
+			mutateExisting: !!(options.mutateExisting || instance.config.allowAddApiOverwrite),
 			allowOverwrite
 		},
 		instance
 	);
+
 	await setValueAtPath(
 		instance.boundApi,
 		parts,
-		newApi,
+		apiToMerge,
 		{
-			mutateExisting: !!options.mutateExisting,
+			mutateExisting: !!(options.mutateExisting || instance.config.allowAddApiOverwrite),
 			allowOverwrite
 		},
 		instance
 	);
 
 	if (instance.ownership && moduleId) {
-		registerOwnership(instance.ownership, moduleId, normalizedPath, newApi);
+		registerOwnership(instance.ownership, moduleId, normalizedPath, apiToMerge);
 	}
 
 	if (instance.ownership) {
@@ -656,10 +743,10 @@ export async function addApiComponent(params) {
 				moduleId
 			});
 		}
-	}
 
-	if (moduleId) {
-		state.removedModuleIds.delete(moduleId);
+		if (moduleId) {
+			state.removedModuleIds.delete(moduleId);
+		}
 	}
 }
 

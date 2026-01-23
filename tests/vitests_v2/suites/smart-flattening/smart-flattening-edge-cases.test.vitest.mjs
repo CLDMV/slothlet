@@ -16,7 +16,9 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+
+const FULL_MATRIX = getMatrixConfigs({});
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -42,14 +44,18 @@ async function materialize(func, ...args) {
 	}
 }
 
-describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___name, config }) => {
+describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___name, config }) => {
 	test("Nested API paths with flattening", async () => {
 		const api = await slothlet({
 			...config,
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("deep.nested.config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+		await api.slothlet.api.add(
+			"deep.nested.config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			{}
+		);
 
 		// Should create nested structure but flatten config.mjs contents
 		expect(typeof api.deep).toBe("object");
@@ -68,10 +74,18 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		});
 
 		// First call with flattening
-		await api.addApi("area1.config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+		await api.slothlet.api.add(
+			"area1.config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			{}
+		);
 
 		// Second call without flattening
-		await api.addApi("area2.config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+		await api.slothlet.api.add(
+			"area2.config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			{}
+		);
 
 		// area1 should be flattened
 		expect(typeof api.area1.config.getConfig).toBe("function");
@@ -90,7 +104,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi("functional", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`), {});
+		await api.slothlet.api.add(
+			"functional",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_multiple`),
+			{}
+		);
 
 		// Test all functions work through their correct namespaces
 		await materialize(api.functional.utils.utilFunction);
@@ -133,7 +151,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await addApiInstance.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+		await addApiInstance.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`),
+			{}
+		);
 
 		// AddApi should flatten
 		expect(typeof addApiInstance.config.getConfig).toBe("function");
@@ -149,7 +171,11 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		});
 
 		// Test with autoFlatten=false - should preserve exact structure
-		await api.addApi("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`), {});
+		await api.slothlet.api.add(
+			"config",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_folder_config`),
+			{}
+		);
 
 		// Should apply Rule 1 flattening regardless of autoFlatten=false (filename matches folder)
 		expect(typeof api.config.main).toBe("object");
@@ -166,7 +192,7 @@ describe.each(TEST_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
 		});
 
-		await api.addApi(
+		await api.slothlet.api.add(
 			"plugins",
 			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_with_folders`),
 			{}

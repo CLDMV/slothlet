@@ -11,12 +11,13 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-describe.each(TEST_MATRIX.filter((item) => item.config.mode === "lazy"))("Background Materialize - %s", ({ name, config }) => {
+const LAZY_MATRIX = getMatrixConfigs({ mode: "lazy" });
+describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => {
 	test("backgroundMaterialize: false - modules not materialized until accessed", async () => {
 		const api = await slothlet({
 			...config,

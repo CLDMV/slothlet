@@ -26,9 +26,11 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import net from "node:net";
-import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe.each(TEST_MATRIX)("TCP Context Propagation - $name", ({ name: ___name, config }) => {
+const FULL_MATRIX = getMatrixConfigs({});
+
+describe.each(FULL_MATRIX)("TCP Context Propagation - $name", ({ name: ___name, config }) => {
 	let slothlet;
 	let api = null;
 
