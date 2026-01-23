@@ -96,8 +96,6 @@ if (existsSync(srcPath) && !isCI) {
 		}
 
 		console.error(errorMessage);
-		throw new Error(errorMessage);
-		// eslint-disable-next-line no-unreachable
 		process.exit(1);
 	}
 }

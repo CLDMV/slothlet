@@ -74,14 +74,9 @@ process.on("uncaughtException", (error) => {
 const devcheckPromise = (async () => {
 	try {
 		await import("@cldmv/slothlet/devcheck");
-	} catch (error) {
-		// If devcheck throws, it means the environment is misconfigured
-		// Re-throw to stop execution instead of continuing to load
-		if (error?.message?.includes("Development environment not properly configured") || 
-		    error?.message?.includes("Incorrect development environment detected")) {
-			throw error;
-		}
-		// Ignore other errors (e.g., devcheck.mjs not found in production)
+	} catch {
+		// Ignore errors (e.g., devcheck.mjs not found in production)
+		// devcheck.mjs uses process.exit() for environment errors
 	}
 })();
 
