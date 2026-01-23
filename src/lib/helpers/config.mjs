@@ -6,6 +6,59 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 
 /**
+ * Normalize collision configuration for handling property collisions
+ * @param {string|Object} collision - Collision mode or object with per-context modes
+ * @returns {Object} Normalized collision configuration with initial and addApi modes
+ * @public
+ * 
+ * @description
+ * Normalizes collision handling configuration for both initial load (buildAPI)
+ * and hot reload (api.add) contexts. Supports five collision modes:
+ * - "skip": Silently ignore collision, keep existing value
+ * - "warn": Warn about collision, keep existing value  
+ * - "replace": Replace existing value completely
+ * - "merge": Merge properties (preserve original + add new)
+ * - "error": Throw error on collision
+ * 
+ * @example
+ * // String shorthand applies to both contexts
+ * normalizeCollision("merge") 
+ * // => { initial: "merge", addApi: "merge" }
+ * 
+ * @example
+ * // Object allows per-context control
+ * normalizeCollision({ initial: "warn", addApi: "error" })
+ * // => { initial: "warn", addApi: "error" }
+ */
+export function normalizeCollision(collision) {
+	const validModes = ["skip", "warn", "replace", "merge", "error"];
+	const defaultMode = "merge";
+	
+	// String shorthand applies to both contexts
+	if (typeof collision === "string") {
+		const normalized = collision.toLowerCase();
+		const mode = validModes.includes(normalized) ? normalized : defaultMode;
+		return { initial: mode, addApi: mode };
+	}
+	
+	// Object allows per-context control
+	if (collision && typeof collision === "object") {
+		const validateMode = (m) => {
+			if (!m) return defaultMode;
+			const normalized = String(m).toLowerCase();
+			return validModes.includes(normalized) ? normalized : defaultMode;
+		};
+		return {
+			initial: validateMode(collision.initial),
+			addApi: validateMode(collision.addApi)
+		};
+	}
+	
+	// Default: merge for both contexts
+	return { initial: defaultMode, addApi: defaultMode };
+}
+
+/**
  * Normalize runtime input to internal standard format
  * @param {string} runtime - Input runtime type (various formats accepted)
  * @returns {string} Normalized runtime type ("async" or "live")
@@ -143,9 +196,7 @@ export function transformConfig(config = {}) {
 		debug: normalizeDebug(config.debug),
 		diagnostics: config.diagnostics === true,
 		hooks: config.hooks === true,
-		allowMutation: config.allowMutation !== false,
-		allowInitialOverwrite: config.allowInitialOverwrite !== false,
-		allowAddApiOverwrite: config.allowAddApiOverwrite === true,
+		collision: normalizeCollision(config.collision),
 		backgroundMaterialize: config.backgroundMaterialize === true,
 		silent: config.silent === true
 	};

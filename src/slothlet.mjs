@@ -60,8 +60,8 @@ class Slothlet {
 		// Initialize context
 		const store = this.contextManager.initialize(this.instanceID, this.config);
 
-		// Initialize ownership manager (only if mutations allowed)
-		this.ownership = this.config.allowMutation ? new OwnershipManager() : null;
+		// Initialize ownership manager
+		this.ownership = new OwnershipManager();
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!

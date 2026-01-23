@@ -175,12 +175,6 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.add("plugins", "./plugins");
 			 */
 			add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
-				if (!config.allowMutation) {
-					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
-						operation: "api.add",
-						validationError: true
-					});
-				}
 				// Filter out internal options that shouldn't be user-controllable
 				const { recordHistory, ...filteredOptions } = options;
 				return addApiComponent({
@@ -204,12 +198,6 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.remove("plugins.tools");
 			 */
 			remove: async function slothlet_api_remove(pathOrModuleId) {
-				if (!config.allowMutation) {
-					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
-						operation: "api.remove",
-						validationError: true
-					});
-				}
 				return removeApiComponent({ instance, pathOrModuleId });
 			},
 
@@ -225,12 +213,6 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.reload("plugins");
 			 */
 			reload: async function slothlet_api_reload(pathOrModuleId) {
-				if (!config.allowMutation) {
-					throw new SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
-						operation: "api.reload",
-						validationError: true
-					});
-				}
 				return reloadApiComponent({ instance, pathOrModuleId });
 			}
 		},
@@ -436,12 +418,6 @@ async function createSlothletNamespace(instance, config, userApi) {
 			return instance.shutdown();
 		}
 	};
-
-	// Remove mutation methods when allowMutation is false (unless diagnostics mode)
-	if (!config.allowMutation && config.diagnostics !== true) {
-		delete namespace.api;
-		delete namespace.reload;
-	}
 
 	// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
 	// Note: Hooks are not yet implemented in v3, but the config option is ready
