@@ -21,13 +21,12 @@ export class OwnershipManager {
 	 * @param {string} options.apiPath - API path being registered
 	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
-	 * @param {boolean} [options.allowConflict=false] - Allow overwriting existing owner
 	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
 	 * @param {Object} [options.config] - Config object for silent mode check
 	 * @returns {Object|null} Registration entry or null if skipped
 	 * @public
 	 */
-	register({ moduleId, apiPath, value, source = "core", allowConflict = false, collisionMode = "error", config = null }) {
+	register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
 			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
@@ -40,8 +39,8 @@ export class OwnershipManager {
 		const currentOwner = this.getCurrentOwner(apiPath);
 		if (currentOwner && currentOwner.moduleId !== moduleId) {
 			// Handle conflict based on collision mode
-			if (allowConflict) {
-				// merge/replace modes - allow registration
+			if (collisionMode === "merge" || collisionMode === "replace") {
+				// Allow registration - will merge or replace
 			} else if (collisionMode === "skip") {
 				// Skip registration silently
 				return null;
@@ -54,7 +53,7 @@ export class OwnershipManager {
 				}
 				return null;
 			} else {
-				// error mode or any other - throw
+				// error mode - throw
 				throw new SlothletError("OWNERSHIP_CONFLICT", {
 					apiPath,
 					existingModuleId: currentOwner.moduleId,

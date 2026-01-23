@@ -125,7 +125,8 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 					ownership.register({
 						moduleId: file.moduleId,
 						apiPath: `${apiPath}.${moduleName}`,
-						source: "core"
+						source: "core",
+						collisionMode: config.collision?.core || "error"
 					});
 				}
 
