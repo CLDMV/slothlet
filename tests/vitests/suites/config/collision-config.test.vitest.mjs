@@ -42,7 +42,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
  * @returns {object|undefined} Math module
  */
 function getMath(api, dir) {
-	return dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm : (getMath(api, config.dir));
+	return dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm : api.math;
 }
 
 const BASE_DIRS = [
