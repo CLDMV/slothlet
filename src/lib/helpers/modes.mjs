@@ -108,7 +108,6 @@ function safeAssign(targetApi, propertyName, value, config, collisionContext = "
 
 	if (collisionMode === "error") {
 		throw new SlothletError("COLLISION_ERROR", {
-			propertyName,
 			apiPath: apiPath || propertyName,
 			reason: `Property "${propertyName}" already exists and collision mode is 'error'`,
 			validationError: true

@@ -433,8 +433,7 @@ async function setValueAtPath(root, parts, value, options, instance) {
 			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: parts.join("."),
 				reason: "path already exists and collision mode is 'error'",
-				validationError: true,
-				collisionMode: "error"
+				validationError: true
 			});
 		}
 
