@@ -665,11 +665,14 @@ export async function processFiles(
 			}
 			if (ownership) {
 				const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
+				const collisionMode = config.collision?.[collisionContext] || "merge";
 				ownership.register({
 					moduleId: file.moduleId,
 					apiPath,
 					source: "core",
-					allowConflict: shouldAllowOwnershipConflict(config, "initial")
+					allowConflict: shouldAllowOwnershipConflict(config, collisionContext),
+					collisionMode,
+					config
 				});
 			}
 		}
@@ -772,11 +775,14 @@ export async function processFiles(
 							targetApi[subDirName] = wrapper.createProxy();
 							if (ownership) {
 								const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
+								const collisionMode = config.collision?.[collisionContext] || "merge";
 								ownership.register({
 									moduleId: file.moduleId,
 									apiPath,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, "initial")
+									allowConflict: shouldAllowOwnershipConflict(config, collisionContext),
+									collisionMode,
+									config
 								});
 							}
 							continue;

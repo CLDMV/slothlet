@@ -22,10 +22,12 @@ export class OwnershipManager {
 	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
 	 * @param {boolean} [options.allowConflict=false] - Allow overwriting existing owner
-	 * @returns {Object} Registration entry
+	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
+	 * @param {Object} [options.config] - Config object for silent mode check
+	 * @returns {Object|null} Registration entry or null if skipped
 	 * @public
 	 */
-	register({ moduleId, apiPath, value, source = "core", allowConflict = false }) {
+	register({ moduleId, apiPath, value, source = "core", allowConflict = false, collisionMode = "error", config = null }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
 			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
@@ -36,13 +38,30 @@ export class OwnershipManager {
 
 		// Check for conflicts
 		const currentOwner = this.getCurrentOwner(apiPath);
-		if (currentOwner && currentOwner.moduleId !== moduleId && !allowConflict) {
-			throw new SlothletError("OWNERSHIP_CONFLICT", {
-				apiPath,
-				existingModuleId: currentOwner.moduleId,
-				newModuleId: moduleId,
-				validationError: true
-			});
+		if (currentOwner && currentOwner.moduleId !== moduleId) {
+			// Handle conflict based on collision mode
+			if (allowConflict) {
+				// merge/replace modes - allow registration
+			} else if (collisionMode === "skip") {
+				// Skip registration silently
+				return null;
+			} else if (collisionMode === "warn") {
+				// Skip registration but emit warning (unless silent)
+				if (!config?.silent) {
+					console.warn(
+						`[SLOTHLET WARNING] Ownership conflict at '${apiPath}': already owned by '${currentOwner.moduleId}', cannot register '${moduleId}'. Keeping existing.`
+					);
+				}
+				return null;
+			} else {
+				// error mode or any other - throw
+				throw new SlothletError("OWNERSHIP_CONFLICT", {
+					apiPath,
+					existingModuleId: currentOwner.moduleId,
+					newModuleId: moduleId,
+					validationError: true
+				});
+			}
 		}
 
 		// Add to moduleToPath
