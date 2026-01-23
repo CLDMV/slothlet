@@ -118,7 +118,12 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
  * });
  */
 export async function mergeApiObjects(targetApi, sourceApi, options = {}) {
-	if (!sourceApi || typeof sourceApi !== "object") {
+	console.log(`[mergeApiObjects ENTRY] targetApi type=${typeof targetApi}, sourceApi type=${typeof sourceApi}`);
+	console.log(`[mergeApiObjects ENTRY] sourceApi keys:`, sourceApi ? Object.keys(sourceApi) : "N/A");
+
+	// Allow both objects and functions (functions can have properties too)
+	if (!sourceApi || (typeof sourceApi !== "object" && typeof sourceApi !== "function")) {
+		console.log(`[mergeApiObjects EXIT] sourceApi is not an object/function`);
 		return;
 	}
 
@@ -130,6 +135,10 @@ export async function mergeApiObjects(targetApi, sourceApi, options = {}) {
 		const sourceValue = sourceApi[key];
 		const targetValue = targetApi[key];
 
+		console.log(
+			`[mergeApiObjects] Processing key="${key}", sourceValue type=${typeof sourceValue}, targetValue type=${typeof targetValue}`
+		);
+
 		// If both are plain objects (not wrappers), recurse
 		if (
 			targetValue &&
@@ -139,9 +148,11 @@ export async function mergeApiObjects(targetApi, sourceApi, options = {}) {
 			typeof sourceValue === "object" &&
 			!isWrapperProxy(sourceValue)
 		) {
+			console.log(`[mergeApiObjects] Both plain objects - recursing`);
 			await mergeApiObjects(targetValue, sourceValue, options);
 		} else {
 			// Use unified assignment logic
+			console.log(`[mergeApiObjects] Calling assignToApiPath for key="${key}"`);
 			assignToApiPath(targetApi, key, sourceValue, assignOptions);
 		}
 	}
