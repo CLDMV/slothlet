@@ -7,7 +7,7 @@
 
 ## Critical Issues Identified
 
-### 1. ❌ apiPath Inconsistency with apiPathPrefix
+### 1. ✅ apiPath Inconsistency with apiPathPrefix
 **Issue:** When `buildAPI` is called with `apiPathPrefix="config"`, the returned structure shows:
 ```javascript
 {
@@ -26,31 +26,45 @@
 
 **Impact:** Path inconsistency breaks proper integration and merging logic.
 
-**Investigation Status:** ✅ INVESTIGATED
+**Fix Status:** ✅ FIXED AND VALIDATED
+
+**Solution:**
+Three changes were needed in `src/lib/helpers/modes.mjs`:
+
+1. **Line 298** - Disable file-level flattening when apiPathPrefix set:
+   ```javascript
+   // OLD: if (!isRoot && moduleName === categoryName)
+   if (!isRoot && !apiPathPrefix && moduleName === categoryName)
+   ```
+
+2. **Line 647** - Disable folder-level flattening when apiPathPrefix set:
+   ```javascript
+   // OLD: if (categoryDecision.shouldFlatten)
+   if (categoryDecision.shouldFlatten && !apiPathPrefix)
+   ```
+
+3. **Line 705** - Pass apiPathPrefix through to recursive subdirectory calls:
+   ```javascript
+   await processFiles(
+       // ... 12 other parameters ...
+       false, // populateDirectly
+       apiPathPrefix // <-- ADDED: Pass through to subdirectories
+   );
+   ```
 
 **Root Cause:** 
-`buildApiPath()` function in `modes.mjs` line 149 has anti-double-prefix logic:
+`apiPathPrefix` wasn't being passed to recursive `processFiles()` calls when processing subdirectories. This meant:
+- Top-level files got correct prefix: `"config.main"` ✓
+- Subdirectories got default empty prefix: `"config"` instead of `"config.config"` ✗
+- The `buildApiPath("config")` was being called with `apiPathPrefix=""` (default), not `"config"`
+
+**Validation:**
+Test file: `tmp/test-apipath-prefix.mjs`
 ```javascript
-if (path === apiPathPrefix || path.startsWith(`${apiPathPrefix}.`)) {
-    return path;  // Don't add prefix if already present
-}
+// Tests buildAPI with apiPathPrefix="config"
+// Expected: {main: wrapper("config.main"), config: wrapper("config.config")}
+// Result: ✅ PASS - All paths have correct prefix
 ```
-
-When processing `config/` subdirectory with `apiPathPrefix="config"`:
-- `categoryName` = `"config"` (from folder name)
-- `buildApiPath("config")` checks: `"config" === "config"` → TRUE
-- Returns `"config"` unchanged (no prefix added)
-- Result: `apiPath="config"` instead of `"config.config"`
-
-**Why This Exists:** Prevents `"config.config.config..."` when recursing through nested folders.
-
-**Is This Correct?** UNCLEAR - needs clarification:
-- If we load `api_smart_flatten_folder_config/` as initial dir (no prefix), we get `{main, config}`
-- If we load same folder WITH prefix `"config"`, should we get `{config.main, config.config}` or `{main, config}`?
-
-**Fix Required:** Determine intended behavior, then either:
-1. Keep current logic and fix integration to handle it
-2. Change logic to always apply prefix, handle name collisions differently
 
 
 ---
