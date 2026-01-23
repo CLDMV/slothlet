@@ -622,6 +622,73 @@ if (unusedTranslations.length > 0) {
 }
 
 // Summary
+// ===== INVALID KEY FORMAT ANALYSIS =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Invalid Translation Key Format ===");
+console.log("=".repeat(80) + "\n");
+
+// Check for non-capitalized translation keys (should be UPPER_CASE_WITH_UNDERSCORES)
+const validKeyPattern = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
+const invalidKeys = [];
+
+// Check all translation keys
+for (const key of translationKeys) {
+	if (!validKeyPattern.test(key)) {
+		// Find where this key is used
+		const usageLocations = [];
+		
+		// Check in error throws
+		for (const error of allErrors) {
+			if (error.errorCode === key) {
+				const relPath = relative(rootDir, error.filePath);
+				usageLocations.push(`${relPath}:${error.lineNumber}`);
+			}
+		}
+		
+		// Check in direct t() calls
+		if (directTranslationUsage.has(key)) {
+			// Find which files use this key in t() calls
+			for (const file of allFiles) {
+				const content = await readFile(file, "utf-8");
+				const tCallPattern = new RegExp(`\\bt\\(\\s*["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`, "g");
+				let match;
+				while ((match = tCallPattern.exec(content)) !== null) {
+					const beforeMatch = content.substring(0, match.index);
+					const lineNumber = beforeMatch.split("\n").length;
+					const relPath = relative(rootDir, file);
+					usageLocations.push(`${relPath}:${lineNumber}`);
+				}
+			}
+		}
+		
+		invalidKeys.push({
+			key,
+			translation: translations[key],
+			usageLocations: [...new Set(usageLocations)] // Remove duplicates
+		});
+	}
+}
+
+if (invalidKeys.length > 0) {
+	console.log(`❌ Found ${invalidKeys.length} translation keys with invalid format:\n`);
+	console.log(`   Convention: UPPER_CASE_WITH_UNDERSCORES (e.g., ERROR_INVALID_CONFIG)\n`);
+	
+	invalidKeys.forEach((item, idx) => {
+		console.log(`[${idx + 1}] ${item.key}`);
+		console.log(`    Translation: "${item.translation.substring(0, 60)}${item.translation.length > 60 ? "..." : ""}"`);
+		if (item.usageLocations.length > 0) {
+			console.log(`    Used in:`);
+			item.usageLocations.forEach((loc) => console.log(`      - ${loc}`));
+		} else {
+			console.log(`    ⚠️  Not used in codebase (unused translation with invalid format)`);
+		}
+		console.log();
+	});
+} else {
+	console.log(`✅ All translation keys follow proper naming convention (UPPER_CASE_WITH_UNDERSCORES)\n`);
+}
+
+// ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\nTranslation Summary:");
 console.log(`  Total Error Codes Used:      ${usedErrorCodes.size}`);
@@ -629,5 +696,6 @@ console.log(`  Total Translations:          ${translationKeys.length}`);
 console.log(`  Missing Translations:        ${missingTranslations.length}`);
 console.log(`  Unused Translations:         ${unusedTranslations.length}`);
 console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
+console.log(`  Invalid Key Format:          ${invalidKeys.length}`);
 
 console.log();

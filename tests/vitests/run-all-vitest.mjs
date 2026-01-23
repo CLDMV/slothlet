@@ -13,8 +13,20 @@
  * node tests/vitests/run-all-vitest.mjs
  *
  * @example
- * // Run specific test file
+ * // Run specific test file (full path)
  * node tests/vitests/run-all-vitest.mjs tests/vitests/suites/addapi/addapi-path-resolution.test.vitest.mjs
+ *
+ * @example
+ * // Run specific test file (partial path - matches from suites/)
+ * node tests/vitests/run-all-vitest.mjs suites/config/background-materialize.test.vitest.mjs
+ *
+ * @example
+ * // Run specific test file (partial path - just folder and filename)
+ * node tests/vitests/run-all-vitest.mjs config/background-materialize.test.vitest.mjs
+ *
+ * @example
+ * // Run specific test file (partial path - just filename)
+ * node tests/vitests/run-all-vitest.mjs background-materialize.test.vitest.mjs
  *
  * @example
  * // Run all tests in a folder
@@ -83,7 +95,7 @@ async function discoverFilesInDir(dir) {
 
 /**
  * Discover Vitest test files based on CLI arguments or default to all processed/ files
- * @param {string[]} args - Command-line arguments (file paths, folder paths, or empty for all)
+ * @param {string[]} args - Command-line arguments (file paths, folder paths, partial paths, or empty for all)
  * @returns {Promise<string[]>} Array of test file paths relative to project root
  */
 async function discoverVitestFiles(args) {
@@ -95,6 +107,7 @@ async function discoverVitestFiles(args) {
 	}
 
 	const files = [];
+	const suitesDir = path.resolve(__dirname, "suites");
 
 	for (const arg of args) {
 		const absPath = path.isAbsolute(arg) ? arg : path.resolve(projectRoot, arg);
@@ -114,12 +127,27 @@ async function discoverVitestFiles(args) {
 				files.push(...dirFiles);
 			}
 		} catch (___error) {
-			console.warn(`⚠️  Could not access: ${arg}`);
-			continue;
+			// Path doesn't exist - try matching as a partial path
+			// Discover all test files and match against them
+			const allFiles = await discoverFilesInDir(suitesDir);
+			const normalizedArg = arg.replace(/\\/g, "/");
+
+			const matchedFiles = allFiles.filter((file) => {
+				const normalizedFile = file.replace(/\\/g, "/");
+				// Match if file ends with the provided partial path
+				return normalizedFile.endsWith(normalizedArg) || normalizedFile.includes(`/${normalizedArg}`);
+			});
+
+			if (matchedFiles.length > 0) {
+				files.push(...matchedFiles);
+			} else {
+				console.warn(`⚠️  No matches found for: ${arg}`);
+			}
 		}
 	}
 
-	return files.sort((a, b) => a.localeCompare(b));
+	// Remove duplicates and sort
+	return [...new Set(files)].sort((a, b) => a.localeCompare(b));
 }
 
 /**
