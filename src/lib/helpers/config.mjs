@@ -10,21 +10,21 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
  * @param {string|Object} collision - Collision mode or object with per-context modes
  * @returns {Object} Normalized collision configuration with initial and addApi modes
  * @public
- * 
+ *
  * @description
  * Normalizes collision handling configuration for both initial load (buildAPI)
  * and hot reload (api.add) contexts. Supports five collision modes:
  * - "skip": Silently ignore collision, keep existing value
- * - "warn": Warn about collision, keep existing value  
+ * - "warn": Warn about collision, keep existing value
  * - "replace": Replace existing value completely
  * - "merge": Merge properties (preserve original + add new)
  * - "error": Throw error on collision
- * 
+ *
  * @example
  * // String shorthand applies to both contexts
- * normalizeCollision("merge") 
+ * normalizeCollision("merge")
  * // => { initial: "merge", addApi: "merge" }
- * 
+ *
  * @example
  * // Object allows per-context control
  * normalizeCollision({ initial: "warn", addApi: "error" })
@@ -33,14 +33,14 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
 export function normalizeCollision(collision) {
 	const validModes = ["skip", "warn", "replace", "merge", "error"];
 	const defaultMode = "merge";
-	
+
 	// String shorthand applies to both contexts
 	if (typeof collision === "string") {
 		const normalized = collision.toLowerCase();
 		const mode = validModes.includes(normalized) ? normalized : defaultMode;
 		return { initial: mode, addApi: mode };
 	}
-	
+
 	// Object allows per-context control
 	if (collision && typeof collision === "object") {
 		const validateMode = (m) => {
@@ -53,7 +53,7 @@ export function normalizeCollision(collision) {
 			addApi: validateMode(collision.addApi)
 		};
 	}
-	
+
 	// Default: merge for both contexts
 	return { initial: defaultMode, addApi: defaultMode };
 }

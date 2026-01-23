@@ -410,10 +410,10 @@ async function mutateApiValue(existingValue, nextValue, options) {
  * - error: Throw error on collision
  *
  * @example
- * await setValueAtPath(api, ["plugins"], newApi, { 
- *   mutateExisting: true, 
+ * await setValueAtPath(api, ["plugins"], newApi, {
+ *   mutateExisting: true,
  *   allowOverwrite: true,
- *   collisionMode: "merge" 
+ *   collisionMode: "merge"
  * });
  */
 async function setValueAtPath(root, parts, value, options, instance) {
@@ -422,7 +422,10 @@ async function setValueAtPath(root, parts, value, options, instance) {
 	const existing = parent ? parent[finalKey] : undefined;
 	const collisionMode = options.collisionMode || "merge";
 
-	console.log(`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, collisionMode=${collisionMode}, options:`, options);
+	console.log(
+		`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, collisionMode=${collisionMode}, options:`,
+		options
+	);
 
 	// Handle collision based on mode
 	if (existing !== undefined) {
@@ -434,30 +437,30 @@ async function setValueAtPath(root, parts, value, options, instance) {
 				collisionMode: "error"
 			});
 		}
-		
+
 		if (collisionMode === "skip") {
 			console.log(`[setValueAtPath] Skipping collision at ${parts.join(".")} (mode: skip)`);
 			return;
 		}
-		
+
 		if (collisionMode === "warn") {
 			if (instance && !instance.config?.silent) {
 				console.warn(`[slothlet] Warning: Path collision at ${parts.join(".")} - keeping existing value`);
 			}
 			return;
 		}
-		
+
 		if (collisionMode === "replace") {
 			console.log(`[setValueAtPath] Replacing value at ${parts.join(".")} (mode: replace)`);
 			parent[finalKey] = value;
 			return;
 		}
-		
+
 		// Default: merge mode
 		if (collisionMode === "merge") {
 			const existingIsObject = typeof existing === "object" || typeof existing === "function";
 			const valueIsObject = typeof value === "object" || typeof value === "function";
-			
+
 			if (existingIsObject && valueIsObject) {
 				console.log("[setValueAtPath] Merging properties (mode: merge)");
 				await mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true });
@@ -697,19 +700,12 @@ export async function addApiComponent(params) {
 
 	const { apiPath: normalizedPath, parts } = normalizeApiPath(apiPath);
 	const resolvedFolderPath = await resolveFolderPath(folderPath);
-	
+
 	// Determine collision handling based on config.collision.addApi
 	const collisionMode = instance.config.collision.addApi || "merge";
-	const allowOverwrite = !!(
-		options.forceOverwrite ||
-		options.allowOverwrite ||
-		(collisionMode === "replace" || collisionMode === "merge")
-	);
-	const mutateExisting = !!(
-		options.mutateExisting ||
-		(collisionMode === "merge")
-	);
-	
+	const allowOverwrite = !!(options.forceOverwrite || options.allowOverwrite || collisionMode === "replace" || collisionMode === "merge");
+	const mutateExisting = !!(options.mutateExisting || collisionMode === "merge");
+
 	const moduleId = options.moduleId ? String(options.moduleId) : buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 	if ((options.forceOverwrite || options.allowOverwrite) && !moduleId) {
 		throw new SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
@@ -725,7 +721,8 @@ export async function addApiComponent(params) {
 		contextManager: instance.contextManager,
 		instanceID: instance.instanceID,
 		config: instance.config,
-		apiPathPrefix: normalizedPath
+		apiPathPrefix: normalizedPath,
+		collisionContext: "addApi"
 	});
 
 	console.log("\n=== [addApiComponent] buildAPI RETURN STRUCTURE ===");

@@ -143,6 +143,7 @@ function normalizeCollision(collision) {
 - [ ] Add examples of each collision mode
 - [ ] Update API documentation
 - [ ] Add to BREAKING-CHANGES-V3.md
+- [ ] Add doc about this change in docs\v3\changelog
 
 ## Completion Status
 
