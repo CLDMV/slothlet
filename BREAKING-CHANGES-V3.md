@@ -260,9 +260,92 @@ If you have other modules following this pattern (`folder/folder.mjs` with defau
 
 ---
 
+## Configuration Changes
+
+### 6. Unified Collision Configuration System
+
+**v2.x:**
+```javascript
+const api = await slothlet({
+  dir: "./api",
+  allowMutation: true,           // Enable runtime modifications
+  allowInitialOverwrite: true,   // Allow collisions during initial build
+  allowAddApiOverwrite: false    // Prevent collisions during api.add()
+});
+```
+
+**v3.0.0:**
+```javascript
+const api = await slothlet({
+  dir: "./api",
+  // Runtime modifications always available via api.slothlet.api.*
+  // Unified collision handling with 5 modes
+  collision: {
+    initial: "merge",  // During initial API build
+    addApi: "skip"     // During api.slothlet.api.add()
+  }
+});
+
+// Or shorthand for both contexts:
+const api = await slothlet({
+  dir: "./api",
+  collision: "merge"  // Applies to both initial and addApi
+});
+```
+
+**Collision Modes:**
+- **`"skip"`** - Silently ignore collision, keep existing value
+- **`"warn"`** - Warn about collision, keep existing value
+- **`"error"`** - Throw error on collision
+- **`"merge"`** (default) - Merge properties (preserve original + add new)
+- **`"replace"`** - Replace existing value completely
+
+**Migration:**
+
+```javascript
+// OLD v2 flags → NEW v3 collision modes
+
+// Immutable mode (no overwrites allowed)
+{ allowMutation: false }
+→ { collision: "error" }
+
+// Allow all overwrites during initial load
+{ allowInitialOverwrite: true }
+→ { collision: { initial: "merge" } }
+
+// Prevent api.add() overwrites
+{ allowAddApiOverwrite: false }
+→ { collision: { addApi: "skip" } }
+
+// Plugin system (later modules override earlier ones)
+{ allowAddApiOverwrite: true }
+→ { collision: { addApi: "replace" } }
+
+// Development mode (warn about conflicts)
+{ allowInitialOverwrite: true }
+→ { collision: "warn" }
+```
+
+**Key Changes:**
+
+1. **`allowMutation` removed** - Runtime modifications always available via `api.slothlet.api.*`
+2. **`allowInitialOverwrite` removed** - Use `collision.initial` mode
+3. **`allowAddApiOverwrite` removed** - Use `collision.addApi` mode
+4. **More granular control** - 5 modes instead of boolean flags
+5. **Per-context control** - Different behavior for initial vs addApi contexts
+6. **Better defaults** - `collision: "merge"` preserves existing + adds new
+
+**Reason:**
+- Three boolean flags were confusing and limited
+- Unified system with clear mode names
+- Better control over collision behavior
+- Consistent handling across all collision contexts
+
+---
+
 ## i18n System
 
-### 6. New: Internationalization Support
+### 7. New: Internationalization Support
 
 **v3.0.0 adds full i18n support:**
 
@@ -316,25 +399,37 @@ throw new SlothletError("INVALID_CONFIG", { ... });
 4. ✅ **Remove reference usage:**
    - `import { self, context, reference }` → `import { self, context }`
 
+5. ✅ **Update collision configuration:**
+   - `allowMutation: false` → `collision: "error"`
+   - `allowInitialOverwrite: true` → `collision: { initial: "merge" }`
+   - `allowAddApiOverwrite: false` → `collision: { addApi: "skip" }`
+   - Remove `allowMutation`, `allowInitialOverwrite`, `allowAddApiOverwrite` flags
+
 ### Medium Priority (Recommended)
 
-5. **Test with new runtime options:**
+6. **Test with new runtime options:**
    - Try `runtime: "live"` for performance-critical code
    - Verify async context propagation works correctly
 
-6. **Add i18n support to custom error messages:**
+7. **Review collision behavior:**
+   - Test existing collision scenarios with new modes
+   - Consider using `collision: "warn"` during development
+   - Use `collision: "error"` for strict production environments
+
+8. **Add i18n support to custom error messages:**
    - Consider translating user-facing messages
    - Add new language files if needed
 
 ### Low Priority (Optional)
 
-7. **Leverage new features:**
+9. **Leverage new features:**
    - Use `diagnostics: true` to enable inspection methods
    - Use `api.slothlet.diag.describe()` for API structure inspection
    - Use `api.slothlet.diag.inspect()` for comprehensive instance state
    - Use `api.slothlet.diag.context()` for debugging context state
    - Use `api.slothlet.diag.reference()` to access reference object passed to slothlet
    - Implement custom language translations
+   - Explore all 5 collision modes for advanced use cases
 
 ---
 
