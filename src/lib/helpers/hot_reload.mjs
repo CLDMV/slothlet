@@ -332,6 +332,8 @@ async function syncWrapper(existingProxy, nextProxy) {
 async function mutateApiValue(existingValue, nextValue, options) {
 	console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
 	console.log(`[mutateApiValue] existing isWrapper: ${isWrapperProxy(existingValue)}, next isWrapper: ${isWrapperProxy(nextValue)}`);
+	console.log(`[mutateApiValue] nextValue:`, nextValue);
+	console.log(`[mutateApiValue] nextValue keys:`, nextValue ? Object.keys(nextValue) : "N/A");
 
 	if (existingValue === nextValue) {
 		return;
@@ -347,8 +349,12 @@ async function mutateApiValue(existingValue, nextValue, options) {
 	// If existing is a wrapper but next is a plain object with children,
 	// merge each child into the wrapper instead of replacing
 	if (isWrapperProxy(existingValue) && !isWrapperProxy(nextValue)) {
-		if (nextValue && typeof nextValue === "object") {
-			console.log(`[mutateApiValue] Merging plain object children into existing wrapper`);
+		// Check if next is an object or function with properties
+		const nextIsObjectLike = nextValue && (typeof nextValue === "object" || typeof nextValue === "function");
+		const nextHasKeys = nextIsObjectLike && Object.keys(nextValue).length > 0;
+
+		if (nextHasKeys) {
+			console.log(`[mutateApiValue] Merging object/function properties into existing wrapper`);
 			console.log(`[mutateApiValue] nextValue keys:`, Object.keys(nextValue));
 			// Merge each child from nextValue into the existing wrapper
 			await mergeApiObjects(existingValue, nextValue, {
@@ -359,8 +365,8 @@ async function mutateApiValue(existingValue, nextValue, options) {
 			});
 			return;
 		}
-		
-		// Fallback: if nextValue is not an object, try __setImpl
+
+		// Fallback: if nextValue has no properties, try __setImpl
 		if (existingValue.__setImpl) {
 			console.log(`[mutateApiValue] Using __setImpl fallback`);
 			existingValue.__setImpl(nextValue?.__impl ?? nextValue);
@@ -402,6 +408,9 @@ async function setValueAtPath(root, parts, value, options) {
 	const parent = ensureParentPath(root, parts);
 	const finalKey = parts[parts.length - 1];
 	const existing = parent ? parent[finalKey] : undefined;
+
+	console.log(`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, options:`, options);
+
 	if (existing !== undefined && !options.allowOverwrite && !options.mutateExisting) {
 		throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 			apiPath: parts.join("."),
@@ -411,10 +420,23 @@ async function setValueAtPath(root, parts, value, options) {
 	}
 
 	if (existing !== undefined && options.mutateExisting) {
+		console.log("[setValueAtPath] mutateExisting=true: calling mutateApiValue");
 		await mutateApiValue(existing, value, { removeMissing: false });
 		return;
 	}
 
+	// NEW: When allowOverwrite is true and existing is a wrapper/object, merge instead of replace
+	// Check for wrappers or objects (typeof value might be 'function' for callable wrappers)
+	const existingIsObject = typeof existing === "object" || typeof existing === "function";
+	const valueIsObject = typeof value === "object" || typeof value === "function";
+
+	if (existing !== undefined && options.allowOverwrite && existingIsObject && valueIsObject) {
+		console.log("[setValueAtPath] allowOverwrite + both objects/wrappers: calling mutateApiValue to merge");
+		await mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true });
+		return;
+	}
+
+	console.log(`[setValueAtPath] No merge conditions met - replacing: parent["${finalKey}"] = value`);
 	parent[finalKey] = value;
 }
 
@@ -700,22 +722,25 @@ export async function addApiComponent(params) {
 
 	// Extract nested API if buildAPI returned { [apiPath]: {...} } structure
 	// This happens when the folder contains a file matching the target path name
-	// Example: api.add("config", folder) where folder has config.mjs
+	// Example: api.add("config", folder) where folder has config.mjs WITHOUT apiPathPrefix
 	// buildAPI returns { config: {...} }, we want just {...}
+	//
+	// HOWEVER: When apiPathPrefix is used, buildAPI returns the content directly
+	// (e.g., { main: ..., config: ... } for apiPathPrefix="math"), so we use the whole newApi
 	let apiToMerge = newApi;
 	const finalKey = parts[parts.length - 1];
 	const newApiKeys = Object.keys(newApi);
 	console.log(`[addApiComponent] finalKey: ${finalKey}, newApiKeys:`, newApiKeys);
-	console.log(`[addApiComponent] newApi[${finalKey}] isWrapper:`, isWrapperProxy(newApi[finalKey]));
 
-	// ALWAYS extract the final key if it exists in newApi, regardless of how many keys
-	// This ensures we're merging the wrapper itself, not its siblings
-	if (newApi[finalKey] !== undefined) {
+	// Only extract finalKey if we're NOT using apiPathPrefix (prefix means content is already structured)
+	if (newApi[finalKey] !== undefined && !normalizedPath.includes(".")) {
+		console.log(`[addApiComponent] Extracting ${finalKey}, isWrapper:`, isWrapperProxy(newApi[finalKey]));
 		apiToMerge = newApi[finalKey];
-		console.log(`[addApiComponent] Extracted ${finalKey}, isWrapper:`, isWrapperProxy(apiToMerge));
 		if (instance.config.debug?.api) {
 			console.log(`[hot_reload] Extracted ${finalKey} from newApi:`, Object.keys(apiToMerge || {}));
 		}
+	} else {
+		console.log(`[addApiComponent] Using full newApi as apiToMerge (apiPathPrefix mode or no finalKey match)`);
 	}
 
 	if (instance.config.debug?.api) {
