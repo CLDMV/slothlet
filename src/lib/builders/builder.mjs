@@ -36,7 +36,7 @@ export async function buildAPI(options) {
 		throw new SlothletError(
 			"INVALID_CONFIG_DIR_INVALID",
 			{
-				value: dir
+				dir: dir
 			},
 			null,
 			{ validationError: true }
