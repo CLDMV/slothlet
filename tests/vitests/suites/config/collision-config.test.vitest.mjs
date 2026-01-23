@@ -127,24 +127,25 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "merge" }
 			});
 			
-			const originalAdd = (getMath(api, config.dir)).add;
+			const math = getMath(api, config.dir);
+			const originalAdd = math.add;
 			expect(originalAdd).toBeTypeOf("function");
 			expect(await originalAdd(2, 3)).toBe(5);
 			
-			// Add additional-math.mjs content to math path
+			// Add additional-math.mjs content to math path - should merge
 			await api.slothlet.api.add("math", `${config.dir}/additional-math.mjs`, {}, {
 				moduleId: "math-additional",
 				allowOverwrite: true
 			});
 			
 			// Original function should still exist
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
-			expect(await (getMath(api, config.dir)).add(2, 3)).toBe(5);
+			expect(math.add).toBeTypeOf("function");
+			expect(await math.add(2, 3)).toBe(5);
 			
 			// New functions should also exist
-			expect((getMath(api, config.dir)).power).toBeTypeOf("function");
-			expect((getMath(api, config.dir)).sqrt).toBeTypeOf("function");
-			expect(await (getMath(api, config.dir)).power(2, 3)).toBe(8);
+			expect(math.power).toBeTypeOf("function");
+			expect(math.sqrt).toBeTypeOf("function");
+			expect(await math.power(2, 3)).toBe(8);
 		});
 
 		it("replace mode: should completely replace existing value", async () => {
@@ -152,18 +153,18 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "replace" }
 			});
 			
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
+			const math = getMath(api, config.dir);
+			expect(math.add).toBeTypeOf("function");
 			
-			// Replace with additional-math.mjs
+			// Replace with additional-math.mjs (using forceOverwrite for replace mode)
 			await api.slothlet.api.add("math", `${config.dir}/additional-math.mjs`, {}, {
 				moduleId: "math-replace",
 				allowOverwrite: true,
 				forceOverwrite: true
 			});
 			
-			// Original should be gone, new should exist
-			// Note: In replace mode with modules, structure depends on implementation
-			// This test validates the mode is accepted and doesn't error
+			// After replace, structure depends on implementation
+			// This validates the mode is accepted and doesn't error
 		});
 
 		it("skip mode: should silently keep existing value", async () => {
@@ -171,7 +172,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "skip" }
 			});
 			
-			const originalAdd = (getMath(api, config.dir)).add;
+			const math = getMath(api, config.dir);
+			const originalAdd = math.add;
 			expect(await originalAdd(2, 3)).toBe(5);
 			
 			// Try to add to math path (should be skipped)
@@ -180,11 +182,11 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 			
 			// Original should still exist
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
-			expect(await (getMath(api, config.dir)).add(2, 3)).toBe(5);
+			expect(math.add).toBeTypeOf("function");
+			expect(await math.add(2, 3)).toBe(5);
 			
 			// New functions should NOT exist (collision was skipped)
-			expect((getMath(api, config.dir)).power).toBeUndefined();
+			expect(math.power).toBeUndefined();
 		});
 
 		it("warn mode: should warn and keep existing value", async () => {
@@ -193,7 +195,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				silent: false
 			});
 			
-			const originalAdd = (getMath(api, config.dir)).add;
+			const math = getMath(api, config.dir);
+			const originalAdd = math.add;
 			
 			// Try to add to math path (should warn and skip)
 			await api.slothlet.api.add("math", `${config.dir}/additional-math.mjs`, {}, {
@@ -201,8 +204,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 			
 			// Original should still exist
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
-			expect(await (getMath(api, config.dir)).add(2, 3)).toBe(5);
+			expect(math.add).toBeTypeOf("function");
+			expect(await math.add(2, 3)).toBe(5);
 		});
 
 		it("error mode: should throw error on collision", async () => {
@@ -210,7 +213,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "error" }
 			});
 			
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
+			const math = getMath(api, config.dir);
+			expect(math.add).toBeTypeOf("function");
 			
 			// Try to add to math path (should throw)
 			await expect(
@@ -272,17 +276,19 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 			
 			// Math module has nested structure
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
+			const math = getMath(api, config.dir);
+			expect(math.add).toBeTypeOf("function");
 			
 			// Add more content to math (should merge at all levels)
-			await api.slothlet.api.add("math", `${config.dir}/additional-math.mjs`, {}, {
+			const additionalPath = config.dir.replace(/api_test(\/|\\)$/i, 'api_test/additional-math.mjs');
+			await api.slothlet.api.add("math", additionalPath, {}, {
 				moduleId: "nested-merge",
 				allowOverwrite: true
 			});
 			
 			// Both original and new should coexist
-			expect((getMath(api, config.dir)).add).toBeTypeOf("function");
-			expect((getMath(api, config.dir)).power).toBeTypeOf("function");
+			expect(math.add).toBeTypeOf("function");
+			expect(math.power).toBeTypeOf("function");
 		});
 	});
 });
