@@ -10,8 +10,7 @@
  * @example
  * const api = await buildFinalAPI({ userApi, instance, config });
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { t } from "@cldmv/slothlet/i18n";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/helpers/hot_reload";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
@@ -55,7 +54,7 @@ export async function buildFinalAPI(options) {
 
 	// Warn if user has 'slothlet' property (reserved namespace)
 	if (clonedApi.slothlet) {
-		console.warn(t("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" }));
+		new SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" });
 	}
 
 	// Create slothlet namespace with all built-in methods
