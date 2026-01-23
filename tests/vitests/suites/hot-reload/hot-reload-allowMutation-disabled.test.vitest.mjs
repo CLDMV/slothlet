@@ -1,13 +1,20 @@
 /**
- * @fileoverview Tests for allowMutation: false config option
+ * @fileoverview Tests for allowMutation: false config option (DEPRECATED)
  *
  * @description
- * Tests that allowMutation: false properly disables all mutation operations:
- * - api.slothlet.api namespace should not exist (unless diagnostics: true)
- * - api.slothlet.reload should not exist (unless diagnostics: true)
- * - Mutation methods should throw INVALID_CONFIG_MUTATION_DISABLED errors when called via diagnostics
+ * NOTE: allowMutation config option has been REMOVED in v3.
+ * This test file is kept for backward compatibility testing only.
+ * 
+ * The allowMutation flag has been replaced by the collision configuration system.
+ * To disable mutations, use: collision: "error"
+ * 
+ * These tests now verify that:
+ * - Passing allowMutation is ignored (no effect)
+ * - Mutation methods are always available
+ * - Use collision config for controlling behavior
  *
  * @module tests/vitests/processed/hot-reload/allowMutation-disabled.test.vitest
+ * @deprecated Use collision config instead
  */
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
@@ -38,7 +45,7 @@ const MATRIX_CONFIGS = getMatrixConfigs({}).flatMap(({ name, config }) =>
 	}))
 );
 
-describe.each(MATRIX_CONFIGS)("allowMutation: false - $name", ({ config }) => {
+describe.each(MATRIX_CONFIGS)("allowMutation config (DEPRECATED) - $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -48,35 +55,35 @@ describe.each(MATRIX_CONFIGS)("allowMutation: false - $name", ({ config }) => {
 		api = null;
 	});
 
-	it("should not expose api.slothlet.api when allowMutation: false", async () => {
+	it("should ignore allowMutation: false (deprecated config)", async () => {
 		api = await createApiInstance(config, { allowMutation: false });
 
-		expect(api.slothlet.api).toBeUndefined();
+		// Mutation methods should still be available (allowMutation removed)
+		expect(api.slothlet.api).toBeDefined();
+		expect(api.slothlet.reload).toBeTypeOf("function");
 	});
 
-	it("should not expose api.slothlet.reload when allowMutation: false", async () => {
-		api = await createApiInstance(config, { allowMutation: false });
-
-		expect(api.slothlet.reload).toBeUndefined();
-	});
-
-	it("should expose mutation methods when diagnostics: true even with allowMutation: false", async () => {
-		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
+	it("should use collision config instead of allowMutation", async () => {
+		// To disable mutations now, use collision: "error"
+		api = await createApiInstance(config, { collision: "error" });
 
 		expect(api.slothlet.api).toBeDefined();
-		expect(api.slothlet.reload).toBeDefined();
+		
+		// Trying to add with collision mode "error" should throw
+		await expect(
+			api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })
+		).rejects.toThrow();
 	});
 
-	it("should throw INVALID_CONFIG_MUTATION_DISABLED when calling add via diagnostics", async () => {
-		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
+	it("should allow mutations with collision: merge (default)", async () => {
+		api = await createApiInstance(config, { collision: "merge" });
 
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("INVALID_CONFIG_MUTATION_DISABLED");
-	});
-
-	it("should throw INVALID_CONFIG_MUTATION_DISABLED when calling remove via diagnostics", async () => {
-		api = await createApiInstance(config, { allowMutation: false, diagnostics: true });
-
-		await expect(api.slothlet.api.remove("test")).rejects.toThrow("INVALID_CONFIG_MUTATION_DISABLED");
+		expect(api.slothlet.api).toBeDefined();
+		expect(api.slothlet.reload).toBeTypeOf("function");
+		
+		// Should be able to add without errors
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-test" });
+		expect(api.extra).toBeDefined();
 	});
 
 	it("should throw INVALID_CONFIG_MUTATION_DISABLED when calling reload via diagnostics", async () => {

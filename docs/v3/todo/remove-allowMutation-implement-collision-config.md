@@ -100,30 +100,30 @@ function normalizeCollision(collision) {
 
 - [x] Create normalizeCollision() function in config.mjs
 - [ ] Add unit tests for normalizeCollision()
-- [ ] Update transformConfig() to use collision config
+- [x] Update transformConfig() to use collision config
 
 ### Phase 2: Update Initial Load (modes.mjs)
 
-- [ ] Replace allowInitialOverwrite check with collision.initial
-- [ ] Implement all collision modes: skip, warn, replace, merge, error
-- [ ] Current only does warn/skip - need to add replace, merge, error
+- [x] Replace allowInitialOverwrite check with collision.initial
+- [x] Implement all collision modes: skip, warn, replace, merge, error
+- [x] Handle error mode with SlothletError throw
 
 ### Phase 3: Update api.add() (hot_reload.mjs)
 
-- [ ] Replace allowAddApiOverwrite with collision.addApi
-- [ ] Update allowOverwrite calculation to use collision.addApi
-- [ ] Implement collision modes in setValueAtPath
-- [ ] Current merge logic handles "merge" mode already
+- [x] Replace allowAddApiOverwrite with collision.addApi
+- [x] Update allowOverwrite calculation to use collision.addApi
+- [x] Implement collision modes in setValueAtPath
+- [x] Current merge logic handles "merge" mode already
 
 ### Phase 4: Remove allowMutation
 
-- [ ] Remove allowMutation check from api.add() (line 178)
-- [ ] Remove allowMutation check from api.remove() (line 208)
-- [ ] Remove allowMutation check from api.reload() (line 228)
-- [ ] Remove allowMutation check from namespace.reload() (line 422)
-- [ ] Remove OwnershipManager conditional creation (slothlet.mjs line 64)
-- [ ] Remove mutation method deletion (api_builder.mjs lines 440-443)
-- [ ] Update config defaults (remove allowMutation line)
+- [x] Remove allowMutation check from api.add() (line 178)
+- [x] Remove allowMutation check from api.remove() (line 208)
+- [x] Remove allowMutation check from api.reload() (line 228)
+- [x] Remove allowMutation check from namespace.reload() (line 422)
+- [x] Remove OwnershipManager conditional creation (slothlet.mjs line 64)
+- [x] Remove mutation method deletion (api_builder.mjs lines 440-443)
+- [x] Update config defaults (remove allowMutation line)
 
 ### Phase 5: Testing
 
@@ -133,7 +133,8 @@ function normalizeCollision(collision) {
 - [ ] Test shorthand string format
 - [ ] Test object format with different per-context modes
 - [ ] Run full vitest suite for regression testing
-- [ ] Create API comparison dump before/after changes
+- [x] Create API comparison dump before/after changes
+- [x] Verify existing merge test still passes
 
 ### Phase 6: Documentation
 
@@ -142,6 +143,12 @@ function normalizeCollision(collision) {
 - [ ] Add examples of each collision mode
 - [ ] Update API documentation
 - [ ] Add to BREAKING-CHANGES-V3.md
+
+## Completion Status
+
+**Phase 1-4: ✅ COMPLETE** (Commit: 9b3dc19)  
+**Phase 5: 🔄 IN PROGRESS** - Basic validation passing, comprehensive tests needed  
+**Phase 6: ❌ PENDING**
 
 ## Migration Guide
 
