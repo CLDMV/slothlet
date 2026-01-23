@@ -94,32 +94,68 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	});
 
 	describe("String shorthand", () => {
-		it("should apply string collision mode to both contexts", async () => {
+		it("should apply string collision mode to both contexts (skip)", async () => {
+			// String shorthand: collision: "skip" => { initial: "skip", addApi: "skip" }
 			api = await createApiInstance(config, { collision: "skip" });
 
-			// Skip mode - API should load and function should work
 			const math = getMath(api, config.dir);
-			expect(math).toBeDefined();
+			const originalAdd = math.add;
+			expect(await originalAdd(2, 3)).toBe(5);
+
+			// Try to add collision content to math path (should be skipped by addApi: "skip")
+			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+				moduleId: "math-skip-shorthand"
+			});
+
+			// Original should still exist (collision was skipped)
 			expect(math.add).toBeTypeOf("function");
-			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
-			expect([5, 1005]).toContain(result);
+			expect(await math.add(2, 3)).toBe(5);
+
+			// New functions should NOT exist (collision was skipped)
+			expect(math.power).toBeUndefined();
+			expect(math.sqrt).toBeUndefined();
 		});
 
-		it("should normalize collision mode case-insensitively", async () => {
+		it("should normalize collision mode case-insensitively (MERGE)", async () => {
+			// String shorthand with uppercase: collision: "MERGE" => { initial: "merge", addApi: "merge" }
 			api = await createApiInstance(config, { collision: "MERGE" });
 
 			const math = getMath(api, config.dir);
-			expect(math).toBeDefined();
+			const originalAdd = math.add;
+			expect(await originalAdd(2, 3)).toBe(5);
+
+			// Add collision content to math path (should merge despite uppercase)
+			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+				moduleId: "math-merge-uppercase"
+			});
+
+			// Original should still exist (merged)
 			expect(math.add).toBeTypeOf("function");
+			expect(await math.add(2, 3)).toBe(5);
+
+			// New functions should also exist (merged)
+			expect(math.power).toBeTypeOf("function");
+			expect(math.sqrt).toBeTypeOf("function");
 		});
 
 		it("should default invalid modes to merge", async () => {
+			// Invalid mode defaults to merge: collision: "invalid" => { initial: "merge", addApi: "merge" }
 			api = await createApiInstance(config, { collision: "invalid-mode" });
 
-			// Should default to merge and load successfully
 			const math = getMath(api, config.dir);
-			expect(math).toBeDefined();
+			const originalAdd = math.add;
+			expect(await originalAdd(2, 3)).toBe(5);
+
+			// Add collision content - should merge (invalid mode defaults to merge)
+			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+				moduleId: "math-invalid-mode"
+			});
+
+			// Should behave like merge: both original and new exist
 			expect(math.add).toBeTypeOf("function");
+			expect(await math.add(2, 3)).toBe(5);
+			expect(math.power).toBeTypeOf("function");
+			expect(math.sqrt).toBeTypeOf("function");
 		});
 	});
 	describe("collision.initial modes", () => {
@@ -192,8 +228,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "replace" }
 			});
 
-			const math = getMath(api, config.dir);
-			const originalAdd = math.add;
+			const mathOld = getMath(api, config.dir);
+			const originalAdd = mathOld.add;
 			expect(originalAdd).toBeTypeOf("function");
 
 			// Replace math path with math-collision.mjs content
@@ -201,16 +237,22 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				moduleId: "math-collision"
 			});
 
-			// After replace, original add should be gone (replaced)
-			expect(math.add).toBeUndefined();
+			// Get NEW reference after replacement
+			const mathNew = getMath(api, config.dir);
 
-			// New functions from collision file should exist
-			expect(math.power).toBeTypeOf("function");
-			expect(math.sqrt).toBeTypeOf("function");
-			expect(math.modulo).toBeTypeOf("function");
-			expect(await math.power(2, 3)).toBe(8);
-			expect(await math.sqrt(16)).toBe(4);
-			expect(await math.modulo(10, 3)).toBe(1);
+			// After replace, original add should be gone from NEW reference
+			expect(mathNew.add).toBeUndefined();
+
+			// Old reference should still have add (it's a different object now)
+			expect(mathOld.add).toBeTypeOf("function");
+
+			// New functions from collision file should exist in NEW reference
+			expect(mathNew.power).toBeTypeOf("function");
+			expect(mathNew.sqrt).toBeTypeOf("function");
+			expect(mathNew.modulo).toBeTypeOf("function");
+			expect(await mathNew.power(2, 3)).toBe(8);
+			expect(await mathNew.sqrt(16)).toBe(4);
+			expect(await mathNew.modulo(10, 3)).toBe(1);
 		});
 
 		it("skip mode: should silently keep existing value", async () => {
