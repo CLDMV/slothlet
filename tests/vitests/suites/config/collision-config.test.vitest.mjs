@@ -13,7 +13,7 @@
  * - error: Throw error on collision
  * 
  * Tests both contexts:
- * - collision.initial: During buildAPI (initial load) using overwrite-test files
+ * - collision.initial: During buildAPI (initial load) using conflict-1.mjs and conflict-2.mjs
  * - collision.addApi: During api.add() operations using math-collision.mjs from api_test_collections
  *
  * @module tests/vitests/config/collision-config.test.vitest
@@ -127,7 +127,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "merge", addApi: "merge" }
 			});
 			
-			// overwrite-test-2.mjs loads after overwrite-test-1.mjs (alphabetically)
+			// conflict-2.mjs loads after conflict-1.mjs (alphabetically)
 			// With merge mode, second file should overwrite
 			const result = config.mode === "lazy" ? await api.conflictingName() : api.conflictingName();
 			
@@ -140,7 +140,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "skip", addApi: "merge" }
 			});
 			
-			// overwrite-test-1.mjs loads first (alphabetically)
+			// conflict-1.mjs loads first (alphabetically)
 			// With skip mode, first file wins, second is skipped
 			const result = config.mode === "lazy" ? await api.conflictingName() : api.conflictingName();
 			
@@ -176,6 +176,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 				collision: { initial: "replace", addApi: "merge" }
 			});
 			
+			// conflict-2.mjs completely replaces conflict-1.mjs
 			// With replace mode, second file completely replaces first
 			const result = config.mode === "lazy" ? await api.conflictingName() : api.conflictingName();
 			
@@ -205,8 +206,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(5);
 			
 			// Add math-collision.mjs content to existing math path - should merge
-			const collectionsDir = `${config.dir}/../api_test_collections`;
-			await api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
+			await api.slothlet.api.add("math", collisionFile, {}, {
 				moduleId: "math-collision",
 				allowOverwrite: true
 			});
@@ -232,8 +233,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 			
 			// Replace math path with math-collision.mjs content
-			const collectionsDir = `${config.dir}/../api_test_collections`;
-			await api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
+			await api.slothlet.api.add("math", collisionFile, {}, {
 				moduleId: "math-replace",
 				allowOverwrite: true,
 				forceOverwrite: true
@@ -253,8 +254,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(5);
 			
 			// Try to add collision content to math path (should be skipped)
-			const collectionsDir = `${config.dir}/../api_test_collections`;
-			await api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
+			await api.slothlet.api.add("math", collisionFile, {}, {
 				moduleId: "math-skip"
 			});
 			
@@ -277,8 +278,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const originalAdd = math.add;
 			
 			// Try to add collision content to math path (should warn and skip)
-			const collectionsDir = `${config.dir}/../api_test_collections`;
-			await api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
+			await api.slothlet.api.add("math", collisionFile, {}, {
 				moduleId: "math-warn"
 			});
 			
@@ -299,9 +300,9 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 			
 			// Try to add collision content to math path (should throw)
-			const collectionsDir = `${config.dir}/../api_test_collections`;
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
 			await expect(
-				api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+				api.slothlet.api.add("math", collisionFile, {}, {
 					moduleId: "math-error"
 				})
 			).rejects.toThrow();
@@ -318,9 +319,9 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect((getMath(api, config.dir))).toBeDefined();
 			
 			// api.add() collision should throw (error mode)
-			const collectionsDir = `${config.dir}/../api_test_collections`;
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
 			await expect(
-				api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+				api.slothlet.api.add("math", collisionFile, {}, {
 					moduleId: "test-error"
 				})
 			).rejects.toThrow();
@@ -364,8 +365,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 			
 			// Add collision content to math path (should merge at all levels)
-			const collectionsDir = `${config.dir}/../api_test_collections`;
-			await api.slothlet.api.add("math", `${collectionsDir}/math-collision.mjs`, {}, {
+			const collisionFile = TEST_DIRS.API_TEST_COLLECTIONS + "/math-collision.mjs";
+			await api.slothlet.api.add("math", collisionFile, {}, {
 				moduleId: "nested-merge",
 				allowOverwrite: true
 			});
