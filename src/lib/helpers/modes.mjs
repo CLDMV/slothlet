@@ -83,16 +83,8 @@ function cloneWrapperImpl(value, mode) {
  * @param {string} collisionContext - Either 'initial' or 'addApi'
  * @returns {boolean} True if ownership conflicts should be allowed
  */
-function shouldAllowOwnershipConflict(config, collisionContext = "initial") {
-	const collisionMode = config.collision?.[collisionContext] || "merge";
-	// Allow ownership conflicts for modes that overwrite/merge:
-	// - "merge": needs to merge properties
-	// - "replace": needs to replace value
-	// Block for modes that prevent overwrite:
-	// - "skip": silently keeps existing
-	// - "warn": warns but keeps existing
-	// - "error": throws OWNERSHIP_CONFLICT (this IS the collision error)
-	return collisionMode === "merge" || collisionMode === "replace";
+function getOwnershipCollisionMode(config, collisionContext = "initial") {
+	return config.collision?.[collisionContext] || "merge";
 }
 
 /**
@@ -388,7 +380,7 @@ export async function processFiles(
 									moduleId: file.moduleId,
 									apiPath: `${categoryName}.${key}`,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+									collisionMode: getOwnershipCollisionMode(config, collisionContext)
 								});
 							}
 						}
@@ -461,7 +453,7 @@ export async function processFiles(
 									moduleId: file.moduleId,
 									apiPath: `${categoryName}.${key}`,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+									collisionMode: getOwnershipCollisionMode(config, collisionContext)
 								});
 							}
 						}
@@ -472,7 +464,7 @@ export async function processFiles(
 							moduleId: file.moduleId,
 							apiPath: categoryName,
 							source: "core",
-							allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+							collisionMode: getOwnershipCollisionMode(config, collisionContext)
 						});
 					}
 
@@ -518,7 +510,7 @@ export async function processFiles(
 									moduleId: file.moduleId,
 									apiPath: `${categoryName}.${propKey}`,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+									collisionMode: getOwnershipCollisionMode(config, collisionContext)
 								});
 							}
 						}
@@ -549,7 +541,7 @@ export async function processFiles(
 										moduleId: file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+										collisionMode: getOwnershipCollisionMode(config, collisionContext)
 									});
 								}
 							}
@@ -586,7 +578,7 @@ export async function processFiles(
 									moduleId: file.moduleId,
 									apiPath: `${categoryName}.${key}`,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+									collisionMode: getOwnershipCollisionMode(config, collisionContext)
 								});
 							}
 						}
@@ -631,7 +623,7 @@ export async function processFiles(
 							moduleId: file.moduleId,
 							apiPath: `${categoryName}.${preferredName}`,
 							source: "core",
-							allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+							collisionMode: getOwnershipCollisionMode(config, collisionContext)
 						});
 					}
 					continue;
@@ -670,7 +662,7 @@ export async function processFiles(
 					moduleId: file.moduleId,
 					apiPath,
 					source: "core",
-					allowConflict: shouldAllowOwnershipConflict(config, collisionContext),
+					collisionMode: getOwnershipCollisionMode(config, collisionContext),
 					collisionMode,
 					config
 				});
@@ -780,7 +772,7 @@ export async function processFiles(
 									moduleId: file.moduleId,
 									apiPath,
 									source: "core",
-									allowConflict: shouldAllowOwnershipConflict(config, collisionContext),
+									collisionMode: getOwnershipCollisionMode(config, collisionContext),
 									collisionMode,
 									config
 								});
@@ -834,7 +826,7 @@ export async function processFiles(
 					moduleId: file.moduleId,
 					apiPath: moduleName,
 					source: "core",
-					allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+					collisionMode: getOwnershipCollisionMode(config, collisionContext)
 				});
 			}
 		} else {
@@ -871,7 +863,7 @@ export async function processFiles(
 						moduleId: file.moduleId,
 						apiPath: moduleName,
 						source: "core",
-						allowConflict: shouldAllowOwnershipConflict(config, collisionContext)
+						collisionMode: getOwnershipCollisionMode(config, collisionContext)
 					});
 				}
 			}

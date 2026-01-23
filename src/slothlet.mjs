@@ -160,7 +160,7 @@ class Slothlet {
 				apiPath: path,
 				value: api,
 				source: "core",
-				allowConflict: true
+				collisionMode: "merge"
 			});
 		}
 
@@ -173,7 +173,7 @@ class Slothlet {
 					apiPath: childPath,
 					value,
 					source: "core",
-					allowConflict: true
+					collisionMode: "merge"
 				});
 
 				// Recurse for objects (but not functions with properties - handle separately if needed)

@@ -552,7 +552,7 @@ function registerOwnership(ownership, moduleId, apiPath, value) {
 			apiPath: pathKey,
 			value: currentValue,
 			source: "add",
-			allowConflict: true
+			collisionMode: "merge"
 		});
 
 		if (currentValue && (typeof currentValue === "object" || typeof currentValue === "function") && !Array.isArray(currentValue)) {
