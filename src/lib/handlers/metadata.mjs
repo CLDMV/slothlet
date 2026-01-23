@@ -5,7 +5,7 @@
  */
 
 import { getStack, toFsPath } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { t } from "@cldmv/slothlet/i18n";
+import { SlothletWarning } from "@cldmv/slothlet/helpers/errors";
 
 // Runtime module import (lazy loaded on first use)
 let runtimeModule = null;
@@ -29,7 +29,7 @@ async function ensureRuntime() {
 				return module;
 			})
 			.catch((err) => {
-				console.error(t("ERROR_RUNTIME_IMPORT_FAILED", { error: err.message }));
+				new SlothletWarning("ERROR_RUNTIME_IMPORT_FAILED", {}, err);
 				runtimeModule = {}; // Empty object to prevent repeated imports
 				return {};
 			});

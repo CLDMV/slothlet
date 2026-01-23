@@ -188,6 +188,23 @@ function analyzeError(error) {
 		return { status: "✅ OK (Validation)", issues: [] };
 	}
 
+	// Warnings don't need originalError (they're informational, not wrapping errors)
+	if (error.errorCode.startsWith("WARNING_") || error.fullMatch.includes("SlothletWarning")) {
+		// Still check for translation and hint
+		const hasTranslation = checkTranslationExists(error.errorCode);
+		const hasHint = checkHintExists(error.errorCode);
+		
+		if (!hasTranslation) {
+			issues.push("❌ Missing error translation (needs error code key in translations)");
+		}
+		if (!hasHint) {
+			issues.push("❌ No hint in translations (needs HINT_ key)");
+		}
+		
+		const status = issues.length === 0 ? "✅ OK (Warning)" : "❌ Issues";
+		return { status, issues, hasHint, hasTranslation };
+	}
+
 	// Rethrows of existing SlothletErrors are fine (bare "throw error;" or "throw err;")
 	const isRethrow =
 		error.code === "SlothletError" &&
