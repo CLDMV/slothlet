@@ -29,11 +29,13 @@ class Slothlet {
 		this.reference = null;
 		this.context = null;
 
+		// Component categories
+		this.componentCategories = ["helpers", "handlers", "builders", "processors"];
+
 		// Component namespaces (populated by _initializeComponents)
-		this.helpers = {};
-		this.handlers = {};
-		this.builders = {};
-		this.processors = {};
+		for (const category of this.componentCategories) {
+			this[category] = {};
+		}
 	}
 
 	/**
@@ -49,10 +51,9 @@ class Slothlet {
 		//   - modes/ (lazy/eager mode handlers, not instance components)
 		//   - i18n/ (translation utilities, not instance components)
 
-		const categories = ["helpers", "handlers", "builders", "processors"];
 		const baseDir = join(import.meta.dirname, "lib");
 
-		for (const category of categories) {
+		for (const category of this.componentCategories) {
 			const categoryDir = join(baseDir, category);
 			const files = readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
 
