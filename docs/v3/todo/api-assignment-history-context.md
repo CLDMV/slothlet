@@ -591,28 +591,22 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 ### Step-by-Step Migration
 
 - [ ] Move file: `git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs`
-- [ ] **TEST** (tail output):
+- [ ] **⚠️ DO NOT TEST YET - imports are broken!**
+- [ ] Update imports in `builders/builder.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
+- [ ] Update imports in `helpers/hot_reload.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
+- [ ] Update imports in `helpers/modes.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
+- [ ] Update package.json exports: `node tools/build-exports.mjs`
+- [ ] **NOW TEST** (tail output):
   ```powershell
   npm run debug 2>&1 | Select-Object -Last 40
   npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
   ```
-- [ ] **CHECK**: Zero errors? If yes, special commit!
-- [ ] Update package.json exports (run `node tools/build-exports.mjs`)
-- [ ] **TEST**: Both critical tests (tail last 40 lines)
-- [ ] Update imports in `builders/builder.mjs`
-- [ ] **TEST**: Both critical tests (tail last 40 lines)
-- [ ] Update imports in `helpers/hot_reload.mjs`
-- [ ] **TEST**: Both critical tests (tail last 40 lines)
-- [ ] Update imports in `helpers/modes.mjs`
-- [ ] **TEST**: Both critical tests (tail last 40 lines)
-- [ ] **CHECK**: Still zero errors? Special commit if yes!
-- [ ] **COMMIT**: "refactor: move api_assignment to builders/" (or special zero-error message)
-- [ ] Update JSDoc @module tags
+- [ ] **CHECK**: Zero errors? If yes, special commit message!
+- [ ] **COMMIT**: "refactor: move api_assignment to builders/" (or special zero-error message if applicable)
+- [ ] Update JSDoc @module tags in the moved file
 - [ ] Update documentation references
 - [ ] **TEST**: Both critical tests (tail last 40 lines)
 - [ ] **COMMIT**: "docs: update api-assignment documentation"
-- [ ] Run full validation: `npm run precommit`
-- [ ] **FINAL COMMIT**: "refactor: complete api-assignment migration"
 
 ## Conclusion
 
