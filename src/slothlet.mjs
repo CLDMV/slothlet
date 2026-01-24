@@ -6,7 +6,7 @@ import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
 import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { Builder } from "@cldmv/slothlet/builders/builder";
-import { buildFinalAPI } from "@cldmv/slothlet/builders/api_builder";
+import { ApiBuilder } from "@cldmv/slothlet/builders/api_builder";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
@@ -20,7 +20,7 @@ class Slothlet {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
 		this.SlothletWarning = SlothletWarning;
-		
+
 		// Instance properties
 		this.instanceID = null;
 		this.config = null;
@@ -31,10 +31,11 @@ class Slothlet {
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
-		
+
 		// Instantiate component classes
 		this.apiManager = new ApiManager(this);
 		this.builder = new Builder(this);
+		this.apiBuilder = new ApiBuilder(this);
 	}
 
 	/**
@@ -243,11 +244,7 @@ class Slothlet {
 	 * @private
 	 */
 	buildFinalAPI(userApi) {
-		return buildFinalAPI({
-			userApi,
-			instance: this,
-			config: this.config
-		});
+		return this.apiBuilder.buildFinalAPI(userApi);
 	}
 }
 
