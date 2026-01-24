@@ -31,6 +31,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
@@ -39,17 +40,19 @@ import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
  * @class ApiManager
+ * @extends ComponentBase
  * @package
  *
  * @description
  * Class-based handler for managing API components at runtime. Tracks add history,
- * removed module IDs, and initial configuration per instance.
+ * removed module IDs, and initial configuration per instance. Extends ComponentBase
+ * for common instance property access.
  *
  * @example
  * const manager = new ApiManager(instance);
  * await manager.addApiComponent({ apiPath: "plugins", folderPath: "./plugins" });
  */
-export class ApiManager {
+export class ApiManager extends ComponentBase {
 	/**
 	 * Create an ApiManager instance.
 	 * @param {object} instance - Slothlet instance.
@@ -63,87 +66,12 @@ export class ApiManager {
 	 * const manager = new ApiManager(instance);
 	 */
 	constructor(instance) {
-		this.instance = instance;
+		super(instance);
 		this.state = {
 			addHistory: [],
 			removedModuleIds: new Set(),
 			initialConfig: instance?.config || null
 		};
-	}
-
-	/**
-	 * Get instance configuration.
-	 * @returns {object} Instance configuration object.
-	 * @package
-	 *
-	 * @description
-	 * Provides access to the instance config for collision modes, debug settings, etc.
-	 *
-	 * @example
-	 * const collisionMode = manager.config.collision.addApi;
-	 */
-	get config() {
-		return this.instance.config;
-	}
-
-	/**
-	 * Get debug configuration.
-	 * @returns {object|undefined} Debug configuration or undefined.
-	 * @package
-	 *
-	 * @description
-	 * Shorthand for accessing debug settings from the instance configuration.
-	 *
-	 * @example
-	 * if (manager.debug?.api) { console.log("API debug enabled"); }
-	 */
-	get debug() {
-		return this.instance.config?.debug;
-	}
-
-	/**
-	 * Get instance ID.
-	 * @returns {string} Instance identifier.
-	 * @package
-	 *
-	 * @description
-	 * Returns the unique instance ID for debugging and tracking.
-	 *
-	 * @example
-	 * console.log(`Manager for instance: ${manager.instanceID}`);
-	 */
-	get instanceID() {
-		return this.instance.instanceID;
-	}
-
-	/**
-	 * Get instance API object.
-	 * @returns {function|object} Instance API root.
-	 * @package
-	 *
-	 * @description
-	 * Provides direct access to the instance's raw API object.
-	 *
-	 * @example
-	 * const currentValue = manager.api.plugins;
-	 */
-	get api() {
-		return this.instance.api;
-	}
-
-	/**
-	 * Get instance bound API object.
-	 * @returns {function|object} Instance bound API root.
-	 * @package
-	 *
-	 * @description
-	 * Provides direct access to the instance's context-bound API object.
-	 *
-	 * @example
-	 * const boundValue = manager.boundApi.plugins;
-	 */
-	get boundApi() {
-		return this.instance.boundApi;
 	}
 
 	/**
@@ -429,7 +357,9 @@ export class ApiManager {
 	async mutateApiValue(existingValue, nextValue, options, config) {
 		if (config?.debug?.api) {
 			console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
-			console.log(`[mutateApiValue] existing isWrapper: ${this.isWrapperProxy(existingValue)}, next isWrapper: ${this.isWrapperProxy(nextValue)}`);
+			console.log(
+				`[mutateApiValue] existing isWrapper: ${this.isWrapperProxy(existingValue)}, next isWrapper: ${this.isWrapperProxy(nextValue)}`
+			);
 			console.log(`[mutateApiValue] nextValue:`, nextValue);
 			console.log(`[mutateApiValue] nextValue keys:`, nextValue ? Object.keys(nextValue) : "N/A");
 		}
@@ -735,24 +665,14 @@ export class ApiManager {
 				this.deletePath(this.instance.boundApi, parts);
 				return;
 			}
-			await this.setValueAtPath(
-				this.instance.api,
-				parts,
-				baseValue,
-				{
-					mutateExisting: true,
-					allowOverwrite: true
-				}
-			);
-			await this.setValueAtPath(
-				this.instance.boundApi,
-				parts,
-				baseValue,
-				{
-					mutateExisting: true,
-					allowOverwrite: true
-				}
-			);
+			await this.setValueAtPath(this.instance.api, parts, baseValue, {
+				mutateExisting: true,
+				allowOverwrite: true
+			});
+			await this.setValueAtPath(this.instance.boundApi, parts, baseValue, {
+				mutateExisting: true,
+				allowOverwrite: true
+			});
 		}
 	}
 
@@ -877,27 +797,17 @@ export class ApiManager {
 			console.log(`[hot_reload] apiToMerge keys:`, Object.keys(apiToMerge));
 		}
 
-		await this.setValueAtPath(
-			this.instance.api,
-			parts,
-			apiToMerge,
-			{
-				mutateExisting,
-				allowOverwrite,
-				collisionMode
-			}
-		);
+		await this.setValueAtPath(this.instance.api, parts, apiToMerge, {
+			mutateExisting,
+			allowOverwrite,
+			collisionMode
+		});
 
-		await this.setValueAtPath(
-			this.instance.boundApi,
-			parts,
-			apiToMerge,
-			{
-				mutateExisting,
-				allowOverwrite,
-				collisionMode
-			}
-		);
+		await this.setValueAtPath(this.instance.boundApi, parts, apiToMerge, {
+			mutateExisting,
+			allowOverwrite,
+			collisionMode
+		});
 
 		if (this.instance.ownership && moduleId) {
 			this.registerOwnership(this.instance.ownership, moduleId, normalizedPath, apiToMerge);
@@ -958,24 +868,14 @@ export class ApiManager {
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.instance.ownership?.getCurrentValue?.(normalizedPath);
 				if (restoredValue !== undefined) {
-					await this.setValueAtPath(
-						this.instance.api,
-						pathParts,
-						restoredValue,
-						{
-							mutateExisting: true,
-							allowOverwrite: true
-						}
-					);
-					await this.setValueAtPath(
-						this.instance.boundApi,
-						pathParts,
-						restoredValue,
-						{
-							mutateExisting: true,
-							allowOverwrite: true
-						}
-					);
+					await this.setValueAtPath(this.instance.api, pathParts, restoredValue, {
+						mutateExisting: true,
+						allowOverwrite: true
+					});
+					await this.setValueAtPath(this.instance.boundApi, pathParts, restoredValue, {
+						mutateExisting: true,
+						allowOverwrite: true
+					});
 					return;
 				}
 				await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
@@ -1000,24 +900,14 @@ export class ApiManager {
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const restoredValue = this.instance.ownership?.getCurrentValue?.(rollback.apiPath);
 				if (restoredValue !== undefined) {
-					await this.setValueAtPath(
-						this.instance.api,
-						parts,
-						restoredValue,
-						{
-							mutateExisting: true,
-							allowOverwrite: true
-						}
-					);
-					await this.setValueAtPath(
-						this.instance.boundApi,
-						parts,
-						restoredValue,
-						{
-							mutateExisting: true,
-							allowOverwrite: true
-						}
-					);
+					await this.setValueAtPath(this.instance.api, parts, restoredValue, {
+						mutateExisting: true,
+						allowOverwrite: true
+					});
+					await this.setValueAtPath(this.instance.boundApi, parts, restoredValue, {
+						mutateExisting: true,
+						allowOverwrite: true
+					});
 				} else {
 					await this.restoreApiPath(rollback.apiPath, rollback.restoredTo);
 				}
@@ -1051,24 +941,14 @@ export class ApiManager {
 		if (ownershipResult.action === "restore") {
 			const restoredValue = this.instance.ownership?.getCurrentValue?.(normalizedPath);
 			if (restoredValue !== undefined) {
-				await this.setValueAtPath(
-					this.instance.api,
-					parts,
-					restoredValue,
-					{
-						mutateExisting: true,
-						allowOverwrite: true
-					}
-				);
-				await this.setValueAtPath(
-					this.instance.boundApi,
-					parts,
-					restoredValue,
-					{
-						mutateExisting: true,
-						allowOverwrite: true
-					}
-				);
+				await this.setValueAtPath(this.instance.api, parts, restoredValue, {
+					mutateExisting: true,
+					allowOverwrite: true
+				});
+				await this.setValueAtPath(this.instance.boundApi, parts, restoredValue, {
+					mutateExisting: true,
+					allowOverwrite: true
+				});
 				return;
 			}
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
