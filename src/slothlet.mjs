@@ -9,6 +9,7 @@ import { Builder } from "@cldmv/slothlet/builders/builder";
 import { ApiBuilder } from "@cldmv/slothlet/builders/api_builder";
 import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
 import { ModesProcessor } from "@cldmv/slothlet/builders/modes-processor";
+import { Loader } from "@cldmv/slothlet/processors/loader";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
@@ -40,6 +41,7 @@ class Slothlet {
 		this.apiBuilder = new ApiBuilder(this);
 		this.apiAssignment = new ApiAssignment(this);
 		this.modesProcessor = new ModesProcessor(this);
+		this.loader = new Loader(this);
 	}
 
 	/**
