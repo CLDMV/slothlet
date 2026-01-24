@@ -32,9 +32,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -387,7 +385,7 @@ export class ApiManager extends ComponentBase {
 				console.log(`[mutateApiValue] Merging object/function properties into existing wrapper`);
 				console.log(`[mutateApiValue] nextValue keys:`, Object.keys(nextValue));
 				// Merge each child from nextValue into the existing wrapper
-				await mergeApiObjects(existingValue, nextValue, {
+				await this.slothlet.apiAssignment.mergeApiObjects(existingValue, nextValue, {
 					removeMissing: options.removeMissing,
 					mutateExisting: true,
 					allowOverwrite: true,
@@ -406,7 +404,7 @@ export class ApiManager extends ComponentBase {
 
 		// Use unified merge logic for objects
 		if (existingValue && typeof existingValue === "object" && nextValue && typeof nextValue === "object") {
-			await mergeApiObjects(existingValue, nextValue, {
+			await this.slothlet.apiAssignment.mergeApiObjects(existingValue, nextValue, {
 				removeMissing: options.removeMissing,
 				mutateExisting: true,
 				allowOverwrite: true,
