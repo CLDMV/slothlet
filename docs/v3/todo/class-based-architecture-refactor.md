@@ -1,13 +1,16 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 24, 2026  
-**Status:** ✅ Phase 1: COMPLETE (5 of 5 file moves done) - Ready for Phase 2  
+**Status:** ⏳ Phase 2: In Progress (1 of 4 steps complete) - api-manager converted  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `48c3400` - Step 1.4 complete, all Phase 1 moves done
+**Latest Progress:** `5495a4b` - Phase 2.1 complete - api-manager converted to ApiManager class
 
 ## Progress Summary
 
 ### ✅ Completed
+
+**Phase 1: File Reorganization (5/5 COMPLETE)**
+
 - **Step 1.3**: Moved `helpers/api_assignment.mjs` → `builders/api-assignment.mjs` (commits `9a3fb82`, `e265ecb`)
   - File moved with `git mv` preserving history
   - All imports updated in `api-manager.mjs` (formerly hot_reload.mjs) and `modes.mjs`
@@ -49,15 +52,30 @@
 
 - **Package.json**: Added `./processors/*` wildcard export (commit `4ab350d`)
 
-### 🎯 Next Steps - Phase 2: Class Conversions
-- **Phase 2.1**: Convert api-manager.mjs to ApiManager class
-- **Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment)
-- **Phase 2.3**: Convert processors to classes (loader, flatten, modes-processor)
-- **Phase 2.4**: Refactor Slothlet main class to use class-based components
-- **Step 1.5a**: Move `helpers/loader.mjs` → `processors/loader.mjs`
-- **Step 1.5b**: Move `helpers/flatten.mjs` → `processors/flatten.mjs`
-- **Step 1.4**: Split `helpers/modes.mjs` into utils and processor (complex, save for last)
-- **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
+- **factories/ directory**: Created for factory pattern files (commit `73ebd93`)
+  - Moved `context.mjs` from handlers/ to factories/
+  - Added `./factories/*` to package.json exports
+  - Factory pattern: Select/provide class instances (getContextManager selects async/live)
+
+**Phase 2: Class Conversions (1/4 COMPLETE)**
+
+- **Phase 2.1**: ✅ Convert api-manager.mjs to ApiManager class (commit `5495a4b`)
+  - Converted function-based to class-based architecture
+  - WeakMap state → instance properties (addHistory, removedModuleIds, initialConfig)
+  - 14 private functions → private methods
+  - 3 exported functions → public methods (addApiComponent, removeApiComponent, reloadApiComponent)
+  - Added getters: config, debug, instanceID, api, boundApi
+  - Updated api_builder.mjs to instantiate ApiManager and use class methods
+  - Bound syncWrapper method when passing to mergeApiObjects
+  - All 441 debug paths pass (3 acceptable exportDefault.extra differences)
+  - All 240 collision config tests pass ✅
+
+### 🎯 Next Steps
+
+**Phase 2: Class Conversions (Continue)**
+- **Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment, modes-processor)
+- **Phase 2.3**: Convert processors to classes (loader, flatten)  
+- **Phase 2.4**: Update Slothlet main class to use class-based components
 
 ### 📝 File Naming Convention
 **All source files must use kebab-case** (e.g., `api-manager.mjs`, not `api_manager.mjs` or `apiManager.mjs`). This refactor includes renaming:
