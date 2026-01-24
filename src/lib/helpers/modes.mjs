@@ -3,7 +3,7 @@
  * @module @cldmv/slothlet/helpers/modes
  */
 import path from "node:path";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/helpers/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
@@ -124,9 +124,14 @@ function safeAssign(targetApi, propertyName, value, config, collisionContext = "
 	if (collisionMode === "warn") {
 		if (!config.silent) {
 			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
-			console.warn(`[slothlet] Warning: Property collision at "${propertyName}" - keeping existing (mode: warn)`);
+			new SlothletWarning("WARNING_PROPERTY_COLLISION", {
+				propertyName,
+				apiPath
+			});
 			if (isWrapper) {
-				console.warn(`  Existing is a wrapper at apiPath="${apiPath}"`);
+				new SlothletWarning("WARNING_PROPERTY_COLLISION_WRAPPER", {
+					apiPath
+				});
 			}
 		}
 		return false; // Keep existing
@@ -830,11 +835,10 @@ export async function processFiles(
 			}
 		} else {
 			// Multiple root contributors: namespace ALL of them and warn
-			console.warn(
-				`[SLOTHLET WARNING] Multiple root-level default function exports detected: ${rootContributors.map((rc) => rc.moduleName).join(", ")}. ` +
-					`Each has been namespaced by filename (e.g., api.${rootContributors[0].moduleName}()). ` +
-					`Consider using a single root-level default export or moving files to subdirectories.`
-			);
+			new SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
+				rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
+				firstContributor: rootContributors[0].moduleName
+			});
 
 			for (const { moduleName, file, defaultFunc } of rootContributors) {
 				// Wrap in UnifiedWrapper if needed

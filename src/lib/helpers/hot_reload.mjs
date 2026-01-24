@@ -21,7 +21,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { mergeApiObjects } from "@cldmv/slothlet/helpers/api_assignment";
 
@@ -444,18 +444,13 @@ async function setValueAtPath(root, parts, value, options, instance) {
 
 		if (collisionMode === "warn") {
 			if (instance && !instance.config?.silent) {
-				console.warn(`[slothlet] Warning: Path collision at ${parts.join(".")} - keeping existing value`);
+				new SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
+					apiPath: parts.join(".")
+				});
 			}
 			return;
 		}
 
-		if (collisionMode === "replace") {
-			console.log(`[setValueAtPath] Replacing value at ${parts.join(".")} (mode: replace)`);
-			parent[finalKey] = value;
-			return;
-		}
-
-		// Default: merge mode
 		if (collisionMode === "merge") {
 			const existingIsObject = typeof existing === "object" || typeof existing === "function";
 			const valueIsObject = typeof value === "object" || typeof value === "function";
@@ -467,7 +462,9 @@ async function setValueAtPath(root, parts, value, options, instance) {
 			} else {
 				// Can't merge primitives - log warning and keep existing
 				if (instance && !instance.config?.silent) {
-					console.warn(`[slothlet] Warning: Cannot merge primitive values at ${parts.join(".")} - keeping existing`);
+					new SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
+						apiPath: parts.join(".")
+					});
 				}
 				return;
 			}
