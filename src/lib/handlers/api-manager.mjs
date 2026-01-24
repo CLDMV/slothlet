@@ -46,16 +46,16 @@ import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
  * @description
  * Class-based handler for managing API components at runtime. Tracks add history,
  * removed module IDs, and initial configuration per instance. Extends ComponentBase
- * for common instance property access.
+ * for common Slothlet property access (config, debug, api, error classes, etc.).
  *
  * @example
- * const manager = new ApiManager(instance);
+ * const manager = new ApiManager(slothlet);
  * await manager.addApiComponent({ apiPath: "plugins", folderPath: "./plugins" });
  */
 export class ApiManager extends ComponentBase {
 	/**
 	 * Create an ApiManager instance.
-	 * @param {object} instance - Slothlet instance.
+	 * @param {object} slothlet - Slothlet class instance.
 	 * @package
 	 *
 	 * @description
@@ -63,14 +63,14 @@ export class ApiManager extends ComponentBase {
 	 * and stores the initial configuration.
 	 *
 	 * @example
-	 * const manager = new ApiManager(instance);
+	 * const manager = new ApiManager(slothlet);
 	 */
-	constructor(instance) {
-		super(instance);
+	constructor(slothlet) {
+		super(slothlet);
 		this.state = {
 			addHistory: [],
 			removedModuleIds: new Set(),
-			initialConfig: instance?.config || null
+			initialConfig: slothlet?.config || null
 		};
 	}
 
@@ -473,7 +473,7 @@ export class ApiManager extends ComponentBase {
 			}
 
 			if (collisionMode === "warn") {
-				if (this.instance && !this.instance.config?.silent) {
+				if (this.slothlet && !this.slothlet.config?.silent) {
 					new SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
 						apiPath: parts.join(".")
 					});
@@ -491,7 +491,7 @@ export class ApiManager extends ComponentBase {
 					return;
 				} else {
 					// Can't merge primitives - log warning and keep existing
-					if (this.instance && !this.instance.config?.silent) {
+					if (this.slothlet && !this.slothlet.config?.silent) {
 						new SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
 							apiPath: parts.join(".")
 						});
@@ -650,26 +650,26 @@ export class ApiManager extends ComponentBase {
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await buildAPI({
-				dir: this.instance.config.dir,
-				mode: this.instance.config.mode,
+				dir: this.slothlet.config.dir,
+				mode: this.slothlet.config.mode,
 				ownership: null,
-				contextManager: this.instance.contextManager,
-				instanceID: this.instance.instanceID,
-				config: this.instance.config
+				contextManager: this.slothlet.contextManager,
+				instanceID: this.slothlet.instanceID,
+				config: this.slothlet.config
 			});
 
 			const { parts } = this.normalizeApiPath(apiPath);
 			const baseValue = this.getValueAtPath(baseApi, parts);
 			if (baseValue === undefined) {
-				this.deletePath(this.instance.api, parts);
-				this.deletePath(this.instance.boundApi, parts);
+				this.deletePath(this.slothlet.api, parts);
+				this.deletePath(this.slothlet.boundApi, parts);
 				return;
 			}
-			await this.setValueAtPath(this.instance.api, parts, baseValue, {
+			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
 				mutateExisting: true,
 				allowOverwrite: true
 			});
-			await this.setValueAtPath(this.instance.boundApi, parts, baseValue, {
+			await this.setValueAtPath(this.slothlet.boundApi, parts, baseValue, {
 				mutateExisting: true,
 				allowOverwrite: true
 			});
@@ -700,7 +700,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	async addApiComponent(params) {
 		const { apiPath, folderPath, metadata = {}, options = {} } = params || {};
-		if (!this.instance || !this.instance.isLoaded) {
+		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "addApi",
 				validationError: true
@@ -711,7 +711,7 @@ export class ApiManager extends ComponentBase {
 		const resolvedFolderPath = await this.resolveFolderPath(folderPath);
 
 		// Determine collision handling based on config.collision.addApi
-		const collisionMode = this.instance.config.collision.addApi || "merge";
+		const collisionMode = this.slothlet.config.collision.addApi || "merge";
 		const allowOverwrite = !!(options.forceOverwrite || options.allowOverwrite || collisionMode === "replace" || collisionMode === "merge");
 		const mutateExisting = !!(options.mutateExisting || collisionMode === "merge");
 
@@ -725,11 +725,11 @@ export class ApiManager extends ComponentBase {
 
 		const newApi = await buildAPI({
 			dir: resolvedFolderPath,
-			mode: this.instance.config.mode,
-			ownership: this.instance.ownership,
-			contextManager: this.instance.contextManager,
-			instanceID: this.instance.instanceID,
-			config: this.instance.config,
+			mode: this.slothlet.config.mode,
+			ownership: this.slothlet.ownership,
+			contextManager: this.slothlet.contextManager,
+			instanceID: this.slothlet.instanceID,
+			config: this.slothlet.config,
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi"
 		});
@@ -786,34 +786,34 @@ export class ApiManager extends ComponentBase {
 		if (newApi[finalKey] !== undefined && !normalizedPath.includes(".")) {
 			console.log(`[addApiComponent] Extracting ${finalKey}, isWrapper:`, this.isWrapperProxy(newApi[finalKey]));
 			apiToMerge = newApi[finalKey];
-			if (this.instance.config.debug?.api) {
+			if (this.slothlet.config.debug?.api) {
 				console.log(`[hot_reload] Extracted ${finalKey} from newApi:`, Object.keys(apiToMerge || {}));
 			}
 		} else {
 			console.log(`[addApiComponent] Using full newApi as apiToMerge (apiPathPrefix mode or no finalKey match)`);
 		}
 
-		if (this.instance.config.debug?.api) {
+		if (this.slothlet.config.debug?.api) {
 			console.log(`[hot_reload] apiToMerge keys:`, Object.keys(apiToMerge));
 		}
 
-		await this.setValueAtPath(this.instance.api, parts, apiToMerge, {
+		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 			mutateExisting,
 			allowOverwrite,
 			collisionMode
 		});
 
-		await this.setValueAtPath(this.instance.boundApi, parts, apiToMerge, {
+		await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 			mutateExisting,
 			allowOverwrite,
 			collisionMode
 		});
 
-		if (this.instance.ownership && moduleId) {
-			this.registerOwnership(this.instance.ownership, moduleId, normalizedPath, apiToMerge);
+		if (this.slothlet.ownership && moduleId) {
+			this.registerOwnership(this.slothlet.ownership, moduleId, normalizedPath, apiToMerge);
 		}
 
-		if (this.instance.ownership) {
+		if (this.slothlet.ownership) {
 			if (options.recordHistory !== false) {
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
@@ -847,7 +847,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	async removeApiComponent(params) {
 		const { apiPath, moduleId } = params || {};
-		if (!this.instance || !this.instance.isLoaded) {
+		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
 				validationError: true
@@ -857,22 +857,22 @@ export class ApiManager extends ComponentBase {
 		if (apiPath && moduleId) {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIdKey = String(moduleId);
-			const history = this.instance.ownership?.getPathHistory?.(normalizedPath) || [];
-			const ownershipResult = this.removeOwnershipEntry(this.instance.ownership, normalizedPath, moduleIdKey);
+			const history = this.slothlet.ownership?.getPathHistory?.(normalizedPath) || [];
+			const ownershipResult = this.removeOwnershipEntry(this.slothlet.ownership, normalizedPath, moduleIdKey);
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
-				this.deletePath(this.instance.api, pathParts);
-				this.deletePath(this.instance.boundApi, pathParts);
+				this.deletePath(this.slothlet.api, pathParts);
+				this.deletePath(this.slothlet.boundApi, pathParts);
 				return;
 			}
 			if (ownershipResult.action === "restore") {
-				const restoredValue = this.instance.ownership?.getCurrentValue?.(normalizedPath);
+				const restoredValue = this.slothlet.ownership?.getCurrentValue?.(normalizedPath);
 				if (restoredValue !== undefined) {
-					await this.setValueAtPath(this.instance.api, pathParts, restoredValue, {
+					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true
 					});
-					await this.setValueAtPath(this.instance.boundApi, pathParts, restoredValue, {
+					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true
 					});
@@ -882,29 +882,29 @@ export class ApiManager extends ComponentBase {
 				return;
 			}
 			if (ownershipResult.action === "none" && history.length === 0) {
-				this.deletePath(this.instance.api, pathParts);
-				this.deletePath(this.instance.boundApi, pathParts);
+				this.deletePath(this.slothlet.api, pathParts);
+				this.deletePath(this.slothlet.boundApi, pathParts);
 			}
 			return;
 		}
 
 		if (moduleId) {
 			const moduleIdKey = String(moduleId);
-			const result = this.instance.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
+			const result = this.slothlet.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
 			for (const removedPath of result.removed) {
 				const { parts } = this.normalizeApiPath(removedPath);
-				this.deletePath(this.instance.api, parts);
-				this.deletePath(this.instance.boundApi, parts);
+				this.deletePath(this.slothlet.api, parts);
+				this.deletePath(this.slothlet.boundApi, parts);
 			}
 			for (const rollback of result.rolledBack) {
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
-				const restoredValue = this.instance.ownership?.getCurrentValue?.(rollback.apiPath);
+				const restoredValue = this.slothlet.ownership?.getCurrentValue?.(rollback.apiPath);
 				if (restoredValue !== undefined) {
-					await this.setValueAtPath(this.instance.api, parts, restoredValue, {
+					await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true
 					});
-					await this.setValueAtPath(this.instance.boundApi, parts, restoredValue, {
+					await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true
 					});
@@ -927,25 +927,25 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		const ownershipResult = this.removeOwnershipEntry(this.instance.ownership, normalizedPath, null);
+		const ownershipResult = this.removeOwnershipEntry(this.slothlet.ownership, normalizedPath, null);
 		if (ownershipResult.action === "none") {
-			this.deletePath(this.instance.api, parts);
-			this.deletePath(this.instance.boundApi, parts);
+			this.deletePath(this.slothlet.api, parts);
+			this.deletePath(this.slothlet.boundApi, parts);
 			return;
 		}
 		if (ownershipResult.action === "delete") {
-			this.deletePath(this.instance.api, parts);
-			this.deletePath(this.instance.boundApi, parts);
+			this.deletePath(this.slothlet.api, parts);
+			this.deletePath(this.slothlet.boundApi, parts);
 			return;
 		}
 		if (ownershipResult.action === "restore") {
-			const restoredValue = this.instance.ownership?.getCurrentValue?.(normalizedPath);
+			const restoredValue = this.slothlet.ownership?.getCurrentValue?.(normalizedPath);
 			if (restoredValue !== undefined) {
-				await this.setValueAtPath(this.instance.api, parts, restoredValue, {
+				await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true
 				});
-				await this.setValueAtPath(this.instance.boundApi, parts, restoredValue, {
+				await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true
 				});
@@ -971,7 +971,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	async reloadApiComponent(params) {
 		const { apiPath, moduleId } = params || {};
-		if (!this.instance || !this.instance.isLoaded) {
+		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reloadApi",
 				validationError: true
@@ -1009,3 +1009,4 @@ export class ApiManager extends ComponentBase {
 		}
 	}
 }
+

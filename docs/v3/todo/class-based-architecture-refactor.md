@@ -86,7 +86,32 @@
 
 ## Overview
 
-Refactor Slothlet's helper system from standalone functions requiring config/instance parameters to be passed through every call, to a class-based architecture where helpers are instantiated with instance references and can access configuration directly via `this.instance`.
+Refactor Slothlet's helper system from standalone functions requiring config/instance parameters to be passed through every call, to a class-based architecture where components are instantiated with a reference to the Slothlet orchestrator and can access configuration directly via `this.config`.
+
+## Two-Level Isolation Architecture
+
+**1. Slothlet Class Instance Isolation (Orchestrator Level)**
+```javascript
+const slothlet1 = new Slothlet(); // Orchestrator #1
+const slothlet2 = new Slothlet(); // Orchestrator #2
+// Each has its own: config, api, ownership, components, etc.
+// Components are bound to their parent Slothlet instance
+```
+
+**2. Runtime Context Store Isolation (Execution Level)**
+```javascript
+const store = contextManager.initialize(instanceID, config);
+// Managed by AsyncLocalStorage (async runtime) or LiveContextManager (live runtime)
+// Accessed by user API files via runtime.mjs (self, context, reference)
+// Handles execution context isolation - NOT attached to Slothlet class
+```
+
+**Key Architecture Points:**
+- **Components receive `slothlet`**: The Slothlet class instance (orchestrator), not a separate "instance" object
+- **ComponentBase stores `this.slothlet`**: Reference to the parent Slothlet orchestrator
+- **Each Slothlet creates its own components**: `slothlet1.apiManager` ≠ `slothlet2.apiManager`
+- **Runtime store is internal**: Managed by contextManager, not exposed on Slothlet class
+- **Error classes on Slothlet**: `this.SlothletError` accessible without imports
 
 ## Problem Statement
 
@@ -95,7 +120,7 @@ Current architecture requires passing `config` or `instance` parameters through 
 ```javascript
 // Current (BAD)
 async function addApiComponent(params) {
-    const config = instance.config;
+    const config = slothlet.config; // Parameter pollution starts
     await mutateApiValue(existing, next, options, config); // Pass config
 }
 
@@ -179,12 +204,19 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 
 ## Proposed Solution
 
-Convert helpers to classes instantiated with instance reference:
+Convert helpers to classes instantiated with a reference to the Slothlet orchestrator:
 
 ```javascript
 // In slothlet.mjs
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+
 export class Slothlet {
     constructor() {
+        // Expose error classes to components (no imports needed)
+        this.SlothletError = SlothletError;
+        this.SlothletWarning = SlothletWarning;
+        
+        // Instance properties
         this.config = null;
         this.instanceID = null;
         this.api = null;
@@ -192,16 +224,20 @@ export class Slothlet {
         this.isLoaded = false;
         
         // Auto-discover and instantiate handlers/builders/processors
+        // Each component receives 'this' (the Slothlet orchestrator)
         // (See "Auto-Discovery Pattern" section below for implementation)
         this._initializeComponents();
     }
     
     _initializeComponents() {
         // Handlers (stateful managers)
-        this.contextManager = null; // Special case - set during load
+        // contextManager is special - set during load() based on runtime type
+        this.contextManager = null;
+        
+        // Each component receives 'this' (the Slothlet orchestrator)
+        // Components store it as 'this.slothlet' and access via getters
         this.ownership = new OwnershipHandler(this);
         this.metadata = new MetadataHandler(this);
-        this.instanceManager = new InstanceManager(this);
         this.apiManager = new ApiManager(this); // Manages api.add/remove/reload
         
         // Builders (construction orchestrators)
@@ -219,14 +255,20 @@ export class Slothlet {
         this.config = normalizeConfig(userConfig);
         this.instanceID = generateInstanceID();
         
-        // Context manager is runtime-specific
+        // Context manager is runtime-specific (handles execution context isolation)
         this.contextManager = this.config.runtime === "async" 
             ? new AsyncContextManager() 
             : new LiveContextManager();
         
-        // Components can now access this.config via this.instance
-        this.instanceManager.register();
+        // Initialize runtime store (managed by contextManager, not attached to Slothlet)
+        const store = this.contextManager.initialize(this.instanceID, this.config);
+        
+        // Components access this.config via getters (this.slothlet.config)
         this.api = await this.builder.buildAPI({ ... });
+        
+        // Set store values (accessed by user API files via runtime.mjs)
+        store.self = this.api;
+        store.context = this.config.context || {};
         
         this.isLoaded = true;
         return this.api;
@@ -234,18 +276,20 @@ export class Slothlet {
 }
 
 // In src/lib/handlers/api-manager.mjs (RENAMED from helpers/hot_reload.mjs)
-export class ApiManager {
-    constructor(instance) {
-        this.instance = instance;
+export class ApiManager extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet); // ComponentBase stores as this.slothlet
+        this.state = { addHistory: [], removedModuleIds: new Set() };
     }
     
-    // Convenience getters for clean access
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
-    get instanceID() { return this.instance.instanceID; }
-    get api() { return this.instance.api; }
-    get boundApi() { return this.instance.boundApi; }
-    get ownership() { return this.instance.ownership; }
+    // Inherited getters from ComponentBase (all return this.slothlet.property):
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
+    // get instanceID() { return this.slothlet.instanceID; }
+    // get api() { return this.slothlet.api; }
+    // get boundApi() { return this.slothlet.boundApi; }
+    // get SlothletError() { return this.slothlet.SlothletError; }
+    // get SlothletWarning() { return this.slothlet.SlothletWarning; }
     
     async addApiComponent(params) {
         // NO MORE PARAMETER PASSING!
@@ -253,8 +297,13 @@ export class ApiManager {
             console.log("Adding API component:", params.apiPath);
         }
         
-        // Access other handlers directly
-        const newApi = await this.instance.builder.buildAPI(...);
+        // Throw errors without imports
+        if (!params.apiPath) {
+            throw new this.SlothletError("INVALID_API_PATH", { params });
+        }
+        
+        // Access other handlers via parent Slothlet
+        const newApi = await this.slothlet.builder.buildAPI(...);
     }
 }
 ```
@@ -314,33 +363,42 @@ Based on comprehensive analysis (see conversation summary):
 
 **`handlers/context.mjs`** → No change needed (reference file that exports context managers)
 
-**`handlers/context-async.mjs`** → Update constructor to accept instance:
+**`handlers/context-async.mjs`** → Already class-based, may not need changes:
 ```javascript
 export class AsyncContextManager {
-    constructor(instance = null) {
-        this.instance = instance;
+    constructor() {
         this.als = new AsyncLocalStorage();
-        this.instances = new Map();
+        this.instances = new Map(); // Manages runtime stores
     }
     
-    get config() { return this.instance?.config; }
-    get debug() { return this.instance?.config?.debug; }
+    // Context managers handle runtime store isolation
+    // They don't need Slothlet reference - they ARE the isolation mechanism
+    initialize(instanceID, config) {
+        const store = { self: null, context: {}, reference: {} };
+        this.instances.set(instanceID, store);
+        return store;
+    }
     
     // Existing methods remain unchanged
 }
 ```
 
-**`handlers/context-live.mjs`** → Update constructor to accept instance:
+**`handlers/context-live.mjs`** → Already class-based, may not need changes:
 ```javascript
 export class LiveContextManager {
-    constructor(instance = null) {
-        this.instance = instance;
-        this.instances = new Map();
+    constructor() {
+        this.instances = new Map(); // Manages runtime stores
         this.currentInstanceID = null;
     }
     
-    get config() { return this.instance?.config; }
-    get debug() { return this.instance?.config?.debug; }
+    // Context managers handle runtime store isolation
+    // They don't need Slothlet reference - they ARE the isolation mechanism
+    initialize(instanceID, config) {
+        const store = { self: null, context: {}, reference: {} };
+        this.instances.set(instanceID, store);
+        this.currentInstanceID = instanceID;
+        return store;
+    }
     
     // Existing methods remain unchanged
 }
@@ -348,15 +406,16 @@ export class LiveContextManager {
 
 **`handlers/ownership.mjs`** → Convert to class:
 ```javascript
-export class OwnershipHandler {
-    constructor(instance) {
-        this.instance = instance;
+export class OwnershipHandler extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
         this.registry = new Map();
         this.pathHistory = new Map();
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
     
     register(entry) { /* ... */ }
     unregister(moduleId) { /* ... */ }
@@ -367,24 +426,25 @@ export class OwnershipHandler {
 
 **`handlers/metadata-handler.mjs`** → Convert to class:
 ```javascript
-export class MetadataHandler {
-    constructor(instance) {
-        this.instance = instance;
+export class MetadataHandler extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
         this.store = new WeakMap();
     }
     
-    get config() { return this.instance.config; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
     
     attachMetadata(target, metadata) { /* ... */ }
     getMetadata(target) { /* ... */ }
 }
 ```
 
-**`handlers/api-manager.mjs`** (MOVED from helpers/) → Convert to class:
+**`handlers/api-manager.mjs`** (MOVED from helpers/) → ✅ **COMPLETED** (Phase 2.1):
 ```javascript
-export class ApiManager {
-    constructor(instance) {
-        this.instance = instance;
+export class ApiManager extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
         this.state = {
             addHistory: [],
             removedModuleIds: new Set(),
@@ -392,11 +452,14 @@ export class ApiManager {
         };
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
-    get instanceID() { return this.instance.instanceID; }
-    get api() { return this.instance.api; }
-    get boundApi() { return this.instance.boundApi; }
+    // Inherited getters from ComponentBase (all return this.slothlet.property):
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
+    // get instanceID() { return this.slothlet.instanceID; }
+    // get api() { return this.slothlet.api; }
+    // get boundApi() { return this.slothlet.boundApi; }
+    // get SlothletError() { return this.slothlet.SlothletError; }
+    // get SlothletWarning() { return this.slothlet.SlothletWarning; }
     
     async addApiComponent(params) { /* ... */ }
     async removeApiComponent(params) { /* ... */ }
@@ -408,15 +471,18 @@ export class ApiManager {
 
 **`builders/builder.mjs`** → Convert to class:
 ```javascript
-export class Builder {
-    constructor(instance) {
-        this.instance = instance;
+export class Builder extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
-    get ownership() { return this.instance.ownership; }
-    get contextManager() { return this.instance.contextManager; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
+    
+    // Direct access to other components via parent
+    get ownership() { return this.slothlet.ownership; }
+    get contextManager() { return this.slothlet.contextManager; }
     
     async buildAPI(options) { /* ... */ }
 }
@@ -424,12 +490,13 @@ export class Builder {
 
 **`builders/api-builder.mjs`** → Convert to class:
 ```javascript
-export class ApiBuilder {
-    constructor(instance) {
-        this.instance = instance;
+export class ApiBuilder extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
     
     async processModule(modulePath) { /* ... */ }
 }
@@ -437,13 +504,14 @@ export class ApiBuilder {
 
 **`builders/api-assignment.mjs`** (MOVED from helpers/) → ✅ **MOVED** (commits 9a3fb82, e265ecb) / ⏳ Convert to class:
 ```javascript
-export class ApiAssignment {
-    constructor(instance) {
-        this.instance = instance;
+export class ApiAssignment extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
     
     assignToApiPath(targetApi, key, value, options) { /* ... */ }
     async mergeApiObjects(targetApi, sourceApi, options) { /* ... */ }
@@ -453,13 +521,14 @@ export class ApiAssignment {
 
 **`builders/modes-processor.mjs`** (SPLIT from helpers/modes.mjs) → Convert to class:
 ```javascript
-export class ModesProcessor {
-    constructor(instance) {
-        this.instance = instance;
+export class ModesProcessor extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
     
     async processFiles(api, files, directory, options) { /* ... */ }
     createLazySubdirectoryWrapper(dir, apiPath) { /* ... */ }
@@ -473,13 +542,14 @@ Stateless classes that need config only for debug logging - no state management.
 
 **`processors/loader.mjs`** (MOVED from helpers/) → Convert to class:
 ```javascript
-export class Loader {
-    constructor(instance) {
-        this.instance = instance;
+export class Loader extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
     
     async loadModule(modulePath) {
         if (this.debug?.modules) {
@@ -492,13 +562,14 @@ export class Loader {
 
 **`processors/flatten.mjs`** (MOVED from helpers/) → Convert to class:
 ```javascript
-export class Flatten {
-    constructor(instance) {
-        this.instance = instance;
+export class Flatten extends ComponentBase {
+    constructor(slothlet) {
+        super(slothlet);
     }
     
-    get config() { return this.instance.config; }
-    get debug() { return this.instance.config?.debug; }
+    // Inherited getters from ComponentBase:
+    // get config() { return this.slothlet.config; }
+    // get debug() { return this.slothlet.config?.debug; }
     
     shouldFlatten(apiPath, structure) {
         if (this.debug?.api) {
@@ -693,6 +764,7 @@ If auto-discovery adds too much complexity during initial refactor, use manual i
 
 ```javascript
 // src/slothlet.mjs
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { OwnershipHandler } from "@cldmv/slothlet/handlers/ownership";
 import { MetadataHandler } from "@cldmv/slothlet/handlers/metadata-handler";
 import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
@@ -705,19 +777,25 @@ import { Flatten } from "@cldmv/slothlet/processors/flatten";
 
 export class Slothlet {
     constructor() {
+        // Expose error classes to components (no imports needed in component files)
+        this.SlothletError = SlothletError;
+        this.SlothletWarning = SlothletWarning;
+        
+        // Instance properties
         this.config = null;
         this.instanceID = null;
         this.api = null;
         this.boundApi = null;
         this.isLoaded = false;
         
+        // Instantiate components with reference to 'this' (the Slothlet orchestrator)
         this._initializeComponents();
     }
     
     _initializeComponents() {
         // Handlers (stateful managers)
-        this.contextManager = null; // Set during load
-        this.ownership = new OwnershipHandler(this);
+        this.contextManager = null; // Set during load based on runtime
+        this.ownership = new OwnershipHandler(this); // 'this' = Slothlet orchestrator
         this.metadata = new MetadataHandler(this);
         this.apiManager = new ApiManager(this); // Manages api.add/remove/reload
         
@@ -736,20 +814,27 @@ export class Slothlet {
         this.config = normalizeConfig(userConfig);
         this.instanceID = generateInstanceID();
         
+        // Context manager handles runtime store isolation
         this.contextManager = this.config.runtime === "async" 
             ? new AsyncContextManager() 
             : new LiveContextManager();
         
-        this.instanceManager.register();
+        // Initialize runtime store (not attached to Slothlet, managed by contextManager)
+        const store = this.contextManager.initialize(this.instanceID, this.config);
+        
+        // Components access config via getters (this.slothlet.config)
         this.api = await this.builder.buildAPI({ ... });
+        
+        // Set store values for user API files (accessed via runtime.mjs)
+        store.self = this.api;
+        store.context = this.config.context || {};
         
         this.isLoaded = true;
         return this.api;
     }
     
     async shutdown() {
-        // instanceManager removed - functionality now in context managers
-        this.contextManager.cleanup();
+        this.contextManager.cleanup(this.instanceID);
         this.isLoaded = false;
     }
 }
