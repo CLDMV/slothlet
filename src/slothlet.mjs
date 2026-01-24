@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
 
 /**
@@ -38,14 +37,14 @@ class Slothlet {
 	 * @private
 	 */
 	async _initializeComponents() {
-		// Auto-discover handlers, builders, processors
+		// Auto-discover handlers, builders, processors, helpers
 		// NOTE: Does NOT auto-discover:
 		//   - errors/ (throw-able classes, not instance components)
 		//   - runtime/ (context managers set manually during load)
 		//   - modes/ (lazy/eager mode handlers, not instance components)
 		//   - i18n/ (translation utilities, not instance components)
 
-		const categories = ["handlers", "builders", "processors"];
+		const categories = ["helpers", "handlers", "builders", "processors"];
 		const baseDir = join(import.meta.dirname, "lib");
 
 		for (const category of categories) {
@@ -110,8 +109,8 @@ class Slothlet {
 		// Transform and validate config using component classes
 		this.config = transformConfig(config);
 
-		// Generate instance ID
-		this.instanceID = generateId();
+		// Generate instance ID using utilities component
+		this.instanceID = this.utilities.generateId();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
