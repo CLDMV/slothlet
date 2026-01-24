@@ -54,13 +54,7 @@ function isWrapperProxy(value) {
  * });
  */
 export function assignToApiPath(targetApi, key, value, options = {}) {
-	const {
-		allowOverwrite = false,
-		mutateExisting = false,
-		useCollisionDetection = false,
-		config = null,
-		syncWrapper = null
-	} = options;
+	const { allowOverwrite = false, mutateExisting = false, useCollisionDetection = false, config = null, syncWrapper = null } = options;
 
 	// Get existing value
 	const existing = targetApi[key];
@@ -77,11 +71,11 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 	// Case 2: Collision detection with config
 	if (useCollisionDetection && config && existing !== undefined) {
 		const collisionMode = config.collision || "merge";
-		
+
 		if (collisionMode === "error") {
 			throw new Error(`[slothlet] Collision detected at "${String(key)}" - collision mode is 'error'`);
 		}
-		
+
 		if (collisionMode === "merge") {
 			// Merge objects/wrappers
 			if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
@@ -89,7 +83,7 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 				return true;
 			}
 		}
-		
+
 		// collisionMode === "replace" or can't merge - fall through to assignment
 	}
 
