@@ -78,24 +78,30 @@ This would be a significant achievement and should be preserved as a separate co
 
 The `api_assignment.mjs` module was created to solve a critical code duplication and consistency problem between two distinct API building operations:
 
-1. **Initial API load** (`buildAPI` in `builders/builder.mjs`)
-2. **Runtime API extension** (`addApiComponent` in `helpers/hot_reload.mjs`)
+1. **Initial API load** (inside `buildAPI` which calls mode-specific builders: `buildEagerAPI`/`buildLazyAPI`)
+2. **Runtime API extension** (`addApiComponent` in `helpers/hot_reload.mjs` for `api.add()` support)
 
-Both operations needed identical logic for:
+**Both operations need identical logic for:**
 - Assigning values to API paths
 - Handling collision detection
 - Merging wrapper proxies
 - Preserving UnifiedWrapper references
 - Managing property overwrites
 
-## The Problem
+**Current Status:**
+- ✅ Hot reload (`hot_reload.mjs`) **IS using** `api_assignment.mjs` functions
+- ❌ Initial load (`buildEagerAPI`/`buildLazyAPI`) **IS NOT using** `api_assignment.mjs` - still has duplicated logic
+- 🎯 **Goal:** Make buildAPI use the same unified functions to eliminate duplication
 
-### Before api_assignment.mjs
+## The Problem: Current Code Duplication
 
-**Initial implementation had duplicated logic:**
+### Current State (Why Refactor Is Needed)
+
+**The duplication still exists in the codebase:**
 
 ```javascript
-// In builders/builder.mjs (processFiles)
+// In modes/eager.mjs and modes/lazy.mjs (processFiles)
+// This logic is DUPLICATED in BOTH mode files
 if (existing !== undefined && isWrapperProxy(existing) && isWrapperProxy(value)) {
     if (mutateExisting && syncWrapper) {
         syncWrapper(existing, value);
@@ -140,18 +146,25 @@ if (existingValue && typeof existingValue === "object" &&
 }
 ```
 
-### The Critical Issue
+### The Critical Issue (Still Present)
 
-When hot reload was implemented, we discovered:
+**Current problems with duplication:**
 
-1. **Logic divergence**: Initial load and hot reload had similar but slightly different assignment patterns
-2. **Bug risk**: Fixing a bug in one place didn't fix it in the other
-3. **Inconsistent behavior**: Same operations (like wrapper merging) behaved differently depending on context
-4. **Testing burden**: Had to test identical logic in two separate code paths
+1. **Logic divergence**: Initial load (in mode files) and hot reload have similar but slightly different assignment patterns
+2. **Bug risk**: Fixing a bug in one place doesn't automatically fix it in the other
+3. **Inconsistent behavior**: Same operations (like wrapper merging) behave differently depending on whether it's initial load or hot reload
+4. **Testing burden**: Have to test identical logic in two separate code paths
+5. **Maintenance burden**: Changes to assignment logic require updating 3 places (eager mode, lazy mode, hot_reload)
 
-**Specific example that triggered the refactor:**
+**What triggered the api_assignment.mjs creation:**
 
-During hot reload testing, we found that wrapper proxy syncing worked correctly during initial load but failed during `addApiComponent`. The root cause was that the wrapper syncing logic in `hot_reload.mjs` didn't properly handle the `_childCache` transfer pattern that was working in the initial build.
+During hot reload implementation, we found that wrapper proxy syncing worked correctly during initial load but failed during `addApiComponent`. The root cause was that the wrapper syncing logic in `hot_reload.mjs` didn't properly handle the `_childCache` transfer pattern that was working in the initial build.
+
+**Current solution (partial):**
+- ✅ Created `api_assignment.mjs` with unified functions
+- ✅ Hot reload now uses these functions successfully
+- ❌ buildAPI (mode files) still have the old duplicated logic
+- 🎯 Next step: Refactor buildAPI to use api_assignment.mjs functions
 
 ## The Solution: api_assignment.mjs
 
@@ -266,11 +279,17 @@ export async function mergeApiObjects(targetApi, sourceApi, options = {}) {
 
 ## Usage Patterns
 
-### Pattern 1: Initial API Build (processFiles)
+### Pattern 1: Initial API Build (PLANNED - Not Yet Implemented)
+
+**🎯 Goal:** Make `buildEagerAPI` and `buildLazyAPI` use `assignToApiPath` instead of duplicated logic.
+
+**Current status:** ❌ Not implemented yet - mode files still have duplicated assignment logic
+
+**Planned implementation:**
 
 ```javascript
-// In builders/builder.mjs - processFiles function
-import { assignToApiPath } from "@cldmv/slothlet/helpers/api_assignment";
+// In modes/eager.mjs and modes/lazy.mjs - processFiles function
+import { assignToApiPath } from "@cldmv/slothlet/builders/api-assignment";
 
 // During module processing
 assignToApiPath(targetApi, key, wrapperProxy, {
@@ -282,11 +301,13 @@ assignToApiPath(targetApi, key, wrapperProxy, {
 });
 ```
 
-### Pattern 2: Hot Reload (addApiComponent)
+### Pattern 2: Hot Reload (CURRENTLY IMPLEMENTED ✅)
+
+**Status:** ✅ Successfully using `api_assignment.mjs` functions
 
 ```javascript
 // In helpers/hot_reload.mjs - mutateApiValue function
-import { mergeApiObjects } from "@cldmv/slothlet/helpers/api_assignment";
+import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
 
 // When syncing wrappers
 if (isWrapperProxy(existingValue) && !isWrapperProxy(nextValue)) {
@@ -420,33 +441,39 @@ if (isWrapperProxy(existing) && isWrapperProxy(value)) {
 
 ### Files Using api_assignment.mjs
 
-1. **`builders/builder.mjs` (processFiles)**
-   - Uses `assignToApiPath` during module processing
-   - Collision detection during initial load
-   - Used in: 12 locations
+**Currently implemented (✅):**
 
-2. **`helpers/hot_reload.mjs` (mutateApiValue, setValueAtPath)**
-   - Uses `mergeApiObjects` during hot reload
-   - Wrapper syncing during component reload
-   - Used in: 8 locations
+1. **`helpers/hot_reload.mjs` (mutateApiValue, addApiComponent)**
+   - ✅ Uses `mergeApiObjects` during hot reload
+   - ✅ Wrapper syncing during component reload
+   - Used in: ~5 locations
 
-3. **`helpers/modes.mjs` (processFiles)**
-   - Uses `assignToApiPath` for subdirectory processing
-   - Category wrapper creation
-   - Used in: 4 locations
+**NOT yet using it (❌ duplication still exists):**
 
-### Current Location Issues
+1. **`modes/eager.mjs` (buildEagerAPI)**
+   - ❌ Still has duplicated assignment logic
+   - 🎯 Should use `assignToApiPath` for module processing
+   - 🎯 Should use collision detection from unified code
 
-**Current:** `src/lib/helpers/api_assignment.mjs`
+2. **`modes/lazy.mjs` (buildLazyAPI)**
+   - ❌ Still has duplicated assignment logic
+   - 🎯 Should use `assignToApiPath` for module processing
+   - 🎯 Should use collision detection from unified code
 
-**Problem:** This is NOT a generic helper - it's builder/construction logic
+3. **`helpers/modes.mjs` (processFiles - shared utilities)**
+   - ❌ Still has some duplicated logic
+   - 🎯 May benefit from using `assignToApiPath` for subdirectory processing
 
-**Should be:** `src/lib/builders/api-assignment.mjs`
+### File Location Update
+
+**Previous:** `src/lib/helpers/api_assignment.mjs`
+**Current:** `src/lib/builders/api-assignment.mjs` (moved January 23, 2026)
 
 **Reasoning:**
-- Contains core API construction patterns
+- Contains core API construction patterns (not generic helpers)
 - Handles collision resolution (builder responsibility)
 - Manages wrapper proxy assignment (builder concern)
+- Fits builder category: orchestrates API construction logic
 - Used primarily during build operations
 
 ## Planned Refactor: Class-Based Architecture
@@ -590,31 +617,87 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 
 ### Step-by-Step Migration
 
-- [ ] Move file: `git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs`
-- [ ] **⚠️ DO NOT TEST YET - imports are broken!**
-- [ ] Update imports in `builders/builder.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
-- [ ] Update imports in `helpers/hot_reload.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
-- [ ] Update imports in `helpers/modes.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
-- [ ] **NOW TEST** (tail output):
+**Phase 1: File Move (COMPLETED ✅ January 23, 2026)**
+
+- [✅] Move file: `git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs`
+- [✅] Update import in `helpers/hot_reload.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
+- [✅] Update JSDoc @module tag in moved file
+- [✅] Tests pass (3 expected differences remain)
+- [✅] **COMMITTED**: "refactor: move api_assignment to builders/ category"
+
+**Phase 2: Eliminate Duplication in Initial Load (TODO 🎯)**
+
+- [ ] **Refactor `modes/eager.mjs`**: Replace duplicated assignment logic with `assignToApiPath` calls
+  - Find all places where values are assigned to API
+  - Replace with `assignToApiPath(targetApi, key, value, options)`
+  - Ensure collision detection uses unified logic
+  - **TEST after each change**
+  
+- [ ] **Refactor `modes/lazy.mjs`**: Replace duplicated assignment logic with `assignToApiPath` calls
+  - Same pattern as eager mode
+  - Find value assignment locations
+  - Replace with unified `assignToApiPath` calls
+  - **TEST after each change**
+
+- [ ] **Review `helpers/modes.mjs`**: Check if any logic should use `api_assignment.mjs`
+  - May have shared utilities that could benefit
+  - Evaluate if subdirectory processing needs unified logic
+  - **TEST after any changes**
+
+**Phase 3: Class-Based Refactor (TODO 🎯)**
+
+- [ ] Convert standalone functions to `ApiAssignment` class
+  - Add constructor with instance parameter
+  - Add `config` and `debug` getters
+  - Remove config/debug from function parameters
+  - Add `static slothletProperty = "apiAssignment"`
+  
+- [ ] Update Slothlet class to instantiate ApiAssignment
+  - `this.apiAssignment = new ApiAssignment(this)`
+  - Make available to all components that need it
+  
+- [ ] Update all callsites to use class methods
+  - `hot_reload.mjs`: Call via instance
+  - `modes/eager.mjs`: Call via instance
+  - `modes/lazy.mjs`: Call via instance
+  
+- [ ] **TEST after complete conversion**:
   ```powershell
   npm run debug 2>&1 | Select-Object -Last 40
   npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
   ```
+  
 - [ ] **CHECK**: Zero errors? If yes, special commit message!
-- [ ] **COMMIT**: "refactor: move api_assignment to builders/" (or special zero-error message if applicable)
-- [ ] Update JSDoc @module tags in the moved file
-- [ ] Update documentation references
+- [ ] **COMMIT**: "refactor: convert api_assignment to class-based ApiAssignment" (or special zero-error message)
+
+**Phase 4: Documentation (TODO 🎯)**
+
+- [ ] Update JSDoc examples to show class usage
+- [ ] Update module documentation in `docs/MODULE-STRUCTURE.md`
+- [ ] Update API rules documentation
 - [ ] **TEST**: Both critical tests (tail last 40 lines)
-- [ ] **COMMIT**: "docs: update api-assignment documentation"
+- [ ] **COMMIT**: "docs: update api-assignment class-based documentation"
 
 ## Conclusion
 
-The `api_assignment.mjs` module represents a critical architectural pattern in Slothlet:
+The `api_assignment.mjs` module represents a critical architectural solution to eliminate code duplication in Slothlet:
 
-**Single Source of Truth for API Assignment**
+**Single Source of Truth for API Assignment Logic**
 
-It was born from the need to prevent code duplication between initial load and hot reload, and has proven essential for maintaining consistency across these two distinct but related operations.
+**Current State:**
+- ✅ Created to prevent duplication between initial load and hot reload
+- ✅ Successfully used in hot_reload.mjs (eliminates one source of duplication)
+- ❌ NOT yet used in buildAPI (modes/eager.mjs and modes/lazy.mjs still have duplicated logic)
+- 🎯 Next step: Refactor mode files to use api_assignment functions
 
-The upcoming class-based refactor will improve this further by eliminating parameter passing and making the relationship between assignment logic and instance state more explicit.
+**Why This Matters:**
 
-**Key Takeaway:** When two operations need identical logic, extract to a shared module rather than duplicating. This module is proof that the pattern works and prevents subtle bugs from logic divergence.
+When we created hot reload (`api.add()` support), we discovered we needed the EXACT same assignment logic that buildAPI uses. Rather than copy-paste, we extracted the logic to api_assignment.mjs. Hot reload now uses it successfully. However, the original duplicated code in the mode files still exists.
+
+**The Upcoming Refactor:**
+
+1. **Eliminate remaining duplication**: Make buildAPI (via mode files) use api_assignment functions
+2. **Class-based conversion**: Convert to ApiAssignment class to eliminate parameter passing
+3. **Single source of truth achieved**: ALL API assignment logic flows through one class
+
+**Key Architectural Principle:** When two operations need identical logic, extract to a shared module rather than duplicating. This module proves the pattern works - now we need to complete the migration by removing the original duplicated code from the mode files.
