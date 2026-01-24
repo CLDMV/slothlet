@@ -294,11 +294,39 @@ Based on comprehensive analysis (see conversation summary):
 
 #### Handlers (Stateful Managers)
 
-**`handlers/context.mjs`** → No change needed (already class-based: `ContextManager`)
+**`handlers/context.mjs`** → No change needed (reference file that exports context managers)
 
-**`handlers/context-async.mjs`** → No change needed (already class-based: `AsyncContextManager`)
+**`handlers/context-async.mjs`** → Update constructor to accept instance:
+```javascript
+export class AsyncContextManager {
+    constructor(instance = null) {
+        this.instance = instance;
+        this.als = new AsyncLocalStorage();
+        this.instances = new Map();
+    }
+    
+    get config() { return this.instance?.config; }
+    get debug() { return this.instance?.config?.debug; }
+    
+    // Existing methods remain unchanged
+}
+```
 
-**`handlers/context-live.mjs`** → No change needed (already class-based: `LiveContextManager`)
+**`handlers/context-live.mjs`** → Update constructor to accept instance:
+```javascript
+export class LiveContextManager {
+    constructor(instance = null) {
+        this.instance = instance;
+        this.instances = new Map();
+        this.currentInstanceID = null;
+    }
+    
+    get config() { return this.instance?.config; }
+    get debug() { return this.instance?.config?.debug; }
+    
+    // Existing methods remain unchanged
+}
+```
 
 **`handlers/ownership.mjs`** → Convert to class:
 ```javascript
@@ -702,7 +730,7 @@ export class Slothlet {
     }
     
     async shutdown() {
-        this.instanceManager.remove();
+        // instanceManager removed - functionality now in context managers
         this.contextManager.cleanup();
         this.isLoaded = false;
     }
@@ -723,13 +751,12 @@ export class Slothlet {
 
 2. **Move files with git mv** (preserves history):
    ```bash
-   # REMAINING TO DO:
-   git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
-   git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
-   
-   # ✅ COMPLETED:
+   # ✅ ALL COMPLETED:
    # commit ecfa60f: git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/api-manager.mjs
    # commits 9a3fb82, e265ecb: git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs
+   # commit 4ab350d: git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
+   # commit 4ab350d: git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
+   # commit 48c3400: Split helpers/modes.mjs → helpers/modes-utils.mjs + builders/modes-processor.mjs
    
    # ❌ DELETED (commit e8d21f9):
    # helpers/instance-manager.mjs - unused, duplicated by context managers
