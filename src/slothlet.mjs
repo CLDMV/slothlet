@@ -7,6 +7,7 @@ import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
 import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { Builder } from "@cldmv/slothlet/builders/builder";
 import { ApiBuilder } from "@cldmv/slothlet/builders/api_builder";
+import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
@@ -36,6 +37,7 @@ class Slothlet {
 		this.apiManager = new ApiManager(this);
 		this.builder = new Builder(this);
 		this.apiBuilder = new ApiBuilder(this);
+		this.apiAssignment = new ApiAssignment(this);
 	}
 
 	/**
