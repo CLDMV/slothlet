@@ -10,6 +10,7 @@ import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/h
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
+import { assignToApiPath } from "@cldmv/slothlet/builders/api-assignment";
 
 /**
  * Build a safe function name for debug output from an API path or module name.
@@ -454,13 +455,17 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, key, namedWrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
-									targetApi[key] = namedWrapper.createProxy();
-								}
+								assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+								});
 							} else {
-								if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
-									targetApi[key] = mod[key];
-								}
+								assignToApiPath(targetApi, key, mod[key], {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+								});
 							}
 							if (ownership) {
 								ownership.register({
@@ -511,13 +516,17 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, propKey, wrapper.createProxy(), config, collisionContext, `${categoryName}.${propKey}`)) {
-									targetApi[propKey] = wrapper.createProxy();
-								}
+								assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${propKey}`)
+								});
 							} else {
-								if (safeAssign(targetApi, propKey, propValue, config, collisionContext, `${categoryName}.${propKey}`)) {
-									targetApi[propKey] = propValue;
-								}
+								assignToApiPath(targetApi, propKey, propValue, {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${propKey}`)
+								});
 							}
 							if (ownership) {
 								ownership.register({
@@ -542,13 +551,17 @@ export async function processFiles(
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									if (safeAssign(targetApi, key, wrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
-										targetApi[key] = wrapper.createProxy();
-									}
+									assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										useCollisionDetection: true,
+										config,
+										safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									});
 								} else {
-									if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
-										targetApi[key] = mod[key];
-									}
+									assignToApiPath(targetApi, key, mod[key], {
+										useCollisionDetection: true,
+										config,
+										safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									});
 								}
 								if (ownership) {
 									ownership.register({
@@ -587,9 +600,11 @@ export async function processFiles(
 									console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
 								}
 							} else {
-								if (safeAssign(targetApi, key, mod[key], config, collisionContext, `${categoryName}.${key}`)) {
-									targetApi[key] = mod[key];
-								}
+								assignToApiPath(targetApi, key, mod[key], {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+								});
 							}
 							if (ownership) {
 								ownership.register({
@@ -628,13 +643,17 @@ export async function processFiles(
 							ownership,
 							materializeOnCreate: config.backgroundMaterialize
 						});
-						if (safeAssign(targetApi, preferredName, wrapper.createProxy(), config, collisionContext, preferredName)) {
-							targetApi[preferredName] = wrapper.createProxy();
-						}
+						assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+							useCollisionDetection: true,
+							config,
+							safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, preferredName)
+						});
 					} else {
-						if (safeAssign(targetApi, preferredName, mod[key], config, collisionContext, preferredName)) {
-							targetApi[preferredName] = mod[key];
-						}
+						assignToApiPath(targetApi, preferredName, mod[key], {
+							useCollisionDetection: true,
+							config,
+							safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, preferredName)
+						});
 					}
 					if (ownership) {
 						ownership.register({
@@ -866,13 +885,17 @@ export async function processFiles(
 						ownership,
 						materializeOnCreate: config.backgroundMaterialize
 					});
-					if (safeAssign(targetApi, moduleName, wrapper.createProxy(), config, collisionContext, moduleName)) {
-						targetApi[moduleName] = wrapper.createProxy();
-					}
+					assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
+						useCollisionDetection: true,
+						config,
+						safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, moduleName)
+					});
 				} else {
-					if (safeAssign(targetApi, moduleName, defaultFunc, config, collisionContext, moduleName)) {
-						targetApi[moduleName] = defaultFunc;
-					}
+					assignToApiPath(targetApi, moduleName, defaultFunc, {
+						useCollisionDetection: true,
+						config,
+						safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, moduleName)
+					});
 				}
 
 				if (ownership) {
