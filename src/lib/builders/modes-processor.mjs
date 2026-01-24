@@ -1,17 +1,24 @@
 /**
  * @fileoverview Mode processing orchestration - file/directory processing for eager/lazy modes
  * @module @cldmv/slothlet/builders/modes-processor
+ * 
+ * @description
+ * Class-based processor for handling mode-specific file and directory transformations.
+ * Extends ComponentBase for consistent dependency injection and error handling.
+ * 
+ * @example
+ * const processor = new ModesProcessor(slothlet);
+ * await processor.processFiles(api, files, directory, ownership, contextManager, instanceID, config, 0, "lazy", true, false);
  */
 
 import path from "node:path";
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
-import { assignToApiPath } from "@cldmv/slothlet/builders/api-assignment";
 import {
 	getSafeFunctionName,
 	ensureNamedExportFunction,
@@ -20,22 +27,39 @@ import {
 	getOwnershipCollisionMode
 } from "@cldmv/slothlet/helpers/modes-utils";
 
-export async function processFiles(
-	api,
-	files,
-	directory,
-	ownership,
-	contextManager,
-	instanceID,
-	config,
-	currentDepth,
-	mode,
-	isRoot,
-	recursive,
-	populateDirectly = false,
-	apiPathPrefix = "",
-	collisionContext = "initial"
-) {
+/**
+ * ModesProcessor - Handles mode-specific file and directory processing.
+ * 
+ * @class
+ * @extends ComponentBase
+ * @package
+ */
+export class ModesProcessor extends ComponentBase {
+	/**
+	 * Creates a new ModesProcessor instance.
+	 * 
+	 * @param {Object} slothlet - Parent slothlet instance
+	 */
+	constructor(slothlet) {
+		super(slothlet);
+	}
+
+	async processFiles(
+		api,
+		files,
+		directory,
+		ownership,
+		contextManager,
+		instanceID,
+		config,
+		currentDepth,
+		mode,
+		isRoot,
+		recursive,
+		populateDirectly = false,
+		apiPathPrefix = "",
+		collisionContext = "initial"
+	) {
 	// Helper to build full apiPath with prefix
 	const buildApiPath = (path) => {
 		if (!apiPathPrefix) return path;
@@ -119,7 +143,7 @@ export async function processFiles(
 			loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 		} catch (error) {
 			if (error.name === "SlothletError") throw error;
-			throw new SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleId: file.moduleId }, error);
+			throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleId: file.moduleId }, error);
 		}
 	}
 
@@ -304,12 +328,12 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
+								this.slothlet.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 									useCollisionDetection: true,
 									config
 								});
 							} else {
-								assignToApiPath(targetApi, key, mod[key], {
+								this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 									useCollisionDetection: true,
 									config
 								});
@@ -363,12 +387,12 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
+								this.slothlet.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config
 								});
 							} else {
-								assignToApiPath(targetApi, propKey, propValue, {
+								this.slothlet.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
 									useCollisionDetection: true,
 									config
 								});
@@ -396,12 +420,12 @@ export async function processFiles(
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									this.slothlet.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config
 									});
 								} else {
-									assignToApiPath(targetApi, key, mod[key], {
+									this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config
 									});
@@ -436,7 +460,7 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								const assigned = assignToApiPath(targetApi, key, wrapper.createProxy(), {
+								const assigned = this.slothlet.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config
 								});
@@ -446,7 +470,7 @@ export async function processFiles(
 									console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
 								}
 							} else {
-								assignToApiPath(targetApi, key, mod[key], {
+								this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 									useCollisionDetection: true,
 									config
 								});
@@ -488,12 +512,12 @@ export async function processFiles(
 							ownership,
 							materializeOnCreate: config.backgroundMaterialize
 						});
-						assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+						this.slothlet.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 							useCollisionDetection: true,
 							config
 						});
 					} else {
-						assignToApiPath(targetApi, preferredName, mod[key], {
+						this.slothlet.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 							useCollisionDetection: true,
 							config
 						});
@@ -526,12 +550,12 @@ export async function processFiles(
 				console.log(
 					`[FILE WRAPPER ASSIGNMENT] propertyName="${propertyName}", apiPath="${buildApiPath(localPath)}", overwriting="${propertyName in targetApi ? (targetApi[propertyName]?.__wrapper ? "wrapper" : "value") : "nothing"}"`
 				);
-				assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
+				this.slothlet.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 					useCollisionDetection: true,
 					config
 				});
 			} else {
-				assignToApiPath(targetApi, propertyName, moduleContent, {
+				this.slothlet.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
 					useCollisionDetection: true,
 					config
 				});
@@ -650,7 +674,7 @@ export async function processFiles(
 								ownership,
 								materializeOnCreate: config.backgroundMaterialize
 							});
-							assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
+							this.slothlet.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config
 							});
@@ -672,7 +696,7 @@ export async function processFiles(
 				}
 
 				// Regular subdirectory processing
-				await processFiles(
+				await this.processFiles(
 					targetApi,
 					subDir.children.files,
 					{ name: subDirName, children: subDir.children },
@@ -696,10 +720,10 @@ export async function processFiles(
 				if (config.debug?.modes) {
 					console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
 				}
-				assignToApiPath(
+				this.slothlet.apiAssignment.assignToApiPath(
 					targetApi,
 					subDirName,
-					createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config),
+					this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config),
 					{
 						useCollisionDetection: true,
 						config
@@ -728,7 +752,7 @@ export async function processFiles(
 			}
 		} else {
 			// Multiple root contributors: namespace ALL of them and warn
-			new SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
+			new this.SlothletWarning("WARNING_MULTIPLE_ROOT_CONTRIBUTORS", {
 				rootContributors: rootContributors.map((rc) => rc.moduleName).join(", "),
 				firstContributor: rootContributors[0].moduleName
 			});
@@ -745,12 +769,12 @@ export async function processFiles(
 						ownership,
 						materializeOnCreate: config.backgroundMaterialize
 					});
-					assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
+					this.slothlet.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 						useCollisionDetection: true,
 						config
 					});
 				} else {
-					assignToApiPath(targetApi, moduleName, defaultFunc, {
+					this.slothlet.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 						useCollisionDetection: true,
 						config
 					});
@@ -771,18 +795,18 @@ export async function processFiles(
 	return rootDefaultFunction;
 }
 
-/**
- * Create lazy wrapper for subdirectory (lazy mode only)
- * @param {Object} dir - Directory structure
- * @param {Object} ownership - Ownership manager
- * @param {Object} contextManager - Context manager
- * @param {string} instanceID - Instance ID
- * @param {string} apiPath - Current API path
- * @param {Object} config - Configuration
- * @returns {Proxy} Lazy unified wrapper
- * @public
- */
-export function createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
+	/**
+	 * Create lazy wrapper for subdirectory (lazy mode only)
+	 * @param {Object} dir - Directory structure
+	 * @param {Object} ownership - Ownership manager
+	 * @param {Object} contextManager - Context manager
+	 * @param {string} instanceID - Instance ID
+	 * @param {string} apiPath - Current API path
+	 * @param {Object} config - Configuration
+	 * @returns {Proxy} Lazy unified wrapper
+	 * @public
+	 */
+	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
 	// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 	/**
 	 * Materialize a lazy subdirectory into a concrete implementation object.
@@ -862,7 +886,7 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 		// Process files in this directory using unified processFiles
 		// IMPORTANT: populateDirectly=true to populate materialized object directly
 		// But isRoot=false so flattening logic knows we're inside a category
-		await processFiles(
+		await this.processFiles(
 			materialized,
 			dir.children.files,
 			{ name: dir.name, children: dir.children },
@@ -934,25 +958,26 @@ export function createLazySubdirectoryWrapper(dir, ownership, contextManager, in
 	});
 
 	return wrapper.createProxy();
-}
-
-/**
- * Apply root contributor pattern - merge API into root function
- * @param {Object} api - API object with properties
- * @param {Function|null} rootFunction - Root contributor function
- * @param {Object} config - Configuration
- * @param {string} mode - Mode name for debug messages
- * @returns {Promise<Object|Function>} Final API (function if root contributor, object otherwise)
- * @public
- */
-export async function applyRootContributor(api, rootFunction, config, mode) {
-	if (rootFunction) {
-		// Merge all other API properties onto the root function
-		Object.assign(rootFunction, api);
-		if (config.debug?.modes) {
-			console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length }));
-		}
-		return rootFunction;
 	}
-	return api;
+
+	/**
+	 * Apply root contributor pattern - merge API into root function
+	 * @param {Object} api - API object with properties
+	 * @param {Function|null} rootFunction - Root contributor function
+	 * @param {Object} config - Configuration
+	 * @param {string} mode - Mode name for debug messages
+	 * @returns {Promise<Object|Function>} Final API (function if root contributor, object otherwise)
+	 * @public
+	 */
+	async applyRootContributor(api, rootFunction, config, mode) {
+		if (rootFunction) {
+			// Merge all other API properties onto the root function
+			Object.assign(rootFunction, api);
+			if (config.debug?.modes) {
+				console.log(await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length }));
+			}
+			return rootFunction;
+		}
+		return api;
+	}
 }

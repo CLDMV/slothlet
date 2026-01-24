@@ -4,7 +4,6 @@
  */
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { processFiles, applyRootContributor, createLazySubdirectoryWrapper } from "@cldmv/slothlet/builders/modes-processor";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -44,7 +43,8 @@ export async function buildLazyAPI({
 	instanceID,
 	config = {},
 	apiPathPrefix = "",
-	collisionContext = "initial"
+	collisionContext = "initial",
+	modesProcessor
 }) {
 	const api = {};
 
@@ -60,7 +60,7 @@ export async function buildLazyAPI({
 			directories: structure.directories
 		}
 	};
-	const rootDefaultFunction = await processFiles(
+	const rootDefaultFunction = await modesProcessor.processFiles(
 		api,
 		structure.files,
 		rootDirectory,
@@ -80,7 +80,7 @@ export async function buildLazyAPI({
 	// Lazy wrappers for directories are now created by processFiles when recursive=false
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await applyRootContributor(api, rootDefaultFunction, config, "lazy");
+	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, config, "lazy");
 
 	return finalApi;
 }

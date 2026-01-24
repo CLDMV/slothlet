@@ -6,7 +6,6 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
-import { processFiles, applyRootContributor } from "@cldmv/slothlet/builders/modes-processor";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
@@ -32,7 +31,8 @@ export async function buildEagerAPI({
 	config = {},
 	maxDepth = Infinity,
 	apiPathPrefix = "",
-	collisionContext = "initial"
+	collisionContext = "initial",
+	modesProcessor
 }) {
 	const api = {};
 
@@ -48,7 +48,7 @@ export async function buildEagerAPI({
 			directories: structure.directories
 		}
 	};
-	const rootDefaultFunction = await processFiles(
+	const rootDefaultFunction = await modesProcessor.processFiles(
 		api,
 		structure.files,
 		rootDirectory,
@@ -68,7 +68,7 @@ export async function buildEagerAPI({
 	// Directory processing is now handled by processFiles when recursive=true
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await applyRootContributor(api, rootDefaultFunction, config, "eager");
+	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, config, "eager");
 
 	return finalApi;
 }
