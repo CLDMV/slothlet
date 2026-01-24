@@ -1,8 +1,28 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 23, 2026  
-**Status:** Planning Phase  
-**Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"
+**Status:** In Progress - Step 1 Partially Complete  
+**Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
+**Latest Progress:** `e265ecb` - api-assignment.mjs moved to builders/ and collision detection unified
+
+## Progress Summary
+
+### ✅ Completed
+- **Step 1.3**: Moved `helpers/api_assignment.mjs` → `builders/api-assignment.mjs` (commits `9a3fb82`, `e265ecb`)
+  - File moved with `git mv` preserving history
+  - All imports updated in `hot_reload.mjs` and `modes.mjs`
+  - Collision detection unified: removed safeAssign callback, moved logic into assignToApiPath
+  - 94 lines deleted from modes.mjs
+  - All 240 collision tests + debug tests passing ✅
+
+### 🎯 Next Steps
+- **Step 1.1**: Move `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`
+- **Step 1.2**: Move `helpers/hot_reload.mjs` → `handlers/hot-reload.mjs` (+ rename to kebab-case)
+- **Step 1.4**: Split `helpers/modes.mjs` into utils and processor
+- **Step 1.5**: Move loader and flatten to processors/
+- **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
+
+---
 
 ## Overview
 
@@ -185,24 +205,25 @@ export class HotReload {
 
 Based on comprehensive analysis (see conversation summary):
 
-1. **`helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`**
+1. **`helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`** ⏳ TODO
    - Reason: Manages global WeakMap of instances (STATEFUL REGISTRY)
    - Functions: `registerInstance()`, `removeInstance()`, `getActiveInstances()`
    - This is not a pure utility, it's a stateful handler
 
-2. **`helpers/hot_reload.mjs` → `handlers/hot-reload.mjs`**
+2. **`helpers/hot_reload.mjs` → `handlers/hot-reload.mjs`** ⏳ TODO
    - Reason: WeakMap-based state, API mutation, lifecycle management
    - Functions: `addApiComponent()`, `removeApiComponent()`, `reloadApiComponent()`
    - Maintains hotReloadState WeakMap with per-instance history
    - **RENAME**: `hot_reload.mjs` → `hot-reload.mjs` (kebab-case consistency)
 
-3. **`helpers/api_assignment.mjs` → `builders/api-assignment.mjs`**
+3. **`helpers/api_assignment.mjs` → `builders/api-assignment.mjs`** ✅ **COMPLETED** (commits 9a3fb82, e265ecb)
    - Reason: Core API construction logic, collision resolution
    - Functions: `assignToApiPath()`, `mergeApiObjects()`
    - This is builder logic, not a generic helper
    - **RENAME**: `api_assignment.mjs` → `api-assignment.mjs` (kebab-case consistency)
+   - **BONUS**: Also removed safeAssign callback indirection, unified collision detection
 
-4. **`helpers/modes.mjs` → SPLIT INTO TWO FILES**
+4. **`helpers/modes.mjs` → SPLIT INTO TWO FILES** ⏳ TODO
    - **Pure utilities** → `helpers/modes-utils.mjs`:
      - `cloneWrapperImpl()`
      - `isGenericFilename()`
@@ -340,7 +361,7 @@ export class ApiBuilder {
 }
 ```
 
-**`builders/api-assignment.mjs`** (MOVED from helpers/) → Convert to class:
+**`builders/api-assignment.mjs`** (MOVED from helpers/) → ✅ **MOVED** (commits 9a3fb82, e265ecb) / ⏳ Convert to class:
 ```javascript
 export class ApiAssignment {
     constructor(instance) {
@@ -354,6 +375,7 @@ export class ApiAssignment {
     async mergeApiObjects(targetApi, sourceApi, options) { /* ... */ }
 }
 ```
+**Note:** File moved and collision detection unified, but not yet converted to class
 
 **`builders/modes-processor.mjs`** (SPLIT from helpers/modes.mjs) → Convert to class:
 ```javascript
@@ -675,11 +697,14 @@ export class Slothlet {
 
 2. **Move files with git mv** (preserves history):
    ```bash
+   # REMAINING TO DO:
    git mv src/lib/helpers/instance-manager.mjs src/lib/handlers/instance-manager.mjs
    git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/hot-reload.mjs
-   git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs
    git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
    git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
+   
+   # ✅ COMPLETED (commits 9a3fb82, e265ecb):
+   # git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs
    ```
    **⚠️ DO NOT TEST YET - imports are broken!**
 
@@ -694,7 +719,7 @@ export class Slothlet {
    - Repeat for all moved files:
      - `helpers/instance-manager` → `handlers/instance-manager`
      - `helpers/hot_reload` → `handlers/hot-reload`
-     - `helpers/api_assignment` → `builders/api-assignment`
+     - ✅ **DONE**: `helpers/api_assignment` → `builders/api-assignment` (commits 9a3fb82, e265ecb)
      - `helpers/loader` → `processors/loader`
      - `helpers/flatten` → `processors/flatten`
      - `helpers/modes` → `helpers/modes-utils` OR `builders/modes-processor`
@@ -707,6 +732,8 @@ export class Slothlet {
    Both should pass (debug shows 3 acceptable diffs)
 
 6. **COMMIT**: "refactor: reorganize files - move stateful handlers and builders"
+   
+   **Note:** api-assignment move was committed separately (commits 9a3fb82, e265ecb) with additional refactoring (collision detection unified, safeAssign removed)
 
 ### Step 2: Convert Handlers to Classes
 
@@ -781,6 +808,8 @@ export class Slothlet {
    - **COMMIT**: "refactor(builders): convert api-builder to class"
 
 3. **Convert `builders/api-assignment.mjs`**:
+   - ✅ **File already moved** to builders/ (commits 9a3fb82, e265ecb)
+   - ⏳ **TODO**: Convert to class
    - Remove config parameter from all methods
    - Use `this.config` and `this.debug` instead
    - **TEST**: Both critical tests (assignment is critical!)
