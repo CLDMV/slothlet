@@ -2,15 +2,11 @@
  * @fileoverview Main Slothlet orchestrator
  * @module @cldmv/slothlet
  */
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
-import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
-import { Builder } from "@cldmv/slothlet/builders/builder";
-import { ApiBuilder } from "@cldmv/slothlet/builders/api_builder";
-import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
-import { ModesProcessor } from "@cldmv/slothlet/builders/modes-processor";
-import { Loader } from "@cldmv/slothlet/processors/loader";
-import { Flatten } from "@cldmv/slothlet/processors/flatten";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
@@ -35,15 +31,59 @@ class Slothlet {
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
+	}
 
-		// Instantiate component classes
-		this.apiManager = new ApiManager(this);
-		this.builder = new Builder(this);
-		this.apiBuilder = new ApiBuilder(this);
-		this.apiAssignment = new ApiAssignment(this);
-		this.modesProcessor = new ModesProcessor(this);
-		this.loader = new Loader(this);
-		this.flatten = new Flatten(this);
+	/**
+	 * Initialize all component class instances via auto-discovery
+	 * Scans handlers/, builders/, processors/ for classes with slothletProperty
+	 * @private
+	 */
+	async _initializeComponents() {
+		// Auto-discover handlers, builders, processors
+		// NOTE: Does NOT auto-discover:
+		//   - errors/ (throw-able classes, not instance components)
+		//   - runtime/ (context managers set manually during load)
+		//   - modes/ (lazy/eager mode handlers, not instance components)
+		//   - i18n/ (translation utilities, not instance components)
+		
+		const categories = ["handlers", "builders", "processors"];
+		const baseDir = join(import.meta.dirname, "lib");
+		
+		for (const category of categories) {
+			const categoryDir = join(baseDir, category);
+			const files = readdirSync(categoryDir).filter(f => f.endsWith(".mjs"));
+			
+			for (const file of files) {
+				const filePath = join(categoryDir, file);
+				
+				try {
+					const module = await import(pathToFileURL(filePath).href);
+					
+					// Find ALL exported classes with slothletProperty (supports multiple per file)
+					const classExports = Object.values(module).filter(
+						exp => typeof exp === "function" && exp.slothletProperty
+					);
+					
+					for (const ClassExport of classExports) {
+						const propName = ClassExport.slothletProperty;
+						this[propName] = new ClassExport(this);
+						
+						if (this.config?.debug?.initialization) {
+							console.log(`[INIT] ${ClassExport.name} → this.${propName}`);
+						}
+					}
+				} catch (error) {
+					// Skip files that fail to import (e.g., metadata.mjs with broken imports)
+					// Only error if a component with slothletProperty can't be loaded
+					if (this.config?.debug?.initialization) {
+						console.warn(`[INIT] Skipped ${file}: ${error.message}`);
+					}
+				}
+			}
+		}
+		
+		// Special case: contextManager is set during load based on runtime
+		this.contextManager = null;
 	}
 
 	/**
@@ -65,6 +105,9 @@ class Slothlet {
 	async load(config = {}) {
 		// Transform and validate config
 		this.config = transformConfig(config);
+
+		// Initialize all components via auto-discovery
+		await this._initializeComponents();
 
 		// Generate instance ID
 		this.instanceID = generateId();

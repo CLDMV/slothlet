@@ -33,6 +33,8 @@ import {
  * @package
  */
 export class ModesProcessor extends ComponentBase {
+	static slothletProperty = "modesProcessor";
+
 	/**
 	 * Creates a new ModesProcessor instance.
 	 *
@@ -714,8 +716,8 @@ export class ModesProcessor extends ComponentBase {
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
 						collisionContext,
 						loader,
-					flatten
-				);
+						flatten
+					);
 				}
 			} else {
 				// Lazy mode: create lazy wrappers for subdirectories

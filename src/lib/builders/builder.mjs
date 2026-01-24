@@ -21,6 +21,8 @@ import { buildLazyAPI } from "@cldmv/slothlet/modes/lazy";
  * const api = await builder.buildAPI({ dir: "./api" });
  */
 export class Builder extends ComponentBase {
+	static slothletProperty = "builder";
+
 	/**
 	 * Create Builder instance.
 	 * @param {object} slothlet - Slothlet orchestrator instance.

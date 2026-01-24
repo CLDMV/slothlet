@@ -26,6 +26,8 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 export class ApiAssignment extends ComponentBase {
+	static slothletProperty = "apiAssignment";
+
 	/**
 	 * Create an ApiAssignment instance.
 	 * @param {object} slothlet - Slothlet class instance.

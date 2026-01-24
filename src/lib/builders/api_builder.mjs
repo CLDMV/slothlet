@@ -29,6 +29,8 @@ import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
  * const api = await builder.buildFinalAPI(userApi);
  */
 export class ApiBuilder extends ComponentBase {
+	static slothletProperty = "apiBuilder";
+
 	/**
 	 * Create an ApiBuilder instance.
 	 * @param {object} slothlet - Slothlet class instance.

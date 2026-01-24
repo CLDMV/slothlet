@@ -9,6 +9,8 @@ import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
  * @public
  */
 export class OwnershipManager {
+	static slothletProperty = "ownership";
+
 	constructor() {
 		this.moduleToPath = new Map(); // moduleId → Set<apiPath>
 		this.pathToModule = new Map(); // apiPath → Array<{moduleId, source, timestamp, value}>

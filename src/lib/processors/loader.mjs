@@ -22,6 +22,8 @@ import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
  * @package
  */
 export class Loader extends ComponentBase {
+	static slothletProperty = "loader";
+
 	constructor(slothlet) {
 		super(slothlet);
 	}
