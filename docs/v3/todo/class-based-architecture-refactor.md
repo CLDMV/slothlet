@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 23, 2026  
-**Status:** In Progress - Step 1: 2 of 5 file moves complete  
+**Status:** In Progress - Step 1: 4 of 5 file moves complete  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `e8d21f9` - Deleted unused instance-manager.mjs (duplicated by context managers)
+**Latest Progress:** `4ab350d` - loader and flatten moved to processors/
 
 ## Progress Summary
 
@@ -28,7 +28,21 @@
   - Only used in src2/ (V2 architecture) - that copy remains
   - Reverted move commits (aa197c1, c2ccbc7) before deletion
 
-### 🎯 Next Steps (3 file moves remaining)
+- **Step 1.5a**: Moved `helpers/loader.mjs` → `processors/loader.mjs` (commit `4ab350d`)
+  - Stateless module transformer belongs in processors
+  - Updated imports in lazy.mjs, eager.mjs, modes.mjs
+  - Updated @module declaration
+  - Debug test passing ✅
+
+- **Step 1.5b**: Moved `helpers/flatten.mjs` → `processors/flatten.mjs` (commit `4ab350d`)
+  - Stateless API flattening logic belongs in processors
+  - Updated imports in eager.mjs, modes.mjs
+  - Updated @module declaration
+  - Debug test passing ✅
+
+- **Package.json**: Added `./processors/*` wildcard export (commit `4ab350d`)
+
+### 🎯 Next Steps (1 file move + Phase 2)
 - **Step 1.5a**: Move `helpers/loader.mjs` → `processors/loader.mjs`
 - **Step 1.5b**: Move `helpers/flatten.mjs` → `processors/flatten.mjs`
 - **Step 1.4**: Split `helpers/modes.mjs` into utils and processor (complex, save for last)
