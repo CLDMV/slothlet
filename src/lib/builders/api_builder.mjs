@@ -11,7 +11,7 @@
  * const api = await buildFinalAPI({ userApi, instance, config });
  */
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/helpers/hot_reload";
+import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/handlers/api-manager";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
