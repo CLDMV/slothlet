@@ -4,7 +4,6 @@
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
@@ -32,7 +31,8 @@ export async function buildEagerAPI({
 	apiPathPrefix = "",
 	collisionContext = "initial",
 	modesProcessor,
-	loader
+	loader,
+	flatten
 }) {
 	const api = {};
 
@@ -63,7 +63,8 @@ export async function buildEagerAPI({
 		false, // populateDirectly - keep false
 		apiPathPrefix,
 		collisionContext,
-		loader
+		loader,
+		flatten
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

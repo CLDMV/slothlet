@@ -44,7 +44,8 @@ export async function buildLazyAPI({
 	apiPathPrefix = "",
 	collisionContext = "initial",
 	modesProcessor,
-	loader
+	loader,
+	flatten
 }) {
 	const api = {};
 
@@ -75,7 +76,8 @@ export async function buildLazyAPI({
 		false,
 		apiPathPrefix,
 		collisionContext,
-		loader
+		loader,
+		flatten
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false
@@ -149,7 +151,7 @@ function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, 
 		// Create lazy wrappers for subdirectories
 		for (const subdir of dir.children.directories || []) {
 			const propName = sanitizePropertyName(subdir.name);
-		materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceID, `${apiPath}.${propName}`, config, loader);
+			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceID, `${apiPath}.${propName}`, config, loader);
 			console.log(`[LAZY.MJS materializeFunc] DONE for apiPath=${apiPath}, keys=${Object.keys(materialized).join(",")}`);
 		}
 		// POC pattern: return the materialized implementation

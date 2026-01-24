@@ -1,33 +1,56 @@
 /**
  * Flattening decision module.
- * Determines when and how to flatten API structures based on comprehensive rule set.
- * Implements 18 core conditions (C01-C18) from API-RULES-CONDITIONS.md.
+ * @description
+ * Provides the Flatten class for determining when and how to flatten API structures
+ * based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
+ * API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.
  * @module processors/flatten
  * @package
+ * @example
+ * // Flatten is instantiated by Slothlet and passed to processors
+ * const flatten = new Flatten(slothlet);
+ * const decision = flatten.getFlatteningDecision(options);
+ * const categoryDecisions = flatten.buildCategoryDecisions(options);
  */
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
- * Check if module is self-referential (exports itself under same name).
- * Rule 6 - Condition C01 from API-RULES-CONDITIONS.md.
- * @param {object} mod - Module exports
- * @param {string} moduleName - Name of the module
- * @returns {boolean} True if self-referential
- * @private
+ * Flattening decision processor
+ * @class Flatten
+ * @extends ComponentBase
+ * @package
  */
-function flatten_checkSelfReferential(mod, moduleName) {
+export class Flatten extends ComponentBase {
+	/**
+	 * Create a Flatten instance
+	 * @param {Object} slothlet - Slothlet instance
+	 */
+	constructor(slothlet) {
+		super(slothlet);
+	}
+
+	/**
+	 * Check if module is self-referential (exports itself under same name).
+	 * Rule 6 - Condition C01 from API-RULES-CONDITIONS.md.
+	 * @param {object} mod - Module exports
+	 * @param {string} moduleName - Name of the module
+	 * @returns {boolean} True if self-referential
+	 * @private
+	 */
+	#checkSelfReferential(mod, moduleName) {
 	if (!mod || typeof mod !== "object") return false;
 	return mod[moduleName] === mod;
 }
 
-/**
- * Check if this is a multi-default context (multiple default exports in folder).
- * Rule 5 - Conditions C02-C03 from API-RULES-CONDITIONS.md.
- * @param {object} analysis - Export analysis
- * @param {boolean} hasMultipleDefaults - Whether folder has multiple defaults
- * @returns {object|null} Multi-default decision or null
- * @private
- */
-function flatten_checkMultiDefault(analysis, hasMultipleDefaults) {
+	/**
+	 * Check if this is a multi-default context (multiple default exports in folder).
+	 * Rule 5 - Conditions C02-C03 from API-RULES-CONDITIONS.md.
+	 * @param {object} analysis - Export analysis
+	 * @param {boolean} hasMultipleDefaults - Whether folder has multiple defaults
+	 * @returns {object|null} Multi-default decision or null
+	 * @private
+	 */
+	#checkMultiDefault(analysis, hasMultipleDefaults) {
 	if (!hasMultipleDefaults) return null;
 
 	// Rule 5 - C02: Multi-default with default export - preserve namespace
@@ -45,38 +68,38 @@ function flatten_checkMultiDefault(analysis, hasMultipleDefaults) {
 	};
 }
 
-/**
- * Check if single named export matches filename (auto-flatten case).
- * Rule 7 (F02, F03) - Condition C04 from API-RULES-CONDITIONS.md.
- * @param {object} mod - Module exports
- * @param {string} moduleName - Name of the module
- * @param {array} moduleKeys - Keys of module exports
- * @returns {boolean} True if should auto-flatten
- * @private
- */
-function flatten_checkAutoFlatten(mod, moduleName, moduleKeys) {
+	/**
+	 * Check if single named export matches filename (auto-flatten case).
+	 * Rule 7 (F02, F03) - Condition C04 from API-RULES-CONDITIONS.md.
+	 * @param {object} mod - Module exports
+	 * @param {string} moduleName - Name of the module
+	 * @param {array} moduleKeys - Keys of module exports
+	 * @returns {boolean} True if should auto-flatten
+	 * @private
+	 */
+	#checkAutoFlatten(mod, moduleName, moduleKeys) {
 	if (moduleKeys.length !== 1) return false;
 	return moduleKeys[0] === moduleName;
 }
 
-/**
- * Core flattening decision function.
- * Implements conditions C01-C07 from getFlatteningDecision().
- * @param {object} options - Decision options
- * @param {object} options.mod - Module exports
- * @param {string} options.moduleName - Sanitized module name
- * @param {string} options.categoryName - Category/folder name
- * @param {object} options.analysis - Export analysis
- * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
- * @param {array} options.moduleKeys - Keys from module
- * @returns {object} Flattening decision
- * @public
- */
-export function getFlatteningDecision(options) {
+	/**
+	 * Core flattening decision function.
+	 * Implements conditions C01-C07 from getFlatteningDecision().
+	 * @param {object} options - Decision options
+	 * @param {object} options.mod - Module exports
+	 * @param {string} options.moduleName - Sanitized module name
+	 * @param {string} options.categoryName - Category/folder name
+	 * @param {object} options.analysis - Export analysis
+	 * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
+	 * @param {array} options.moduleKeys - Keys from module
+	 * @returns {object} Flattening decision
+	 * @public
+	 */
+	getFlatteningDecision(options) {
 	const { mod, moduleName, categoryName, analysis, hasMultipleDefaults, moduleKeys } = options;
 
 	// Rule 6 - C01: Self-referential check - preserve namespace
-	if (flatten_checkSelfReferential(mod, moduleName)) {
+	if (this.#checkSelfReferential(mod, moduleName)) {
 		return {
 			preserveAsNamespace: true,
 			reason: "Self-referential export detected"
@@ -84,13 +107,13 @@ export function getFlatteningDecision(options) {
 	}
 
 	// Rule 5 - C02, C03: Multi-default context handling
-	const multiDefaultDecision = flatten_checkMultiDefault(analysis, hasMultipleDefaults);
+	const multiDefaultDecision = this.#checkMultiDefault(analysis, hasMultipleDefaults);
 	if (multiDefaultDecision) {
 		return multiDefaultDecision;
 	}
 
 	// Rule 7 (F02, F03) - C04: Auto-flatten single named export matching filename
-	if (flatten_checkAutoFlatten(mod, moduleName, moduleKeys)) {
+	if (this.#checkAutoFlatten(mod, moduleName, moduleKeys)) {
 		return {
 			useAutoFlattening: true,
 			reason: "Single named export matches filename"
@@ -136,19 +159,19 @@ export function getFlatteningDecision(options) {
 	};
 }
 
-/**
- * Process module for API assignment.
- * Implements conditions C08-C09b from processModuleForAPI().
- * @param {object} options - Processing options
- * @param {object} options.mod - Module exports
- * @param {object} options.decision - Flattening decision from getFlatteningDecision
- * @param {string} options.apiPathKey - API path key
- * @param {array} options.moduleKeys - Module export keys
- * @param {boolean} options.isSelfReferential - Whether module is self-referential
- * @returns {object} API assignments and metadata
- * @public
- */
-export function processModuleForAPI(options) {
+	/**
+	 * Process module for API assignment.
+	 * Implements conditions C08-C09b from processModuleForAPI().
+	 * @param {object} options - Processing options
+	 * @param {object} options.mod - Module exports
+	 * @param {object} options.decision - Flattening decision from getFlatteningDecision
+	 * @param {string} options.apiPathKey - API path key
+	 * @param {array} options.moduleKeys - Module export keys
+	 * @param {boolean} options.isSelfReferential - Whether module is self-referential
+	 * @returns {object} API assignments and metadata
+	 * @public
+	 */
+	processModuleForAPI(options) {
 	const { mod, decision, apiPathKey, moduleKeys, isSelfReferential } = options;
 
 	const result = {
@@ -242,22 +265,22 @@ export function processModuleForAPI(options) {
 	return result;
 }
 
-/**
- * Build category-level flattening decisions.
- * Implements conditions C10-C18 from buildCategoryDecisions().
- * @param {object} options - Category options
- * @param {string} options.categoryName - Category name
- * @param {object} options.mod - Module exports
- * @param {string} options.moduleName - Module name
- * @param {string} options.fileBaseName - File base name
- * @param {object} options.analysis - Export analysis
- * @param {array} options.moduleKeys - Module keys
- * @param {number} options.currentDepth - Current depth
- * @param {array} options.moduleFiles - Files in category
- * @returns {object} Category decision
- * @public
- */
-export function buildCategoryDecisions(options) {
+	/**
+	 * Build category-level flattening decisions.
+	 * Implements conditions C10-C18 from buildCategoryDecisions().
+	 * @param {object} options - Category options
+	 * @param {string} options.categoryName - Category name
+	 * @param {object} options.mod - Module exports
+	 * @param {string} options.moduleName - Module name
+	 * @param {string} options.fileBaseName - File base name
+	 * @param {object} options.analysis - Export analysis
+	 * @param {array} options.moduleKeys - Module keys
+	 * @param {number} options.currentDepth - Current depth
+	 * @param {array} options.moduleFiles - Files in category
+	 * @returns {object} Category decision
+	 * @public
+	 */
+	buildCategoryDecisions(options) {
 	const { categoryName, mod, moduleName, fileBaseName, analysis, moduleKeys, currentDepth, moduleFiles = [] } = options;
 
 	const decision = {
@@ -376,4 +399,6 @@ export function buildCategoryDecisions(options) {
 	}
 
 	return decision;
+}
+
 }
