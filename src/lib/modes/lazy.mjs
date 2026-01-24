@@ -4,7 +4,7 @@
  */
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { processFiles, applyRootContributor, createLazySubdirectoryWrapper } from "@cldmv/slothlet/helpers/modes";
+import { processFiles, applyRootContributor, createLazySubdirectoryWrapper } from "@cldmv/slothlet/builders/modes-processor";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
