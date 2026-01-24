@@ -699,17 +699,14 @@ export class Slothlet {
      - `helpers/flatten` → `processors/flatten`
      - `helpers/modes` → `helpers/modes-utils` OR `builders/modes-processor`
 
-5. **Update package.json exports**:
-   - Run `node tools/build-exports.mjs` to regenerate
-
-6. **NOW TEST** (imports fixed, should work):
+5. **NOW TEST** (imports fixed, should work):
    ```bash
    npm run debug  # Verify no broken imports
    npm run testv3 -- collision-config.test.vitest.mjs  # Verify collision handling
    ```
    Both should pass (debug shows 3 acceptable diffs)
 
-7. **COMMIT**: "refactor: reorganize files - move stateful handlers and builders"
+6. **COMMIT**: "refactor: reorganize files - move stateful handlers and builders"
 
 ### Step 2: Convert Handlers to Classes
 
