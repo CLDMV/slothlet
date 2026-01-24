@@ -1,6 +1,6 @@
 /**
  * @fileoverview Module loading utilities
- * @module @cldmv/slothlet/helpers/loader
+ * @module @cldmv/slothlet/processors/loader
  */
 import { readdir, stat } from "node:fs/promises";
 import { join, extname, basename, resolve } from "node:path";

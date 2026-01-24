@@ -4,9 +4,9 @@
  */
 import path from "node:path";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/helpers/loader";
+import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
+import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";

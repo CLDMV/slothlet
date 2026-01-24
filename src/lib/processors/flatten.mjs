@@ -2,7 +2,7 @@
  * Flattening decision module.
  * Determines when and how to flatten API structures based on comprehensive rule set.
  * Implements 18 core conditions (C01-C18) from API-RULES-CONDITIONS.md.
- * @module helpers/flatten
+ * @module processors/flatten
  * @package
  */
 

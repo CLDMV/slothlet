@@ -121,6 +121,18 @@
 			"types": "./types/dist/lib/handlers/*.d.mts",
 			"import": "./dist/lib/handlers/*.mjs"
 		},
+		"./processors/*": {
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/processors/*.d.mts",
+				"import": "./src2/lib/processors/*.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/processors/*.d.mts",
+				"import": "./src/lib/processors/*.mjs"
+			},
+			"types": "./types/dist/lib/processors/*.d.mts",
+			"import": "./dist/lib/processors/*.mjs"
+		},
 		"./errors": {
 			"slothlet-two-dev": {
 				"types": "./types/src2/lib/errors.d.mts",
