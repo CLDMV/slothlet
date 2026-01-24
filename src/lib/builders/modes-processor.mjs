@@ -48,20 +48,19 @@ export class ModesProcessor extends ComponentBase {
 		api,
 		files,
 		directory,
-		ownership,
-		contextManager,
-		instanceID,
-		config,
 		currentDepth,
 		mode,
 		isRoot,
 		recursive,
 		populateDirectly = false,
 		apiPathPrefix = "",
-		collisionContext = "initial",
-		loader,
-		flatten
+		collisionContext = "initial"
 	) {
+		// Access components and data via slothlet instance
+		const { ownership } = this.slothlet.handlers;
+		const { loader, flatten } = this.slothlet.processors;
+		const { contextManager, instanceID, config } = this.slothlet;
+		
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
 			if (!apiPathPrefix) return path;
@@ -704,19 +703,13 @@ export class ModesProcessor extends ComponentBase {
 						targetApi,
 						subDir.children.files,
 						{ name: subDirName, children: subDir.children },
-						ownership,
-						contextManager,
-						instanceID,
-						config,
 						currentDepth + 1,
 						mode,
 						false, // Not root
 						recursive, // Pass through recursive flag
 						false, // populateDirectly - build on parent api
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
-						collisionContext,
-						loader,
-						flatten
+						collisionContext
 					);
 				}
 			} else {
@@ -897,19 +890,13 @@ export class ModesProcessor extends ComponentBase {
 				materialized,
 				dir.children.files,
 				{ name: dir.name, children: dir.children },
-				ownership,
-				contextManager,
-				instanceID,
-				config,
 				0,
 				"eager",
 				false, // Not root (for root contributor detection)
 				false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
 				true, // Populate directly (don't nest under categoryName)
 				"",
-				"initial",
-				loader,
-				flatten
+				"initial"
 			);
 
 			if (config.debug?.modes) {

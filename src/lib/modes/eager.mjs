@@ -29,11 +29,9 @@ export async function buildEagerAPI({
 }) {
 	const api = {};
 
-	// Access components and data via slothlet instance
-	const { loader, flatten } = slothlet.processors;
+	// Access components via slothlet instance
 	const { modesProcessor } = slothlet.builders;
-	const { ownership } = slothlet.handlers;
-	const { contextManager, instanceID, config } = slothlet;
+	const { loader } = slothlet.processors;
 
 	// Scan directory structure
 	const structure = await loader.scanDirectory(dir);
@@ -51,25 +49,19 @@ export async function buildEagerAPI({
 		api,
 		structure.files,
 		rootDirectory,
-		ownership,
-		contextManager,
-		instanceID,
-		config,
 		0,
 		"eager",
 		true, // isRoot
 		true, // recursive - MUST be true to process subdirectories!
 		false, // populateDirectly - keep false
 		apiPathPrefix,
-		collisionContext,
-		loader,
-		flatten
+		collisionContext
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, config, "eager");
+	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, slothlet.config, "eager");
 
 	return finalApi;
 }

@@ -77,16 +77,7 @@ export class Builder extends ComponentBase {
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
 	 */
 	async buildAPI(options) {
-		const {
-			dir,
-			mode = "eager",
-			ownership = this.slothlet.handlers.ownership,
-			contextManager = this.contextManager,
-			instanceID = this.instanceID,
-			config = this.config,
-			apiPathPrefix = "",
-			collisionContext = "initial"
-		} = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial" } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {

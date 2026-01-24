@@ -43,11 +43,9 @@ export async function buildLazyAPI({
 }) {
 	const api = {};
 
-	// Access components and data via slothlet instance
-	const { loader, flatten } = slothlet.processors;
+	// Access components via slothlet instance
 	const { modesProcessor } = slothlet.builders;
-	const { ownership } = slothlet.handlers;
-	const { contextManager, instanceID, config } = slothlet;
+	const { loader } = slothlet.processors;
 
 	// Scan directory structure
 	const structure = await loader.scanDirectory(dir);
@@ -65,25 +63,19 @@ export async function buildLazyAPI({
 		api,
 		structure.files,
 		rootDirectory,
-		ownership,
-		contextManager,
-		instanceID,
-		config,
 		0,
 		"lazy",
 		true,
 		false, // populateDirectly - keep false, the real issue is elsewhere
 		false,
 		apiPathPrefix,
-		collisionContext,
-		loader,
-		flatten
+		collisionContext
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, config, "lazy");
+	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, slothlet.config, "lazy");
 
 	return finalApi;
 }
