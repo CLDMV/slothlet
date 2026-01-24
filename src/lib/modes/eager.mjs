@@ -6,7 +6,7 @@ import { SlothletError } from "@cldmv/slothlet/errors";
 import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
-import { processFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
+import { processFiles, applyRootContributor } from "@cldmv/slothlet/builders/modes-processor";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
 import path from "node:path";
