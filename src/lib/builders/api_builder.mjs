@@ -11,7 +11,7 @@
  * const api = await buildFinalAPI({ userApi, instance, config });
  */
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { addApiComponent, removeApiComponent, reloadApiComponent } from "@cldmv/slothlet/handlers/api-manager";
+import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -128,6 +128,9 @@ async function createSlothletNamespace(instance, config, userApi) {
 		// Ignore - version will remain "unknown"
 	}
 
+	// Create ApiManager instance for this slothlet instance
+	const apiManager = new ApiManager(instance);
+
 	const namespace = {
 		/**
 		 * Slothlet version from package.json
@@ -176,8 +179,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
 				// Filter out internal options that shouldn't be user-controllable
 				const { recordHistory, ...filteredOptions } = options;
-				return addApiComponent({
-					instance,
+				return apiManager.addApiComponent({
 					apiPath,
 					folderPath,
 					metadata,
@@ -197,7 +199,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.remove("plugins.tools");
 			 */
 			remove: async function slothlet_api_remove(pathOrModuleId) {
-				return removeApiComponent({ instance, pathOrModuleId });
+				return apiManager.removeApiComponent({ pathOrModuleId });
 			},
 
 			/**
@@ -212,7 +214,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.reload("plugins");
 			 */
 			reload: async function slothlet_api_reload(pathOrModuleId) {
-				return reloadApiComponent({ instance, pathOrModuleId });
+				return apiManager.reloadApiComponent({ pathOrModuleId });
 			}
 		},
 
