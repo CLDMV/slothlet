@@ -23,20 +23,17 @@ import path from "node:path";
  */
 export async function buildEagerAPI({
 	dir,
-	ownership,
-	contextManager,
-	instanceID,
-	config = {},
-	maxDepth = Infinity,
 	apiPathPrefix = "",
 	collisionContext = "initial",
 	slothlet
 }) {
 	const api = {};
 
-	// Access components via slothlet instance
+	// Access components and data via slothlet instance
 	const { loader, flatten } = slothlet.processors;
 	const { modesProcessor } = slothlet.builders;
+	const { ownership } = slothlet.handlers;
+	const { contextManager, instanceID, config } = slothlet;
 
 	// Scan directory structure
 	const structure = await loader.scanDirectory(dir);
