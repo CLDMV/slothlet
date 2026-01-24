@@ -687,7 +687,11 @@ export async function processFiles(
 				console.log(
 					`[FILE WRAPPER ASSIGNMENT] propertyName="${propertyName}", apiPath="${buildApiPath(localPath)}", overwriting="${propertyName in targetApi ? (targetApi[propertyName]?.__wrapper ? "wrapper" : "value") : "nothing"}"`
 				);
-				targetApi[propertyName] = wrapper.createProxy();
+				assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
+					useCollisionDetection: true,
+					config,
+					safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, buildApiPath(localPath))
+				});
 			} else {
 				targetApi[propertyName] = moduleContent;
 			}
