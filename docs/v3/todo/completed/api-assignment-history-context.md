@@ -1,8 +1,44 @@
 # API Assignment Module - Design History and Context
 
 **Created:** January 23, 2026  
-**Module:** `src/lib/helpers/api_assignment.mjs` (to be moved to `builders/api-assignment.mjs`)  
-**Status:** Current implementation working, planned for class-based refactor
+**Completed:** January 23, 2026  
+**Module:** `src/lib/builders/api-assignment.mjs`  
+**Status:** ✅ **COMPLETED** - Phase 1 & Phase 2 complete, collision detection unified
+
+## Completion Summary
+
+**What Was Accomplished:**
+
+✅ **Phase 1: File Organization (COMPLETE)**
+- Moved `src/lib/helpers/api_assignment.mjs` → `src/lib/builders/api-assignment.mjs`
+- Updated all import paths in `hot_reload.mjs` and `modes.mjs`
+- All tests passing after move
+
+✅ **Phase 2: Unify Direct Assignments (COMPLETE)**
+- Replaced all 4 direct assignments in `modes.mjs` with `assignToApiPath` calls
+- Removed `safeAssign` callback parameter (unnecessary indirection)
+- Moved collision detection directly into `assignToApiPath` using `config.collision`
+- Deleted 65-line `safeAssign` function entirely
+- Math collision scenario (math.mjs + math/ folder) now merges correctly
+- All 240 collision tests passing + debug tests passing
+
+**Key Architectural Achievement:**
+- **Single source of truth**: `assignToApiPath` now handles ALL collision detection directly
+- **No more duplication**: All assignments (initial load + hot reload) use unified logic
+- **Cleaner code**: Removed callback indirection, 94 lines deleted from modes.mjs
+
+**Commits:**
+1. `9a3fb82` - Move collision detection into assignToApiPath, remove safeAssign callback
+2. `e265ecb` - Remove safeAssign function and all callback parameters
+
+**Remaining Work (Optional Phase 3):**
+- Class-based refactor (convert to `ApiAssignment` class)
+- Can be done separately as architecture cleanup
+- Current functional implementation is solid and complete
+
+---
+
+## Original Design Context (Historical Reference)
 
 ## ⚠️ CRITICAL: Testing Instructions (READ THIS FIRST)
 
@@ -625,29 +661,41 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 - [✅] Tests pass (3 expected differences remain)
 - [✅] **COMMITTED**: "refactor: move api_assignment to builders/ category"
 
-**Phase 2: Eliminate Duplication in Initial Load (COMPLETED ✅ January 23, 2026)**
+**Phase 2: Unify All Assignments (COMPLETED ✅ January 23, 2026)**
 
-- [✅] **Refactored processFiles in modes.mjs**: Replaced 12 occurrences of safeAssign + assignment pattern
-  - Pattern: `if (safeAssign(...)) { targetApi[key] = value; }` 
-  - Replaced with: `assignToApiPath(targetApi, key, value, { useCollisionDetection: true, config, safeAssign: wrapper })`
-  - Uses unified collision detection from api-assignment.mjs
-  - **TEST after each change**: Both critical tests pass
+- [✅] **Removed safeAssign indirection**: Moved collision detection into assignToApiPath
+  - assignToApiPath now checks `config.collision` directly
+  - No more callback parameter needed
+  - Cleaner architecture: single source of truth
   
-- [✅] **Verified unified logic**: buildAPI now uses same collision/assignment logic as hot_reload
-  - processFiles calls assignToApiPath internally (12 locations)
-  - hot_reload calls mergeApiObjects for result merging  
-  - Both use the SAME unified code from api-assignment.mjs
-
+- [✅] **Replaced all 4 remaining direct assignments** in modes.mjs:
+  - Line 690: `wrapper.createProxy()` file assignment
+  - Line 696: `moduleContent` file assignment
+  - Line 814: `wrapper.createProxy()` subdirectory (eager mode)
+  - Line 857: `createLazySubdirectoryWrapper()` (lazy mode)
+  
+- [✅] **Removed safeAssign from all 12 existing assignToApiPath calls**
+  - Deleted unused callback parameters
+  
+- [✅] **Deleted safeAssign function entirely**
+  - 65 lines removed
+  - Function no longer needed
+  
+- [✅] **Math collision test passes**:
+  - math.mjs + math/ folder now merge correctly
+  - Both math.add and math.multiply work
+  - No more 1005 collision marker
+  
+- [✅] **All tests pass**:
+  - 240 collision config tests ✅
+  - Debug validation (441 paths) ✅
+  
 - [✅] **Commits**:
-  - `4d943c9`: Initial 11 replacements
-  - `636e0a2`: Fixed pattern with console.log (1 more)
-  - Both tests pass consistently
+  - `9a3fb82`: Move collision detection into assignToApiPath, remove safeAssign callback
+  - `e265ecb`: Remove safeAssign function and all callback parameters
+  - Total: 94 lines deleted from modes.mjs
 
-**Note on remaining direct assignments:**
-- 4 direct assignments remain without collision detection (lines ~689, 691, 807, 850 in modes.mjs)
-- These don't have collision detection in original code - working as designed
-- Adding collision to them would be a breaking behavior change
-- Can be addressed separately if collision detection should be universal
+**Key Achievement**: ALL assignment operations (initial load + hot reload) now use unified `assignToApiPath` logic with direct config.collision checking. No duplication, no callbacks, single source of truth achieved.
 
 **Phase 3: Class-Based Refactor (TODO 🎯)**
 
