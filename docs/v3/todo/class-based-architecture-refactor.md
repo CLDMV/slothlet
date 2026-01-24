@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 24, 2026  
-**Status:** ⏳ Phase 2: In Progress (1 of 4 steps complete) - api-manager converted  
+**Status:** ✅ Phase 2.3 COMPLETE - All processors converted to classes  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `5495a4b` - Phase 2.1 complete - api-manager converted to ApiManager class
+**Latest Progress:** `3d2df43` - Phase 2.3 (2/2) complete - Flatten processor converted to class
 
 ## Progress Summary
 
@@ -57,7 +57,7 @@
   - Added `./factories/*` to package.json exports
   - Factory pattern: Select/provide class instances (getContextManager selects async/live)
 
-**Phase 2: Class Conversions (1/4 COMPLETE)**
+**Phase 2: Class Conversions (6/6 COMPLETE)** 🎉
 
 - **Phase 2.1**: ✅ Convert api-manager.mjs to ApiManager class (commit `5495a4b`)
   - Converted function-based to class-based architecture
@@ -70,12 +70,93 @@
   - All 441 debug paths pass (3 acceptable exportDefault.extra differences)
   - All 240 collision config tests pass ✅
 
+- **Phase 2.2 (1/4)**: ✅ Convert Builder to class (commit `d7f7e6b`)
+  - Converted buildAPI function to Builder class extending ComponentBase
+  - Updated Slothlet to instantiate Builder as this.builder
+  - Builder accesses other components via this.slothlet.apiBuilder, this.slothlet.ownership, etc.
+  - All 452 debug paths pass (+11 from Slothlet exposing new properties)
+  - All 240 collision config tests pass ✅
+
+- **Phase 2.2 (2/4)**: ✅ Convert ApiBuilder to class (commit `d989bbe`)
+  - Converted buildCoreAPI function to ApiBuilder class extending ComponentBase
+  - Updated Slothlet to instantiate ApiBuilder as this.apiBuilder
+  - Builder calls this.slothlet.apiBuilder.buildCoreAPI()
+  - Removed standalone buildCoreAPI function export
+  - All 451 debug paths pass (-1 from removing buildCoreAPI export)
+  - All 240 collision config tests pass ✅
+
+- **Phase 2.2 (3/4)**: ✅ Convert ApiAssignment to class (commit `1e1dadb`)
+  - Converted assignToApiPath, mergeApiObjects, mutateApiValue to ApiAssignment class methods
+  - Extended ComponentBase for config and error class access
+  - Updated Slothlet to instantiate ApiAssignment as this.apiAssignment
+  - Updated ApiBuilder to use this.slothlet.apiAssignment.assignToApiPath()
+  - Updated ApiManager to use this.slothlet.apiAssignment methods
+  - Removed all direct imports of api-assignment functions
+  - Kept backwards-compatible standalone exports for code not yet converted
+  - All 452 debug paths pass
+  - All 240 collision config tests pass ✅
+
+- **Phase 2.2 (4/4)**: ✅ Convert ModesProcessor to class (commit `1d9afaa`)
+  - Converted processFiles, createLazySubdirectoryWrapper, applyRootContributor to ModesProcessor class methods
+  - Extended ComponentBase for config and error class access
+  - Updated all 16 assignToApiPath calls to use this.slothlet.apiAssignment.assignToApiPath
+  - Fixed recursive processFiles calls (lines 699, 889) to use this.processFiles
+  - Fixed internal createLazySubdirectoryWrapper call (line 726) to use this.createLazySubdirectoryWrapper
+  - Updated Slothlet to instantiate ModesProcessor as this.modesProcessor
+  - Builder passes modesProcessor to buildEagerAPI/buildLazyAPI
+  - Mode files (eager.mjs, lazy.mjs) updated to use modesProcessor instance methods
+  - Removed processFiles/applyRootContributor/createLazySubdirectoryWrapper imports from mode files
+  - All 453 debug paths pass (+1 for modesProcessor property)
+  - All 240 collision config tests pass ✅
+
+- **Phase 2.3 (1/2)**: ✅ Convert Loader to class (commit `54f9f88`)
+  - Converted loadModule, scanDirectory, hasValidExports, extractExports, mergeExportsIntoAPI to Loader class methods
+  - Extended ComponentBase for error class access (this.SlothletError, this.SlothletWarning)
+  - Fixed recursive scanDirectory call to use this.scanDirectory
+  - Updated Slothlet to instantiate Loader as this.loader
+  - Builder passes loader to buildEagerAPI/buildLazyAPI
+  - Mode files (eager.mjs, lazy.mjs) updated to use loader parameter
+  - ModesProcessor updated to accept and use loader parameter in processFiles
+  - All loader method calls use loader instance (loader.loadModule, loader.extractExports, loader.scanDirectory)
+  - Fixed recursive processFiles calls to pass loader parameter with correct argument order (collisionContext before loader)
+  - Removed all direct imports of loader functions from mode files and modes-processor
+  - All 454 debug paths pass (+1 for loader property)
+  - All 240 collision config tests pass ✅
+
+- **Phase 2.3 (2/2)**: ✅ Convert Flatten to class (commit `3d2df43`)
+  - Converted getFlatteningDecision, processModuleForAPI, buildCategoryDecisions to Flatten class methods
+  - Extended ComponentBase for config access (no error classes needed - pure logic)
+  - Converted flatten_checkSelfReferential, flatten_checkMultiDefault, flatten_checkAutoFlatten to private methods using # syntax
+  - Updated Slothlet to instantiate Flatten as this.flatten
+  - Builder passes flatten to buildEagerAPI/buildLazyAPI
+  - Mode files (eager.mjs, lazy.mjs) updated to use flatten parameter
+  - ModesProcessor updated to accept and use flatten parameter in processFiles
+  - All flatten method calls use flatten instance (flatten.getFlatteningDecision, flatten.buildCategoryDecisions, flatten.processModuleForAPI)
+  - Fixed lazy.mjs buildLazyAPI to accept flatten parameter
+  - Fixed modes-processor.mjs recursive processFiles call at line 894 to pass flatten
+  - Removed all direct imports of flatten functions from mode files and modes-processor
+  - All 455 debug paths pass (+1 for flatten property)
+  - All 240 collision config tests pass ✅
+
 ### 🎯 Next Steps
 
-**Phase 2: Class Conversions (Continue)**
-- **Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment, modes-processor)
-- **Phase 2.3**: Convert processors to classes (loader, flatten)  
-- **Phase 2.4**: Update Slothlet main class to use class-based components
+**Phase 2: Class Conversions (COMPLETE)** ✅
+~~**Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment, modes-processor)~~ ✅ **COMPLETE**  
+~~**Phase 2.3**: Convert processors to classes (loader, flatten)~~ ✅ **COMPLETE**  
+**Phase 2.4**: Update Slothlet main class to use class-based components → **COMPLETE** ✅
+  - ✅ ApiManager instantiated and used
+  - ✅ Builder instantiated and used
+  - ✅ ApiBuilder instantiated and used
+  - ✅ ApiAssignment instantiated and used
+  - ✅ ModesProcessor instantiated and used
+  - ✅ Loader instantiated and used
+  - ✅ Flatten instantiated and used
+
+**Phase 3: Final Documentation & Cleanup**
+- Update architecture docs to reflect class-based system
+- Remove any remaining standalone function exports that are no longer needed
+- Verify all test suites pass
+- Update README if necessary
 
 ### 📝 File Naming Convention
 **All source files must use kebab-case** (e.g., `api-manager.mjs`, not `api_manager.mjs` or `apiManager.mjs`). This refactor includes renaming:
