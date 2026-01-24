@@ -50,6 +50,8 @@ import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-call
  * await manager.addApiComponent({ apiPath: "plugins", folderPath: "./plugins" });
  */
 export class ApiManager extends ComponentBase {
+	static slothletProperty = "apiManager";
+
 	/**
 	 * Create an ApiManager instance.
 	 * @param {object} slothlet - Slothlet class instance.
