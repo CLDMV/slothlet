@@ -693,7 +693,11 @@ export async function processFiles(
 					safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, buildApiPath(localPath))
 				});
 			} else {
-				targetApi[propertyName] = moduleContent;
+				assignToApiPath(targetApi, propertyName, moduleContent, {
+					useCollisionDetection: true,
+					config,
+					safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, buildApiPath(isRoot ? propertyName : `${categoryName}.${propertyName}`))
+				});
 			}
 			if (config.debug?.modes && categoryName === "logger") {
 				console.log(
