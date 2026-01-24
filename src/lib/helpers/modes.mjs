@@ -208,16 +208,20 @@ export async function processFiles(
 	if (!isRoot && shouldWrap && !populateDirectly) {
 		const existingTarget = api[categoryName];
 		if (existingTarget && existingTarget.__wrapper) {
-			console.log(
-				`[CATEGORY REUSE] Reusing existing wrapper for categoryName="${categoryName}", apiPath="${existingTarget.__wrapper.apiPath}"`
-			);
+			if (config.debug?.modes) {
+				console.log(
+					`[CATEGORY REUSE] Reusing existing wrapper for categoryName="${categoryName}", apiPath="${existingTarget.__wrapper.apiPath}"`
+				);
+			}
 			targetApi = existingTarget;
 		} else if (existingTarget === undefined || (typeof existingTarget === "object" && existingTarget !== null)) {
 			// If existingTarget is a wrapper proxy, don't try to clone it - use empty object
 			// The wrapper will be populated with new children during file processing
 			const initialImpl = existingTarget && existingTarget.__wrapper ? {} : cloneWrapperImpl(existingTarget || {}, mode);
 
-			console.log(`[CATEGORY WRAPPER CREATED] categoryName="${categoryName}", apiPath="${buildApiPath(categoryName)}"`);
+			if (config.debug?.modes) {
+				console.log(`[CATEGORY WRAPPER CREATED] categoryName="${categoryName}", apiPath="${buildApiPath(categoryName)}"`);
+			}
 			const wrapper = new UnifiedWrapper({
 				mode,
 				apiPath: buildApiPath(categoryName),
@@ -227,10 +231,14 @@ export async function processFiles(
 				ownership
 			});
 			api[categoryName] = wrapper.createProxy();
-			console.log(`[CATEGORY WRAPPER ASSIGNED] api["${categoryName}"] is now a wrapper`);
+			if (config.debug?.modes) {
+				console.log(`[CATEGORY WRAPPER ASSIGNED] api["${categoryName}"] is now a wrapper`);
+			}
 			targetApi = api[categoryName];
-			console.log(`[CATEGORY CREATED] Created new category wrapper for categoryName="${categoryName}", apiPath="${wrapper.apiPath}"`);
-			console.log(`[CATEGORY CREATED] targetApi is wrapper: ${!!targetApi.__wrapper}, targetApi keys: ${Object.keys(targetApi)}`);
+			if (config.debug?.modes) {
+				console.log(`[CATEGORY CREATED] Created new category wrapper for categoryName="${categoryName}", apiPath="${wrapper.apiPath}"`);
+				console.log(`[CATEGORY CREATED] targetApi is wrapper: ${!!targetApi.__wrapper}, targetApi keys: ${Object.keys(targetApi)}`);
+			}
 		}
 	}
 
@@ -279,9 +287,11 @@ export async function processFiles(
 		const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function";
 
 		if (moduleName === "config" || moduleKeys.some((k) => k.includes("Config") || k.includes("config"))) {
-			console.log(
-				`[FILE PROCESSING] module="${moduleName}", category="${categoryName || "(none)"}", isRoot=${isRoot}, hasDefault=${analysis.hasDefault}, moduleKeys=[${moduleKeys.join(", ")}]`
-			);
+			if (config.debug?.modes) {
+				console.log(
+					`[FILE PROCESSING] module="${moduleName}", category="${categoryName || "(none)"}", isRoot=${isRoot}, hasDefault=${analysis.hasDefault}, moduleKeys=[${moduleKeys.join(", ")}]`
+				);
+			}
 		}
 
 		if (isRootContributor) {
@@ -552,10 +562,14 @@ export async function processFiles(
 						}
 					} else {
 						// Regular multi-export file (no matching object)
-						console.log(`[FLATTEN MULTI-EXPORT] File "${moduleName}" in category "${categoryName}", has ${moduleKeys.length} exports`);
-						console.log(`[FLATTEN MULTI-EXPORT] targetApi is wrapper: ${!!targetApi.__wrapper}, keys before: ${Object.keys(targetApi)}`);
+						if (config.debug?.modes) {
+							console.log(`[FLATTEN MULTI-EXPORT] File "${moduleName}" in category "${categoryName}", has ${moduleKeys.length} exports`);
+							console.log(`[FLATTEN MULTI-EXPORT] targetApi is wrapper: ${!!targetApi.__wrapper}, keys before: ${Object.keys(targetApi)}`);
+						}
 						for (const key of moduleKeys) {
-							console.log(`[FLATTEN MULTI-EXPORT] Assigning export "${key}" to targetApi`);
+							if (config.debug?.modes) {
+								console.log(`[FLATTEN MULTI-EXPORT] Assigning export "${key}" to targetApi`);
+							}
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper({
 									mode,

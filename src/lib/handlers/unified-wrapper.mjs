@@ -116,11 +116,12 @@ export class UnifiedWrapper {
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		if (initialImpl !== null) {
 			const implKeys = Object.keys(initialImpl || {});
-			if (apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+			const config = this._getConfig();
+			if ((wrapperDebugEnabled || config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				console.log(`[UnifiedWrapper constructor] apiPath="${apiPath}": _impl has ${implKeys.length} keys:`, implKeys.slice(0, 5));
 			}
 			this._adoptImplChildren();
-			if (apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+			if ((wrapperDebugEnabled || config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				console.log(
 					`[UnifiedWrapper constructor] apiPath="${apiPath}": after adopt, _childCache size=${this._childCache.size}, keys:`,
 					Array.from(this._childCache.keys()).slice(0, 5)
@@ -138,6 +139,19 @@ export class UnifiedWrapper {
 	}
 
 	/**
+	 * Get config from contextManager
+	 * @returns {Object|null} Config object or null if not available
+	 * @private
+	 */
+	_getConfig() {
+		if (!this.contextManager || !this.instanceID) {
+			return null;
+		}
+		const store = this.contextManager.instances?.get(this.instanceID);
+		return store?.config || null;
+	}
+
+	/**
 	 * Get current implementation
 	 * @returns {Object|null} Current __impl value
 	 * @public
@@ -152,7 +166,8 @@ export class UnifiedWrapper {
 	 * @public
 	 */
 	__setImpl(newImpl) {
-		if (wrapperDebugEnabled && this.apiPath === "string") {
+		const config = this._getConfig();
+		if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
 			console.log(`[__setImpl] apiPath=${this.apiPath}, newImpl keys=${Object.keys(newImpl || {}).join(",")}`);
 		}
 		this._impl = newImpl;
@@ -184,7 +199,8 @@ export class UnifiedWrapper {
 			return;
 		}
 
-		if (wrapperDebugEnabled && this.apiPath === "string") {
+		const config = this._getConfig();
+		if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
 			console.log(`[_materialize] START for apiPath=${this.apiPath}`);
 		}
 
@@ -192,7 +208,7 @@ export class UnifiedWrapper {
 
 		try {
 			if (this._materializeFunc) {
-				if (wrapperDebugEnabled && this.apiPath === "string") {
+				if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
 					console.log(`[_materialize] Calling materializeFunc (no args, expects return value)...`);
 				}
 				// POC pattern: materializeFunc returns the implementation
@@ -202,14 +218,14 @@ export class UnifiedWrapper {
 				this._adoptImplChildren();
 				this._state.materialized = true;
 				this._state.inFlight = false;
-				if (wrapperDebugEnabled && this.apiPath === "string") {
+				if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
 					console.log(
 						`[_materialize] DONE! result=${typeof result}, result keys=${result ? Object.keys(result).join(",") : "null"}, impl keys=${this._impl ? Object.keys(this._impl).join(",") : "null"}`
 					);
 				}
 			}
 		} catch (error) {
-			if (wrapperDebugEnabled && this.apiPath === "string") {
+			if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
 				console.log(`[_materialize] ERROR: ${error.message}`);
 			}
 			this._state.inFlight = false;
