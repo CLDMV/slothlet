@@ -23,7 +23,7 @@ import path from "node:path";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { mergeApiObjects } from "@cldmv/slothlet/helpers/api_assignment";
+import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
 
 const hotReloadState = new WeakMap();
 
