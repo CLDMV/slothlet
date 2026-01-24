@@ -112,9 +112,27 @@ export class Builder extends ComponentBase {
 		// Build based on mode - each mode handles its own scanning and flattening
 		let rawAPI;
 		if (mode === "eager") {
-			rawAPI = await buildEagerAPI({ dir, ownership, contextManager, instanceID, config, apiPathPrefix, collisionContext });
+			rawAPI = await buildEagerAPI({
+				dir,
+				ownership,
+				contextManager,
+				instanceID,
+				config,
+				apiPathPrefix,
+				collisionContext,
+				modesProcessor: this.slothlet.modesProcessor
+			});
 		} else if (mode === "lazy") {
-			rawAPI = await buildLazyAPI({ dir, ownership, contextManager, instanceID, config, apiPathPrefix, collisionContext });
+			rawAPI = await buildLazyAPI({
+				dir,
+				ownership,
+				contextManager,
+				instanceID,
+				config,
+				apiPathPrefix,
+				collisionContext,
+				modesProcessor: this.slothlet.modesProcessor
+			});
 		} else {
 			throw new this.SlothletError(
 				"INVALID_CONFIG_MODE_UNKNOWN",
