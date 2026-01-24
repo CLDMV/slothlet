@@ -625,24 +625,29 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 - [✅] Tests pass (3 expected differences remain)
 - [✅] **COMMITTED**: "refactor: move api_assignment to builders/ category"
 
-**Phase 2: Eliminate Duplication in Initial Load (TODO 🎯)**
+**Phase 2: Eliminate Duplication in Initial Load (COMPLETED ✅ January 23, 2026)**
 
-- [ ] **Refactor `modes/eager.mjs`**: Replace duplicated assignment logic with `assignToApiPath` calls
-  - Find all places where values are assigned to API
-  - Replace with `assignToApiPath(targetApi, key, value, options)`
-  - Ensure collision detection uses unified logic
-  - **TEST after each change**
+- [✅] **Refactored processFiles in modes.mjs**: Replaced 12 occurrences of safeAssign + assignment pattern
+  - Pattern: `if (safeAssign(...)) { targetApi[key] = value; }` 
+  - Replaced with: `assignToApiPath(targetApi, key, value, { useCollisionDetection: true, config, safeAssign: wrapper })`
+  - Uses unified collision detection from api-assignment.mjs
+  - **TEST after each change**: Both critical tests pass
   
-- [ ] **Refactor `modes/lazy.mjs`**: Replace duplicated assignment logic with `assignToApiPath` calls
-  - Same pattern as eager mode
-  - Find value assignment locations
-  - Replace with unified `assignToApiPath` calls
-  - **TEST after each change**
+- [✅] **Verified unified logic**: buildAPI now uses same collision/assignment logic as hot_reload
+  - processFiles calls assignToApiPath internally (12 locations)
+  - hot_reload calls mergeApiObjects for result merging  
+  - Both use the SAME unified code from api-assignment.mjs
 
-- [ ] **Review `helpers/modes.mjs`**: Check if any logic should use `api_assignment.mjs`
-  - May have shared utilities that could benefit
-  - Evaluate if subdirectory processing needs unified logic
-  - **TEST after any changes**
+- [✅] **Commits**:
+  - `4d943c9`: Initial 11 replacements
+  - `636e0a2`: Fixed pattern with console.log (1 more)
+  - Both tests pass consistently
+
+**Note on remaining direct assignments:**
+- 4 direct assignments remain without collision detection (lines ~689, 691, 807, 850 in modes.mjs)
+- These don't have collision detection in original code - working as designed
+- Adding collision to them would be a breaking behavior change
+- Can be addressed separately if collision detection should be universal
 
 **Phase 3: Class-Based Refactor (TODO 🎯)**
 
