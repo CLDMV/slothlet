@@ -24,7 +24,6 @@ class Slothlet {
 		this.config = null;
 		this.api = null;
 		this.boundApi = null;
-		this.ownership = null;
 		this.contextManager = null;
 		this.isLoaded = false;
 		this.reference = null;
@@ -87,18 +86,6 @@ class Slothlet {
 
 		// Special case: contextManager is set during load based on runtime
 		this.contextManager = null;
-
-		// Backwards compatibility: expose commonly-used components at root level
-		this.utilities = this.helpers.utilities;
-		this.apiManager = this.handlers.apiManager;
-		this.ownership = this.handlers.ownership;
-		this.metadata = this.handlers.metadata;
-		this.builder = this.builders.builder;
-		this.apiBuilder = this.builders.apiBuilder;
-		this.apiAssignment = this.builders.apiAssignment;
-		this.modesProcessor = this.builders.modesProcessor;
-		this.loader = this.processors.loader;
-		this.flatten = this.processors.flatten;
 	}
 
 	/**
@@ -129,7 +116,7 @@ class Slothlet {
 		this.config = transformConfig(config);
 
 		// Generate instance ID using utilities component
-		this.instanceID = this.utilities.generateId();
+		this.instanceID = this.helpers.utilities.generateId();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -145,7 +132,7 @@ class Slothlet {
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
-		this.api = await this.builder.buildAPI({
+		this.api = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode
 		});
@@ -155,7 +142,7 @@ class Slothlet {
 
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
-		if (this.ownership) {
+		if (this.handlers.ownership) {
 			this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
 		}
 
@@ -208,14 +195,13 @@ class Slothlet {
 		}
 
 		// Clear ownership
-		if (this.ownership) {
-			this.ownership.clear();
+		if (this.handlers.ownership) {
+			this.handlers.ownership.clear();
 		}
 
 		// Clear references
 		this.api = null;
 		this.boundApi = null;
-		this.ownership = null;
 		this.isLoaded = false;
 	}
 
@@ -231,7 +217,7 @@ class Slothlet {
 
 		// Register this level
 		if (path) {
-			this.ownership.register({
+			this.handlers.ownership.register({
 				moduleId,
 				apiPath: path,
 				value: api,
@@ -244,7 +230,7 @@ class Slothlet {
 		for (const [key, value] of Object.entries(api)) {
 			const childPath = path ? `${path}.${key}` : key;
 			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.ownership.register({
+				this.handlers.ownership.register({
 					moduleId,
 					apiPath: childPath,
 					value,
@@ -290,7 +276,7 @@ class Slothlet {
 			isLoaded: this.isLoaded,
 			config: this.config,
 			context: this.contextManager?.getDiagnostics() || null,
-			ownership: this.ownership?.getDiagnostics() || null
+			ownership: this.handlers.ownership?.getDiagnostics() || null
 		};
 	}
 
@@ -300,10 +286,10 @@ class Slothlet {
 	 * @public
 	 */
 	getOwnership() {
-		if (!this.ownership) {
+		if (!this.handlers.ownership) {
 			return null;
 		}
-		return this.ownership.getDiagnostics();
+		return this.handlers.ownership.getDiagnostics();
 	}
 
 	/**
@@ -313,7 +299,7 @@ class Slothlet {
 	 * @private
 	 */
 	buildFinalAPI(userApi) {
-		return this.apiBuilder.buildFinalAPI(userApi);
+		return this.builders.apiBuilder.buildFinalAPI(userApi);
 	}
 }
 
