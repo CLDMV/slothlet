@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
-**Date:** January 23, 2026  
-**Status:** In Progress - Step 1: 4 of 5 file moves complete  
+**Date:** January 24, 2026  
+**Status:** Phase 1: 4 of 5 file moves complete (Step 1.4 deferred) - Starting Phase 2  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `4ab350d` - loader and flatten moved to processors/
+**Latest Progress:** `126f0a3` - Steps 1.5a/b complete, ready for Phase 2
 
 ## Progress Summary
 
@@ -42,7 +42,12 @@
 
 - **Package.json**: Added `./processors/*` wildcard export (commit `4ab350d`)
 
-### 🎯 Next Steps (1 file move + Phase 2)
+### 🎯 Next Steps - Phase 2: Class Conversions
+- **Step 1.4 DEFERRED**: Split modes.mjs (complex, non-blocking for Phase 2)
+- **Phase 2.1**: Convert api-manager.mjs to ApiManager class
+- **Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment)
+- **Phase 2.3**: Convert processors to classes (loader, flatten)
+- **Phase 2.4**: Refactor Slothlet main class to use class-based components
 - **Step 1.5a**: Move `helpers/loader.mjs` → `processors/loader.mjs`
 - **Step 1.5b**: Move `helpers/flatten.mjs` → `processors/flatten.mjs`
 - **Step 1.4**: Split `helpers/modes.mjs` into utils and processor (complex, save for last)
