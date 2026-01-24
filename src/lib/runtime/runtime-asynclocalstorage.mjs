@@ -26,7 +26,7 @@
  * };
  */
 
-import { asyncRuntime } from "@cldmv/slothlet/handlers/context";
+import { asyncRuntime } from "@cldmv/slothlet/factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**

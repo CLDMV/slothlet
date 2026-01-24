@@ -24,7 +24,7 @@ import { SlothletError } from "@cldmv/slothlet/errors"; *
  * };
  */
 
-import { liveRuntime } from "@cldmv/slothlet/handlers/context";
+import { liveRuntime } from "@cldmv/slothlet/factories/context";
 
 /**
  * Live binding to the current API (self-reference)

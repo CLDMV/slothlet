@@ -2,7 +2,7 @@
  * @fileoverview Main Slothlet orchestrator
  * @module @cldmv/slothlet
  */
-import { getContextManager } from "@cldmv/slothlet/handlers/context";
+import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
 import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { buildFinalAPI } from "@cldmv/slothlet/builders/api_builder";

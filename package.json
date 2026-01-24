@@ -133,6 +133,18 @@
 			"types": "./types/dist/lib/processors/*.d.mts",
 			"import": "./dist/lib/processors/*.mjs"
 		},
+		"./factories/*": {
+			"slothlet-two-dev": {
+				"types": "./types/src2/lib/factories/*.d.mts",
+				"import": "./src2/lib/factories/*.mjs"
+			},
+			"slothlet-dev": {
+				"types": "./types/src/lib/factories/*.d.mts",
+				"import": "./src/lib/factories/*.mjs"
+			},
+			"types": "./types/dist/lib/factories/*.d.mts",
+			"import": "./dist/lib/factories/*.mjs"
+		},
 		"./errors": {
 			"slothlet-two-dev": {
 				"types": "./types/src2/lib/errors.d.mts",

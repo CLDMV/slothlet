@@ -1,6 +1,6 @@
 /**
- * @fileoverview Context management - exports appropriate manager based on runtime
- * @module @cldmv/slothlet/handlers/context
+ * @fileoverview Context management factory - selects appropriate manager based on runtime
+ * @module @cldmv/slothlet/factories/context
  */
 import { asyncContextManager } from "@cldmv/slothlet/handlers/context-async";
 import { liveContextManager } from "@cldmv/slothlet/handlers/context-live";
