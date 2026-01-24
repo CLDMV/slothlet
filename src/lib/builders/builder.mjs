@@ -116,10 +116,6 @@ export class Builder extends ComponentBase {
 		if (mode === "eager") {
 			rawAPI = await buildEagerAPI({
 				dir,
-				ownership,
-				contextManager,
-				instanceID,
-				config,
 				apiPathPrefix,
 				collisionContext,
 				slothlet: this.slothlet
@@ -127,10 +123,6 @@ export class Builder extends ComponentBase {
 		} else if (mode === "lazy") {
 			rawAPI = await buildLazyAPI({
 				dir,
-				ownership,
-				contextManager,
-				instanceID,
-				config,
 				apiPathPrefix,
 				collisionContext,
 				slothlet: this.slothlet
