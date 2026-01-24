@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 23, 2026  
-**Status:** In Progress - Step 1 Partially Complete  
+**Status:** In Progress - Step 1: 2 of 6 file moves complete  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `e265ecb` - api-assignment.mjs moved to builders/ and collision detection unified
+**Latest Progress:** `ecfa60f` - hot_reload.mjs → handlers/api-manager.mjs (renamed + moved)
 
 ## Progress Summary
 
@@ -15,16 +15,20 @@
   - 94 lines deleted from modes.mjs
   - All 240 collision tests + debug tests passing ✅
 
+- **Step 1.2**: Moved `helpers/hot_reload.mjs` → `handlers/api-manager.mjs` (commit `ecfa60f`)
+  - File renamed to kebab-case + better name (api-manager reflects add/remove/reload, not just hot reload)
+  - Updated import in `api_builder.mjs`
+  - Both critical tests passing (240 collision + debug) ✅
+
 ### 🎯 Next Steps
 - **Step 1.1**: Move `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`
-- **Step 1.2**: Move `helpers/hot_reload.mjs` → `handlers/api-manager.mjs` (+ rename to kebab-case)
 - **Step 1.4**: Split `helpers/modes.mjs` into utils and processor
 - **Step 1.5**: Move loader and flatten to processors/
 - **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
 
 ### 📝 File Naming Convention
 **All source files must use kebab-case** (e.g., `api-manager.mjs`, not `api_manager.mjs` or `apiManager.mjs`). This refactor includes renaming:
-- `hot_reload.mjs` → `api-manager.mjs` (also better name - covers add/remove/reload, not just hot reload)
+- `hot_reload.mjs` → `api-manager.mjs` ✅ **DONE** (commit ecfa60f) - also better name (covers add/remove/reload, not just hot reload)
 - `api_assignment.mjs` → `api-assignment.mjs` ✅ **DONE** (commit e265ecb)
 
 ---
@@ -215,12 +219,14 @@ Based on comprehensive analysis (see conversation summary):
    - Functions: `registerInstance()`, `removeInstance()`, `getActiveInstances()`
    - This is not a pure utility, it's a stateful handler
 
-2. **`helpers/hot_reload.mjs` → `handlers/api-manager.mjs`** ⏳ TODO
+2. **`helpers/hot_reload.mjs` → `handlers/api-manager.mjs`** ✅ **COMPLETED** (commit ecfa60f)
    - Reason: Manages runtime API component lifecycle (add/remove/reload)
    - Functions: `addApiComponent()`, `removeApiComponent()`, `reloadApiComponent()`
    - Maintains state WeakMap with per-instance history
    - **RENAME**: `hot_reload.mjs` → `api-manager.mjs` (kebab-case + better name - "hot reload" is only one feature)
    - **CLASS**: `ApiManager` (clearer than "HotReload" - most users use add/remove, not hot reload)
+   - Updated import in `api_builder.mjs`
+   - Both critical tests passing (240 collision + debug)
 
 3. **`helpers/api_assignment.mjs` → `builders/api-assignment.mjs`** ✅ **COMPLETED** (commits 9a3fb82, e265ecb)
    - Reason: Core API construction logic, collision resolution
