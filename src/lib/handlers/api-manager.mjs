@@ -32,7 +32,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { buildAPI } from "@cldmv/slothlet/builders/builder";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 import { mergeApiObjects } from "@cldmv/slothlet/builders/api-assignment";
@@ -89,7 +88,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	normalizeApiPath(apiPath) {
 		if (!apiPath || typeof apiPath !== "string") {
-			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
 				reason: "must be a non-empty string",
 				validationError: true
@@ -99,7 +98,7 @@ export class ApiManager extends ComponentBase {
 		const normalized = apiPath.trim();
 		const parts = normalized.split(".");
 		if (parts.length === 0 || parts.some((part) => part.trim() === "")) {
-			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
 				reason: "contains empty path segments",
 				validationError: true
@@ -107,7 +106,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (parts[0] === "slothlet" || normalized === "shutdown" || normalized === "destroy") {
-			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
 				reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
 				validationError: true
@@ -132,7 +131,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	async resolveFolderPath(folderPath) {
 		if (!folderPath || typeof folderPath !== "string") {
-			throw new SlothletError("INVALID_CONFIG_DIR_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
 				dir: folderPath,
 				validationError: true
 			});
@@ -142,16 +141,16 @@ export class ApiManager extends ComponentBase {
 		try {
 			const stats = await fs.stat(resolvedPath);
 			if (!stats.isDirectory()) {
-				throw new SlothletError("INVALID_CONFIG_DIR_INVALID", {
+				throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
 					dir: resolvedPath,
 					validationError: true
 				});
 			}
 		} catch (error) {
-			if (error instanceof SlothletError) {
+			if (error instanceof this.SlothletError) {
 				throw error;
 			}
-			throw new SlothletError("INVALID_CONFIG_DIR_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
 				dir: resolvedPath,
 				validationError: true
 			});
@@ -230,7 +229,7 @@ export class ApiManager extends ComponentBase {
 				current = next;
 				continue;
 			}
-			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: parts.slice(0, i + 1).join("."),
 				reason: "path segment does not exist or is not traversable",
 				validationError: true
@@ -460,7 +459,7 @@ export class ApiManager extends ComponentBase {
 		// Handle collision based on mode
 		if (existing !== undefined) {
 			if (collisionMode === "error") {
-				throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath: parts.join("."),
 					reason: "path already exists and collision mode is 'error'",
 					validationError: true
@@ -473,8 +472,8 @@ export class ApiManager extends ComponentBase {
 			}
 
 			if (collisionMode === "warn") {
-				if (this.slothlet && !this.slothlet.config?.silent) {
-					new SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
+				if (this.slothlet && !this.config?.silent) {
+					new this.SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
 						apiPath: parts.join(".")
 					});
 				}
@@ -491,8 +490,8 @@ export class ApiManager extends ComponentBase {
 					return;
 				} else {
 					// Can't merge primitives - log warning and keep existing
-					if (this.slothlet && !this.slothlet.config?.silent) {
-						new SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
+					if (this.slothlet && !this.config?.silent) {
+						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
 							apiPath: parts.join(".")
 						});
 					}
@@ -649,13 +648,10 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
-			const baseApi = await buildAPI({
-				dir: this.slothlet.config.dir,
-				mode: this.slothlet.config.mode,
-				ownership: null,
-				contextManager: this.slothlet.contextManager,
-				instanceID: this.slothlet.instanceID,
-				config: this.slothlet.config
+			const baseApi = await this.slothlet.builder.buildAPI({
+				dir: this.config.dir,
+				mode: this.config.mode,
+				ownership: null
 			});
 
 			const { parts } = this.normalizeApiPath(apiPath);
@@ -701,7 +697,7 @@ export class ApiManager extends ComponentBase {
 	async addApiComponent(params) {
 		const { apiPath, folderPath, metadata = {}, options = {} } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "addApi",
 				validationError: true
 			});
@@ -711,25 +707,21 @@ export class ApiManager extends ComponentBase {
 		const resolvedFolderPath = await this.resolveFolderPath(folderPath);
 
 		// Determine collision handling based on config.collision.addApi
-		const collisionMode = this.slothlet.config.collision.addApi || "merge";
+		const collisionMode = this.config.collision.addApi || "merge";
 		const allowOverwrite = !!(options.forceOverwrite || options.allowOverwrite || collisionMode === "replace" || collisionMode === "merge");
 		const mutateExisting = !!(options.mutateExisting || collisionMode === "merge");
 
 		const moduleId = options.moduleId ? String(options.moduleId) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
 		if ((options.forceOverwrite || options.allowOverwrite) && !moduleId) {
-			throw new SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
+			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
 				apiPath: normalizedPath,
 				validationError: true
 			});
 		}
 
-		const newApi = await buildAPI({
+		const newApi = await this.slothlet.builder.buildAPI({
 			dir: resolvedFolderPath,
-			mode: this.slothlet.config.mode,
-			ownership: this.slothlet.ownership,
-			contextManager: this.slothlet.contextManager,
-			instanceID: this.slothlet.instanceID,
-			config: this.slothlet.config,
+			mode: this.config.mode,
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi"
 		});
@@ -786,14 +778,14 @@ export class ApiManager extends ComponentBase {
 		if (newApi[finalKey] !== undefined && !normalizedPath.includes(".")) {
 			console.log(`[addApiComponent] Extracting ${finalKey}, isWrapper:`, this.isWrapperProxy(newApi[finalKey]));
 			apiToMerge = newApi[finalKey];
-			if (this.slothlet.config.debug?.api) {
+			if (this.config.debug?.api) {
 				console.log(`[hot_reload] Extracted ${finalKey} from newApi:`, Object.keys(apiToMerge || {}));
 			}
 		} else {
 			console.log(`[addApiComponent] Using full newApi as apiToMerge (apiPathPrefix mode or no finalKey match)`);
 		}
 
-		if (this.slothlet.config.debug?.api) {
+		if (this.config.debug?.api) {
 			console.log(`[hot_reload] apiToMerge keys:`, Object.keys(apiToMerge));
 		}
 
@@ -848,7 +840,7 @@ export class ApiManager extends ComponentBase {
 	async removeApiComponent(params) {
 		const { apiPath, moduleId } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
 				validationError: true
 			});
@@ -919,7 +911,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (!apiPath) {
-			throw new SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
 				reason: "apiPath is required for removeApi operation",
 				validationError: true
@@ -972,7 +964,7 @@ export class ApiManager extends ComponentBase {
 	async reloadApiComponent(params) {
 		const { apiPath, moduleId } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
-			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
+			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reloadApi",
 				validationError: true
 			});
@@ -1009,4 +1001,3 @@ export class ApiManager extends ComponentBase {
 		}
 	}
 }
-
