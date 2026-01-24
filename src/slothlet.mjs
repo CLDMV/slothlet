@@ -29,15 +29,21 @@ class Slothlet {
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
+
+		// Component namespaces (populated by _initializeComponents)
+		this.helpers = {};
+		this.handlers = {};
+		this.builders = {};
+		this.processors = {};
 	}
 
 	/**
 	 * Initialize all component class instances via auto-discovery
-	 * Scans handlers/, builders/, processors/ for classes with slothletProperty
+	 * Organizes components into namespaces: helpers.*, handlers.*, builders.*, processors.*
 	 * @private
 	 */
 	async _initializeComponents() {
-		// Auto-discover handlers, builders, processors, helpers
+		// Auto-discover helpers, handlers, builders, processors
 		// NOTE: Does NOT auto-discover:
 		//   - errors/ (throw-able classes, not instance components)
 		//   - runtime/ (context managers set manually during load)
@@ -62,14 +68,15 @@ class Slothlet {
 
 					for (const ClassExport of classExports) {
 						const propName = ClassExport.slothletProperty;
-						this[propName] = new ClassExport(this);
+						// Organize into category namespace
+						this[category][propName] = new ClassExport(this);
 
 						if (this.config?.debug?.initialization) {
-							console.log(`[INIT] ${ClassExport.name} → this.${propName}`);
+							console.log(`[INIT] ${ClassExport.name} → this.${category}.${propName}`);
 						}
 					}
 				} catch (error) {
-					// Skip files that fail to import (e.g., metadata.mjs with broken imports)
+					// Skip files that fail to import
 					// Only error if a component with slothletProperty can't be loaded
 					if (this.config?.debug?.initialization) {
 						console.warn(`[INIT] Skipped ${file}: ${error.message}`);
@@ -80,6 +87,18 @@ class Slothlet {
 
 		// Special case: contextManager is set during load based on runtime
 		this.contextManager = null;
+
+		// Backwards compatibility: expose commonly-used components at root level
+		this.utilities = this.helpers.utilities;
+		this.apiManager = this.handlers.apiManager;
+		this.ownership = this.handlers.ownership;
+		this.metadata = this.handlers.metadata;
+		this.builder = this.builders.builder;
+		this.apiBuilder = this.builders.apiBuilder;
+		this.apiAssignment = this.builders.apiAssignment;
+		this.modesProcessor = this.builders.modesProcessor;
+		this.loader = this.processors.loader;
+		this.flatten = this.processors.flatten;
 	}
 
 	/**
