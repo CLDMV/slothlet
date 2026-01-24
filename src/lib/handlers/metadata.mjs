@@ -5,7 +5,7 @@
  */
 
 import { getStack, toFsPath } from "@cldmv/slothlet/helpers/resolve-from-caller";
-import { SlothletWarning } from "@cldmv/slothlet/helpers/errors";
+import { SlothletWarning } from "@cldmv/slothlet/errors";
 
 // Runtime module import (lazy loaded on first use)
 let runtimeModule = null;

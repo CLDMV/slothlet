@@ -6,7 +6,6 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
-import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
 import { transformConfig } from "@cldmv/slothlet/helpers/config";
@@ -45,29 +44,27 @@ class Slothlet {
 		//   - runtime/ (context managers set manually during load)
 		//   - modes/ (lazy/eager mode handlers, not instance components)
 		//   - i18n/ (translation utilities, not instance components)
-		
+
 		const categories = ["handlers", "builders", "processors"];
 		const baseDir = join(import.meta.dirname, "lib");
-		
+
 		for (const category of categories) {
 			const categoryDir = join(baseDir, category);
-			const files = readdirSync(categoryDir).filter(f => f.endsWith(".mjs"));
-			
+			const files = readdirSync(categoryDir).filter((f) => f.endsWith(".mjs"));
+
 			for (const file of files) {
 				const filePath = join(categoryDir, file);
-				
+
 				try {
 					const module = await import(pathToFileURL(filePath).href);
-					
+
 					// Find ALL exported classes with slothletProperty (supports multiple per file)
-					const classExports = Object.values(module).filter(
-						exp => typeof exp === "function" && exp.slothletProperty
-					);
-					
+					const classExports = Object.values(module).filter((exp) => typeof exp === "function" && exp.slothletProperty);
+
 					for (const ClassExport of classExports) {
 						const propName = ClassExport.slothletProperty;
 						this[propName] = new ClassExport(this);
-						
+
 						if (this.config?.debug?.initialization) {
 							console.log(`[INIT] ${ClassExport.name} → this.${propName}`);
 						}
@@ -81,7 +78,7 @@ class Slothlet {
 				}
 			}
 		}
-		
+
 		// Special case: contextManager is set during load based on runtime
 		this.contextManager = null;
 	}
@@ -122,8 +119,7 @@ class Slothlet {
 		// Initialize context
 		const store = this.contextManager.initialize(this.instanceID, this.config);
 
-		// Initialize ownership manager
-		this.ownership = new OwnershipManager();
+		// Note: ownership manager already initialized via auto-discovery
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
