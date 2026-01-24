@@ -146,8 +146,8 @@ function safeAssign(targetApi, propertyName, value, config, collisionContext = "
 	}
 
 	// Default: merge mode
-	// For initial load, merge isn't truly possible (no mutateApiValue available here)
-	// So we log and allow the assignment (which may merge at wrapper level if supported)
+	// For initial load, collision detection just returns true to allow assignment
+	// The actual merge happens via wrapper proxy syncing in assignToApiPath
 	if (!config.silent && config.debug?.api) {
 		console.log(`[slothlet] Allowing assignment at "${propertyName}" (mode: merge)`);
 	}
@@ -689,14 +689,12 @@ export async function processFiles(
 				);
 				assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 					useCollisionDetection: true,
-					config,
-					safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, buildApiPath(localPath))
+					config
 				});
 			} else {
 				assignToApiPath(targetApi, propertyName, moduleContent, {
 					useCollisionDetection: true,
-					config,
-					safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, buildApiPath(isRoot ? propertyName : `${categoryName}.${propertyName}`))
+					config
 				});
 			}
 			if (config.debug?.modes && categoryName === "logger") {
@@ -813,7 +811,10 @@ export async function processFiles(
 								ownership,
 								materializeOnCreate: config.backgroundMaterialize
 							});
-							targetApi[subDirName] = wrapper.createProxy();
+							assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
+								useCollisionDetection: true,
+								config
+							});
 							if (ownership) {
 								const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 								const collisionMode = config.collision?.[collisionContext] || "merge";
@@ -856,7 +857,10 @@ export async function processFiles(
 				if (config.debug?.modes) {
 					console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
 				}
-				targetApi[subDirName] = createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config);
+				assignToApiPath(targetApi, subDirName, createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config), {
+					useCollisionDetection: true,
+					config
+				});
 			}
 		}
 	}

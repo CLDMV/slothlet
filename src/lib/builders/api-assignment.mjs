@@ -26,17 +26,16 @@ function isWrapperProxy(value) {
  * @param {Object} options - Assignment options
  * @param {boolean} [options.allowOverwrite=false] - Allow overwriting existing non-wrapper values
  * @param {boolean} [options.mutateExisting=false] - Sync existing wrappers instead of replacing
- * @param {boolean} [options.useCollisionDetection=true] - Use safeAssign for collision detection
- * @param {Object} [options.config] - Slothlet config for collision detection
+ * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.collision mode
+ * @param {Object} [options.config] - Slothlet config (uses config.collision: "merge"|"replace"|"error")
  * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
- * @param {Function} [options.safeAssign] - Function for safe assignment with collision detection
  * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
  *
  * @description
  * This function encapsulates all assignment patterns from processFiles:
  * - Direct assignment when no collision
  * - Wrapper sync when both existing and new are wrappers
- * - safeAssign collision detection when enabled
+ * - Collision detection using config.collision mode (merge/replace/error)
  * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
  *
  * @example
@@ -51,8 +50,7 @@ function isWrapperProxy(value) {
  * // With collision detection
  * assignToApiPath(api.math, "add", addFunction, {
  *     useCollisionDetection: true,
- *     config,
- *     safeAssign
+ *     config
  * });
  */
 export function assignToApiPath(targetApi, key, value, options = {}) {
@@ -61,8 +59,7 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 		mutateExisting = false,
 		useCollisionDetection = false,
 		config = null,
-		syncWrapper = null,
-		safeAssign = null
+		syncWrapper = null
 	} = options;
 
 	// Get existing value
@@ -74,21 +71,31 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 			syncWrapper(existing, value);
 			return true;
 		}
-		// If not mutating, fall through to overwrite logic
+		// If not mutating, fall through to collision detection
 	}
 
-	// Case 2: Existing value present but overwrite not allowed
-	if (existing !== undefined && !allowOverwrite && !mutateExisting) {
-		return false; // Assignment blocked
-	}
-
-	// Case 3: Use collision detection (safeAssign)
-	if (useCollisionDetection && safeAssign && config) {
-		if (safeAssign(targetApi, key, value, config)) {
-			targetApi[key] = value;
-			return true;
+	// Case 2: Collision detection with config
+	if (useCollisionDetection && config && existing !== undefined) {
+		const collisionMode = config.collision || "merge";
+		
+		if (collisionMode === "error") {
+			throw new Error(`[slothlet] Collision detected at "${String(key)}" - collision mode is 'error'`);
 		}
-		return false; // Collision detected, assignment blocked
+		
+		if (collisionMode === "merge") {
+			// Merge objects/wrappers
+			if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
+				Object.assign(existing, value);
+				return true;
+			}
+		}
+		
+		// collisionMode === "replace" or can't merge - fall through to assignment
+	}
+
+	// Case 3: Block overwrite if not allowed
+	if (existing !== undefined && !allowOverwrite && !mutateExisting && !useCollisionDetection) {
+		return false; // Assignment blocked
 	}
 
 	// Case 4: Direct assignment
