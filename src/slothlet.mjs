@@ -5,7 +5,7 @@
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { OwnershipManager } from "@cldmv/slothlet/handlers/ownership";
 import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
-import { buildAPI } from "@cldmv/slothlet/builders/builder";
+import { Builder } from "@cldmv/slothlet/builders/builder";
 import { buildFinalAPI } from "@cldmv/slothlet/builders/api_builder";
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { generateId } from "@cldmv/slothlet/helpers/utilities";
@@ -34,6 +34,7 @@ class Slothlet {
 		
 		// Instantiate component classes
 		this.apiManager = new ApiManager(this);
+		this.builder = new Builder(this);
 	}
 
 	/**
@@ -74,13 +75,9 @@ class Slothlet {
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
-		this.api = await buildAPI({
+		this.api = await this.builder.buildAPI({
 			dir: this.config.dir,
-			mode: this.config.mode,
-			ownership: this.ownership,
-			contextManager: this.contextManager,
-			instanceID: this.instanceID,
-			config: this.config
+			mode: this.config.mode
 		});
 
 		// Build final API with builtins attached
