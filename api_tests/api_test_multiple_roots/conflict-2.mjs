@@ -11,3 +11,7 @@
 export default function conflictingName() {
 	return "from-file-2";
 }
+
+export function rootFunctionShout(name) {
+	return `HELLO 2, ${name.toUpperCase()}!`;
+}

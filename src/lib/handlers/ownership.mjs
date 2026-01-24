@@ -2,7 +2,7 @@
  * @fileoverview Centralized ownership tracking for hot reload
  * @module @cldmv/slothlet/ownership
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
  * Tracks which modules own which API paths for hot reload and rollback
@@ -47,9 +47,11 @@ export class OwnershipManager {
 			} else if (collisionMode === "warn") {
 				// Skip registration but emit warning (unless silent)
 				if (!config?.silent) {
-					console.warn(
-						`[SLOTHLET WARNING] Ownership conflict at '${apiPath}': already owned by '${currentOwner.moduleId}', cannot register '${moduleId}'. Keeping existing.`
-					);
+					new SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
+						apiPath,
+						existingModuleId: currentOwner.moduleId,
+						newModuleId: moduleId
+					});
 				}
 				return null;
 			} else {

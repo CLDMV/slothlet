@@ -52,6 +52,112 @@ async function findMjsFiles(dir, files = []) {
 }
 
 /**
+ * Parse console.warn calls from file content
+ */
+function parseConsoleWarns(content, filePath) {
+	const warns = [];
+
+	// Find console.warn statements
+	const warnPattern = /console\.warn\s*\(/g;
+
+	let match;
+	while ((match = warnPattern.exec(content)) !== null) {
+		// Check if this match is inside a comment
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+
+		// Skip if it's in a line comment
+		if (currentLine.trim().startsWith("//")) {
+			continue;
+		}
+
+		// Skip if it's in a block comment
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) {
+			continue;
+		}
+
+		// Skip if in translations.mjs (circular dependency - can't use SlothletWarning there)
+		if (filePath.includes("i18n\\translations.mjs") || filePath.includes("i18n/translations.mjs")) {
+			continue;
+		}
+
+		// Skip if inside SlothletWarning class (false positive - that's the warning implementation itself)
+		const classPattern = /(?:export\s+)?class\s+SlothletWarning(?:\s+extends\s+\w+)?\s*\{/;
+		const classMatch = classPattern.exec(content);
+		if (classMatch) {
+			const classStart = classMatch.index;
+			// Find the matching closing brace of the class
+			let braceDepth = 0;
+			let classEnd = -1;
+			let foundOpenBrace = false;
+			for (let i = classMatch.index + classMatch[0].length; i < content.length; i++) {
+				if (content[i] === "{") {
+					braceDepth++;
+					foundOpenBrace = true;
+				} else if (content[i] === "}") {
+					if (braceDepth === 0 && foundOpenBrace) {
+						classEnd = i;
+						break;
+					}
+					braceDepth--;
+				}
+			}
+			// Skip if console.warn is inside the SlothletWarning class
+			if (classEnd !== -1 && match.index > classStart && match.index < classEnd) {
+				continue;
+			}
+		}
+
+		const startIndex = match.index;
+		const parenStart = content.indexOf("(", startIndex);
+		if (parenStart === -1) continue;
+
+		// Track parenthesis depth to find matching closing paren
+		let depth = 0;
+		let parenEnd = -1;
+
+		for (let i = parenStart; i < content.length; i++) {
+			const char = content[i];
+			if (char === "(") depth++;
+			else if (char === ")") {
+				depth--;
+				if (depth === 0) {
+					parenEnd = i;
+					break;
+				}
+			}
+		}
+
+		if (parenEnd === -1) continue;
+
+		// Extract the full statement
+		let endIndex = parenEnd + 1;
+		if (content[endIndex] === ";") endIndex++;
+
+		const fullMatch = content.substring(startIndex, endIndex);
+
+		// Find line number
+		const lineNumber = beforeMatch.split("\n").length;
+
+		// Extract the warning message (first argument)
+		const argsContent = content.substring(parenStart + 1, parenEnd);
+		const firstArg = argsContent.split(",")[0].trim();
+
+		warns.push({
+			filePath,
+			lineNumber,
+			fullMatch,
+			firstArg
+		});
+	}
+
+	return warns;
+}
+
+/**
  * Parse SlothletError and SlothletWarning throws from file content
  */
 function parseErrorThrows(content, filePath) {
@@ -688,6 +794,34 @@ if (invalidKeys.length > 0) {
 	console.log(`✅ All translation keys follow proper naming convention (UPPER_CASE_WITH_UNDERSCORES)\n`);
 }
 
+// ===== CONSOLE.WARN DETECTION =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Console.warn Detection (Should Use SlothletWarning) ===");
+console.log("=".repeat(80) + "\n");
+
+const allConsoleWarns = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	const warns = parseConsoleWarns(content, file);
+	allConsoleWarns.push(...warns);
+}
+
+if (allConsoleWarns.length > 0) {
+	console.log(`⚠️  Found ${allConsoleWarns.length} console.warn calls in src folder:\n`);
+	console.log(`   These should be converted to SlothletWarning with proper translation keys.\n`);
+	
+	allConsoleWarns.forEach((warn, idx) => {
+		const relPath = relative(rootDir, warn.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${warn.lineNumber}`);
+		console.log(`    Code: ${warn.fullMatch.substring(0, 80)}${warn.fullMatch.length > 80 ? "..." : ""}`);
+		console.log(`    First Arg: ${warn.firstArg.substring(0, 60)}${warn.firstArg.length > 60 ? "..." : ""}`);
+		console.log(`    ⚠️  Should use: new SlothletWarning("WARNING_KEY", { context })`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No console.warn calls found in src folder\n`);
+}
+
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\nTranslation Summary:");
@@ -697,5 +831,6 @@ console.log(`  Missing Translations:        ${missingTranslations.length}`);
 console.log(`  Unused Translations:         ${unusedTranslations.length}`);
 console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
 console.log(`  Invalid Key Format:          ${invalidKeys.length}`);
+console.log(`  Console.warn Calls:          ${allConsoleWarns.length}`);
 
 console.log();
