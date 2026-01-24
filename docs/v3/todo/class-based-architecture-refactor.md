@@ -10,17 +10,22 @@
 ### ✅ Completed
 - **Step 1.3**: Moved `helpers/api_assignment.mjs` → `builders/api-assignment.mjs` (commits `9a3fb82`, `e265ecb`)
   - File moved with `git mv` preserving history
-  - All imports updated in `hot_reload.mjs` and `modes.mjs`
+  - All imports updated in `api-manager.mjs` (formerly hot_reload.mjs) and `modes.mjs`
   - Collision detection unified: removed safeAssign callback, moved logic into assignToApiPath
   - 94 lines deleted from modes.mjs
   - All 240 collision tests + debug tests passing ✅
 
 ### 🎯 Next Steps
 - **Step 1.1**: Move `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`
-- **Step 1.2**: Move `helpers/hot_reload.mjs` → `handlers/hot-reload.mjs` (+ rename to kebab-case)
+- **Step 1.2**: Move `helpers/hot_reload.mjs` → `handlers/api-manager.mjs` (+ rename to kebab-case)
 - **Step 1.4**: Split `helpers/modes.mjs` into utils and processor
 - **Step 1.5**: Move loader and flatten to processors/
 - **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
+
+### 📝 File Naming Convention
+**All source files must use kebab-case** (e.g., `api-manager.mjs`, not `api_manager.mjs` or `apiManager.mjs`). This refactor includes renaming:
+- `hot_reload.mjs` → `api-manager.mjs` (also better name - covers add/remove/reload, not just hot reload)
+- `api_assignment.mjs` → `api-assignment.mjs` ✅ **DONE** (commit e265ecb)
 
 ---
 
@@ -142,7 +147,7 @@ export class Slothlet {
         this.ownership = new OwnershipHandler(this);
         this.metadata = new MetadataHandler(this);
         this.instanceManager = new InstanceManager(this);
-        this.hotReload = new HotReload(this);
+        this.apiManager = new ApiManager(this); // Manages api.add/remove/reload
         
         // Builders (construction orchestrators)
         this.builder = new Builder(this);
@@ -173,8 +178,8 @@ export class Slothlet {
     }
 }
 
-// In src/lib/handlers/hot-reload.mjs (RENAMED from helpers/hot_reload.mjs)
-export class HotReload {
+// In src/lib/handlers/api-manager.mjs (RENAMED from helpers/hot_reload.mjs)
+export class ApiManager {
     constructor(instance) {
         this.instance = instance;
     }
@@ -210,11 +215,12 @@ Based on comprehensive analysis (see conversation summary):
    - Functions: `registerInstance()`, `removeInstance()`, `getActiveInstances()`
    - This is not a pure utility, it's a stateful handler
 
-2. **`helpers/hot_reload.mjs` → `handlers/hot-reload.mjs`** ⏳ TODO
-   - Reason: WeakMap-based state, API mutation, lifecycle management
+2. **`helpers/hot_reload.mjs` → `handlers/api-manager.mjs`** ⏳ TODO
+   - Reason: Manages runtime API component lifecycle (add/remove/reload)
    - Functions: `addApiComponent()`, `removeApiComponent()`, `reloadApiComponent()`
-   - Maintains hotReloadState WeakMap with per-instance history
-   - **RENAME**: `hot_reload.mjs` → `hot-reload.mjs` (kebab-case consistency)
+   - Maintains state WeakMap with per-instance history
+   - **RENAME**: `hot_reload.mjs` → `api-manager.mjs` (kebab-case + better name - "hot reload" is only one feature)
+   - **CLASS**: `ApiManager` (clearer than "HotReload" - most users use add/remove, not hot reload)
 
 3. **`helpers/api_assignment.mjs` → `builders/api-assignment.mjs`** ✅ **COMPLETED** (commits 9a3fb82, e265ecb)
    - Reason: Core API construction logic, collision resolution
@@ -306,9 +312,9 @@ export class InstanceManager {
 }
 ```
 
-**`handlers/hot-reload.mjs`** (MOVED from helpers/) → Convert to class:
+**`handlers/api-manager.mjs`** (MOVED from helpers/) → Convert to class:
 ```javascript
-export class HotReload {
+export class ApiManager {
     constructor(instance) {
         this.instance = instance;
         this.state = {
@@ -622,7 +628,7 @@ If auto-discovery adds too much complexity during initial refactor, use manual i
 import { OwnershipHandler } from "@cldmv/slothlet/handlers/ownership";
 import { MetadataHandler } from "@cldmv/slothlet/handlers/metadata-handler";
 import { InstanceManager } from "@cldmv/slothlet/handlers/instance-manager";
-import { HotReload } from "@cldmv/slothlet/handlers/hot-reload";
+import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { Builder } from "@cldmv/slothlet/builders/builder";
 import { ApiBuilder } from "@cldmv/slothlet/builders/api-builder";
 import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
@@ -699,7 +705,7 @@ export class Slothlet {
    ```bash
    # REMAINING TO DO:
    git mv src/lib/helpers/instance-manager.mjs src/lib/handlers/instance-manager.mjs
-   git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/hot-reload.mjs
+   git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/api-manager.mjs
    git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
    git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
    
@@ -715,10 +721,10 @@ export class Slothlet {
 
 4. **Update all imports** across codebase:
    - Search: `from "@cldmv/slothlet/helpers/hot_reload"`
-   - Replace: `from "@cldmv/slothlet/handlers/hot-reload"`
+   - Replace: `from "@cldmv/slothlet/handlers/api-manager"`
    - Repeat for all moved files:
      - `helpers/instance-manager` → `handlers/instance-manager`
-     - `helpers/hot_reload` → `handlers/hot-reload`
+     - `helpers/hot_reload` → `handlers/api-manager`
      - ✅ **DONE**: `helpers/api_assignment` → `builders/api-assignment` (commits 9a3fb82, e265ecb)
      - `helpers/loader` → `processors/loader`
      - `helpers/flatten` → `processors/flatten`
@@ -762,12 +768,12 @@ export class Slothlet {
    - **TEST**: Both critical tests
    - **COMMIT**: "refactor(handlers): convert instance-manager to class"
 
-4. **Convert `handlers/hot-reload.mjs`**:
+4. **Convert `handlers/api-manager.mjs`**:
    - Replace WeakMap with instance property
    - Add all convenience getters
    - Remove config parameter passing
-   - **TEST**: Both critical tests (hot-reload is critical!)
-   - **COMMIT**: "refactor(handlers): convert hot-reload to class"
+   - **TEST**: Both critical tests (api-manager is critical!)
+   - **COMMIT**: "refactor(handlers): convert api-manager to class (renamed from hot-reload)"
 
 5. **Update imports and usage in `slothlet.mjs`**:
    - Instantiate all handlers in constructor
@@ -843,7 +849,7 @@ export class Slothlet {
 ### Step 6: Complete Console.log Wrapping
 
 With class-based architecture, complete remaining wraps:
-- `hot-reload.mjs`: Use `this.debug?.api` instead of passing config
+- `api-manager.mjs`: Use `this.debug?.api` instead of passing config
 - `modes-processor.mjs`: Use `this.debug?.modes` instead of passing config
 
 **VERIFY**:
@@ -945,7 +951,7 @@ src/lib/
 │   ├── unified-wrapper.mjs (UnifiedWrapper - already class)
 │   ├── metadata-handler.mjs (MetadataHandler - convert to class)
 │   ├── instance-manager.mjs (InstanceManager - MOVED + convert to class)
-│   └── hot-reload.mjs (HotReload - MOVED + RENAMED + convert to class)
+│   └── api-manager.mjs (ApiManager - MOVED + RENAMED from hot_reload.mjs + convert to class)
 ├── builders/ (CONSTRUCTION ORCHESTRATORS - ALL CLASSES)
 │   ├── builder.mjs (Builder - convert to class)
 │   ├── api-builder.mjs (ApiBuilder - convert to class)
