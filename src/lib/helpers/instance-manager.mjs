@@ -1,6 +1,6 @@
 /**
  * @fileoverview Instance registry for runtime detection
- * @module @cldmv/slothlet/handlers/instance-manager
+ * @module @cldmv/slothlet/helpers/instance-manager
  * @internal
  */
 
