@@ -595,7 +595,6 @@ npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
 - [ ] Update imports in `builders/builder.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
 - [ ] Update imports in `helpers/hot_reload.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
 - [ ] Update imports in `helpers/modes.mjs` (change `helpers/api_assignment` → `builders/api-assignment`)
-- [ ] Update package.json exports: `node tools/build-exports.mjs`
 - [ ] **NOW TEST** (tail output):
   ```powershell
   npm run debug 2>&1 | Select-Object -Last 40
