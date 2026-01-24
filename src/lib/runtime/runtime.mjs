@@ -5,7 +5,7 @@
  */
 
 // Import context managers
-import { asyncRuntime, liveRuntime } from "@cldmv/slothlet/handlers/context";
+import { asyncRuntime, liveRuntime } from "@cldmv/slothlet/factories/context";
 
 // Pre-load both runtime modules at initialization
 const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
