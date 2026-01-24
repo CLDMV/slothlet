@@ -100,11 +100,15 @@ class Slothlet {
 	 * });
 	 */
 	async load(config = {}) {
-		// Transform and validate config
-		this.config = transformConfig(config);
+		// Store raw config for components to access if needed
+		this.config = config;
 
-		// Initialize all components via auto-discovery
+		// Initialize all components via auto-discovery BEFORE transforming config
+		// This allows config helpers to be component classes
 		await this._initializeComponents();
+
+		// Transform and validate config using component classes
+		this.config = transformConfig(config);
 
 		// Generate instance ID
 		this.instanceID = generateId();
