@@ -593,8 +593,12 @@ export async function processFiles(
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								if (safeAssign(targetApi, key, wrapper.createProxy(), config, collisionContext, `${categoryName}.${key}`)) {
-									targetApi[key] = wrapper.createProxy();
+								const assigned = assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									useCollisionDetection: true,
+									config,
+									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+								});
+								if (assigned) {
 									console.log(`[FLATTEN MULTI-EXPORT] ✓ Assigned "${key}" to targetApi, keys after: ${Object.keys(targetApi)}`);
 								} else {
 									console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
