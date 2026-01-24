@@ -30,11 +30,13 @@ export async function buildEagerAPI({
 	maxDepth = Infinity,
 	apiPathPrefix = "",
 	collisionContext = "initial",
-	modesProcessor,
-	loader,
-	flatten
+	slothlet
 }) {
 	const api = {};
+
+	// Access components via slothlet instance
+	const { loader, flatten } = slothlet.processors;
+	const { modesProcessor } = slothlet.builders;
 
 	// Scan directory structure
 	const structure = await loader.scanDirectory(dir);

@@ -122,9 +122,7 @@ export class Builder extends ComponentBase {
 				config,
 				apiPathPrefix,
 				collisionContext,
-				modesProcessor: this.slothlet.builders.modesProcessor,
-				loader: this.slothlet.processors.loader,
-				flatten: this.slothlet.processors.flatten
+				slothlet: this.slothlet
 			});
 		} else if (mode === "lazy") {
 			rawAPI = await buildLazyAPI({
@@ -135,9 +133,7 @@ export class Builder extends ComponentBase {
 				config,
 				apiPathPrefix,
 				collisionContext,
-				modesProcessor: this.slothlet.builders.modesProcessor,
-				loader: this.slothlet.processors.loader,
-				flatten: this.slothlet.processors.flatten
+				slothlet: this.slothlet
 			});
 		} else {
 			throw new this.SlothletError(
