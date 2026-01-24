@@ -3,9 +3,9 @@
  * @module @cldmv/slothlet/modes/eager
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/helpers/loader";
+import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/helpers/flatten";
+import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { processFiles, applyRootContributor } from "@cldmv/slothlet/helpers/modes";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { t } from "@cldmv/slothlet/i18n";
