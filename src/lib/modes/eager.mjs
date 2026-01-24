@@ -3,7 +3,6 @@
  * @module @cldmv/slothlet/modes/eager
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { loadModule, scanDirectory, extractExports, mergeExportsIntoAPI } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, processModuleForAPI, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
@@ -32,12 +31,13 @@ export async function buildEagerAPI({
 	maxDepth = Infinity,
 	apiPathPrefix = "",
 	collisionContext = "initial",
-	modesProcessor
+	modesProcessor,
+	loader
 }) {
 	const api = {};
 
 	// Scan directory structure
-	const structure = await scanDirectory(dir);
+	const structure = await loader.scanDirectory(dir);
 
 	// Process root files (with root contributor pattern support)
 	// Pass synthetic root directory with children.directories for consistent handling
@@ -62,7 +62,8 @@ export async function buildEagerAPI({
 		true, // recursive - MUST be true to process subdirectories!
 		false, // populateDirectly - keep false
 		apiPathPrefix,
-		collisionContext
+		collisionContext,
+		loader
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

@@ -13,7 +13,6 @@
 
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { loadModule, extractExports, scanDirectory } from "@cldmv/slothlet/processors/loader";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { getFlatteningDecision, buildCategoryDecisions } from "@cldmv/slothlet/processors/flatten";
 import { t } from "@cldmv/slothlet/i18n";
@@ -58,7 +57,8 @@ export class ModesProcessor extends ComponentBase {
 		recursive,
 		populateDirectly = false,
 		apiPathPrefix = "",
-		collisionContext = "initial"
+		collisionContext = "initial",
+		loader
 	) {
 	// Helper to build full apiPath with prefix
 	const buildApiPath = (path) => {
@@ -130,8 +130,8 @@ export class ModesProcessor extends ComponentBase {
 		}
 
 		try {
-			const mod = await loadModule(file.path, instanceID);
-			const exports = extractExports(mod);
+			const mod = await loader.loadModule(file.path, instanceID);
+			const exports = loader.extractExports(mod);
 			const moduleName = sanitizePropertyName(file.name);
 			const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 			const analysis = {
@@ -619,8 +619,8 @@ export class ModesProcessor extends ComponentBase {
 						console.log(
 							`[FOLDER-LEVEL FLATTEN CHECK] subDir="${subDirName}", file="${moduleName}", isGeneric=${isGeneric}, filenameMatches=${filenameMatchesFolder}`
 						);
-						const mod = await loadModule(file.path, instanceID);
-						const exports = extractExports(mod);
+					const mod = await loader.loadModule(file.path, instanceID);
+					const exports = loader.extractExports(mod);
 						const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 						const analysis = {
 							hasDefault: exports.default !== undefined,
@@ -709,7 +709,9 @@ export class ModesProcessor extends ComponentBase {
 					false, // Not root
 					recursive, // Pass through recursive flag
 					false, // populateDirectly - build on parent api
-					apiPathPrefix // Pass through apiPathPrefix to subdirectories
+					apiPathPrefix, // Pass through apiPathPrefix to subdirectories
+					collisionContext,
+					loader
 				);
 			}
 		} else {
@@ -723,7 +725,7 @@ export class ModesProcessor extends ComponentBase {
 				this.slothlet.apiAssignment.assignToApiPath(
 					targetApi,
 					subDirName,
-					this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config),
+					this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config, loader),
 					{
 						useCollisionDetection: true,
 						config
@@ -806,7 +808,7 @@ export class ModesProcessor extends ComponentBase {
 	 * @returns {Proxy} Lazy unified wrapper
 	 * @public
 	 */
-	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config) {
+	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config, loader) {
 	// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 	/**
 	 * Materialize a lazy subdirectory into a concrete implementation object.
@@ -830,8 +832,8 @@ export class ModesProcessor extends ComponentBase {
 			const filenameMatchesFolder = moduleName === categoryName;
 
 			if (isGeneric || filenameMatchesFolder) {
-				const mod = await loadModule(file.path, instanceID);
-				const exports = extractExports(mod);
+				const mod = await loader.loadModule(file.path, instanceID);
+				const exports = loader.extractExports(mod);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {
 					hasDefault: exports.default !== undefined,
@@ -898,7 +900,10 @@ export class ModesProcessor extends ComponentBase {
 			"eager",
 			false, // Not root (for root contributor detection)
 			false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
-			true // Populate directly (don't nest under categoryName)
+			true, // Populate directly (don't nest under categoryName)
+			"",
+			"initial",
+			loader
 		);
 
 		if (config.debug?.modes) {
