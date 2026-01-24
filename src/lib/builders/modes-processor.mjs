@@ -330,12 +330,12 @@ export class ModesProcessor extends ComponentBase {
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									this.slothlet.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
+									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
 										config
 									});
 								} else {
-									this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config
 									});
@@ -389,12 +389,12 @@ export class ModesProcessor extends ComponentBase {
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									this.slothlet.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
+									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config
 									});
 								} else {
-									this.slothlet.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
+									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
 										useCollisionDetection: true,
 										config
 									});
@@ -422,12 +422,12 @@ export class ModesProcessor extends ComponentBase {
 											ownership,
 											materializeOnCreate: config.backgroundMaterialize
 										});
-										this.slothlet.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
 											config
 										});
 									} else {
-										this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 											useCollisionDetection: true,
 											config
 										});
@@ -464,7 +464,7 @@ export class ModesProcessor extends ComponentBase {
 										ownership,
 										materializeOnCreate: config.backgroundMaterialize
 									});
-									const assigned = this.slothlet.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
 										config
 									});
@@ -474,7 +474,7 @@ export class ModesProcessor extends ComponentBase {
 										console.log(`[FLATTEN MULTI-EXPORT] ✗ safeAssign blocked "${key}"`);
 									}
 								} else {
-									this.slothlet.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
+									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config
 									});
@@ -516,12 +516,12 @@ export class ModesProcessor extends ComponentBase {
 								ownership,
 								materializeOnCreate: config.backgroundMaterialize
 							});
-							this.slothlet.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config
 							});
 						} else {
-							this.slothlet.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 								useCollisionDetection: true,
 								config
 							});
@@ -554,12 +554,12 @@ export class ModesProcessor extends ComponentBase {
 					console.log(
 						`[FILE WRAPPER ASSIGNMENT] propertyName="${propertyName}", apiPath="${buildApiPath(localPath)}", overwriting="${propertyName in targetApi ? (targetApi[propertyName]?.__wrapper ? "wrapper" : "value") : "nothing"}"`
 					);
-					this.slothlet.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
+					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
 						config
 					});
 				} else {
-					this.slothlet.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
+					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
 						useCollisionDetection: true,
 						config
 					});
@@ -678,7 +678,7 @@ export class ModesProcessor extends ComponentBase {
 									ownership,
 									materializeOnCreate: config.backgroundMaterialize
 								});
-								this.slothlet.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
+								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
 									config
 								});
@@ -727,7 +727,7 @@ export class ModesProcessor extends ComponentBase {
 					if (config.debug?.modes) {
 						console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
 					}
-					this.slothlet.apiAssignment.assignToApiPath(
+					this.slothlet.builders.apiAssignment.assignToApiPath(
 						targetApi,
 						subDirName,
 						this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config, loader, flatten),
@@ -776,12 +776,12 @@ export class ModesProcessor extends ComponentBase {
 							ownership,
 							materializeOnCreate: config.backgroundMaterialize
 						});
-						this.slothlet.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
+						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
 							config
 						});
 					} else {
-						this.slothlet.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
+						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 							useCollisionDetection: true,
 							config
 						});

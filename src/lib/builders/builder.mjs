@@ -80,7 +80,7 @@ export class Builder extends ComponentBase {
 		const {
 			dir,
 			mode = "eager",
-			ownership = this.ownership,
+			ownership = this.slothlet.handlers.ownership,
 			contextManager = this.contextManager,
 			instanceID = this.instanceID,
 			config = this.config,
@@ -122,9 +122,9 @@ export class Builder extends ComponentBase {
 				config,
 				apiPathPrefix,
 				collisionContext,
-				modesProcessor: this.slothlet.modesProcessor,
-				loader: this.slothlet.loader,
-				flatten: this.slothlet.flatten
+				modesProcessor: this.slothlet.builders.modesProcessor,
+				loader: this.slothlet.processors.loader,
+				flatten: this.slothlet.processors.flatten
 			});
 		} else if (mode === "lazy") {
 			rawAPI = await buildLazyAPI({
@@ -135,9 +135,9 @@ export class Builder extends ComponentBase {
 				config,
 				apiPathPrefix,
 				collisionContext,
-				modesProcessor: this.slothlet.modesProcessor,
-				loader: this.slothlet.loader,
-				flatten: this.slothlet.flatten
+				modesProcessor: this.slothlet.builders.modesProcessor,
+				loader: this.slothlet.processors.loader,
+				flatten: this.slothlet.processors.flatten
 			});
 		} else {
 			throw new this.SlothletError(

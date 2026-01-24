@@ -801,11 +801,11 @@ export class ApiManager extends ComponentBase {
 			collisionMode
 		});
 
-		if (this.slothlet.ownership && moduleId) {
-			this.registerOwnership(this.slothlet.ownership, moduleId, normalizedPath, apiToMerge);
+		if (this.slothlet.handlers.ownership && moduleId) {
+			this.registerOwnership(this.slothlet.handlers.ownership, moduleId, normalizedPath, apiToMerge);
 		}
 
-		if (this.slothlet.ownership) {
+		if (this.slothlet.handlers.ownership) {
 			if (options.recordHistory !== false) {
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
@@ -849,8 +849,8 @@ export class ApiManager extends ComponentBase {
 		if (apiPath && moduleId) {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIdKey = String(moduleId);
-			const history = this.slothlet.ownership?.getPathHistory?.(normalizedPath) || [];
-			const ownershipResult = this.removeOwnershipEntry(this.slothlet.ownership, normalizedPath, moduleIdKey);
+			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
+			const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, moduleIdKey);
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
@@ -858,7 +858,7 @@ export class ApiManager extends ComponentBase {
 				return;
 			}
 			if (ownershipResult.action === "restore") {
-				const restoredValue = this.slothlet.ownership?.getCurrentValue?.(normalizedPath);
+				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
 				if (restoredValue !== undefined) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
@@ -882,7 +882,7 @@ export class ApiManager extends ComponentBase {
 
 		if (moduleId) {
 			const moduleIdKey = String(moduleId);
-			const result = this.slothlet.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
+			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
 			for (const removedPath of result.removed) {
 				const { parts } = this.normalizeApiPath(removedPath);
 				this.deletePath(this.slothlet.api, parts);
@@ -890,7 +890,7 @@ export class ApiManager extends ComponentBase {
 			}
 			for (const rollback of result.rolledBack) {
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
-				const restoredValue = this.slothlet.ownership?.getCurrentValue?.(rollback.apiPath);
+				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 				if (restoredValue !== undefined) {
 					await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 						mutateExisting: true,
@@ -919,7 +919,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		const ownershipResult = this.removeOwnershipEntry(this.slothlet.ownership, normalizedPath, null);
+		const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, null);
 		if (ownershipResult.action === "none") {
 			this.deletePath(this.slothlet.api, parts);
 			this.deletePath(this.slothlet.boundApi, parts);
@@ -931,7 +931,7 @@ export class ApiManager extends ComponentBase {
 			return;
 		}
 		if (ownershipResult.action === "restore") {
-			const restoredValue = this.slothlet.ownership?.getCurrentValue?.(normalizedPath);
+			const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
 			if (restoredValue !== undefined) {
 				await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 					mutateExisting: true,
