@@ -158,6 +158,110 @@ function parseConsoleWarns(content, filePath) {
 }
 
 /**
+ * Parse console.log statements and check if they're wrapped with debug checks
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of unwrapped console.log statements
+ */
+function parseConsoleLogs(content, filePath) {
+	const logs = [];
+
+	// Find console.log statements
+	const logPattern = /console\.log\s*\(/g;
+
+	let match;
+	while ((match = logPattern.exec(content)) !== null) {
+		// Check if this match is inside a comment
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+
+		// Skip if it's in a line comment
+		if (currentLine.trim().startsWith("//")) {
+			continue;
+		}
+
+		// Skip if it's in a block comment
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) {
+			continue;
+		}
+
+		// Check if this console.log is wrapped with a debug check
+		// Look backwards for if (config.debug?.xxx) or if (instance.config.debug?.xxx)
+		// Need to find the debug check before the opening brace that contains this console.log
+
+		// Split into lines and look back through recent lines
+		const lines = beforeMatch.split("\n");
+		let hasDebugGuard = false;
+
+		// Check last 10 lines for a debug check pattern
+		const checkLines = lines.slice(Math.max(0, lines.length - 10));
+		for (let i = checkLines.length - 1; i >= 0; i--) {
+			const line = checkLines[i];
+			// Look for if statements with config.debug or instance.config.debug checks
+			// Also accept patterns like: (wrapperDebugEnabled || config?.debug?.xxx)
+			if (/if\s*\([^)]*(?:instance\.)?config\.?(?:\?\.)?debug\?\.\w+/.test(line) ||
+			    /\(\w+\s*\|\|\s*(?:instance\.)?config\?\.debug\?\.\w+\)/.test(line)) {
+				hasDebugGuard = true;
+				break;
+			}
+			// If we hit a closing brace or function definition, stop looking
+			if (/^\s*\}|^export |^function |^class /.test(line)) {
+				break;
+			}
+		}
+
+		if (!hasDebugGuard) {
+			const startIndex = match.index;
+			const parenStart = content.indexOf("(", startIndex);
+			if (parenStart === -1) continue;
+
+			// Track parenthesis depth to find matching closing paren
+			let depth = 0;
+			let parenEnd = -1;
+
+			for (let i = parenStart; i < content.length; i++) {
+				const char = content[i];
+				if (char === "(") depth++;
+				else if (char === ")") {
+					depth--;
+					if (depth === 0) {
+						parenEnd = i;
+						break;
+					}
+				}
+			}
+
+			if (parenEnd === -1) continue;
+
+			// Extract the full statement
+			let endIndex = parenEnd + 1;
+			if (content[endIndex] === ";") endIndex++;
+
+			const fullMatch = content.substring(startIndex, endIndex);
+
+			// Find line number
+			const lineNumber = beforeMatch.split("\n").length;
+
+			// Extract the log message (first argument)
+			const argsContent = content.substring(parenStart + 1, parenEnd);
+			const firstArg = argsContent.split(",")[0].trim();
+
+			logs.push({
+				filePath,
+				lineNumber,
+				fullMatch,
+				firstArg
+			});
+		}
+	}
+
+	return logs;
+}
+
+/**
  * Parse SlothletError and SlothletWarning throws from file content
  */
 function parseErrorThrows(content, filePath) {
@@ -299,14 +403,14 @@ function analyzeError(error) {
 		// Still check for translation and hint
 		const hasTranslation = checkTranslationExists(error.errorCode);
 		const hasHint = checkHintExists(error.errorCode);
-		
+
 		if (!hasTranslation) {
 			issues.push("❌ Missing error translation (needs error code key in translations)");
 		}
 		if (!hasHint) {
 			issues.push("❌ No hint in translations (needs HINT_ key)");
 		}
-		
+
 		const status = issues.length === 0 ? "✅ OK (Warning)" : "❌ Issues";
 		return { status, issues, hasHint, hasTranslation };
 	}
@@ -742,7 +846,7 @@ for (const key of translationKeys) {
 	if (!validKeyPattern.test(key)) {
 		// Find where this key is used
 		const usageLocations = [];
-		
+
 		// Check in error throws
 		for (const error of allErrors) {
 			if (error.errorCode === key) {
@@ -750,7 +854,7 @@ for (const key of translationKeys) {
 				usageLocations.push(`${relPath}:${error.lineNumber}`);
 			}
 		}
-		
+
 		// Check in direct t() calls
 		if (directTranslationUsage.has(key)) {
 			// Find which files use this key in t() calls
@@ -766,7 +870,7 @@ for (const key of translationKeys) {
 				}
 			}
 		}
-		
+
 		invalidKeys.push({
 			key,
 			translation: translations[key],
@@ -778,7 +882,7 @@ for (const key of translationKeys) {
 if (invalidKeys.length > 0) {
 	console.log(`❌ Found ${invalidKeys.length} translation keys with invalid format:\n`);
 	console.log(`   Convention: UPPER_CASE_WITH_UNDERSCORES (e.g., ERROR_INVALID_CONFIG)\n`);
-	
+
 	invalidKeys.forEach((item, idx) => {
 		console.log(`[${idx + 1}] ${item.key}`);
 		console.log(`    Translation: "${item.translation.substring(0, 60)}${item.translation.length > 60 ? "..." : ""}"`);
@@ -809,7 +913,7 @@ for (const file of files) {
 if (allConsoleWarns.length > 0) {
 	console.log(`⚠️  Found ${allConsoleWarns.length} console.warn calls in src folder:\n`);
 	console.log(`   These should be converted to SlothletWarning with proper translation keys.\n`);
-	
+
 	allConsoleWarns.forEach((warn, idx) => {
 		const relPath = relative(rootDir, warn.filePath);
 		console.log(`[${idx + 1}] ${relPath}:${warn.lineNumber}`);
@@ -822,6 +926,34 @@ if (allConsoleWarns.length > 0) {
 	console.log(`✅ No console.warn calls found in src folder\n`);
 }
 
+// ===== CONSOLE.LOG DETECTION =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Console.log Detection (Must Be Debug-Wrapped) ===");
+console.log("=".repeat(80) + "\n");
+
+const allConsoleLogs = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	const logs = parseConsoleLogs(content, file);
+	allConsoleLogs.push(...logs);
+}
+
+if (allConsoleLogs.length > 0) {
+	console.log(`❌ Found ${allConsoleLogs.length} unwrapped console.log calls in src folder:\n`);
+	console.log(`   All console.log must be wrapped with debug checks (e.g., if (config.debug?.modes)).\n`);
+
+	allConsoleLogs.forEach((log, idx) => {
+		const relPath = relative(rootDir, log.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${log.lineNumber}`);
+		console.log(`    Code: ${log.fullMatch.substring(0, 80)}${log.fullMatch.length > 80 ? "..." : ""}`);
+		console.log(`    First Arg: ${log.firstArg.substring(0, 60)}${log.firstArg.length > 60 ? "..." : ""}`);
+		console.log(`    ❌ Must wrap with: if (config.debug?.xxx) { ... }`);
+		console.log();
+	});
+} else {
+	console.log(`✅ All console.log calls are properly debug-wrapped\n`);
+}
+
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\nTranslation Summary:");
@@ -832,5 +964,6 @@ console.log(`  Unused Translations:         ${unusedTranslations.length}`);
 console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
 console.log(`  Invalid Key Format:          ${invalidKeys.length}`);
 console.log(`  Console.warn Calls:          ${allConsoleWarns.length}`);
+console.log(`  Unwrapped Console.log:       ${allConsoleLogs.length}`);
 
 console.log();

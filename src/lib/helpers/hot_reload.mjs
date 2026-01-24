@@ -260,9 +260,11 @@ function isWrapperProxy(value) {
  * @example
  * await syncWrapper(existingProxy, nextProxy);
  */
-async function syncWrapper(existingProxy, nextProxy) {
-	console.log(`[syncWrapper ENTRY] existingProxy apiPath:`, existingProxy?.__wrapper?.apiPath);
-	console.log(`[syncWrapper ENTRY] nextProxy apiPath:`, nextProxy?.__wrapper?.apiPath);
+async function syncWrapper(existingProxy, nextProxy, config) {
+	if (config?.debug?.api) {
+		console.log(`[syncWrapper ENTRY] existingProxy apiPath:`, existingProxy?.__wrapper?.apiPath);
+		console.log(`[syncWrapper ENTRY] nextProxy apiPath:`, nextProxy?.__wrapper?.apiPath);
+	}
 
 	if (!isWrapperProxy(existingProxy) || !isWrapperProxy(nextProxy)) {
 		return false;
@@ -271,8 +273,10 @@ async function syncWrapper(existingProxy, nextProxy) {
 	const existingWrapper = existingProxy.__wrapper || existingProxy;
 	const nextWrapper = nextProxy.__wrapper || nextProxy;
 
-	console.log(`[syncWrapper] existingWrapper.apiPath: ${existingWrapper.apiPath}`);
-	console.log(`[syncWrapper] nextWrapper.apiPath: ${nextWrapper.apiPath}`);
+	if (config?.debug?.api) {
+		console.log(`[syncWrapper] existingWrapper.apiPath: ${existingWrapper.apiPath}`);
+		console.log(`[syncWrapper] nextWrapper.apiPath: ${nextWrapper.apiPath}`);
+	}
 
 	// Copy materialize function if present (lazy mode support)
 	if (nextWrapper._materializeFunc) {
@@ -283,11 +287,13 @@ async function syncWrapper(existingProxy, nextProxy) {
 	// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 	// We need to transfer the child wrappers from nextWrapper to existingWrapper
 	if (nextWrapper._childCache && existingWrapper._childCache) {
-		console.log(
-			`[syncWrapper] Before merge - existing cache size: ${existingWrapper._childCache.size}, next cache size: ${nextWrapper._childCache.size}`
-		);
-		console.log(`[syncWrapper] Next wrapper _impl keys:`, Object.keys(nextWrapper._impl || {}));
-		console.log(`[syncWrapper] Next wrapper _childCache keys:`, Array.from(nextWrapper._childCache.keys()));
+		if (config?.debug?.api) {
+			console.log(
+				`[syncWrapper] Before merge - existing cache size: ${existingWrapper._childCache.size}, next cache size: ${nextWrapper._childCache.size}`
+			);
+			console.log(`[syncWrapper] Next wrapper _impl keys:`, Object.keys(nextWrapper._impl || {}));
+			console.log(`[syncWrapper] Next wrapper _childCache keys:`, Array.from(nextWrapper._childCache.keys()));
+		}
 
 		// Clear existing cache first
 		existingWrapper._childCache.clear();
@@ -301,7 +307,9 @@ async function syncWrapper(existingProxy, nextProxy) {
 			}
 		}
 
-		console.log(`[syncWrapper] After merge - existing cache size: ${existingWrapper._childCache.size}`);
+		if (config?.debug?.api) {
+			console.log(`[syncWrapper] After merge - existing cache size: ${existingWrapper._childCache.size}`);
+		}
 	}
 
 	// Mark as materialized
@@ -329,11 +337,13 @@ async function syncWrapper(existingProxy, nextProxy) {
  * @example
  * await mutateApiValue(existing, next, { removeMissing: true });
  */
-async function mutateApiValue(existingValue, nextValue, options) {
-	console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
-	console.log(`[mutateApiValue] existing isWrapper: ${isWrapperProxy(existingValue)}, next isWrapper: ${isWrapperProxy(nextValue)}`);
-	console.log(`[mutateApiValue] nextValue:`, nextValue);
-	console.log(`[mutateApiValue] nextValue keys:`, nextValue ? Object.keys(nextValue) : "N/A");
+async function mutateApiValue(existingValue, nextValue, options, config) {
+	if (config?.debug?.api) {
+		console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
+		console.log(`[mutateApiValue] existing isWrapper: ${isWrapperProxy(existingValue)}, next isWrapper: ${isWrapperProxy(nextValue)}`);
+		console.log(`[mutateApiValue] nextValue:`, nextValue);
+		console.log(`[mutateApiValue] nextValue keys:`, nextValue ? Object.keys(nextValue) : "N/A");
+	}
 
 	if (existingValue === nextValue) {
 		return;
@@ -341,8 +351,10 @@ async function mutateApiValue(existingValue, nextValue, options) {
 
 	// If both are wrapper proxies, sync them
 	if (isWrapperProxy(existingValue) && isWrapperProxy(nextValue)) {
-		console.log(`[mutateApiValue] Both are wrappers - calling syncWrapper`);
-		await syncWrapper(existingValue, nextValue);
+		if (config?.debug?.api) {
+			console.log(`[mutateApiValue] Both are wrappers - calling syncWrapper`);
+		}
+		await syncWrapper(existingValue, nextValue, config);
 		return;
 	}
 
