@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 23, 2026  
-**Status:** In Progress - Step 1: 3 of 6 file moves complete  
+**Status:** In Progress - Step 1: 2 of 6 file moves complete  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `aa197c1` - instance-manager.mjs → handlers/instance-manager.mjs
+**Latest Progress:** `ecfa60f` - hot_reload.mjs → handlers/api-manager.mjs (renamed + moved)
 
 ## Progress Summary
 
@@ -20,16 +20,10 @@
   - Updated import in `api_builder.mjs`
   - Both critical tests passing (240 collision + debug) ✅
 
-- **Step 1.1**: Moved `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs` (commit `aa197c1`)
-  - Instance manager is stateful registry, belongs in handlers
-  - Updated @module declaration to handlers path
-  - No source imports to update (used via package exports)
-  - Both critical tests passing (240 collision + debug) ✅
-
 ### 🎯 Next Steps
+- **Step 1.1**: Move `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`
 - **Step 1.4**: Split `helpers/modes.mjs` into utils and processor
-- **Step 1.5a**: Move `helpers/loader.mjs` → `processors/loader.mjs`
-- **Step 1.5b**: Move `helpers/flatten.mjs` → `processors/flatten.mjs`
+- **Step 1.5**: Move loader and flatten to processors/
 - **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
 
 ### 📝 File Naming Convention
@@ -220,12 +214,10 @@ export class ApiManager {
 
 Based on comprehensive analysis (see conversation summary):
 
-1. **`helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`** ✅ **COMPLETED** (commit aa197c1)
+1. **`helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`** ⏳ TODO
    - Reason: Manages global WeakMap of instances (STATEFUL REGISTRY)
    - Functions: `registerInstance()`, `removeInstance()`, `getActiveInstances()`
    - This is not a pure utility, it's a stateful handler
-   - Updated @module declaration to handlers path
-   - Both critical tests passing (240 collision + debug)
 
 2. **`helpers/hot_reload.mjs` → `handlers/api-manager.mjs`** ✅ **COMPLETED** (commit ecfa60f)
    - Reason: Manages runtime API component lifecycle (add/remove/reload)
