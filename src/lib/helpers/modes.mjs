@@ -89,72 +89,6 @@ function getOwnershipCollisionMode(config, collisionContext = "initial") {
 }
 
 /**
- * Check if a property assignment should be allowed during initial load.
- * Emits warning if assignment is blocked by config.
- * @param {Object} targetApi - Target API object
- * @param {string} propertyName - Property name to assign
- * @param {unknown} value - Value being assigned
- * @param {Object} config - Slothlet configuration
- * @returns {boolean} True if assignment should proceed, false to skip
- */
-function safeAssign(targetApi, propertyName, value, config, collisionContext = "initial", apiPath = "") {
-	// Check if property already exists
-	const existing = targetApi[propertyName];
-	if (existing === undefined) {
-		return true; // No conflict, allow assignment
-	}
-
-	// Handle collision based on collision context (initial or addApi)
-	const collisionMode = config.collision?.[collisionContext] || "merge";
-
-	if (collisionMode === "error") {
-		throw new SlothletError("COLLISION_ERROR", {
-			apiPath: apiPath || propertyName,
-			reason: `Property "${propertyName}" already exists and collision mode is 'error'`,
-			validationError: true
-		});
-	}
-
-	if (collisionMode === "skip") {
-		if (!config.silent && config.debug?.api) {
-			console.log(`[slothlet] Skipping collision at "${propertyName}" (mode: skip)`);
-		}
-		return false; // Skip assignment
-	}
-
-	if (collisionMode === "warn") {
-		if (!config.silent) {
-			const isWrapper = !!(existing.__wrapper || existing.__setImpl || existing.__getState);
-			new SlothletWarning("WARNING_PROPERTY_COLLISION", {
-				propertyName,
-				apiPath
-			});
-			if (isWrapper) {
-				new SlothletWarning("WARNING_PROPERTY_COLLISION_WRAPPER", {
-					apiPath
-				});
-			}
-		}
-		return false; // Keep existing
-	}
-
-	if (collisionMode === "replace") {
-		if (!config.silent && config.debug?.api) {
-			console.log(`[slothlet] Replacing "${propertyName}" (mode: replace)`);
-		}
-		return true; // Allow replacement
-	}
-
-	// Default: merge mode
-	// For initial load, collision detection just returns true to allow assignment
-	// The actual merge happens via wrapper proxy syncing in assignToApiPath
-	if (!config.silent && config.debug?.api) {
-		console.log(`[slothlet] Allowing assignment at "${propertyName}" (mode: merge)`);
-	}
-	return true;
-}
-
-/**
  * Universal file processing function for both root and nested directories
  * @param {Object} api - API object being built
  * @param {Array} files - Files to process
@@ -457,14 +391,12 @@ export async function processFiles(
 								});
 								assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									config
 								});
 							} else {
 								assignToApiPath(targetApi, key, mod[key], {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									config
 								});
 							}
 							if (ownership) {
@@ -518,14 +450,12 @@ export async function processFiles(
 								});
 								assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${propKey}`)
+									config
 								});
 							} else {
 								assignToApiPath(targetApi, propKey, propValue, {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${propKey}`)
+									config
 								});
 							}
 							if (ownership) {
@@ -553,14 +483,12 @@ export async function processFiles(
 									});
 									assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
-										config,
-										safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+										config
 									});
 								} else {
 									assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
-										config,
-										safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+										config
 									});
 								}
 								if (ownership) {
@@ -595,8 +523,7 @@ export async function processFiles(
 								});
 								const assigned = assignToApiPath(targetApi, key, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									config
 								});
 								if (assigned) {
 									console.log(`[FLATTEN MULTI-EXPORT] ✓ Assigned "${key}" to targetApi, keys after: ${Object.keys(targetApi)}`);
@@ -606,8 +533,7 @@ export async function processFiles(
 							} else {
 								assignToApiPath(targetApi, key, mod[key], {
 									useCollisionDetection: true,
-									config,
-									safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, `${categoryName}.${key}`)
+									config
 								});
 							}
 							if (ownership) {
@@ -649,14 +575,12 @@ export async function processFiles(
 						});
 						assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 							useCollisionDetection: true,
-							config,
-							safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, preferredName)
+							config
 						});
 					} else {
 						assignToApiPath(targetApi, preferredName, mod[key], {
 							useCollisionDetection: true,
-							config,
-							safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, preferredName)
+							config
 						});
 					}
 					if (ownership) {
@@ -857,10 +781,15 @@ export async function processFiles(
 				if (config.debug?.modes) {
 					console.log(`[LAZY SUBDIR] Creating for ${apiPath}, files=${subDir.children.files.length}`);
 				}
-				assignToApiPath(targetApi, subDirName, createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config), {
-					useCollisionDetection: true,
-					config
-				});
+				assignToApiPath(
+					targetApi,
+					subDirName,
+					createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config),
+					{
+						useCollisionDetection: true,
+						config
+					}
+				);
 			}
 		}
 	}
@@ -903,14 +832,12 @@ export async function processFiles(
 					});
 					assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 						useCollisionDetection: true,
-						config,
-						safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, moduleName)
+						config
 					});
 				} else {
 					assignToApiPath(targetApi, moduleName, defaultFunc, {
 						useCollisionDetection: true,
-						config,
-						safeAssign: (target, k, v, cfg) => safeAssign(target, k, v, cfg, collisionContext, moduleName)
+						config
 					});
 				}
 
