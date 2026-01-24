@@ -681,34 +681,35 @@ export class Slothlet {
    git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
    git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
    ```
+   **⚠️ DO NOT TEST YET - imports are broken!**
 
-3. **TEST IMMEDIATELY**:
-   ```bash
-   npm run debug
-   npm run testv3 -- collision-config.test.vitest.mjs
-   ```
-   Both should pass (debug shows 3 acceptable diffs)
-
-4. **Split modes.mjs**:
+3. **Split modes.mjs**:
    - Create `src/lib/helpers/modes-utils.mjs` with pure utilities
    - Create `src/lib/builders/modes-processor.mjs` with orchestration
    - Delete `src/lib/helpers/modes.mjs`
 
-5. **Update all imports** across codebase:
+4. **Update all imports** across codebase:
    - Search: `from "@cldmv/slothlet/helpers/hot_reload"`
    - Replace: `from "@cldmv/slothlet/handlers/hot-reload"`
-   - Repeat for all moved files
+   - Repeat for all moved files:
+     - `helpers/instance-manager` → `handlers/instance-manager`
+     - `helpers/hot_reload` → `handlers/hot-reload`
+     - `helpers/api_assignment` → `builders/api-assignment`
+     - `helpers/loader` → `processors/loader`
+     - `helpers/flatten` → `processors/flatten`
+     - `helpers/modes` → `helpers/modes-utils` OR `builders/modes-processor`
 
-6. **Update package.json exports**:
+5. **Update package.json exports**:
    - Run `node tools/build-exports.mjs` to regenerate
 
-7. **TEST AGAIN**:
+6. **NOW TEST** (imports fixed, should work):
    ```bash
    npm run debug  # Verify no broken imports
    npm run testv3 -- collision-config.test.vitest.mjs  # Verify collision handling
    ```
+   Both should pass (debug shows 3 acceptable diffs)
 
-8. **COMMIT**: "refactor: reorganize files - move stateful handlers and builders"
+7. **COMMIT**: "refactor: reorganize files - move stateful handlers and builders"
 
 ### Step 2: Convert Handlers to Classes
 
