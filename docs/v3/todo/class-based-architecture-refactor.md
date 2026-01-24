@@ -1,9 +1,9 @@
 # Class-Based Architecture Refactor Plan
 
 **Date:** January 23, 2026  
-**Status:** In Progress - Step 1: 2 of 6 file moves complete  
+**Status:** In Progress - Step 1: 2 of 5 file moves complete  
 **Checkpoint Commit:** `5f7f839` - "chore: pre-class refactor checkpoint"  
-**Latest Progress:** `ecfa60f` - hot_reload.mjs → handlers/api-manager.mjs (renamed + moved)
+**Latest Progress:** `e8d21f9` - Deleted unused instance-manager.mjs (duplicated by context managers)
 
 ## Progress Summary
 
@@ -20,10 +20,18 @@
   - Updated import in `api_builder.mjs`
   - Both critical tests passing (240 collision + debug) ✅
 
-### 🎯 Next Steps
-- **Step 1.1**: Move `helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`
-- **Step 1.4**: Split `helpers/modes.mjs` into utils and processor
-- **Step 1.5**: Move loader and flatten to processors/
+- **Step 1.1 DELETED**: `helpers/instance-manager.mjs` removed (commit `e8d21f9`)
+  - File was UNUSED in V3 architecture
+  - Functionality duplicated by AsyncContextManager/LiveContextManager
+  - Context managers handle instance registry via `.instances` Map
+  - Context managers handle active instance via AsyncLocalStorage
+  - Only used in src2/ (V2 architecture) - that copy remains
+  - Reverted move commits (aa197c1, c2ccbc7) before deletion
+
+### 🎯 Next Steps (3 file moves remaining)
+- **Step 1.5a**: Move `helpers/loader.mjs` → `processors/loader.mjs`
+- **Step 1.5b**: Move `helpers/flatten.mjs` → `processors/flatten.mjs`
+- **Step 1.4**: Split `helpers/modes.mjs` into utils and processor (complex, save for last)
 - **Step 2-7**: Class conversions (handlers, processors, builders, Slothlet refactor)
 
 ### 📝 File Naming Convention
@@ -214,10 +222,12 @@ export class ApiManager {
 
 Based on comprehensive analysis (see conversation summary):
 
-1. **`helpers/instance-manager.mjs` → `handlers/instance-manager.mjs`** ⏳ TODO
-   - Reason: Manages global WeakMap of instances (STATEFUL REGISTRY)
-   - Functions: `registerInstance()`, `removeInstance()`, `getActiveInstances()`
-   - This is not a pure utility, it's a stateful handler
+1. **`helpers/instance-manager.mjs`** ❌ **DELETED** (commit e8d21f9)
+   - File was UNUSED in V3 architecture
+   - Functionality duplicated by AsyncContextManager/LiveContextManager
+   - Context managers handle instance registry via `.instances` Map
+   - Context managers handle active instance via AsyncLocalStorage
+   - Only used in src2/ (V2 architecture) - that copy remains
 
 2. **`helpers/hot_reload.mjs` → `handlers/api-manager.mjs`** ✅ **COMPLETED** (commit ecfa60f)
    - Reason: Manages runtime API component lifecycle (add/remove/reload)
@@ -293,28 +303,6 @@ export class MetadataHandler {
     
     attachMetadata(target, metadata) { /* ... */ }
     getMetadata(target) { /* ... */ }
-}
-```
-
-**`handlers/instance-manager.mjs`** (MOVED from helpers/) → Convert to class:
-```javascript
-export class InstanceManager {
-    constructor(instance) {
-        this.instance = instance;
-    }
-    
-    static instances = new WeakMap(); // Shared across all instances
-    
-    register() {
-        InstanceManager.instances.set(this.instance, {
-            id: this.instance.instanceID,
-            config: this.instance.config
-        });
-    }
-    
-    remove() {
-        InstanceManager.instances.delete(this.instance);
-    }
 }
 ```
 
@@ -633,7 +621,6 @@ If auto-discovery adds too much complexity during initial refactor, use manual i
 // src/slothlet.mjs
 import { OwnershipHandler } from "@cldmv/slothlet/handlers/ownership";
 import { MetadataHandler } from "@cldmv/slothlet/handlers/metadata-handler";
-import { InstanceManager } from "@cldmv/slothlet/handlers/instance-manager";
 import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { Builder } from "@cldmv/slothlet/builders/builder";
 import { ApiBuilder } from "@cldmv/slothlet/builders/api-builder";
@@ -658,8 +645,7 @@ export class Slothlet {
         this.contextManager = null; // Set during load
         this.ownership = new OwnershipHandler(this);
         this.metadata = new MetadataHandler(this);
-        this.instanceManager = new InstanceManager(this);
-        this.hotReload = new HotReload(this);
+        this.apiManager = new ApiManager(this); // Manages api.add/remove/reload
         
         // Builders (construction orchestrators)
         this.builder = new Builder(this);
@@ -710,13 +696,15 @@ export class Slothlet {
 2. **Move files with git mv** (preserves history):
    ```bash
    # REMAINING TO DO:
-   git mv src/lib/helpers/instance-manager.mjs src/lib/handlers/instance-manager.mjs
-   git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/api-manager.mjs
    git mv src/lib/helpers/loader.mjs src/lib/processors/loader.mjs
    git mv src/lib/helpers/flatten.mjs src/lib/processors/flatten.mjs
    
-   # ✅ COMPLETED (commits 9a3fb82, e265ecb):
-   # git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs
+   # ✅ COMPLETED:
+   # commit ecfa60f: git mv src/lib/helpers/hot_reload.mjs src/lib/handlers/api-manager.mjs
+   # commits 9a3fb82, e265ecb: git mv src/lib/helpers/api_assignment.mjs src/lib/builders/api-assignment.mjs
+   
+   # ❌ DELETED (commit e8d21f9):
+   # helpers/instance-manager.mjs - unused, duplicated by context managers
    ```
    **⚠️ DO NOT TEST YET - imports are broken!**
 
@@ -726,15 +714,12 @@ export class Slothlet {
    - Delete `src/lib/helpers/modes.mjs`
 
 4. **Update all imports** across codebase:
-   - Search: `from "@cldmv/slothlet/helpers/hot_reload"`
-   - Replace: `from "@cldmv/slothlet/handlers/api-manager"`
-   - Repeat for all moved files:
-     - `helpers/instance-manager` → `handlers/instance-manager`
-     - `helpers/hot_reload` → `handlers/api-manager`
-     - ✅ **DONE**: `helpers/api_assignment` → `builders/api-assignment` (commits 9a3fb82, e265ecb)
-     - `helpers/loader` → `processors/loader`
-     - `helpers/flatten` → `processors/flatten`
-     - `helpers/modes` → `helpers/modes-utils` OR `builders/modes-processor`
+   - ✅ **DONE**: `helpers/hot_reload` → `handlers/api-manager` (commit ecfa60f)
+   - ✅ **DONE**: `helpers/api_assignment` → `builders/api-assignment` (commits 9a3fb82, e265ecb)
+   - **TODO**: `helpers/loader` → `processors/loader`
+   - **TODO**: `helpers/flatten` → `processors/flatten`
+   - **TODO**: `helpers/modes` → `helpers/modes-utils` OR `builders/modes-processor`
+   - **N/A**: `helpers/instance-manager` - deleted (commit e8d21f9)
 
 5. **NOW TEST** (imports fixed, should work):
    ```bash
@@ -768,20 +753,14 @@ export class Slothlet {
    - **TEST**: Both critical tests
    - **COMMIT**: "refactor(handlers): convert metadata-handler to class"
 
-3. **Convert `handlers/instance-manager.mjs`**:
-   - Add static `instances` WeakMap
-   - Instance methods access `this.instance`
-   - **TEST**: Both critical tests
-   - **COMMIT**: "refactor(handlers): convert instance-manager to class"
-
-4. **Convert `handlers/api-manager.mjs`**:
+3. **Convert `handlers/api-manager.mjs`**:
    - Replace WeakMap with instance property
    - Add all convenience getters
    - Remove config parameter passing
    - **TEST**: Both critical tests (api-manager is critical!)
    - **COMMIT**: "refactor(handlers): convert api-manager to class (renamed from hot-reload)"
 
-5. **Update imports and usage in `slothlet.mjs`**:
+4. **Update imports and usage in `slothlet.mjs`**:
    - Instantiate all handlers in constructor
    - Update method calls to use `this.handlerName.method()`
    - **TEST**: Both critical tests
@@ -956,7 +935,6 @@ src/lib/
 │   ├── ownership.mjs (OwnershipHandler - convert to class)
 │   ├── unified-wrapper.mjs (UnifiedWrapper - already class)
 │   ├── metadata-handler.mjs (MetadataHandler - convert to class)
-│   ├── instance-manager.mjs (InstanceManager - MOVED + convert to class)
 │   └── api-manager.mjs (ApiManager - MOVED + RENAMED from hot_reload.mjs + convert to class)
 ├── builders/ (CONSTRUCTION ORCHESTRATORS - ALL CLASSES)
 │   ├── builder.mjs (Builder - convert to class)
