@@ -11,7 +11,6 @@
  * const api = await buildFinalAPI({ userApi, instance, config });
  */
 import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { ApiManager } from "@cldmv/slothlet/handlers/api-manager";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -102,7 +101,7 @@ export async function buildFinalAPI(options) {
 }
 
 /**
- * @param {object} instance - Slothlet instance.
+ * @param {object} slothlet - Slothlet orchestrator instance.
  * @param {object} config - Configuration.
  * @param {object} userApi - User API object (for diagnostics).
  * @returns {Promise<object>} Slothlet namespace object.
@@ -113,9 +112,9 @@ export async function buildFinalAPI(options) {
  * helpers for the current instance.
  *
  * @example
- * const namespace = await createSlothletNamespace(instance, config, api);
+ * const namespace = await createSlothletNamespace(slothlet, config, api);
  */
-async function createSlothletNamespace(instance, config, userApi) {
+async function createSlothletNamespace(slothlet, config, userApi) {
 	// Read version from package.json
 	let version = "unknown";
 	try {
@@ -128,9 +127,6 @@ async function createSlothletNamespace(instance, config, userApi) {
 		// Ignore - version will remain "unknown"
 	}
 
-	// Create ApiManager instance for this slothlet instance
-	const apiManager = new ApiManager(instance);
-
 	const namespace = {
 		/**
 		 * Slothlet version from package.json
@@ -142,7 +138,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 		 * Unique instance ID for this slothlet instance
 		 * @type {string}
 		 */
-		instanceID: instance.instanceID,
+		instanceID: slothlet.instanceID,
 
 		/**
 		 * Type state symbols for checking __type property values
@@ -179,7 +175,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
 				// Filter out internal options that shouldn't be user-controllable
 				const { recordHistory, ...filteredOptions } = options;
-				return apiManager.addApiComponent({
+				return slothlet.apiManager.addApiComponent({
 					apiPath,
 					folderPath,
 					metadata,
@@ -199,7 +195,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.remove("plugins.tools");
 			 */
 			remove: async function slothlet_api_remove(pathOrModuleId) {
-				return apiManager.removeApiComponent({ pathOrModuleId });
+				return slothlet.apiManager.removeApiComponent({ pathOrModuleId });
 			},
 
 			/**
@@ -214,7 +210,7 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * await api.slothlet.api.reload("plugins");
 			 */
 			reload: async function slothlet_api_reload(pathOrModuleId) {
-				return apiManager.reloadApiComponent({ pathOrModuleId });
+				return slothlet.apiManager.reloadApiComponent({ pathOrModuleId });
 			}
 		},
 
@@ -447,20 +443,20 @@ async function createSlothletNamespace(instance, config, userApi) {
 			 * Reference object passed to slothlet initialization (merged into API)
 			 * @type {Object|null}
 			 */
-			reference: instance.reference || null,
+			reference: slothlet.reference || null,
 
 			/**
 			 * Context object (user-provided context from config)
 			 * @type {Object}
 			 */
-			context: instance.context || {},
+			context: slothlet.context || {},
 
 			/**
 			 * Inspect instance state
 			 * @returns {Object}
 			 */
 			inspect: () => {
-				return instance.getDiagnostics();
+				return slothlet.getDiagnostics();
 			}
 		};
 	}
