@@ -719,8 +719,11 @@ export class ModesProcessor extends ComponentBase {
 									implToWrap = exports.default;
 									if (typeof implToWrap === "function" && moduleKeys.length > 0) {
 										for (const key of moduleKeys) {
-											if (key !== "default" && implToWrap[key] === undefined) {
-												implToWrap[key] = exports[key];
+											if (key !== "default") {
+												const hasExisting = implToWrap[key] !== undefined;
+												if (!hasExisting) {
+													implToWrap[key] = exports[key];
+												}
 											}
 										}
 									}
@@ -925,9 +928,25 @@ export class ModesProcessor extends ComponentBase {
 							// Hybrid pattern: default function + named exports
 							// Attach named exports as properties on the function
 							if (typeof implToWrap === "function" && moduleKeys.length > 0) {
+								const collisionMode = this.slothlet.config?.collision?.initial || "merge";
 								for (const key of moduleKeys) {
 									if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
 										continue;
+									}
+									// Respect collision mode when attaching named exports
+									const hasExisting = Object.prototype.hasOwnProperty.call(implToWrap, key);
+									if (hasExisting) {
+										if (collisionMode === "merge" || collisionMode === "skip") {
+											// Keep existing property from default export
+											continue;
+										} else if (collisionMode === "error") {
+											throw new Error(`Collision detected: property "${key}" already exists on default export function at ${apiPath}`);
+										} else if (collisionMode === "warn") {
+											console.warn(
+												`Collision warning: property "${key}" already exists on default export function at ${apiPath}. Named export will overwrite.`
+											);
+										}
+										// collisionMode === "replace" falls through to assignment
 									}
 									implToWrap[key] = exports[key];
 								}
