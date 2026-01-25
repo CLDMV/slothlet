@@ -15,6 +15,11 @@ import { ComponentBase } from "@cldmv/slothlet/helpers/component-base";
 export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
+	// Secure WeakMap storage for immutable system metadata
+	#secureMetadata = new WeakMap();  // target → system metadata (IMMUTABLE)
+	#userMetadata = new WeakMap();     // target → user metadata (MUTABLE)
+	#globalUserMetadata = {};          // global user metadata (applies to all)
+
 	#runtimeModule = null;
 	#runtimeImportPromise = null;
 
@@ -135,7 +140,97 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Tag system metadata (SECURE, IMMUTABLE)
+	 * Called internally during wrapper/function creation
+	 * @param {Function|Object} target - Wrapper or function to tag
+	 * @param {Object} systemData - System metadata (filePath, apiPath, moduleId, sourceFolder)
+	 * @private
+	 */
+	tagSystemMetadata(target, systemData) {
+		if (!target) return;
+
+		// Store in secure WeakMap (inaccessible externally)
+		const frozenSystem = Object.freeze({
+			filePath: systemData.filePath,
+			sourceFolder: systemData.sourceFolder || this.slothlet.config?.dir,
+			apiPath: systemData.apiPath,
+			moduleId: systemData.moduleId,
+			taggedAt: Date.now()
+		});
+
+		this.#secureMetadata.set(target, frozenSystem);
+	}
+
+	/**
+	 * Get metadata for a target (combines system + user)
+	 * For wrappers: checks current impl to ensure metadata is current
+	 * @param {Function|Object} target - Wrapper or function
+	 * @returns {Object} Combined metadata
+	 * @public
+	 */
+	getMetadata(target) {
+		if (!target) return {};
+
+		// For wrappers, verify impl hasn't changed
+		if (target.__wrapper || (typeof target === "object" && target._impl)) {
+			const wrapper = target.__wrapper || target;
+			const currentImpl = wrapper._impl;
+
+			// Get system metadata for current impl (not wrapper)
+			const systemData = this.#secureMetadata.get(currentImpl) || 
+							  this.#secureMetadata.get(wrapper) ||
+							  {};
+
+			const userData = this.#userMetadata.get(wrapper) || {};
+
+			return {
+				...this.#globalUserMetadata,
+				...systemData,
+				...userData
+			};
+		}
+
+		// For direct functions
+		const systemData = this.#secureMetadata.get(target) || {};
+		const userData = this.#userMetadata.get(target) || {};
+
+		return {
+			...this.#globalUserMetadata,
+			...systemData,
+			...userData
+		};
+	}
+
+	/**
+	 * Set global user metadata (applies to all functions)
+	 * @param {Object} metadata - User metadata
+	 * @public
+	 */
+	setGlobalMetadata(metadata) {
+		this.#globalUserMetadata = { ...metadata };
+	}
+
+	/**
+	 * Add/update user metadata for specific target
+	 * @param {string} apiPath - API path
+	 * @param {Object} metadata - User metadata
+	 * @public
+	 */
+	async setUserMetadata(apiPath, metadata) {
+		await this.#ensureRuntime();
+		const apiRoot = this.#getApiRoot();
+		if (!apiRoot) return;
+
+		const target = this.#findFunctionByPath(apiRoot, apiPath);
+		if (target) {
+			const existing = this.#userMetadata.get(target) || {};
+			this.#userMetadata.set(target, { ...existing, ...metadata });
+		}
+	}
+
+	/**
 	 * Get metadata of the function that called the current function
+	 * Includes security verification comparing stack trace to stored metadata
 	 * @returns {Promise<object|null>} Caller's metadata object or null
 	 * @public
 	 */
@@ -153,7 +248,30 @@ export class Metadata extends ComponentBase {
 		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
 		if (!func) return null;
 
-		return func.__metadata || null;
+		// Get metadata using new secure system
+		const metadata = this.getMetadata(func);
+
+		// SECURITY CHECK: Verify stack trace matches metadata
+		const stackFilePath = this.slothlet.helpers.resolver.toFsPath(parsed.file);
+		const metaFilePath = this.slothlet.helpers.resolver.toFsPath(metadata.filePath);
+
+		if (stackFilePath && metaFilePath && stackFilePath !== metaFilePath) {
+			// WARNING: Metadata mismatch (possible tampering or hot reload)
+			new this.SlothletWarning("WARNING_METADATA_MISMATCH", {
+				apiPath: metadata.apiPath,
+				stackFile: stackFilePath,
+				metadataFile: metaFilePath
+			});
+
+			// Return metadata with security warning
+			return {
+				...metadata,
+				__securityWarning: "FILE_PATH_MISMATCH",
+				__stackFile: stackFilePath
+			};
+		}
+
+		return metadata || null;
 	}
 
 	/**
@@ -175,7 +293,8 @@ export class Metadata extends ComponentBase {
 		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
 		if (!func) return null;
 
-		return func.__metadata || null;
+		// Get metadata using new secure system
+		return this.getMetadata(func) || null;
 	}
 
 	/**
