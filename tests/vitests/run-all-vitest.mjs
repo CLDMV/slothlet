@@ -95,10 +95,29 @@ async function discoverFilesInDir(dir) {
 
 /**
  * Discover Vitest test files based on CLI arguments or default to all processed/ files
- * @param {string[]} args - Command-line arguments (file paths, folder paths, partial paths, or empty for all)
+ * @param {string[]} args - Command-line arguments (file paths, folder paths, partial paths, --baseline flag, or empty for all)
  * @returns {Promise<string[]>} Array of test file paths relative to project root
  */
 async function discoverVitestFiles(args) {
+	// Check if --baseline flag is provided
+	if (args.length > 0 && args[0] === "--baseline") {
+		const baselineJsonPath = path.resolve(__dirname, "baseline-tests.json");
+		try {
+			const jsonContent = await fs.readFile(baselineJsonPath, "utf8");
+			const testList = JSON.parse(jsonContent);
+
+			if (!Array.isArray(testList)) {
+				throw new Error("baseline-tests.json must contain an array of test file paths");
+			}
+
+			console.log(`📋 Loading baseline test list from: ${path.relative(projectRoot, baselineJsonPath)}`);
+			return testList.sort((a, b) => a.localeCompare(b));
+		} catch (error) {
+			console.error(`❌ Error reading baseline test list from ${baselineJsonPath}:`, error.message);
+			process.exit(1);
+		}
+	}
+
 	// If no arguments provided, run all files in suites/
 	if (args.length === 0) {
 		const suitesDir = path.resolve(__dirname, "suites");

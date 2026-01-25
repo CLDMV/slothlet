@@ -16,9 +16,9 @@ export class Metadata extends ComponentBase {
 	static slothletProperty = "metadata";
 
 	// Secure WeakMap storage for immutable system metadata
-	#secureMetadata = new WeakMap();  // target → system metadata (IMMUTABLE)
-	#userMetadata = new WeakMap();     // target → user metadata (MUTABLE)
-	#globalUserMetadata = {};          // global user metadata (applies to all)
+	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
+	#userMetadata = new WeakMap(); // target → user metadata (MUTABLE)
+	#globalUserMetadata = {}; // global user metadata (applies to all)
 
 	#runtimeModule = null;
 	#runtimeImportPromise = null;
@@ -149,12 +149,30 @@ export class Metadata extends ComponentBase {
 	tagSystemMetadata(target, systemData) {
 		if (!target) return;
 
+		// Get source from ownership to construct full moduleId (source:relativePath)
+		let fullModuleId = systemData.moduleId;
+		if (systemData.apiPath && systemData.moduleId) {
+			const owner = this.slothlet.handlers.ownership?.getCurrentOwner(systemData.apiPath);
+			if (owner?.source && systemData.moduleId) {
+				// Construct moduleId as "source:relativePath"
+				fullModuleId = `${owner.source}:${systemData.moduleId}`;
+			}
+		}
+
+		// Derive sourceFolder from filePath if not provided
+		let sourceFolder = systemData.sourceFolder;
+		if (!sourceFolder && systemData.filePath) {
+			// Extract directory from filePath
+			const pathModule = this.slothlet.helpers.resolver.path;
+			sourceFolder = pathModule.dirname(systemData.filePath);
+		}
+
 		// Store in secure WeakMap (inaccessible externally)
 		const frozenSystem = Object.freeze({
 			filePath: systemData.filePath,
-			sourceFolder: systemData.sourceFolder || this.slothlet.config?.dir,
+			sourceFolder: sourceFolder,
 			apiPath: systemData.apiPath,
-			moduleId: systemData.moduleId,
+			moduleId: fullModuleId,
 			taggedAt: Date.now()
 		});
 
@@ -177,9 +195,7 @@ export class Metadata extends ComponentBase {
 			const currentImpl = wrapper._impl;
 
 			// Get system metadata for current impl (not wrapper)
-			const systemData = this.#secureMetadata.get(currentImpl) || 
-							  this.#secureMetadata.get(wrapper) ||
-							  {};
+			const systemData = this.#secureMetadata.get(currentImpl) || this.#secureMetadata.get(wrapper) || {};
 
 			const userData = this.#userMetadata.get(wrapper) || {};
 
