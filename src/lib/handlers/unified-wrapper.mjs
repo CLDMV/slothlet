@@ -823,14 +823,14 @@ export class UnifiedWrapper extends ComponentBase {
 			const impl = wrapper._impl;
 			if (typeof impl === "function") {
 				if (wrapper.slothlet.contextManager) {
-					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args);
+					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper);
 				}
 				return impl.apply(thisArg, args);
 			}
 
 			if (impl && typeof impl === "object" && typeof impl.default === "function") {
 				if (wrapper.slothlet.contextManager) {
-					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args);
+					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper);
 				}
 				return impl.default.apply(impl, args);
 			}
