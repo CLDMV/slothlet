@@ -46,10 +46,11 @@ export class AsyncContextManager {
 	 * @param {Function} fn - Function to execute
 	 * @param {*} thisArg - this binding for function
 	 * @param {Array} args - Arguments to pass to function
+	 * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper) {
 		const store = this.instances.get(instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
@@ -58,7 +59,14 @@ export class AsyncContextManager {
 			});
 		}
 
-		return this.als.run(store, () => {
+		// Create a new store with currentWrapper for this execution
+		const executionStore = { ...store };
+		if (currentWrapper) {
+			executionStore.currentWrapper = currentWrapper;
+			// TODO: Implement caller detection by checking parent context
+		}
+
+		return this.als.run(executionStore, () => {
 			try {
 				return fn.apply(thisArg, args);
 			} catch (error) {

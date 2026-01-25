@@ -51,10 +51,11 @@ export class LiveContextManager {
 	 * @param {Function} fn - Function to execute
 	 * @param {*} thisArg - this binding for function
 	 * @param {Array} args - Arguments to pass to function
+	 * @param {Object} [currentWrapper] - Current wrapper being executed (for metadata.self())
 	 * @returns {*} Result of function execution
 	 * @public
 	 */
-	runInContext(instanceID, fn, thisArg, args) {
+	runInContext(instanceID, fn, thisArg, args, currentWrapper) {
 		const store = this.instances.get(instanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
@@ -65,7 +66,13 @@ export class LiveContextManager {
 
 		// Set current instance (synchronous)
 		const previousInstanceID = this.currentInstanceID;
+		const previousWrapper = store.currentWrapper;
+		
 		this.currentInstanceID = instanceID;
+		if (currentWrapper) {
+			store.currentWrapper = currentWrapper;
+			// TODO: Implement caller detection
+		}
 
 		try {
 			return fn.apply(thisArg, args);
@@ -78,8 +85,9 @@ export class LiveContextManager {
 				error
 			);
 		} finally {
-			// Restore previous instance
+			// Restore previous state
 			this.currentInstanceID = previousInstanceID;
+			store.currentWrapper = previousWrapper;
 		}
 	}
 
