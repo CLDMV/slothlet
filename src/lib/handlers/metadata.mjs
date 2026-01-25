@@ -5,7 +5,6 @@
  */
 
 import { ComponentBase } from "@cldmv/slothlet/helpers/component-base";
-import { getStack, toFsPath } from "@cldmv/slothlet/helpers/resolve-from-caller";
 
 /**
  * Metadata handler for introspection of function metadata
@@ -74,7 +73,7 @@ export class Metadata extends ComponentBase {
 			const lineNumber = callSite.getLineNumber();
 			if (!fileName || !lineNumber) return null;
 			return {
-				file: toFsPath(fileName),
+				file: this.slothlet.helpers.resolver.toFsPath(fileName),
 				line: lineNumber
 			};
 		} catch {
@@ -121,7 +120,7 @@ export class Metadata extends ComponentBase {
 			if (typeof value === "function") {
 				const meta = value.__metadata;
 				if (meta?.sourceFile && meta?.sourceLine) {
-					const metaFile = toFsPath(meta.sourceFile);
+					const metaFile = this.slothlet.helpers.resolver.toFsPath(meta.sourceFile);
 					if (metaFile === targetFile && meta.sourceLine === targetLine) {
 						return value;
 					}
@@ -145,7 +144,7 @@ export class Metadata extends ComponentBase {
 		const apiRoot = this.#getApiRoot();
 		if (!apiRoot || typeof apiRoot !== "object") return null;
 
-		const stack = getStack(this.caller);
+		const stack = this.slothlet.helpers.resolver.getStack(this.caller);
 		if (stack.length < 1) return null;
 
 		const parsed = this.#parseCallSite(stack[0]);
@@ -167,7 +166,7 @@ export class Metadata extends ComponentBase {
 		const apiRoot = this.#getApiRoot();
 		if (!apiRoot || typeof apiRoot !== "object") return null;
 
-		const stack = getStack(this.self);
+		const stack = this.slothlet.helpers.resolver.getStack(this.self);
 		if (stack.length < 1) return null;
 
 		const parsed = this.#parseCallSite(stack[0]);

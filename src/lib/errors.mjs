@@ -160,3 +160,88 @@ export class SlothletWarning {
 		return `[${this.code}] ${this.name}: ${this.message}`;
 	}
 }
+
+/**
+ * Debug utility class for centralized conditional console output with i18n
+ * @public
+ */
+export class SlothletDebug {
+	/**
+	 * Create a debug logger instance bound to a config
+	 * @param {Object} config - Configuration object (typically slothlet.config)
+	 * @public
+	 */
+	constructor(config = {}) {
+		this.config = config;
+		this.debugFlags = config.debug || {};
+	}
+
+	/**
+	 * Log a debug message if the code's debug flag is enabled
+	 * @param {string} code - Debug code/category (e.g., "modes", "wrapper", "api")
+	 * @param {Object} context - Contextual information to display
+	 * @public
+	 *
+	 * @description
+	 * Centralized debug logging that respects debug configuration flags.
+	 * Only outputs when the specified code matches a truthy debug flag.
+	 * Translates messages using i18n system (looks for DEBUG_{CODE} keys).
+	 *
+	 * @example
+	 * this.slothlet.debug("wrapper", {
+	 *   apiPath: "math.add",
+	 *   action: "materialized",
+	 *   implKeys: ["add", "subtract"]
+	 * });
+	 */
+	log(code, context = {}) {
+		// Only log if debug flag for this code is enabled
+		if (!this.debugFlags || !this.debugFlags[code]) {
+			return;
+		}
+
+		// Try to translate the message using DEBUG_{CODE} key
+		const debugKey = `DEBUG_${code.toUpperCase()}`;
+		const translatedMessage = translate(debugKey, context);
+
+		// Format label
+		const label = `[DEBUG:${code.toUpperCase()}]`;
+
+		// If translation exists (not fallback), use it
+		if (translatedMessage && !translatedMessage.startsWith("Error:")) {
+			console.log(`${label} ${translatedMessage}`);
+			// Show additional context if available (excluding 'message' which is already shown)
+			const { message, ...additionalContext } = context;
+			if (Object.keys(additionalContext).length > 0) {
+				console.log(`${label} Context:`, additionalContext);
+			}
+		} else if (context.message) {
+			// Fallback to context.message
+			console.log(`${label} ${context.message}`);
+			// Show additional context if available (excluding 'message')
+			const { message, ...additionalContext } = context;
+			if (Object.keys(additionalContext).length > 0) {
+				console.log(`${label} Context:`, additionalContext);
+			}
+		} else {
+			// No message or translation - show all context
+			console.log(label, context);
+		}
+
+		// Show remaining context (excluding message)
+		const { message, ...remainingContext } = context;
+		if (Object.keys(remainingContext).length > 0) {
+			console.log(remainingContext);
+		}
+	}
+
+	/**
+	 * Custom string representation
+	 * @returns {string} Debug info
+	 */
+	toString() {
+		return `[SlothletDebug] flags: ${Object.keys(this.debugFlags)
+			.filter((k) => this.debugFlags[k])
+			.join(", ")}`;
+	}
+}

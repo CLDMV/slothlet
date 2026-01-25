@@ -16,7 +16,7 @@
  * await manager.addApiComponent({
  * 	apiPath: "plugins",
  * 	folderPath: "./plugins",
- * 	options: { moduleId: "plugins-core" }
+ * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  *
  * @example
@@ -26,13 +26,12 @@
  * await manager.addApiComponent({
  * 	apiPath: "plugins",
  * 	folderPath: "./plugins",
- * 	options: { moduleId: "plugins-core" }
+ * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { resolvePathFromCaller } from "@cldmv/slothlet/helpers/resolve-from-caller";
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -137,7 +136,7 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		const resolvedPath = resolvePathFromCaller(folderPath);
+		const resolvedPath = this.slothlet.helpers.resolver.resolvePathFromCaller(folderPath);
 		try {
 			const stats = await fs.stat(resolvedPath);
 			if (!stats.isDirectory()) {
@@ -277,8 +276,14 @@ export class ApiManager extends ComponentBase {
 	 */
 	async syncWrapper(existingProxy, nextProxy, config) {
 		if (config?.debug?.api) {
-			console.log(`[syncWrapper ENTRY] existingProxy apiPath:`, existingProxy?.__wrapper?.apiPath);
-			console.log(`[syncWrapper ENTRY] nextProxy apiPath:`, nextProxy?.__wrapper?.apiPath);
+			this.slothlet.debug("api", {
+				message: "syncWrapper entry - existingProxy",
+				apiPath: existingProxy?.__wrapper?.apiPath
+			});
+			this.slothlet.debug("api", {
+				message: "syncWrapper entry - nextProxy",
+				apiPath: nextProxy?.__wrapper?.apiPath
+			});
 		}
 
 		if (!this.isWrapperProxy(existingProxy) || !this.isWrapperProxy(nextProxy)) {
@@ -289,8 +294,14 @@ export class ApiManager extends ComponentBase {
 		const nextWrapper = nextProxy.__wrapper || nextProxy;
 
 		if (config?.debug?.api) {
-			console.log(`[syncWrapper] existingWrapper.apiPath: ${existingWrapper.apiPath}`);
-			console.log(`[syncWrapper] nextWrapper.apiPath: ${nextWrapper.apiPath}`);
+			this.slothlet.debug("api", {
+				message: "syncWrapper existingWrapper",
+				apiPath: existingWrapper.apiPath
+			});
+			this.slothlet.debug("api", {
+				message: "syncWrapper nextWrapper",
+				apiPath: nextWrapper.apiPath
+			});
 		}
 
 		// Copy materialize function if present (lazy mode support)
@@ -303,11 +314,19 @@ export class ApiManager extends ComponentBase {
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
 		if (nextWrapper._childCache && existingWrapper._childCache) {
 			if (config?.debug?.api) {
-				console.log(
-					`[syncWrapper] Before merge - existing cache size: ${existingWrapper._childCache.size}, next cache size: ${nextWrapper._childCache.size}`
-				);
-				console.log(`[syncWrapper] Next wrapper _impl keys:`, Object.keys(nextWrapper._impl || {}));
-				console.log(`[syncWrapper] Next wrapper _childCache keys:`, Array.from(nextWrapper._childCache.keys()));
+				this.slothlet.debug("api", {
+					message: "syncWrapper before merge",
+					existingCacheSize: existingWrapper._childCache.size,
+					nextCacheSize: nextWrapper._childCache.size
+				});
+				this.slothlet.debug("api", {
+					message: "syncWrapper next wrapper impl keys",
+					implKeys: Object.keys(nextWrapper._impl || {})
+				});
+				this.slothlet.debug("api", {
+					message: "syncWrapper next wrapper childCache keys",
+					childCacheKeys: Array.from(nextWrapper._childCache.keys())
+				});
 			}
 
 			// Clear existing cache first
@@ -323,7 +342,10 @@ export class ApiManager extends ComponentBase {
 			}
 
 			if (config?.debug?.api) {
-				console.log(`[syncWrapper] After merge - existing cache size: ${existingWrapper._childCache.size}`);
+				this.slothlet.debug("api", {
+					message: "syncWrapper after merge",
+					cacheSize: existingWrapper._childCache.size
+				});
 			}
 		}
 
@@ -355,12 +377,24 @@ export class ApiManager extends ComponentBase {
 	 */
 	async mutateApiValue(existingValue, nextValue, options, config) {
 		if (config?.debug?.api) {
-			console.log(`[mutateApiValue] called - existing type: ${typeof existingValue}, next type: ${typeof nextValue}`);
-			console.log(
-				`[mutateApiValue] existing isWrapper: ${this.isWrapperProxy(existingValue)}, next isWrapper: ${this.isWrapperProxy(nextValue)}`
-			);
-			console.log(`[mutateApiValue] nextValue:`, nextValue);
-			console.log(`[mutateApiValue] nextValue keys:`, nextValue ? Object.keys(nextValue) : "N/A");
+			this.slothlet.debug("api", {
+				message: "mutateApiValue called",
+				existingType: typeof existingValue,
+				nextType: typeof nextValue
+			});
+			this.slothlet.debug("api", {
+				message: "mutateApiValue wrapper status",
+				existingIsWrapper: this.isWrapperProxy(existingValue),
+				nextIsWrapper: this.isWrapperProxy(nextValue)
+			});
+			this.slothlet.debug("api", {
+				message: "mutateApiValue nextValue",
+				nextValue
+			});
+			this.slothlet.debug("api", {
+				message: "mutateApiValue nextValue keys",
+				nextValueKeys: nextValue ? Object.keys(nextValue) : []
+			});
 		}
 
 		if (existingValue === nextValue) {
@@ -370,7 +404,9 @@ export class ApiManager extends ComponentBase {
 		// If both are wrapper proxies, sync them
 		if (this.isWrapperProxy(existingValue) && this.isWrapperProxy(nextValue)) {
 			if (config?.debug?.api) {
-				console.log(`[mutateApiValue] Both are wrappers - calling syncWrapper`);
+				this.slothlet.debug("api", {
+					message: "mutateApiValue - both are wrappers, calling syncWrapper"
+				});
 			}
 			await this.syncWrapper(existingValue, nextValue, config);
 			return;
@@ -384,8 +420,15 @@ export class ApiManager extends ComponentBase {
 			const nextHasKeys = nextIsObjectLike && Object.keys(nextValue).length > 0;
 
 			if (nextHasKeys) {
-				console.log(`[mutateApiValue] Merging object/function properties into existing wrapper`);
-				console.log(`[mutateApiValue] nextValue keys:`, Object.keys(nextValue));
+				if (config?.debug?.api) {
+					this.slothlet.debug("api", {
+						message: "mutateApiValue - merging properties into existing wrapper"
+					});
+					this.slothlet.debug("api", {
+						message: "mutateApiValue nextValue keys to merge",
+						keys: Object.keys(nextValue)
+					});
+				}
 				// Merge each child from nextValue into the existing wrapper
 				await this.slothlet.apiAssignment.mergeApiObjects(existingValue, nextValue, {
 					removeMissing: options.removeMissing,
@@ -398,7 +441,11 @@ export class ApiManager extends ComponentBase {
 
 			// Fallback: if nextValue has no properties, try __setImpl
 			if (existingValue.__setImpl) {
-				console.log(`[mutateApiValue] Using __setImpl fallback`);
+				if (config?.debug?.api) {
+					this.slothlet.debug("api", {
+						message: "mutateApiValue - using __setImpl fallback"
+					});
+				}
 				existingValue.__setImpl(nextValue?.__impl ?? nextValue);
 				return;
 			}
@@ -451,10 +498,14 @@ export class ApiManager extends ComponentBase {
 		const existing = parent ? parent[finalKey] : undefined;
 		const collisionMode = options.collisionMode || "merge";
 
-		console.log(
-			`[setValueAtPath] finalKey="${finalKey}", existing=${typeof existing}, value=${typeof value}, collisionMode=${collisionMode}, options:`,
+		this.slothlet.debug("api", {
+			message: "setValueAtPath",
+			finalKey,
+			existingType: typeof existing,
+			valueType: typeof value,
+			collisionMode,
 			options
-		);
+		});
 
 		// Handle collision based on mode
 		if (existing !== undefined) {
@@ -467,7 +518,11 @@ export class ApiManager extends ComponentBase {
 			}
 
 			if (collisionMode === "skip") {
-				console.log(`[setValueAtPath] Skipping collision at ${parts.join(".")} (mode: skip)`);
+				this.slothlet.debug("api", {
+					message: "setValueAtPath - skipping collision",
+					path: parts.join("."),
+					mode: "skip"
+				});
 				return;
 			}
 
@@ -485,7 +540,10 @@ export class ApiManager extends ComponentBase {
 				const valueIsObject = typeof value === "object" || typeof value === "function";
 
 				if (existingIsObject && valueIsObject) {
-					console.log("[setValueAtPath] Merging properties (mode: merge)");
+					this.slothlet.debug("api", {
+						message: "setValueAtPath - merging properties",
+						mode: "merge"
+					});
 					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true }, this.config);
 					return;
 				} else {
@@ -501,7 +559,10 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// No collision - simple assignment
-		console.log(`[setValueAtPath] No collision - assigning: parent["${finalKey}"] = value`);
+		this.slothlet.debug("api", {
+			message: "setValueAtPath - no collision, assigning",
+			finalKey
+		});
 		parent[finalKey] = value;
 	}
 
@@ -636,9 +697,9 @@ export class ApiManager extends ComponentBase {
 			await this.addApiComponent({
 				apiPath: historyEntry.apiPath,
 				folderPath: historyEntry.folderPath,
-				metadata: historyEntry.metadata,
 				options: {
 					...historyEntry.options,
+					metadata: historyEntry.metadata,
 					mutateExisting: true,
 					forceOverwrite: true,
 					recordHistory: false
@@ -648,7 +709,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
-			const baseApi = await this.slothlet.builder.buildAPI({
+			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.config.dir,
 				mode: this.config.mode,
 				ownership: null
@@ -677,8 +738,7 @@ export class ApiManager extends ComponentBase {
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
 	 * @param {string} params.folderPath - Folder path to load.
-	 * @param {Record<string, unknown>} [params.metadata={}] - Optional metadata.
-	 * @param {Record<string, unknown>} [params.options={}] - Add options.
+	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
 	 * @package
@@ -691,11 +751,12 @@ export class ApiManager extends ComponentBase {
 	 * await manager.addApiComponent({
 	 * 	apiPath: "plugins",
 	 * 	folderPath: "./plugins",
-	 * 	options: { moduleId: "plugins-core" }
+	 * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
 	 * });
 	 */
 	async addApiComponent(params) {
-		const { apiPath, folderPath, metadata = {}, options = {} } = params || {};
+		const { apiPath, folderPath, options = {} } = params || {};
+		const { metadata = {}, ...restOptions } = options;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "addApi",
@@ -708,59 +769,46 @@ export class ApiManager extends ComponentBase {
 
 		// Determine collision handling based on config.collision.addApi
 		const collisionMode = this.config.collision.addApi || "merge";
-		const allowOverwrite = !!(options.forceOverwrite || options.allowOverwrite || collisionMode === "replace" || collisionMode === "merge");
-		const mutateExisting = !!(options.mutateExisting || collisionMode === "merge");
+		const allowOverwrite = !!(
+			restOptions.forceOverwrite ||
+			restOptions.allowOverwrite ||
+			collisionMode === "replace" ||
+			collisionMode === "merge"
+		);
+		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
-		const moduleId = options.moduleId ? String(options.moduleId) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
-		if ((options.forceOverwrite || options.allowOverwrite) && !moduleId) {
+		const moduleId = restOptions.moduleId ? String(restOptions.moduleId) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
+		if ((restOptions.forceOverwrite || restOptions.allowOverwrite) && !moduleId) {
 			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
 				apiPath: normalizedPath,
 				validationError: true
 			});
 		}
 
-		const newApi = await this.slothlet.builder.buildAPI({
+		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: resolvedFolderPath,
 			mode: this.config.mode,
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi"
 		});
 
-		console.log("\n=== [addApiComponent] buildAPI RETURN STRUCTURE ===");
-		console.log("Top-level keys:", Object.keys(newApi));
-
-		// Check if flattened children exist as top-level keys with dotted names
-		const dottedKeys = Object.keys(newApi).filter((k) => k.includes("."));
-		if (dottedKeys.length > 0) {
-			console.log("FOUND DOTTED KEYS (flattened children as siblings!):", dottedKeys);
-		}
-
-		// Walk through ALL top-level entries to see the full structure
-		for (const [key, value] of Object.entries(newApi)) {
-			if (value?.__wrapper) {
-				console.log(`\n[${key}] is a wrapper:`);
-				console.log("  apiPath:", value.__wrapper.apiPath);
-				console.log("  _impl keys:", Object.keys(value.__wrapper._impl || {}));
-				console.log("  _childCache size:", value.__wrapper._childCache?.size);
-				console.log("  _childCache keys:", Array.from(value.__wrapper._childCache?.keys() || []));
-
-				// Check properties accessible via the proxy
-				const proxyProps = Object.keys(value).filter((k) => k !== "__wrapper");
-				console.log("  Proxy properties:", proxyProps);
-
-				// For each proxy property, check if it's a wrapper
-				for (const prop of proxyProps.slice(0, 3)) {
-					// First 3 to avoid spam
-					const child = value[prop];
-					if (child?.__wrapper) {
-						console.log(`    [${prop}] -> wrapper apiPath="${child.__wrapper.apiPath}"`);
-					}
-				}
-			} else {
-				console.log(`\n[${key}] is NOT a wrapper:`, typeof value);
-			}
-		}
-		console.log("=== END buildAPI RETURN STRUCTURE ===\n");
+		this.slothlet.debug("api", {
+			message: "addApiComponent buildAPI return structure",
+			topLevelKeys: Object.keys(newApi),
+			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
+			wrappers: Object.keys(newApi)
+				.filter((k) => newApi[k]?.__wrapper)
+				.map((k) => ({
+					key: k,
+					apiPath: newApi[k].__wrapper.apiPath,
+					implKeys: Object.keys(newApi[k].__wrapper._impl || {}),
+					childCacheSize: newApi[k].__wrapper._childCache?.size,
+					childCacheKeys: Array.from(newApi[k].__wrapper._childCache?.keys() || [])
+				})),
+			nonWrappers: Object.keys(newApi)
+				.filter((k) => !newApi[k]?.__wrapper)
+				.map((k) => ({ key: k, type: typeof newApi[k] }))
+		});
 
 		// Extract nested API if buildAPI returned { [apiPath]: {...} } structure
 		// This happens when the folder contains a file matching the target path name
@@ -772,21 +820,39 @@ export class ApiManager extends ComponentBase {
 		let apiToMerge = newApi;
 		const finalKey = parts[parts.length - 1];
 		const newApiKeys = Object.keys(newApi);
-		console.log(`[addApiComponent] finalKey: ${finalKey}, newApiKeys:`, newApiKeys);
+		this.slothlet.debug("api", {
+			message: "addApiComponent finalKey",
+			finalKey,
+			newApiKeys
+		});
 
 		// Only extract finalKey if we're NOT using apiPathPrefix (prefix means content is already structured)
 		if (newApi[finalKey] !== undefined && !normalizedPath.includes(".")) {
-			console.log(`[addApiComponent] Extracting ${finalKey}, isWrapper:`, this.isWrapperProxy(newApi[finalKey]));
+			this.slothlet.debug("api", {
+				message: "addApiComponent extracting key",
+				finalKey,
+				isWrapper: this.isWrapperProxy(newApi[finalKey])
+			});
 			apiToMerge = newApi[finalKey];
 			if (this.config.debug?.api) {
-				console.log(`[hot_reload] Extracted ${finalKey} from newApi:`, Object.keys(apiToMerge || {}));
+				this.slothlet.debug("api", {
+					message: "addApiComponent extracted key",
+					finalKey,
+					extractedKeys: Object.keys(apiToMerge)
+				});
 			}
 		} else {
-			console.log(`[addApiComponent] Using full newApi as apiToMerge (apiPathPrefix mode or no finalKey match)`);
+			this.slothlet.debug("api", {
+				message: "addApiComponent using full newApi",
+				reason: "apiPathPrefix mode or no finalKey match"
+			});
 		}
 
 		if (this.config.debug?.api) {
-			console.log(`[hot_reload] apiToMerge keys:`, Object.keys(apiToMerge));
+			this.slothlet.debug("api", {
+				message: "addApiComponent apiToMerge keys",
+				keys: Object.keys(apiToMerge)
+			});
 		}
 
 		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
@@ -806,12 +872,12 @@ export class ApiManager extends ComponentBase {
 		}
 
 		if (this.slothlet.handlers.ownership) {
-			if (options.recordHistory !== false) {
+			if (restOptions.recordHistory !== false) {
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
 					metadata,
-					options: { ...options, moduleId },
+					options: { ...restOptions, metadata, moduleId },
 					moduleId
 				});
 			}
@@ -990,9 +1056,9 @@ export class ApiManager extends ComponentBase {
 			await this.addApiComponent({
 				apiPath: entry.apiPath,
 				folderPath: entry.folderPath,
-				metadata: entry.metadata,
 				options: {
 					...entry.options,
+					metadata: entry.metadata,
 					mutateExisting: true,
 					forceOverwrite: true,
 					recordHistory: false

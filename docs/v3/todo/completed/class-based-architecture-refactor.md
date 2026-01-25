@@ -7,6 +7,8 @@
 
 ## Progress Summary
 
+**Status Update:** January 24, 2026 - Phase 2 COMPLETE (11 total classes converted)
+
 ### ✅ Completed
 
 **Phase 1: File Reorganization (5/5 COMPLETE)**
@@ -57,7 +59,9 @@
   - Added `./factories/*` to package.json exports
   - Factory pattern: Select/provide class instances (getContextManager selects async/live)
 
-**Phase 2: Class Conversions (6/6 COMPLETE)** 🎉
+**Phase 2: Class Conversions (11/11 COMPLETE)** 🎉
+
+**Handlers, Builders & Processors (6 classes):**
 
 - **Phase 2.1**: ✅ Convert api-manager.mjs to ApiManager class (commit `5495a4b`)
   - Converted function-based to class-based architecture
@@ -138,12 +142,32 @@
   - All 455 debug paths pass (+1 for flatten property)
   - All 240 collision config tests pass ✅
 
+- **Phase 2.5**: ✅ Convert ALL Helpers to Component Classes (January 24, 2026)
+  - **Utilities** → `Utilities` class with static slothletProperty = "utilities"
+  - **Sanitize** → `Sanitize` class with 5 private methods (#compileGlobPattern, #matchesAnyPattern, #extractPatternLiterals, #applySegmentRules, #applyWithinSegmentPatterns)
+  - **Config** → `Config` class (normalizeCollision, normalizeRuntime, normalizeMode, normalizeDebug, transformConfig)
+  - **Resolver** → `Resolver` class (resolvePathFromCaller, getStack, toFsPath)
+  - **ModesUtils** → `ModesUtils` class (getSafeFunctionName, ensureNamedExportFunction, createNamedMaterializeFunc, cloneWrapperImpl, getOwnershipCollisionMode)
+  - **HintDetector** → `HintDetector` class (detectHint)
+  - **Import elimination**: Updated 8 files to use `this.slothlet.helpers.*` instead of imports (37+ function calls replaced):
+    - `modes-processor.mjs` - 37 replacements
+    - `slothlet.mjs` - transformConfig
+    - `eager.mjs`, `lazy.mjs` - sanitizePropertyName
+    - `loader.mjs` - getModuleId, shouldAttachNamedExport
+    - `metadata.mjs` - getStack, toFsPath
+    - `api-manager.mjs` - resolvePathFromCaller
+    - `config.mjs` - resolvePathFromCaller (self-reference)
+  - **Backwards compatibility**: All helpers maintain standalone exports for external use
+  - **Component access**: All components now use `this.slothlet.helpers.*` - zero imports needed
+  - All 475 debug paths pass (+20 from helper properties)
+  - Zero NaN results or call errors ✅
+
 ### 🎯 Next Steps
 
 **Phase 2: Class Conversions (COMPLETE)** ✅
 ~~**Phase 2.2**: Convert builders to classes (builder, api-builder, api-assignment, modes-processor)~~ ✅ **COMPLETE**  
 ~~**Phase 2.3**: Convert processors to classes (loader, flatten)~~ ✅ **COMPLETE**  
-**Phase 2.4**: Update Slothlet main class to use class-based components → **COMPLETE** ✅
+~~**Phase 2.4**: Update Slothlet main class to use class-based components~~ ✅ **COMPLETE**
   - ✅ ApiManager instantiated and used
   - ✅ Builder instantiated and used
   - ✅ ApiBuilder instantiated and used
@@ -151,12 +175,20 @@
   - ✅ ModesProcessor instantiated and used
   - ✅ Loader instantiated and used
   - ✅ Flatten instantiated and used
+~~**Phase 2.5**: Convert ALL helpers to component classes~~ ✅ **COMPLETE**
+  - ✅ 6 helpers converted: Utilities, Sanitize, Config, Resolver, ModesUtils, HintDetector
+  - ✅ 37+ import eliminations across 8 files
+  - ✅ All components use `this.slothlet.helpers.*` (zero imports)
+  - ✅ Backwards-compatible standalone exports maintained
+  - ✅ 475 debug paths passing
 
-**Phase 3: Final Documentation & Cleanup**
-- Update architecture docs to reflect class-based system
-- Remove any remaining standalone function exports that are no longer needed
-- Verify all test suites pass
-- Update README if necessary
+**Phase 3: Final Documentation & Cleanup** (PENDING)
+- ⏳ Update architecture docs to reflect class-based system
+- ⏳ Update CONTEXT-PROPAGATION.md to reflect helper component access
+- ⏳ Remove any remaining standalone function exports that are no longer needed
+- ⏳ Verify all test suites pass (not just debug + collision-config)
+- ⏳ Update README if necessary
+- ⏳ Generate updated API documentation
 
 ### 📝 File Naming Convention
 **All source files must use kebab-case** (e.g., `api-manager.mjs`, not `api_manager.mjs` or `apiManager.mjs`). This refactor includes renaming:

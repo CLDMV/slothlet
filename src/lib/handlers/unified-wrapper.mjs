@@ -2,8 +2,8 @@
  * @fileoverview Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding
  * @module @cldmv/slothlet/handlers/unified-wrapper
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
 import util from "node:util";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 const wrapperDebugEnabled =
 	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
@@ -57,46 +57,36 @@ function createNamedProxyTarget(nameHint, fallback) {
  * - Context binding through contextManager
  *
  * @class
+ * @extends ComponentBase
  * @public
  */
-export class UnifiedWrapper {
+export class UnifiedWrapper extends ComponentBase {
 	/**
+	 * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
 	 * @param {Object} options - Configuration options
 	 * @param {string} options.mode - "lazy" or "eager"
 	 * @param {string} options.apiPath - API path for this wrapper (e.g., "math.advanced.calc")
-	 * @param {Object} options.contextManager - Context manager for AsyncLocalStorage binding
-	 * @param {string} options.instanceID - Slothlet instance ID
 	 * @param {Object} [options.initialImpl=null] - Initial implementation (null for lazy mode)
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
-	 * @param {Object} [options.ownership=null] - Ownership manager
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
+	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 *
 	 * @description
-	 * Creates a unified wrapper instance for a specific API path.
+	 * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
+	 * to access slothlet.contextManager, slothlet.instanceID, and slothlet.handlers.ownership.
 	 *
 	 * @example
-	 * const wrapper = new UnifiedWrapper({
+	 * const wrapper = new UnifiedWrapper(this.slothlet, {
 	 * 	mode: "lazy",
 	 * 	apiPath: "math",
-	 * 	contextManager,
-	 * 	instanceID
+	 * 	initialImpl: null,
+	 * 	materializeFunc: async () => import("./math.mjs")
 	 * });
 	 */
-	constructor({
-		mode,
-		apiPath,
-		contextManager,
-		instanceID,
-		initialImpl = null,
-		materializeFunc = null,
-		ownership = null,
-		isCallable,
-		materializeOnCreate = false
-	}) {
+	constructor(slothlet, { mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false }) {
+		super(slothlet);
 		this.mode = mode;
 		this.apiPath = apiPath;
-		this.contextManager = contextManager;
-		this.instanceID = instanceID;
 		this.materializeOnCreate = materializeOnCreate;
 		this.isCallable =
 			typeof isCallable === "boolean"
@@ -112,20 +102,25 @@ export class UnifiedWrapper {
 			inFlight: false
 		};
 		this._materializeFunc = materializeFunc;
-		this.ownership = ownership;
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		if (initialImpl !== null) {
 			const implKeys = Object.keys(initialImpl || {});
-			const config = this._getConfig();
-			if ((wrapperDebugEnabled || config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				console.log(`[UnifiedWrapper constructor] apiPath="${apiPath}": _impl has ${implKeys.length} keys:`, implKeys.slice(0, 5));
+			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+				this.slothlet.debug("wrapper", {
+					message: "UnifiedWrapper constructor - impl keys",
+					apiPath,
+					keyCount: implKeys.length,
+					keySample: implKeys.slice(0, 5)
+				});
 			}
 			this._adoptImplChildren();
-			if ((wrapperDebugEnabled || config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				console.log(
-					`[UnifiedWrapper constructor] apiPath="${apiPath}": after adopt, _childCache size=${this._childCache.size}, keys:`,
-					Array.from(this._childCache.keys()).slice(0, 5)
-				);
+			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+				this.slothlet.debug("wrapper", {
+					message: "UnifiedWrapper constructor - after adopt",
+					apiPath,
+					childCacheSize: this._childCache.size,
+					childCacheKeySample: Array.from(this._childCache.keys()).slice(0, 5)
+				});
 			}
 		}
 	}
@@ -136,19 +131,6 @@ export class UnifiedWrapper {
 	 */
 	[util.inspect.custom]() {
 		return this.displayName;
-	}
-
-	/**
-	 * Get config from contextManager
-	 * @returns {Object|null} Config object or null if not available
-	 * @private
-	 */
-	_getConfig() {
-		if (!this.contextManager || !this.instanceID) {
-			return null;
-		}
-		const store = this.contextManager.instances?.get(this.instanceID);
-		return store?.config || null;
 	}
 
 	/**
@@ -166,9 +148,12 @@ export class UnifiedWrapper {
 	 * @public
 	 */
 	__setImpl(newImpl) {
-		const config = this._getConfig();
-		if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
-			console.log(`[__setImpl] apiPath=${this.apiPath}, newImpl keys=${Object.keys(newImpl || {}).join(",")}`);
+		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+			this.slothlet.debug("wrapper", {
+				message: "__setImpl called",
+				apiPath: this.apiPath,
+				newImplKeys: Object.keys(newImpl || {})
+			});
 		}
 		this._impl = newImpl;
 		if (typeof newImpl === "function" || (newImpl && typeof newImpl.default === "function")) {
@@ -199,17 +184,22 @@ export class UnifiedWrapper {
 			return;
 		}
 
-		const config = this._getConfig();
-		if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
-			console.log(`[_materialize] START for apiPath=${this.apiPath}`);
+		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+			this.slothlet.debug("wrapper", {
+				message: "_materialize start",
+				apiPath: this.apiPath
+			});
 		}
 
 		this._state.inFlight = true;
 
 		try {
 			if (this._materializeFunc) {
-				if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
-					console.log(`[_materialize] Calling materializeFunc (no args, expects return value)...`);
+				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+					this.slothlet.debug("wrapper", {
+						message: "_materialize calling materializeFunc",
+						apiPath: this.apiPath
+					});
 				}
 				// POC pattern: materializeFunc returns the implementation
 				const result = await this._materializeFunc();
@@ -218,15 +208,22 @@ export class UnifiedWrapper {
 				this._adoptImplChildren();
 				this._state.materialized = true;
 				this._state.inFlight = false;
-				if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
-					console.log(
-						`[_materialize] DONE! result=${typeof result}, result keys=${result ? Object.keys(result).join(",") : "null"}, impl keys=${this._impl ? Object.keys(this._impl).join(",") : "null"}`
-					);
+				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+					this.slothlet.debug("wrapper", {
+						message: "_materialize complete",
+						apiPath: this.apiPath,
+						resultType: typeof result,
+						resultKeys: Object.keys(result || {})
+					});
 				}
 			}
 		} catch (error) {
-			if ((wrapperDebugEnabled || config?.debug?.wrapper) && this.apiPath === "string") {
-				console.log(`[_materialize] ERROR: ${error.message}`);
+			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+				this.slothlet.debug("wrapper", {
+					message: "_materialize error",
+					apiPath: this.apiPath,
+					error: error.message
+				});
 			}
 			this._state.inFlight = false;
 			throw error;
@@ -385,13 +382,10 @@ export class UnifiedWrapper {
 			}
 		}
 
-		const nestedWrapper = new UnifiedWrapper({
+		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
 			mode: "eager",
 			apiPath: this.apiPath ? `${this.apiPath}.${String(key)}` : String(key),
-			contextManager: this.contextManager,
-			instanceID: this.instanceID,
 			initialImpl: childImpl,
-			ownership: this.ownership,
 			isCallable: typeof childImpl === "function"
 		});
 		return nestedWrapper.createProxy();
@@ -402,12 +396,6 @@ export class UnifiedWrapper {
 	 * Builds property chain (e.g., ["advanced", "calc", "power"]) and waits for all parent
 	 * wrappers to materialize before accessing the final property.
 	 *
-	 * @param {Array<string|symbol>} propChain - Property chain being built
-	 * @returns {Proxy} Waiting proxy that chains property access
-	 * @private
-	 */
-	/**
-	 * Create a waiting proxy that resolves a property chain after lazy materialization.
 	 * @private
 	 * @param {Array<string|symbol>} [propChain=[]] - Property chain to resolve.
 	 * @returns {Proxy} Proxy that waits for materialization before applying calls.
@@ -710,8 +698,8 @@ export class UnifiedWrapper {
 						if (wrapper._state.materialized) {
 							const impl = wrapper._impl;
 							if (typeof impl === "function") {
-								if (wrapper.contextManager) {
-									resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args));
+								if (wrapper.slothlet.contextManager) {
+									resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args));
 								} else {
 									resolve(impl.apply(thisArg, args));
 								}
@@ -726,7 +714,7 @@ export class UnifiedWrapper {
 								return;
 							}
 							reject(
-								new SlothletError(
+								new wrapper.slothlet.SlothletError(
 									"INVALID_CONFIG_NOT_A_FUNCTION",
 									{
 										apiPath: wrapper.apiPath,
@@ -740,7 +728,7 @@ export class UnifiedWrapper {
 						}
 						if (!wrapper._state.inFlight) {
 							reject(
-								new SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
+								new wrapper.slothlet.SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
 									validationError: true
 								})
 							);
@@ -754,20 +742,20 @@ export class UnifiedWrapper {
 
 			const impl = wrapper._impl;
 			if (typeof impl === "function") {
-				if (wrapper.contextManager) {
-					return wrapper.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args);
+				if (wrapper.slothlet.contextManager) {
+					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args);
 				}
 				return impl.apply(thisArg, args);
 			}
 
 			if (impl && typeof impl === "object" && typeof impl.default === "function") {
-				if (wrapper.contextManager) {
-					return wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args);
+				if (wrapper.slothlet.contextManager) {
+					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args);
 				}
 				return impl.default.apply(impl, args);
 			}
 
-			throw new SlothletError(
+			throw new wrapper.SlothletError(
 				"INVALID_CONFIG_NOT_A_FUNCTION",
 				{
 					apiPath: wrapper.apiPath,

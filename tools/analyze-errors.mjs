@@ -158,10 +158,10 @@ function parseConsoleWarns(content, filePath) {
 }
 
 /**
- * Parse console.log statements and check if they're wrapped with debug checks
+ * Parse console.log statements and check if they're inside SlothletDebug class
  * @param {string} content - File content
  * @param {string} filePath - File path
- * @returns {Array} Array of unwrapped console.log statements
+ * @returns {Array} Array of improper console.log statements (outside SlothletDebug)
  */
 function parseConsoleLogs(content, filePath) {
 	const logs = [];
@@ -188,74 +188,75 @@ function parseConsoleLogs(content, filePath) {
 			continue;
 		}
 
-		// Check if this console.log is wrapped with a debug check
-		// Look backwards for if (config.debug?.xxx) or if (instance.config.debug?.xxx)
-		// Need to find the debug check before the opening brace that contains this console.log
-
-		// Split into lines and look back through recent lines
-		const lines = beforeMatch.split("\n");
-		let hasDebugGuard = false;
-
-		// Check last 10 lines for a debug check pattern
-		const checkLines = lines.slice(Math.max(0, lines.length - 10));
-		for (let i = checkLines.length - 1; i >= 0; i--) {
-			const line = checkLines[i];
-			// Look for if statements with config.debug or instance.config.debug checks
-			// Also accept patterns like: (wrapperDebugEnabled || config?.debug?.xxx)
-			if (/if\s*\([^)]*(?:instance\.)?config\.?(?:\?\.)?debug\?\.\w+/.test(line) ||
-			    /\(\w+\s*\|\|\s*(?:instance\.)?config\?\.debug\?\.\w+\)/.test(line)) {
-				hasDebugGuard = true;
-				break;
-			}
-			// If we hit a closing brace or function definition, stop looking
-			if (/^\s*\}|^export |^function |^class /.test(line)) {
-				break;
-			}
-		}
-
-		if (!hasDebugGuard) {
-			const startIndex = match.index;
-			const parenStart = content.indexOf("(", startIndex);
-			if (parenStart === -1) continue;
-
-			// Track parenthesis depth to find matching closing paren
-			let depth = 0;
-			let parenEnd = -1;
-
-			for (let i = parenStart; i < content.length; i++) {
-				const char = content[i];
-				if (char === "(") depth++;
-				else if (char === ")") {
-					depth--;
-					if (depth === 0) {
-						parenEnd = i;
+		// Skip if inside SlothletDebug class (that's where console.log should be)
+		const classPattern = /(?:export\s+)?class\s+SlothletDebug(?:\s+extends\s+\w+)?\s*\{/;
+		const classMatch = classPattern.exec(content);
+		if (classMatch) {
+			const classStart = classMatch.index;
+			// Find the matching closing brace of the class
+			let braceDepth = 0;
+			let classEnd = -1;
+			let foundOpenBrace = false;
+			for (let i = classMatch.index + classMatch[0].length; i < content.length; i++) {
+				if (content[i] === "{") {
+					braceDepth++;
+					foundOpenBrace = true;
+				} else if (content[i] === "}") {
+					if (braceDepth === 0 && foundOpenBrace) {
+						classEnd = i;
 						break;
 					}
+					braceDepth--;
 				}
 			}
-
-			if (parenEnd === -1) continue;
-
-			// Extract the full statement
-			let endIndex = parenEnd + 1;
-			if (content[endIndex] === ";") endIndex++;
-
-			const fullMatch = content.substring(startIndex, endIndex);
-
-			// Find line number
-			const lineNumber = beforeMatch.split("\n").length;
-
-			// Extract the log message (first argument)
-			const argsContent = content.substring(parenStart + 1, parenEnd);
-			const firstArg = argsContent.split(",")[0].trim();
-
-			logs.push({
-				filePath,
-				lineNumber,
-				fullMatch,
-				firstArg
-			});
+			// Skip if console.log is inside the SlothletDebug class
+			if (classEnd !== -1 && match.index > classStart && match.index < classEnd) {
+				continue;
+			}
 		}
+
+		// If we got here, this console.log is NOT inside SlothletDebug class
+		const startIndex = match.index;
+		const parenStart = content.indexOf("(", startIndex);
+		if (parenStart === -1) continue;
+
+		// Track parenthesis depth to find matching closing paren
+		let depth = 0;
+		let parenEnd = -1;
+
+		for (let i = parenStart; i < content.length; i++) {
+			const char = content[i];
+			if (char === "(") depth++;
+			else if (char === ")") {
+				depth--;
+				if (depth === 0) {
+					parenEnd = i;
+					break;
+				}
+			}
+		}
+
+		if (parenEnd === -1) continue;
+
+		// Extract the full statement
+		let endIndex = parenEnd + 1;
+		if (content[endIndex] === ";") endIndex++;
+
+		const fullMatch = content.substring(startIndex, endIndex);
+
+		// Find line number
+		const lineNumber = beforeMatch.split("\n").length;
+
+		// Extract the log message (first argument)
+		const argsContent = content.substring(parenStart + 1, parenEnd);
+		const firstArg = argsContent.split(",")[0].trim();
+
+		logs.push({
+			filePath,
+			lineNumber,
+			fullMatch,
+			firstArg
+		});
 	}
 
 	return logs;
@@ -928,7 +929,7 @@ if (allConsoleWarns.length > 0) {
 
 // ===== CONSOLE.LOG DETECTION =====
 console.log("\n" + "=".repeat(80));
-console.log("=== Console.log Detection (Must Be Debug-Wrapped) ===");
+console.log("=== Console.log Detection (Outside SlothletDebug Class) ===");
 console.log("=".repeat(80) + "\n");
 
 const allConsoleLogs = [];
@@ -939,19 +940,19 @@ for (const file of files) {
 }
 
 if (allConsoleLogs.length > 0) {
-	console.log(`❌ Found ${allConsoleLogs.length} unwrapped console.log calls in src folder:\n`);
-	console.log(`   All console.log must be wrapped with debug checks (e.g., if (config.debug?.modes)).\n`);
+	console.log(`❌ Found ${allConsoleLogs.length} improper console.log calls in src folder:\n`);
+	console.log(`   All console.log must be inside SlothletDebug class or use slothlet.debug().\n`);
 
 	allConsoleLogs.forEach((log, idx) => {
 		const relPath = relative(rootDir, log.filePath);
 		console.log(`[${idx + 1}] ${relPath}:${log.lineNumber}`);
 		console.log(`    Code: ${log.fullMatch.substring(0, 80)}${log.fullMatch.length > 80 ? "..." : ""}`);
 		console.log(`    First Arg: ${log.firstArg.substring(0, 60)}${log.firstArg.length > 60 ? "..." : ""}`);
-		console.log(`    ❌ Must wrap with: if (config.debug?.xxx) { ... }`);
+		console.log(`    ❌ Should use: this.slothlet.debug("code", { context })`);
 		console.log();
 	});
 } else {
-	console.log(`✅ All console.log calls are properly debug-wrapped\n`);
+	console.log(`✅ All console.log calls are inside SlothletDebug class\n`);
 }
 
 // ===== FINAL SUMMARY =====
@@ -964,6 +965,6 @@ console.log(`  Unused Translations:         ${unusedTranslations.length}`);
 console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
 console.log(`  Invalid Key Format:          ${invalidKeys.length}`);
 console.log(`  Console.warn Calls:          ${allConsoleWarns.length}`);
-console.log(`  Unwrapped Console.log:       ${allConsoleLogs.length}`);
+console.log(`  Improper Console.log:        ${allConsoleLogs.length}`);
 
 console.log();

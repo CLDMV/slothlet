@@ -2,11 +2,6 @@
  * @fileoverview Eager mode implementation - loads all modules immediately with unified wrapper
  * @module @cldmv/slothlet/modes/eager
  */
-import { SlothletError } from "@cldmv/slothlet/errors";
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
-import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
-import { t } from "@cldmv/slothlet/i18n";
-import path from "node:path";
 
 /**
  * Build API in eager mode (load all modules immediately)
@@ -21,12 +16,7 @@ import path from "node:path";
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({
-	dir,
-	apiPathPrefix = "",
-	collisionContext = "initial",
-	slothlet
-}) {
+export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance

@@ -2,13 +2,15 @@
  * @fileoverview Centralized ownership tracking for hot reload
  * @module @cldmv/slothlet/ownership
  */
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
  * Tracks which modules own which API paths for hot reload and rollback
+ * @class OwnershipManager
+ * @extends ComponentBase
  * @public
  */
-export class OwnershipManager {
+export class OwnershipManager extends ComponentBase {
 	static slothletProperty = "ownership";
 
 	constructor() {
@@ -31,10 +33,10 @@ export class OwnershipManager {
 	register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
 		}
 		if (!apiPath || typeof apiPath !== "string") {
-			throw new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
+			throw new this.SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
 		}
 
 		// Check for conflicts
@@ -49,7 +51,7 @@ export class OwnershipManager {
 			} else if (collisionMode === "warn") {
 				// Skip registration but emit warning (unless silent)
 				if (!config?.silent) {
-					new SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
+					new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
 						apiPath,
 						existingModuleId: currentOwner.moduleId,
 						newModuleId: moduleId
@@ -58,7 +60,7 @@ export class OwnershipManager {
 				return null;
 			} else {
 				// error mode - throw
-				throw new SlothletError("OWNERSHIP_CONFLICT", {
+				throw new this.SlothletError("OWNERSHIP_CONFLICT", {
 					apiPath,
 					existingModuleId: currentOwner.moduleId,
 					newModuleId: moduleId,

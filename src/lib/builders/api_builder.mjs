@@ -50,10 +50,11 @@ export class ApiBuilder extends ComponentBase {
 	 * @public
 	 */
 	async buildFinalAPI(userApi) {
-		if (this.config.debug?.api) {
-			console.log("DEBUG buildFinalAPI: called with config.diagnostics =", this.config.diagnostics);
-			console.log("DEBUG buildFinalAPI: userApi keys before =", Object.keys(userApi));
-		}
+		this.slothlet.debug("api", {
+			message: "buildFinalAPI called",
+			diagnostics: this.config.diagnostics,
+			userApiKeys: Object.keys(userApi)
+		});
 
 		// CRITICAL: Clone the API object to prevent cross-instance pollution from module cache
 		// The API modules are cached by Node.js and shared across instances
@@ -65,9 +66,10 @@ export class ApiBuilder extends ComponentBase {
 					}, userApi)
 				: Object.assign({}, userApi);
 
-		if (this.config.debug?.api) {
-			console.log("DEBUG buildFinalAPI: clonedApi keys =", Object.keys(clonedApi));
-		}
+		this.slothlet.debug("api", {
+			message: "API cloned",
+			clonedApiKeys: Object.keys(clonedApi)
+		});
 
 		// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
 		// Store these on the instance so they can be updated during add/remove API operations
@@ -84,10 +86,11 @@ export class ApiBuilder extends ComponentBase {
 		// Create slothlet namespace with all built-in methods
 		const slothletNamespace = await this.createSlothletNamespace(clonedApi);
 
-		if (this.config.debug?.api) {
-			console.log("DEBUG buildFinalAPI: slothletNamespace keys =", Object.keys(slothletNamespace));
-			console.log("DEBUG buildFinalAPI: slothletNamespace.diag exists =", !!slothletNamespace.diag);
-		}
+		this.slothlet.debug("api", {
+			message: "Slothlet namespace created",
+			namespaceKeys: Object.keys(slothletNamespace),
+			hasDiag: !!slothletNamespace.diag
+		});
 
 		// Create root-level convenience methods (use getters for dynamic user hooks)
 		const shutdownFn = this.createShutdownFunction();
@@ -99,11 +102,12 @@ export class ApiBuilder extends ComponentBase {
 			destroy: null
 		});
 
-		if (this.config.debug?.api) {
-			console.log("DEBUG buildFinalAPI: clonedApi keys after attachBuiltins =", Object.keys(clonedApi));
-			console.log("DEBUG buildFinalAPI: clonedApi.slothlet exists =", !!clonedApi.slothlet);
-			console.log("DEBUG buildFinalAPI: clonedApi.slothlet.diag exists =", !!clonedApi.slothlet?.diag);
-		}
+		this.slothlet.debug("api", {
+			message: "Built-ins attached",
+			clonedApiKeys: Object.keys(clonedApi),
+			hasSlothlet: !!clonedApi.slothlet,
+			hasDiag: !!clonedApi.slothlet?.diag
+		});
 
 		// Now create destroy with dynamic user hooks
 		const destroyWithApi = this.createDestroyFunction(clonedApi);
@@ -201,11 +205,10 @@ export class ApiBuilder extends ComponentBase {
 				add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
 					// Filter out internal options that shouldn't be user-controllable
 					const { recordHistory, ...filteredOptions } = options;
-					return slothlet.apiManager.addApiComponent({
+					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
-						metadata,
-						options: filteredOptions
+						options: { ...filteredOptions, metadata }
 					});
 				},
 
@@ -221,7 +224,7 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.api.remove("plugins.tools");
 				 */
 				remove: async function slothlet_api_remove(pathOrModuleId) {
-					return slothlet.apiManager.removeApiComponent({ pathOrModuleId });
+					return slothlet.handlers.apiManager.removeApiComponent({ pathOrModuleId });
 				},
 
 				/**
@@ -236,7 +239,7 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.api.reload("plugins");
 				 */
 				reload: async function slothlet_api_reload(pathOrModuleId) {
-					return slothlet.apiManager.reloadApiComponent({ pathOrModuleId });
+					return slothlet.handlers.apiManager.reloadApiComponent({ pathOrModuleId });
 				}
 			},
 
