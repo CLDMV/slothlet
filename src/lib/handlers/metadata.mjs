@@ -87,6 +87,33 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Deep freeze an object and all its nested properties
+	 * @private
+	 * @param {any} obj - Object to freeze
+	 * @returns {any} Frozen object
+	 */
+	#deepFreeze(obj) {
+		// Base cases: null, undefined, primitives
+		if (obj === null || obj === undefined) return obj;
+		if (typeof obj !== "object") return obj;
+
+		// Already frozen
+		if (Object.isFrozen(obj)) return obj;
+
+		// Freeze the object itself
+		Object.freeze(obj);
+
+		// Recursively freeze all properties
+		Object.getOwnPropertyNames(obj).forEach((prop) => {
+			if (obj[prop] !== null && typeof obj[prop] === "object") {
+				this.#deepFreeze(obj[prop]);
+			}
+		});
+
+		return obj;
+	}
+
+	/**
 	 * Find function by API path (dot notation)
 	 * @private
 	 * @param {object} apiRoot - Root API object
@@ -148,7 +175,7 @@ export class Metadata extends ComponentBase {
 	 */
 	tagSystemMetadata(target, systemData) {
 		if (!target) return;
-		
+
 		// WeakMap only accepts objects/functions as keys
 		if (typeof target !== "object" && typeof target !== "function") {
 			return;
@@ -185,7 +212,7 @@ export class Metadata extends ComponentBase {
 	 * Get metadata for a target (combines system + user)
 	 * For wrappers: checks current impl to ensure metadata is current
 	 * @param {Function|Object} target - Wrapper or function
-	 * @returns {Object} Combined metadata
+	 * @returns {Object} Combined metadata (deeply frozen)
 	 * @public
 	 */
 	getMetadata(target) {
@@ -201,22 +228,26 @@ export class Metadata extends ComponentBase {
 
 			const userData = this.#userMetadata.get(wrapper) || {};
 
-			return {
+			const combined = {
 				...this.#globalUserMetadata,
 				...systemData,
 				...userData
 			};
+			
+			return this.#deepFreeze(combined);
 		}
 
 		// For direct functions
 		const systemData = this.#secureMetadata.get(target) || {};
 		const userData = this.#userMetadata.get(target) || {};
 
-		return {
+		const combined = {
 			...this.#globalUserMetadata,
 			...systemData,
 			...userData
 		};
+		
+		return this.#deepFreeze(combined);
 	}
 
 	/**

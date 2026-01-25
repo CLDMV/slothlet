@@ -87,7 +87,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	constructor(
 		slothlet,
-		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null }
+		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null, sourceFolder = null }
 	) {
 		super(slothlet);
 		this.mode = mode;
@@ -115,7 +115,7 @@ export class UnifiedWrapper extends ComponentBase {
 				filePath,
 				apiPath,
 				moduleId,
-				sourceFolder: slothlet.config?.dir
+				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
 		}
 
@@ -125,7 +125,7 @@ export class UnifiedWrapper extends ComponentBase {
 				filePath,
 				apiPath,
 				moduleId,
-				sourceFolder: slothlet.config?.dir
+				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
 		}
 
@@ -425,7 +425,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Get parent wrapper's metadata to inherit filePath and moduleId
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
 		const childFilePath = parentMetadata?.filePath || null;
-		
+		const childSourceFolder = parentMetadata?.sourceFolder || null;
+
 		// Extract SHORT moduleId from FULL moduleID format "moduleId:apiPath"
 		let childModuleId = null;
 		if (parentMetadata?.moduleID) {
@@ -439,7 +440,8 @@ export class UnifiedWrapper extends ComponentBase {
 			initialImpl: childImpl,
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
-			moduleId: childModuleId
+			moduleId: childModuleId,
+			sourceFolder: childSourceFolder
 		});
 		return nestedWrapper.createProxy();
 	}
