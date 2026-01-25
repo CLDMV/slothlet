@@ -45,7 +45,8 @@ export class ModesProcessor extends ComponentBase {
 		populateDirectly = false,
 		apiPathPrefix = "",
 		collisionContext = "initial",
-        moduleId = null
+		moduleId = null,
+		sourceFolder = null
 	) {
 		// Access components and data via slothlet instance
 		const { ownership } = this.slothlet.handlers;
@@ -100,7 +101,8 @@ export class ModesProcessor extends ComponentBase {
 					apiPath: buildApiPath(categoryName),
 					initialImpl,
 					filePath: directory.path,
-					moduleId: categoryName
+					moduleId: categoryName,
+					sourceFolder
 				});
 				api[categoryName] = wrapper.createProxy();
 				if (config.debug?.modes) {
@@ -279,12 +281,11 @@ export class ModesProcessor extends ComponentBase {
 									apiPath: buildApiPath(categoryName),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: moduleId || file.moduleId
+									moduleId: moduleId || file.moduleId,
+									sourceFolder
 								});
 
-								// Replace targetApi reference with the wrapped proxy
-								// This allows other files in the folder to attach properties if needed
-								api[categoryName] = wrapper.createProxy();
+								// Assign wrapper to API
 								targetApi = api[categoryName];
 							} else {
 								this.slothlet.debug("modes", {
@@ -337,7 +338,8 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
-								moduleId: moduleId || file.moduleId
+								moduleId: moduleId || file.moduleId,
+								sourceFolder
 							});
 
 							// Replace the empty object with the wrapped callable function
@@ -361,7 +363,8 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: mod[key],
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId
+										moduleId: moduleId || file.moduleId,
+										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -421,7 +424,8 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId
+										moduleId: moduleId || file.moduleId,
+										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -454,7 +458,8 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 											materializeOnCreate: config.backgroundMaterialize,
 											filePath: file.path,
-											moduleId: moduleId || file.moduleId
+											moduleId: moduleId || file.moduleId,
+											sourceFolder
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
@@ -506,7 +511,8 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId
+										moduleId: moduleId || file.moduleId,
+										sourceFolder
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -554,7 +560,7 @@ export class ModesProcessor extends ComponentBase {
 					const key = moduleKeys[0];
 					const keyValue = mod[key];
 					const isMatchingObject = key === moduleName && typeof keyValue === "object" && keyValue !== null && !Array.isArray(keyValue);
-					
+
 					// Skip matching objects - they need to go through the matching-object branch below
 					if (!isMatchingObject) {
 						// Only auto-flatten if the export name matches the module name (case-insensitive, ignore separators)
@@ -562,39 +568,40 @@ export class ModesProcessor extends ComponentBase {
 						const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
 
 						if (normalizedKey === normalizedModuleName) {
-						// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
-						const preferredName = key;
-						if (shouldWrap) {
-							const wrapper = new UnifiedWrapper(this.slothlet, {
-								mode,
-								apiPath: buildApiPath(`${categoryName}.${preferredName}`),
-								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-								materializeOnCreate: config.backgroundMaterialize,
-								filePath: file.path,
-								moduleId: moduleId || file.moduleId
-							});
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
-								useCollisionDetection: true,
-								config
-							});
-						} else {
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
-								useCollisionDetection: true,
-								config
-							});
+							// Prefer the actual export name over sanitized filename (preserves capitalization like parseJSON, getHTTPStatus)
+							const preferredName = key;
+							if (shouldWrap) {
+								const wrapper = new UnifiedWrapper(this.slothlet, {
+									mode,
+									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
+									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
+									materializeOnCreate: config.backgroundMaterialize,
+									filePath: file.path,
+									moduleId: moduleId || file.moduleId,
+									sourceFolder
+								});
+								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
+									useCollisionDetection: true,
+									config
+								});
+							} else {
+								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
+									useCollisionDetection: true,
+									config
+								});
+							}
+							if (ownership) {
+								ownership.register({
+									moduleId: moduleId || file.moduleId,
+									apiPath: `${categoryName}.${preferredName}`,
+									source: "core",
+									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+									filePath: file.path
+								});
+							}
+							continue;
 						}
-						if (ownership) {
-							ownership.register({
-								moduleId: moduleId || file.moduleId,
-								apiPath: `${categoryName}.${preferredName}`,
-								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-								filePath: file.path
-							});
-						}
-						continue;
 					}
-				}
 				}
 
 				// Wrap in UnifiedWrapper
@@ -606,7 +613,8 @@ export class ModesProcessor extends ComponentBase {
 						initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 						materializeOnCreate: config.backgroundMaterialize,
 						filePath: file.path,
-						moduleId: moduleId || file.moduleId
+						moduleId: moduleId || file.moduleId,
+						sourceFolder
 					});
 
 					this.slothlet.debug("modes", {
@@ -772,7 +780,8 @@ export class ModesProcessor extends ComponentBase {
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(implToWrap, mode),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: moduleId || file.moduleId
+									moduleId: moduleId || file.moduleId,
+									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
@@ -807,7 +816,8 @@ export class ModesProcessor extends ComponentBase {
 						false, // populateDirectly - build on parent api
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
 						collisionContext,
-                    moduleId // Pass through moduleId to subdirectories
+						moduleId, // Pass through moduleId to subdirectories
+						sourceFolder
 					);
 				}
 			} else {
@@ -815,7 +825,7 @@ export class ModesProcessor extends ComponentBase {
 				for (const subDir of directory.children.directories) {
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
 					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
-                    
+
 					if (config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							message: "Creating lazy subdirectory",
@@ -826,7 +836,19 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.builders.apiAssignment.assignToApiPath(
 						targetApi,
 						subDirName,
-						this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config, loader, flatten, apiPathPrefix, moduleId),
+						this.createLazySubdirectoryWrapper(
+							subDir,
+							ownership,
+							contextManager,
+							instanceID,
+							apiPath,
+							config,
+							loader,
+							flatten,
+							apiPathPrefix,
+							moduleId,
+							sourceFolder
+						),
 						{
 							useCollisionDetection: true,
 							config
@@ -872,7 +894,8 @@ export class ModesProcessor extends ComponentBase {
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
 							materializeOnCreate: config.backgroundMaterialize,
 							filePath: file.path,
-							moduleId: moduleId || file.moduleId
+							moduleId: moduleId || file.moduleId,
+							sourceFolder
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
@@ -912,7 +935,19 @@ export class ModesProcessor extends ComponentBase {
 	 * @returns {Proxy} Lazy unified wrapper
 	 * @public
 	 */
-	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config, loader, flatten, parentApiPathPrefix = "", moduleId = null) {
+	createLazySubdirectoryWrapper(
+		dir,
+		ownership,
+		contextManager,
+		instanceID,
+		apiPath,
+		config,
+		loader,
+		flatten,
+		parentApiPathPrefix = "",
+		moduleId = null,
+		sourceFolder = null
+	) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
 		 * Materialize a lazy subdirectory into a concrete implementation object.
@@ -931,10 +966,9 @@ export class ModesProcessor extends ComponentBase {
 
 			const materialized = {};
 
-        // Compute parent API path prefix from this wrapper's apiPath
-        // e.g., 'plugins.utilities' → 'plugins'
-        const parentPrefix = apiPath.includes('.') ? apiPath.split('.').slice(0, -1).join('.') : '';
-        
+			// Compute parent API path prefix from this wrapper's apiPath
+			// e.g., 'plugins.utilities' → 'plugins'
+			const parentPrefix = apiPath.includes(".") ? apiPath.split(".").slice(0, -1).join(".") : "";
 
 			const subDirs = dir.children.directories || [];
 
@@ -1028,9 +1062,10 @@ export class ModesProcessor extends ComponentBase {
 				false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
 				true, // Populate directly (don't nest under categoryName)
 				parentPrefix, // Use computed parent prefix so children get correct paths
-           
+
 				"initial",
-            moduleId // Pass parent moduleId to children
+				moduleId, // Pass parent moduleId to children
+				sourceFolder // Pass parent sourceFolder to children
 			);
 
 			if (config.debug?.modes) {
@@ -1099,7 +1134,8 @@ export class ModesProcessor extends ComponentBase {
 			materializeFunc: lazy_materializeFunc,
 			materializeOnCreate: config.backgroundMaterialize,
 			filePath: dir.path,
-			moduleId: moduleId // Use parent moduleId}:${dir.name}`
+			moduleId: moduleId, // Use parent moduleId}:${dir.name}`
+			sourceFolder
 		});
 
 		return wrapper.createProxy();

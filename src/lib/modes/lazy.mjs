@@ -64,7 +64,8 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 		false,
 		apiPathPrefix,
 		collisionContext,
-		moduleId
+		moduleId,
+		dir // sourceFolder for metadata
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false

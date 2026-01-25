@@ -46,7 +46,8 @@ export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext 
 		false, // populateDirectly - keep false
 		apiPathPrefix,
 		collisionContext,
-		moduleId
+		moduleId,
+		dir // sourceFolder for metadata
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true
