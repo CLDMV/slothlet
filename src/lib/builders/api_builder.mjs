@@ -387,6 +387,11 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setGlobal("env", "production");
 				 */
 				setGlobal: function slothlet_metadata_setGlobal(key, value) {
+					if (!slothlet.handlers?.metadata) {
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							hint: "Metadata handler not initialized - this is a bug"
+						});
+					}
 					return slothlet.handlers.metadata.setGlobalMetadata(key, value);
 				},
 
@@ -415,6 +420,12 @@ export class ApiBuilder extends ComponentBase {
 				 * });
 				 */
 				set: function slothlet_metadata_set(fn, key, value) {
+					if (!slothlet.handlers?.metadata) {
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							hint: "Metadata handler not initialized - this is a bug",
+							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers) : "handlers undefined"
+						});
+					}
 					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
 				},
 
