@@ -231,11 +231,12 @@ export class Metadata extends ComponentBase {
 			// Merge wrapper's _userMetadata if it exists (from buildAPI)
 			const wrapperUserMetadata = wrapper._userMetadata || {};
 
+			// Merge order: global < user < wrapper user < SYSTEM (system always wins)
 			const combined = {
 				...this.#globalUserMetadata,
-				...systemData,
 				...userData,
-				...wrapperUserMetadata
+				...wrapperUserMetadata,
+				...systemData // System metadata LAST = highest priority (immutable)
 			};
 
 			return this.#deepFreeze(combined);
@@ -245,10 +246,11 @@ export class Metadata extends ComponentBase {
 		const systemData = this.#secureMetadata.get(target) || {};
 		const userData = this.#userMetadata.get(target) || {};
 
+		// Merge order: global < user < SYSTEM (system always wins)
 		const combined = {
 			...this.#globalUserMetadata,
-			...systemData,
-			...userData
+			...userData,
+			...systemData // System metadata LAST = highest priority (immutable)
 		};
 
 		return this.#deepFreeze(combined);
