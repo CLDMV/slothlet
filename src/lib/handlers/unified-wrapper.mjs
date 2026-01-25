@@ -89,7 +89,18 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	constructor(
 		slothlet,
-		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null, sourceFolder = null, userMetadata = {} }
+		{
+			mode,
+			apiPath,
+			initialImpl = null,
+			materializeFunc = null,
+			isCallable,
+			materializeOnCreate = false,
+			filePath = null,
+			moduleId = null,
+			sourceFolder = null,
+			userMetadata = {}
+		}
 	) {
 		super(slothlet);
 		this.mode = mode;
@@ -429,7 +440,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
 		const childFilePath = parentMetadata?.filePath || null;
 		const childSourceFolder = parentMetadata?.sourceFolder || null;
-		
+
 		// Inherit user metadata from parent wrapper
 		const childUserMetadata = this._userMetadata || {};
 
