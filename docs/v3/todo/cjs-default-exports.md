@@ -39,6 +39,7 @@ The loader's `extractExports()` method is not normalizing CJS `module.exports` t
 - **API Inconsistency**: CJS and ESM modules have different access patterns
 - **Developer Confusion**: Users must remember which modules are CJS vs ESM
 - **Migration Pain**: Converting CJS to ESM breaks API paths
+- **Metadata Access**: Properties under `.default` (like `api.mathCjs.default.multiply`) don't have individual metadata since they're nested properties, not top-level wrappers. Only the file-level wrapper (`api.mathCjs`) has metadata.
 
 ## Solution Approach
 
