@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-20 22:11:28 -08:00 (1768975888)
+ *	@Last modified time: 2026-01-24 18:05:07 -08:00 (1769306707)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1139,10 +1139,17 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		}
 	}
 
-	if (compared.nestedDifferences.length > 0) {
+	// Filter out expected nested differences (mode configs naturally differ between eager and lazy)
+	const significantNestedDifferences = compared.nestedDifferences.filter(
+		(diff) =>
+			diff.path !== "__slothletInstance.debugLogger.config.mode" &&
+			diff.path !== "__slothletInstance.handlers.apiManager.state.initialConfig.mode"
+	);
+
+	if (significantNestedDifferences.length > 0) {
 		hasErrors = true;
 		console.log(chalk.magentaBright("🔍 Nested differences:"));
-		compared.nestedDifferences.forEach((diff) => {
+		significantNestedDifferences.forEach((diff) => {
 			const typeLabel = diff.type === "onlyInA" ? "only in eager" : diff.type === "onlyInB" ? "only in lazy" : diff.type;
 			console.log(`  - [${typeLabel}] ${diff.path}`);
 		});
@@ -1154,7 +1161,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		compared.onlyInB.length === 0 &&
 		compared.differingFunctions.length === 0 &&
 		compared.differingValues.length === 0 &&
-		compared.nestedDifferences.length === 0
+		significantNestedDifferences.length === 0
 	) {
 		console.log(chalk.greenBright("✅ APIs are structurally identical!"));
 	}
