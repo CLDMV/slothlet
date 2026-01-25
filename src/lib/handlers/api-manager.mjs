@@ -430,7 +430,7 @@ export class ApiManager extends ComponentBase {
 					});
 				}
 				// Merge each child from nextValue into the existing wrapper
-				await this.slothlet.apiAssignment.mergeApiObjects(existingValue, nextValue, {
+				await this.slothlet.builders.apiAssignment.mergeApiObjects(existingValue, nextValue, {
 					removeMissing: options.removeMissing,
 					mutateExisting: true,
 					allowOverwrite: true,
@@ -453,7 +453,7 @@ export class ApiManager extends ComponentBase {
 
 		// Use unified merge logic for objects
 		if (existingValue && typeof existingValue === "object" && nextValue && typeof nextValue === "object") {
-			await this.slothlet.apiAssignment.mergeApiObjects(existingValue, nextValue, {
+			await this.slothlet.builders.apiAssignment.mergeApiObjects(existingValue, nextValue, {
 				removeMissing: options.removeMissing,
 				mutateExisting: true,
 				allowOverwrite: true,
@@ -735,6 +735,42 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Recursively apply metadata to all functions in an API object.
+	 * @param {unknown} target - API object or function to tag with metadata.
+	 * @param {object} metadata - Metadata key/value pairs to apply.
+	 * @returns {void}
+	 * @private
+	 *
+	 * @description
+	 * Traverses the API structure and applies metadata to every function encountered.
+	 *
+	 * @example
+	 * this.applyMetadataRecursively(api.nested, { level: "nested", depth: 1 });
+	 */
+	applyMetadataRecursively(target, metadata) {
+		if (!target || !this.slothlet.handlers.metadata) {
+			return;
+		}
+
+		// Apply metadata to functions (including wrapper proxies)
+		if (typeof target === "function") {
+			for (const [key, value] of Object.entries(metadata)) {
+				this.slothlet.handlers.metadata.setUserMetadata(target, key, value);
+			}
+		}
+
+		// Recursively apply to children (for objects and function properties)
+		if (typeof target === "object" || typeof target === "function") {
+			for (const key of Object.keys(target)) {
+				const child = target[key];
+				if (child && (typeof child === "object" || typeof child === "function")) {
+					this.applyMetadataRecursively(child, metadata);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
@@ -867,6 +903,14 @@ export class ApiManager extends ComponentBase {
 			allowOverwrite,
 			collisionMode
 		});
+
+		// Apply metadata to all functions in the ACTUAL API (not apiToMerge, since merging may have changed things)
+		if (metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+			const actualValue = this.getValueAtPath(this.slothlet.api, parts);
+			if (actualValue) {
+				this.applyMetadataRecursively(actualValue, metadata);
+			}
+		}
 
 		if (this.slothlet.handlers.ownership && moduleId) {
 			this.registerOwnership(this.slothlet.handlers.ownership, moduleId, normalizedPath, apiToMerge);
