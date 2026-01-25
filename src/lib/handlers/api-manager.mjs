@@ -638,7 +638,8 @@ export class ApiManager extends ComponentBase {
 				apiPath: pathKey,
 				value: currentValue,
 				source: "add",
-				collisionMode: "merge"
+				collisionMode: "merge",
+				filePath: null
 			});
 
 			if (currentValue && (typeof currentValue === "object" || typeof currentValue === "function") && !Array.isArray(currentValue)) {

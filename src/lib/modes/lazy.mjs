@@ -119,7 +119,8 @@ function createLazyWrapper(dir, apiPath, slothlet) {
 						moduleId: file.moduleId,
 						apiPath: `${apiPath}.${moduleName}`,
 						source: "core",
-						collisionMode: slothlet.config.collision?.core || "error"
+						collisionMode: slothlet.config.collision?.core || "error",
+						filePath: file.path
 					});
 				}
 
