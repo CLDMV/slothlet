@@ -203,28 +203,60 @@ export class Metadata extends ComponentBase {
 
 	/**
 	 * Set global user metadata (applies to all functions)
-	 * @param {Object} metadata - User metadata
+	 * @param {string} key - Metadata key
+	 * @param {unknown} value - Metadata value
 	 * @public
 	 */
-	setGlobalMetadata(metadata) {
-		this.#globalUserMetadata = { ...metadata };
+	setGlobalMetadata(key, value) {
+		this.#globalUserMetadata[key] = value;
 	}
 
 	/**
-	 * Add/update user metadata for specific target
-	 * @param {string} apiPath - API path
-	 * @param {Object} metadata - User metadata
+	 * Add/update user metadata for specific function
+	 * @param {Function} target - Function to tag with metadata
+	 * @param {string} key - Metadata key
+	 * @param {unknown} value - Metadata value
 	 * @public
 	 */
-	async setUserMetadata(apiPath, metadata) {
-		await this.#ensureRuntime();
-		const apiRoot = this.#getApiRoot();
-		if (!apiRoot) return;
+	setUserMetadata(target, key, value) {
+		if (typeof target !== "function" && typeof target !== "object") {
+			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+				target: typeof target,
+				expected: "function or object",
+				hint: "setUserMetadata expects a function or object reference"
+			});
+		}
 
-		const target = this.#findFunctionByPath(apiRoot, apiPath);
-		if (target) {
-			const existing = this.#userMetadata.get(target) || {};
-			this.#userMetadata.set(target, { ...existing, ...metadata });
+		const existing = this.#userMetadata.get(target) || {};
+		this.#userMetadata.set(target, { ...existing, [key]: value });
+	}
+
+	/**
+	 * Remove user metadata from specific function
+	 * @param {Function} target - Function to remove metadata from
+	 * @param {string} [key] - Optional key to remove (removes all if omitted)
+	 * @public
+	 */
+	removeUserMetadata(target, key) {
+		if (typeof target !== "function" && typeof target !== "object") {
+			throw new this.SlothletError("INVALID_METADATA_TARGET", {
+				target: typeof target,
+				expected: "function or object",
+				hint: "removeUserMetadata expects a function or object reference"
+			});
+		}
+
+		if (key === undefined) {
+			// Remove all user metadata
+			this.#userMetadata.delete(target);
+		} else {
+			// Remove specific key
+			const existing = this.#userMetadata.get(target);
+			if (existing) {
+				const updated = { ...existing };
+				delete updated[key];
+				this.#userMetadata.set(target, updated);
+			}
 		}
 	}
 

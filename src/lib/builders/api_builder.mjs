@@ -367,6 +367,81 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * Metadata API for function introspection and tagging.
+			 * @type {object}
+			 */
+			metadata: {
+				/**
+				 * @param {string} key - Metadata key.
+				 * @param {unknown} value - Metadata value.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Sets global metadata that applies to all functions in the instance.
+				 * Global metadata has lower priority than per-function metadata.
+				 *
+				 * @example
+				 * // Set global metadata for entire API
+				 * api.slothlet.metadata.setGlobal("version", "1.0.0");
+				 * api.slothlet.metadata.setGlobal("env", "production");
+				 */
+				setGlobal: function slothlet_metadata_setGlobal(key, value) {
+					return slothlet.handlers.metadata.setGlobalMetadata(key, value);
+				},
+
+				/**
+				 * @param {Function} fn - Target function to tag with metadata.
+				 * @param {string} key - Metadata key.
+				 * @param {unknown} value - Metadata value.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Sets per-function user metadata. User metadata has higher priority than
+				 * global metadata and is mutable (can be updated at runtime).
+				 *
+				 * @example
+				 * // Tag a specific function with metadata
+				 * api.slothlet.metadata.set(api.math.add, "description", "Adds two numbers");
+				 * api.slothlet.metadata.set(api.math.add, "version", "2.0.0");
+				 *
+				 * @example
+				 * // Tag multiple functions
+				 * Object.values(api.math).forEach(fn => {
+				 *   if (typeof fn === "function") {
+				 *     api.slothlet.metadata.set(fn, "category", "math");
+				 *   }
+				 * });
+				 */
+				set: function slothlet_metadata_set(fn, key, value) {
+					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
+				},
+
+				/**
+				 * @param {Function} fn - Target function to remove metadata from.
+				 * @param {string} [key] - Optional metadata key to remove (removes all if omitted).
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Removes user metadata from a function. If key is provided, removes only that
+				 * key. If key is omitted, removes all user metadata for the function.
+				 *
+				 * @example
+				 * // Remove specific metadata key
+				 * api.slothlet.metadata.remove(api.math.add, "description");
+				 *
+				 * @example
+				 * // Remove all user metadata from function
+				 * api.slothlet.metadata.remove(api.math.add);
+				 */
+				remove: function slothlet_metadata_remove(fn, key) {
+					return slothlet.handlers.metadata.removeUserMetadata(fn, key);
+				}
+			},
+
+			/**
 			 * Create per-request scope with custom context
 			 * @param {Function} fn - Function to run in scope
 			 * @param {Object} context - Custom context
