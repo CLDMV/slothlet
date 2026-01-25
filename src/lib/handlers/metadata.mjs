@@ -148,15 +148,17 @@ export class Metadata extends ComponentBase {
 	 */
 	tagSystemMetadata(target, systemData) {
 		if (!target) return;
+		
+		// WeakMap only accepts objects/functions as keys
+		if (typeof target !== "object" && typeof target !== "function") {
+			return;
+		}
 
-		// Get source from ownership to construct full moduleId (source:relativePath)
-		let fullModuleId = systemData.moduleId;
+		// Construct full moduleID as "moduleId:apiPath/with/slashes"
+		let fullModuleID = systemData.moduleId;
 		if (systemData.apiPath && systemData.moduleId) {
-			const owner = this.slothlet.handlers.ownership?.getCurrentOwner(systemData.apiPath);
-			if (owner?.source && systemData.moduleId) {
-				// Construct moduleId as "source:relativePath"
-				fullModuleId = `${owner.source}:${systemData.moduleId}`;
-			}
+			const apiPathSlashes = systemData.apiPath.replace(/\./g, "/");
+			fullModuleID = `${systemData.moduleId}:${apiPathSlashes}`;
 		}
 
 		// Derive sourceFolder from filePath if not provided
@@ -172,7 +174,7 @@ export class Metadata extends ComponentBase {
 			filePath: systemData.filePath,
 			sourceFolder: sourceFolder,
 			apiPath: systemData.apiPath,
-			moduleId: fullModuleId,
+			moduleID: fullModuleID,
 			taggedAt: Date.now()
 		});
 

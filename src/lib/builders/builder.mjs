@@ -77,7 +77,7 @@ export class Builder extends ComponentBase {
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial" } = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleId } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -109,6 +109,7 @@ export class Builder extends ComponentBase {
 				dir,
 				apiPathPrefix,
 				collisionContext,
+				moduleId,
 				slothlet: this.slothlet
 			});
 		} else if (mode === "lazy") {
@@ -116,6 +117,7 @@ export class Builder extends ComponentBase {
 				dir,
 				apiPathPrefix,
 				collisionContext,
+				moduleId,
 				slothlet: this.slothlet
 			});
 		} else {

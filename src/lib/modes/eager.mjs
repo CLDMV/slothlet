@@ -16,7 +16,7 @@
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", slothlet }) {
+export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance
@@ -45,7 +45,8 @@ export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext 
 		true, // recursive - MUST be true to process subdirectories!
 		false, // populateDirectly - keep false
 		apiPathPrefix,
-		collisionContext
+		collisionContext,
+		moduleId
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

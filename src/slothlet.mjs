@@ -143,11 +143,15 @@ class Slothlet {
 
 		// Note: ownership manager already initialized via auto-discovery
 
+		// Generate base moduleId for ownership tracking
+		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
+
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
 		this.api = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
-			mode: this.config.mode
+			mode: this.config.mode,
+			moduleId: baseModuleId
 		});
 
 		// Build final API with builtins attached
