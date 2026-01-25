@@ -72,6 +72,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
 	 * @param {string} [options.moduleId=null] - Module identifier
+	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
+	 * @param {Object} [options.userMetadata={}] - User metadata to apply
 	 *
 	 * @description
 	 * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -87,7 +89,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	constructor(
 		slothlet,
-		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null, sourceFolder = null }
+		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null, sourceFolder = null, userMetadata = {} }
 	) {
 		super(slothlet);
 		this.mode = mode;
@@ -102,6 +104,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this._proxyTarget = null;
 		this._invalid = false;
 		this._impl = initialImpl;
+		this._userMetadata = userMetadata || {}; // Store user metadata for inheritance
 		this._state = {
 			materialized: initialImpl !== null,
 			inFlight: false
@@ -426,6 +429,9 @@ export class UnifiedWrapper extends ComponentBase {
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
 		const childFilePath = parentMetadata?.filePath || null;
 		const childSourceFolder = parentMetadata?.sourceFolder || null;
+		
+		// Inherit user metadata from parent wrapper
+		const childUserMetadata = this._userMetadata || {};
 
 		// Extract SHORT moduleId from FULL moduleID format "moduleId:apiPath"
 		let childModuleId = null;
@@ -441,7 +447,8 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
 			moduleId: childModuleId,
-			sourceFolder: childSourceFolder
+			sourceFolder: childSourceFolder,
+			userMetadata: childUserMetadata
 		});
 		return nestedWrapper.createProxy();
 	}

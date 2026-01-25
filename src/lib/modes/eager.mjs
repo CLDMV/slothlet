@@ -13,10 +13,11 @@
  * @param {Object} options.config - Configuration
  * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
  * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
+ * @param {Object} [options.userMetadata={}] - User metadata to apply to all wrappers
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, slothlet }) {
+export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance
@@ -47,7 +48,8 @@ export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext 
 		apiPathPrefix,
 		collisionContext,
 		moduleId,
-		dir // sourceFolder for metadata
+		dir, // sourceFolder for metadata
+		userMetadata
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

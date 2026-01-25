@@ -2,7 +2,7 @@
  * Test suite for sanitizePropertyName - V2 compatibility verification
  */
 
-import { sanitizePropertyName } from "../src3/lib/helpers/sanitize.mjs";
+import { sanitizePropertyName } from "../src/lib/helpers/sanitize.mjs";
 
 console.log("=".repeat(80));
 console.log("V3 Sanitization Engine - V2 Compatibility Tests");

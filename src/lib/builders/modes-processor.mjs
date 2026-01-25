@@ -46,7 +46,8 @@ export class ModesProcessor extends ComponentBase {
 		apiPathPrefix = "",
 		collisionContext = "initial",
 		moduleId = null,
-		sourceFolder = null
+		sourceFolder = null,
+		userMetadata = {}
 	) {
 		// Access components and data via slothlet instance
 		const { ownership } = this.slothlet.handlers;
@@ -102,7 +103,8 @@ export class ModesProcessor extends ComponentBase {
 					initialImpl,
 					filePath: directory.path,
 					moduleId: categoryName,
-					sourceFolder
+					sourceFolder,
+					userMetadata
 				});
 				api[categoryName] = wrapper.createProxy();
 				if (config.debug?.modes) {
@@ -282,7 +284,8 @@ export class ModesProcessor extends ComponentBase {
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
 									moduleId: moduleId || file.moduleId,
-									sourceFolder
+									sourceFolder,
+									userMetadata
 								});
 
 								// Assign wrapper to API
@@ -339,7 +342,8 @@ export class ModesProcessor extends ComponentBase {
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
 								moduleId: moduleId || file.moduleId,
-								sourceFolder
+								sourceFolder,
+								userMetadata
 							});
 
 							// Replace the empty object with the wrapped callable function
@@ -364,7 +368,8 @@ export class ModesProcessor extends ComponentBase {
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
 										moduleId: moduleId || file.moduleId,
-										sourceFolder
+										sourceFolder,
+										userMetadata
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -425,7 +430,8 @@ export class ModesProcessor extends ComponentBase {
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
 										moduleId: moduleId || file.moduleId,
-										sourceFolder
+										sourceFolder,
+										userMetadata
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -459,7 +465,8 @@ export class ModesProcessor extends ComponentBase {
 											materializeOnCreate: config.backgroundMaterialize,
 											filePath: file.path,
 											moduleId: moduleId || file.moduleId,
-											sourceFolder
+											sourceFolder,
+											userMetadata
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
@@ -512,7 +519,8 @@ export class ModesProcessor extends ComponentBase {
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
 										moduleId: moduleId || file.moduleId,
-										sourceFolder
+										sourceFolder,
+										userMetadata
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -578,7 +586,8 @@ export class ModesProcessor extends ComponentBase {
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
 									moduleId: moduleId || file.moduleId,
-									sourceFolder
+									sourceFolder,
+									userMetadata
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 									useCollisionDetection: true,
@@ -614,7 +623,8 @@ export class ModesProcessor extends ComponentBase {
 						materializeOnCreate: config.backgroundMaterialize,
 						filePath: file.path,
 						moduleId: moduleId || file.moduleId,
-						sourceFolder
+						sourceFolder,
+						userMetadata
 					});
 
 					this.slothlet.debug("modes", {
@@ -781,7 +791,8 @@ export class ModesProcessor extends ComponentBase {
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
 									moduleId: moduleId || file.moduleId,
-									sourceFolder
+									sourceFolder,
+									userMetadata
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
@@ -817,7 +828,8 @@ export class ModesProcessor extends ComponentBase {
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
 						collisionContext,
 						moduleId, // Pass through moduleId to subdirectories
-						sourceFolder
+						sourceFolder,
+						userMetadata
 					);
 				}
 			} else {
@@ -847,7 +859,8 @@ export class ModesProcessor extends ComponentBase {
 							flatten,
 							apiPathPrefix,
 							moduleId,
-							sourceFolder
+							sourceFolder,
+							userMetadata
 						),
 						{
 							useCollisionDetection: true,
@@ -895,7 +908,8 @@ export class ModesProcessor extends ComponentBase {
 							materializeOnCreate: config.backgroundMaterialize,
 							filePath: file.path,
 							moduleId: moduleId || file.moduleId,
-							sourceFolder
+							sourceFolder,
+							userMetadata
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
@@ -946,7 +960,8 @@ export class ModesProcessor extends ComponentBase {
 		flatten,
 		parentApiPathPrefix = "",
 		moduleId = null,
-		sourceFolder = null
+		sourceFolder = null,
+		userMetadata = {}
 	) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
@@ -1065,7 +1080,8 @@ export class ModesProcessor extends ComponentBase {
 
 				"initial",
 				moduleId, // Pass parent moduleId to children
-				sourceFolder // Pass parent sourceFolder to children
+				sourceFolder, // Pass parent sourceFolder to children
+				userMetadata // Pass parent userMetadata to children
 			);
 
 			if (config.debug?.modes) {
@@ -1135,7 +1151,8 @@ export class ModesProcessor extends ComponentBase {
 			materializeOnCreate: config.backgroundMaterialize,
 			filePath: dir.path,
 			moduleId: moduleId, // Use parent moduleId}:${dir.name}`
-			sourceFolder
+			sourceFolder,
+			userMetadata
 		});
 
 		return wrapper.createProxy();
