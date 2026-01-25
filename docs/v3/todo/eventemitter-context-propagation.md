@@ -6,6 +6,20 @@
 
 ---
 
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+---
+
 ## Problem Statement
 
 V3 of slothlet is **completely missing** the EventEmitter context propagation system that was a core feature of V2. This is a critical architectural gap that will cause silent context loss for any API that uses event-driven patterns (TCP servers, HTTP servers, custom EventEmitters, etc.).
@@ -178,6 +192,18 @@ const server = net.createServer((socket) => {
     console.log(context.user); // ✅ Works!
 });
 ```
+
+---
+
+## Related Test Files
+
+The following test files in `tests/vitests` are related to EventEmitter context propagation:
+
+- **`suites/context/tcp-eventemitter-context.test.vitest.mjs`** - Tests EventEmitter context preservation across TCP socket events
+- **`suites/context/tcp-context-propagation.test.vitest.mjs`** - Tests context propagation in TCP server scenarios
+- **`suites/context/auto-context-propagation.test.vitest.mjs`** - Tests automatic context propagation
+- **`suites/listener-cleanup/listener-cleanup.test.vitest.mjs`** - Tests EventEmitter listener cleanup on shutdown
+- **`suites/listener-cleanup/third-party-cleanup.test.vitest.mjs`** - Tests cleanup of third-party EventEmitter listeners
 
 ---
 
