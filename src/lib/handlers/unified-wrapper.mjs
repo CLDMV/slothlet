@@ -422,11 +422,24 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
+		// Get parent wrapper's metadata to inherit filePath and moduleId
+		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
+		const childFilePath = parentMetadata?.filePath || null;
+		
+		// Extract SHORT moduleId from FULL moduleID format "moduleId:apiPath"
+		let childModuleId = null;
+		if (parentMetadata?.moduleID) {
+			const colonIndex = parentMetadata.moduleID.indexOf(":");
+			childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
+		}
+
 		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
 			mode: "eager",
 			apiPath: this.apiPath ? `${this.apiPath}.${String(key)}` : String(key),
 			initialImpl: childImpl,
-			isCallable: typeof childImpl === "function"
+			isCallable: typeof childImpl === "function",
+			filePath: childFilePath,
+			moduleId: childModuleId
 		});
 		return nestedWrapper.createProxy();
 	}
