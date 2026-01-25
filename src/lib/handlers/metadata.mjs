@@ -4,7 +4,7 @@
  * @package
  */
 
-import { ComponentBase } from "@cldmv/slothlet/helpers/component-base";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
  * Metadata handler for introspection of function metadata
