@@ -172,8 +172,8 @@ export class ApiManager extends ComponentBase {
 	 * const moduleId = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
 	 */
 	buildDefaultModuleId(apiPath, resolvedFolderPath) {
-		const folderName = path.basename(resolvedFolderPath);
-		return `${apiPath}:${folderName}`;
+		const randomSuffix = Math.random().toString(36).substring(2, 8);
+		return `${apiPath}_${randomSuffix}`;
 	}
 
 	/**
@@ -826,7 +826,8 @@ export class ApiManager extends ComponentBase {
 			dir: resolvedFolderPath,
 			mode: this.config.mode,
 			apiPathPrefix: normalizedPath,
-			collisionContext: "addApi"
+			collisionContext: "addApi",
+			moduleId: moduleId
 		});
 
 		this.slothlet.debug("api", {

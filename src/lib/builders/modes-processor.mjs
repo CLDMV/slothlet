@@ -44,7 +44,8 @@ export class ModesProcessor extends ComponentBase {
 		recursive,
 		populateDirectly = false,
 		apiPathPrefix = "",
-		collisionContext = "initial"
+		collisionContext = "initial",
+        moduleId = null
 	) {
 		// Access components and data via slothlet instance
 		const { ownership } = this.slothlet.handlers;
@@ -805,14 +806,16 @@ export class ModesProcessor extends ComponentBase {
 						recursive, // Pass through recursive flag
 						false, // populateDirectly - build on parent api
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
-						collisionContext
+						collisionContext,
+                    moduleId // Pass through moduleId to subdirectories
 					);
 				}
 			} else {
 				// Lazy mode: create lazy wrappers for subdirectories
 				for (const subDir of directory.children.directories) {
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
-					const apiPath = categoryName ? `${categoryName}.${subDirName}` : subDirName;
+					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
+                    
 					if (config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							message: "Creating lazy subdirectory",
@@ -823,7 +826,7 @@ export class ModesProcessor extends ComponentBase {
 					this.slothlet.builders.apiAssignment.assignToApiPath(
 						targetApi,
 						subDirName,
-						this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config, loader, flatten),
+						this.createLazySubdirectoryWrapper(subDir, ownership, contextManager, instanceID, apiPath, config, loader, flatten, apiPathPrefix, moduleId),
 						{
 							useCollisionDetection: true,
 							config
@@ -909,7 +912,7 @@ export class ModesProcessor extends ComponentBase {
 	 * @returns {Proxy} Lazy unified wrapper
 	 * @public
 	 */
-	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config, loader, flatten) {
+	createLazySubdirectoryWrapper(dir, ownership, contextManager, instanceID, apiPath, config, loader, flatten, parentApiPathPrefix = "", moduleId = null) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
 		 * Materialize a lazy subdirectory into a concrete implementation object.
@@ -927,6 +930,12 @@ export class ModesProcessor extends ComponentBase {
 			const categoryName = this.slothlet.helpers.sanitize.sanitizePropertyName(dir.name);
 
 			const materialized = {};
+
+        // Compute parent API path prefix from this wrapper's apiPath
+        // e.g., 'plugins.utilities' → 'plugins'
+        const parentPrefix = apiPath.includes('.') ? apiPath.split('.').slice(0, -1).join('.') : '';
+        
+
 			const subDirs = dir.children.directories || [];
 
 			if (dir.children.files.length === 1 && subDirs.length === 0) {
@@ -1018,8 +1027,10 @@ export class ModesProcessor extends ComponentBase {
 				false, // Not root (for root contributor detection)
 				false, // NOT recursive - create lazy wrappers for subdirectories, don't cascade eager load
 				true, // Populate directly (don't nest under categoryName)
-				"",
-				"initial"
+				parentPrefix, // Use computed parent prefix so children get correct paths
+           
+				"initial",
+            moduleId // Pass parent moduleId to children
 			);
 
 			if (config.debug?.modes) {
@@ -1088,7 +1099,7 @@ export class ModesProcessor extends ComponentBase {
 			materializeFunc: lazy_materializeFunc,
 			materializeOnCreate: config.backgroundMaterialize,
 			filePath: dir.path,
-			moduleId: `${apiPath.split(".").pop()}:${dir.name}`
+			moduleId: moduleId // Use parent moduleId}:${dir.name}`
 		});
 
 		return wrapper.createProxy();

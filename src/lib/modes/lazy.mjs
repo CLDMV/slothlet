@@ -34,7 +34,7 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", slothlet }) {
+export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance
@@ -63,7 +63,8 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 		false, // populateDirectly - keep false, the real issue is elsewhere
 		false,
 		apiPathPrefix,
-		collisionContext
+		collisionContext,
+		moduleId
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false
