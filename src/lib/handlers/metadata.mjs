@@ -227,8 +227,11 @@ export class Metadata extends ComponentBase {
 			});
 		}
 
-		const existing = this.#userMetadata.get(target) || {};
-		this.#userMetadata.set(target, { ...existing, [key]: value });
+		// Normalize target: if it's a proxy, get the underlying wrapper
+		const actualTarget = target.__wrapper || target;
+
+		const existing = this.#userMetadata.get(actualTarget) || {};
+		this.#userMetadata.set(actualTarget, { ...existing, [key]: value });
 	}
 
 	/**
@@ -246,16 +249,19 @@ export class Metadata extends ComponentBase {
 			});
 		}
 
+		// Normalize target: if it's a proxy, get the underlying wrapper
+		const actualTarget = target.__wrapper || target;
+
 		if (key === undefined) {
 			// Remove all user metadata
-			this.#userMetadata.delete(target);
+			this.#userMetadata.delete(actualTarget);
 		} else {
 			// Remove specific key
-			const existing = this.#userMetadata.get(target);
+			const existing = this.#userMetadata.get(actualTarget);
 			if (existing) {
 				const updated = { ...existing };
 				delete updated[key];
-				this.#userMetadata.set(target, updated);
+				this.#userMetadata.set(actualTarget, updated);
 			}
 		}
 	}
