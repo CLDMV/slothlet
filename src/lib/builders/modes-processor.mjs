@@ -296,7 +296,8 @@ export class ModesProcessor extends ComponentBase {
 										moduleId: file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										filePath: file.path
 									});
 								}
 							}
@@ -368,7 +369,8 @@ export class ModesProcessor extends ComponentBase {
 										moduleId: file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										filePath: file.path
 									});
 								}
 							}
@@ -379,7 +381,8 @@ export class ModesProcessor extends ComponentBase {
 								moduleId: file.moduleId,
 								apiPath: categoryName,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+								filePath: file.path
 							});
 						}
 
@@ -424,7 +427,8 @@ export class ModesProcessor extends ComponentBase {
 										moduleId: file.moduleId,
 										apiPath: `${categoryName}.${propKey}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										filePath: file.path
 									});
 								}
 							}
@@ -454,7 +458,8 @@ export class ModesProcessor extends ComponentBase {
 											moduleId: file.moduleId,
 											apiPath: `${categoryName}.${key}`,
 											source: "core",
-											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+											filePath: file.path
 										});
 									}
 								}
@@ -515,7 +520,8 @@ export class ModesProcessor extends ComponentBase {
 										moduleId: file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										filePath: file.path
 									});
 								}
 							}
@@ -559,7 +565,8 @@ export class ModesProcessor extends ComponentBase {
 								moduleId: file.moduleId,
 								apiPath: `${categoryName}.${preferredName}`,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+								filePath: file.path
 							});
 						}
 						continue;
@@ -815,7 +822,8 @@ export class ModesProcessor extends ComponentBase {
 						moduleId: file.moduleId,
 						apiPath: moduleName,
 						source: "core",
-						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+						filePath: file.path
 					});
 				}
 			} else {
@@ -850,7 +858,8 @@ export class ModesProcessor extends ComponentBase {
 							moduleId: file.moduleId,
 							apiPath: moduleName,
 							source: "core",
-							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext)
+							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+							filePath: file.path
 						});
 					}
 				}

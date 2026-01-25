@@ -27,10 +27,11 @@ export class OwnershipManager extends ComponentBase {
 	 * @param {string} [options.source="core"] - Source of registration
 	 * @param {string} [options.collisionMode="error"] - Collision mode: skip, warn, error, merge, replace
 	 * @param {Object} [options.config] - Config object for silent mode check
+	 * @param {string} [options.filePath=null] - File path of the module source (for metadata tracking)
 	 * @returns {Object|null} Registration entry or null if skipped
 	 * @public
 	 */
-	register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null }) {
+	register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null, filePath = null }) {
 		// Validate inputs
 		if (!moduleId || typeof moduleId !== "string") {
 			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
@@ -84,7 +85,8 @@ export class OwnershipManager extends ComponentBase {
 			moduleId,
 			source,
 			timestamp: Date.now(),
-			value
+			value,
+			filePath
 		};
 
 		this.pathToModule.get(apiPath).push(entry);

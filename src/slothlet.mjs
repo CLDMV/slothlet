@@ -250,7 +250,8 @@ class Slothlet {
 				apiPath: path,
 				value: api,
 				source: "core",
-				collisionMode: "merge"
+				collisionMode: "merge",
+				filePath: null
 			});
 		}
 
@@ -263,7 +264,8 @@ class Slothlet {
 					apiPath: childPath,
 					value,
 					source: "core",
-					collisionMode: "merge"
+					collisionMode: "merge",
+					filePath: null
 				});
 
 				// Recurse for objects (but not functions with properties - handle separately if needed)
