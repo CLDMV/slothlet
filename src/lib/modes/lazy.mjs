@@ -31,10 +31,11 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @param {Object} options.contextManager - Context manager for binding
  * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} [options.config={}] - Configuration
+ * @param {Object} [options.userMetadata={}] - User metadata to apply to all wrappers
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, slothlet }) {
+export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance
@@ -65,7 +66,8 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 		apiPathPrefix,
 		collisionContext,
 		moduleId,
-		dir // sourceFolder for metadata
+		dir, // sourceFolder for metadata
+		userMetadata
 	);
 
 	// Lazy wrappers for directories are now created by processFiles when recursive=false

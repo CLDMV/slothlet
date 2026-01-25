@@ -827,7 +827,8 @@ export class ApiManager extends ComponentBase {
 			mode: this.config.mode,
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
-			moduleId: moduleId
+			moduleId: moduleId,
+			userMetadata: metadata
 		});
 
 		this.slothlet.debug("api", {
