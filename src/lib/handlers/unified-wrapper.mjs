@@ -70,6 +70,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
+	 * @param {string} [options.filePath=null] - File path of the module source
+	 * @param {string} [options.moduleId=null] - Module identifier
 	 *
 	 * @description
 	 * Creates a unified wrapper instance for a specific API path. Extends ComponentBase
@@ -83,7 +85,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * 	materializeFunc: async () => import("./math.mjs")
 	 * });
 	 */
-	constructor(slothlet, { mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false }) {
+	constructor(slothlet, { mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null }) {
 		super(slothlet);
 		this.mode = mode;
 		this.apiPath = apiPath;
@@ -103,6 +105,27 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 		this._materializeFunc = materializeFunc;
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
+		
+		// Tag wrapper with system metadata immediately
+		if (filePath && slothlet.handlers?.metadata) {
+			slothlet.handlers.metadata.tagSystemMetadata(this, {
+				filePath,
+				apiPath,
+				moduleId,
+				sourceFolder: slothlet.config?.dir
+			});
+		}
+		
+		// For eager mode with initial impl, also tag the impl
+		if (initialImpl !== null && filePath && slothlet.handlers?.metadata) {
+			slothlet.handlers.metadata.tagSystemMetadata(initialImpl, {
+				filePath,
+				apiPath,
+				moduleId,
+				sourceFolder: slothlet.config?.dir
+			});
+		}
+		
 		if (initialImpl !== null) {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
@@ -160,6 +183,20 @@ export class UnifiedWrapper extends ComponentBase {
 			this.isCallable = true;
 		}
 		this._invalid = false;
+		
+		// Update metadata for new impl
+		if (newImpl && this.slothlet.handlers?.metadata) {
+			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
+			if (wrapperMetadata && wrapperMetadata.filePath) {
+				this.slothlet.handlers.metadata.tagSystemMetadata(newImpl, {
+					filePath: wrapperMetadata.filePath,
+					apiPath: this.apiPath,
+					moduleId: wrapperMetadata.moduleId,
+					sourceFolder: wrapperMetadata.sourceFolder
+				});
+			}
+		}
+		
 		this._adoptImplChildren();
 		this._state.materialized = true;
 		this._state.inFlight = false;
@@ -572,6 +609,13 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === "__invalidate") return wrapper.__invalidate.bind(wrapper);
 			if (prop === "__slothletPath") return wrapper.apiPath;
 			if (prop === "__wrapper") return wrapper;
+			if (prop === "__metadata") {
+				// Return combined system + user metadata
+				if (wrapper.slothlet.handlers?.metadata) {
+					return wrapper.slothlet.handlers.metadata.getMetadata(wrapper);
+				}
+				return {};
+			}
 			if (prop === "_impl") return wrapper._impl;
 			if (prop === "_state") return wrapper._state;
 			if (prop === "_invalid") return wrapper._invalid;
