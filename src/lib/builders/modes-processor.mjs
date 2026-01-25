@@ -1057,7 +1057,9 @@ export class ModesProcessor extends ComponentBase {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
-			materializeOnCreate: config.backgroundMaterialize
+			materializeOnCreate: config.backgroundMaterialize,
+			filePath: dir.path,
+			moduleId: `${apiPath.split(".").pop()}:${dir.name}`
 		});
 
 		return wrapper.createProxy();
