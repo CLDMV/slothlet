@@ -85,7 +85,10 @@ export class UnifiedWrapper extends ComponentBase {
 	 * 	materializeFunc: async () => import("./math.mjs")
 	 * });
 	 */
-	constructor(slothlet, { mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null }) {
+	constructor(
+		slothlet,
+		{ mode, apiPath, initialImpl = null, materializeFunc = null, isCallable, materializeOnCreate = false, filePath = null, moduleId = null }
+	) {
 		super(slothlet);
 		this.mode = mode;
 		this.apiPath = apiPath;
@@ -105,7 +108,7 @@ export class UnifiedWrapper extends ComponentBase {
 		};
 		this._materializeFunc = materializeFunc;
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
-		
+
 		// Tag wrapper with system metadata immediately
 		if (filePath && slothlet.handlers?.metadata) {
 			slothlet.handlers.metadata.tagSystemMetadata(this, {
@@ -115,7 +118,7 @@ export class UnifiedWrapper extends ComponentBase {
 				sourceFolder: slothlet.config?.dir
 			});
 		}
-		
+
 		// For eager mode with initial impl, also tag the impl
 		if (initialImpl !== null && filePath && slothlet.handlers?.metadata) {
 			slothlet.handlers.metadata.tagSystemMetadata(initialImpl, {
@@ -125,7 +128,7 @@ export class UnifiedWrapper extends ComponentBase {
 				sourceFolder: slothlet.config?.dir
 			});
 		}
-		
+
 		if (initialImpl !== null) {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
@@ -183,7 +186,7 @@ export class UnifiedWrapper extends ComponentBase {
 			this.isCallable = true;
 		}
 		this._invalid = false;
-		
+
 		// Update metadata for new impl
 		if (newImpl && this.slothlet.handlers?.metadata) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
@@ -196,7 +199,7 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 		}
-		
+
 		this._adoptImplChildren();
 		this._state.materialized = true;
 		this._state.inFlight = false;

@@ -11,12 +11,17 @@
 **⚠️ IMPORTANT: Always tail test output (last 40 lines):**
 ```powershell
 npm run debug 2>&1 | Select-Object -Last 40
-npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
+npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
 ```
 
 **Why tail?**
 - ❌ **WRONG:** Running without tailing shows the START of output, not results
 - ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+**📋 When EventEmitter context tests pass 100%:**
+- Add EventEmitter-related test files to `tests/vitests/baseline-tests.json`
+- But ONLY if `npm run debug` AND `npm run testv3 -- --baseline` both pass
+- This ensures we catch regressions in working tests immediately
 
 ---
 
