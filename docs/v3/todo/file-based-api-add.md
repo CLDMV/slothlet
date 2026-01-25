@@ -1,5 +1,21 @@
 # File-Based api.add() Feature
 
+---
+
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+---
+
 ## Current Limitation
 
 Currently, `api.slothlet.api.add()` only accepts directory paths and loads all modules from that directory. There is no way to add a single file module to the API dynamically.
@@ -45,6 +61,10 @@ if (path.endsWith('.mjs') || path.endsWith('.cjs') || path.endsWith('.js')) {
 ### Priority
 
 Medium - Not blocking but would improve API flexibility and testing capabilities.
+
+### Related Test Files
+
+**None** - This is a proposed feature that has not been implemented yet. No tests exist for file-based api.add() functionality.
 
 ### Related Issues
 

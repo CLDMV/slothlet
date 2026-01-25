@@ -7,6 +7,20 @@
 
 ---
 
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+---
+
 ## System Distinction
 
 **Metadata Tagging** (this document) is **separate** from **ApiManager** (hot reload):
@@ -28,11 +42,12 @@
 - ✅ Loader system: Already tracks file paths for loaded modules
 
 **What's Missing (Core Metadata System)**:
-- ❌ Metadata tagging pipeline - no code to attach immutable metadata to functions
-- ❌ Function metadata attachment with deep freeze protection
-- ❌ Integration with ownership system to include file path information
-- ❌ Stack-based caller/self introspection (metadataAPI.caller(), metadataAPI.self())
-- ❌ File path and line number tracking for stack-based function identification
+- ❌ **filePath in ownership.register()** - Ownership doesn't track file paths yet (15 call sites to update)
+- ❌ **Secure metadata storage** - WeakMap system for immutable system metadata
+- ❌ **Metadata tied to wrapper impl** - System metadata must track current impl, not wrapper
+- ❌ **UnifiedWrapper integration** - Pass filePath/moduleId to wrapper constructor
+- ❌ **Security verification** - caller() must verify stack trace matches metadata.filePath
+- ❌ **User metadata API** - api.slothlet.metadata.setGlobal/set/remove methods
 
 ---
 
@@ -184,362 +199,587 @@ export async function myFunction() {
 
 ---
 
+## Related Test Files
+
+The following test files in `tests/vitests` are related to metadata tagging:
+
+- **`suites/metadata/metadata-api.test.vitest.mjs`** - Comprehensive metadata API functionality tests including:
+  - Attaching metadata to functions via addApi
+  - Automatic sourceFolder addition
+  - Metadata immutability (primitives and objects)
+  - metadataAPI.get() path-based lookup
+  - metadataAPI.caller() for access control
+  - metadataAPI.self() for self-introspection
+
+---
+
+## Security Model & Architecture
+
+### Core Principles
+
+1. **System Metadata is IMMUTABLE and TRUSTED**
+   - Stored in WeakMap (inaccessible externally)
+   - Contains: `filePath`, `sourceFolder`, `apiPath`, `moduleId`, `taggedAt`
+   - Used for security decisions (authorization, access control)
+   - Updated when impl changes (tracked separately from wrapper)
+
+2. **User Metadata is MUTABLE and UNTRUSTED**
+   - Stored separately in WeakMap
+   - User-provided convenience data (`version`, `author`, etc.)
+   - NEVER use for security decisions
+   - Can be set globally or per-function
+
+3. **Metadata Tied to Implementation**
+   - For wrappers: metadata follows current `_impl`, not wrapper itself
+   - When `__setImpl()` called, metadata updates to reflect new impl
+   - Prevents stale metadata after hot reload
+
+4. **Dual Verification in caller()**
+   - Stack trace provides file path (runtime truth)
+   - Metadata provides stored file path (expected truth)
+   - Mismatch triggers security warning
+   - User gets both values to make decision
+
+5. **Set During Creation, Not Post-Build**
+   - Metadata attached when wrapper/function created
+   - Works for lazy mode (before materialization)
+   - No recursive post-build tagging needed
+
+---
+
 ## Implementation Requirements
 
-### 1. Metadata Tagging Pipeline
+### Phase 1: Add filePath to Ownership (FOUNDATION)
 
-**Location**: Modify `src/lib/handlers/api-manager.mjs`
+**File**: `src/lib/handlers/ownership.mjs`
 
-**In `addApiComponent()` method**:
+**Current signature** (lines 33-92):
 ```javascript
-async addApiComponent(params) {
-    const { apiPath, folderPath, metadata = {}, options = {} } = params;
+register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null }) {
+    // ... validation ...
     
-    // Build API as usual
-    const newApi = await this.slothlet.builders.builder.buildAPI({
-        dir: resolvedPath,
-        mode: this.config.mode,
-        apiPathPrefix: normalizedPath,
-        collisionContext: "addApi"
-    });
+    const entry = {
+        moduleId,
+        source,
+        timestamp: Date.now(),
+        value
+        // ❌ NO filePath
+    };
     
-    // NEW: Tag all functions with immutable metadata
-    // Include sourceFolder and use ownership system for per-function file paths
-    await this.#tagFunctionsWithMetadata(newApi, normalizedPath, {
-        ...metadata,
-        sourceFolder: path.resolve(folderPath)
-    });
-    
-    // Continue with merge...
-}
-
-/**
- * Recursively tag all functions in API tree with immutable metadata.
- * @private
- * @param {object} obj - API object tree to traverse
- * @param {string} basePath - Base API path for this tree
- * @param {object} metadata - User-provided metadata to attach
- */
-async #tagFunctionsWithMetadata(obj, basePath, metadata, visited = new WeakSet(), currentPath = basePath) {
-    if (visited.has(obj)) return;
-    if (typeof obj !== "object" || obj === null) return;
-    visited.add(obj);
-    
-    for (const key of Object.keys(obj)) {
-        const value = obj[key];
-        const apiPath = `${currentPath}.${key}`;
-        
-        if (typeof value === "function") {
-            // Get file path from ownership system (if available)
-            const ownershipEntry = this.slothlet.handlers.ownership?.getOwner?.(apiPath);
-            const filePath = ownershipEntry?.filePath;  // Ownership already tracks this
-            
-            // Tag function with immutable metadata
-            this.slothlet.handlers.metadata.tagFunction(value, {
-                ...metadata,
-                apiPath,          // Where in API tree
-                filePath,         // Actual source file (from loader)
-                moduleId: ownershipEntry?.moduleId
-            });
-        } else if (typeof value === "object") {
-            // Recurse into nested objects
-            await this.#tagFunctionsWithMetadata(value, basePath, metadata, visited, apiPath);
-        }
-    }
+    this.pathToModule.get(apiPath).push(entry);
+    return entry;
 }
 ```
 
-### 2. Metadata Handler Implementation
-
-**Location**: Complete `src/lib/handlers/metadata.mjs`
-
-**Current structure** (exists but incomplete):
+**Updated signature**:
 ```javascript
-class Metadata extends ComponentBase {
-    constructor(slothlet) {
-        super(slothlet);
-    }
+register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null, filePath = null }) {
+    // ... existing validation ...
     
-    /**
-     * Tag a function with metadata (system + user).
-     * @param {Function} func - Function to tag
-     * @param {object} metadata - Metadata object (system + user data)
-     * 
-     * System metadata (sourceFolder, filePath, apiPath, moduleId) is deeply frozen.
-     * User metadata (any custom properties) is NOT frozen - just convenience data.
-     * 
-     * Security model:
-     * - Trust ONLY system metadata for authorization decisions
-     * - User metadata is mutable, untrusted, for convenience only
-     * 
-     * Also attaches __sourceFile for stack-based caller identification.
-     */
-    tagFunction(func, metadata) {
-        if (typeof func !== "function") return;
-        
-        // Separate system metadata (immutable) from user metadata (mutable)
-        const systemMetadata = {
-            sourceFolder: metadata.sourceFolder,
-            filePath: metadata.filePath,
-            apiPath: metadata.apiPath,
-            moduleId: metadata.moduleId,
-            taggedAt: Date.now()
-        };
-        
-        // User metadata (everything else) - NOT frozen, NOT trusted
-        const userMetadata = { ...metadata };
-        delete userMetadata.sourceFolder;
-        delete userMetadata.filePath;
-        delete userMetadata.apiPath;
-        delete userMetadata.moduleId;
-        
-        // Create metadata object: frozen system + unfrozen user data
-        const frozenSystem = this.#createImmutableMetadata(systemMetadata);
-        const combinedMetadata = { ...frozenSystem, ...userMetadata };
-        
-        // Attach metadata (non-enumerable, non-writable)
-        Object.defineProperty(func, "__metadata", {
-            value: combinedMetadata,
-            writable: false,
-            enumerable: false,  // Hidden from Object.keys()
-            configurable: false  // Cannot be redefined or deleted
-        });
-        
-        // Attach source file for stack-based identification (CRITICAL for metadataAPI.caller/self)
-        if (metadata.filePath) {
-            Object.defineProperty(func, "__sourceFile", {
-                value: metadata.filePath,
-                writable: false,
-                enumerable: false,
-                configurable: false
-            });
-        }
-        
-        // Note: __sourceLine would need to come from source map or export analysis
-        // For now, rely on file path matching (less precise but workable)
-    }
+    const entry = {
+        moduleId,
+        source,
+        timestamp: Date.now(),
+        value,
+        filePath  // ✅ ADD THIS
+    };
     
-    /**
-     * Get metadata for a function (convenience method).
-     * @param {Function} func - Function to query
-     * @returns {object|undefined} Frozen metadata or undefined
-     */
-    getMetadata(func) {
-        return func?.__metadata;
-    }
-    
-    /**
-     * Get metadata by API path.
-     * @param {string} apiPath - Path like "plugins.trusted.someFunc"
-     * @returns {object|undefined} Metadata or undefined
-     */
-    get(apiPath) {
-        const parts = apiPath.split(".");
-        let current = this.slothlet.api;
-        
-        for (const part of parts) {
-            if (part === "api") continue;  // Skip "api" prefix if present
-            current = current?.[part];
-            if (!current) return undefined;
-        }
-        
-        return typeof current === "function" ? current.__metadata : undefined;
-    }
-    
-    /**
-     * Create deeply frozen, immutable metadata object.
-     * Uses Proxy to prevent ALL modifications (existing props, new props, deletions).
-     * Recursively freezes nested objects and arrays.
-     * @private
-     */
-    #createImmutableMetadata(obj, visited = new WeakSet()) {
-        if (obj === null || typeof obj !== "object") return obj;
-        if (visited.has(obj)) return obj;
-        visited.add(obj);
-        
-        // Recursively freeze nested structures
-        const frozen = Array.isArray(obj) ? [] : {};
-        for (const [key, value] of Object.entries(obj)) {
-            frozen[key] = this.#createImmutableMetadata(value, visited);
-        }
-        
-        // Deep freeze the object
-        Object.freeze(frozen);
-        
-        // Wrap in Proxy to enforce immutability at runtime
-        return new Proxy(frozen, {
-            set() { return false; },  // Reject all modifications
-            deleteProperty() { return false; },  // Reject deletions
-            defineProperty() { return false; }  // Reject new properties
-        });
-    }
+    this.pathToModule.get(apiPath).push(entry);
+    return entry;
 }
 ```
 
-### 3. metadataAPI Runtime Export
+**Update 15 call sites**:
+- `src/slothlet.mjs` (2 calls) - add `filePath: file.path`
+- `src/lib/modes/lazy.mjs` (1 call) - add `filePath: file.path`
+- `src/lib/handlers/api-manager.mjs` (1 call) - add `filePath: resolvedPath`
+- `src/lib/builders/modes-processor.mjs` (11 calls) - add `filePath: file.path`
 
-**Location**: Create/modify `src/lib/runtime/metadata-api.mjs`
-
-**Implementation** (leverages V2 approach with V3 improvements):
-
+**Example update**:
 ```javascript
-import { self } from "@cldmv/slothlet/runtime";
-
-/**
- * Parse V8 stack trace to extract file path and line number.
- * @private
- */
-function parseStackFrame(frameString) {
-    // Extract file:line from stack frame like "at functionName (file:///path/file.mjs:123:45)"
-    const match = frameString.match(/\((.+?):(\d+):(\d+)\)/) || frameString.match(/at (.+?):(\d+):(\d+)/);
-    if (!match) return null;
-    
-    let filePath = match[1];
-    const lineNum = parseInt(match[2], 10);
-    
-    // Convert file:// URLs to filesystem paths
-    if (filePath.startsWith("file://")) {
-        filePath = fileURLToPath(filePath);
-    }
-    
-    return { file: filePath, line: lineNum };
-}
-
-/**
- * Find function in API tree by matching source file.
- * @private
- */
-function findFunctionByStack(apiRoot, targetFile, targetLine, visited = new WeakSet()) {
-    if (!apiRoot || visited.has(apiRoot)) return null;
-    visited.add(apiRoot);
-    
-    // Check if this is a function with matching source
-    if (typeof apiRoot === "function" && apiRoot.__sourceFile) {
-        // Match by file path (exact or normalized)
-        if (apiRoot.__sourceFile === targetFile) {
-            // If we have line numbers, match those too
-            if (apiRoot.__sourceLine && targetLine) {
-                if (apiRoot.__sourceLine === targetLine) return apiRoot;
-            } else {
-                // No line number - return based on file match only
-                return apiRoot;
-            }
-        }
-    }
-    
-    // Recurse into properties
-    if (typeof apiRoot === "object" || typeof apiRoot === "function") {
-        for (const key of Object.keys(apiRoot)) {
-            const result = findFunctionByStack(apiRoot[key], targetFile, targetLine, visited);
-            if (result) return result;
-        }
-    }
-    
-    return null;
-}
-
-export const metadataAPI = {
-    /**
-     * Get metadata of the function that called the current function.
-     * CRITICAL for authorization: allows secure functions to validate their caller's permissions.
-     * @returns {Promise<object|null>} Caller's metadata or null
-     */
-    async caller() {
-        const apiRoot = self;  // Runtime binding to current API instance
-        if (!apiRoot) return null;
-        
-        // Get stack trace
-        const stack = new Error().stack.split("\n");
-        // stack[0]: "Error"
-        // stack[1]: "at metadataAPI.caller"
-        // stack[2]: current function (the one checking)
-        // stack[3]: THE CALLER we want to identify
-        
-        if (stack.length < 4) return null;
-        
-        const parsed = parseStackFrame(stack[3]);
-        if (!parsed) return null;
-        
-        // Find function by source file
-        const func = findFunctionByStack(apiRoot, parsed.file, parsed.line);
-        return func?.__metadata || null;
-    },
-    
-    /**
-     * Get metadata of the currently executing function.
-     * @returns {Promise<object|null>} Current function's metadata or null
-     */
-    async self() {
-        const apiRoot = self;
-        if (!apiRoot) return null;
-        
-        const stack = new Error().stack.split("\n");
-        // stack[0]: "Error"
-        // stack[1]: "at metadataAPI.self"
-        // stack[2]: current function (the one we want)
-        
-        if (stack.length < 3) return null;
-        
-        const parsed = parseStackFrame(stack[2]);
-        if (!parsed) return null;
-        
-        const func = findFunctionByStack(apiRoot, parsed.file, parsed.line);
-        return func?.__metadata || null;
-    },
-    
-    /**
-     * Get metadata by API path (convenience method).
-     * @param {string} path - API path like "plugins.someFunc"
-     * @returns {Promise<object|null>} Metadata or null
-     */
-    async get(path) {
-        const apiRoot = self;
-        if (!apiRoot) return null;
-        
-        const parts = path.split(".");
-        let current = apiRoot;
-        
-        for (const part of parts) {
-            current = current?.[part];
-            if (!current) return null;
-        }
-        
-        return typeof current === "function" ? current.__metadata : null;
-    }
-};
-```
-
-**Export from runtime.mjs**:
-```javascript
-export { metadataAPI } from "./metadata-api.mjs";
-```
-
-### 4. Ownership System Integration
-
-**Location**: Ensure ownership tracks file paths
-
-**Ownership already tracks**:
-- `moduleId` → which module owns this API path
-- `apiPath` → where in the API tree
-- `source` → how it was added ("load" vs "add")
-
-**Need to add** (if not already present):
-- `filePath` → actual source file that was loaded
-
-This information comes from the loader and should be passed through to ownership.register():
-
-```javascript
-// In loader or buildAPI flow
+// Before
 ownership.register({
     moduleId,
     apiPath,
+    value: wrapper,
     source: "add",
-    filePath: resolvedModulePath,  // ADD THIS if missing
     collisionMode
+});
+
+// After
+ownership.register({
+    moduleId,
+    apiPath,
+    value: wrapper,
+    source: "add",
+    collisionMode,
+    filePath: file.path  // ✅ ADD THIS
 });
 ```
 
-With file paths in ownership, metadata tagging can include exact source file for each function.
+---
+
+### Phase 2: Create Secure Metadata Storage (SECURITY LAYER)
+
+**File**: `src/lib/handlers/metadata.mjs`
+
+**Add secure storage** (beginning of class):
+```javascript
+export class Metadata extends ComponentBase {
+    static slothletProperty = "metadata";
+
+    #secureMetadata = new WeakMap();  // target → system metadata (IMMUTABLE)
+    #userMetadata = new WeakMap();     // target → user metadata (MUTABLE)
+    #globalUserMetadata = {};          // global user metadata (applies to all)
+
+    #runtimeModule = null;
+    #runtimeImportPromise = null;
+
+    constructor(slothlet) {
+        super(slothlet);
+    }
+
+/**
+ * Tag system metadata (SECURE, IMMUTABLE)
+ * Called internally during wrapper/function creation
+ * @param {Function|Object} target - Wrapper or function to tag
+ * @param {Object} systemData - System metadata (filePath, apiPath, moduleId, sourceFolder)
+ * @private
+ */
+#tagSystemMetadata(target, systemData) {
+    // Store in secure WeakMap (inaccessible externally)
+    const frozenSystem = Object.freeze({
+        filePath: systemData.filePath,
+        sourceFolder: systemData.sourceFolder,
+        apiPath: systemData.apiPath,
+        moduleId: systemData.moduleId,
+        taggedAt: Date.now()
+    });
+    
+    this.#secureMetadata.set(target, frozenSystem);
+}
+
+/**
+ * Get metadata for a target (combines system + user)
+ * For wrappers: checks current impl to ensure metadata is current
+ * @param {Function|Object} target - Wrapper or function
+ * @returns {Object} Combined metadata
+ * @public
+ */
+getMetadata(target) {
+    // For wrappers, verify impl hasn't changed
+    if (target?.__wrapper) {
+        const wrapper = target.__wrapper;
+        const currentImpl = wrapper._impl;
+        
+        // Get system metadata for current impl (not wrapper)
+        const systemData = this.#secureMetadata.get(currentImpl) || 
+                          this.#secureMetadata.get(wrapper) ||
+                          {};
+        
+        const userData = this.#userMetadata.get(wrapper) || {};
+        
+        return {
+            ...this.#globalUserMetadata,
+            ...systemData,
+            ...userData
+        };
+    }
+    
+    // For direct functions
+    const systemData = this.#secureMetadata.get(target) || {};
+    const userData = this.#userMetadata.get(target) || {};
+    
+    return {
+        ...this.#globalUserMetadata,
+        ...systemData,
+        ...userData
+    };
+}
+
+/**
+ * Set global user metadata (applies to all functions)
+ * @param {Object} metadata - User metadata
+ * @public
+ */
+setGlobalMetadata(metadata) {
+    this.#globalUserMetadata = { ...metadata };
+}
+
+/**
+ * Add/update user metadata for specific target
+ * @param {string} apiPath - API path
+ * @param {Object} metadata - User metadata
+ * @public
+ */
+async setUserMetadata(apiPath, metadata) {
+    const target = this.#findByPath(apiPath);
+    if (target) {
+        const existing = this.#userMetadata.get(target) || {};
+        this.#userMetadata.set(target, { ...existing, ...metadata });
+    }
+}
+```
+
+**Update existing caller() method** (add security verification):
+```javascript
+/**
+ * caller() with security verification
+ * @returns {Promise<Object|null>} Caller metadata with verification
+ * @public
+ */
+async caller() {
+    await this.#ensureRuntime();
+    const apiRoot = this.#getApiRoot();
+    if (!apiRoot) return null;
+    
+    // Get stack trace
+    const stack = this.slothlet.helpers.resolver.getStack(this.caller);
+    if (stack.length < 1) return null;
+    
+    const parsed = this.#parseCallSite(stack[0]);
+    if (!parsed) return null;
+    
+    // Find function by stack trace
+    const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
+    if (!func) return null;
+    
+    // Get metadata
+    const metadata = this.getMetadata(func);
+    
+    // SECURITY CHECK: Verify stack trace matches metadata
+    const stackFilePath = this.slothlet.helpers.resolver.toFsPath(parsed.file);
+    const metaFilePath = this.slothlet.helpers.resolver.toFsPath(metadata.filePath);
+    
+    if (stackFilePath !== metaFilePath) {
+        // WARNING: Metadata mismatch (possible tampering or hot reload)
+        new this.SlothletWarning("WARNING_METADATA_MISMATCH", {
+            apiPath: metadata.apiPath,
+            stackFile: stackFilePath,
+            metadataFile: metaFilePath
+        });
+        
+        // Return metadata with security warning
+        return {
+            ...metadata,
+            __securityWarning: "FILE_PATH_MISMATCH",
+            __stackFile: stackFilePath
+        };
+    }
+    
+    return metadata;
+}
+```
+
+---
+
+### Phase 3: Integrate with UnifiedWrapper (MODE INTEGRATION)
+
+**File**: `src/lib/handlers/unified-wrapper.mjs`
+
+**A. Constructor** - Attach metadata on creation (lines 87-127):
+```javascript
+constructor(slothlet, { 
+    mode, 
+    apiPath, 
+    initialImpl = null, 
+    materializeFunc = null, 
+    isCallable, 
+    materializeOnCreate = false,
+    filePath = null,      // ✅ ADD THIS
+    moduleId = null       // ✅ ADD THIS
+}) {
+    super(slothlet);
+    this.mode = mode;
+    this.apiPath = apiPath;
+    // ... existing code ...
+    
+    // ✅ NEW: Tag wrapper with system metadata immediately
+    if (filePath) {
+        this.slothlet.handlers.metadata.#tagSystemMetadata(this, {
+            filePath,
+            apiPath,
+            moduleId,
+            sourceFolder: this.config?.dir
+        });
+    }
+    
+    // ✅ NEW: For eager mode with initial impl, also tag the impl
+    if (initialImpl !== null && filePath) {
+        this.slothlet.handlers.metadata.#tagSystemMetadata(initialImpl, {
+            filePath,
+            apiPath,
+            moduleId,
+            sourceFolder: this.config?.dir
+        });
+    }
+    
+    // ... rest of constructor ...
+}
+```
+
+**B. __setImpl** - Update metadata when impl changes (lines 150-168):
+```javascript
+__setImpl(newImpl) {
+    this._impl = newImpl;
+    
+    // ✅ NEW: Update metadata for new impl
+    const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
+    if (wrapperMetadata && newImpl) {
+        this.slothlet.handlers.metadata.#tagSystemMetadata(newImpl, {
+            filePath: wrapperMetadata.filePath,
+            apiPath: this.apiPath,
+            moduleId: wrapperMetadata.moduleId,
+            sourceFolder: wrapperMetadata.sourceFolder
+        });
+    }
+    
+    // ... rest of existing code ...
+}
+```
+
+**C. Add metadata getter to proxy** (in createProxy method):
+```javascript
+createProxy() {
+    // ... existing code ...
+    
+    return new Proxy(proxyTarget, {
+        // ... existing traps ...
+        
+        get(target, prop, receiver) {
+            // ✅ NEW: Add __metadata property
+            if (prop === "__metadata") {
+                return wrapper.slothlet.handlers.metadata.getMetadata(wrapper);
+            }
+            
+            // ... existing get trap code ...
+        }
+    });
+}
+```
+
+---
+
+### Phase 4: Wire Into Build Pipeline (INTEGRATION)
+
+**File**: `src/lib/builders/modes-processor.mjs`
+
+**Pass filePath/moduleId to UnifiedWrapper constructor** (multiple locations):
+
+```javascript
+// Line ~90 - Eager wrapper creation for categories
+if (mode === "eager") {
+    const wrapper = new UnifiedWrapper(this.slothlet, {
+        mode: "eager",
+        apiPath: buildApiPath(categoryName),
+        initialImpl,
+        materializeOnCreate: config.backgroundMaterialize,
+        filePath: directory.path,  // ✅ ADD THIS (folder path)
+        moduleId: ownership ? `${categoryName}:${basename(directory.path)}` : null  // ✅ ADD THIS
+    });
+}
+
+// Line ~108 - Lazy wrapper creation for categories
+const wrapper = new UnifiedWrapper(this.slothlet, {
+    mode,
+    apiPath: buildApiPath(categoryName),
+    materializeOnCreate: config.backgroundMaterialize,
+    filePath: directory.path,  // ✅ ADD THIS
+    moduleId: ownership ? `${categoryName}:${basename(directory.path)}` : null  // ✅ ADD THIS
+});
+
+// Line ~150+ - Module processing (individual files)
+const wrapper = new UnifiedWrapper(this.slothlet, {
+    mode,
+    apiPath: buildApiPath(propertyName),
+    initialImpl: mode === "eager" ? moduleContent : null,
+    materializeFunc: mode === "lazy" ? async () => moduleContent : null,
+    isCallable: typeof moduleContent === "function",
+    materializeOnCreate: config.backgroundMaterialize,
+    filePath: file.path,  // ✅ ADD THIS (module file path)
+    moduleId: file.moduleId  // ✅ ADD THIS
+});
+```
+
+**Update all 15+ wrapper creation sites** in modes-processor.mjs to pass filePath/moduleId.
+
+---
+
+### Phase 5: User Metadata API (USER INTERFACE)
+
+**File**: `src/lib/builders/api_builder.mjs`
+
+Add to `api.slothlet.metadata`:
+
+```javascript
+// In buildCoreAPI method, where slothlet APIs are created
+{
+    // Existing
+    get: (path) => this.slothlet.handlers.metadata.get(path),
+    caller: () => this.slothlet.handlers.metadata.caller(),
+    self: () => this.slothlet.handlers.metadata.self(),
+    
+    // ✅ NEW: User metadata management
+    setGlobal: (metadata) => this.slothlet.handlers.metadata.setGlobalMetadata(metadata),
+    set: (apiPath, metadata) => this.slothlet.handlers.metadata.setUserMetadata(apiPath, metadata),
+    remove: (apiPath) => this.slothlet.handlers.metadata.setUserMetadata(apiPath, {})
+}
+```
+
+**Usage examples**:
+
+```javascript
+// Set global metadata (applies to all functions)
+await api.slothlet.metadata.setGlobal({ 
+    version: "1.0.0", 
+    tenant: "acme",
+    environment: "production"
+});
+
+// Set per-function metadata
+await api.slothlet.metadata.set("plugins.dangerousFunc", { 
+    restricted: true,
+    requiresApproval: true
+});
+
+// Access combined metadata
+const meta = api.plugins.dangerousFunc.__metadata;
+// {
+//   filePath: "/abs/path/plugins/dangerous.mjs",  // IMMUTABLE system data
+//   apiPath: "plugins.dangerousFunc",             // IMMUTABLE system data
+//   moduleId: "plugins:dangerous",                // IMMUTABLE system data
+//   version: "1.0.0",                             // mutable user data
+//   tenant: "acme",                               // mutable user data
+//   restricted: true                              // mutable user data
+// }
+
+// Security check using IMMUTABLE system metadata
+import { metadataAPI } from "@cldmv/slothlet/runtime";
+
+export async function deleteUser(userId) {
+    const caller = await metadataAPI.caller();
+    
+    // ✅ SECURE: Use immutable system metadata
+    if (!caller?.filePath?.startsWith("/app/trusted/")) {
+        throw new Error(`Access denied: caller from ${caller?.filePath}`);
+    }
+    
+    // ❌ INSECURE: Don't use mutable user metadata for security
+    // if (caller?.restricted) { ... }  // User can modify this!
+    
+    // Delete user...
+}
+```
+
+---
+
+## Key Security Features
+
+1. **System metadata stored in WeakMap** - Inaccessible externally, can't be tampered with
+2. **Metadata tied to impl** - When impl changes via __setImpl, metadata reflects current impl
+3. **Double verification in caller()** - Stack trace + metadata filePath must match, warns on mismatch
+4. **Metadata set during creation** - Not recursive post-build, works for lazy mode before materialization
+5. **User vs system separation** - Clear distinction between trusted and untrusted data
+6. **Hot reload support** - Metadata updates automatically when modules reload
+
+---
+
+## Testing Requirements
+
+### Unit Tests (metadata-api.test.vitest.mjs - 160 tests)
+
+The existing test suite covers:
+- ✅ Attaching metadata to functions via addApi
+- ✅ Automatic sourceFolder addition
+- ✅ Metadata immutability (primitives and objects)
+- ✅ metadataAPI.get() path-based lookup
+- ✅ metadataAPI.caller() for access control
+- ✅ metadataAPI.self() for self-introspection
+
+**Additional tests needed**:
+1. **WeakMap isolation**: Verify system metadata can't be accessed externally
+2. **Impl tracking**: Verify metadata follows _impl, not wrapper
+3. **__setImpl updates**: Verify metadata updates when impl changes
+4. **Security verification**: Verify caller() detects file path mismatches
+5. **User metadata**: Verify setGlobal/set/remove work correctly
+6. **Hot reload**: Verify metadata survives reload operations
+
+### Integration Tests
+
+1. **Lazy mode**: Verify metadata attached before materialization
+2. **Eager mode**: Verify metadata attached to initial impl
+3. **Cross-module calls**: Verify caller() works across module boundaries
+4. **Authorization patterns**: Test real security use cases
+
+---
+
+## Implementation Timeline
+
+### Phase 1: filePath in ownership
+- Update ownership.register() signature
+- Update 15 call sites
+- Test: Verify ownership tracks file paths
+- **Estimate**: 2 hours
+
+### Phase 2: Secure metadata storage
+- Add WeakMaps to Metadata class
+- Implement #tagSystemMetadata
+- Implement getMetadata with impl tracking
+- Update caller() with security verification
+- **Estimate**: 4 hours
+
+### Phase 3: UnifiedWrapper integration
+- Update constructor signature
+- Add metadata tagging in constructor
+- Update __setImpl to retag
+- Add __metadata getter to proxy
+- **Estimate**: 3 hours
+
+### Phase 4: Build pipeline wiring
+- Update modes-processor wrapper creations
+- Pass filePath/moduleId everywhere
+- **Estimate**: 2 hours
+
+### Phase 5: User metadata API
+- Add setGlobal/set/remove to api.slothlet.metadata
+- **Estimate**: 1 hour
+
+### Testing & validation
+- Run existing 160 tests
+- Add new security tests
+- Verify lazy/eager modes
+- **Estimate**: 4 hours
+
+**Total**: ~16 hours (~2 days)
+
+---
+
+## Next Steps
+
+1. **Phase 1**: Add filePath to ownership.register() (foundation)
+2. **Phase 2**: Implement secure WeakMap storage in Metadata class
+3. **Phase 3**: Integrate with UnifiedWrapper constructor
+4. **Phase 4**: Wire filePath through build pipeline
+5. **Phase 5**: Add user metadata API methods
+6. **Testing**: Run test suite, add security tests
+7. **Documentation**: Update METADATA.md with V3 approach
+
+---
+
+## Migration from V2
+
+**V2 approach** (from `src2/lib/helpers/metadata-api.mjs`):
+- Metadata attached via recursive post-build tagging
+- Stack-based caller/self introspection
+- Direct __metadata property access
+
+**V3 improvements**:
+- ✅ **Kept**: `metadataAPI.caller()` and `.self()` - NECESSARY for security
+- ✅ **Improved**: Metadata tied to impl (tracks hot reload correctly)
+- ✅ **Improved**: Set during creation (works for lazy mode)
+- ✅ **Enhanced**: Security verification (double-check stack vs metadata)
+- ✅ **Enhanced**: User metadata API (setGlobal/set/remove)
+- ✅ **Enhanced**: WeakMap storage (tamper-proof)
 
 ---
 

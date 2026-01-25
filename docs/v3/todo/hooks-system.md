@@ -7,6 +7,20 @@
 
 ---
 
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run testv3 -- collision-config.test.vitest.mjs 2>&1 | Select-Object -Last 40
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+---
+
 ## Current State
 
 **V3 Status**: API surface exists but throws `NOT_IMPLEMENTED` errors
@@ -110,6 +124,28 @@ const api = await slothlet({
     }
 });
 ```
+
+---
+
+## Related Test Files
+
+The following test files in `tests/vitests` are related to the hooks system:
+
+- **`suites/hooks/hooks-comprehensive.test.vitest.mjs`** - Comprehensive hooks functionality tests
+- **`suites/hooks/hooks-execution.test.vitest.mjs`** - Tests hook execution order and behavior
+- **`suites/hooks/hooks-before-chaining.test.vitest.mjs`** - Tests chaining of before hooks
+- **`suites/hooks/hooks-after-chaining.test.vitest.mjs`** - Tests chaining of after hooks
+- **`suites/hooks/hooks-always-error-context.test.vitest.mjs`** - Tests always hooks and error context
+- **`suites/hooks/hooks-error-source.test.vitest.mjs`** - Tests error source tracking in hooks
+- **`suites/hooks/hooks-short-circuit.test.vitest.mjs`** - Tests short-circuit behavior in before hooks
+- **`suites/hooks/hooks-suppress-errors.test.vitest.mjs`** - Tests error suppression in hooks
+- **`suites/hooks/hooks-patterns.test.vitest.mjs`** - Tests pattern matching in hook registration
+- **`suites/hooks/hooks-mixed-scenarios.test.vitest.mjs`** - Tests complex hook scenarios
+- **`suites/hooks/hooks-internal-properties.test.vitest.mjs`** - Tests internal hook properties
+- **`suites/hooks/hooks-debug.test.vitest.mjs`** - Tests hook debugging functionality
+- **`suites/hooks/hook-subsets.test.vitest.mjs`** - Tests hook subset functionality
+- **`suites/hot-reload/hot-reload-hooks.test.vitest.mjs`** - Tests hooks with hot reload functionality
+- **`suites/listener-cleanup/listener-cleanup.test.vitest.mjs`** - Tests hook cleanup on shutdown
 
 ---
 

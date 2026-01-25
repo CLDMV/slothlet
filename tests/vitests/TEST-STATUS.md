@@ -7,6 +7,18 @@
 - Update "Notes" column with relevant details about changes or test results
 - Format: `✅ pass (2026-01-20 21:30:00)` or `❌ fail - retest` or `untested`
 
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run testv3 -- suites/<folder>/<test-file>.test.vitest.mjs 2>&1 | Select-Object -Last 40
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
 **Test command syntax:**
 ```powershell
 npm run testv3 -- tests/vitests/suites/<folder>/<test-file>.test.vitest.mjs
@@ -35,37 +47,37 @@ Relative base: tests/vitests
 | suites/config/background-materialize.test.vitest.mjs | Config | ✅ Yes (2026-01-21 15:51:00) | ✅ pass (2026-01-21 16:23:00) | 24/24 pass - **FIXED**: Was failing due to Node.js module cache pollution. When multiple slothlet instances loaded same modules sequentially, Node cached them causing wrapper/state bleed between instances. Fixed by appending `?slothlet_instance=${instanceID}` to import URLs in loader.mjs for cache busting. Each instance now gets fresh module imports. Test properly uses api.slothlet.types symbols. Note: typeof ALWAYS returns "function" in lazy mode (see docs/v3/changelog/typeof-always-function-lazy-mode.md). |
 | suites/config/collision-config.test.vitest.mjs | Config | ✅ Yes (2026-01-23 11:35:00) | ✅ pass (2026-01-23 11:35:00) | 240/240 pass - Tests unified collision config system (skip/warn/replace/merge/error modes) for both initial load and api.add() contexts. All collision modes working correctly. Fixed ownership.register() signature to accept collisionMode string instead of allowConflict boolean. All 15 call sites updated across ownership.mjs, slothlet.mjs, lazy.mjs, modes.mjs, and hot_reload.mjs. |
 | suites/context/als-cleanup.test.vitest.mjs | Context Management | No | untested | |
-| suites/context/auto-context-propagation.test.vitest.mjs | Context Management | No | untested | |
+| suites/context/auto-context-propagation.test.vitest.mjs | Context Management + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
 | suites/context/map-set-proxy-fix.test.vitest.mjs | Context Management | No | untested | |
 | suites/context/per-request-context.test.vitest.mjs | Context Management | No | untested | |
-| suites/context/tcp-context-propagation.test.vitest.mjs | Context Management | No | untested | |
-| suites/context/tcp-eventemitter-context.test.vitest.mjs | Context Management | No | untested | |
+| suites/context/tcp-context-propagation.test.vitest.mjs | Context Management + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
+| suites/context/tcp-eventemitter-context.test.vitest.mjs | Context Management + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
 | suites/diagnostics/mixed-diagnostic.test.vitest.mjs | Diagnostics | No | untested | |
-| suites/hooks/hooks-after-chaining.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-always-error-context.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-before-chaining.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-comprehensive.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-debug.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-error-source.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-execution.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-internal-properties.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-mixed-scenarios.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-patterns.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-short-circuit.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hooks-suppress-errors.test.vitest.mjs | Hooks | No | untested | |
-| suites/hooks/hook-subsets.test.vitest.mjs | Hooks | No | untested | |
+| suites/hooks/hooks-after-chaining.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-always-error-context.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-before-chaining.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-comprehensive.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-debug.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-error-source.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-execution.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-internal-properties.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-mixed-scenarios.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-patterns.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-short-circuit.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hooks-suppress-errors.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
+| suites/hooks/hook-subsets.test.vitest.mjs | Hooks | No | untested | Related to hooks-system.md |
 | suites/hot-reload/hot-reload-allowMutation-disabled.test.vitest.mjs | Hot Reload + Config | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:05:37) | 143/256 tests fail, 113 pass - V3 BUGS: (1) Broken error message "Invalid configuration: ' ' = ' '. Expected: ." instead of "INVALID_CONFIG_MUTATION_DISABLED" (2) LAZY modes: mathAdd undefined or "math.add is not a function" error |
 | suites/hot-reload/hot-reload-advanced.test.vitest.mjs | Hot Reload | No | untested | |
 | suites/hot-reload/hot-reload-basic.test.vitest.mjs | Hot Reload Basic | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:06:51) | 224/224 tests fail, 0 pass - V3 BUGS: (1) api.slothlet.reload/api undefined for non-MUTATE (2) "state is not defined" at hot_reload.mjs:657 (3) Broken error messages "Invalid configuration: ' ' = ' '. Expected: ." (4) LAZY modes: "math.add is not a function" (5) "Reload functionality not yet implemented" for MUTATE configs |
 | suites/hot-reload/hot-reload-errors.test.vitest.mjs | Hot Reload + Error Handling | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:13:25) | 5/5 tests fail, 0 pass - V3 BUGS: (1) "api.slothlet.reload is not a function" (2) "Cannot read properties of undefined (reading 'reload')" - api.slothlet.api undefined (3) "Cannot read properties of undefined (reading 'add')" |
-| suites/hot-reload/hot-reload-hooks.test.vitest.mjs | Hot Reload + Hooks | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:13:45) | 16/16 tests fail, 0 pass - V3 BUG: "Cannot read properties of undefined (reading 'on')" - api.hooks undefined for hooks configs |
+| suites/hot-reload/hot-reload-hooks.test.vitest.mjs | Hot Reload + Hooks | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:13:45) | 16/16 tests fail, 0 pass - V3 BUG: "Cannot read properties of undefined (reading 'on')" - api.hooks undefined for hooks configs. Related to hooks-system.md |
 | suites/hot-reload/hot-reload-reference-identity.test.vitest.mjs | Hot Reload + Reference Identity | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:14:10) | 22/22 tests fail, 0 pass + HEAP OOM crash at 12.5s - V3 BUGS: (1) "api.slothlet.reload is not a function" (2) "Cannot read properties of undefined (reading 'add')" - api.slothlet.api undefined (3) "state is not defined" at hot_reload.mjs:657 (4) MUTATE: "Reload functionality not yet implemented" |
 | suites/hot-reload/hot-reload-test-remove-reload-isolated.test.vitest.mjs | Hot Reload + Remove/Reload | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:14:39) | 32/32 tests fail, 0 pass - V3 BUGS: (1) "Cannot read properties of undefined (reading 'add')" - api.slothlet.api undefined (2) "state is not defined" at hot_reload.mjs:657 (3) Broken error message "Invalid configuration: ' ' = ' '. Expected: ." |
 | suites/isolation/multi-instance-isolation.test.vitest.mjs | Isolation | No | untested | |
 | suites/isolation/tv-config-isolation.test.vitest.mjs | Isolation | No | untested | |
-| suites/listener-cleanup/listener-cleanup.test.vitest.mjs | Lifecycle | No | untested | |
-| suites/listener-cleanup/third-party-cleanup.test.vitest.mjs | Lifecycle | No | untested | |
-| suites/metadata/metadata-api.test.vitest.mjs | Metadata | ✅ Yes (2026-01-20 21:30) | ❌ fail - retest | 136/160 tests fail, 24 pass - V3 BUGS: (1) `api.slothlet.api` undefined for 8 non-mutate configs - 80 tests fail with `TypeError: Cannot read properties of undefined (reading 'add')` at api.slothlet.api.add() (2) "state is not defined" for EAGER_MUTATE - 16 tests fail at hot_reload.mjs:657 (3) Invalid config error for 7 mutate configs - 40 tests fail with broken error message template (4) Only read-only metadata utilities (get/caller/self) pass for non-mutate/non-hooks configs |
+| suites/listener-cleanup/listener-cleanup.test.vitest.mjs | Lifecycle + EventEmitter + Hooks | No | untested | Related to eventemitter-context-propagation.md and hooks-system.md |
+| suites/listener-cleanup/third-party-cleanup.test.vitest.mjs | Lifecycle + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
+| suites/metadata/metadata-api.test.vitest.mjs | Metadata | ✅ Yes (2026-01-20 21:30) | ❌ fail - retest | 136/160 tests fail, 24 pass - V3 BUGS: (1) `api.slothlet.api` undefined for 8 non-mutate configs - 80 tests fail with `TypeError: Cannot read properties of undefined (reading 'add')` at api.slothlet.api.add() (2) "state is not defined" for EAGER_MUTATE - 16 tests fail at hot_reload.mjs:657 (3) Invalid config error for 7 mutate configs - 40 tests fail with broken error message template (4) Only read-only metadata utilities (get/caller/self) pass for non-mutate/non-hooks configs. Related to metadata-tagging.md |
 | suites/ownership/module-ownership-removal.test.vitest.mjs | Ownership | ✅ Yes (2026-01-20 21:30) | ❌ fail - retest | Parse error - FILE CORRUPT/INCOMPLETE - "Failed to parse source for import analysis because the content contains invalid JS syntax" at line 207 - missing closing braces |
 | suites/ownership/ownership-replacement.test.vitest.mjs | Ownership Tracking | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-21 01:16:27) | 48/48 tests fail, 0 pass - V3 BUGS: (1) "api._getApiOwnership is not a function" for all 8 non-MUTATE configs (16 tests) (2) "Cannot read properties of undefined (reading 'add')" for 8 non-MUTATE configs (16 tests) (3) "state is not defined" at hot_reload.mjs:657 for 8 MUTATE configs (16 tests) |
 | suites/proxies/proxy-baseline.test.vitest.mjs | Proxies | No | untested | |
