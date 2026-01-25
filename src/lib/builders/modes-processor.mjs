@@ -159,7 +159,7 @@ export class ModesProcessor extends ComponentBase {
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
 				if (error.name === "SlothletError") throw error;
-				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleId: file.moduleId }, error);
+				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleId: moduleId || file.moduleId }, error);
 			}
 		}
 
@@ -279,7 +279,7 @@ export class ModesProcessor extends ComponentBase {
 									apiPath: buildApiPath(categoryName),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: file.moduleId
+									moduleId: moduleId || file.moduleId
 								});
 
 								// Replace targetApi reference with the wrapped proxy
@@ -298,7 +298,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const key of Object.keys(exportedValue)) {
 								if (ownership) {
 									ownership.register({
-										moduleId: file.moduleId,
+										moduleId: moduleId || file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -337,7 +337,7 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
-								moduleId: file.moduleId
+								moduleId: moduleId || file.moduleId
 							});
 
 							// Replace the empty object with the wrapped callable function
@@ -361,7 +361,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: mod[key],
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: file.moduleId
+										moduleId: moduleId || file.moduleId
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -375,7 +375,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: file.moduleId,
+										moduleId: moduleId || file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -387,7 +387,7 @@ export class ModesProcessor extends ComponentBase {
 
 						if (ownership) {
 							ownership.register({
-								moduleId: file.moduleId,
+								moduleId: moduleId || file.moduleId,
 								apiPath: categoryName,
 								source: "core",
 								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -421,7 +421,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: file.moduleId
+										moduleId: moduleId || file.moduleId
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -435,7 +435,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: file.moduleId,
+										moduleId: moduleId || file.moduleId,
 										apiPath: `${categoryName}.${propKey}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -454,7 +454,7 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 											materializeOnCreate: config.backgroundMaterialize,
 											filePath: file.path,
-											moduleId: file.moduleId
+											moduleId: moduleId || file.moduleId
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
@@ -468,7 +468,7 @@ export class ModesProcessor extends ComponentBase {
 									}
 									if (ownership) {
 										ownership.register({
-											moduleId: file.moduleId,
+											moduleId: moduleId || file.moduleId,
 											apiPath: `${categoryName}.${key}`,
 											source: "core",
 											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -506,7 +506,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: file.moduleId
+										moduleId: moduleId || file.moduleId
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
@@ -532,7 +532,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: file.moduleId,
+										moduleId: moduleId || file.moduleId,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -571,7 +571,7 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
-								moduleId: file.moduleId
+								moduleId: moduleId || file.moduleId
 							});
 							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 								useCollisionDetection: true,
@@ -585,7 +585,7 @@ export class ModesProcessor extends ComponentBase {
 						}
 						if (ownership) {
 							ownership.register({
-								moduleId: file.moduleId,
+								moduleId: moduleId || file.moduleId,
 								apiPath: `${categoryName}.${preferredName}`,
 								source: "core",
 								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -606,7 +606,7 @@ export class ModesProcessor extends ComponentBase {
 						initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 						materializeOnCreate: config.backgroundMaterialize,
 						filePath: file.path,
-						moduleId: file.moduleId
+						moduleId: moduleId || file.moduleId
 					});
 
 					this.slothlet.debug("modes", {
@@ -639,7 +639,7 @@ export class ModesProcessor extends ComponentBase {
 					const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 					const collisionMode = config.collision?.[collisionContext] || "merge";
 					ownership.register({
-						moduleId: file.moduleId,
+						moduleId: moduleId || file.moduleId,
 						apiPath,
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -772,7 +772,7 @@ export class ModesProcessor extends ComponentBase {
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(implToWrap, mode),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: file.moduleId
+									moduleId: moduleId || file.moduleId
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
@@ -782,7 +782,7 @@ export class ModesProcessor extends ComponentBase {
 									const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 									const collisionMode = config.collision?.[collisionContext] || "merge";
 									ownership.register({
-										moduleId: file.moduleId,
+										moduleId: moduleId || file.moduleId,
 										apiPath,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -849,7 +849,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (ownership) {
 					ownership.register({
-						moduleId: file.moduleId,
+						moduleId: moduleId || file.moduleId,
 						apiPath: moduleName,
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -872,7 +872,7 @@ export class ModesProcessor extends ComponentBase {
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
 							materializeOnCreate: config.backgroundMaterialize,
 							filePath: file.path,
-							moduleId: file.moduleId
+							moduleId: moduleId || file.moduleId
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
@@ -887,7 +887,7 @@ export class ModesProcessor extends ComponentBase {
 
 					if (ownership) {
 						ownership.register({
-							moduleId: file.moduleId,
+							moduleId: moduleId || file.moduleId,
 							apiPath: moduleName,
 							source: "core",
 							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
