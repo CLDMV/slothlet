@@ -12,8 +12,6 @@ import { readdir, stat } from "node:fs/promises";
 import { join, extname, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { getModuleId } from "@cldmv/slothlet/helpers/sanitize";
-import { shouldAttachNamedExport } from "@cldmv/slothlet/helpers/utilities";
 
 /**
  * Loader component for module loading, directory scanning, and API merging
@@ -108,7 +106,7 @@ export class Loader extends ComponentBase {
 						path: fullPath,
 						name: nameWithoutExt,
 						fullName: entry.name,
-						moduleId: getModuleId(fullPath, dir)
+						moduleId: this.slothlet.helpers.sanitize.getModuleId(fullPath, dir)
 					});
 				}
 			}
@@ -232,7 +230,7 @@ export class Loader extends ComponentBase {
 			if (typeof exports.default === "function") {
 				const callable = ensureNamedDefaultFunction(exports.default, propertyName);
 				for (const key of exportKeys) {
-					if (!shouldAttachNamedExport(key, exports[key], callable, exports.default)) {
+					if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], callable, exports.default)) {
 						continue;
 					}
 					callable[key] = exports[key];

@@ -155,14 +155,23 @@ export class ApiAssignment extends ComponentBase {
 	async mergeApiObjects(targetApi, sourceApi, options = {}) {
 		const config = options.config;
 		if (config?.debug?.api) {
-			console.log(`[mergeApiObjects ENTRY] targetApi type=${typeof targetApi}, sourceApi type=${typeof sourceApi}`);
-			console.log(`[mergeApiObjects ENTRY] sourceApi keys:`, sourceApi ? Object.keys(sourceApi) : "N/A");
+			this.slothlet.debug("api", {
+				message: "mergeApiObjects entry",
+				targetApiType: typeof targetApi,
+				sourceApiType: typeof sourceApi
+			});
+			this.slothlet.debug("api", {
+				message: "mergeApiObjects sourceApi keys",
+				sourceApiKeys: sourceApi ? Object.keys(sourceApi) : []
+			});
 		}
 
 		// Allow both objects and functions (functions can have properties too)
 		if (!sourceApi || (typeof sourceApi !== "object" && typeof sourceApi !== "function")) {
 			if (config?.debug?.api) {
-				console.log(`[mergeApiObjects EXIT] sourceApi is not an object/function`);
+				this.slothlet.debug("api", {
+					message: "mergeApiObjects exit - sourceApi not object/function"
+				});
 			}
 			return;
 		}
@@ -176,9 +185,12 @@ export class ApiAssignment extends ComponentBase {
 			const targetValue = targetApi[key];
 
 			if (config?.debug?.api) {
-				console.log(
-					`[mergeApiObjects] Processing key="${key}", sourceValue type=${typeof sourceValue}, targetValue type=${typeof targetValue}`
-				);
+				this.slothlet.debug("api", {
+					message: "mergeApiObjects processing key",
+					key,
+					targetValueType: typeof targetValue,
+					sourceValueType: typeof sourceValue
+				});
 			}
 
 			// If both are plain objects (not wrappers), recurse
@@ -191,13 +203,19 @@ export class ApiAssignment extends ComponentBase {
 				!this.isWrapperProxy(sourceValue)
 			) {
 				if (config?.debug?.api) {
-					console.log(`[mergeApiObjects] Both plain objects - recursing`);
+					this.slothlet.debug("api", {
+						message: "mergeApiObjects - both plain objects, recursing",
+						key
+					});
 				}
 				await this.mergeApiObjects(targetValue, sourceValue, options);
 			} else {
 				// Use unified assignment logic
 				if (config?.debug?.api) {
-					console.log(`[mergeApiObjects] Calling assignToApiPath for key="${key}"`);
+					this.slothlet.debug("api", {
+						message: "mergeApiObjects calling assignToApiPath",
+						key
+					});
 				}
 				this.assignToApiPath(targetApi, key, sourceValue, assignOptions);
 			}

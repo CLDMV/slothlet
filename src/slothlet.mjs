@@ -6,8 +6,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
-import { transformConfig } from "@cldmv/slothlet/helpers/config";
+import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -18,6 +17,8 @@ class Slothlet {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
 		this.SlothletWarning = SlothletWarning;
+		// Debug logger will be initialized in load() with config
+		this.debugLogger = null;
 
 		// Instance properties
 		this.instanceID = null;
@@ -72,14 +73,22 @@ class Slothlet {
 						this[category][propName] = new ClassExport(this);
 
 						if (this.config?.debug?.initialization) {
-							console.log(`[INIT] ${ClassExport.name} → this.${category}.${propName}`);
+							this.debug("initialization", {
+								message: `Component initialized: ${ClassExport.name} → this.${category}.${propName}`,
+								component: ClassExport.name,
+								category,
+								propertyName: propName
+							});
 						}
 					}
 				} catch (error) {
 					// Skip files that fail to import
 					// Only error if a component with slothletProperty can't be loaded
 					if (this.config?.debug?.initialization) {
-						console.warn(`[INIT] Skipped ${file}: ${error.message}`);
+						new this.SlothletWarning("WARNING_INIT_COMPONENT_SKIPPED", {
+							file,
+							error: error.message
+						});
 					}
 				}
 			}
@@ -114,7 +123,10 @@ class Slothlet {
 		await this._initializeComponents();
 
 		// Transform and validate config using component classes
-		this.config = transformConfig(config);
+		this.config = this.helpers.config.transformConfig(config);
+
+		// Initialize debug logger with config
+		this.debugLogger = new SlothletDebug(this.config);
 
 		// Generate instance ID using utilities component
 		this.instanceID = this.helpers.utilities.generateId();
@@ -204,6 +216,21 @@ class Slothlet {
 		this.api = null;
 		this.boundApi = null;
 		this.isLoaded = false;
+	}
+
+	/**
+	 * Log debug message if debug flag is enabled
+	 * @param {string} code - Debug code/category
+	 * @param {Object} context - Debug context
+	 * @public
+	 *
+	 * @example
+	 * this.slothlet.debug("wrapper", { apiPath: "math", action: "materialized" });
+	 */
+	debug(code, context = {}) {
+		if (this.debugLogger) {
+			this.debugLogger.log(code, context);
+		}
 	}
 
 	/**

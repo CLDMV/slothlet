@@ -2,7 +2,6 @@
  * @fileoverview Lazy mode implementation - deferred loading with unified wrapper
  * @module @cldmv/slothlet/modes/lazy
  */
-import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
@@ -35,12 +34,7 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({
-	dir,
-	apiPathPrefix = "",
-	collisionContext = "initial",
-	slothlet
-}) {
+export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", slothlet }) {
 	const api = {};
 
 	// Access components via slothlet instance
@@ -83,83 +77,94 @@ export async function buildLazyAPI({
 /**
  * Create lazy wrapper using UnifiedWrapper
  * @param {Object} dir - Directory structure
- * @param {Object} ownership - Ownership manager
- * @param {Object} contextManager - Context manager
- * @param {string} instanceID - Instance ID
  * @param {string} apiPath - Current API path
- * @param {Object} config - Configuration
- * @param {Object} loader - Loader instance
+ * @param {Object} slothlet - Slothlet instance
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, ownership, contextManager, instanceID, apiPath, config, loader) {
+function createLazyWrapper(dir, apiPath, slothlet) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
-		if (config.debug?.modes) {
-			console.log(`[LAZY.MJS materializeFunc] START for apiPath=${apiPath}, dir=${dir.name}`);
-		}
+		slothlet.debug("modes", {
+			message: "Lazy materializeFunc started",
+			apiPath,
+			dirName: dir.name
+		});
 		const materialized = {};
 
 		// Load files in directory
 		for (const file of dir.children.files) {
 			try {
-				if (config.debug?.modes) {
-					console.log(`[LAZY.MJS] Loading file: ${file.name} from ${file.path}`);
-				}
-				const mod = await loader.loadModule(file.path, instanceID);
-				if (config.debug?.modes) {
-					console.log(`[LAZY.MJS] Loaded file: ${file.name}, extracting exports...`);
-				}
-				const exports = loader.extractExports(mod);
-				if (config.debug?.modes) {
-					console.log(`[LAZY.MJS] Extracted exports for ${file.name}:`, Object.keys(exports));
-				}
-				const moduleName = sanitizePropertyName(file.name);
+				slothlet.debug("modes", {
+					message: "Loading file",
+					fileName: file.name,
+					filePath: file.path
+				});
+				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID);
+				slothlet.debug("modes", {
+					message: "File loaded, extracting exports",
+					fileName: file.name
+				});
+				const exports = slothlet.processors.loader.extractExports(mod);
+				slothlet.debug("modes", {
+					message: "Exports extracted",
+					fileName: file.name,
+					exportKeys: Object.keys(exports)
+				});
+				const moduleName = slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 
 				// Register ownership
-				if (ownership) {
-					ownership.register({
+				if (slothlet.handlers.ownership) {
+					slothlet.handlers.ownership.register({
 						moduleId: file.moduleId,
 						apiPath: `${apiPath}.${moduleName}`,
 						source: "core",
-						collisionMode: config.collision?.core || "error"
+						collisionMode: slothlet.config.collision?.core || "error"
 					});
 				}
 
 				// Merge exports into materialized object
-				if (config.debug?.modes) {
-					console.log(`[LAZY.MJS] Merging exports for ${file.name} into materialized...`);
-				}
-				loader.mergeExportsIntoAPI(materialized, exports, moduleName);
-				if (config.debug?.modes) {
-					console.log(`[LAZY.MJS] Merged exports for ${file.name}, materialized keys now:`, Object.keys(materialized));
-				}
+				slothlet.debug("modes", {
+					message: "Merging exports",
+					fileName: file.name
+				});
+				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
+				slothlet.debug("modes", {
+					message: "Exports merged",
+					fileName: file.name,
+					materializedKeys: Object.keys(materialized)
+				});
 			} catch (error) {
-				console.error(`[LAZY.MJS] ERROR loading ${file.name}:`, error.message);
+				slothlet.debug("modes", {
+					message: "Error loading file",
+					fileName: file.name,
+					error: error.message
+				});
 				throw error;
 			}
 		}
 
 		// Create lazy wrappers for subdirectories
 		for (const subdir of dir.children.directories || []) {
-			const propName = sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, ownership, contextManager, instanceID, `${apiPath}.${propName}`, config, loader);
-			console.log(`[LAZY.MJS materializeFunc] DONE for apiPath=${apiPath}, keys=${Object.keys(materialized).join(",")}`);
+			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
+			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet);
 		}
+		slothlet.debug("modes", {
+			message: "Lazy materializeFunc complete",
+			apiPath,
+			keys: Object.keys(materialized)
+		});
 		// POC pattern: return the materialized implementation
 		return materialized;
 	});
 
 	// Create unified wrapper in lazy mode
-	const wrapper = new UnifiedWrapper({
+	const wrapper = new UnifiedWrapper(slothlet, {
 		mode: "lazy",
 		apiPath,
-		contextManager,
-		instanceID,
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
-		ownership,
-		materializeOnCreate: config.backgroundMaterialize
+		materializeOnCreate: slothlet.config.backgroundMaterialize
 	});
 
 	return wrapper.createProxy();
