@@ -227,7 +227,7 @@ export class Metadata extends ComponentBase {
 			const systemData = this.#secureMetadata.get(currentImpl) || this.#secureMetadata.get(wrapper) || {};
 
 			const userData = this.#userMetadata.get(wrapper) || {};
-			
+
 			// Merge wrapper's _userMetadata if it exists (from buildAPI)
 			const wrapperUserMetadata = wrapper._userMetadata || {};
 
@@ -237,7 +237,7 @@ export class Metadata extends ComponentBase {
 				...userData,
 				...wrapperUserMetadata
 			};
-			
+
 			return this.#deepFreeze(combined);
 		}
 
@@ -250,7 +250,7 @@ export class Metadata extends ComponentBase {
 			...systemData,
 			...userData
 		};
-		
+
 		return this.#deepFreeze(combined);
 	}
 
