@@ -738,19 +738,28 @@ export class ApiManager extends ComponentBase {
 	 * Recursively apply metadata to all functions in an API object.
 	 * @param {unknown} target - API object or function to tag with metadata.
 	 * @param {object} metadata - Metadata key/value pairs to apply.
+	 * @param {WeakSet} [visited] - WeakSet to track visited objects (prevents circular refs)
+	 * @param {string[]} [pathStack] - Path stack to track current depth (e.g., ["api", "math", "add"])
 	 * @returns {void}
 	 * @private
 	 *
 	 * @description
 	 * Traverses the API structure and applies metadata to every function encountered.
+	 * Skips reserved root-level keys (from Slothlet.RESERVED_ROOT_KEYS) at depth 0 only.
 	 *
 	 * @example
 	 * this.applyMetadataRecursively(api.nested, { level: "nested", depth: 1 });
 	 */
-	applyMetadataRecursively(target, metadata) {
+	applyMetadataRecursively(target, metadata, visited = new WeakSet(), pathStack = []) {
 		if (!target || !this.slothlet.handlers.metadata) {
 			return;
 		}
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(target)) {
+			return;
+		}
+		visited.add(target);
 
 		// Apply metadata to functions (including wrapper proxies)
 		if (typeof target === "function") {
@@ -762,9 +771,16 @@ export class ApiManager extends ComponentBase {
 		// Recursively apply to children (for objects and function properties)
 		if (typeof target === "object" || typeof target === "function") {
 			for (const key of Object.keys(target)) {
+				// Skip reserved root-level keys ONLY at depth 0
+				const isRootLevel = pathStack.length === 0;
+				const isReservedKey = this.slothlet.constructor.RESERVED_ROOT_KEYS.includes(key);
+				if (isRootLevel && isReservedKey) {
+					continue;
+				}
+
 				const child = target[key];
 				if (child && (typeof child === "object" || typeof child === "function")) {
-					this.applyMetadataRecursively(child, metadata);
+					this.applyMetadataRecursively(child, metadata, visited, [...pathStack, key]);
 				}
 			}
 		}

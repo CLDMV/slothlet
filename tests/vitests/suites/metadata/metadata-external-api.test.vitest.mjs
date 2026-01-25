@@ -1,0 +1,344 @@
+/**
+ * @fileoverview Tests for external metadata API (set/remove/setGlobal).
+ *
+ * Tests the public API for manipulating metadata from OUTSIDE API context:
+ * - api.slothlet.metadata.set(fn, key, value) - Set metadata on specific function
+ * - api.slothlet.metadata.remove(fn, key?) - Remove metadata from function
+ * - api.slothlet.metadata.setGlobal(key, value) - Set global metadata
+ *
+ * These are EXTERNAL APIs used by users to modify metadata at runtime.
+ * They differ from INTERNAL APIs (self.slothlet.metadata.get/self/caller)
+ * which are used FROM WITHIN API files for introspection.
+ *
+ * @module tests/vitests/suites/metadata/metadata-external-api.test.vitest
+ */
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) {
+			await api.shutdown();
+		}
+	});
+
+	const materialize = async (api, path, ...args) => {
+		const parts = path.split(".");
+		let target = api;
+		for (let i = 0; i < parts.length - 1; i++) {
+			target = target[parts[i]];
+		}
+		const fn = target[parts[parts.length - 1]];
+		try {
+			return await fn(...args);
+		} catch (_) {
+			return await fn(...args);
+		}
+	};
+
+	describe("api.slothlet.metadata.set()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should set user metadata on a function", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set metadata via external API
+			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
+			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
+
+			// Verify metadata was set
+			const meta = api.rootMath.add.__metadata;
+			expect(meta).toBeDefined();
+			expect(meta.category).toBe("math");
+			expect(meta.version).toBe("2.0.0");
+
+			// System metadata should still be present
+			expect(meta.moduleID).toBeDefined();
+			expect(meta.filePath).toBeDefined();
+		});
+
+		it("should override existing user metadata keys", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set initial metadata
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+
+			// Override with new value
+			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
+			expect(api.rootMath.add.__metadata.version).toBe("2.0.0");
+		});
+
+		it("should NOT override system metadata", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			const originalModuleID = api.rootMath.add.__metadata.moduleID;
+			const originalFilePath = api.rootMath.add.__metadata.filePath;
+
+			// Attempt to override system metadata (should fail or be ignored)
+			api.slothlet.metadata.set(api.rootMath.add, "moduleID", "fake-id");
+			api.slothlet.metadata.set(api.rootMath.add, "filePath", "fake-path");
+
+			// System metadata should remain unchanged
+			expect(api.rootMath.add.__metadata.moduleID).toBe(originalModuleID);
+			expect(api.rootMath.add.__metadata.filePath).toBe(originalFilePath);
+		});
+
+		it("should work with nested functions", async () => {
+			await materialize(api, "config.settings.getPluginConfig", "test");
+
+			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "plugin", "test-plugin");
+			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "enabled", true);
+
+			const meta = api.config.settings.getPluginConfig.__metadata;
+			expect(meta.plugin).toBe("test-plugin");
+			expect(meta.enabled).toBe(true);
+		});
+
+		it("should handle multiple functions independently", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.subtract", 5, 3);
+
+			api.slothlet.metadata.set(api.rootMath.add, "operation", "addition");
+			api.slothlet.metadata.set(api.rootMath.subtract, "operation", "subtraction");
+
+			expect(api.rootMath.add.__metadata.operation).toBe("addition");
+			expect(api.rootMath.subtract.__metadata.operation).toBe("subtraction");
+		});
+
+		it("should persist metadata across function calls", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.set(api.rootMath.add, "callCount", 0);
+
+			// Call function multiple times
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.add", 3, 4);
+			await materialize(api, "rootMath.add", 5, 6);
+
+			// Metadata should persist
+			expect(api.rootMath.add.__metadata.callCount).toBe(0);
+		});
+	});
+
+	describe("api.slothlet.metadata.remove()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should remove specific user metadata key", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set metadata
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
+
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+
+			// Remove one key
+			api.slothlet.metadata.remove(api.rootMath.add, "version");
+
+			// Only removed key should be gone
+			expect(api.rootMath.add.__metadata.version).toBeUndefined();
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+
+		it("should remove all user metadata when no key specified", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set multiple metadata keys
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
+			api.slothlet.metadata.set(api.rootMath.add, "author", "test");
+
+			const originalModuleID = api.rootMath.add.__metadata.moduleID;
+
+			// Remove all user metadata
+			api.slothlet.metadata.remove(api.rootMath.add);
+
+			// All user metadata should be removed
+			expect(api.rootMath.add.__metadata.version).toBeUndefined();
+			expect(api.rootMath.add.__metadata.category).toBeUndefined();
+			expect(api.rootMath.add.__metadata.author).toBeUndefined();
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBe(originalModuleID);
+		});
+
+		it("should NOT remove system metadata", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			const meta = api.rootMath.add.__metadata;
+			const originalModuleID = meta.moduleID;
+			const originalFilePath = meta.filePath;
+			const originalApiPath = meta.apiPath;
+
+			// Attempt to remove system metadata (should fail or be ignored)
+			api.slothlet.metadata.remove(api.rootMath.add, "moduleID");
+			api.slothlet.metadata.remove(api.rootMath.add, "filePath");
+			api.slothlet.metadata.remove(api.rootMath.add, "apiPath");
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBe(originalModuleID);
+			expect(api.rootMath.add.__metadata.filePath).toBe(originalFilePath);
+			expect(api.rootMath.add.__metadata.apiPath).toBe(originalApiPath);
+		});
+
+		it("should handle removing non-existent keys gracefully", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Try to remove key that doesn't exist
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, "nonexistent");
+			}).not.toThrow();
+
+			// Metadata should still exist
+			expect(api.rootMath.add.__metadata).toBeDefined();
+		});
+	});
+
+	describe("api.slothlet.metadata.setGlobal()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should set global metadata visible to all functions", async () => {
+			// Set global metadata
+			api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
+			api.slothlet.metadata.setGlobal("environment", "test");
+
+			// Materialize multiple functions
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.subtract", 5, 3);
+
+			// Global metadata should be in both
+			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");
+			expect(api.rootMath.add.__metadata.environment).toBe("test");
+			expect(api.rootMath.subtract.__metadata.appVersion).toBe("3.0.0");
+			expect(api.rootMath.subtract.__metadata.environment).toBe("test");
+		});
+
+		it("should override global metadata on specific function", async () => {
+			// Set global metadata
+			api.slothlet.metadata.setGlobal("version", "1.0.0");
+
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.subtract", 5, 3);
+
+			// Override on specific function
+			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
+
+			// One function has override, other has global
+			expect(api.rootMath.add.__metadata.version).toBe("2.0.0");
+			expect(api.rootMath.subtract.__metadata.version).toBe("1.0.0");
+		});
+
+		it("should apply global metadata to newly added functions", async () => {
+			// Set global metadata first
+			api.slothlet.metadata.setGlobal("defaultCategory", "utility");
+
+			// Add new function
+			await api.slothlet.api.add("testFunc", TEST_DIRS.API_SMART_FLATTEN);
+
+			// Materialize new function
+			await materialize(api, "testFunc.add", 1, 2);
+
+			// Should have global metadata
+			expect(api.testFunc.add.__metadata.defaultCategory).toBe("utility");
+		});
+
+		it("should handle multiple global metadata updates", async () => {
+			api.slothlet.metadata.setGlobal("counter", 1);
+
+			await materialize(api, "rootMath.add", 1, 2);
+			expect(api.rootMath.add.__metadata.counter).toBe(1);
+
+			// Update global metadata
+			api.slothlet.metadata.setGlobal("counter", 2);
+
+			// Newly materialized functions should get updated value
+			await materialize(api, "rootMath.subtract", 5, 3);
+			expect(api.rootMath.subtract.__metadata.counter).toBe(2);
+
+			// Already materialized function keeps old value (metadata is snapshot)
+			expect(api.rootMath.add.__metadata.counter).toBe(1);
+		});
+	});
+
+	describe("Combined External API Operations", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should handle set/remove/setGlobal in combination", async () => {
+			// Set global metadata
+			api.slothlet.metadata.setGlobal("appName", "TestApp");
+			api.slothlet.metadata.setGlobal("version", "1.0.0");
+
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Should have global metadata
+			expect(api.rootMath.add.__metadata.appName).toBe("TestApp");
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+
+			// Set function-specific metadata
+			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
+			api.slothlet.metadata.set(api.rootMath.add, "custom", "value");
+
+			expect(api.rootMath.add.__metadata.appName).toBe("TestApp"); // Global
+			expect(api.rootMath.add.__metadata.version).toBe("2.0.0"); // Override
+			expect(api.rootMath.add.__metadata.custom).toBe("value"); // Specific
+
+			// Remove function-specific metadata
+			api.slothlet.metadata.remove(api.rootMath.add, "custom");
+
+			expect(api.rootMath.add.__metadata.custom).toBeUndefined();
+			expect(api.rootMath.add.__metadata.appName).toBe("TestApp"); // Still present
+			expect(api.rootMath.add.__metadata.version).toBe("2.0.0"); // Still present
+		});
+
+		it("should maintain metadata isolation between functions", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.subtract", 5, 3);
+			await materialize(api, "config.settings.getPluginConfig", "test");
+
+			// Set different metadata on each
+			api.slothlet.metadata.set(api.rootMath.add, "tag", "add");
+			api.slothlet.metadata.set(api.rootMath.subtract, "tag", "subtract");
+			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "tag", "config");
+
+			// Each should have its own metadata
+			expect(api.rootMath.add.__metadata.tag).toBe("add");
+			expect(api.rootMath.subtract.__metadata.tag).toBe("subtract");
+			expect(api.config.settings.getPluginConfig.__metadata.tag).toBe("config");
+
+			// Removing one shouldn't affect others
+			api.slothlet.metadata.remove(api.rootMath.add, "tag");
+
+			expect(api.rootMath.add.__metadata.tag).toBeUndefined();
+			expect(api.rootMath.subtract.__metadata.tag).toBe("subtract");
+			expect(api.config.settings.getPluginConfig.__metadata.tag).toBe("config");
+		});
+	});
+});

@@ -13,6 +13,10 @@ import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/e
  * @private
  */
 class Slothlet {
+	// Reserved root-level API keys that should be skipped by recursive functions
+	// Only applies at the root level (path depth 0) - nested keys with same name are allowed
+	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
+
 	constructor() {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
@@ -157,6 +161,22 @@ class Slothlet {
 		// Build final API with builtins attached
 		const apiWithBuiltins = await this.buildFinalAPI(this.api);
 
+		// Inject runtime-aware metadata functions that have proper context access
+		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
+
+		// Apply init metadata if provided in config
+		if (this.config.metadata && typeof this.config.metadata === "object") {
+			// Set as global metadata so it's inherited by all future api.add() calls
+			for (const [key, value] of Object.entries(this.config.metadata)) {
+				this.handlers.metadata.setGlobalMetadata(key, value);
+			}
+
+			// Apply to initial API (this.api, not apiWithBuiltins to avoid builtins)
+			if (this.handlers.apiManager) {
+				this.handlers.apiManager.applyMetadataRecursively(this.api, this.config.metadata);
+			}
+		}
+
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
 		if (this.handlers.ownership) {
@@ -195,6 +215,83 @@ class Slothlet {
 
 		// TODO: Implement full reload
 		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL", {}, null, { validationError: true });
+	}
+
+	/**
+	 * Inject runtime-aware metadata functions into api.slothlet.metadata
+	 * These functions use the context manager to access current execution context
+	 * @param {Object} api - API object with slothlet namespace
+	 * @private
+	 */
+	injectRuntimeMetadataFunctions(api) {
+		if (!api.slothlet?.metadata) {
+			return;
+		}
+
+		const contextManager = this.contextManager;
+		const metadataHandler = this.handlers.metadata;
+
+		// Add get() - Get metadata by API path string
+		api.slothlet.metadata.get = function slothlet_metadata_get_runtime(path) {
+			if (typeof path !== "string") {
+				throw new SlothletError("INVALID_ARGUMENT", {
+					argument: "path",
+					expected: "string",
+					received: typeof path,
+					hint: "Path must be a dot-notation string (e.g., 'math.add')"
+				});
+			}
+
+			const ctx = contextManager.tryGetContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, {
+					validationError: true,
+					hint: "metadata.get() must be called from within a slothlet API function"
+				});
+			}
+
+			// Traverse the path
+			const parts = path.split(".");
+			let target = ctx.self;
+
+			for (const part of parts) {
+				if (!target || typeof target !== "object") {
+					return null;
+				}
+				target = target[part];
+			}
+
+			// Get metadata for the resolved function
+			if (typeof target === "function") {
+				return metadataHandler.getMetadata(target);
+			}
+
+			return null;
+		};
+
+		// Add self() - Get metadata for currently executing function
+		api.slothlet.metadata.self = function slothlet_metadata_self_runtime() {
+			const ctx = contextManager.tryGetContext();
+			if (!ctx || !ctx.currentWrapper) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, {
+					validationError: true,
+					hint: "metadata.self() must be called from within a slothlet API function"
+				});
+			}
+
+			return metadataHandler.getMetadata(ctx.currentWrapper);
+		};
+
+		// Add caller() - Get metadata for calling function
+		api.slothlet.metadata.caller = function slothlet_metadata_caller_runtime() {
+			const ctx = contextManager.tryGetContext();
+			if (!ctx || !ctx.callerWrapper) {
+				// No caller in context (e.g., called from outside API)
+				return null;
+			}
+
+			return metadataHandler.getMetadata(ctx.callerWrapper);
+		};
 	}
 
 	/**
@@ -242,10 +339,18 @@ class Slothlet {
 	 * @param {Object} api - API object or value
 	 * @param {string} moduleId - Module identifier (owner)
 	 * @param {string} path - Current API path
+	 * @param {WeakSet} [visited] - WeakSet to track visited objects (prevents circular refs)
+	 * @param {string[]} [pathStack] - Path stack to track current depth
 	 * @private
 	 */
-	registerAPIWithOwnership(api, moduleId, path) {
+	registerAPIWithOwnership(api, moduleId, path, visited = new WeakSet(), pathStack = []) {
 		if (!api || typeof api !== "object") return;
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
 
 		// Register this level
 		if (path) {
@@ -261,6 +366,13 @@ class Slothlet {
 
 		// Recursively register children
 		for (const [key, value] of Object.entries(api)) {
+			// Skip reserved root-level keys ONLY at depth 0
+			const isRootLevel = pathStack.length === 0;
+			const isReservedKey = Slothlet.RESERVED_ROOT_KEYS.includes(key);
+			if (isRootLevel && isReservedKey) {
+				continue;
+			}
+
 			const childPath = path ? `${path}.${key}` : key;
 			if (typeof value === "function" || (value && typeof value === "object")) {
 				this.handlers.ownership.register({
@@ -274,7 +386,7 @@ class Slothlet {
 
 				// Recurse for objects (but not functions with properties - handle separately if needed)
 				if (typeof value === "object" && !Array.isArray(value)) {
-					this.registerAPIWithOwnership(value, moduleId, childPath);
+					this.registerAPIWithOwnership(value, moduleId, childPath, visited, [...pathStack, key]);
 				}
 			}
 		}

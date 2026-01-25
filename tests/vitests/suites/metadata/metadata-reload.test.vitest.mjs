@@ -341,4 +341,101 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 		});
 	});
+
+	describe("External Metadata API with Reload", () => {
+		it("should preserve user metadata set via api.slothlet.metadata.set() after full reload", async () => {
+			if (!api.slothlet?.reload) {
+				return;
+			}
+
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set user metadata via external API
+			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
+			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
+
+			const metaBefore = api.rootMath.add.__metadata;
+			expect(metaBefore.category).toBe("math");
+			expect(metaBefore.version).toBe("2.0.0");
+
+			// Full reload
+			await api.slothlet.reload();
+
+			// Rematerialize
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// User metadata should persist after reload
+			const metaAfter = api.rootMath.add.__metadata;
+			expect(metaAfter.category).toBe("math");
+			expect(metaAfter.version).toBe("2.0.0");
+		});
+
+		it("should preserve global metadata set via api.slothlet.metadata.setGlobal() after reload", async () => {
+			if (!api.slothlet?.reload) {
+				return;
+			}
+
+			// Set global metadata
+			api.slothlet.metadata.setGlobal("appVersion", "3.0.0");
+			api.slothlet.metadata.setGlobal("environment", "test");
+
+			await materialize(api, "rootMath.add", 1, 2);
+			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");
+			expect(api.rootMath.add.__metadata.environment).toBe("test");
+
+			// Full reload
+			await api.slothlet.reload();
+
+			// Rematerialize another function
+			await materialize(api, "rootMath.subtract", 5, 3);
+
+			// Global metadata should still be applied
+			expect(api.rootMath.subtract.__metadata.appVersion).toBe("3.0.0");
+			expect(api.rootMath.subtract.__metadata.environment).toBe("test");
+		});
+
+		it("should allow updating metadata after api.slothlet.api.reload()", async () => {
+			if (!api.slothlet?.api?.reload) {
+				return;
+			}
+
+			await api.slothlet.api.add("testReload", TEST_DIRS.API_TEST);
+			await materialize(api, "testReload.rootMath.add", 1, 2);
+
+			// Set metadata before reload
+			api.slothlet.metadata.set(api.testReload.rootMath.add, "status", "initial");
+			expect(api.testReload.rootMath.add.__metadata.status).toBe("initial");
+
+			// Partial reload
+			await api.slothlet.api.reload({ apiPath: "testReload" });
+			await materialize(api, "testReload.rootMath.add", 1, 2);
+
+			// Update metadata after reload
+			api.slothlet.metadata.set(api.testReload.rootMath.add, "status", "reloaded");
+			expect(api.testReload.rootMath.add.__metadata.status).toBe("reloaded");
+		});
+
+		it("should remove metadata via api.slothlet.metadata.remove() after reload", async () => {
+			if (!api.slothlet?.reload) {
+				return;
+			}
+
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set metadata
+			api.slothlet.metadata.set(api.rootMath.add, "temp", "value");
+			expect(api.rootMath.add.__metadata.temp).toBe("value");
+
+			// Reload
+			await api.slothlet.reload();
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Remove metadata after reload
+			api.slothlet.metadata.remove(api.rootMath.add, "temp");
+			expect(api.rootMath.add.__metadata.temp).toBeUndefined();
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+	});
 });
