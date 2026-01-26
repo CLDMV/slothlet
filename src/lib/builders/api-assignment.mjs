@@ -61,7 +61,8 @@ export class ApiAssignment extends ComponentBase {
 	 * @param {boolean} [options.allowOverwrite=false] - Allow overwriting existing non-wrapper values
 	 * @param {boolean} [options.mutateExisting=false] - Sync existing wrappers instead of replacing
 	 * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.collision mode
-	 * @param {Object} [options.config] - Slothlet config (uses config.collision: "merge"|"replace"|"error")
+	 * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.addApi)
+	 * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "addApi"
 	 * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
 	 * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
 	 *
@@ -69,7 +70,7 @@ export class ApiAssignment extends ComponentBase {
 	 * This function encapsulates all assignment patterns from processFiles:
 	 * - Direct assignment when no collision
 	 * - Wrapper sync when both existing and new are wrappers
-	 * - Collision detection using config.collision mode (merge/replace/error)
+	 * - Collision detection using config.collision[context] mode (merge/replace/error/skip/warn)
 	 * - Proper handling of UnifiedWrapper proxies (preserves them, doesn't unwrap)
 	 *
 	 * @example
@@ -84,11 +85,19 @@ export class ApiAssignment extends ComponentBase {
 	 * // With collision detection
 	 * assignment.assignToApiPath(api.math, "add", addFunction, {
 	 *     useCollisionDetection: true,
-	 *     config
+	 *     config,
+	 *     collisionContext: "initial"
 	 * });
 	 */
 	assignToApiPath(targetApi, key, value, options = {}) {
-		const { allowOverwrite = false, mutateExisting = false, useCollisionDetection = false, config = null, syncWrapper = null } = options;
+		const {
+			allowOverwrite = false,
+			mutateExisting = false,
+			useCollisionDetection = false,
+			config = null,
+			collisionContext = "initial",
+			syncWrapper = null
+		} = options;
 
 		// Get existing value
 		const existing = targetApi[key];
@@ -104,18 +113,71 @@ export class ApiAssignment extends ComponentBase {
 
 		// Case 2: Collision detection with config
 		if (useCollisionDetection && config && existing !== undefined) {
-			const collisionMode = config.collision || "merge";
+			// Get collision mode from config.collision.initial or config.collision.addApi
+			const collisionMode = config.collision?.[collisionContext] || "merge";
 
 			if (collisionMode === "error") {
-				throw new Error(`[slothlet] Collision detected at "${String(key)}" - collision mode is 'error'`);
+				const SlothletError = this.slothlet?.SlothletError || Error;
+				throw new SlothletError("COLLISION_ERROR", {
+					key: String(key),
+					collisionMode,
+					collisionContext
+				});
+			}
+
+			if (collisionMode === "skip") {
+				// Skip assignment - keep existing value
+				return false;
+			}
+
+			if (collisionMode === "warn") {
+				console.warn(`[slothlet] Collision detected at "${String(key)}" - using 'replace' behavior (collision mode: 'warn')`);
+				// Fall through to replace
 			}
 
 			if (collisionMode === "merge") {
-				// Merge objects/wrappers
-				if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
-					Object.assign(existing, value);
+				// Special handling for wrapper proxies - merge their implementations
+				const existingIsWrapper = this.isWrapperProxy(existing);
+				const valueIsWrapper = this.isWrapperProxy(value);
+
+				if (existingIsWrapper && valueIsWrapper) {
+					// Both are wrappers - merge their child caches (properties are moved there during adoption)
+					const existingWrapper = existing.__wrapper;
+					const valueWrapper = value.__wrapper;
+
+					console.log("[DEBUG:MERGE] Merging wrapper child caches:");
+					console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
+					console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
+
+					// Merge value's child cache into existing's child cache
+					for (const [key, child] of valueWrapper._childCache.entries()) {
+						existingWrapper._childCache.set(key, child);
+						// Also update proxy target if it exists
+						if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+							existingWrapper._proxyTarget[key] = child;
+						}
+					}
+
+					console.log("  merged childCache keys:", Array.from(existingWrapper._childCache.keys()));
 					return true;
+				} else if (existingIsWrapper && !valueIsWrapper) {
+					// Existing is wrapper, new value is plain - merge into impl
+					const existingWrapper = existing.__wrapper;
+					const existingImpl = existingWrapper.__impl;
+					const mergedImpl = { ...(existingImpl || {}), ...value };
+					existingWrapper.__setImpl(mergedImpl);
+					return true;
+				} else if (!existingIsWrapper && valueIsWrapper) {
+					// Existing is plain, new value is wrapper - can't merge into plain object
+					// Fall through to replace
+				} else {
+					// Both are plain objects - use Object.assign
+					if (typeof existing === "object" && existing !== null && typeof value === "object" && value !== null) {
+						Object.assign(existing, value);
+						return true;
+					}
 				}
+				// Can't merge - fall through to replace
 			}
 
 			// collisionMode === "replace" or can't merge - fall through to assignment
@@ -251,7 +313,14 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 			return val && typeof val === "object" && "__wrapper" in val;
 		},
 		assignToApiPath(tApi, k, v, opts) {
-			const { allowOverwrite = false, mutateExisting = false, useCollisionDetection = false, config = null, syncWrapper = null } = opts;
+			const {
+				allowOverwrite = false,
+				mutateExisting = false,
+				useCollisionDetection = false,
+				config = null,
+				collisionContext = "initial",
+				syncWrapper = null
+			} = opts;
 			const existing = tApi[k];
 
 			if (existing !== undefined && this.isWrapperProxy(existing) && this.isWrapperProxy(v)) {
@@ -262,14 +331,45 @@ export function assignToApiPath(targetApi, key, value, options = {}) {
 			}
 
 			if (useCollisionDetection && config && existing !== undefined) {
-				const collisionMode = config.collision || "merge";
+				const collisionMode = config.collision?.[collisionContext] || "merge";
 				if (collisionMode === "error") {
-					throw new Error(`[slothlet] Collision detected at "${String(k)}" - collision mode is 'error'`);
+					throw new Error(`[slothlet] Collision detected at "${String(k)}" - collision mode is 'error' (context: ${collisionContext})`);
+				}
+				if (collisionMode === "skip") {
+					return false;
+				}
+				if (collisionMode === "warn") {
+					console.warn(`[slothlet] Collision detected at "${String(k)}" - using 'replace' behavior (collision mode: 'warn')`);
 				}
 				if (collisionMode === "merge") {
-					if (typeof existing === "object" && existing !== null && typeof v === "object" && v !== null) {
-						Object.assign(existing, v);
+					// Special handling for wrapper proxies - merge their implementations
+					const existingIsWrapper = this.isWrapperProxy(existing);
+					const valueIsWrapper = this.isWrapperProxy(v);
+
+					if (existingIsWrapper && valueIsWrapper) {
+						// Both are wrappers - merge their implementations
+						const existingWrapper = existing.__wrapper;
+						const valueWrapper = v.__wrapper;
+						const existingImpl = existingWrapper.__impl;
+						const valueImpl = valueWrapper.__impl;
+						const mergedImpl = { ...(existingImpl || {}), ...(valueImpl || {}) };
+						existingWrapper.__setImpl(mergedImpl);
 						return true;
+					} else if (existingIsWrapper && !valueIsWrapper) {
+						// Existing is wrapper, new value is plain - merge into impl
+						const existingWrapper = existing.__wrapper;
+						const existingImpl = existingWrapper.__impl;
+						const mergedImpl = { ...(existingImpl || {}), ...v };
+						existingWrapper.__setImpl(mergedImpl);
+						return true;
+					} else if (!existingIsWrapper && valueIsWrapper) {
+						// Existing is plain, new value is wrapper - can't merge, fall through
+					} else {
+						// Both are plain objects
+						if (typeof existing === "object" && existing !== null && typeof v === "object" && v !== null) {
+							Object.assign(existing, v);
+							return true;
+						}
 					}
 				}
 			}

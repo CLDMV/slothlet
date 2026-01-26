@@ -649,6 +649,22 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl === "object") {
 					return "object";
 				}
+				// Handle primitives
+				if (typeof impl === "string") {
+					return "string";
+				}
+				if (typeof impl === "number") {
+					return "number";
+				}
+				if (typeof impl === "boolean") {
+					return "boolean";
+				}
+				if (typeof impl === "symbol") {
+					return "symbol";
+				}
+				if (typeof impl === "bigint") {
+					return "bigint";
+				}
 				return "undefined";
 			}
 			if (prop === "__getState") return wrapper.__getState.bind(wrapper);

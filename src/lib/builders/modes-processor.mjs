@@ -351,12 +351,14 @@ export class ModesProcessor extends ComponentBase {
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 								}
 								if (ownership) {
@@ -407,12 +409,14 @@ export class ModesProcessor extends ComponentBase {
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 								}
 								if (ownership) {
@@ -440,12 +444,14 @@ export class ModesProcessor extends ComponentBase {
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
-											config
+											config,
+											collisionContext
 										});
 									} else {
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 											useCollisionDetection: true,
-											config
+											config,
+											collisionContext
 										});
 									}
 									if (ownership) {
@@ -493,7 +499,8 @@ export class ModesProcessor extends ComponentBase {
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 									if (assigned) {
 										this.slothlet.debug("modes", {
@@ -510,7 +517,8 @@ export class ModesProcessor extends ComponentBase {
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
-										config
+										config,
+										collisionContext
 									});
 								}
 								if (ownership) {
@@ -556,12 +564,14 @@ export class ModesProcessor extends ComponentBase {
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config
+									config,
+									collisionContext
 								});
 							} else {
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 									useCollisionDetection: true,
-									config
+									config,
+									collisionContext
 								});
 							}
 							if (ownership) {
@@ -597,12 +607,14 @@ export class ModesProcessor extends ComponentBase {
 					});
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
-						config
+						config,
+						collisionContext
 					});
 				} else {
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
 						useCollisionDetection: true,
-						config
+						config,
+						collisionContext
 					});
 				}
 				if (config.debug?.modes && categoryName === "logger") {
@@ -739,6 +751,10 @@ export class ModesProcessor extends ComponentBase {
 									// Fallback - use the whole module
 									implToWrap = modContent;
 								}
+
+								console.log("[DEBUG:FOLDER-FLATTEN] implToWrap keys:", Object.keys(implToWrap || {}));
+								console.log("[DEBUG:FOLDER-FLATTEN] implToWrap type:", typeof implToWrap);
+
 								// Flatten: put the module content directly at targetApi[subDirName]
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode,
@@ -751,7 +767,8 @@ export class ModesProcessor extends ComponentBase {
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config
+									config,
+									collisionContext
 								});
 								if (ownership) {
 									const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
@@ -815,7 +832,8 @@ export class ModesProcessor extends ComponentBase {
 						),
 						{
 							useCollisionDetection: true,
-							config
+							config,
+							collisionContext
 						}
 					);
 				}
@@ -861,12 +879,14 @@ export class ModesProcessor extends ComponentBase {
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
-							config
+							config,
+							collisionContext
 						});
 					} else {
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 							useCollisionDetection: true,
-							config
+							config,
+							collisionContext
 						});
 					}
 					if (ownership) {
