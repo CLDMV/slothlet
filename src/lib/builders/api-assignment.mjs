@@ -173,13 +173,13 @@ export class ApiAssignment extends ComponentBase {
 					console.log("  value has _materializeFunc:", valueWrapper._materializeFunc !== null);
 
 					// CRITICAL: For lazy unmaterialized wrappers, we can't merge synchronously
-					// Fall through to replace behavior (value overwrites existing)
+					// Keep the existing (materialized) wrapper and skip merging the unmaterialized one
 					if (
 						(existingWrapper.mode === "lazy" && !existingWrapper._state.materialized) ||
 						(valueWrapper.mode === "lazy" && !valueWrapper._state.materialized)
 					) {
-						console.log("[DEBUG:MERGE] Cannot merge unmaterialized lazy wrappers - using replace");
-						// Fall through to replace behavior below
+						console.log("[DEBUG:MERGE] Cannot merge unmaterialized lazy wrappers - keeping existing");
+						return false; // Skip assignment, keep existing
 					} else {
 						// CRITICAL: For lazy wrappers, we need child caches populated
 						// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
