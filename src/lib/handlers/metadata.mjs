@@ -247,12 +247,12 @@ export class Metadata extends ComponentBase {
 		// then fall back to _impl (for cases where wrapper wasn't tagged)
 		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
 
-		// Lookup user metadata by moduleID from system metadata
-		// Extract base moduleID (before colon) if full moduleID format is used
-		const fullModuleID = systemData.moduleID || systemData.moduleId;
-		const baseModuleID = fullModuleID ? fullModuleID.split(":")[0] : null;
+		// Lookup user metadata by API PATH from system metadata
+		// Extract root apiPath segment (e.g., "nested" from "nested.mathCjs.add")
+		const apiPath = systemData.apiPath;
+		const rootApiPath = apiPath ? apiPath.split(".")[0].split("/")[0] : null;
 
-		const userMetadataEntry = baseModuleID ? this.#userMetadataStore.get(baseModuleID) : null;
+		const userMetadataEntry = rootApiPath ? this.#userMetadataStore.get(rootApiPath) : null;
 		const userData = userMetadataEntry?.metadata || {};
 
 		// Merge order: global < user (by moduleID) < SYSTEM (system always wins)
@@ -355,117 +355,57 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Register user metadata for a moduleID with optional apiPath tracking
+	 * Register user metadata for an API path
 	 *
 	 * @description
-	 * Stores user-provided metadata keyed by moduleID (base identifier without apiPath suffix).
-	 * Each moduleID entry tracks its associated apiPaths for cleanup purposes.
+	 * Stores user-provided metadata keyed by apiPath (root segment only).
+	 * Each apiPath entry tracks its associated paths for cleanup purposes.
 	 *
-	 * @param {string} moduleID - Base module identifier (e.g., "lookup_abc123")
-	 * @param {string} apiPath - API path for this metadata (e.g., "lookup")
+	 * @param {string} apiPath - API path (e.g., "nested", "math", etc.)
 	 * @param {Object} metadata - User metadata object to store/merge
 	 * @package
 	 */
-	registerUserMetadata(moduleID, apiPath, metadata = {}) {
-		if (!moduleID || typeof moduleID !== "string") {
+	registerUserMetadata(apiPath, metadata = {}) {
+		if (!apiPath || typeof apiPath !== "string") {
 			throw new this.SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "moduleID",
+					argument: "apiPath",
 					expected: "non-empty string",
-					received: typeof moduleID
+					received: typeof apiPath
 				},
 				null,
 				{ validationError: true }
 			);
 		}
 
-		// Get or create user metadata entry for this moduleID
-		let entry = this.#userMetadataStore.get(moduleID);
+		// Get or create user metadata entry for this apiPath
+		let entry = this.#userMetadataStore.get(apiPath);
 		if (!entry) {
 			entry = { metadata: {}, apiPaths: new Set() };
-			this.#userMetadataStore.set(moduleID, entry);
+			this.#userMetadataStore.set(apiPath, entry);
 		}
 
 		// Merge new metadata with existing
 		entry.metadata = { ...entry.metadata, ...metadata };
 
 		// Track apiPath for cleanup
-		if (apiPath) {
-			entry.apiPaths.add(apiPath);
-		}
+		entry.apiPaths.add(apiPath);
 	}
 
 	/**
-	 * Remove all user metadata for a moduleID
+	 * Remove all user metadata for an apiPath
 	 *
 	 * @description
-	 * Cleanup method to remove all user metadata associated with a moduleID.
+	 * Cleanup method to remove all user metadata associated with an apiPath.
 	 * Used during api.remove() or cleanup operations.
 	 *
-	 * @param {string} moduleID - Module identifier to remove
+	 * @param {string} apiPath - API path to remove
 	 * @package
 	 */
-	removeUserMetadataByModuleID(moduleID) {
-		if (!moduleID) return;
-		this.#userMetadataStore.delete(moduleID);
-	}
-
-	/**
-	 * Register user metadata for a moduleID with optional apiPath tracking
-	 *
-	 * @description
-	 * Stores user-provided metadata keyed by moduleID (base identifier without apiPath suffix).
-	 * Each moduleID entry tracks its associated apiPaths for cleanup purposes.
-	 *
-	 * @param {string} moduleID - Base module identifier (e.g., "lookup_abc123")
-	 * @param {string} apiPath - API path for this metadata (e.g., "lookup")
-	 * @param {Object} metadata - User metadata object to store/merge
-	 * @package
-	 */
-	registerUserMetadata(moduleID, apiPath, metadata = {}) {
-		if (!moduleID || typeof moduleID !== "string") {
-			throw new this.SlothletError(
-				"INVALID_ARGUMENT",
-				{
-					argument: "moduleID",
-					expected: "non-empty string",
-					received: typeof moduleID
-				},
-				null,
-				{ validationError: true }
-			);
-		}
-
-		// Get or create user metadata entry for this moduleID
-		let entry = this.#userMetadataStore.get(moduleID);
-		if (!entry) {
-			entry = { metadata: {}, apiPaths: new Set() };
-			this.#userMetadataStore.set(moduleID, entry);
-		}
-
-		// Merge new metadata with existing
-		entry.metadata = { ...entry.metadata, ...metadata };
-
-		// Track apiPath for cleanup
-		if (apiPath) {
-			entry.apiPaths.add(apiPath);
-		}
-	}
-
-	/**
-	 * Remove all user metadata for a moduleID
-	 *
-	 * @description
-	 * Cleanup method to remove all user metadata associated with a moduleID.
-	 * Used during api.remove() or cleanup operations.
-	 *
-	 * @param {string} moduleID - Module identifier to remove
-	 * @package
-	 */
-	removeUserMetadataByModuleID(moduleID) {
-		if (!moduleID) return;
-		this.#userMetadataStore.delete(moduleID);
+	removeUserMetadataByApiPath(apiPath) {
+		if (!apiPath) return;
+		this.#userMetadataStore.delete(apiPath);
 	}
 
 	/**

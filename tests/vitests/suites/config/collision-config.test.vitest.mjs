@@ -161,6 +161,8 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("collision.initial modes", () => {
 		// math.mjs file collides with math/ folder during initial load
 		// Both try to create api.math, triggering collision.initial behavior
+		// File has: add() returning 1005, collisionVersion property
+		// Folder has: add() returning 5, multiply() function
 
 		it("merge mode: should merge file and folder exports", async () => {
 			api = await createApiInstance(config, {
@@ -171,10 +173,22 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
-			// Should have both folder and file exports merged
-			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
-			// Result could be from folder (5) or file (1005) depending on load order
-			expect([5, 1005]).toContain(result);
+			// Check unique identifiers to verify BOTH sources present
+			const hasFileSource = math.collisionVersion === "collision-math-file";
+			const hasFolderSource = typeof math.multiply === "function";
+
+			// BOTH sources should be merged
+			expect(hasFileSource).toBe(true);
+			expect(hasFolderSource).toBe(true);
+
+			// Verify functions actually work
+			const addResult = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			expect([5, 1005]).toContain(addResult); // Either could be present depending on merge order
+
+			if (hasFolderSource) {
+				const multiplyResult = config.mode === "lazy" ? await math.multiply(2, 3) : math.multiply(2, 3);
+				expect(multiplyResult).toBe(6);
+			}
 		});
 
 		it("skip mode: should keep first loaded (folder or file)", async () => {
@@ -186,14 +200,74 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
-			// Verify the function works (whichever loaded first)
-			const result = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
-			expect([5, 1005]).toContain(result);
+			// Check unique identifiers to verify ONLY ONE source present
+			const hasFileSource = math.collisionVersion === "collision-math-file";
+			const hasFolderSource = typeof math.multiply === "function";
+
+			// ONLY ONE source should be present (XOR)
+			expect(hasFileSource !== hasFolderSource).toBe(true);
+
+			// Verify the present source works
+			const addResult = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			if (hasFileSource) {
+				expect(addResult).toBe(1005); // File version
+			} else {
+				expect(addResult).toBe(5); // Folder version
+			}
+		});
+
+		it("replace mode: should replace with last loaded (folder or file)", async () => {
+			api = await createApiInstance(config, {
+				collision: { initial: "replace", addApi: "merge" }
+			});
+
+			const math = getMath(api, config.dir);
+			expect(math).toBeDefined();
+			expect(math.add).toBeTypeOf("function");
+
+			// Check unique identifiers to verify ONLY ONE source present
+			const hasFileSource = math.collisionVersion === "collision-math-file";
+			const hasFolderSource = typeof math.multiply === "function";
+
+			// ONLY ONE source should be present (XOR)
+			expect(hasFileSource !== hasFolderSource).toBe(true);
+
+			// Verify the present source works
+			const addResult = config.mode === "lazy" ? await math.add(2, 3) : math.add(2, 3);
+			if (hasFileSource) {
+				expect(addResult).toBe(1005); // File version
+			} else {
+				expect(addResult).toBe(5); // Folder version
+			}
+		});
+
+		it("warn mode: should warn and merge file and folder exports", async () => {
+			api = await createApiInstance(config, {
+				collision: { initial: "warn", addApi: "merge" },
+				silent: false
+			});
+
+			const math = getMath(api, config.dir);
+			expect(math).toBeDefined();
+			expect(math.add).toBeTypeOf("function");
+
+			// Warn mode should merge (with warning)
+			const hasFileSource = math.collisionVersion === "collision-math-file";
+			const hasFolderSource = typeof math.multiply === "function";
+
+			// BOTH sources should be merged (warn just adds warning)
+			expect(hasFileSource).toBe(true);
+			expect(hasFolderSource).toBe(true);
+		});
+
+		it("error mode: should throw error on collision", async () => {
+			await expect(async () => {
+				api = await createApiInstance(config, {
+					collision: { initial: "error", addApi: "merge" }
+				});
+			}).rejects.toThrow();
 		});
 	});
-	// NOTE: collision.initial tests removed because files don't actually collide during initial buildAPI
-	// Each file gets its own namespace, so there's no collision to test
-	// collision.initial would only apply in custom scenarios not representable in simple file loading
 
 	describe("collision.addApi modes", () => {
 		it("merge mode: should preserve original and add new properties", async () => {
