@@ -17,11 +17,15 @@ export class Metadata extends ComponentBase {
 
 	// Secure WeakMap storage for immutable system metadata
 	#secureMetadata = new WeakMap(); // target → system metadata (IMMUTABLE)
-	#userMetadata = new WeakMap(); // target → user metadata (MUTABLE)
+
+	// Centralized user metadata storage - keyed by moduleID
+	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = {}; // global user metadata (applies to all)
 
 	#runtimeModule = null;
 	#runtimeImportPromise = null;
+
+	_instanceId = null;
 
 	/**
 	 * Create Metadata instance
@@ -29,6 +33,7 @@ export class Metadata extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
+		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 	}
 
 	/**
@@ -209,6 +214,23 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Get system metadata only (without user metadata)
+	 * @param {Function|Object} target - Wrapper or function
+	 * @returns {Object|null} System metadata or null
+	 * @package
+	 */
+	getSystemMetadata(target) {
+		if (!target) return null;
+
+		// Normalize target: if it's a proxy, get the underlying wrapper
+		const actualTarget = target.__wrapper || target;
+
+		// Try _impl first (for wrapped functions), then target itself
+		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget);
+		return systemData || null;
+	}
+
+	/**
 	 * Get metadata for a target (combines system + user)
 	 * For wrappers: checks current impl to ensure metadata is current
 	 * @param {Function|Object} target - Wrapper or function
@@ -218,35 +240,22 @@ export class Metadata extends ComponentBase {
 	getMetadata(target) {
 		if (!target) return {};
 
-		// For wrappers, verify impl hasn't changed
-		if (target.__wrapper || (typeof target === "object" && target._impl)) {
-			const wrapper = target.__wrapper || target;
-			const currentImpl = wrapper._impl;
+		// Normalize target: if it's a proxy, get the underlying wrapper
+		const actualTarget = target.__wrapper || target;
 
-			// Get system metadata for current impl (not wrapper)
-			const systemData = this.#secureMetadata.get(currentImpl) || this.#secureMetadata.get(wrapper) || {};
+		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
+		// then fall back to _impl (for cases where wrapper wasn't tagged)
+		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
 
-			const userData = this.#userMetadata.get(wrapper) || {};
+		// Lookup user metadata by moduleID from system metadata
+		// Extract base moduleID (before colon) if full moduleID format is used
+		const fullModuleID = systemData.moduleID || systemData.moduleId;
+		const baseModuleID = fullModuleID ? fullModuleID.split(":")[0] : null;
 
-			// Merge wrapper's _userMetadata if it exists (from buildAPI)
-			const wrapperUserMetadata = wrapper._userMetadata || {};
+		const userMetadataEntry = baseModuleID ? this.#userMetadataStore.get(baseModuleID) : null;
+		const userData = userMetadataEntry?.metadata || {};
 
-			// Merge order: global < user < wrapper user < SYSTEM (system always wins)
-			const combined = {
-				...this.#globalUserMetadata,
-				...userData,
-				...wrapperUserMetadata,
-				...systemData // System metadata LAST = highest priority (immutable)
-			};
-
-			return this.#deepFreeze(combined);
-		}
-
-		// For direct functions
-		const systemData = this.#secureMetadata.get(target) || {};
-		const userData = this.#userMetadata.get(target) || {};
-
-		// Merge order: global < user < SYSTEM (system always wins)
+		// Merge order: global < user (by moduleID) < SYSTEM (system always wins)
 		const combined = {
 			...this.#globalUserMetadata,
 			...userData,
@@ -285,8 +294,28 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = target.__wrapper || target;
 
-		const existing = this.#userMetadata.get(actualTarget) || {};
-		this.#userMetadata.set(actualTarget, { ...existing, [key]: value });
+		// Get system metadata to find moduleID
+		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
+		const moduleID = systemData.moduleID || systemData.moduleId;
+
+		if (!moduleID) {
+			throw new this.SlothletError(
+				"METADATA_NO_MODULE_ID",
+				{ hint: "Cannot set user metadata without moduleID in system metadata" },
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Get or create user metadata entry for this moduleID
+		let entry = this.#userMetadataStore.get(moduleID);
+		if (!entry) {
+			entry = { metadata: {}, apiPaths: new Set() };
+			this.#userMetadataStore.set(moduleID, entry);
+		}
+
+		// Set the metadata key
+		entry.metadata[key] = value;
 	}
 
 	/**
@@ -307,18 +336,136 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = target.__wrapper || target;
 
+		// Get system metadata to find moduleID
+		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
+		const moduleID = systemData.moduleID || systemData.moduleId;
+
+		if (!moduleID) return;
+
+		const entry = this.#userMetadataStore.get(moduleID);
+		if (!entry) return;
+
 		if (key === undefined) {
-			// Remove all user metadata
-			this.#userMetadata.delete(actualTarget);
+			// Remove all user metadata for this moduleID
+			this.#userMetadataStore.delete(moduleID);
 		} else {
 			// Remove specific key
-			const existing = this.#userMetadata.get(actualTarget);
-			if (existing) {
-				const updated = { ...existing };
-				delete updated[key];
-				this.#userMetadata.set(actualTarget, updated);
-			}
+			delete entry.metadata[key];
 		}
+	}
+
+	/**
+	 * Register user metadata for a moduleID with optional apiPath tracking
+	 *
+	 * @description
+	 * Stores user-provided metadata keyed by moduleID (base identifier without apiPath suffix).
+	 * Each moduleID entry tracks its associated apiPaths for cleanup purposes.
+	 *
+	 * @param {string} moduleID - Base module identifier (e.g., "lookup_abc123")
+	 * @param {string} apiPath - API path for this metadata (e.g., "lookup")
+	 * @param {Object} metadata - User metadata object to store/merge
+	 * @package
+	 */
+	registerUserMetadata(moduleID, apiPath, metadata = {}) {
+		if (!moduleID || typeof moduleID !== "string") {
+			throw new this.SlothletError(
+				"INVALID_ARGUMENT",
+				{
+					argument: "moduleID",
+					expected: "non-empty string",
+					received: typeof moduleID
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Get or create user metadata entry for this moduleID
+		let entry = this.#userMetadataStore.get(moduleID);
+		if (!entry) {
+			entry = { metadata: {}, apiPaths: new Set() };
+			this.#userMetadataStore.set(moduleID, entry);
+		}
+
+		// Merge new metadata with existing
+		entry.metadata = { ...entry.metadata, ...metadata };
+
+		// Track apiPath for cleanup
+		if (apiPath) {
+			entry.apiPaths.add(apiPath);
+		}
+	}
+
+	/**
+	 * Remove all user metadata for a moduleID
+	 *
+	 * @description
+	 * Cleanup method to remove all user metadata associated with a moduleID.
+	 * Used during api.remove() or cleanup operations.
+	 *
+	 * @param {string} moduleID - Module identifier to remove
+	 * @package
+	 */
+	removeUserMetadataByModuleID(moduleID) {
+		if (!moduleID) return;
+		this.#userMetadataStore.delete(moduleID);
+	}
+
+	/**
+	 * Register user metadata for a moduleID with optional apiPath tracking
+	 *
+	 * @description
+	 * Stores user-provided metadata keyed by moduleID (base identifier without apiPath suffix).
+	 * Each moduleID entry tracks its associated apiPaths for cleanup purposes.
+	 *
+	 * @param {string} moduleID - Base module identifier (e.g., "lookup_abc123")
+	 * @param {string} apiPath - API path for this metadata (e.g., "lookup")
+	 * @param {Object} metadata - User metadata object to store/merge
+	 * @package
+	 */
+	registerUserMetadata(moduleID, apiPath, metadata = {}) {
+		if (!moduleID || typeof moduleID !== "string") {
+			throw new this.SlothletError(
+				"INVALID_ARGUMENT",
+				{
+					argument: "moduleID",
+					expected: "non-empty string",
+					received: typeof moduleID
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Get or create user metadata entry for this moduleID
+		let entry = this.#userMetadataStore.get(moduleID);
+		if (!entry) {
+			entry = { metadata: {}, apiPaths: new Set() };
+			this.#userMetadataStore.set(moduleID, entry);
+		}
+
+		// Merge new metadata with existing
+		entry.metadata = { ...entry.metadata, ...metadata };
+
+		// Track apiPath for cleanup
+		if (apiPath) {
+			entry.apiPaths.add(apiPath);
+		}
+	}
+
+	/**
+	 * Remove all user metadata for a moduleID
+	 *
+	 * @description
+	 * Cleanup method to remove all user metadata associated with a moduleID.
+	 * Used during api.remove() or cleanup operations.
+	 *
+	 * @param {string} moduleID - Module identifier to remove
+	 * @package
+	 */
+	removeUserMetadataByModuleID(moduleID) {
+		if (!moduleID) return;
+		this.#userMetadataStore.delete(moduleID);
 	}
 
 	/**

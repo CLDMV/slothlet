@@ -171,10 +171,8 @@ class Slothlet {
 				this.handlers.metadata.setGlobalMetadata(key, value);
 			}
 
-			// Apply to initial API (this.api, not apiWithBuiltins to avoid builtins)
-			if (this.handlers.apiManager) {
-				this.handlers.apiManager.applyMetadataRecursively(this.api, this.config.metadata);
-			}
+			// Register user metadata for base moduleID
+			this.handlers.metadata.registerUserMetadata(baseModuleId, "", this.config.metadata);
 		}
 
 		// Register all API paths with ownership manager AFTER building final API
@@ -258,21 +256,32 @@ class Slothlet {
 			for (const part of parts) {
 				// Allow traversal through both objects AND functions (functions can have properties)
 				if (!target || (typeof target !== "object" && typeof target !== "function")) {
+					console.log("[metadata.get] Traversal failed at part:", part, "target type:", typeof target);
 					return null;
 				}
 				target = target[part];
 			}
 
+			console.log("[metadata.get] Traversal complete for path:", path, {
+				targetType: typeof target,
+				isFunction: typeof target === "function",
+				hasImpl: target && target._impl,
+				hasMaterialize: target && typeof target.__materialize === "function"
+			});
+
 			// If target is a lazy proxy (has __materialize), materialize it first
 			if (target && typeof target.__materialize === "function") {
+				console.log("[metadata.get] Materializing lazy proxy");
 				await target.__materialize();
 			}
 
 			// Get metadata for the resolved function
 			if (typeof target === "function" || (target && target._impl)) {
+				console.log("[metadata.get] Calling getMetadata on target");
 				return metadataHandler.getMetadata(target);
 			}
 
+			console.log("[metadata.get] Target is not a function or wrapper, returning null");
 			return null;
 		};
 

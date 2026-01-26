@@ -105,7 +105,7 @@ function createLazyWrapper(dir, apiPath, slothlet, userMetadata = {}) {
 					fileName: file.name,
 					filePath: file.path
 				});
-				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID);
+				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID, moduleId);
 				slothlet.debug("modes", {
 					message: "File loaded, extracting exports",
 					fileName: file.name
@@ -171,7 +171,9 @@ function createLazyWrapper(dir, apiPath, slothlet, userMetadata = {}) {
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
 		materializeOnCreate: slothlet.config.backgroundMaterialize,
-		userMetadata
+		filePath: dir.path,
+		moduleId: dir.moduleId,
+		sourceFolder: slothlet.config?.dir
 	});
 
 	return wrapper.createProxy();
