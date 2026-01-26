@@ -274,7 +274,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await this.syncWrapper(existingProxy, nextProxy, this.config);
 	 */
-	async syncWrapper(existingProxy, nextProxy, config) {
+	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace") {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - existingProxy",
@@ -329,16 +329,26 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 
-			// Clear existing cache first
-			existingWrapper._childCache.clear();
-
-			// Transfer all child wrappers from next to existing
+			// Merge child wrappers from next to existing based on collision mode
 			// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
-			for (const [key, childValue] of nextWrapper._childCache.entries()) {
-				existingWrapper._childCache.set(key, childValue);
-			// NOTE: Do NOT set childValue on _proxyTarget - it may be a wrapper object
-			// In live runtime, direct property access would return the wrapper instead of unwrapped value
-			// The proxy's get trap will handle unwrapping from _childCache
+			if (collisionMode === "replace") {
+				// Clear existing and add all from next
+				existingWrapper._childCache.clear();
+				for (const [key, childValue] of nextWrapper._childCache.entries()) {
+					existingWrapper._childCache.set(key, childValue);
+				}
+			} else if (collisionMode === "merge") {
+				// Keep existing, only add new keys
+				for (const [key, childValue] of nextWrapper._childCache.entries()) {
+					if (!existingWrapper._childCache.has(key)) {
+						existingWrapper._childCache.set(key, childValue);
+					}
+				}
+			} else if (collisionMode === "merge-replace") {
+				// Add new keys and replace existing
+				for (const [key, childValue] of nextWrapper._childCache.entries()) {
+					existingWrapper._childCache.set(key, childValue);
+				}
 			}
 		}
 
@@ -401,7 +411,7 @@ export class ApiManager extends ComponentBase {
 					message: "mutateApiValue - both are wrappers, calling syncWrapper"
 				});
 			}
-			await this.syncWrapper(existingValue, nextValue, config);
+			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode);
 			return;
 		}
 
@@ -528,16 +538,16 @@ export class ApiManager extends ComponentBase {
 				return false;
 			}
 
-			if (collisionMode === "merge") {
+			if (collisionMode === "merge" || collisionMode === "merge-replace") {
 				const existingIsObject = typeof existing === "object" || typeof existing === "function";
 				const valueIsObject = typeof value === "object" || typeof value === "function";
 
 				if (existingIsObject && valueIsObject) {
 					this.slothlet.debug("api", {
 						message: "setValueAtPath - merging properties",
-						mode: "merge"
+						mode: collisionMode
 					});
-					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true }, this.config);
+					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.config);
 					return true;
 				} else {
 					// Can't merge primitives - log warning and keep existing
@@ -835,6 +845,8 @@ export class ApiManager extends ComponentBase {
 		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: resolvedFolderPath,
 			mode: this.config.mode,
+			// Use apiPathPrefix to ensure wrappers have correct full API paths including namespace
+			// This is critical for metadata.moduleID to match the actual access path
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
 			moduleId: moduleId,

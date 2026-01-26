@@ -189,16 +189,6 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @public
 	 */
 	__setImpl(newImpl) {
-		console.log(`[DEBUG:SETIMPL] __setImpl called for apiPath: ${this.apiPath}`);
-		console.log(`[DEBUG:SETIMPL] newImpl keys:`, Object.keys(newImpl || {}));
-		if (this.apiPath?.includes("math")) {
-			console.log(`[DEBUG:SETIMPL] newImpl.add:`, newImpl?.add);
-			if (typeof newImpl?.add === "function") {
-				console.log(`[DEBUG:SETIMPL] newImpl.add(2,3) =`, newImpl.add(2, 3));
-			}
-		}
-		console.log(`[DEBUG:SETIMPL] childCache size BEFORE setImpl: ${this._childCache.size}, keys:`, Array.from(this._childCache.keys()));
-
 		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "__setImpl called",
@@ -229,9 +219,6 @@ export class UnifiedWrapper extends ComponentBase {
 		this._adoptImplChildren();
 		this._state.materialized = true;
 		this._state.inFlight = false;
-
-		console.log(`[DEBUG:SETIMPL] __setImpl finished for apiPath: ${this.apiPath}`);
-		console.log(`[DEBUG:SETIMPL] childCache size AFTER setImpl: ${this._childCache.size}, keys:`, Array.from(this._childCache.keys()));
 	}
 
 	/**
@@ -249,12 +236,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	async _materialize() {
-		console.log(
-			`[DEBUG:MATERIALIZE] _materialize called for ${this.apiPath}, inFlight=${this._state.inFlight}, materialized=${this._state.materialized}`
-		);
-
 		if (this._state.inFlight || this._state.materialized) {
-			console.log(`[DEBUG:MATERIALIZE] Skipping - already materialized or in progress`);
 			return;
 		}
 
@@ -269,12 +251,6 @@ export class UnifiedWrapper extends ComponentBase {
 
 		try {
 			if (this._materializeFunc) {
-				console.log(`[DEBUG:MATERIALIZE] Starting materialization for ${this.apiPath}`);
-				console.log(
-					`[DEBUG:MATERIALIZE] childCache BEFORE materializeFunc: size=${this._childCache.size}, keys=`,
-					Array.from(this._childCache.keys())
-				);
-
 				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 					this.slothlet.debug("wrapper", {
 						message: "_materialize calling materializeFunc",
@@ -283,24 +259,13 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// POC pattern: materializeFunc returns the implementation
 				const result = await this._materializeFunc();
-				console.log(`[DEBUG:MATERIALIZE] materializeFunc returned, result type: ${typeof result}`);
-				console.log(
-					`[DEBUG:MATERIALIZE] childCache AFTER materializeFunc: size=${this._childCache.size}, keys=`,
-					Array.from(this._childCache.keys())
-				);
 
 				this._impl = result;
 				this._invalid = false;
 				this._adoptImplChildren();
-				console.log(
-					`[DEBUG:MATERIALIZE] After _adoptImplChildren: size=${this._childCache.size}, keys=`,
-					Array.from(this._childCache.keys())
-				);
 
 				this._state.materialized = true;
 				this._state.inFlight = false;
-				console.log(`[DEBUG:MATERIALIZE] Materialization complete for ${this.apiPath}`);
-				console.log(`[DEBUG:MATERIALIZE] FINAL childCache: size=${this._childCache.size}, keys=`, Array.from(this._childCache.keys()));
 
 				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 					this.slothlet.debug("wrapper", {
@@ -377,17 +342,11 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper._adoptImplChildren();
 	 */
 	_adoptImplChildren() {
-		const stack = new Error().stack;
-		console.log(`[DEBUG:ADOPT] START - childCache size: ${this._childCache.size}, childCache keys:`, Array.from(this._childCache.keys()));
-		console.log(`[DEBUG:ADOPT] Called from:`, stack.split("\n")[2]?.trim());
-		console.log(`[DEBUG:ADOPT] impl type: ${typeof this._impl}`);
-
 		if (!this._impl || (typeof this._impl !== "object" && typeof this._impl !== "function")) {
 			return;
 		}
 
 		const ownKeys = Reflect.ownKeys(this._impl);
-		console.log(`[DEBUG:ADOPT] impl ownKeys:`, ownKeys);
 
 		const internalKeys = new Set(["__impl", "__setImpl", "__getState", "__materialize", "_impl", "_state", "_invalid"]);
 		const keepImplProperties =
@@ -400,9 +359,6 @@ export class UnifiedWrapper extends ComponentBase {
 		// CRITICAL: If childCache already has entries (from collision merge), this is a MERGE scenario
 		// In merge mode, we should NEVER delete existing entries - only add new ones
 		const isMergeScenario = this._childCache.size > 0;
-		if (isMergeScenario) {
-			console.log("[DEBUG:ADOPT] MERGE SCENARIO detected - existing childCache entries will be preserved");
-		}
 
 		// Add existing childCache keys to observedKeys so they don't get deleted
 		for (const key of this._childCache.keys()) {
@@ -432,20 +388,16 @@ export class UnifiedWrapper extends ComponentBase {
 			// childCache contains RAW functions/values, not wrappers, so just check if key exists
 			if (this._childCache.has(key)) {
 				// Keep existing entry (don't replace) - preserves merge-mode behavior
-				console.log(`[DEBUG:ADOPT] ✓ Preserving existing childCache entry for "${String(key)}"`);
 				// CRITICAL: Remove this key from impl to prevent conflicts
 				// The childCache entry takes precedence in merge mode
 				if (descriptor.configurable) {
 					delete this._impl[key];
-					console.log(`[DEBUG:ADOPT]   → Removed "${String(key)}" from impl to prevent conflict`);
 				}
 				continue;
 			}
 
-			console.log(`[DEBUG:ADOPT] Creating wrapper for "${String(key)}"`);
 			const wrapped = this._createChildWrapper(key, value);
 			if (wrapped) {
-				console.log(`[DEBUG:ADOPT] ✓ Created wrapper for "${String(key)}", adding to childCache`);
 				this._childCache.set(key, wrapped);
 				// NOTE: Do NOT set wrapped on _proxyTarget - it's a wrapper object
 				// In live runtime, direct property access would return the wrapper instead of unwrapped value
@@ -453,22 +405,14 @@ export class UnifiedWrapper extends ComponentBase {
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
-			} else {
-				console.log(`[DEBUG:ADOPT] ✗ Failed to create wrapper for "${String(key)}"`);
 			}
 		}
-
-		console.log(
-			`[DEBUG:ADOPT] AFTER CREATION - childCache size: ${this._childCache.size}, childCache keys:`,
-			Array.from(this._childCache.keys())
-		);
 
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
 			for (const key of this._childCache.keys()) {
 				if (!observedKeys.has(key)) {
-					console.log(`[DEBUG:ADOPT] DELETING unobserved childCache key: "${String(key)}"`);
 					const existing = this._childCache.get(key);
 					if (existing && typeof existing.__invalidate === "function") {
 						existing.__invalidate();
@@ -484,31 +428,23 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
-		console.log(`[DEBUG:ADOPT] END - childCache size: ${this._childCache.size}, childCache keys:`, Array.from(this._childCache.keys()));
-		console.log(`[DEBUG:ADOPT] END - wrapper apiPath: ${this.apiPath}, wrapper mode: ${this.mode}`);
-
 		// Handle merge-after-materialize for lazy wrappers in merge-replace mode
 		if (this._mergeAfterMaterialize) {
-			console.log("[DEBUG:ADOPT] Processing _mergeAfterMaterialize");
 			const { existingWrapper, isMergeReplace } = this._mergeAfterMaterialize;
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
 			for (const [key, child] of existingWrapper._childCache.entries()) {
 				if (!this._childCache.has(key)) {
-					console.log(`  [MERGE-AFTER] Adding non-conflicting key "${String(key)}" from existing`);
 					this._childCache.set(key, child);
 					// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 					// In live runtime, direct property access would return the wrapper instead of unwrapped value
 					// The proxy's get trap will handle unwrapping from _childCache
-				} else {
-					console.log(`  [MERGE-AFTER] Skipping key "${String(key)}" - this wrapper's version takes precedence (merge-replace)`);
 				}
 			}
 
 			// Clear the merge info
 			delete this._mergeAfterMaterialize;
-			console.log("[DEBUG:ADOPT] After merge: childCache size:", this._childCache.size, "keys:", Array.from(this._childCache.keys()));
 		}
 	}
 
