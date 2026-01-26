@@ -336,16 +336,9 @@ export class ApiManager extends ComponentBase {
 			// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 			for (const [key, childValue] of nextWrapper._childCache.entries()) {
 				existingWrapper._childCache.set(key, childValue);
-				if (existingWrapper._proxyTarget) {
-					existingWrapper._proxyTarget[key] = childValue;
-				}
-			}
-
-			if (config?.debug?.api) {
-				this.slothlet.debug("api", {
-					message: "syncWrapper after merge",
-					cacheSize: existingWrapper._childCache.size
-				});
+			// NOTE: Do NOT set childValue on _proxyTarget - it may be a wrapper object
+			// In live runtime, direct property access would return the wrapper instead of unwrapped value
+			// The proxy's get trap will handle unwrapping from _childCache
 			}
 		}
 
