@@ -867,7 +867,13 @@ export class UnifiedWrapper extends ComponentBase {
 					const cachedImpl = cached.__wrapper._impl;
 					// For primitives, return the unwrapped value
 					const cachedType = typeof cachedImpl;
-					if (cachedType === "string" || cachedType === "number" || cachedType === "boolean" || cachedType === "bigint" || cachedType === "symbol") {
+					if (
+						cachedType === "string" ||
+						cachedType === "number" ||
+						cachedType === "boolean" ||
+						cachedType === "bigint" ||
+						cachedType === "symbol"
+					) {
 						return cachedImpl;
 					}
 				}

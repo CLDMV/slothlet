@@ -138,13 +138,16 @@ export class ApiAssignment extends ComponentBase {
 				return false;
 			}
 
+			// Effective mode after warn conversion
+			let effectiveMode = collisionMode;
 			if (collisionMode === "warn") {
-				console.warn(`[slothlet] Collision detected at "${String(key)}" - using 'replace' behavior (collision mode: 'warn')`);
-				// Fall through to replace
+				console.warn(`[slothlet] Collision detected at "${String(key)}" - merging file and folder exports (collision mode: 'warn')`);
+				// Treat warn as merge - merge file properties into lazy folder to preserve lazy capability
+				effectiveMode = "merge";
 			}
 
-			if (collisionMode === "merge" || collisionMode === "merge-replace") {
-				const isMergeReplace = collisionMode === "merge-replace";
+			if (effectiveMode === "merge" || effectiveMode === "merge-replace") {
+				const isMergeReplace = effectiveMode === "merge-replace";
 				// Special handling for wrapper proxies - merge their implementations
 				const existingIsWrapper = this.isWrapperProxy(existing);
 				const valueIsWrapper = this.isWrapperProxy(value);
@@ -191,10 +194,10 @@ export class ApiAssignment extends ComponentBase {
 
 						for (const [key, child] of valueWrapper._childCache.entries()) {
 							existingWrapper._childCache.set(key, child);
-						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-						// In live runtime, direct property access would return the wrapper instead of unwrapped value
-						// The proxy's get trap will handle unwrapping from _childCache
-					}
+							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+							// In live runtime, direct property access would return the wrapper instead of unwrapped value
+							// The proxy's get trap will handle unwrapping from _childCache
+						}
 
 						console.log("  After: existing childCache size =", existingWrapper._childCache.size);
 						console.log("  Lazy folder wrapper enriched - keeping existing");
@@ -203,13 +206,6 @@ export class ApiAssignment extends ComponentBase {
 						// Case 2: File processed first, lazy folder processed second
 						// Copy existing's childCache (file exports) into value (lazy folder)
 						// BUT: In merge-replace mode, DON'T copy keys that will be overwritten by folder
-						console.log("[DEBUG:MERGE] Value is lazy unmaterialized - copying existing's childCache");
-						console.log(
-							"  Merge mode:",
-							isMergeReplace ? "merge-replace (skip existing, folder will overwrite)" : "merge (copy all, folder adds new)"
-						);
-
-						console.log("  Before: value childCache keys =", Array.from(valueWrapper._childCache.keys()));
 
 						// In merge-replace mode, we need to know which keys the lazy folder will provide
 						// But we can't know that until it materializes. Solution: Don't copy ANY keys in merge-replace,
@@ -220,7 +216,6 @@ export class ApiAssignment extends ComponentBase {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
 							for (const [key, child] of existingWrapper._childCache.entries()) {
-								console.log(`  Copying key "${String(key)}" from existing to value`);
 								valueWrapper._childCache.set(key, child);
 								// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 								// In live runtime, direct property access would return the wrapper instead of unwrapped value
@@ -230,7 +225,6 @@ export class ApiAssignment extends ComponentBase {
 							// Merge-replace mode: Don't copy anything
 							// Let the lazy folder materialize clean, its keys will be the "new" values
 							// After materialization, we'll need to merge in non-conflicting keys from existing
-							console.log("  [MERGE-REPLACE] Not copying existing keys - lazy folder will provide fresh values");
 							// Store reference to existing wrapper so we can merge after materialization
 							valueWrapper._mergeAfterMaterialize = {
 								existingWrapper,
@@ -238,9 +232,6 @@ export class ApiAssignment extends ComponentBase {
 							};
 						}
 
-						console.log("  After: value childCache size =", valueWrapper._childCache.size);
-						console.log("  After: value childCache keys =", Array.from(valueWrapper._childCache.keys()));
-						console.log("  Lazy folder wrapper enriched - replacing existing with value");
 						// Assign value to API (replace existing with lazy folder wrapper)
 						targetApi[key] = value;
 						return true; // Assignment completed
@@ -269,15 +260,15 @@ export class ApiAssignment extends ComponentBase {
 						if (!keyExists) {
 							console.log(`  [MERGE] Adding new key "${String(key)}" from value to existing`);
 							existingWrapper._childCache.set(key, child);
-						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-						// In live runtime, direct property access would return the wrapper instead of unwrapped value
-						// The proxy's get trap will handle unwrapping from _childCache
+							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+							// In live runtime, direct property access would return the wrapper instead of unwrapped value
+							// The proxy's get trap will handle unwrapping from _childCache
 						} else if (isMergeReplace) {
 							console.log(`  [MERGE-REPLACE] Overwriting key "${String(key)}" with value's version`);
 							existingWrapper._childCache.set(key, child);
-						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-						// In live runtime, direct property access would return the wrapper instead of unwrapped value
-						// The proxy's get trap will handle unwrapping from _childCache
+							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+							// In live runtime, direct property access would return the wrapper instead of unwrapped value
+							// The proxy's get trap will handle unwrapping from _childCache
 						} else {
 							console.log(`  [MERGE] Skipping key "${String(key)}" - already exists in existing (merge mode preserves first)`);
 						}

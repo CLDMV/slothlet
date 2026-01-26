@@ -179,6 +179,11 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
 
+			// Force materialization to complete
+			if (config.mode === "lazy") {
+				await math.add(0, 0);
+			}
+
 			// Check unique identifiers to verify BOTH sources present
 			const hasFileSource = math.collisionVersion === "collision-math-file";
 			const hasFolderSource = typeof math.multiply === "function";
@@ -205,7 +210,10 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const math = getMath(api, config.dir);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
-
+			// Force materialization to complete in lazy mode
+			if (config.mode === "lazy") {
+				await math.add(0, 0);
+			}
 			// Check unique identifiers to verify BOTH sources present
 			const hasFileSource = math.collisionVersion === "collision-math-file";
 			const hasFolderSource = typeof math.multiply === "function";
@@ -283,12 +291,18 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const math = getMath(api, config.dir);
 			expect(math).toBeDefined();
 			expect(math.add).toBeTypeOf("function");
-
-			// Warn mode should merge (with warning)
+			// Force materialization to complete in lazy mode
+			if (config.mode === "lazy") {
+				await math.add(0, 0);
+			}
+			// Warn mode merges file properties onto lazy folder proxy (preserving lazy capability)
+			// File exports: add (impl 1) + collisionVersion
+			// Folder exports: add (impl 2) + multiply + divide
+			// Expected: ALL properties present (file properties applied to lazy folder proxy)
 			const hasFileSource = math.collisionVersion === "collision-math-file";
 			const hasFolderSource = typeof math.multiply === "function";
 
-			// BOTH sources should be merged (warn just adds warning)
+			// BOTH sources should be merged (file properties → lazy folder proxy)
 			expect(hasFileSource).toBe(true);
 			expect(hasFolderSource).toBe(true);
 		});
