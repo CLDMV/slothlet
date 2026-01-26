@@ -116,6 +116,16 @@ export class UnifiedWrapper extends ComponentBase {
 		this._invalid = false;
 		this._impl = initialImpl;
 		this._userMetadata = userMetadata || {}; // Store user metadata for inheritance
+
+		// Debug userMetadata in constructor
+		if (apiPath && (apiPath.includes("config") || apiPath.includes("lookup"))) {
+			console.log("[UnifiedWrapper constructor]", {
+				apiPath,
+				userMetadata: this._userMetadata,
+				mode
+			});
+		}
+
 		this._state = {
 			materialized: initialImpl !== null,
 			inFlight: false

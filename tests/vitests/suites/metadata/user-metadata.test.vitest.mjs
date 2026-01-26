@@ -154,7 +154,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await materialize(api, "merged.config.settings.getPluginConfig");
-		const meta = api.merged.config.settings.getPluginConfig.__metadata;
+			const meta = api.merged.config.settings.getPluginConfig.__metadata;
 
 			// Should have both init and add metadata
 			if (meta.appVersion && meta.moduleVersion) {
@@ -298,7 +298,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			// Use helper function that calls self.slothlet.metadata.get() internally
 			if (api.metadataTestHelper?.getMetadata) {
 				const meta = await api.metadataTestHelper.getMetadata("lookup.config.settings.getPluginConfig");
-				
+
 				expect(meta).toBeDefined();
 				expect(meta.fromGet).toBe(true);
 				expect(meta.version).toBe("1.0.0");
@@ -310,7 +310,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			// Use helper function that calls self.slothlet.metadata.self() internally
 			if (api.metadataTestHelper?.getSelfMetadata) {
 				const meta = await api.metadataTestHelper.getSelfMetadata();
-				
+
 				expect(meta).toBeDefined();
 				expect(meta.moduleID).toBeDefined();
 				expect(meta.apiPath).toContain("getSelfMetadata");
@@ -321,7 +321,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			// Use helper function that tests caller tracking
 			if (api.metadataTestHelper?.testCaller) {
 				const result = await api.metadataTestHelper.testCaller();
-				
+
 				expect(result).toBeDefined();
 				expect(result.callerMeta).toBeDefined();
 				// Caller should be testCaller function itself
@@ -338,7 +338,7 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 			if (api.metadataTestHelper?.verifyMetadata) {
 				const result = await api.metadataTestHelper.verifyMetadata("verifiable.config.settings.getPluginConfig");
-				
+
 				expect(result.exists).toBe(true);
 				expect(result.hasSourceFolder).toBe(true);
 				expect(result.metadata.verified).toBe(true);
