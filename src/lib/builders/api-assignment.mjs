@@ -167,46 +167,107 @@ export class ApiAssignment extends ComponentBase {
 					console.log("[DEBUG:MERGE] Before adoption:");
 					console.log("  existing._impl:", existingWrapper._impl);
 					console.log("  existing._impl keys:", Object.keys(existingWrapper._impl || {}));
+					console.log("  existing._childCache size:", existingWrapper._childCache.size);
+					console.log("  existing._childCache keys:", Array.from(existingWrapper._childCache.keys()));
 					console.log("  existing has _materializeFunc:", existingWrapper._materializeFunc !== null);
 					console.log("  value._impl:", valueWrapper._impl);
 					console.log("  value._impl keys:", Object.keys(valueWrapper._impl || {}));
-					console.log("  value has _materializeFunc:", valueWrapper._materializeFunc !== null);
+					console.log("  value._childCache size:", valueWrapper._childCache.size);
+					console.log("  value._childCache keys:", Array.from(valueWrapper._childCache.keys()));
+					// Strategy: Keep the lazy wrapper and copy the other wrapper's childCache into it
+					// When the lazy wrapper materializes, it will merge with the copied childCache
+					const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
+					const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
 
-					// CRITICAL: For lazy unmaterialized wrappers, we can't merge synchronously
-					// Keep the existing (materialized) wrapper and skip merging the unmaterialized one
-					if (
-						(existingWrapper.mode === "lazy" && !existingWrapper._state.materialized) ||
-						(valueWrapper.mode === "lazy" && !valueWrapper._state.materialized)
-					) {
-						console.log("[DEBUG:MERGE] Cannot merge unmaterialized lazy wrappers - keeping existing");
-						return false; // Skip assignment, keep existing
-					} else {
-						// CRITICAL: For lazy wrappers, we need child caches populated
-						// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
-						// We can't await async _materialize(), so manually adopt children if needed
-						if (existingWrapper._impl && existingWrapper._childCache.size === 0) {
-							existingWrapper._adoptImplChildren();
-						}
-						if (valueWrapper._impl && valueWrapper._childCache.size === 0) {
-							valueWrapper._adoptImplChildren();
-						}
+					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
+						// Case 1: Lazy folder processed first, file processed second
+						// Copy value's childCache (file exports) into existing (lazy folder)
+						console.log("[DEBUG:MERGE] Existing is lazy unmaterialized - copying value's childCache");
+						console.log("  Before: existing childCache size =", existingWrapper._childCache.size);
+						console.log("  Before: value childCache size =", valueWrapper._childCache.size);
 
-						console.log("[DEBUG:MERGE] Merging wrapper child caches:");
-						console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
-						console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
-
-						// Merge value's child cache into existing's child cache
 						for (const [key, child] of valueWrapper._childCache.entries()) {
 							existingWrapper._childCache.set(key, child);
-							// Also update proxy target if it exists
 							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
 								existingWrapper._proxyTarget[key] = child;
 							}
 						}
 
-						console.log("  merged childCache keys:", Array.from(existingWrapper._childCache.keys()));
-						return true;
+						console.log("  After: existing childCache size =", existingWrapper._childCache.size);
+						console.log("  Lazy folder wrapper enriched - keeping existing");
+						return true; // Keep existing (lazy folder with copied file exports)
+					} else if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
+						// Case 2: File processed first, lazy folder processed second
+						// Copy existing's childCache (file exports) into value (lazy folder)
+						console.log("[DEBUG:MERGE] Value is lazy unmaterialized - copying existing's childCache");
+
+						console.log("  Before: value childCache keys =", Array.from(valueWrapper._childCache.keys()));
+
+						for (const [key, child] of existingWrapper._childCache.entries()) {
+							console.log(`  Copying key "${String(key)}" from existing to value`);
+							console.log(`    child type: ${typeof child}, has __wrapper: ${child?.__wrapper !== undefined}`);
+							if (child?.__wrapper) {
+								console.log(
+									`    wrapper mode: ${child.__wrapper.mode}, materialized: ${child.__wrapper._state?.materialized}, apiPath: ${child.__wrapper.apiPath}`
+								);
+							}
+							if (key === "add" && typeof child === "function") {
+								console.log(`    add function test: add(2,3) = ${child(2, 3)}`);
+							}
+							valueWrapper._childCache.set(key, child);
+							if (valueWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+								valueWrapper._proxyTarget[key] = child;
+							}
+						}
+
+						console.log("  After: value childCache size =", valueWrapper._childCache.size);
+						console.log("  After: value childCache keys =", Array.from(valueWrapper._childCache.keys()));
+						console.log("  Lazy folder wrapper enriched - replacing existing with value");
+						// Assign value to API (replace existing with lazy folder wrapper)
+						targetApi[key] = value;
+						return true; // Assignment completed
 					}
+
+					// CRITICAL: For materialized lazy wrappers, we need child caches populated
+					// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
+					if (existingWrapper._impl && existingWrapper._childCache.size === 0) {
+						existingWrapper._adoptImplChildren();
+					}
+					if (valueWrapper._impl && valueWrapper._childCache.size === 0) {
+						valueWrapper._adoptImplChildren();
+					}
+
+					console.log("[DEBUG:MERGE] Merging wrapper child caches:");
+					console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
+					console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
+
+					// Merge value's child cache into existing's child cache
+					// CRITICAL: In merge mode, only ADD new keys, don't OVERWRITE existing ones
+					for (const [key, child] of valueWrapper._childCache.entries()) {
+						if (!existingWrapper._childCache.has(key)) {
+							console.log(`  [MERGE] Adding new key "${String(key)}" from value to existing`);
+							existingWrapper._childCache.set(key, child);
+							// Also update proxy target if it exists
+							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+								existingWrapper._proxyTarget[key] = child;
+							}
+						} else {
+							console.log(`  [MERGE] Skipping key "${String(key)}" - already exists in existing (merge mode preserves first)`);
+						}
+					}
+
+					console.log("  merged childCache keys:", Array.from(existingWrapper._childCache.keys()));
+
+					// CRITICAL: If value is lazy unmaterialized, keep VALUE not existing
+					// The value wrapper has the materializeFunc that will load folder's exports
+					if (valueWrapper.mode === "lazy" && !valueWrapper._state.materialized && valueWrapper._materializeFunc) {
+						console.log("[DEBUG:MERGE] Keeping lazy folder wrapper (value) instead of file wrapper (existing)");
+						// Don't copy impl - the lazy folder needs to materialize on its own
+						// The childCache already has the file's exports from the copy above
+						return false; // Assign value, not existing
+					}
+
+					return true;
 				} else if (existingIsWrapper && !valueIsWrapper) {
 					// Existing is wrapper, new value is plain - merge into impl
 					const existingWrapper = existing.__wrapper;
