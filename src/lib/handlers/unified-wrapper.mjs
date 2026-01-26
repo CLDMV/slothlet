@@ -117,15 +117,6 @@ export class UnifiedWrapper extends ComponentBase {
 		this._impl = initialImpl;
 		this._userMetadata = userMetadata || {}; // Store user metadata for inheritance
 
-		// Debug userMetadata in constructor
-		if (apiPath && (apiPath.includes("config") || apiPath.includes("lookup"))) {
-			console.log("[UnifiedWrapper constructor]", {
-				apiPath,
-				userMetadata: this._userMetadata,
-				mode
-			});
-		}
-
 		this._state = {
 			materialized: initialImpl !== null,
 			inFlight: false
@@ -487,9 +478,20 @@ export class UnifiedWrapper extends ComponentBase {
 		const wrapper = this;
 		const waitingTarget = createNamedProxyTarget(`${wrapper.apiPath}_waitingProxy`, "waitingProxyTarget");
 
+		// Link waiting proxy back to wrapper so metadata can be found
+		waitingTarget.__wrapper = wrapper;
+
 		return new Proxy(waitingTarget, {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
+				if (prop === "__wrapper") return wrapper;
+				if (prop === "__metadata") {
+					// Return metadata through wrapper
+					if (wrapper.slothlet.handlers?.metadata) {
+						return wrapper.slothlet.handlers.metadata.getMetadata(wrapper);
+					}
+					return {};
+				}
 				if (typeof prop === "symbol") return undefined;
 				if (prop === "length") {
 					// For waiting proxies in lazy mode, we can't know the length until materialized

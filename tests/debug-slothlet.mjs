@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-24 18:05:07 -08:00 (1769306707)
+ *	@Last modified time: 2026-01-25 18:01:10 -08:00 (1769392870)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1143,6 +1143,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	const significantNestedDifferences = compared.nestedDifferences.filter(
 		(diff) =>
 			diff.path !== "__slothletInstance.debugLogger.config.mode" &&
+			diff.path !== "__slothletInstance.handlers.metadata._instanceId" &&
 			diff.path !== "__slothletInstance.handlers.apiManager.state.initialConfig.mode"
 	);
 

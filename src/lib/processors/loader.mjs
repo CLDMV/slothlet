@@ -30,14 +30,19 @@ export class Loader extends ComponentBase {
 	 * Load a single module
 	 * @param {string} filePath - Path to module file
 	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
+	 * @param {string} [moduleID] - Module ID for additional cache busting (used in addApi)
 	 * @returns {Promise<Object>} Loaded module
 	 * @public
 	 */
-	async loadModule(filePath, instanceID) {
+	async loadModule(filePath, instanceID, moduleID) {
 		try {
 			const fileUrl = pathToFileURL(filePath).href;
 			// Cache bust using instanceID to prevent cross-instance pollution
-			const cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
+			// Add moduleID for addApi calls to prevent cache reuse between different API paths
+			let cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
+			if (moduleID) {
+				cacheBustedUrl += `&module=${moduleID}`;
+			}
 			const module = await import(cacheBustedUrl);
 			return module;
 		} catch (error) {
