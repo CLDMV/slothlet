@@ -752,9 +752,6 @@ export class ModesProcessor extends ComponentBase {
 									implToWrap = modContent;
 								}
 
-								console.log("[DEBUG:FOLDER-FLATTEN] implToWrap keys:", Object.keys(implToWrap || {}));
-								console.log("[DEBUG:FOLDER-FLATTEN] implToWrap type:", typeof implToWrap);
-
 								// Flatten: put the module content directly at targetApi[subDirName]
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode,
