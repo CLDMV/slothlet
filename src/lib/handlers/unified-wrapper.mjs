@@ -206,10 +206,11 @@ export class UnifiedWrapper extends ComponentBase {
 		if (newImpl && this.slothlet.handlers?.metadata) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
 			if (wrapperMetadata && wrapperMetadata.filePath) {
+				const extractedModuleId = wrapperMetadata.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null;
 				this.slothlet.handlers.metadata.tagSystemMetadata(newImpl, {
 					filePath: wrapperMetadata.filePath,
 					apiPath: this.apiPath,
-					moduleId: wrapperMetadata.moduleId,
+					moduleId: extractedModuleId,
 					sourceFolder: wrapperMetadata.sourceFolder
 				});
 			}

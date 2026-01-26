@@ -472,7 +472,7 @@ export class ApiManager extends ComponentBase {
 	 * @param {boolean} options.mutateExisting - Mutate existing values in place.
 	 * @param {boolean} options.allowOverwrite - Allow overwriting existing values.
 	 * @param {string} [options.collisionMode] - Collision handling mode (skip/warn/replace/merge/error).
-	 * @returns {Promise<void>}
+	 * @returns {Promise<boolean>} True if value was set, false if skipped due to collision.
 	 * @throws {SlothletError} When overwrite is not allowed or collision mode is "error".
 	 * @private
 	 *
@@ -523,7 +523,7 @@ export class ApiManager extends ComponentBase {
 					path: parts.join("."),
 					mode: "skip"
 				});
-				return;
+				return false;
 			}
 
 			if (collisionMode === "warn") {
@@ -532,7 +532,7 @@ export class ApiManager extends ComponentBase {
 						apiPath: parts.join(".")
 					});
 				}
-				return;
+				return false;
 			}
 
 			if (collisionMode === "merge") {
@@ -545,7 +545,7 @@ export class ApiManager extends ComponentBase {
 						mode: "merge"
 					});
 					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true }, this.config);
-					return;
+					return true;
 				} else {
 					// Can't merge primitives - log warning and keep existing
 					if (this.slothlet && !this.config?.silent) {
@@ -553,7 +553,7 @@ export class ApiManager extends ComponentBase {
 							apiPath: parts.join(".")
 						});
 					}
-					return;
+					return false;
 				}
 			}
 		}
@@ -564,6 +564,7 @@ export class ApiManager extends ComponentBase {
 			finalKey
 		});
 		parent[finalKey] = value;
+		return true;
 	}
 
 	/**
@@ -916,18 +917,16 @@ export class ApiManager extends ComponentBase {
 			collisionMode
 		});
 
-		await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
+		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 			mutateExisting,
 			allowOverwrite,
 			collisionMode
 		});
 
-		// Apply metadata to all functions in the ACTUAL API (not apiToMerge, since merging may have changed things)
-		if (metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
-			const actualValue = this.getValueAtPath(this.slothlet.api, parts);
-			if (actualValue) {
-				this.applyMetadataRecursively(actualValue, metadata);
-			}
+		// Only register user metadata if the API was actually set (not skipped due to collision)
+		// Metadata will be looked up via apiPath stored in system metadata on each wrapper
+		if (boundApiSet && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+			this.slothlet.handlers.metadata.registerUserMetadata(normalizedPath, metadata);
 		}
 
 		if (this.slothlet.handlers.ownership && moduleId) {
@@ -953,21 +952,35 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Remove API modules at runtime.
-	 * @param {object} params - Remove parameters.
-	 * @param {?string} params.apiPath - API path to remove.
-	 * @param {?string} params.moduleId - ModuleId to remove.
+	 * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.
 	 * @returns {Promise<void>}
 	 * @throws {SlothletError} When inputs are invalid.
 	 * @package
 	 *
 	 * @description
 	 * Removes an API subtree by apiPath or removes all paths owned by a moduleId.
+	 * Automatically detects whether the parameter is a moduleId (contains underscore) or apiPath.
 	 *
 	 * @example
-	 * await manager.removeApiComponent({ apiPath: "plugins.tools" });
+	 * await manager.removeApiComponent("plugins.tools"); // Remove by API path
+	 *
+	 * @example
+	 * await manager.removeApiComponent("plugins_abc123"); // Remove by module ID
 	 */
-	async removeApiComponent(params) {
-		const { apiPath, moduleId } = params || {};
+	async removeApiComponent(pathOrModuleId) {
+		if (typeof pathOrModuleId !== "string" || !pathOrModuleId) {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "pathOrModuleId",
+				expected: "non-empty string",
+				received: typeof pathOrModuleId,
+				validationError: true
+			});
+		}
+
+		// Detect if this is a moduleId (contains underscore) or apiPath
+		const isModuleId = pathOrModuleId.includes("_");
+		const apiPath = isModuleId ? null : pathOrModuleId;
+		const moduleId = isModuleId ? pathOrModuleId : null;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
@@ -984,6 +997,10 @@ export class ApiManager extends ComponentBase {
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
 				this.deletePath(this.slothlet.boundApi, pathParts);
+				// Clean up user metadata
+				if (this.slothlet.handlers.metadata) {
+					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+				}
 				return;
 			}
 			if (ownershipResult.action === "restore") {
@@ -1016,6 +1033,10 @@ export class ApiManager extends ComponentBase {
 				const { parts } = this.normalizeApiPath(removedPath);
 				this.deletePath(this.slothlet.api, parts);
 				this.deletePath(this.slothlet.boundApi, parts);
+				// Clean up user metadata for removed path
+				if (this.slothlet.handlers.metadata) {
+					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(removedPath);
+				}
 			}
 			for (const rollback of result.rolledBack) {
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
@@ -1052,11 +1073,19 @@ export class ApiManager extends ComponentBase {
 		if (ownershipResult.action === "none") {
 			this.deletePath(this.slothlet.api, parts);
 			this.deletePath(this.slothlet.boundApi, parts);
+			// Clean up user metadata
+			if (this.slothlet.handlers.metadata) {
+				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+			}
 			return;
 		}
 		if (ownershipResult.action === "delete") {
 			this.deletePath(this.slothlet.api, parts);
 			this.deletePath(this.slothlet.boundApi, parts);
+			// Clean up user metadata
+			if (this.slothlet.handlers.metadata) {
+				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+			}
 			return;
 		}
 		if (ownershipResult.action === "restore") {

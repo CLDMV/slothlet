@@ -224,7 +224,15 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.api.remove("plugins.tools");
 				 */
 				remove: async function slothlet_api_remove(pathOrModuleId) {
-					return slothlet.handlers.apiManager.removeApiComponent({ pathOrModuleId });
+					if (typeof pathOrModuleId !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "pathOrModuleId",
+							expected: "string",
+							received: typeof pathOrModuleId,
+							validationError: true
+						});
+					}
+					return slothlet.handlers.apiManager.removeApiComponent(pathOrModuleId);
 				},
 
 				/**

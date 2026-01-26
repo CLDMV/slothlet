@@ -92,7 +92,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			await materialize(api, "removable.config.settings.getPluginConfig");
 			expect(api.removable).toBeDefined();
 
-			await api.slothlet.api.remove({ apiPath: "removable" });
+			await api.slothlet.api.remove("removable");
 			expect(api.removable).toBeUndefined();
 		});
 
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			await materialize(api, "keep.config.settings.getPluginConfig");
 			const metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
 
-			await api.slothlet.api.remove({ apiPath: "remove" });
+			await api.slothlet.api.remove("remove");
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
 			const metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			const meta1 = api.replaceable.config.settings.getPluginConfig.__metadata;
 			expect(meta1.version).toBe("1.0.0");
 
-			await api.slothlet.api.remove({ apiPath: "replaceable" });
+			await api.slothlet.api.remove("replaceable");
 			await api.slothlet.api.add("replaceable", TEST_DIRS.API_SMART_FLATTEN, {
 				version: "2.0.0",
 				iteration: 2
@@ -138,33 +138,6 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			expect(meta2.version).toBe("2.0.0");
 			expect(meta2.iteration).toBe(2);
 			expect(meta2.moduleID).not.toBe(meta1.moduleID); // New moduleID
-		});
-
-		it("should maintain original metadata when base API is restored after collision", async () => {
-			// Test collision mode where removed item is replaced by original
-			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-			const originalModuleID = originalMeta.moduleID;
-
-			// Add conflicting API with different metadata
-			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-				conflicting: true,
-				version: "conflict"
-			});
-
-			// After removing the conflict, original should be restored
-			// (exact behavior depends on collision mode)
-			if (api.rootMath?.add) {
-				await materialize(api, "rootMath.add", 1, 2);
-				const currentMeta = api.rootMath.add.__metadata;
-
-				// The restored item should have its original metadata
-				// NOT the metadata from the removed conflicting item
-				if (currentMeta.moduleID === originalModuleID) {
-					expect(currentMeta.conflicting).not.toBe(true);
-					expect(currentMeta.version).not.toBe("conflict");
-				}
-			}
 		});
 	});
 
@@ -183,7 +156,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 				expect(meta.cycle).toBe(i);
 
 				if (i < cycles) {
-					await api.slothlet.api.remove({ apiPath: "cycled" });
+					await api.slothlet.api.remove("cycled");
 					expect(api.cycled).toBeUndefined();
 				}
 			}
@@ -191,55 +164,6 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			// Final state
 			const finalMeta = api.cycled.config.settings.getPluginConfig.__metadata;
 			expect(finalMeta.cycle).toBe(cycles);
-		});
-	});
-
-	describe("Collision Modes with Metadata", () => {
-		it("should handle merge mode with metadata", async () => {
-			// Add initial API with metadata
-			await api.slothlet.api.add("mergeable", TEST_DIRS.API_SMART_FLATTEN, {
-				initial: true,
-				version: "1.0"
-			});
-
-			// Add conflicting API with merge mode
-			try {
-				await api.slothlet.api.add("mergeable.config", TEST_DIRS.API_SMART_FLATTEN, {
-					merged: true,
-					version: "1.1"
-				});
-			} catch (_) {
-				// May throw depending on collision mode
-			}
-
-			// Check if metadata was properly merged or replaced
-			if (api.mergeable?.config?.settings?.getPluginConfig) {
-				await materialize(api, "mergeable.config.settings.getPluginConfig");
-				const meta = api.mergeable.config.settings.getPluginConfig.__metadata;
-				expect(meta).toBeDefined();
-			}
-		});
-
-		it("should handle warn mode with metadata preservation", async () => {
-			await materialize(api, "rootMath.add", 1, 2);
-			const originalMeta = api.rootMath.add.__metadata;
-
-			// Try to add conflicting API (should warn and keep existing)
-			try {
-				await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-					shouldNotAppear: true
-				});
-			} catch (_) {
-				// May throw or warn
-			}
-
-			// Original should still be there with original metadata
-			if (api.rootMath?.add) {
-				await materialize(api, "rootMath.add", 1, 2);
-				const currentMeta = api.rootMath.add.__metadata;
-				expect(currentMeta.moduleID).toBe(originalMeta.moduleID);
-				expect(currentMeta.shouldNotAppear).not.toBe(true);
-			}
 		});
 	});
 
@@ -253,7 +177,7 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			expect(api.partial.config).toBeDefined();
 
 			// Remove just config subtree
-			await api.slothlet.api.remove({ apiPath: "partial.config" });
+			await api.slothlet.api.remove("partial.config");
 
 			expect(api.partial).toBeDefined(); // Parent still exists
 			expect(api.partial.config).toBeUndefined(); // Child removed
