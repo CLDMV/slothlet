@@ -21,11 +21,12 @@ export class Config extends ComponentBase {
 	 *
 	 * @description
 	 * Normalizes collision handling configuration for both initial load (buildAPI)
-	 * and hot reload (api.add) contexts. Supports five collision modes:
+	 * and hot reload (api.add) contexts. Supports six collision modes:
 	 * - "skip": Silently ignore collision, keep existing value
 	 * - "warn": Warn about collision, keep existing value
 	 * - "replace": Replace existing value completely
 	 * - "merge": Merge properties (preserve original + add new)
+	 * - "merge-replace": Merge properties (add new + overwrite existing with new values)
 	 * - "error": Throw error on collision
 	 *
 	 * @example
@@ -39,7 +40,7 @@ export class Config extends ComponentBase {
 	 * // => { initial: "warn", addApi: "error" }
 	 */
 	normalizeCollision(collision) {
-		const validModes = ["skip", "warn", "replace", "merge", "error"];
+		const validModes = ["skip", "warn", "replace", "merge", "merge-replace", "error"];
 		const defaultMode = "merge";
 
 		// String shorthand applies to both contexts

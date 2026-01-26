@@ -119,8 +119,10 @@ export class ApiAssignment extends ComponentBase {
 				existingType: typeof existing,
 				valueType: typeof value
 			});
+			console.log("[DEBUG:COLLISION] Full config.collision:", config.collision);
 			// Get collision mode from config.collision.initial or config.collision.addApi
 			const collisionMode = config.collision?.[collisionContext] || "merge";
+			console.log(`[DEBUG:COLLISION] Resolved collisionMode: "${collisionMode}"`);
 
 			if (collisionMode === "error") {
 				const SlothletError = this.slothlet?.SlothletError || Error;
@@ -141,7 +143,8 @@ export class ApiAssignment extends ComponentBase {
 				// Fall through to replace
 			}
 
-			if (collisionMode === "merge") {
+			if (collisionMode === "merge" || collisionMode === "merge-replace") {
+				const isMergeReplace = collisionMode === "merge-replace";
 				// Special handling for wrapper proxies - merge their implementations
 				const existingIsWrapper = this.isWrapperProxy(existing);
 				const valueIsWrapper = this.isWrapperProxy(value);
@@ -199,25 +202,40 @@ export class ApiAssignment extends ComponentBase {
 					} else if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
 						// Case 2: File processed first, lazy folder processed second
 						// Copy existing's childCache (file exports) into value (lazy folder)
+						// BUT: In merge-replace mode, DON'T copy keys that will be overwritten by folder
 						console.log("[DEBUG:MERGE] Value is lazy unmaterialized - copying existing's childCache");
+						console.log(
+							"  Merge mode:",
+							isMergeReplace ? "merge-replace (skip existing, folder will overwrite)" : "merge (copy all, folder adds new)"
+						);
 
 						console.log("  Before: value childCache keys =", Array.from(valueWrapper._childCache.keys()));
 
-						for (const [key, child] of existingWrapper._childCache.entries()) {
-							console.log(`  Copying key "${String(key)}" from existing to value`);
-							console.log(`    child type: ${typeof child}, has __wrapper: ${child?.__wrapper !== undefined}`);
-							if (child?.__wrapper) {
-								console.log(
-									`    wrapper mode: ${child.__wrapper.mode}, materialized: ${child.__wrapper._state?.materialized}, apiPath: ${child.__wrapper.apiPath}`
-								);
+						// In merge-replace mode, we need to know which keys the lazy folder will provide
+						// But we can't know that until it materializes. Solution: Don't copy ANY keys in merge-replace,
+						// let the folder materialize and provide all its keys fresh, then existing non-conflicting keys
+						// can be added via the normal merge process in _adoptImplChildren
+
+						if (!isMergeReplace) {
+							// Merge mode: Copy all existing keys into lazy folder
+							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
+							for (const [key, child] of existingWrapper._childCache.entries()) {
+								console.log(`  Copying key "${String(key)}" from existing to value`);
+								valueWrapper._childCache.set(key, child);
+								if (valueWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+									valueWrapper._proxyTarget[key] = child;
+								}
 							}
-							if (key === "add" && typeof child === "function") {
-								console.log(`    add function test: add(2,3) = ${child(2, 3)}`);
-							}
-							valueWrapper._childCache.set(key, child);
-							if (valueWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-								valueWrapper._proxyTarget[key] = child;
-							}
+						} else {
+							// Merge-replace mode: Don't copy anything
+							// Let the lazy folder materialize clean, its keys will be the "new" values
+							// After materialization, we'll need to merge in non-conflicting keys from existing
+							console.log("  [MERGE-REPLACE] Not copying existing keys - lazy folder will provide fresh values");
+							// Store reference to existing wrapper so we can merge after materialization
+							valueWrapper._mergeAfterMaterialize = {
+								existingWrapper,
+								isMergeReplace: true
+							};
 						}
 
 						console.log("  After: value childCache size =", valueWrapper._childCache.size);
@@ -240,12 +258,23 @@ export class ApiAssignment extends ComponentBase {
 					console.log("[DEBUG:MERGE] Merging wrapper child caches:");
 					console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
 					console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
+					console.log("  merge mode:", isMergeReplace ? "merge-replace (overwrite existing)" : "merge (keep first)");
 
 					// Merge value's child cache into existing's child cache
 					// CRITICAL: In merge mode, only ADD new keys, don't OVERWRITE existing ones
+					// In merge-replace mode, ADD new keys AND OVERWRITE existing ones
 					for (const [key, child] of valueWrapper._childCache.entries()) {
-						if (!existingWrapper._childCache.has(key)) {
+						const keyExists = existingWrapper._childCache.has(key);
+
+						if (!keyExists) {
 							console.log(`  [MERGE] Adding new key "${String(key)}" from value to existing`);
+							existingWrapper._childCache.set(key, child);
+							// Also update proxy target if it exists
+							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+								existingWrapper._proxyTarget[key] = child;
+							}
+						} else if (isMergeReplace) {
+							console.log(`  [MERGE-REPLACE] Overwriting key "${String(key)}" with value's version`);
 							existingWrapper._childCache.set(key, child);
 							// Also update proxy target if it exists
 							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {

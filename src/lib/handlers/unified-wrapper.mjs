@@ -486,6 +486,30 @@ export class UnifiedWrapper extends ComponentBase {
 
 		console.log(`[DEBUG:ADOPT] END - childCache size: ${this._childCache.size}, childCache keys:`, Array.from(this._childCache.keys()));
 		console.log(`[DEBUG:ADOPT] END - wrapper apiPath: ${this.apiPath}, wrapper mode: ${this.mode}`);
+
+		// Handle merge-after-materialize for lazy wrappers in merge-replace mode
+		if (this._mergeAfterMaterialize) {
+			console.log("[DEBUG:ADOPT] Processing _mergeAfterMaterialize");
+			const { existingWrapper, isMergeReplace } = this._mergeAfterMaterialize;
+
+			// Now that this wrapper has materialized with its own keys,
+			// add non-conflicting keys from the existing wrapper
+			for (const [key, child] of existingWrapper._childCache.entries()) {
+				if (!this._childCache.has(key)) {
+					console.log(`  [MERGE-AFTER] Adding non-conflicting key "${String(key)}" from existing`);
+					this._childCache.set(key, child);
+					if (this._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+						this._proxyTarget[key] = child;
+					}
+				} else {
+					console.log(`  [MERGE-AFTER] Skipping key "${String(key)}" - this wrapper's version takes precedence (merge-replace)`);
+				}
+			}
+
+			// Clear the merge info
+			delete this._mergeAfterMaterialize;
+			console.log("[DEBUG:ADOPT] After merge: childCache size:", this._childCache.size, "keys:", Array.from(this._childCache.keys()));
+		}
 	}
 
 	/**
