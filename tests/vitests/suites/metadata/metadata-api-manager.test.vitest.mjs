@@ -105,13 +105,13 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 				temporary: true
 			});
 
-		await materialize(api, "keep.config.settings.getPluginConfig");
-		const metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
+			await materialize(api, "keep.config.settings.getPluginConfig");
+			const metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
 
-		await api.slothlet.api.remove({ apiPath: "remove" });
+			await api.slothlet.api.remove({ apiPath: "remove" });
 
-		await materialize(api, "keep.config.settings.getPluginConfig");
-		const metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
+			await materialize(api, "keep.config.settings.getPluginConfig");
+			const metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
 		});
 	});
 

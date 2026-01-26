@@ -259,7 +259,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 		it("should handle metadata on named exports", async () => {
 			await api.slothlet.api.add("named", TEST_DIRS.API_SMART_FLATTEN);
-			
+
 			if (api.named?.config?.settings?.getPluginConfig) {
 				await materialize(api.named.config.settings.getPluginConfig);
 				const meta = api.named.config.settings.getPluginConfig.__metadata;

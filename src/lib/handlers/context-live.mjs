@@ -67,7 +67,7 @@ export class LiveContextManager {
 		// Set current instance (synchronous)
 		const previousInstanceID = this.currentInstanceID;
 		const previousWrapper = store.currentWrapper;
-		
+
 		this.currentInstanceID = instanceID;
 		if (currentWrapper) {
 			store.currentWrapper = currentWrapper;

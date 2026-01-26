@@ -230,9 +230,10 @@ class Slothlet {
 
 		const contextManager = this.contextManager;
 		const metadataHandler = this.handlers.metadata;
+		const apiRoot = api; // Use the api parameter passed in (apiWithBuiltins)
 
 		// Add get() - Get metadata by API path string
-		api.slothlet.metadata.get = function slothlet_metadata_get_runtime(path) {
+		api.slothlet.metadata.get = async function slothlet_metadata_get_runtime(path) {
 			if (typeof path !== "string") {
 				throw new SlothletError("INVALID_ARGUMENT", {
 					argument: "path",
@@ -250,19 +251,25 @@ class Slothlet {
 				});
 			}
 
-			// Traverse the path
+			// Traverse the path from API root (not from current module's self)
 			const parts = path.split(".");
-			let target = ctx.self;
+			let target = apiRoot;
 
 			for (const part of parts) {
-				if (!target || typeof target !== "object") {
+				// Allow traversal through both objects AND functions (functions can have properties)
+				if (!target || (typeof target !== "object" && typeof target !== "function")) {
 					return null;
 				}
 				target = target[part];
 			}
 
+			// If target is a lazy proxy (has __materialize), materialize it first
+			if (target && typeof target.__materialize === "function") {
+				await target.__materialize();
+			}
+
 			// Get metadata for the resolved function
-			if (typeof target === "function") {
+			if (typeof target === "function" || (target && target._impl)) {
 				return metadataHandler.getMetadata(target);
 			}
 

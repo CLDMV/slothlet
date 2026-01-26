@@ -83,10 +83,11 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
  * @param {Object} dir - Directory structure
  * @param {string} apiPath - Current API path
  * @param {Object} slothlet - Slothlet instance
+ * @param {Object} userMetadata - User metadata to inherit from parent
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, apiPath, slothlet) {
+function createLazyWrapper(dir, apiPath, slothlet, userMetadata = {}) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
 		slothlet.debug("modes", {
@@ -149,10 +150,10 @@ function createLazyWrapper(dir, apiPath, slothlet) {
 			}
 		}
 
-		// Create lazy wrappers for subdirectories
+		// Create lazy wrappers for subdirectories (inherit userMetadata from parent)
 		for (const subdir of dir.children.directories || []) {
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet);
+			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, userMetadata);
 		}
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc complete",
@@ -169,7 +170,8 @@ function createLazyWrapper(dir, apiPath, slothlet) {
 		apiPath,
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
-		materializeOnCreate: slothlet.config.backgroundMaterialize
+		materializeOnCreate: slothlet.config.backgroundMaterialize,
+		userMetadata
 	});
 
 	return wrapper.createProxy();
