@@ -47,7 +47,7 @@ export class ApiAssignment extends ComponentBase {
 	 * @private
 	 */
 	isWrapperProxy(value) {
-		return value && typeof value === "object" && "__wrapper" in value;
+		return value && (typeof value === "object" || typeof value === "function") && "__wrapper" in value;
 	}
 
 	/**
@@ -113,6 +113,12 @@ export class ApiAssignment extends ComponentBase {
 
 		// Case 2: Collision detection with config
 		if (useCollisionDetection && config && existing !== undefined) {
+			console.log(`[DEBUG:COLLISION] Detected collision at key "${String(key)}"`, {
+				collisionContext,
+				mode: config.collision?.[collisionContext] || "merge",
+				existingType: typeof existing,
+				valueType: typeof value
+			});
 			// Get collision mode from config.collision.initial or config.collision.addApi
 			const collisionMode = config.collision?.[collisionContext] || "merge";
 
@@ -140,26 +146,67 @@ export class ApiAssignment extends ComponentBase {
 				const existingIsWrapper = this.isWrapperProxy(existing);
 				const valueIsWrapper = this.isWrapperProxy(value);
 
+				console.log("[DEBUG:MERGE] Checking wrapper status:", {
+					existingIsWrapper,
+					valueIsWrapper,
+					existingType: typeof existing,
+					valueType: typeof value,
+					valueHasWrapper: value?.__wrapper !== undefined,
+					valueConstructor: value?.constructor?.name,
+					existingMode: existing?.__wrapper?.mode,
+					valueMode: value?.__wrapper?.mode,
+					existingMaterialized: existing?.__wrapper?._state?.materialized,
+					valueMaterialized: value?.__wrapper?._state?.materialized
+				});
+
 				if (existingIsWrapper && valueIsWrapper) {
 					// Both are wrappers - merge their child caches (properties are moved there during adoption)
 					const existingWrapper = existing.__wrapper;
 					const valueWrapper = value.__wrapper;
 
-					console.log("[DEBUG:MERGE] Merging wrapper child caches:");
-					console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
-					console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
+					console.log("[DEBUG:MERGE] Before adoption:");
+					console.log("  existing._impl:", existingWrapper._impl);
+					console.log("  existing._impl keys:", Object.keys(existingWrapper._impl || {}));
+					console.log("  existing has _materializeFunc:", existingWrapper._materializeFunc !== null);
+					console.log("  value._impl:", valueWrapper._impl);
+					console.log("  value._impl keys:", Object.keys(valueWrapper._impl || {}));
+					console.log("  value has _materializeFunc:", valueWrapper._materializeFunc !== null);
 
-					// Merge value's child cache into existing's child cache
-					for (const [key, child] of valueWrapper._childCache.entries()) {
-						existingWrapper._childCache.set(key, child);
-						// Also update proxy target if it exists
-						if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-							existingWrapper._proxyTarget[key] = child;
+					// CRITICAL: For lazy unmaterialized wrappers, we can't merge synchronously
+					// Fall through to replace behavior (value overwrites existing)
+					if (
+						(existingWrapper.mode === "lazy" && !existingWrapper._state.materialized) ||
+						(valueWrapper.mode === "lazy" && !valueWrapper._state.materialized)
+					) {
+						console.log("[DEBUG:MERGE] Cannot merge unmaterialized lazy wrappers - using replace");
+						// Fall through to replace behavior below
+					} else {
+						// CRITICAL: For lazy wrappers, we need child caches populated
+						// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
+						// We can't await async _materialize(), so manually adopt children if needed
+						if (existingWrapper._impl && existingWrapper._childCache.size === 0) {
+							existingWrapper._adoptImplChildren();
 						}
-					}
+						if (valueWrapper._impl && valueWrapper._childCache.size === 0) {
+							valueWrapper._adoptImplChildren();
+						}
 
-					console.log("  merged childCache keys:", Array.from(existingWrapper._childCache.keys()));
-					return true;
+						console.log("[DEBUG:MERGE] Merging wrapper child caches:");
+						console.log("  existing childCache keys:", Array.from(existingWrapper._childCache.keys()));
+						console.log("  value childCache keys:", Array.from(valueWrapper._childCache.keys()));
+
+						// Merge value's child cache into existing's child cache
+						for (const [key, child] of valueWrapper._childCache.entries()) {
+							existingWrapper._childCache.set(key, child);
+							// Also update proxy target if it exists
+							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
+								existingWrapper._proxyTarget[key] = child;
+							}
+						}
+
+						console.log("  merged childCache keys:", Array.from(existingWrapper._childCache.keys()));
+						return true;
+					}
 				} else if (existingIsWrapper && !valueIsWrapper) {
 					// Existing is wrapper, new value is plain - merge into impl
 					const existingWrapper = existing.__wrapper;
