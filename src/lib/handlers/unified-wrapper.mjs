@@ -447,9 +447,9 @@ export class UnifiedWrapper extends ComponentBase {
 			if (wrapped) {
 				console.log(`[DEBUG:ADOPT] ✓ Created wrapper for "${String(key)}", adding to childCache`);
 				this._childCache.set(key, wrapped);
-				if (this._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-					this._proxyTarget[key] = wrapped;
-				}
+				// NOTE: Do NOT set wrapped on _proxyTarget - it's a wrapper object
+				// In live runtime, direct property access would return the wrapper instead of unwrapped value
+				// The proxy's get trap will handle unwrapping from _childCache
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
@@ -498,9 +498,9 @@ export class UnifiedWrapper extends ComponentBase {
 				if (!this._childCache.has(key)) {
 					console.log(`  [MERGE-AFTER] Adding non-conflicting key "${String(key)}" from existing`);
 					this._childCache.set(key, child);
-					if (this._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-						this._proxyTarget[key] = child;
-					}
+					// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+					// In live runtime, direct property access would return the wrapper instead of unwrapped value
+					// The proxy's get trap will handle unwrapping from _childCache
 				} else {
 					console.log(`  [MERGE-AFTER] Skipping key "${String(key)}" - this wrapper's version takes precedence (merge-replace)`);
 				}
@@ -711,11 +711,9 @@ export class UnifiedWrapper extends ComponentBase {
 			configurable: true
 		});
 		wrapper._proxyTarget = proxyTarget;
-		for (const [key, value] of wrapper._childCache.entries()) {
-			if (typeof key === "string" || typeof key === "symbol") {
-				proxyTarget[key] = value;
-			}
-		}
+		// NOTE: Do NOT copy _childCache entries to _proxyTarget
+		// They are wrapper objects, and in live runtime direct property access would return wrappers
+		// The proxy's get trap will handle unwrapping from _childCache
 
 		/**
 		 * @private
@@ -862,7 +860,19 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			if (wrapper._childCache.has(prop)) {
-				return wrapper._childCache.get(prop);
+				const cached = wrapper._childCache.get(prop);
+				// If it's a wrapper with a primitive impl, return the unwrapped value
+				// This ensures live runtime gets the actual value, not the wrapper object
+				if (cached && cached.__wrapper && cached.__wrapper._impl !== null && cached.__wrapper._impl !== undefined) {
+					const cachedImpl = cached.__wrapper._impl;
+					// For primitives, return the unwrapped value
+					const cachedType = typeof cachedImpl;
+					if (cachedType === "string" || cachedType === "number" || cachedType === "boolean" || cachedType === "bigint" || cachedType === "symbol") {
+						return cachedImpl;
+					}
+				}
+				// For objects and functions, return the wrapper/proxy as-is
+				return cached;
 			}
 
 			let value = wrapper._impl ? wrapper._impl[prop] : undefined;

@@ -191,10 +191,10 @@ export class ApiAssignment extends ComponentBase {
 
 						for (const [key, child] of valueWrapper._childCache.entries()) {
 							existingWrapper._childCache.set(key, child);
-							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-								existingWrapper._proxyTarget[key] = child;
-							}
-						}
+						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+						// In live runtime, direct property access would return the wrapper instead of unwrapped value
+						// The proxy's get trap will handle unwrapping from _childCache
+					}
 
 						console.log("  After: existing childCache size =", existingWrapper._childCache.size);
 						console.log("  Lazy folder wrapper enriched - keeping existing");
@@ -222,9 +222,9 @@ export class ApiAssignment extends ComponentBase {
 							for (const [key, child] of existingWrapper._childCache.entries()) {
 								console.log(`  Copying key "${String(key)}" from existing to value`);
 								valueWrapper._childCache.set(key, child);
-								if (valueWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-									valueWrapper._proxyTarget[key] = child;
-								}
+								// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+								// In live runtime, direct property access would return the wrapper instead of unwrapped value
+								// The proxy's get trap will handle unwrapping from _childCache
 							}
 						} else {
 							// Merge-replace mode: Don't copy anything
@@ -269,17 +269,15 @@ export class ApiAssignment extends ComponentBase {
 						if (!keyExists) {
 							console.log(`  [MERGE] Adding new key "${String(key)}" from value to existing`);
 							existingWrapper._childCache.set(key, child);
-							// Also update proxy target if it exists
-							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-								existingWrapper._proxyTarget[key] = child;
-							}
+						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+						// In live runtime, direct property access would return the wrapper instead of unwrapped value
+						// The proxy's get trap will handle unwrapping from _childCache
 						} else if (isMergeReplace) {
 							console.log(`  [MERGE-REPLACE] Overwriting key "${String(key)}" with value's version`);
 							existingWrapper._childCache.set(key, child);
-							// Also update proxy target if it exists
-							if (existingWrapper._proxyTarget && (typeof key === "string" || typeof key === "symbol")) {
-								existingWrapper._proxyTarget[key] = child;
-							}
+						// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+						// In live runtime, direct property access would return the wrapper instead of unwrapped value
+						// The proxy's get trap will handle unwrapping from _childCache
 						} else {
 							console.log(`  [MERGE] Skipping key "${String(key)}" - already exists in existing (merge mode preserves first)`);
 						}
