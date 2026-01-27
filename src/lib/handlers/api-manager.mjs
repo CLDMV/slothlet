@@ -930,8 +930,11 @@ export class ApiManager extends ComponentBase {
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
 		// Metadata will be looked up via apiPath stored in system metadata on each wrapper
+		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
+		// e.g., "testMerge.config" → "testMerge", "nested.deep.path" → "nested"
 		if (boundApiSet && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
-			this.slothlet.handlers.metadata.registerUserMetadata(normalizedPath, metadata);
+			const rootSegment = normalizedPath.split(".")[0];
+			this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
 		}
 
 		if (this.slothlet.handlers.ownership && moduleId) {
@@ -1002,9 +1005,10 @@ export class ApiManager extends ComponentBase {
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
 				this.deletePath(this.slothlet.boundApi, pathParts);
-				// Clean up user metadata
+				// Clean up user metadata (use root segment only)
 				if (this.slothlet.handlers.metadata) {
-					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+					const rootSegment = normalizedPath.split(".")[0];
+					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 				return;
 			}
@@ -1038,9 +1042,10 @@ export class ApiManager extends ComponentBase {
 				const { parts } = this.normalizeApiPath(removedPath);
 				this.deletePath(this.slothlet.api, parts);
 				this.deletePath(this.slothlet.boundApi, parts);
-				// Clean up user metadata for removed path
+				// Clean up user metadata for removed path (use root segment only)
 				if (this.slothlet.handlers.metadata) {
-					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(removedPath);
+					const rootSegment = removedPath.split(".")[0];
+					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 			}
 			for (const rollback of result.rolledBack) {
