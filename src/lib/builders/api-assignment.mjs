@@ -96,7 +96,8 @@ export class ApiAssignment extends ComponentBase {
 			useCollisionDetection = false,
 			config = null,
 			collisionContext = "initial",
-			syncWrapper = null
+			syncWrapper = null,
+			collisionMode = "merge"  // Default to merge for hot reload
 		} = options;
 
 		// Get existing value
@@ -105,7 +106,7 @@ export class ApiAssignment extends ComponentBase {
 		// Case 1: Both are wrapper proxies - sync them if mutateExisting is true
 		if (existing !== undefined && this.isWrapperProxy(existing) && this.isWrapperProxy(value)) {
 			if (mutateExisting && syncWrapper) {
-				syncWrapper(existing, value);
+				syncWrapper(existing, value, config, collisionMode);
 				return true;
 			}
 			// If not mutating, fall through to collision detection

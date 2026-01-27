@@ -538,6 +538,26 @@ export class ApiManager extends ComponentBase {
 				return false;
 			}
 
+			if (collisionMode === "replace") {
+				const existingIsObject = typeof existing === "object" || typeof existing === "function";
+				const valueIsObject = typeof value === "object" || typeof value === "function";
+
+				if (existingIsObject && valueIsObject) {
+					this.slothlet.debug("api", {
+						message: "setValueAtPath - replacing with merge (preserves wrapper)",
+						path: parts.join("."),
+						mode: "replace"
+					});
+					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children
+					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode: "replace" }, this.config);
+					return true;
+				} else {
+					// Primitives - just replace
+					parent[finalKey] = value;
+					return true;
+				}
+			}
+
 			if (collisionMode === "merge" || collisionMode === "merge-replace") {
 				const existingIsObject = typeof existing === "object" || typeof existing === "function";
 				const valueIsObject = typeof value === "object" || typeof value === "function";
