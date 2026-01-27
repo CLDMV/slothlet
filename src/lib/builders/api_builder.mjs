@@ -539,15 +539,21 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Get ownership info for a specific API path
-			 * @param {string} apiPath - API path to check
-			 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+			 * Ownership management namespace
+			 * @type {object}
 			 */
-			getPathOwnership: (apiPath) => {
-				if (slothlet.handlers?.ownership) {
-					return slothlet.handlers.ownership.getPathOwnership(apiPath);
+			owner: {
+				/**
+				 * Get ownership info for a specific API path
+				 * @param {string} apiPath - API path to check
+				 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+				 */
+				get: (apiPath) => {
+					if (slothlet.handlers?.ownership) {
+						return slothlet.handlers.ownership.getPathOwnership(apiPath);
+					}
+					return null;
 				}
-				return null;
 			}
 		};
 
@@ -595,15 +601,21 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Get ownership info for a specific API path
-				 * @param {string} apiPath - API path to check
-				 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+				 * Ownership management namespace
+				 * @type {object}
 				 */
-				getPathOwnership: (apiPath) => {
-					if (slothlet.handlers?.ownership) {
-						return slothlet.handlers.ownership.getPathOwnership(apiPath);
+				owner: {
+					/**
+					 * Get ownership info for a specific API path
+					 * @param {string} apiPath - API path to check
+					 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+					 */
+					get: (apiPath) => {
+						if (slothlet.handlers?.ownership) {
+							return slothlet.handlers.ownership.getPathOwnership(apiPath);
+						}
+						return null;
 					}
-					return null;
 				}
 			};
 		}
