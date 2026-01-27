@@ -621,6 +621,24 @@ export class ApiManager extends ComponentBase {
 		if (!Object.prototype.hasOwnProperty.call(current, finalKey)) {
 			return false;
 		}
+
+		// Get the impl being removed and its metadata before deletion
+		const removedImpl = current[finalKey];
+		const apiPath = parts.join(".");
+
+		// Emit lifecycle event for removal
+		if (removedImpl && this.slothlet.handlers?.lifecycle) {
+			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
+			this.slothlet.handlers.lifecycle.emit("impl:removed", {
+				apiPath,
+				impl: removedImpl,
+				source: "removal",
+				moduleId: metadata?.moduleID,
+				filePath: metadata?.filePath,
+				sourceFolder: metadata?.sourceFolder
+			});
+		}
+
 		delete current[finalKey];
 
 		for (let i = stack.length - 1; i >= 0; i -= 1) {

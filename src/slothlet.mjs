@@ -133,6 +133,14 @@ class Slothlet {
 					sourceFolder: data.sourceFolder
 				}, { _fromLifecycle: true });
 			});
+
+			this.handlers.lifecycle.subscribe("impl:removed", (data) => {
+				// Clean up user metadata for removed impl (use root segment only)
+				if (data.apiPath) {
+					const rootSegment = data.apiPath.split(".")[0];
+					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+				}
+			});
 		}
 
 		// Subscribe ownership system to impl:created and impl:changed events
