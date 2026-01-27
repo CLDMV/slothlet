@@ -210,6 +210,129 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// Metadata should still exist
 			expect(api.rootMath.add.__metadata).toBeDefined();
 		});
+
+		it("should remove multiple keys with array parameter", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set multiple metadata keys
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+			api.slothlet.metadata.set(api.rootMath.add, "category", "math");
+			api.slothlet.metadata.set(api.rootMath.add, "author", "test");
+			api.slothlet.metadata.set(api.rootMath.add, "status", "stable");
+
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+			expect(api.rootMath.add.__metadata.author).toBe("test");
+			expect(api.rootMath.add.__metadata.status).toBe("stable");
+
+			// Remove multiple keys at once
+			api.slothlet.metadata.remove(api.rootMath.add, ["version", "author"]);
+
+			// Removed keys should be gone
+			expect(api.rootMath.add.__metadata.version).toBeUndefined();
+			expect(api.rootMath.add.__metadata.author).toBeUndefined();
+
+			// Non-removed keys should remain
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+			expect(api.rootMath.add.__metadata.status).toBe("stable");
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+
+		it("should throw error for non-string elements in array parameter", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+
+			// Try to remove with non-string array element
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, ["version", 123]);
+			}).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, ["version", null]);
+			}).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, ["version", undefined]);
+			}).toThrow(/INVALID_METADATA_KEY/);
+		});
+
+		it("should remove nested keys from object values with object parameter", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set metadata with nested objects
+			api.slothlet.metadata.set(api.rootMath.add, "config", {
+				timeout: 5000,
+				retries: 3,
+				cache: true,
+				debug: false
+			});
+			api.slothlet.metadata.set(api.rootMath.add, "stats", {
+				calls: 100,
+				errors: 2,
+				avgTime: 50
+			});
+
+			// Remove specific nested keys from both objects
+			api.slothlet.metadata.remove(api.rootMath.add, {
+				config: ["timeout", "debug"],
+				stats: ["errors"]
+			});
+
+			// Removed nested keys should be gone
+			expect(api.rootMath.add.__metadata.config.timeout).toBeUndefined();
+			expect(api.rootMath.add.__metadata.config.debug).toBeUndefined();
+			expect(api.rootMath.add.__metadata.stats.errors).toBeUndefined();
+
+			// Non-removed nested keys should remain
+			expect(api.rootMath.add.__metadata.config.retries).toBe(3);
+			expect(api.rootMath.add.__metadata.config.cache).toBe(true);
+			expect(api.rootMath.add.__metadata.stats.calls).toBe(100);
+			expect(api.rootMath.add.__metadata.stats.avgTime).toBe(50);
+
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+
+		it("should throw error for non-array values in object parameter", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.set(api.rootMath.add, "config", { timeout: 5000 });
+
+			// Try to remove with non-array object value
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, { config: "timeout" });
+			}).toThrow(/INVALID_METADATA_KEY/);
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, { config: 123 });
+			}).toThrow(/INVALID_METADATA_KEY/);
+		});
+
+		it("should throw error for non-string nested keys in object parameter", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.set(api.rootMath.add, "config", { timeout: 5000 });
+
+			// Try to remove with non-string nested key
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, { config: ["timeout", 123] });
+			}).toThrow(/INVALID_METADATA_KEY/);
+		});
+
+		it("should handle object parameter gracefully when metadata value is not an object", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set non-object metadata value
+			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
+
+			// Try to remove nested keys (should not throw, just not remove anything)
+			expect(() => {
+				api.slothlet.metadata.remove(api.rootMath.add, { version: ["subkey"] });
+			}).not.toThrow();
+
+			// Value should remain unchanged
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+		});
 	});
 
 	describe("api.slothlet.metadata.setGlobal()", () => {
@@ -278,8 +401,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			await materialize(api, "rootMath.multiply", 5, 3);
 			expect(api.rootMath.multiply.__metadata.counter).toBe(2);
 
-			// Already materialized function keeps old value (metadata is snapshot)
-			expect(api.rootMath.add.__metadata.counter).toBe(1);
+			// Already materialized function gets updated value too (global metadata is LIVE)
+			expect(api.rootMath.add.__metadata.counter).toBe(2);
 		});
 	});
 
