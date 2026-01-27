@@ -154,22 +154,28 @@ class Slothlet {
 		// Subscribe ownership system to impl:created and impl:changed events
 		if (this.handlers.ownership) {
 			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+				// Get collision mode from config or use default
+				const collisionMode = this.config.collision?.addApi || "merge";
 				this.handlers.ownership.register({
 					moduleId: data.moduleId,
 					apiPath: data.apiPath,
 					value: data.impl,
 					source: data.source,
-					filePath: data.filePath
+					filePath: data.filePath,
+					collisionMode: collisionMode
 				});
 			});
 
 			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+				// Get collision mode from config or use default
+				const collisionMode = this.config.collision?.addApi || "merge";
 				this.handlers.ownership.register({
 					moduleId: data.moduleId,
 					apiPath: data.apiPath,
 					value: data.impl,
 					source: data.source,
-					filePath: data.filePath
+					filePath: data.filePath,
+					collisionMode: collisionMode
 				});
 			});
 		}
