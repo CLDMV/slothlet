@@ -347,6 +347,13 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 	});
 
 	describe("Complex Path Scenarios (self.slothlet.metadata.*)", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
 		it("should handle deeply nested paths via internal API", async () => {
 			await api.slothlet.api.add("deep", TEST_DIRS.API_SMART_FLATTEN, {
 				depth: "very_deep"
