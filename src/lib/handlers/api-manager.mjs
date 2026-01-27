@@ -337,6 +337,16 @@ export class ApiManager extends ComponentBase {
 				for (const [key, childValue] of nextWrapper._childCache.entries()) {
 					existingWrapper._childCache.set(key, childValue);
 				}
+				// CRITICAL: Also replace the implementation itself
+				// DON'T use __setImpl because that triggers lifecycle events with wrong moduleId
+				// The ownership will be registered properly later in addApiComponent
+				if (nextWrapper._impl) {
+					existingWrapper._impl = nextWrapper._impl;
+					// Update callable status
+					if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
+						existingWrapper.isCallable = true;
+					}
+				}
 			} else if (collisionMode === "merge") {
 				// Keep existing, only add new keys
 				for (const [key, childValue] of nextWrapper._childCache.entries()) {
@@ -911,7 +921,9 @@ export class ApiManager extends ComponentBase {
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
 			moduleId: moduleId,
-			userMetadata: metadata
+			userMetadata: metadata,
+			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
+			collisionMode: collisionMode
 		});
 
 		this.slothlet.debug("api", {
