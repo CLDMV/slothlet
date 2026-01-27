@@ -2,6 +2,7 @@
 	"suites/config/collision-config.test.vitest.mjs",
 	"suites/metadata/metadata-api-manager.test.vitest.mjs",
 	"suites/metadata/metadata-edge-cases.test.vitest.mjs",
+	"suites/metadata/metadata-external-api.test.vitest.mjs",
 	"suites/metadata/system-metadata.test.vitest.mjs",
 	"suites/metadata/user-metadata.test.vitest.mjs"
 ]
