@@ -339,7 +339,10 @@ export class Metadata extends ComponentBase {
 	/**
 	 * Remove user metadata from specific function
 	 * @param {Function} target - Function to remove metadata from
-	 * @param {string} [key] - Optional key to remove (removes all if omitted)
+	 * @param {string|string[]|Object<string, string[]>} [key] - Optional key(s) to remove (removes all if omitted). Can be:
+	 *   - string: Remove single key
+	 *   - string[]: Remove multiple keys (each element must be a string)
+	 *   - {key: string[]}: Remove nested keys from object values
 	 * @public
 	 */
 	removeUserMetadata(target, key) {
@@ -366,9 +369,56 @@ export class Metadata extends ComponentBase {
 		if (key === undefined) {
 			// Remove all user metadata for this moduleID
 			this.#userMetadataStore.delete(moduleID);
-		} else {
+		} else if (Array.isArray(key)) {
+			// Remove multiple keys - each element must be a string
+			for (const k of key) {
+				if (typeof k !== "string") {
+					throw new this.SlothletError("INVALID_METADATA_KEY", {
+						key: k,
+						type: typeof k,
+						expected: "string",
+						hint: "Array elements must be strings when removing multiple metadata keys"
+					});
+				}
+				delete entry.metadata[k];
+			}
+		} else if (typeof key === "object" && key !== null) {
+			// Remove nested keys from object values: {metadataKey: [nestedKey1, nestedKey2]}
+			for (const [metadataKey, nestedKeys] of Object.entries(key)) {
+				if (!Array.isArray(nestedKeys)) {
+					throw new this.SlothletError("INVALID_METADATA_KEY", {
+						key: metadataKey,
+						value: nestedKeys,
+						expected: "array",
+						hint: "Object values must be arrays of nested keys to remove"
+					});
+				}
+				
+				const metadataValue = entry.metadata[metadataKey];
+				if (metadataValue && typeof metadataValue === "object") {
+					for (const nestedKey of nestedKeys) {
+						if (typeof nestedKey !== "string") {
+							throw new this.SlothletError("INVALID_METADATA_KEY", {
+								key: nestedKey,
+								type: typeof nestedKey,
+								expected: "string",
+								hint: "Nested keys must be strings"
+							});
+						}
+						delete metadataValue[nestedKey];
+					}
+				}
+			}
+		} else if (typeof key === "string") {
 			// Remove specific key
 			delete entry.metadata[key];
+		} else {
+			throw new this.SlothletError("INVALID_METADATA_KEY", {
+				key: key,
+				type: typeof key,
+				expected: "string, string[], or object",
+				hint: "Key must be a string, array of strings, or object with array values"
+			});
 		}
 	}
 
