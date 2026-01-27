@@ -154,6 +154,16 @@ export class Metadata extends ComponentBase {
 		for (const key of Object.keys(apiRoot)) {
 			const value = apiRoot[key];
 
+			// Skip unmaterialized wrappers/proxies - accessing their properties creates waiting proxies
+			// that can cause "fn is not a function" errors
+			if (value && typeof value === "object" && value.__wrapper) {
+				const wrapper = value.__wrapper;
+				// Only traverse if materialized, otherwise skip to avoid creating waiting proxies
+				if (wrapper._state && !wrapper._state.materialized) {
+					continue;
+				}
+			}
+
 			if (typeof value === "function") {
 				const meta = value.__metadata;
 				if (meta?.sourceFile && meta?.sourceLine) {

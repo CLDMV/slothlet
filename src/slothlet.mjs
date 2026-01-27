@@ -241,13 +241,8 @@ class Slothlet {
 				});
 			}
 
-			const ctx = contextManager.tryGetContext();
-			if (!ctx || !ctx.self) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, {
-					validationError: true,
-					hint: "metadata.get() must be called from within a slothlet API function"
-				});
-			}
+			// Note: No context check needed - this function works with explicit paths
+			// and doesn't require being called from within an API function
 
 			// Traverse the path from API root (not from current module's self)
 			const parts = path.split(".");
@@ -256,32 +251,21 @@ class Slothlet {
 			for (const part of parts) {
 				// Allow traversal through both objects AND functions (functions can have properties)
 				if (!target || (typeof target !== "object" && typeof target !== "function")) {
-					console.log("[metadata.get] Traversal failed at part:", part, "target type:", typeof target);
 					return null;
 				}
 				target = target[part];
 			}
 
-			console.log("[metadata.get] Traversal complete for path:", path, {
-				targetType: typeof target,
-				isFunction: typeof target === "function",
-				hasImpl: target && target._impl,
-				hasMaterialize: target && typeof target.__materialize === "function"
-			});
-
 			// If target is a lazy proxy (has __materialize), materialize it first
 			if (target && typeof target.__materialize === "function") {
-				console.log("[metadata.get] Materializing lazy proxy");
 				await target.__materialize();
 			}
 
 			// Get metadata for the resolved function
 			if (typeof target === "function" || (target && target._impl)) {
-				console.log("[metadata.get] Calling getMetadata on target");
 				return metadataHandler.getMetadata(target);
 			}
 
-			console.log("[metadata.get] Target is not a function or wrapper, returning null");
 			return null;
 		};
 

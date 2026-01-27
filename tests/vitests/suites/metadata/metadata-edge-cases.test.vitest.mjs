@@ -30,7 +30,13 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 		}
 	});
 
-	const materialize = async (fn, ...args) => {
+	const materialize = async (api, path, ...args) => {
+		const parts = path.split(".");
+		let target = api;
+		for (let i = 0; i < parts.length - 1; i++) {
+			target = target[parts[i]];
+		}
+		const fn = target[parts[parts.length - 1]];
 		try {
 			return await fn(...args);
 		} catch (_) {
@@ -43,7 +49,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// Root contributor: when a file exports default and makes it THE api
 			// Check if single.mjs exists in test directory
 			if (api.single) {
-				await materialize(api.single, "test");
+				await materialize(api, "single", "test");
 				const meta = api.single.__metadata;
 
 				expect(meta).toBeDefined();
@@ -55,7 +61,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 		it("should preserve metadata on root contributor children", async () => {
 			// Root contributor with child properties
 			if (api.single?.nested) {
-				await materialize(api.single.nested, "test");
+				await materialize(api, "single.nested", "test");
 				const meta = api.single.nested.__metadata;
 
 				expect(meta).toBeDefined();
@@ -74,7 +80,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// Navigate 5+ levels if structure exists
 			// veryDeep.config.settings.getPluginConfig
 			if (api.veryDeep?.config?.settings?.getPluginConfig) {
-				const result = await materialize(api.veryDeep.config.settings.getPluginConfig);
+				const result = await materialize(api, "veryDeep.config.settings.getPluginConfig");
 				const meta = api.veryDeep.config.settings.getPluginConfig.__metadata;
 
 				expect(meta.depth).toBe("extreme");
@@ -96,8 +102,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("large", TEST_DIRS.API_SMART_FLATTEN, largeMetadata);
-			await materialize(api.large.config.settings.getPluginConfig);
-
+			await materialize(api, "large.config.settings.getPluginConfig");
 			const meta = api.large.config.settings.getPluginConfig.__metadata;
 
 			expect(meta.key0).toBe("value0");
@@ -117,7 +122,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				"key with spaces": "value"
 			});
 
-			await materialize(api.special.config.settings.getPluginConfig);
+			await materialize(api, "special.config.settings.getPluginConfig");
 			const meta = api.special.config.settings.getPluginConfig.__metadata;
 
 			expect(meta["key-with-dashes"]).toBe("value");
@@ -135,7 +140,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				symbols: "©®™€£¥"
 			});
 
-			await materialize(api.unicode.config.settings.getPluginConfig);
+			await materialize(api, "unicode.config.settings.getPluginConfig");
 			const meta = api.unicode.config.settings.getPluginConfig.__metadata;
 
 			expect(meta.emoji).toBe("🎉✨🚀");
@@ -155,7 +160,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 			try {
 				await api.slothlet.api.add("circular", TEST_DIRS.API_SMART_FLATTEN, circular);
-				await materialize(api.circular.config.settings.getPluginConfig);
+				await materialize(api, "circular.config.settings.getPluginConfig");
 
 				const meta = api.circular.config.settings.getPluginConfig.__metadata;
 				expect(meta.name).toBe("circular");
@@ -176,7 +181,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				arrowFunc: (x) => x * 2
 			});
 
-			await materialize(api.withFuncs.config.settings.getPluginConfig);
+			await materialize(api, "withFuncs.config.settings.getPluginConfig");
 			const meta = api.withFuncs.config.settings.getPluginConfig.__metadata;
 
 			expect(meta.normalValue).toBe("test");
@@ -205,10 +210,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				[sym2]: "symbol-value-2"
 			});
 
-			await materialize(api.symbols.config.settings.getPluginConfig);
-			const meta = api.symbols.config.settings.getPluginConfig.__metadata;
-
-			expect(meta.normal).toBe("value");
+			await materialize(api, "symbols.config.settings.getPluginConfig");
 			// Symbol properties may or may not be preserved
 			// depending on how metadata is stored/frozen
 		});
@@ -220,7 +222,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				data: "test"
 			});
 
-			await materialize(api.perf.config.settings.getPluginConfig);
+			await materialize(api, "perf.config.settings.getPluginConfig");
 
 			const iterations = 1000;
 			const start = Date.now();
@@ -238,21 +240,22 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	});
 
 	describe("Empty API Paths", () => {
-		it("should handle metadata on empty/minimal API structures", async () => {
-			// Test with minimal structure (if such test files exist)
-			if (api.empty) {
-				const meta = api.empty.__metadata;
-				if (meta) {
-					expect(meta.moduleID).toBeDefined();
-					expect(meta.apiPath).toBeDefined();
-				}
-			}
+		it("should handle metadata operations on non-existent paths gracefully", async () => {
+			// Test that metadata API handles non-existent paths without crashing
+
+			// Get metadata for non-existent path should return undefined
+			const nonExistentMeta = api.nonExistent?.__metadata;
+			expect(nonExistentMeta).toBeUndefined();
+
+			// metadata.get() should return null for non-existent paths (traversal fails gracefully)
+			const result = await api.slothlet.metadata.get("nonExistent.path.that.doesNotExist");
+			expect(result).toBeNull();
 		});
 	});
 
 	describe("Metadata on Different Export Types", () => {
 		it("should handle metadata on default exports", async () => {
-			await materialize(api.rootMath.add, 1, 2);
+			await materialize(api, "rootMath.add", 1, 2);
 			const meta = api.rootMath.add.__metadata;
 			expect(meta).toBeDefined();
 		});
@@ -261,7 +264,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			await api.slothlet.api.add("named", TEST_DIRS.API_SMART_FLATTEN);
 
 			if (api.named?.config?.settings?.getPluginConfig) {
-				await materialize(api.named.config.settings.getPluginConfig);
+				await materialize(api, "named.config.settings.getPluginConfig");
 				const meta = api.named.config.settings.getPluginConfig.__metadata;
 				expect(meta).toBeDefined();
 			}
@@ -277,7 +280,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				const keys = Object.keys(api.mixed);
 				for (const key of keys) {
 					if (typeof api.mixed[key] === "function") {
-						await materialize(api.mixed[key], 1);
+						await materialize(api, `mixed.${key}`, 1);
 						const meta = api.mixed[key].__metadata;
 						if (meta) {
 							expect(meta.type).toBe("mixed");

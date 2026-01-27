@@ -63,8 +63,12 @@ const CONFIG_SPACE = {
 	mode: ["eager", "lazy"],
 	runtime: ["async", "live"],
 	// allowApiOverwrite: [false, true],
-	allowMutation: [false, true],
 	// apiDepth: [1, 3, Infinity],
+	// allowMutation: [false, true],
+	// collision: [
+	// 	{ initial: "merge", addApi: "merge" },      // Default - allow all overwrites
+	// 	{ initial: "error", addApi: "error" }       // Strict - prevent overwrites
+	// ],
 	hooks: [false, true]
 };
 
@@ -132,17 +136,20 @@ function generateTestMatrix(configSpace) {
 		});
 
 		// Enable diagnostics for non-mutate configs to expose api.slothlet.api/reload/hooks for testing
-		if (config.allowMutation === false) {
-			config.diagnostics = true;
-		}
+		// if (config.allowMutation === false) {
+		config.diagnostics = true;
+		// }
 
 		// Generate descriptive name
 		const nameParts = [];
 		nameParts.push(config.mode.toUpperCase());
 		if (config.runtime === "live") nameParts.push("LIVE");
-		// if (!config.allowApiOverwrite) nameParts.push("DENY");
-		if (config.allowMutation) nameParts.push("MUTATE");
-		// if (config.apiDepth !== Infinity) nameParts.push(`DEPTH_${config.apiDepth}`);
+
+		// Add collision mode indicator (only if not default merge/merge)
+		if (config.collision && (config.collision.initial === "error" || config.collision.addApi === "error")) {
+			nameParts.push("STRICT");
+		}
+
 		if (config.hooks) nameParts.push("HOOKS");
 
 		const name = nameParts.join("_");
@@ -161,12 +168,12 @@ function generateTestMatrix(configSpace) {
 export const TEST_MATRIX = generateTestMatrix(CONFIG_SPACE);
 
 /**
- * Ownership-enabled configurations (all configs in v3 support ownership via allowMutation)
- * In v3, ownership/mutation is controlled by allowMutation config (defaults to true)
- * This matrix is kept for compatibility but returns full matrix since ownership is always available
+ * Ownership-enabled configurations (collision mode with merge or merge-replace)
+ * In v3, ownership/mutation is controlled by collision config
+ * This matrix includes configs that allow overwrites via collision settings
  * @type {Array<{name: string, config: object}>}
  */
-export const OWNERSHIP_MATRIX = getMatrixConfigs({});
+// export const OWNERSHIP_MATRIX = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
 
 /**
  * Get filtered matrix configurations based on test requirements
@@ -174,12 +181,15 @@ export const OWNERSHIP_MATRIX = getMatrixConfigs({});
  * @returns {Array<{name: string, config: object}>} Filtered matrix configs
  *
  * @example
- * // Test needs hot reload functionality
- * const allowMutationConfigs = getMatrixConfigs({ allowMutation: true });
+ * // Test needs collision merge mode
+ * const mergeConfigs = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
  *
  * @example
- * // Test needs live bindings with overwrite protection
- * const liveProtectedConfigs = getMatrixConfigs({ runtime: "live", allowApiOverwrite: false });
+ * // Test needs live bindings with strict collision protection
+ * const liveStrictConfigs = getMatrixConfigs({
+ *   runtime: "live",
+ *   collision: { initial: "error", addApi: "error" }
+ * });
  *
  * @example
  * // Test needs lazy loading only
@@ -189,8 +199,24 @@ export function getMatrixConfigs(requirements = {}) {
 	return TEST_MATRIX.filter((matrixConfig) => {
 		// Filter based on requirements
 		for (const [key, value] of Object.entries(requirements)) {
+			const configValue = matrixConfig.config[key];
+
 			// If requirement specifies a value, config must match
-			if (matrixConfig.config[key] !== undefined && matrixConfig.config[key] !== value) {
+			if (configValue === undefined) {
+				return false;
+			}
+
+			// Special handling for collision object comparison
+			if (key === "collision" && typeof value === "object" && typeof configValue === "object") {
+				// Deep equality check for collision objects
+				if (value.initial !== undefined && configValue.initial !== value.initial) {
+					return false;
+				}
+				if (value.addApi !== undefined && configValue.addApi !== value.addApi) {
+					return false;
+				}
+			} else if (configValue !== value) {
+				// Simple equality check for other properties
 				return false;
 			}
 		}
@@ -215,25 +241,27 @@ export async function runTestWithApi(api, testFunction) {
 }
 
 /**
- * Basic configurations without advanced features (no mutation, async runtime)
- * Used for simple functionality tests that don't need mutation/live binding features
+ * Basic configurations without advanced features (async runtime)
+ * Used for simple functionality tests that don't need live bindings
  * @type {Array<{name: string, config: object}>}
  */
-export const BASIC_MATRIX = getMatrixConfigs({ allowMutation: false, runtime: "async" });
+export const BASIC_MATRIX = getMatrixConfigs({
+	runtime: "async"
+});
 
 /**
- * Overwrite configuration matrix (allowApiOverwrite true/false)
- * Used for testing API overwrite protection features
+ * Strict collision configurations (error on conflicts)
+ * Used for testing collision protection features
  * @type {Array<{name: string, config: object}>}
  */
-// export const OVERWRITE_MATRIX = TEST_MATRIX.filter(({ config }) => config.allowApiOverwrite === false);
+// export const STRICT_MATRIX = getMatrixConfigs({ collision: { initial: "error", addApi: "error" } });
 
 /**
- * Depth configuration matrix (apiDepth variations, excluding infinite depth)
- * Used for testing API depth limitations
+ * Collision configuration matrix (merge vs strict modes)
+ * Used for testing collision handling behavior
  * @type {Array<{name: string, config: object}>}
  */
-// export const DEPTH_MATRIX = TEST_MATRIX.filter(({ config }) => config.apiDepth !== Infinity);
+export const COLLISION_MATRIX = TEST_MATRIX;
 
 /**
  * Runtime configuration matrix (async vs live bindings)
@@ -249,10 +277,9 @@ export const RUNTIME_MATRIX = getMatrixConfigs({ runtime: "live" });
  */
 export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
-	if (config.allowMutation === true) featureCount++;
+	if (config.collision && (config.collision.initial === "error" || config.collision.addApi === "error")) featureCount++;
 	if (config.runtime === "live") featureCount++;
-	// if (config.allowApiOverwrite === false) featureCount++;
-	// if (config.apiDepth !== Infinity) featureCount++;
+	if (config.hooks === true) featureCount++;
 	return featureCount >= 2;
 });
 
