@@ -117,21 +117,29 @@ class Slothlet {
 		// Subscribe metadata system to impl:created and impl:changed events
 		if (this.handlers.metadata) {
 			this.handlers.lifecycle.subscribe("impl:created", (data) => {
-				this.handlers.metadata.tagSystemMetadata(data.impl, {
-					filePath: data.filePath,
-					apiPath: data.apiPath,
-					moduleId: data.moduleId,
-					sourceFolder: data.sourceFolder
-				}, { _fromLifecycle: true });
+				this.handlers.metadata.tagSystemMetadata(
+					data.impl,
+					{
+						filePath: data.filePath,
+						apiPath: data.apiPath,
+						moduleId: data.moduleId,
+						sourceFolder: data.sourceFolder
+					},
+					{ _fromLifecycle: true }
+				);
 			});
 
 			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
-				this.handlers.metadata.tagSystemMetadata(data.impl, {
-					filePath: data.filePath,
-					apiPath: data.apiPath,
-					moduleId: data.moduleId,
-					sourceFolder: data.sourceFolder
-				}, { _fromLifecycle: true });
+				this.handlers.metadata.tagSystemMetadata(
+					data.impl,
+					{
+						filePath: data.filePath,
+						apiPath: data.apiPath,
+						moduleId: data.moduleId,
+						sourceFolder: data.sourceFolder
+					},
+					{ _fromLifecycle: true }
+				);
 			});
 
 			this.handlers.lifecycle.subscribe("impl:removed", (data) => {

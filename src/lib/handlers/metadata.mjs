@@ -195,7 +195,7 @@ export class Metadata extends ComponentBase {
 		if (!options._fromLifecycle) {
 			const error = new Error(
 				"[slothlet] tagSystemMetadata() must be called through lifecycle system. " +
-				"Use lifecycle.emit('impl:created') or lifecycle.emit('impl:changed') instead of direct call."
+					"Use lifecycle.emit('impl:created') or lifecycle.emit('impl:changed') instead of direct call."
 			);
 			if (!this.config?.silent) {
 				console.error(error.message);
