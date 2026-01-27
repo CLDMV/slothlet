@@ -74,6 +74,7 @@ describe("Nested Lazy Collision Test", () => {
 		console.log("[TEST] mathWrapper.__childFilePaths:", mathWrapper.__childFilePaths);
 		console.log("[TEST] mathWrapper.__childFilePathsPreMaterialize:", mathWrapper.__childFilePathsPreMaterialize);
 		
+		console.log("\n=== INTERNAL HANDLER API ===");
 		// Check if wrapper itself has metadata
 		const wrapperSystemMetadata = slothletInstance.handlers.metadata.getSystemMetadata(mathWrapper);
 		console.log("[TEST] mathWrapper system metadata:", JSON.stringify(wrapperSystemMetadata, null, 2));
@@ -84,11 +85,53 @@ describe("Nested Lazy Collision Test", () => {
 		const powerWrapperMeta = slothletInstance.handlers.metadata.getSystemMetadata(powerFunc.__wrapper || powerFunc);
 		const addWrapperMeta = slothletInstance.handlers.metadata.getSystemMetadata(addFunc.__wrapper || addFunc);
 		
-		console.log("[TEST] power function wrapper metadata:", JSON.stringify(powerWrapperMeta, null, 2));
-		console.log("[TEST] add function wrapper metadata:", JSON.stringify(addWrapperMeta, null, 2));
+		console.log("[TEST] power function wrapper metadata (handler):", JSON.stringify(powerWrapperMeta, null, 2));
+		console.log("[TEST] add function wrapper metadata (handler):", JSON.stringify(addWrapperMeta, null, 2));
 		
-		// Just verify functions work, skip metadata for now
+		console.log("\n=== __metadata PROPERTY ===");
+		// Check __metadata property on functions
+		const power__metadata = api.parent.math.power.__metadata;
+		const add__metadata = api.parent.math.add.__metadata;
+		
+		console.log("[TEST] power.__metadata:", JSON.stringify(power__metadata, null, 2));
+		console.log("[TEST] add.__metadata:", JSON.stringify(add__metadata, null, 2));
+		
+		console.log("\n=== PUBLIC API (api.slothlet.metadata.get) ===");
+		// Debug: Check what get() receives
+		console.log("[TEST] typeof api.parent:", typeof api.parent);
+		console.log("[TEST] typeof api.parent.math:", typeof api.parent.math);
+		console.log("[TEST] typeof api.parent.math.power:", typeof api.parent.math.power);
+		console.log("[TEST] typeof api.parent.math.add:", typeof api.parent.math.add);
+		
+		// Check public API: api.slothlet.metadata.get(path) - MUST AWAIT!
+		const powerPublicMeta = await api.slothlet.metadata.get("parent.math.power");
+		const addPublicMeta = await api.slothlet.metadata.get("parent.math.add");
+		
+		console.log("[TEST] api.slothlet.metadata.get('parent.math.power'):", JSON.stringify(powerPublicMeta, null, 2));
+		console.log("[TEST] api.slothlet.metadata.get('parent.math.add'):", JSON.stringify(addPublicMeta, null, 2));
+		
+		// Verify functions work
 		expect(powerResult).toBe(8);
 		expect(addResult).toBe(12);
+		
+		// Verify all three access methods return correct filePaths
+		expect(powerWrapperMeta.filePath).toContain("parent");
+		expect(powerWrapperMeta.filePath).toContain("math.mjs");
+		expect(powerWrapperMeta.filePath).not.toContain("math\\math");
+		
+		expect(power__metadata?.filePath).toContain("parent");
+		expect(power__metadata?.filePath).toContain("math.mjs");
+		
+		expect(powerPublicMeta?.filePath).toContain("parent");
+		expect(powerPublicMeta?.filePath).toContain("math.mjs");
+		
+		expect(addWrapperMeta.filePath).toContain("parent");
+		expect(addWrapperMeta.filePath).toContain("math\\math");
+		
+		expect(add__metadata?.filePath).toContain("parent");
+		expect(add__metadata?.filePath).toContain("math\\math");
+		
+		expect(addPublicMeta?.filePath).toContain("parent");
+		expect(addPublicMeta?.filePath).toContain("math\\math");
 	});
 });
