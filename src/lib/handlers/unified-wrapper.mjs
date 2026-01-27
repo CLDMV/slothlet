@@ -481,18 +481,41 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Get parent wrapper's metadata to inherit filePath and moduleId
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
-		const childFilePath = parentMetadata?.filePath || null;
-		const childSourceFolder = parentMetadata?.sourceFolder || null;
+		
+		// Try to get child's actual filePath from its own metadata first (if already tagged during materialization)
+		const childExistingMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
+		let childFilePath = childExistingMetadata?.filePath || null;
+		let childModuleId = null;
+		
+		if (!childFilePath) {
+			// No existing metadata on child - try __childFilePaths map from lazy materialization
+			if (this._impl && this._impl.__childFilePaths && this._impl.__childFilePaths[key]) {
+				childFilePath = this._impl.__childFilePaths[key];
+			} else if (this.__childFilePathsPreMaterialize && this.__childFilePathsPreMaterialize[key]) {
+				// Check pre-materialize mapping from collision merge
+				childFilePath = this.__childFilePathsPreMaterialize[key];
+			} else {
+				// Fall back to parent's filePath (will be directory path for lazy wrappers)
+				childFilePath = parentMetadata?.filePath || null;
+			}
+			
+			// Extract SHORT moduleId from parent's FULL moduleID format "moduleId:apiPath"
+			if (parentMetadata?.moduleID) {
+				const colonIndex = parentMetadata.moduleID.indexOf(":");
+				childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
+			}
+		} else {
+			// Child already has metadata - extract moduleId from it
+			if (childExistingMetadata?.moduleID) {
+				const colonIndex = childExistingMetadata.moduleID.indexOf(":");
+				childModuleId = colonIndex > 0 ? childExistingMetadata.moduleID.substring(0, colonIndex) : childExistingMetadata.moduleID;
+			}
+		}
+		
+		const childSourceFolder = childExistingMetadata?.sourceFolder || parentMetadata?.sourceFolder || null;
 
 		// Inherit user metadata from parent wrapper
 		const childUserMetadata = this._userMetadata || {};
-
-		// Extract SHORT moduleId from FULL moduleID format "moduleId:apiPath"
-		let childModuleId = null;
-		if (parentMetadata?.moduleID) {
-			const colonIndex = parentMetadata.moduleID.indexOf(":");
-			childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
-		}
 
 		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
 			mode: "eager",
@@ -950,7 +973,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Checks for properties on impl, target, and cached wrappers.
 		 */
 		const hasTrap = (target, prop) => {
-			if (prop === "__impl" || prop === "__setImpl" || prop === "__getState" || prop === "__materialize" || prop === "__invalidate") {
+			if (prop === "__impl" || prop === "__setImpl" || prop === "__getState" || prop === "__materialize" || prop === "__invalidate" || prop === "__wrapper") {
 				return true;
 			}
 

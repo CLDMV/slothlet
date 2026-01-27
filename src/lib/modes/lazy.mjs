@@ -54,23 +54,24 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 			directories: structure.directories
 		}
 	};
+
+	// Load all root-level content (files and folders)
+	// Root files will be wrapped eagerly (see modes-processor.mjs special handling)
 	const rootDefaultFunction = await modesProcessor.processFiles(
 		api,
 		structure.files,
 		rootDirectory,
 		0,
 		"lazy",
-		true,
-		false, // populateDirectly - keep false, the real issue is elsewhere
-		false,
+		true, // isRoot=true for root contributor detection
+		true, // recursive=true to process subdirectories
+		false, // populateDirectly=false for root level
 		apiPathPrefix,
 		collisionContext,
 		moduleId,
 		dir, // sourceFolder for metadata
 		userMetadata
 	);
-
-	// Lazy wrappers for directories are now created by processFiles when recursive=false
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
 	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, slothlet.config, "lazy");
@@ -91,15 +92,19 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadata = {}) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
+		console.log(`[MATERIALIZE] START apiPath=${apiPath}, dir=${dir.name}, files=${dir.children?.files?.length}`);
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc started",
 			apiPath,
 			dirName: dir.name
 		});
 		const materialized = {};
+		// Store file paths for each property so child wrappers get correct filePath
+		const childFilePaths = {};
 
 		// Load files in directory
 		for (const file of dir.children.files) {
+			console.log(`[MATERIALIZE] Loading file: ${file.name}`);
 			try {
 				slothlet.debug("modes", {
 					message: "Loading file",
@@ -132,13 +137,41 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 					});
 				}
 
+				// Store the file path for this property
+				childFilePaths[moduleName] = file.path;
+
 				// Merge exports into materialized object
 				slothlet.debug("modes", {
 					message: "Merging exports",
 					fileName: file.name
 				});
-				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
-				slothlet.debug("modes", {
+			slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
+			// Tag system metadata for the merged module AND its properties with correct file path
+			if (materialized[moduleName] && slothlet.handlers?.metadata) {
+				// Tag the module object itself
+				slothlet.handlers.metadata.tagSystemMetadata(materialized[moduleName], {
+					filePath: file.path,
+					apiPath: `${apiPath}.${moduleName}`,
+					moduleId: effectiveModuleId,
+					sourceFolder: dir.path
+				});
+				
+				// Tag all properties (functions) in the module
+				if (typeof materialized[moduleName] === "object") {
+					for (const key of Object.keys(materialized[moduleName])) {
+						const prop = materialized[moduleName][key];
+						if (typeof prop === "function" || (typeof prop === "object" && prop !== null)) {
+							slothlet.handlers.metadata.tagSystemMetadata(prop, {
+								filePath: file.path,
+								apiPath: `${apiPath}.${moduleName}.${key}`,
+								moduleId: effectiveModuleId,
+								sourceFolder: dir.path
+							});
+						}
+					}
+				}
+			}
+			slothlet.debug("modes", {
 					message: "Exports merged",
 					fileName: file.name,
 					materializedKeys: Object.keys(materialized)
@@ -158,6 +191,15 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
 			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIdOverride, userMetadata);
 		}
+		
+		// Store the file path mapping as non-enumerable property
+		Object.defineProperty(materialized, "__childFilePaths", {
+			value: childFilePaths,
+			enumerable: false,
+			configurable: false,
+			writable: false
+		});
+		
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc complete",
 			apiPath,
@@ -174,7 +216,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 		initialImpl: null, // Lazy mode starts with null
 		materializeFunc,
 		materializeOnCreate: slothlet.config.backgroundMaterialize,
-		filePath: dir.path,
+		filePath: null, // Don't set filePath yet - will be set during materialization
 		moduleId: moduleIdOverride, // Use the override if provided, otherwise null
 		sourceFolder: slothlet.config?.dir
 	});

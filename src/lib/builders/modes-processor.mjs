@@ -74,7 +74,13 @@ export class ModesProcessor extends ComponentBase {
 		const rootContributors = []; // Track all root-level default exports for multi-detection
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
-		const shouldWrap = !(mode === "lazy" && populateDirectly);
+		
+		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
+		// This ensures file wrappers are materialized for collision handling
+		const isRootFile = currentDepth === 0 && !populateDirectly;
+		const effectiveMode = (mode === "lazy" && isRootFile) ? "eager" : mode;
+		const shouldWrap = !(effectiveMode === "lazy" && populateDirectly);
+		
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
 			if (existingTarget && existingTarget.__wrapper) {
@@ -99,7 +105,7 @@ export class ModesProcessor extends ComponentBase {
 					});
 				}
 				const wrapper = new UnifiedWrapper(this.slothlet, {
-					mode,
+					effectiveMode,
 					apiPath: buildApiPath(categoryName),
 					initialImpl,
 					filePath: directory.path,
@@ -264,7 +270,7 @@ export class ModesProcessor extends ComponentBase {
 							// CRITICAL: Wrap the object so all its functions get context wrapping
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									mode,
+									effectiveMode,
 									apiPath: buildApiPath(categoryName),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
@@ -318,7 +324,7 @@ export class ModesProcessor extends ComponentBase {
 						moduleContent = callableModule;
 						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
-								mode,
+								effectiveMode,
 								apiPath: buildApiPath(categoryName),
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 								materializeOnCreate: config.backgroundMaterialize,
@@ -341,7 +347,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (shouldWrap) {
 									const namedWrapper = new UnifiedWrapper(this.slothlet, {
-										mode,
+										effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: mod[key],
 										materializeOnCreate: config.backgroundMaterialize,
@@ -399,7 +405,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const [propKey, propValue] of Object.entries(matchingObj)) {
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
-										mode,
+										effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${propKey}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
 										materializeOnCreate: config.backgroundMaterialize,
@@ -434,7 +440,7 @@ export class ModesProcessor extends ComponentBase {
 								if (key !== moduleName) {
 									if (shouldWrap) {
 										const wrapper = new UnifiedWrapper(this.slothlet, {
-											mode,
+											effectiveMode,
 											apiPath: buildApiPath(`${categoryName}.${key}`),
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 											materializeOnCreate: config.backgroundMaterialize,
@@ -489,7 +495,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
-										mode,
+										effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 										materializeOnCreate: config.backgroundMaterialize,
@@ -554,7 +560,7 @@ export class ModesProcessor extends ComponentBase {
 							const preferredName = key;
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									mode,
+									effectiveMode,
 									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 									materializeOnCreate: config.backgroundMaterialize,
@@ -591,7 +597,7 @@ export class ModesProcessor extends ComponentBase {
 				if (shouldWrap) {
 					const localPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 					const wrapper = new UnifiedWrapper(this.slothlet, {
-						mode,
+						effectiveMode,
 						apiPath: buildApiPath(localPath),
 						initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
 						materializeOnCreate: config.backgroundMaterialize,
@@ -752,7 +758,7 @@ export class ModesProcessor extends ComponentBase {
 
 								// Flatten: put the module content directly at targetApi[subDirName]
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									mode,
+									effectiveMode,
 									apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(implToWrap, mode),
 									materializeOnCreate: config.backgroundMaterialize,
@@ -864,7 +870,7 @@ export class ModesProcessor extends ComponentBase {
 					// Wrap in UnifiedWrapper if needed
 					if (shouldWrap) {
 						const wrapper = new UnifiedWrapper(this.slothlet, {
-							mode,
+							effectiveMode,
 							apiPath: buildApiPath(moduleName),
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
 							materializeOnCreate: config.backgroundMaterialize,
@@ -1011,6 +1017,30 @@ export class ModesProcessor extends ComponentBase {
 						// 2. Lazy materialization would try to re-register with file-specific moduleId
 						// 3. Different moduleIds trigger OWNERSHIP_CONFLICT unless allowConflict=true
 						// The collision config should be respected via registerAPIWithOwnership, not here
+						
+						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
+						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.metadata) {
+							for (const key of Object.keys(implToWrap)) {
+								const value = implToWrap[key];
+								if (typeof value === "function") {
+									this.slothlet.handlers.metadata.tagSystemMetadata(value, {
+										filePath: file.path,
+										apiPath: `${apiPath}.${key}`,
+										moduleId: moduleId,
+										sourceFolder: sourceFolder || this.slothlet.config?.dir
+									});
+								}
+							}
+						}
+						
+						// CRITICAL: If collision merge set __childFilePathsPreMaterialize on wrapper,
+						// copy it to implToWrap so _createChildWrapper can find file function paths
+						if (implToWrap && typeof implToWrap === "object" && this.__childFilePathsPreMaterialize) {
+							implToWrap.__childFilePaths = { ...implToWrap.__childFilePaths, ...this.__childFilePathsPreMaterialize };
+						}
+						
+						console.log(`[MATERIALIZE] Returning implToWrap:`, implToWrap);
+						console.log(`[MATERIALIZE] implToWrap keys:`, Object.keys(implToWrap || {}));
 						return implToWrap;
 					}
 				}
@@ -1040,6 +1070,13 @@ export class ModesProcessor extends ComponentBase {
 					keys: Object.keys(materialized)
 				});
 			}
+			
+			// Debug for math folder
+			if (dir.name === "math") {
+				console.log(`[MATERIALIZE] math folder materialized keys: ${Object.keys(materialized).join(", ")}`);
+				console.log(`[MATERIALIZE] math folder materialized:`, materialized);
+			}
+			
 			const materializedKeys = Object.keys(materialized);
 			// Check for folder/folder.mjs pattern - if materialized has a property matching the folder name,
 			// attach all other properties to it (e.g., logger/logger.mjs + logger/utils.mjs → logger function with .utils attached)
@@ -1096,7 +1133,7 @@ export class ModesProcessor extends ComponentBase {
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
 			materializeOnCreate: config.backgroundMaterialize,
-			filePath: dir.path,
+			filePath: null, // Don't set filePath yet - will be set during materialization
 			moduleId: moduleId, // Use parent moduleId}:${dir.name}`
 			sourceFolder
 		});

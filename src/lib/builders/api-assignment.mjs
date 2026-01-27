@@ -157,8 +157,26 @@ export class ApiAssignment extends ComponentBase {
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
 						// Copy value's childCache (file exports) into existing (lazy folder)
+						
+						// Get file wrapper's metadata to extract filePath for child mappings
+						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
+						const valueFilePath = valueMetadata?.filePath;
+						
+						console.log(`[COLLISION MERGE] file wrapper filePath: ${valueFilePath}`);
+						
+						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
+						if (!existingWrapper.__childFilePathsPreMaterialize) {
+							existingWrapper.__childFilePathsPreMaterialize = {};
+						}
+						
 						for (const [key, child] of valueWrapper._childCache.entries()) {
 							existingWrapper._childCache.set(key, child);
+							// Store filePath mapping so child wrappers can inherit correct filePath
+							if (valueFilePath) {
+								existingWrapper.__childFilePathsPreMaterialize[key] = valueFilePath;
+								console.log(`[COLLISION MERGE] Mapping ${key} -> ${valueFilePath}`);
+							}
 							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 							// In live runtime, direct property access would return the wrapper instead of unwrapped value
 							// The proxy's get trap will handle unwrapping from _childCache
@@ -178,8 +196,25 @@ export class ApiAssignment extends ComponentBase {
 						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
+							
+							// Get file wrapper's metadata to extract filePath for child mappings
+							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
+							const existingFilePath = existingMetadata?.filePath;
+							
+							console.log(`[COLLISION MERGE Case 2] file wrapper filePath: ${existingFilePath}`);
+							
+							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
+							if (!valueWrapper.__childFilePathsPreMaterialize) {
+								valueWrapper.__childFilePathsPreMaterialize = {};
+							}
+							
 							for (const [key, child] of existingWrapper._childCache.entries()) {
 								valueWrapper._childCache.set(key, child);
+								// Store filePath mapping so child wrappers can inherit correct filePath
+								if (existingFilePath) {
+									valueWrapper.__childFilePathsPreMaterialize[key] = existingFilePath;
+									console.log(`[COLLISION MERGE Case 2] Mapping ${key} -> ${existingFilePath}`);
+								}
 								// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 								// In live runtime, direct property access would return the wrapper instead of unwrapped value
 								// The proxy's get trap will handle unwrapping from _childCache

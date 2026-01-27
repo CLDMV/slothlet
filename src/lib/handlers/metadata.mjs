@@ -393,7 +393,7 @@ export class Metadata extends ComponentBase {
 						hint: "Object values must be arrays of nested keys to remove"
 					});
 				}
-				
+
 				const metadataValue = entry.metadata[metadataKey];
 				if (metadataValue && typeof metadataValue === "object") {
 					for (const nestedKey of nestedKeys) {
