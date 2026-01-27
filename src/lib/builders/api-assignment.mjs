@@ -97,7 +97,7 @@ export class ApiAssignment extends ComponentBase {
 			config = null,
 			collisionContext = "initial",
 			syncWrapper = null,
-			collisionMode = "merge"  // Default to merge for hot reload
+			collisionMode = "merge" // Default to merge for hot reload
 		} = options;
 
 		// Get existing value
@@ -158,19 +158,19 @@ export class ApiAssignment extends ComponentBase {
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
 						// Copy value's childCache (file exports) into existing (lazy folder)
-						
+
 						// Get file wrapper's metadata to extract filePath for child mappings
 						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
-						
+
 						console.log(`[COLLISION MERGE] file wrapper filePath: ${valueFilePath}`);
-						
+
 						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
 						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
 						if (!existingWrapper.__childFilePathsPreMaterialize) {
 							existingWrapper.__childFilePathsPreMaterialize = {};
 						}
-						
+
 						for (const [key, child] of valueWrapper._childCache.entries()) {
 							existingWrapper._childCache.set(key, child);
 							// Store filePath mapping so child wrappers can inherit correct filePath
@@ -197,18 +197,18 @@ export class ApiAssignment extends ComponentBase {
 						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
-							
+
 							// Get file wrapper's metadata to extract filePath for child mappings
 							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
 							const existingFilePath = existingMetadata?.filePath;
-							
+
 							console.log(`[COLLISION MERGE Case 2] file wrapper filePath: ${existingFilePath}`);
-							
+
 							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
 							if (!valueWrapper.__childFilePathsPreMaterialize) {
 								valueWrapper.__childFilePathsPreMaterialize = {};
 							}
-							
+
 							for (const [key, child] of existingWrapper._childCache.entries()) {
 								valueWrapper._childCache.set(key, child);
 								// Store filePath mapping so child wrappers can inherit correct filePath

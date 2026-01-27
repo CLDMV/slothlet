@@ -396,21 +396,21 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// Get NEW reference after replacement
 			const mathNew = getMath(api, config.dir);
 
-		// UNIFIED WRAPPER PATTERN: mathNew and mathOld are the SAME wrapper
-		// (wrapper preserved, impl replaced)
-		expect(mathNew).toBe(mathOld);
+			// UNIFIED WRAPPER PATTERN: mathNew and mathOld are the SAME wrapper
+			// (wrapper preserved, impl replaced)
+			expect(mathNew).toBe(mathOld);
 
-		// In replace mode, verify new impl functions work
-		// The originalAdd reference still works on its own
-		expect(await originalAdd(1, 2)).toBe(1003);
+			// In replace mode, verify new impl functions work
+			// The originalAdd reference still works on its own
+			expect(await originalAdd(1, 2)).toBe(1003);
 
-		// Wrapper now executes NEW impl - new functions exist
-		expect(await mathNew.power(2, 3)).toBe(8);
-		expect(await mathNew.sqrt(16)).toBe(4);
-		expect(await mathNew.modulo(10, 3)).toBe(1);
+			// Wrapper now executes NEW impl - new functions exist
+			expect(await mathNew.power(2, 3)).toBe(8);
+			expect(await mathNew.sqrt(16)).toBe(4);
+			expect(await mathNew.modulo(10, 3)).toBe(1);
 
-		// Old reference also executes new impl (same wrapper!)
-		expect(await mathOld.power(2, 3)).toBe(8);
+			// Old reference also executes new impl (same wrapper!)
+			expect(await mathOld.power(2, 3)).toBe(8);
 		});
 
 		it("skip mode: should silently keep existing value", async () => {
