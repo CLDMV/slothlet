@@ -13,7 +13,8 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 export class OwnershipManager extends ComponentBase {
 	static slothletProperty = "ownership";
 
-	constructor() {
+	constructor(slothlet) {
+		super(slothlet);
 		this.moduleToPath = new Map(); // moduleId → Set<apiPath>
 		this.pathToModule = new Map(); // apiPath → Array<{moduleId, source, timestamp, value}>
 	}

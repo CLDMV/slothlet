@@ -88,7 +88,7 @@ class Slothlet {
 				} catch (error) {
 					// Skip files that fail to import
 					// Only error if a component with slothletProperty can't be loaded
-					if (this.config?.debug?.initialization) {
+					if (!this.config?.silent) {
 						new this.SlothletWarning("WARNING_INIT_COMPONENT_SKIPPED", {
 							file,
 							error: error.message
