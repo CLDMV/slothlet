@@ -1111,6 +1111,20 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 			for (const rollback of result.rolledBack) {
+				// If restoring to the same moduleId we're removing, that's a self-restoration
+				// (duplicate registration), so delete instead
+				if (rollback.restoredTo === moduleIdKey) {
+					const { parts } = this.normalizeApiPath(rollback.apiPath);
+					this.deletePath(this.slothlet.api, parts);
+					this.deletePath(this.slothlet.boundApi, parts);
+					// Clean up user metadata
+					if (this.slothlet.handlers.metadata) {
+						const rootSegment = rollback.apiPath.split(".")[0];
+						this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+					}
+					continue;
+				}
+
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
 				if (restoredValue !== undefined) {
