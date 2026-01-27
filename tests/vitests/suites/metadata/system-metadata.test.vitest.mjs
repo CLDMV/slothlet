@@ -257,4 +257,66 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 			expect(path).toBe("rootMath/add");
 		});
 	});
+
+	describe("Internal API Access to System Metadata (self.slothlet.metadata.*)", () => {
+		it("should access system metadata via self.slothlet.metadata.get() from within API", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Use helper that calls self.slothlet.metadata.get() internally
+			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+
+			// Should retrieve system metadata
+			expect(metadata).toBeDefined();
+			expect(metadata.moduleID).toBeDefined();
+			expect(metadata.moduleID).toMatch(/^base_[a-z0-9]+:rootMath\/add$/);
+			expect(metadata.filePath).toContain("root-math.mjs");
+			expect(metadata.apiPath).toBe("rootMath.add");
+			expect(metadata.sourceFolder).toContain("api_test");
+		});
+
+		it("should access nested function system metadata internally", async () => {
+			await api.slothlet.api.add("internal", TEST_DIRS.API_SMART_FLATTEN);
+			await materialize(api, "internal.config.settings.getPluginConfig");
+
+			// Access via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("internal.config.settings.getPluginConfig");
+
+			expect(metadata.apiPath).toBe("internal.config.settings.getPluginConfig");
+			expect(metadata.moduleID).toContain("internal/config/settings/getPluginConfig");
+			expect(metadata.filePath).toContain("settings.mjs");
+		});
+
+		it("should return undefined for non-existent paths via internal API", async () => {
+			const metadata = await api.metadataTestHelper.getMetadata("nonExistent.path");
+			expect(metadata).toBeUndefined();
+		});
+
+		it("should access own system metadata via self.slothlet.metadata.self()", async () => {
+			const selfMetadata = await api.metadataTestHelper.getSelfMetadata();
+
+			// Should return metadata of the helper function itself
+			expect(selfMetadata).toBeDefined();
+			expect(selfMetadata.apiPath).toContain("metadataTestHelper");
+			expect(selfMetadata.moduleID).toBeDefined();
+		});
+
+		it("should track system metadata immutability via internal API", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Get metadata via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+			const originalModuleID = metadata.moduleID;
+
+			// Attempt to modify (should fail silently due to freeze)
+			try {
+				metadata.moduleID = "hacked";
+			} catch (_) {
+				// Expected
+			}
+
+			// Verify still immutable
+			const metadataAfter = await api.metadataTestHelper.getMetadata("rootMath.add");
+			expect(metadataAfter.moduleID).toBe(originalModuleID);
+		});
+	});
 });

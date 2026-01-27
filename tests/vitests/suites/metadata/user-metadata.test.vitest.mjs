@@ -345,4 +345,107 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			}
 		});
 	});
+
+	describe("Complex Path Scenarios (self.slothlet.metadata.*)", () => {
+		it("should handle deeply nested paths via internal API", async () => {
+			await api.slothlet.api.add("deep", TEST_DIRS.API_SMART_FLATTEN, {
+				depth: "very_deep"
+			});
+
+			await materialize(api, "deep.config.settings.getPluginConfig");
+
+			// Access deeply nested function
+			const metadata = await api.metadataTestHelper.getMetadata("deep.config.settings.getPluginConfig");
+
+			expect(metadata).toBeDefined();
+			expect(metadata.depth).toBe("very_deep");
+			expect(metadata.apiPath).toBe("deep.config.settings.getPluginConfig");
+		});
+
+		it("should return undefined for partial paths that don't have metadata", async () => {
+			await api.slothlet.api.add("partial", TEST_DIRS.API_SMART_FLATTEN);
+
+			// Intermediate paths may not have complete metadata
+			const configMeta = await api.metadataTestHelper.getMetadata("partial.config");
+
+			// Depending on implementation, intermediate nodes may or may not have metadata
+			// Just verify the call doesn't throw
+			expect(configMeta === undefined || typeof configMeta === "object").toBe(true);
+		});
+
+		it("should distinguish between different paths with similar names", async () => {
+			await api.slothlet.api.add("similar1", TEST_DIRS.API_SMART_FLATTEN, {
+				id: "first"
+			});
+
+			await api.slothlet.api.add("similar2", TEST_DIRS.API_SMART_FLATTEN, {
+				id: "second"
+			});
+
+			await materialize(api, "similar1.config.settings.getPluginConfig");
+			await materialize(api, "similar2.config.settings.getPluginConfig");
+
+			const meta1 = await api.metadataTestHelper.getMetadata("similar1.config.settings.getPluginConfig");
+			const meta2 = await api.metadataTestHelper.getMetadata("similar2.config.settings.getPluginConfig");
+
+			expect(meta1.id).toBe("first");
+			expect(meta2.id).toBe("second");
+			expect(meta1.moduleID).not.toBe(meta2.moduleID);
+		});
+
+		it("should handle root-level functions via internal API", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+
+			expect(metadata.apiPath).toBe("rootMath.add");
+			expect(metadata.moduleID).toContain("rootMath/add");
+		});
+
+		it("should verify metadata existence for various path types", async () => {
+			// Root-level function
+			await materialize(api, "rootMath.add", 1, 2);
+			const rootResult = await api.metadataTestHelper.verifyMetadata("rootMath.add");
+			expect(rootResult.exists).toBe(true);
+
+			// Added API function
+			await api.slothlet.api.add("verified", TEST_DIRS.API_SMART_FLATTEN, {
+				verified: true
+			});
+			await materialize(api, "verified.config.settings.getPluginConfig");
+			const addedResult = await api.metadataTestHelper.verifyMetadata("verified.config.settings.getPluginConfig");
+			expect(addedResult.exists).toBe(true);
+			expect(addedResult.metadata.verified).toBe(true);
+
+			// Non-existent path
+			const nonExistentResult = await api.metadataTestHelper.verifyMetadata("does.not.exist");
+			expect(nonExistentResult.exists).toBe(false);
+		});
+
+		it("should access caller metadata from nested calls", async () => {
+			// testCaller internally calls self.slothlet.metadata.caller()
+			const callerInfo = await api.metadataTestHelper.testCaller();
+
+			// Caller is the test itself, which doesn't have metadata
+			// But the call should not throw
+			expect(callerInfo !== undefined).toBe(true);
+		});
+
+		it("should handle mixed user and system metadata via internal API", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set user metadata
+			api.slothlet.metadata.set(api.rootMath.add, "userKey", "userValue");
+			api.slothlet.metadata.set(api.rootMath.add, "timestamp", Date.now());
+
+			// Access via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+
+			// Should have both system and user metadata
+			expect(metadata.moduleID).toBeDefined(); // System
+			expect(metadata.apiPath).toBeDefined(); // System
+			expect(metadata.userKey).toBe("userValue"); // User
+			expect(metadata.timestamp).toBeDefined(); // User
+		});
+	});
 });

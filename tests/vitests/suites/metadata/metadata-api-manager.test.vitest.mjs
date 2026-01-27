@@ -183,4 +183,98 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			expect(api.partial.config).toBeUndefined(); // Child removed
 		});
 	});
+
+	describe("Internal API Access During api.add()/remove() (self.slothlet.metadata.*)", () => {
+		it("should access newly added API via internal metadata.get()", async () => {
+			await api.slothlet.api.add("internalAdd", TEST_DIRS.API_SMART_FLATTEN, {
+				addedViaInternal: true,
+				timestamp: Date.now()
+			});
+
+			await materialize(api, "internalAdd.config.settings.getPluginConfig");
+
+			// Access via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("internalAdd.config.settings.getPluginConfig");
+
+			expect(metadata).toBeDefined();
+			expect(metadata.addedViaInternal).toBe(true);
+			expect(metadata.timestamp).toBeDefined();
+			expect(metadata.apiPath).toBe("internalAdd.config.settings.getPluginConfig");
+		});
+
+		it("should reflect user metadata set via external API in internal API", async () => {
+			await api.slothlet.api.add("crossCheck", TEST_DIRS.API_SMART_FLATTEN);
+			await materialize(api, "crossCheck.config.settings.getPluginConfig");
+
+			// Set via external API
+			api.slothlet.metadata.set(api.crossCheck.config.settings.getPluginConfig, "externalValue", "test123");
+
+			// Read via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("crossCheck.config.settings.getPluginConfig");
+			expect(metadata.externalValue).toBe("test123");
+		});
+
+		it("should return undefined after api.remove() via internal API", async () => {
+			await api.slothlet.api.add("removableInternal", TEST_DIRS.API_SMART_FLATTEN, {
+				temporary: true
+			});
+
+			await materialize(api, "removableInternal.config.settings.getPluginConfig");
+
+			// Verify exists via internal API
+			let metadata = await api.metadataTestHelper.getMetadata("removableInternal.config.settings.getPluginConfig");
+			expect(metadata).toBeDefined();
+			expect(metadata.temporary).toBe(true);
+
+			// Remove
+			await api.slothlet.api.remove("removableInternal");
+
+			// Should be undefined via internal API
+			metadata = await api.metadataTestHelper.getMetadata("removableInternal.config.settings.getPluginConfig");
+			expect(metadata).toBeUndefined();
+		});
+
+		it("should handle multiple add/remove cycles via internal API", async () => {
+			for (let cycle = 1; cycle <= 3; cycle++) {
+				// Add with cycle metadata
+				await api.slothlet.api.add("cycleInternal", TEST_DIRS.API_SMART_FLATTEN, {
+					cycle,
+					iteration: `cycle_${cycle}`
+				});
+
+				await materialize(api, "cycleInternal.config.settings.getPluginConfig");
+
+				// Verify via internal API
+				const metadata = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
+				expect(metadata.cycle).toBe(cycle);
+				expect(metadata.iteration).toBe(`cycle_${cycle}`);
+
+				// Remove
+				await api.slothlet.api.remove("cycleInternal");
+
+				// Verify removed via internal API
+				const afterRemove = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
+				expect(afterRemove).toBeUndefined();
+			}
+		});
+
+		it("should track partial removal via internal API", async () => {
+			await api.slothlet.api.add("partialInternal", TEST_DIRS.API_SMART_FLATTEN, {
+				hasConfig: true
+			});
+
+			await materialize(api, "partialInternal.config.settings.getPluginConfig");
+
+			// Verify parent exists
+			const beforeRemove = await api.metadataTestHelper.getMetadata("partialInternal.config.settings.getPluginConfig");
+			expect(beforeRemove).toBeDefined();
+
+			// Remove subtree
+			await api.slothlet.api.remove("partialInternal.config");
+
+			// Child should be gone
+			const afterRemove = await api.metadataTestHelper.getMetadata("partialInternal.config.settings.getPluginConfig");
+			expect(afterRemove).toBeUndefined();
+		});
+	});
 });

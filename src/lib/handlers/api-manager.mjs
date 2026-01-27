@@ -635,20 +635,43 @@ export class ApiManager extends ComponentBase {
 			return;
 		}
 
-		const registerRecursive = (currentValue, pathParts) => {
+		const visited = new WeakSet();
+		const maxDepth = 10; // Prevent excessive recursion
+
+		// Get collision mode from config (defaults to "merge")
+		const collisionMode = this.config.collision?.addApi || "merge";
+
+		const registerRecursive = (currentValue, pathParts, depth = 0) => {
+			// Depth limit check
+			if (depth > maxDepth) {
+				return;
+			}
+
 			const pathKey = pathParts.join(".");
 			ownership.register({
 				moduleId,
 				apiPath: pathKey,
 				value: currentValue,
 				source: "add",
-				collisionMode: "merge",
+				collisionMode: collisionMode,
 				filePath: null
 			});
 
+			// Only recurse into objects/functions, not primitives or arrays
 			if (currentValue && (typeof currentValue === "object" || typeof currentValue === "function") && !Array.isArray(currentValue)) {
+				// Circular reference check
+				if (visited.has(currentValue)) {
+					return;
+				}
+				visited.add(currentValue);
+
+				// Skip special properties that shouldn't be recursively registered
+				const skipProps = new Set(["__wrapper", "__metadata", "__materialize", "__type", "_impl", "_childCache"]);
+
 				for (const [key, child] of Object.entries(currentValue)) {
-					registerRecursive(child, [...pathParts, key]);
+					if (!skipProps.has(key)) {
+						registerRecursive(child, [...pathParts, key], depth + 1);
+					}
 				}
 			}
 		};

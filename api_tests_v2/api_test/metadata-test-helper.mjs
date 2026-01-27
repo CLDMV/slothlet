@@ -1,22 +1,21 @@
 /**
- * @fileoverview Helper functions for testing metadataAPI from within slothlet context.
+ * @fileoverview Helper functions for testing metadata API from within slothlet context.
  * @module api_test.metadataTestHelper
  * @memberof module:api_test
  * @public
  *
  * @description
- * Provides test helper functions that access metadataAPI from within the slothlet
+ * Provides test helper functions that access metadata API from within the slothlet
  * execution context where runtime bindings (self, context, reference) are available.
  */
 
 // Import runtime bindings - these establish the execution context
+import { self } from "@cldmv/slothlet/runtime";
 
-// TODO: Bring over metadata system from v2 to v3
-// import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
-import { self as _ } from "@cldmv/slothlet/runtime";
+console.log("[metadata-test-helper] Module loaded at:", new Date().toISOString());
 
 /**
- * Test helper that calls metadataAPI.get() from within slothlet context.
+ * Test helper that calls api.slothlet.metadata.get() from within slothlet context.
  *
  * @function getMetadata
  * @public
@@ -25,25 +24,38 @@ import { self as _ } from "@cldmv/slothlet/runtime";
  *
  * @description
  * This function runs inside the slothlet API context where runtime.self
- * is available, allowing metadataAPI.get() to access the API root.
+ * is available, allowing metadata.get() to access the API root.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
  */
 export async function getMetadata(path) {
-	// TODO: Bring over metadata system from v2 to v3
-	// const result = await metadataAPI.get(path);
-	// // Debug: Show what we got
-	// if (process.env.SLOTHLET_DEBUG) {
-	// 	console.log("[getMetadata] Result for", path, ":", result);
-	// }
-	// return result;
-	throw new Error("metadataAPI not yet implemented in v3 - TODO");
+	// Access metadata API through self (the bound API root)
+	if (!self.slothlet?.metadata?.get) {
+		throw new Error("Metadata API not available - ensure slothlet instance has metadata enabled");
+	}
+
+	const result = await self.slothlet.metadata.get(path);
+
+	// Debug: Show what we got
+	if (process.env.SLOTHLET_DEBUG) {
+		console.log("[getMetadata] Result for", path, ":", result);
+		console.log("[getMetadata] Converting null?", result === null);
+	}
+
+	// Convert null to undefined for test consistency
+	const finalResult = result === null ? undefined : result;
+
+	if (process.env.SLOTHLET_DEBUG) {
+		console.log("[getMetadata] Final result:", finalResult);
+	}
+
+	return finalResult;
 }
 
 /**
- * Test helper that calls metadataAPI.self() from within slothlet context.
+ * Test helper that calls api.slothlet.metadata.self() from within slothlet context.
  *
  * @function getSelfMetadata
  * @public
@@ -51,20 +63,23 @@ export async function getMetadata(path) {
  *
  * @description
  * Returns the metadata of this helper function itself, demonstrating
- * that metadataAPI.self() works within the slothlet context.
+ * that metadata.self() works within the slothlet context.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getSelfMetadata();
  */
 export async function getSelfMetadata() {
-	// TODO: Bring over metadata system from v2 to v3
-	// return await metadataAPI.self();
-	throw new Error("metadataAPI not yet implemented in v3 - TODO");
+	// Access metadata API through self (the bound API root)
+	if (!self.slothlet?.metadata?.self) {
+		throw new Error("Metadata API not available - ensure slothlet instance has metadata enabled");
+	}
+
+	return self.slothlet.metadata.self();
 }
 
 /**
- * Test helper that simulates a caller detection scenario for metadataAPI.caller().
+ * Test helper that simulates a caller detection scenario for api.slothlet.metadata.caller().
  *
  * @function testCaller
  * @public
@@ -72,7 +87,7 @@ export async function getSelfMetadata() {
  *
  * @description
  * This function calls an inner function which checks its caller's metadata
- * using metadataAPI.caller(). Used to test the caller tracking functionality.
+ * using metadata.caller(). Used to test the caller tracking functionality.
  *
  * @example
  * // From test file
@@ -80,16 +95,19 @@ export async function getSelfMetadata() {
  * console.log(result.callerMeta); // Should show testCaller's metadata
  */
 export async function testCaller() {
-	// TODO: Bring over metadata system from v2 to v3
-	// // Inner function that will check who called it
-	// async function innerFunction() {
-	// 	const callerMeta = await metadataAPI.caller();
-	// 	return { callerMeta };
-	// }
-	//
-	// // Call inner function - it should see testCaller as the caller
-	// return await innerFunction();
-	throw new Error("metadataAPI not yet implemented in v3 - TODO");
+	// Access metadata API through self (the bound API root)
+	if (!self.slothlet?.metadata?.caller) {
+		throw new Error("Metadata API not available - ensure slothlet instance has metadata enabled");
+	}
+
+	// Inner function that will check who called it
+	async function innerFunction() {
+		const callerMeta = self.slothlet.metadata.caller();
+		return { callerMeta };
+	}
+
+	// Call inner function - it should see testCaller as the caller
+	return await innerFunction();
 }
 
 /**
@@ -108,12 +126,15 @@ export async function testCaller() {
  * const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
  */
 export async function verifyMetadata(path) {
-	// TODO: Bring over metadata system from v2 to v3
-	// const meta = await metadataAPI.get(path);
-	// return {
-	// 	exists: meta !== null,
-	// 	hasSourceFolder: meta?.sourceFolder !== undefined,
-	// 	metadata: meta
-	// };
-	throw new Error("metadataAPI not yet implemented in v3 - TODO");
+	// Access metadata API through self (the bound API root)
+	if (!self.slothlet?.metadata?.get) {
+		throw new Error("Metadata API not available - ensure slothlet instance has metadata enabled");
+	}
+
+	const meta = await self.slothlet.metadata.get(path);
+	return {
+		exists: meta !== null,
+		hasSourceFolder: meta?.sourceFolder !== undefined,
+		metadata: meta
+	};
 }
