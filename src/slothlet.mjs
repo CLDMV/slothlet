@@ -181,7 +181,7 @@ class Slothlet {
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
 		if (this.handlers.ownership) {
-			this.registerAPIWithOwnership(apiWithBuiltins, "base", "");
+			this.registerAPIWithOwnership(apiWithBuiltins, baseModuleId, "");
 		}
 
 		// UnifiedWrapper already handles context binding, so no additional wrapping needed

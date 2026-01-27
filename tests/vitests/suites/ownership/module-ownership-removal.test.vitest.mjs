@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -14,9 +14,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use OWNERSHIP_MATRIX helper for configs that require hotReload + ownership tracking
-const OWNERSHIP_MATRIX = getMatrixConfigs({ hotReload: true });
-const BASIC_MATRIX = getMatrixConfigs({ hotReload: false, hooks: false });
+// Use TEST_MATRIX - ownership tracking is now always available via api.slothlet.api
 
 // Test modules directory - temporary folder next to this test file
 const testDir = path.join(__dirname, "temp-ownership-modules");
@@ -201,13 +199,10 @@ describe.each(BASIC_MATRIX)("Basic API Removal > Config: '$name'", ({ config }) 
 		expect(removedByPath).toBe(true);
 		expect(api.plugins?.test).toBeUndefined();
 	});
-		expect(removedByPath).toBe(true);
-		expect(api.plugins?.test).toBeUndefined();
-	});
 });
 
-// Module ownership tests - require hotReload for ownership tracking
-describe.each(OWNERSHIP_MATRIX)("Module Ownership > Config: '$name'", ({ config }) => {
+// Module ownership tests - ownership tracking always available in v3
+describe.each(TEST_MATRIX)("Module Ownership > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
