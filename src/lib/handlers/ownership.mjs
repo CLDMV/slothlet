@@ -261,6 +261,20 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Get ownership info for a specific API path
+	 * @param {string} apiPath - API path to check
+	 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+	 * @public
+	 */
+	getPathOwnership(apiPath) {
+		const stack = this.pathToModule.get(apiPath);
+		if (!stack || stack.length === 0) {
+			return null;
+		}
+		return new Set(stack.map((entry) => entry.moduleId));
+	}
+
+	/**
 	 * Clear all ownership data
 	 * @public
 	 */

@@ -536,6 +536,18 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			shutdown: async () => {
 				return slothlet.shutdown();
+			},
+
+			/**
+			 * Get ownership info for a specific API path
+			 * @param {string} apiPath - API path to check
+			 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+			 */
+			getPathOwnership: (apiPath) => {
+				if (slothlet.handlers?.ownership) {
+					return slothlet.handlers.ownership.getPathOwnership(apiPath);
+				}
+				return null;
 			}
 		};
 
@@ -580,6 +592,18 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				inspect: () => {
 					return slothlet.getDiagnostics();
+				},
+
+				/**
+				 * Get ownership info for a specific API path
+				 * @param {string} apiPath - API path to check
+				 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+				 */
+				getPathOwnership: (apiPath) => {
+					if (slothlet.handlers?.ownership) {
+						return slothlet.handlers.ownership.getPathOwnership(apiPath);
+					}
+					return null;
 				}
 			};
 		}

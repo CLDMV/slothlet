@@ -7,14 +7,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
+import { TEST_MATRIX } from "../../setup/vitest-helper.mjs";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import slothlet from "@cldmv/slothlet";
 
-// Use OWNERSHIP_MATRIX for configs that require hotReload + ownership tracking
-const OWNERSHIP_MATRIX = getMatrixConfigs({ hotReload: true });
+// Use all configurations - ownership tracking is now always available via api.slothlet.api
 
 describe("Ownership Tracking on Cross-Module Replacement", () => {
 	beforeAll(() => {
@@ -27,7 +26,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 		delete process.env.SLOTHLET_INTERNAL_TEST_MODE;
 	});
 
-	OWNERSHIP_MATRIX.forEach(({ name, config }) => {
+	TEST_MATRIX.forEach(({ name, config }) => {
 		describe.sequential(name, () => {
 			it("should track full rollback chain: core → v1 → v2 → v1 → core", async () => {
 				// Create unique temp directory for this specific test
@@ -62,11 +61,13 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(api.feature.doSomething).toBeDefined();
 					expect(await api.feature.doSomething()).toBe("core-implementation");
 
-					// Check initial ownership - should be "core"
-					const initialOwnership = api._getApiOwnership("feature");
+					// Check initial ownership - should be "base_slothlet" (generated base moduleId)
+					const initialOwnership = api.slothlet.getPathOwnership("feature");
 					expect(initialOwnership).toBeDefined();
-					expect(initialOwnership.has("core")).toBe(true);
 					expect(initialOwnership.size).toBe(1);
+					// Ownership contains generated base_* moduleId (not "base" to avoid user conflicts)
+					const baseModuleId = [...initialOwnership][0];
+					expect(baseModuleId).toMatch(/^base_/);
 
 					// Load v1 with moduleId (overwrites core)
 					await api.slothlet.api.add("feature", v1Dir, {}, { moduleId: "module-v1" });
@@ -74,12 +75,13 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Verify v1 replaced core's implementation
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
 
-					// Check ownership - should accumulate: core + v1 (v1 is current)
-					const ownershipAfterV1 = api._getApiOwnership("feature");
+					// Check ownership - should accumulate: base_* + v1 (v1 is current)
+					const ownershipAfterV1 = api.slothlet.getPathOwnership("feature");
 					expect(ownershipAfterV1.size).toBe(2);
-					expect(ownershipAfterV1.has("core")).toBe(true);
+					expect(ownershipAfterV1.has(baseModuleId)).toBe(true);
 					expect(ownershipAfterV1.has("module-v1")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v1");
+					// Current owner is last in stack (most recent)
+					expect([...ownershipAfterV1].pop()).toBe("module-v1");
 
 					// Load v2 with different moduleId (cross-module overwrite)
 					await api.slothlet.api.add("feature", v2Dir, {}, { moduleId: "module-v2" });
@@ -87,34 +89,37 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					// Verify v2 replaced v1's implementation
 					expect(await api.feature.doSomething()).toBe("v2-implementation");
 
-					// Check ownership - should accumulate: core + v1 + v2 (v2 is current)
-					const ownershipAfterV2 = api._getApiOwnership("feature");
+					// Check ownership - should accumulate: base_* + v1 + v2 (v2 is current)
+					const ownershipAfterV2 = api.slothlet.getPathOwnership("feature");
 					expect(ownershipAfterV2.size).toBe(3);
-					expect(ownershipAfterV2.has("core")).toBe(true);
+					expect(ownershipAfterV2.has(baseModuleId)).toBe(true);
 					expect(ownershipAfterV2.has("module-v1")).toBe(true);
 					expect(ownershipAfterV2.has("module-v2")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v2");
+					// Current owner is last in stack (most recent)
+					expect([...ownershipAfterV2].pop()).toBe("module-v2");
 
 					// Remove v2 - should rollback to v1
 					await api.slothlet.api.remove("module-v2");
 
 					// Verify rollback to v1
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
-					const ownershipAfterV2Removed = api._getApiOwnership("feature");
+					const ownershipAfterV2Removed = api.slothlet.getPathOwnership("feature");
 					expect(ownershipAfterV2Removed.size).toBe(2);
-					expect(ownershipAfterV2Removed.has("core")).toBe(true);
+					expect(ownershipAfterV2Removed.has(baseModuleId)).toBe(true);
 					expect(ownershipAfterV2Removed.has("module-v1")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("module-v1");
+					// Current owner is last in stack (most recent)
+					expect([...ownershipAfterV2Removed].pop()).toBe("module-v1");
 
 					// Remove v1 - should rollback to core
 					await api.slothlet.api.remove("module-v1");
 
-					// Verify rollback to core
+					// Verify rollback to base
 					expect(await api.feature.doSomething()).toBe("core-implementation");
-					const finalOwnership = api._getApiOwnership("feature");
+					const finalOwnership = api.slothlet.getPathOwnership("feature");
 					expect(finalOwnership.size).toBe(1);
-					expect(finalOwnership.has("core")).toBe(true);
-					expect(api._getCurrentOwner("feature")).toBe("core");
+					expect(finalOwnership.has(baseModuleId)).toBe(true);
+					// Current owner is last in stack (most recent)
+					expect([...finalOwnership].pop()).toBe(baseModuleId);
 
 					await api.shutdown();
 				} finally {
@@ -162,7 +167,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(await api.test.feature.doSomething()).toBe("v1-implementation");
 
 					// Check ownership - should only be v1
-					const ownershipAfterV1 = api._getApiOwnership("test");
+					const ownershipAfterV1 = api.slothlet.getPathOwnership("test");
 					expect(ownershipAfterV1.has("module-v1")).toBe(true);
 
 					// Load v2 with different moduleId (cross-module overwrite)
@@ -175,7 +180,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 					// CORRECTED: Ownership should accumulate for hot reload rollback support
 					// When v2 overwrites v1, both should be tracked so v1 can be restored if v2 is removed
-					const ownershipAfterV2 = api._getApiOwnership("test");
+					const ownershipAfterV2 = api.slothlet.getPathOwnership("test");
 					expect(ownershipAfterV2).toBeDefined();
 					expect(ownershipAfterV2.size).toBe(2); // Both v1 and v2 should be tracked
 					expect(ownershipAfterV2.has("module-v2")).toBe(true);
@@ -222,7 +227,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 
 					// Check ownership - both should be owners since they contribute different properties
 					// Ownership is registered at the API path level (merged)
-					const ownership = api._getApiOwnership("merged");
+					const ownership = api.slothlet.getPathOwnership("merged");
 					expect(ownership.size).toBe(2);
 					expect(ownership.has("module-v1")).toBe(true);
 					expect(ownership.has("module-v2")).toBe(true);
