@@ -106,6 +106,60 @@ class Slothlet {
 	}
 
 	/**
+	 * Set up lifecycle event subscribers for cross-system coordination
+	 * @private
+	 */
+	_setupLifecycleSubscribers() {
+		if (!this.handlers.lifecycle) {
+			return; // Lifecycle handler not available
+		}
+
+		// Subscribe metadata system to impl:created and impl:changed events
+		if (this.handlers.metadata) {
+			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+				this.handlers.metadata.tagSystemMetadata(data.impl, {
+					filePath: data.filePath,
+					apiPath: data.apiPath,
+					moduleId: data.moduleId,
+					sourceFolder: data.sourceFolder
+				}, { _fromLifecycle: true });
+			});
+
+			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+				this.handlers.metadata.tagSystemMetadata(data.impl, {
+					filePath: data.filePath,
+					apiPath: data.apiPath,
+					moduleId: data.moduleId,
+					sourceFolder: data.sourceFolder
+				}, { _fromLifecycle: true });
+			});
+		}
+
+		// Subscribe ownership system to impl:created and impl:changed events
+		if (this.handlers.ownership) {
+			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+				this.handlers.ownership.register({
+					moduleId: data.moduleId,
+					apiPath: data.apiPath,
+					value: data.impl,
+					source: data.source,
+					filePath: data.filePath
+				});
+			});
+
+			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+				this.handlers.ownership.register({
+					moduleId: data.moduleId,
+					apiPath: data.apiPath,
+					value: data.impl,
+					source: data.source,
+					filePath: data.filePath
+				});
+			});
+		}
+	}
+
+	/**
 	 * Load API from directory
 	 * @param {Object} config - Configuration options
 	 * @param {string} config.dir - Directory to load API from
@@ -128,6 +182,9 @@ class Slothlet {
 		// Initialize all components via auto-discovery BEFORE transforming config
 		// This allows config helpers to be component classes
 		await this._initializeComponents();
+
+		// Set up lifecycle event subscribers for cross-system coordination
+		this._setupLifecycleSubscribers();
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);

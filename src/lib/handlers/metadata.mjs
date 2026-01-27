@@ -186,9 +186,25 @@ export class Metadata extends ComponentBase {
 	 * Called internally during wrapper/function creation
 	 * @param {Function|Object} target - Wrapper or function to tag
 	 * @param {Object} systemData - System metadata (filePath, apiPath, moduleId, sourceFolder)
+	 * @param {Object} [options] - Options
+	 * @param {boolean} [options._fromLifecycle] - REQUIRED: Must be true, indicates call from lifecycle system
 	 * @private
 	 */
-	tagSystemMetadata(target, systemData) {
+	tagSystemMetadata(target, systemData, options = {}) {
+		// ENFORCEMENT: All metadata tagging MUST go through lifecycle system
+		if (!options._fromLifecycle) {
+			const error = new Error(
+				"[slothlet] tagSystemMetadata() must be called through lifecycle system. " +
+				"Use lifecycle.emit('impl:created') or lifecycle.emit('impl:changed') instead of direct call."
+			);
+			if (!this.config?.silent) {
+				console.error(error.message);
+				console.error("Stack trace:");
+				console.error(error.stack);
+			}
+			throw error;
+		}
+
 		if (!target) return;
 
 		// WeakMap only accepts objects/functions as keys

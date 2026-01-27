@@ -147,24 +147,28 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 				});
 				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
 				// Tag system metadata for the merged module AND its properties with correct file path
-				if (materialized[moduleName] && slothlet.handlers?.metadata) {
-					// Tag the module object itself
-					slothlet.handlers.metadata.tagSystemMetadata(materialized[moduleName], {
-						filePath: file.path,
+				if (materialized[moduleName] && slothlet.handlers?.lifecycle) {
+					// Emit impl:created event for the module object itself
+					slothlet.handlers.lifecycle.emit("impl:created", {
 						apiPath: `${apiPath}.${moduleName}`,
+						impl: materialized[moduleName],
+						source: "lazy-merge",
 						moduleId: effectiveModuleId,
+						filePath: file.path,
 						sourceFolder: dir.path
 					});
 
-					// Tag all properties (functions) in the module
+					// Emit impl:created events for all properties (functions) in the module
 					if (typeof materialized[moduleName] === "object") {
 						for (const key of Object.keys(materialized[moduleName])) {
 							const prop = materialized[moduleName][key];
 							if (typeof prop === "function" || (typeof prop === "object" && prop !== null)) {
-								slothlet.handlers.metadata.tagSystemMetadata(prop, {
-									filePath: file.path,
+								slothlet.handlers.lifecycle.emit("impl:created", {
 									apiPath: `${apiPath}.${moduleName}.${key}`,
+									impl: prop,
+									source: "lazy-merge-property",
 									moduleId: effectiveModuleId,
+									filePath: file.path,
 									sourceFolder: dir.path
 								});
 							}

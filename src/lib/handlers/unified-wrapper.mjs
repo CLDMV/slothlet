@@ -124,22 +124,28 @@ export class UnifiedWrapper extends ComponentBase {
 		this._materializeFunc = materializeFunc;
 		this.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 
-		// Tag wrapper with system metadata immediately
-		if (filePath && slothlet.handlers?.metadata) {
-			slothlet.handlers.metadata.tagSystemMetadata(this, {
-				filePath,
+		// Emit impl:created event for lifecycle management (wrapper creation)
+		if (filePath && slothlet.handlers?.lifecycle) {
+			slothlet.handlers.lifecycle.emit("impl:created", {
 				apiPath,
+				impl: this,
+				wrapper: this,
+				source: "initial",
 				moduleId,
+				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
 		}
 
-		// For eager mode with initial impl, also tag the impl
-		if (initialImpl !== null && filePath && slothlet.handlers?.metadata) {
-			slothlet.handlers.metadata.tagSystemMetadata(initialImpl, {
-				filePath,
+		// For eager mode with initial impl, also emit event for impl
+		if (initialImpl !== null && filePath && slothlet.handlers?.lifecycle) {
+			slothlet.handlers.lifecycle.emit("impl:created", {
 				apiPath,
+				impl: initialImpl,
+				wrapper: this,
+				source: "initial",
 				moduleId,
+				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
 		}
@@ -202,18 +208,20 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		this._invalid = false;
 
-		// Update metadata for new impl
-		if (newImpl && this.slothlet.handlers?.metadata) {
+		// Emit impl:changed event for lifecycle management
+		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			if (wrapperMetadata && wrapperMetadata.filePath) {
-				const extractedModuleId = wrapperMetadata.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null;
-				this.slothlet.handlers.metadata.tagSystemMetadata(newImpl, {
-					filePath: wrapperMetadata.filePath,
-					apiPath: this.apiPath,
-					moduleId: extractedModuleId,
-					sourceFolder: wrapperMetadata.sourceFolder
-				});
-			}
+			const extractedModuleId = wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null;
+
+			this.slothlet.handlers.lifecycle.emit("impl:changed", {
+				apiPath: this.apiPath,
+				impl: newImpl,
+				wrapper: this,
+				source: "hot-reload",
+				moduleId: extractedModuleId,
+				filePath: wrapperMetadata?.filePath,
+				sourceFolder: wrapperMetadata?.sourceFolder
+			});
 		}
 
 		this._adoptImplChildren();
