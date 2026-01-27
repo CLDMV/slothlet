@@ -93,25 +93,25 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 
 		it("should work with nested functions", async () => {
-			await materialize(api, "config.settings.getPluginConfig", "test");
+			await materialize(api, "nested.date.today");
 
-			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "plugin", "test-plugin");
-			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "enabled", true);
+			api.slothlet.metadata.set(api.nested.date.today, "plugin", "test-plugin");
+			api.slothlet.metadata.set(api.nested.date.today, "enabled", true);
 
-			const meta = api.config.settings.getPluginConfig.__metadata;
+			const meta = api.nested.date.today.__metadata;
 			expect(meta.plugin).toBe("test-plugin");
 			expect(meta.enabled).toBe(true);
 		});
 
 		it("should handle multiple functions independently", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			await materialize(api, "rootMath.subtract", 5, 3);
+			await materialize(api, "rootMath.multiply", 5, 3);
 
 			api.slothlet.metadata.set(api.rootMath.add, "operation", "addition");
-			api.slothlet.metadata.set(api.rootMath.subtract, "operation", "subtraction");
+			api.slothlet.metadata.set(api.rootMath.multiply, "operation", "multiplication");
 
 			expect(api.rootMath.add.__metadata.operation).toBe("addition");
-			expect(api.rootMath.subtract.__metadata.operation).toBe("subtraction");
+			expect(api.rootMath.multiply.__metadata.operation).toBe("multiplication");
 		});
 
 		it("should persist metadata across function calls", async () => {
@@ -227,13 +227,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 			// Materialize multiple functions
 			await materialize(api, "rootMath.add", 1, 2);
-			await materialize(api, "rootMath.subtract", 5, 3);
+			await materialize(api, "rootMath.multiply", 5, 3);
 
 			// Global metadata should be in both
 			expect(api.rootMath.add.__metadata.appVersion).toBe("3.0.0");
 			expect(api.rootMath.add.__metadata.environment).toBe("test");
-			expect(api.rootMath.subtract.__metadata.appVersion).toBe("3.0.0");
-			expect(api.rootMath.subtract.__metadata.environment).toBe("test");
+			expect(api.rootMath.multiply.__metadata.appVersion).toBe("3.0.0");
+			expect(api.rootMath.multiply.__metadata.environment).toBe("test");
 		});
 
 		it("should override global metadata on specific function", async () => {
@@ -241,22 +241,23 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.setGlobal("version", "1.0.0");
 
 			await materialize(api, "rootMath.add", 1, 2);
-			await materialize(api, "rootMath.subtract", 5, 3);
+			await materialize(api, "rootMath.multiply", 5, 3);
 
 			// Override on specific function
 			api.slothlet.metadata.set(api.rootMath.add, "version", "2.0.0");
 
 			// One function has override, other has global
 			expect(api.rootMath.add.__metadata.version).toBe("2.0.0");
-			expect(api.rootMath.subtract.__metadata.version).toBe("1.0.0");
+			expect(api.rootMath.multiply.__metadata.version).toBe("1.0.0");
 		});
 
 		it("should apply global metadata to newly added functions", async () => {
 			// Set global metadata first
 			api.slothlet.metadata.setGlobal("defaultCategory", "utility");
 
-			// Add new function
-			await api.slothlet.api.add("testFunc", TEST_DIRS.API_SMART_FLATTEN);
+			// Add new function from API_TEST/math folder which has add() and multiply()
+			const mathPath = TEST_DIRS.API_TEST + "/math";
+			await api.slothlet.api.add("testFunc", mathPath);
 
 			// Materialize new function
 			await materialize(api, "testFunc.add", 1, 2);
@@ -275,8 +276,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.setGlobal("counter", 2);
 
 			// Newly materialized functions should get updated value
-			await materialize(api, "rootMath.subtract", 5, 3);
-			expect(api.rootMath.subtract.__metadata.counter).toBe(2);
+			await materialize(api, "rootMath.multiply", 5, 3);
+			expect(api.rootMath.multiply.__metadata.counter).toBe(2);
 
 			// Already materialized function keeps old value (metadata is snapshot)
 			expect(api.rootMath.add.__metadata.counter).toBe(1);
@@ -320,25 +321,25 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 
 		it("should maintain metadata isolation between functions", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
-			await materialize(api, "rootMath.subtract", 5, 3);
-			await materialize(api, "config.settings.getPluginConfig", "test");
+			await materialize(api, "rootMath.multiply", 5, 3);
+			await materialize(api, "nested.date.today");
 
 			// Set different metadata on each
 			api.slothlet.metadata.set(api.rootMath.add, "tag", "add");
-			api.slothlet.metadata.set(api.rootMath.subtract, "tag", "subtract");
-			api.slothlet.metadata.set(api.config.settings.getPluginConfig, "tag", "config");
+			api.slothlet.metadata.set(api.rootMath.multiply, "tag", "multiply");
+			api.slothlet.metadata.set(api.nested.date.today, "tag", "date");
 
 			// Each should have its own metadata
 			expect(api.rootMath.add.__metadata.tag).toBe("add");
-			expect(api.rootMath.subtract.__metadata.tag).toBe("subtract");
-			expect(api.config.settings.getPluginConfig.__metadata.tag).toBe("config");
+			expect(api.rootMath.multiply.__metadata.tag).toBe("multiply");
+			expect(api.nested.date.today.__metadata.tag).toBe("date");
 
 			// Removing one shouldn't affect others
 			api.slothlet.metadata.remove(api.rootMath.add, "tag");
 
 			expect(api.rootMath.add.__metadata.tag).toBeUndefined();
-			expect(api.rootMath.subtract.__metadata.tag).toBe("subtract");
-			expect(api.config.settings.getPluginConfig.__metadata.tag).toBe("config");
+			expect(api.rootMath.multiply.__metadata.tag).toBe("multiply");
+			expect(api.nested.date.today.__metadata.tag).toBe("date");
 		});
 	});
 });
