@@ -552,7 +552,17 @@ async function runAllFiles() {
 
 	// Exit with appropriate code
 	if (failedFiles.length > 0) {
-		console.log(`\n❌ ${failedFiles.length} test file(s) failed\n`);
+		console.log(`\n❌ ${failedFiles.length} test file(s) failed`);
+		console.log(chalk.bold.red("\nFailed Test Files:"));
+		failedFiles.forEach((result) => {
+			const testCounts = [];
+			if (result.testsFail > 0) testCounts.push(chalk.red(`${result.testsFail} failed`));
+			if (result.testsPass > 0) testCounts.push(chalk.green(`${result.testsPass} passed`));
+			if (result.testsSkip > 0) testCounts.push(chalk.yellow(`${result.testsSkip} skipped`));
+			const countStr = testCounts.length > 0 ? ` (${testCounts.join(", ")})` : "";
+			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}`);
+		});
+		console.log("");
 		process.exit(1);
 	} else {
 		console.log(`\n✅ All ${passedFiles.length} test files passed\n`);

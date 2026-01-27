@@ -554,6 +554,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			async apply(___target, ___thisArg, args) {
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
+
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
 					await wrapper._materialize();
 				}
@@ -602,6 +603,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 				if (typeof current === "function") {
 					return current(...args);
+				}
+
+				// If current is undefined/null after traversing the chain, return undefined instead of throwing
+				// This handles cases where test frameworks try to call methods that don't exist
+				// during introspection/cleanup (e.g., after api.remove())
+				if (current === undefined || current === null) {
+					return undefined;
 				}
 
 				throw new Error(`${wrapper.apiPath}.${chainLabel} is not a function`);

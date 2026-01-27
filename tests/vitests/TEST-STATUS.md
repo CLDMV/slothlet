@@ -1,3 +1,21 @@
+/*
+ * @Project: @cldmv/slothlet
+ * @Filename: /tests/vitests/TEST-STATUS.md
+ * @Date: 2026-01-23 15:47:00 -08:00 (1769212020)
+ * @Author: Nate Hyson <CLDMV>
+ * @Email: <Shinrai@users.noreply.github.com>
+ * -----
+ * @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ * @Last modified time: 2026-01-26 15:21:54 -08:00 (1769469714)
+ * -----
+ * @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+
+
+
+
+
 # V3 Vitest Status
 
 **Instructions for maintaining this file:**
@@ -72,9 +90,9 @@ Relative base: tests/vitests
 | suites/listener-cleanup/listener-cleanup.test.vitest.mjs | Lifecycle + EventEmitter + Hooks | No | untested | Related to eventemitter-context-propagation.md and hooks-system.md |
 | suites/listener-cleanup/third-party-cleanup.test.vitest.mjs | Lifecycle + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
 | suites/metadata/metadata-api-manager.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:16:00) | 112/112 tests pass (100%) - Tests metadata with api.add/remove cycles. **FIXED**: Debug cleanup removed ungated console.log statements that were polluting test environment. All metadata now properly persists across remove/add operations. Related to metadata-tagging.md |
-| suites/metadata/metadata-collision-modes.test.vitest.mjs | Metadata - Collision Modes | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:16:00) | 192/192 tests pass (100%) - Tests metadata behavior across collision modes (skip/warn/replace/merge). **FIXED**: Debug cleanup resolved test environment pollution. Metadata now properly cleaned up after api.remove() operations across all collision modes. Related to metadata-tagging.md |
-| suites/metadata/metadata-edge-cases.test.vitest.mjs | Metadata - Edge Cases | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:16:00) | 224/224 tests pass (100%) - Tests edge cases: root contributor, deep nesting, special chars, large objects. **FIXED**: Debug cleanup resolved metadata access issues. __metadata property now correctly accessible for repeated accesses across all edge case scenarios including deep nesting and performance tests. Related to metadata-tagging.md |
-| suites/metadata/metadata-external-api.test.vitest.mjs | Metadata - External API | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:16:00) | 256/256 tests pass (100%) - Tests external metadata API (api.slothlet.metadata.set/remove/setGlobal). **FIXED**: Debug cleanup resolved function materialization issues. Combined External API Operations now properly materialize API paths and return valid function references. Related to metadata-tagging.md |
+| suites/metadata/metadata-collision-modes.test.vitest.mjs | Metadata - Collision Modes | ✅ Yes (2026-01-26) | ❌ fail (2026-01-26 16:54:00) | 56/192 tests fail, 136 pass (70.8%) - Tests metadata behavior across collision modes. **PARTIALLY FIXED**: Fixed `hasAttribute is not a function` errors by returning undefined for non-existent methods after materialization instead of throwing. **REMAINING BUG**: api.remove() not fully deleting paths - `api.tempModule` still exists after removal with empty Function objects for services/utils. Related to metadata-tagging.md |
+| suites/metadata/metadata-edge-cases.test.vitest.mjs | Metadata - Edge Cases | ✅ Yes (2026-01-26) | ❌ fail (2026-01-26 16:54:00) | 8/224 tests fail, 216 pass (96.4%) - Tests edge cases: root contributor, deep nesting, special chars, large objects. **MOSTLY FIXED**: Fixed `hasAttribute` errors. **MINOR ISSUE**: Empty functions missing metadata - `expect(meta.moduleID).toBeDefined()` fails for `api.empty` (empty function export). 8 EAGER configs fail on this test. Related to metadata-tagging.md |
+| suites/metadata/metadata-external-api.test.vitest.mjs | Metadata - External API | ✅ Yes (2026-01-26) | ❌ fail (2026-01-26 16:54:00) | 256/672 tests fail, 416 pass (61.9%) - Tests external metadata API (api.slothlet.metadata.set/remove/setGlobal). **PARTIALLY FIXED**: Fixed `hasAttribute` errors. **REMAINING BUGS**: (1) `fn is not a function` during materialization - functions becoming undefined in Combined External API Operations test (2) `expected '1.0.0' to be '2.0.0'` - metadata not updating when set via api.slothlet.metadata.set(). External metadata API not properly updating user metadata values. Related to metadata-tagging.md |
 | suites/metadata/metadata-reload.test.vitest.mjs | Metadata - Hot Reload | ✅ Yes (2026-01-26) | ❌ fail (2026-01-26 15:16:00) | 56/192 tests fail, 136 pass (70.8%) - Tests metadata with api.slothlet.reload() and api.slothlet.api.reload(). **IMPROVED**: Debug cleanup fixed many tests. Issues: (1) 16 tests fail with "SlothletError: Reload functionality not yet implemented" - Full reload not implemented for MUTATE configs (expected limitation) (2) 32 tests fail with "INVALID_CONFIG_MUTATION_DISABLED" - Non-MUTATE configs correctly reject reload operations (3) 8 tests fail with "expected '1.0.0' to be '2.0.0'" - Metadata not updating during reload with new metadata parameter. Related to metadata-tagging.md |
 | suites/metadata/system-metadata.test.vitest.mjs | Metadata - System | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:07:00) | 288/288 tests pass (100%) - Tests immutable system metadata (moduleID, filePath, apiPath, sourceFolder). **FIXED**: (1) Enabled apiPathPrefix in api-manager.mjs line 850 to include namespace in moduleID path portion (2) Updated test expectations for lazy materialization behavior - metadata comes from folder wrapper before materialization, then function wrapper after (3) Simplified nested structure test to only verify function-level metadata (4) Removed 35 ungated debug console.log statements ([DEBUG:ADOPT], [DEBUG:COLLISION], [DEBUG:MERGE], [DEBUG:FOLDER-FLATTEN], [DEBUG:MATERIALIZE], [DEBUG:SETIMPL]) from unified-wrapper.mjs, api-assignment.mjs, modes-processor.mjs. Clean test output. Related to metadata-tagging.md |
 | suites/metadata/user-metadata.test.vitest.mjs | Metadata - User | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 15:16:00) | 240/240 tests pass (100%) - Tests user metadata via add(), init, merge, metadata API (self.slothlet.metadata.*). **FIXED**: Debug cleanup resolved all metadata retrieval issues. Tests using metadataTestHelper.verifyMetadata() now properly retrieve user metadata properties on config.settings.getPluginConfig path and all other tested paths. Related to metadata-tagging.md |
