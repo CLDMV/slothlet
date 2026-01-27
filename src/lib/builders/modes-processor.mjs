@@ -1019,14 +1019,16 @@ export class ModesProcessor extends ComponentBase {
 						// The collision config should be respected via registerAPIWithOwnership, not here
 
 						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
-						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.metadata) {
+						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.lifecycle) {
 							for (const key of Object.keys(implToWrap)) {
 								const value = implToWrap[key];
 								if (typeof value === "function") {
-									this.slothlet.handlers.metadata.tagSystemMetadata(value, {
-										filePath: file.path,
+									this.slothlet.handlers.lifecycle.emit("impl:created", {
 										apiPath: `${apiPath}.${key}`,
+										impl: value,
+										source: "lazy-materialization",
 										moduleId: moduleId,
+										filePath: file.path,
 										sourceFolder: sourceFolder || this.slothlet.config?.dir
 									});
 								}
