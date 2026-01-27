@@ -184,43 +184,43 @@ describe.each(getMatrixConfigs())("System Metadata > Config: '$name'", ({ config
 
 			await api.slothlet.api.add("lazyTest", TEST_DIRS.API_SMART_FLATTEN);
 
-	// Before materialization - access __type to trigger lazy loading
-	// The __type getter will trigger materialization, then return symbol if in-flight or typeof if complete
-	const wrapper = api.lazyTest.config.settings.getPluginConfig;
-	const typeBefore = wrapper.__type;
-	
-	// Also get metadata
-	const metaBefore = wrapper.__metadata;
-		await materialize(api, "lazyTest.config.settings.getPluginConfig");
+			// Before materialization - access __type to trigger lazy loading
+			// The __type getter will trigger materialization, then return symbol if in-flight or typeof if complete
+			const wrapper = api.lazyTest.config.settings.getPluginConfig;
+			const typeBefore = wrapper.__type;
 
-		// After materialization - metadata comes from function wrapper
-		const metaAfter = api.lazyTest.config.settings.getPluginConfig.__metadata;
-		const typeAfter = api.lazyTest.config.settings.getPluginConfig.__type;
+			// Also get metadata
+			const metaBefore = wrapper.__metadata;
+			await materialize(api, "lazyTest.config.settings.getPluginConfig");
 
-		// Both metadata should be defined
-		expect(metaBefore).toBeDefined();
-		expect(metaAfter).toBeDefined();
+			// After materialization - metadata comes from function wrapper
+			const metaAfter = api.lazyTest.config.settings.getPluginConfig.__metadata;
+			const typeAfter = api.lazyTest.config.settings.getPluginConfig.__type;
 
-	// Before materialization: __type triggers materialization and either:
-	// - Returns a symbol (UNMATERIALIZED or IN_FLIGHT) if materialization is async/pending
-	// - Returns typeof string ("function") if materialization completed synchronously
-	if (typeof typeBefore === "symbol") {
-		expect(["unmaterialized", "inFlight"]).toContain(typeBefore.description);
-	} else {
-		// Materialized synchronously - should be "function"
-		expect(typeBefore).toBe("function");
-	}
+			// Both metadata should be defined
+			expect(metaBefore).toBeDefined();
+			expect(metaAfter).toBeDefined();
 
-	// After explicit materialization, metadata comes from specific function
-		expect(metaAfter.apiPath).toBe("lazyTest.config.settings.getPluginConfig");
-		expect(metaAfter.moduleID).toMatch(/^lazyTest_[a-z0-9]+:lazyTest\/config\/settings\/getPluginConfig$/);
-		expect(metaAfter.filePath).toContain("settings.mjs");
-		
-		// After materialization, __type should return "function" (the typeof the impl)
-		expect(typeAfter).toBe("function");
-	});
+			// Before materialization: __type triggers materialization and either:
+			// - Returns a symbol (UNMATERIALIZED or IN_FLIGHT) if materialization is async/pending
+			// - Returns typeof string ("function") if materialization completed synchronously
+			if (typeof typeBefore === "symbol") {
+				expect(["unmaterialized", "inFlight"]).toContain(typeBefore.description);
+			} else {
+				// Materialized synchronously - should be "function"
+				expect(typeBefore).toBe("function");
+			}
 
-	it("should have correct system metadata at function level", async () => {
+			// After explicit materialization, metadata comes from specific function
+			expect(metaAfter.apiPath).toBe("lazyTest.config.settings.getPluginConfig");
+			expect(metaAfter.moduleID).toMatch(/^lazyTest_[a-z0-9]+:lazyTest\/config\/settings\/getPluginConfig$/);
+			expect(metaAfter.filePath).toContain("settings.mjs");
+
+			// After materialization, __type should return "function" (the typeof the impl)
+			expect(typeAfter).toBe("function");
+		});
+
+		it("should have correct system metadata at function level", async () => {
 			await api.slothlet.api.add("nested", TEST_DIRS.API_SMART_FLATTEN);
 
 			// Note: Intermediate levels (api.nested, api.nested.config) may or may not have complete metadata

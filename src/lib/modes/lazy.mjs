@@ -145,33 +145,33 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 					message: "Merging exports",
 					fileName: file.name
 				});
-			slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
-			// Tag system metadata for the merged module AND its properties with correct file path
-			if (materialized[moduleName] && slothlet.handlers?.metadata) {
-				// Tag the module object itself
-				slothlet.handlers.metadata.tagSystemMetadata(materialized[moduleName], {
-					filePath: file.path,
-					apiPath: `${apiPath}.${moduleName}`,
-					moduleId: effectiveModuleId,
-					sourceFolder: dir.path
-				});
-				
-				// Tag all properties (functions) in the module
-				if (typeof materialized[moduleName] === "object") {
-					for (const key of Object.keys(materialized[moduleName])) {
-						const prop = materialized[moduleName][key];
-						if (typeof prop === "function" || (typeof prop === "object" && prop !== null)) {
-							slothlet.handlers.metadata.tagSystemMetadata(prop, {
-								filePath: file.path,
-								apiPath: `${apiPath}.${moduleName}.${key}`,
-								moduleId: effectiveModuleId,
-								sourceFolder: dir.path
-							});
+				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
+				// Tag system metadata for the merged module AND its properties with correct file path
+				if (materialized[moduleName] && slothlet.handlers?.metadata) {
+					// Tag the module object itself
+					slothlet.handlers.metadata.tagSystemMetadata(materialized[moduleName], {
+						filePath: file.path,
+						apiPath: `${apiPath}.${moduleName}`,
+						moduleId: effectiveModuleId,
+						sourceFolder: dir.path
+					});
+
+					// Tag all properties (functions) in the module
+					if (typeof materialized[moduleName] === "object") {
+						for (const key of Object.keys(materialized[moduleName])) {
+							const prop = materialized[moduleName][key];
+							if (typeof prop === "function" || (typeof prop === "object" && prop !== null)) {
+								slothlet.handlers.metadata.tagSystemMetadata(prop, {
+									filePath: file.path,
+									apiPath: `${apiPath}.${moduleName}.${key}`,
+									moduleId: effectiveModuleId,
+									sourceFolder: dir.path
+								});
+							}
 						}
 					}
 				}
-			}
-			slothlet.debug("modes", {
+				slothlet.debug("modes", {
 					message: "Exports merged",
 					fileName: file.name,
 					materializedKeys: Object.keys(materialized)
@@ -191,7 +191,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
 			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIdOverride, userMetadata);
 		}
-		
+
 		// Store the file path mapping as non-enumerable property
 		Object.defineProperty(materialized, "__childFilePaths", {
 			value: childFilePaths,
@@ -199,7 +199,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 			configurable: false,
 			writable: false
 		});
-		
+
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc complete",
 			apiPath,

@@ -74,13 +74,13 @@ export class ModesProcessor extends ComponentBase {
 		const rootContributors = []; // Track all root-level default exports for multi-detection
 		const categoryName = isRoot && !populateDirectly ? null : this.slothlet.helpers.sanitize.sanitizePropertyName(directory.name);
 		let targetApi = isRoot && !populateDirectly ? api : populateDirectly ? api : (api[categoryName] = api[categoryName] || {});
-		
+
 		// CRITICAL: Root files should ALWAYS be wrapped eagerly, even in lazy mode
 		// This ensures file wrappers are materialized for collision handling
 		const isRootFile = currentDepth === 0 && !populateDirectly;
-		const effectiveMode = (mode === "lazy" && isRootFile) ? "eager" : mode;
+		const effectiveMode = mode === "lazy" && isRootFile ? "eager" : mode;
 		const shouldWrap = !(effectiveMode === "lazy" && populateDirectly);
-		
+
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
 			if (existingTarget && existingTarget.__wrapper) {
@@ -1017,7 +1017,7 @@ export class ModesProcessor extends ComponentBase {
 						// 2. Lazy materialization would try to re-register with file-specific moduleId
 						// 3. Different moduleIds trigger OWNERSHIP_CONFLICT unless allowConflict=true
 						// The collision config should be respected via registerAPIWithOwnership, not here
-						
+
 						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
 						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.metadata) {
 							for (const key of Object.keys(implToWrap)) {
@@ -1032,13 +1032,13 @@ export class ModesProcessor extends ComponentBase {
 								}
 							}
 						}
-						
+
 						// CRITICAL: If collision merge set __childFilePathsPreMaterialize on wrapper,
 						// copy it to implToWrap so _createChildWrapper can find file function paths
 						if (implToWrap && typeof implToWrap === "object" && this.__childFilePathsPreMaterialize) {
 							implToWrap.__childFilePaths = { ...implToWrap.__childFilePaths, ...this.__childFilePathsPreMaterialize };
 						}
-						
+
 						console.log(`[MATERIALIZE] Returning implToWrap:`, implToWrap);
 						console.log(`[MATERIALIZE] implToWrap keys:`, Object.keys(implToWrap || {}));
 						return implToWrap;
@@ -1070,13 +1070,13 @@ export class ModesProcessor extends ComponentBase {
 					keys: Object.keys(materialized)
 				});
 			}
-			
+
 			// Debug for math folder
 			if (dir.name === "math") {
 				console.log(`[MATERIALIZE] math folder materialized keys: ${Object.keys(materialized).join(", ")}`);
 				console.log(`[MATERIALIZE] math folder materialized:`, materialized);
 			}
-			
+
 			const materializedKeys = Object.keys(materialized);
 			// Check for folder/folder.mjs pattern - if materialized has a property matching the folder name,
 			// attach all other properties to it (e.g., logger/logger.mjs + logger/utils.mjs → logger function with .utils attached)
