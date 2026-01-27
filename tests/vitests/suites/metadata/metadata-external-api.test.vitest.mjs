@@ -255,15 +255,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// Set global metadata first
 			api.slothlet.metadata.setGlobal("defaultCategory", "utility");
 
-			// Add new function from API_TEST/math folder which has add() and multiply()
-			const mathPath = TEST_DIRS.API_TEST + "/math";
-			await api.slothlet.api.add("testFunc", mathPath);
+			// Add new API
+			await api.slothlet.api.add("testFunc", TEST_DIRS.API_SMART_FLATTEN);
 
-			// Materialize new function
-			await materialize(api, "testFunc.add", 1, 2);
+			// Materialize function from newly added API
+			await materialize(api, "testFunc.config.settings.getPluginConfig");
 
 			// Should have global metadata
-			expect(api.testFunc.add.__metadata.defaultCategory).toBe("utility");
+			expect(api.testFunc.config.settings.getPluginConfig.__metadata.defaultCategory).toBe("utility");
 		});
 
 		it("should handle multiple global metadata updates", async () => {
