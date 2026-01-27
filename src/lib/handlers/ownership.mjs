@@ -45,7 +45,7 @@ export class OwnershipManager extends ComponentBase {
 		const currentOwner = this.getCurrentOwner(apiPath);
 		if (currentOwner && currentOwner.moduleId !== moduleId) {
 			// Handle conflict based on collision mode
-			if (collisionMode === "merge" || collisionMode === "replace") {
+			if (collisionMode === "merge" || collisionMode === "replace" || collisionMode === "merge-replace") {
 				// Allow registration - will merge or replace
 			} else if (collisionMode === "skip") {
 				// Skip registration silently

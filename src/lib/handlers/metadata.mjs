@@ -257,15 +257,23 @@ export class Metadata extends ComponentBase {
 		// then fall back to _impl (for cases where wrapper wasn't tagged)
 		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
 
-		// Lookup user metadata by API PATH from system metadata
-		// Extract root apiPath segment (e.g., "nested" from "nested.mathCjs.add")
+		// Lookup user metadata by BOTH moduleID AND rootApiPath
+		// - registerUserMetadata() stores by root apiPath (for api.add())
+		// - setUserMetadata() stores by moduleID (for external metadata.set())
+		const moduleID = systemData.moduleID || systemData.moduleId;
 		const apiPath = systemData.apiPath;
 		const rootApiPath = apiPath ? apiPath.split(".")[0].split("/")[0] : null;
 
-		const userMetadataEntry = rootApiPath ? this.#userMetadataStore.get(rootApiPath) : null;
-		const userData = userMetadataEntry?.metadata || {};
+		const userMetadataByModule = moduleID ? this.#userMetadataStore.get(moduleID) : null;
+		const userMetadataByPath = rootApiPath ? this.#userMetadataStore.get(rootApiPath) : null;
 
-		// Merge order: global < user (by moduleID) < SYSTEM (system always wins)
+		// Merge both user metadata sources (path < moduleID priority)
+		const userData = {
+			...(userMetadataByPath?.metadata || {}),
+			...(userMetadataByModule?.metadata || {})
+		};
+
+		// Merge order: global < user (by path) < user (by moduleID) < SYSTEM (system always wins)
 		const combined = {
 			...this.#globalUserMetadata,
 			...userData,

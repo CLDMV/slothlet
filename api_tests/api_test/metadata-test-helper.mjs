@@ -36,7 +36,8 @@ export async function getMetadata(path) {
 	if (process.env.SLOTHLET_DEBUG) {
 		console.log("[getMetadata] Result for", path, ":", result);
 	}
-	return result;
+	// Convert null to undefined for test consistency
+	return result === null ? undefined : result;
 }
 
 /**

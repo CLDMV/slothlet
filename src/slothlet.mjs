@@ -17,6 +17,9 @@ class Slothlet {
 	// Only applies at the root level (path depth 0) - nested keys with same name are allowed
 	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
 
+	// Properties to skip during recursive operations (at any depth)
+	static SKIP_PROPS = ["__wrapper", "__metadata", "__type", "__materialize", "_impl", "_childCache"];
+
 	constructor() {
 		// Expose error classes to components (no imports needed)
 		this.SlothletError = SlothletError;
@@ -366,6 +369,11 @@ class Slothlet {
 
 		// Recursively register children
 		for (const [key, value] of Object.entries(api)) {
+			// Skip internal properties at any depth
+			if (Slothlet.SKIP_PROPS.includes(key)) {
+				continue;
+			}
+
 			// Skip reserved root-level keys ONLY at depth 0
 			const isRootLevel = pathStack.length === 0;
 			const isReservedKey = Slothlet.RESERVED_ROOT_KEYS.includes(key);

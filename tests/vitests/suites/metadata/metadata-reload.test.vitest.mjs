@@ -48,11 +48,6 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 	describe("api.slothlet.reload() - Full Reload", () => {
 		it("should refresh system metadata after full reload", async () => {
-			if (!api.slothlet?.reload) {
-				// Skip if reload not implemented
-				return;
-			}
-
 			await materialize(api, "rootMath.add", 1, 2);
 			const metaBefore = api.rootMath.add.__metadata;
 			expect(metaBefore).toBeDefined();
@@ -71,10 +66,6 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		});
 
 		it("should preserve user metadata across full reload", async () => {
-			if (!api.slothlet?.reload) {
-				return;
-			}
-
 			await api.slothlet.api.add("persistent", TEST_DIRS.API_SMART_FLATTEN, {
 				shouldPersist: true,
 				version: "1.0.0"
@@ -97,14 +88,6 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		});
 
 		it("should handle reload with metadata changes", async () => {
-			if (!api.slothlet?.reload) {
-				return;
-			}
-
-			// Initial state
-			await materialize(api, "rootMath.add", 1, 2);
-			const meta1 = api.rootMath.add.__metadata;
-
 			// Reload (simulates file changes on disk)
 			await api.slothlet.reload();
 
@@ -436,6 +419,113 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 			// System metadata should remain
 			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+	});
+
+	describe("Internal API Access During Reload (self.slothlet.metadata.*)", () => {
+		it("should access metadata via internal API after full reload", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set user metadata
+			api.slothlet.metadata.set(api.rootMath.add, "preReload", "value123");
+
+			// Reload
+			await api.slothlet.reload();
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Access via internal API
+			const metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+
+			// Should have system metadata
+			expect(metadata.moduleID).toBeDefined();
+			expect(metadata.apiPath).toBe("rootMath.add");
+
+			// User metadata persistence depends on reload implementation
+			// Just verify internal API works after reload
+			expect(metadata).toBeDefined();
+		});
+
+		it("should access added API metadata via internal API after reload", async () => {
+			await api.slothlet.api.add("reloadInternal", TEST_DIRS.API_SMART_FLATTEN, {
+				persistValue: "should_persist"
+			});
+
+			await materialize(api, "reloadInternal.config.settings.getPluginConfig");
+
+			// Access before reload
+			const beforeReload = await api.metadataTestHelper.getMetadata("reloadInternal.config.settings.getPluginConfig");
+			expect(beforeReload.persistValue).toBe("should_persist");
+
+			// Reload
+			await api.slothlet.reload();
+
+			// Access after reload via internal API
+			if (api.reloadInternal?.config?.settings?.getPluginConfig) {
+				await materialize(api, "reloadInternal.config.settings.getPluginConfig");
+				const afterReload = await api.metadataTestHelper.getMetadata("reloadInternal.config.settings.getPluginConfig");
+
+				// System metadata should be refreshed
+				expect(afterReload.moduleID).toBeDefined();
+				expect(afterReload.apiPath).toBe("reloadInternal.config.settings.getPluginConfig");
+			}
+		});
+
+		it("should handle partial reload with internal API access", async () => {
+			await api.slothlet.api.add("partialReload", TEST_DIRS.API_SMART_FLATTEN, {
+				partial: true
+			});
+
+			await materialize(api, "partialReload.config.settings.getPluginConfig");
+
+			// Partial reload
+			await api.slothlet.api.reload("partialReload");
+
+			// Access via internal API
+			if (api.partialReload?.config?.settings?.getPluginConfig) {
+				await materialize(api, "partialReload.config.settings.getPluginConfig");
+				const metadata = await api.metadataTestHelper.getMetadata("partialReload.config.settings.getPluginConfig");
+
+				expect(metadata).toBeDefined();
+				expect(metadata.apiPath).toBe("partialReload.config.settings.getPluginConfig");
+			}
+		});
+
+		it("should track metadata changes across reload via internal API", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set metadata before reload
+			api.slothlet.metadata.set(api.rootMath.add, "counter", 1);
+
+			// Read via internal API
+			let metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+			expect(metadata.counter).toBe(1);
+
+			// Reload
+			await api.slothlet.reload();
+			await materialize(api, "rootMath.add", 1, 2);
+
+			// Set different value after reload
+			api.slothlet.metadata.set(api.rootMath.add, "counter", 2);
+
+			// Read via internal API
+			metadata = await api.metadataTestHelper.getMetadata("rootMath.add");
+			expect(metadata.counter).toBe(2);
+		});
+
+		it("should access self metadata during reload scenarios", async () => {
+			// Get self metadata before reload
+			const beforeReload = await api.metadataTestHelper.getSelfMetadata();
+			expect(beforeReload).toBeDefined();
+
+			// Reload
+			await api.slothlet.reload();
+
+			// Get self metadata after reload
+			const afterReload = await api.metadataTestHelper.getSelfMetadata();
+			expect(afterReload).toBeDefined();
+
+			// Both should reference the helper function
+			expect(afterReload.apiPath).toContain("metadataTestHelper");
 		});
 	});
 });

@@ -629,13 +629,11 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (ownership) {
 					const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
-					const collisionMode = config.collision?.[collisionContext] || "merge";
 					ownership.register({
 						moduleId: moduleId || file.moduleId,
 						apiPath,
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-						collisionMode,
 						config
 					});
 				}
