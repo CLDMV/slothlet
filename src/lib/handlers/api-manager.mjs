@@ -988,7 +988,8 @@ export class ApiManager extends ComponentBase {
 		// Detect if this is a moduleId (contains underscore) or apiPath
 		const isModuleId = pathOrModuleId.includes("_");
 		const apiPath = isModuleId ? null : pathOrModuleId;
-		const moduleId = isModuleId ? pathOrModuleId : null;
+		// Extract moduleId from full moduleID format "moduleId:path" if present
+		const moduleId = isModuleId ? pathOrModuleId.split(":")[0] : null;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
