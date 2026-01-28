@@ -1,6 +1,6 @@
 /**
  * Isolated test for "does not restore removed APIs after reload"
- * Uses the SAME MATRIX as hot-reload-basic to reproduce the issue
+ * Uses the SAME MATRIX as api-manager-basic to reproduce the issue
  */
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";

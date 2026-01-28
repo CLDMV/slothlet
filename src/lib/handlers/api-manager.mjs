@@ -1130,16 +1130,19 @@ export class ApiManager extends ComponentBase {
 			}
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-				if (restoredValue !== undefined) {
+				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleId;
+				if (restoredValue !== undefined && restoredModuleId) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true,
-						collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
+						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
+						moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 					});
 					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true,
-						collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
+						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
+						moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 					});
 					return true;
 				}
@@ -1247,10 +1250,10 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, null);
-		
+
 		// Check if path actually exists before attempting deletion
 		const pathExists = this.getValueAtPath(this.slothlet.api, parts) !== undefined;
-		
+
 		if (ownershipResult.action === "none") {
 			if (pathExists) {
 				this.deletePath(this.slothlet.api, parts);
@@ -1275,16 +1278,19 @@ export class ApiManager extends ComponentBase {
 		}
 		if (ownershipResult.action === "restore") {
 			const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-			if (restoredValue !== undefined) {
+			const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleId;
+			if (restoredValue !== undefined && restoredModuleId) {
 				await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true,
-					collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
+					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
+					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 				});
 				await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true,
-					collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
+					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
+					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 				});
 				return true;
 			}
