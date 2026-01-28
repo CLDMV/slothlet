@@ -35,6 +35,7 @@ Relative base: tests/vitests
 | suites/api/eager/api-eager-live.test.vitest.mjs | Core API + Live Binding | No | untested | |
 | suites/api/function-name-preservation.test.vitest.mjs | API Sanitization | No | untested | |
 | suites/api/lazy/api-lazy-basic.test.vitest.mjs | Core API | No | untested | |
+| suites/cjs/cjs-default-exports.test.vitest.mjs | CJS Interop | ✅ Yes (2026-01-28) | ✅ pass (2026-01-28 11:35:22) | 64/64 tests pass (100%) - Tests CJS modules using `module.exports = { default: obj, namedExport: fn }` pattern behave identically to ESM `export default obj; export { namedExport }`. Verifies Node.js CJS wrapper normalization ensures both default object properties AND named exports are accessible on the API without extra `.default` layer. |
 | suites/api/lazy/api-lazy-hooks.test.vitest.mjs | Core API + Hooks | No | untested | |
 | suites/api/lazy/api-lazy-hot.test.vitest.mjs | Core API + API Manager | No | untested | |
 | suites/api/lazy/api-lazy-live.test.vitest.mjs | Core API + Live Binding | No | untested | |

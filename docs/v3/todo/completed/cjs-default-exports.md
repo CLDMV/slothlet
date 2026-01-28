@@ -1,7 +1,7 @@
 # CJS Default Export Handling Issue
 
 ## Status
-🔴 **OPEN** - Not yet implemented
+✅ **COMPLETED** - January 28, 2026
 
 ## Priority
 Medium - Affects CommonJS interoperability
@@ -79,3 +79,39 @@ Metadata system implementation (Phase 4) - noticed `api.mathCjs.default.*` patte
 - This issue was not caught earlier because most testing focused on ESM modules
 - The `.default` wrapper is technically correct per Node.js CJS/ESM interop, but creates poor DX
 - Need to ensure fix doesn't break legitimate use of a property named "default"
+
+## Implementation Summary
+
+**Completed: January 28, 2026**
+
+### Changes Made
+
+1. **src/lib/processors/loader.mjs** (~lines 157-195):
+   - Added filtering of "module.exports" key from named exports
+   - Implemented CJS default normalization to unwrap nested `.default` pattern
+   - Handles pattern: `module.exports = { default: X, namedExport: fn }` → normalizes to match ESM behavior
+
+2. **src/lib/builders/modes-processor.mjs**:
+   - Lines ~261-287: Added object default handling in main processing path to merge named exports onto default objects
+   - Lines ~820-835: Extended flattening path to handle object defaults (not just function defaults)
+   - Line ~669: Changed to use `moduleContent` directly instead of `cloneWrapperImpl()` to preserve added properties
+   - Line ~844: Changed to use `implToWrap` directly instead of cloning for flattening path
+
+3. **tests/vitests/suites/cjs/cjs-default-exports.test.vitest.mjs** (NEW):
+   - Created comprehensive test suite with 64 tests (8 test cases × 8 config combinations)
+   - Tests CJS pattern `module.exports = { default: obj, namedFn: fn }`
+   - Verifies no extra .default layer, all properties accessible, correct typeof, function name preservation
+   - Added to baseline-tests.json and TEST-STATUS.md
+
+### Key Insights
+
+- Node.js wraps CJS as `{ default: { default: X, namedExport: fn }, namedExport: fn }` for modules using the ESM-style pattern
+- The `extractExports()` unwraps this to `{ default: X, namedExport: fn }` matching ESM behavior
+- Two separate code paths needed fixing: main processing and flattening
+- Both paths now add named exports to object defaults and avoid cloning (which stripped added properties)
+- UnifiedWrapper's `_adoptImplChildren()` reads keys at construction time, so named exports must be added BEFORE wrapper creation
+
+### Test Results
+
+✅ All 64 tests pass across matrix configurations (EAGER/LAZY × ASYNC/LIVE × HOOKS/NO-HOOKS)
+✅ All 1296 baseline tests continue to pass

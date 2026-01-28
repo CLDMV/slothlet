@@ -332,8 +332,7 @@ class Slothlet {
 				throw new SlothletError("INVALID_ARGUMENT", {
 					argument: "path",
 					expected: "string",
-					received: typeof path,
-					hint: "Path must be a dot-notation string (e.g., 'math.add')"
+					received: typeof path
 				});
 			}
 
@@ -370,8 +369,7 @@ class Slothlet {
 			const ctx = contextManager.tryGetContext();
 			if (!ctx || !ctx.currentWrapper) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, {
-					validationError: true,
-					hint: "metadata.self() must be called from within a slothlet API function"
+					validationError: true
 				});
 			}
 

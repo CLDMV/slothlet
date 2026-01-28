@@ -92,7 +92,6 @@ export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext =
 function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadata = {}) {
 	// Create materialization function (POC pattern: returns implementation, no wrapper param)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
-		console.log(`[MATERIALIZE] START apiPath=${apiPath}, dir=${dir.name}, files=${dir.children?.files?.length}`);
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc started",
 			apiPath,
@@ -104,7 +103,6 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 
 		// Load files in directory
 		for (const file of dir.children.files) {
-			console.log(`[MATERIALIZE] Loading file: ${file.name}`);
 			try {
 				slothlet.debug("modes", {
 					message: "Loading file",
