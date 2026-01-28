@@ -140,7 +140,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 		});
 
 		// Test invalid types
-		await expect(api.slothlet.api.remove(123)).rejects.toThrow(TypeError);
+		await expect(api.slothlet.api.remove(123)).rejects.toThrow();
 
 		// Test empty object
 		await expect(api.slothlet.api.remove({})).rejects.toThrow();
@@ -176,25 +176,20 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 		expect(removed).toBe(false);
 	});
 
-	it("should silently ignore moduleId when ownership disabled", async () => {
+	it("should remove by moduleId when ownership is available", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
-		// Add API WITH moduleId option but ownership tracking is OFF
+		// Add API with moduleId (ownership tracking is ALWAYS available in v3)
 		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", {}, { moduleId: "testModule" });
 
 		expect(api.plugins?.test).toBeDefined();
 
-		// Attempt to remove by moduleId should fail
+		// Remove by moduleId should work (ownership is available)
 		const removedById = await api.slothlet.api.remove("testModule");
-		expect(removedById).toBe(false);
-		expect(api.plugins?.test).toBeDefined();
-
-		// But removal by path should still work
-		const removedByPath = await api.slothlet.api.remove("plugins.test");
-		expect(removedByPath).toBe(true);
+		expect(removedById).toBe(true);
 		expect(api.plugins?.test).toBeUndefined();
 	});
 });

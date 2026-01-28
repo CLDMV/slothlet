@@ -1126,7 +1126,7 @@ export class ApiManager extends ComponentBase {
 					const rootSegment = normalizedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
-				return;
+				return true;
 			}
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
@@ -1141,16 +1141,17 @@ export class ApiManager extends ComponentBase {
 						allowOverwrite: true,
 						collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 					});
-					return;
+					return true;
 				}
 				await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
-				return;
+				return true;
 			}
 			if (ownershipResult.action === "none" && history.length === 0) {
 				this.deletePath(this.slothlet.api, pathParts);
 				this.deletePath(this.slothlet.boundApi, pathParts);
+				return true;
 			}
-			return;
+			return false;
 		}
 
 		if (moduleId) {
@@ -1170,18 +1171,23 @@ export class ApiManager extends ComponentBase {
 			for (const path of uniquePaths) {
 				const currentOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(path);
 
-				// Check if path has children by looking for paths starting with this path + "."
-				const hasChildren = uniquePaths.some((p) => p !== path && p.startsWith(path + "."));
+				// Check if path has children that will NOT be deleted
+				// (i.e., children that have owners other than the module being removed)
+				const hasChildrenWithOtherOwners = uniquePaths.some((p) => {
+					if (p === path || !p.startsWith(path + ".")) return false;
+					const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
+					return childOwner && childOwner.moduleId !== moduleIdKey;
+				});
 
 				// Only rollback if there's an owner AND it's not the module being removed
 				if (currentOwner && currentOwner.moduleId !== moduleIdKey) {
 					// Has different owner → rollback to current owner
 					pathsToRollback.push({ apiPath: path, restoredTo: currentOwner.moduleId });
-				} else if (!hasChildren) {
-					// No owner (or self-ownership) and no children → safe to delete
+				} else if (!hasChildrenWithOtherOwners) {
+					// No owner (or self-ownership) and no children with other owners → safe to delete
 					pathsToDelete.push(path);
 				}
-				// If has children but no owner, skip - children will handle their own cleanup
+				// If has children with other owners but no owner itself, skip - children will handle their own cleanup
 			}
 
 			// Sort paths to delete by depth (deep to shallow)
@@ -1227,7 +1233,8 @@ export class ApiManager extends ComponentBase {
 
 			this.state.removedModuleIds.add(moduleIdKey);
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleId) !== moduleIdKey);
-			return;
+			// Return true if we actually removed something
+			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
 		}
 
 		if (!apiPath) {
@@ -1240,14 +1247,22 @@ export class ApiManager extends ComponentBase {
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, null);
+		
+		// Check if path actually exists before attempting deletion
+		const pathExists = this.getValueAtPath(this.slothlet.api, parts) !== undefined;
+		
 		if (ownershipResult.action === "none") {
-			this.deletePath(this.slothlet.api, parts);
-			this.deletePath(this.slothlet.boundApi, parts);
-			// Clean up user metadata
-			if (this.slothlet.handlers.metadata) {
-				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+			if (pathExists) {
+				this.deletePath(this.slothlet.api, parts);
+				this.deletePath(this.slothlet.boundApi, parts);
+				// Clean up user metadata
+				if (this.slothlet.handlers.metadata) {
+					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
+				}
+				return true;
 			}
-			return;
+			// Path doesn't exist - nothing to remove
+			return false;
 		}
 		if (ownershipResult.action === "delete") {
 			this.deletePath(this.slothlet.api, parts);
@@ -1256,7 +1271,7 @@ export class ApiManager extends ComponentBase {
 			if (this.slothlet.handlers.metadata) {
 				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 			}
-			return;
+			return true;
 		}
 		if (ownershipResult.action === "restore") {
 			const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
@@ -1271,10 +1286,12 @@ export class ApiManager extends ComponentBase {
 					allowOverwrite: true,
 					collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 				});
-				return;
+				return true;
 			}
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
+			return true;
 		}
+		return false;
 	}
 
 	/**
