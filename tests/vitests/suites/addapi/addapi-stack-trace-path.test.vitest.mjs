@@ -18,9 +18,8 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, executeClosureFromDifferentFile, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 describe("Stack Trace Path Resolution", () => {
-	// Stack trace path resolution is independent of most config options
-	// Test with minimal matrix: both modes, no hooks/hotReload needed
-	const matrixConfigs = getMatrixConfigs({ hotReload: false, hooks: false });
+	// Stack trace path resolution tests work across all configurations
+	const matrixConfigs = getMatrixConfigs({});
 
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
 		let api;
@@ -50,15 +49,20 @@ describe("Stack Trace Path Resolution", () => {
 			// When executed through helper function, path should resolve relative to THIS file
 			const testClosure = async (apiInstance) => {
 				// This path is relative to THIS test file (tests/vitests/processed/addapi/addapi-stack-trace-path.test.vitest.mjs)
-			// Should resolve to: tests/vitests/processed/addapi/../../../../${API_TEST_BASE}/api_test_mixed
-			await apiInstance.slothlet.api.add("test.path", `../../../../${API_TEST_BASE}/api_test_mixed`, {}, addApiOptions);
+				// Should resolve to: tests/vitests/processed/addapi/../../../../${API_TEST_BASE}/api_test_mixed
+				await apiInstance.slothlet.api.add("test.path", `../../../../${API_TEST_BASE}/api_test_mixed`, {}, addApiOptions);
 
-			// Verify the API was actually loaded from the correct location
-			expect(api.test).toBeDefined();
-			expect(api.test.path).toBeDefined();
+				// Verify the API was actually loaded from the correct location
+				expect(api.test).toBeDefined();
+				expect(api.test.path).toBeDefined();
 
-			// Verify specific API structure from api_test_mixed
-			expect(typeof api.test.path).toBe("object");
+				// Verify specific API structure from api_test_mixed
+				expect(typeof api.test.path).toBe("object");
+			};
+
+			// Execute the closure through helper function in different file
+			// This tests that path resolution uses closure definition location, not helper execution location
+			await executeClosureFromDifferentFile(api, testClosure);
 		});
 	});
 });

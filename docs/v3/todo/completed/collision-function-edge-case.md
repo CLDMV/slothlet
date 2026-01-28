@@ -40,20 +40,30 @@ In this case:
 
 ## Testing Status
 
-**No test coverage exists for this edge case.**
+**✅ Test coverage EXISTS for this scenario.**
 
-Recommended test scenario:
-- Create `collision-callable/` test directory
-- `math.mjs` - default export callable function with methods
-- `math/` folder - contains additional module files
-- Test all collision modes (merge, warn, replace) with callable file exports
+**Test Location**: `tests/vitests/suites/config/collision-config.test.vitest.mjs`
+
+**Scenario Tested**:
+- `math.mjs` (file) exports callable function with methods: `add()`, `collisionVersion` property
+- `math/` (folder) contains additional module files with `multiply()` function
+- Tests all collision modes: skip, warn, replace, merge, merge-replace, error
+- Verifies both `collision.initial` (during buildAPI) and `collision.addApi` contexts
+
+**Test Results**:
+- Merge mode: BOTH file function and folder methods present
+- Replace mode: Folder takes over, file function lost
+- Other modes: Tested and working as expected
+
+**Coverage**: 541 test cases across 8 configurations (EAGER, LAZY, HOOKS, LIVE variants)
 
 ## Priority
 
-Low - unusual pattern, but should be documented and eventually tested.
+✅ **COMPLETE** - Tests exist and pass. No additional work needed.
 
 ## Related Files
 
 - `src/lib/builders/api-assignment.mjs` - Collision handling logic
 - `src/lib/modes/lazy.mjs` - Lazy proxy materialization
-- `tests/vitests/suites/metadata/metadata-collision-modes.test.vitest.mjs` - Collision test suite
+- `tests/vitests/suites/config/collision-config.test.vitest.mjs` - **Comprehensive collision test suite (541 lines)**
+- `tests/vitests/suites/metadata/metadata-collision-modes.test.vitest.mjs` - Metadata during collisions

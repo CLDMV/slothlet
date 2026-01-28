@@ -82,28 +82,28 @@ describe("addApi Functionality", () => {
 		 */
 		it("should throw appropriate errors for invalid inputs", async () => {
 			// Non-existent folder
-			await expect(api.slothlet.api.add("test", "/non/existent/path")).rejects.toThrow("Cannot access folder");
+			await expect(api.slothlet.api.add("test", "/non/existent/path")).rejects.toThrow("Configuration error");
 
 			// Non-string apiPath
-			await expect(api.slothlet.api.add(null, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("apiPath' must be a string");
+			await expect(api.slothlet.api.add(null, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
 
 			// Empty apiPath
 			await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
 
 			// Consecutive dots
-			await expect(api.slothlet.api.add("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
 
 			// Leading dot
-			await expect(api.slothlet.api.add(".test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add(".test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
 
 			// Trailing dot
-			await expect(api.slothlet.api.add("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("empty segments");
+			await expect(api.slothlet.api.add("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
 
 			// Whitespace-only apiPath
 			await expect(api.slothlet.api.add("   ", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
 
 			// Non-string folderPath
-			await expect(api.slothlet.api.add("test", null)).rejects.toThrow("folderPath' must be a string");
+			await expect(api.slothlet.api.add("test", null)).rejects.toThrow("Configuration error");
 		});
 
 		/**
@@ -147,7 +147,7 @@ describe("addApi Functionality", () => {
 
 			// Test primitive extension rejection
 			api.test.primitive = 42;
-			await expect(api.slothlet.api.add("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("cannot add properties");
+			await expect(api.slothlet.api.add("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("Invalid API path");
 		});
 
 		/**

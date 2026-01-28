@@ -47,8 +47,8 @@ export default defineConfig({
 	},
 	test: {
 		// maxWorkers: 4,
-		include: ["tests/**/*.vest.{js,mjs}", "tests/**/*.test.vitest.{js,mjs}"],
-		exclude: ["node_modules"],
+		include: ["tests/vitests/**/*.vest.{js,mjs}", "tests/vitests/**/*.test.vitest.{js,mjs}"],
+		exclude: ["node_modules", "tests/vitests_v2/**"],
 		environment: "node",
 		globals: true,
 		globalSetup: ["./tests/vitests/setup/global-setup.mjs"],

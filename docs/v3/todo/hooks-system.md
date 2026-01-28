@@ -149,7 +149,7 @@ The following test files in `tests/vitests` are related to the hooks system:
 - **`suites/hooks/hooks-internal-properties.test.vitest.mjs`** - Tests internal hook properties
 - **`suites/hooks/hooks-debug.test.vitest.mjs`** - Tests hook debugging functionality
 - **`suites/hooks/hook-subsets.test.vitest.mjs`** - Tests hook subset functionality
-- **`suites/hot-reload/hot-reload-hooks.test.vitest.mjs`** - Tests hooks with hot reload functionality
+- **`suites/api-manager/api-manager-hooks.test.vitest.mjs`** - Tests hooks with hot reload functionality
 - **`suites/listener-cleanup/listener-cleanup.test.vitest.mjs`** - Tests hook cleanup on shutdown
 
 ---

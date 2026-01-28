@@ -29,5 +29,5 @@ export async function executeWithApi(api, fn) {
  * @returns {Promise<void>}
  */
 export async function addApiFromNested(api, apiPath, folderPath, metadata = {}, options = {}) {
-	return await api.addApi(apiPath, folderPath, metadata, options);
+	return await api.slothlet.api.add(apiPath, folderPath, metadata, options);
 }
