@@ -153,30 +153,44 @@ class Slothlet {
 
 		// Subscribe ownership system to impl:created and impl:changed events
 		if (this.handlers.ownership) {
+			// Only register on impl:created, not impl:changed
+			// This prevents duplicate registrations during replacement operations
 			this.handlers.lifecycle.subscribe("impl:created", (data) => {
 				// Get collision mode from config or use default
 				const collisionMode = this.config.collision?.addApi || "merge";
+				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
+				const implValue = data.wrapper?.__impl ?? data.impl;
 				this.handlers.ownership.register({
 					moduleId: data.moduleId,
 					apiPath: data.apiPath,
-					value: data.impl,
+					value: implValue,
 					source: data.source,
 					filePath: data.filePath,
 					collisionMode: collisionMode
 				});
 			});
 
+			// Also subscribe to impl:changed for replacements (when wrapper already exists but impl changes)
+			// This handles the case where a module replaces another module's impl
 			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
 				// Get collision mode from config or use default
 				const collisionMode = this.config.collision?.addApi || "merge";
-				this.handlers.ownership.register({
-					moduleId: data.moduleId,
-					apiPath: data.apiPath,
-					value: data.impl,
-					source: data.source,
-					filePath: data.filePath,
-					collisionMode: collisionMode
-				});
+				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
+				const implValue = data.wrapper?.__impl ?? data.impl;
+
+				// Only register if this moduleId doesn't already own this path
+				// This prevents duplicate registrations from multiple impl:changed events
+				const currentOwner = this.handlers.ownership.getCurrentOwner(data.apiPath);
+				if (currentOwner?.moduleId !== data.moduleId) {
+					this.handlers.ownership.register({
+						moduleId: data.moduleId,
+						apiPath: data.apiPath,
+						value: implValue,
+						source: data.source,
+						filePath: data.filePath,
+						collisionMode: collisionMode
+					});
+				}
 			});
 		}
 	}

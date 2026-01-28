@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { TEST_MATRIX } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,7 +26,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 		delete process.env.SLOTHLET_INTERNAL_TEST_MODE;
 	});
 
-	TEST_MATRIX.forEach(({ name, config }) => {
+	getMatrixConfigs().forEach(({ name, config }) => {
 		describe.sequential(name, () => {
 			it("should track full rollback chain: core → v1 → v2 → v1 → core", async () => {
 				// Create unique temp directory for this specific test

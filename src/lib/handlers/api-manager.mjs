@@ -274,7 +274,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await this.syncWrapper(existingProxy, nextProxy, this.config);
 	 */
-	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace") {
+	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleId = null) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - existingProxy",
@@ -332,20 +332,34 @@ export class ApiManager extends ComponentBase {
 			// Merge child wrappers from next to existing based on collision mode
 			// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 			if (collisionMode === "replace") {
-				// Clear existing and add all from next
+				// CRITICAL: Use __setImpl to trigger lifecycle events for ownership tracking
+				// This ensures impl:changed fires with the correct moduleId
+				if (existingWrapper.__setImpl && nextWrapper._impl !== undefined) {
+					// Pass moduleId for correct ownership tracking in lifecycle events
+					existingWrapper.__setImpl(nextWrapper._impl, moduleId);
+				} else if (nextWrapper._impl === undefined) {
+					// For lazy mode or unmaterialized wrappers, clear the existing impl
+					// so that materialization will load the correct module
+					existingWrapper._impl = null;
+				} else {
+					// Fallback for non-unified wrappers
+					if (nextWrapper._impl !== undefined) {
+						existingWrapper._impl = nextWrapper._impl;
+						// Update callable status
+						if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
+							existingWrapper.isCallable = true;
+						}
+					}
+				}
+
+				// Clear existing child cache and adopt children from the new impl
 				existingWrapper._childCache.clear();
+				existingWrapper._adoptImplChildren();
+
+				// Also copy any child wrappers that nextWrapper already has in its cache
+				// (this handles cases where nextWrapper was built with pre-existing children)
 				for (const [key, childValue] of nextWrapper._childCache.entries()) {
 					existingWrapper._childCache.set(key, childValue);
-				}
-				// CRITICAL: Also replace the implementation itself
-				// DON'T use __setImpl because that triggers lifecycle events with wrong moduleId
-				// The ownership will be registered properly later in addApiComponent
-				if (nextWrapper._impl) {
-					existingWrapper._impl = nextWrapper._impl;
-					// Update callable status
-					if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
-						existingWrapper.isCallable = true;
-					}
 				}
 			} else if (collisionMode === "merge") {
 				// Keep existing, only add new keys
@@ -362,9 +376,11 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Mark as materialized
+		// Mark as materialized only if _impl is actually materialized (not a function)
 		if (existingWrapper._state) {
-			existingWrapper._state.materialized = true;
+			// In lazy mode, _impl being a function means it's not materialized yet
+			const isActuallyMaterialized = existingWrapper._impl && typeof existingWrapper._impl !== "function";
+			existingWrapper._state.materialized = isActuallyMaterialized;
 			existingWrapper._state.inFlight = false;
 		}
 
@@ -421,7 +437,7 @@ export class ApiManager extends ComponentBase {
 					message: "mutateApiValue - both are wrappers, calling syncWrapper"
 				});
 			}
-			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode);
+			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleId);
 			return;
 		}
 
@@ -447,7 +463,8 @@ export class ApiManager extends ComponentBase {
 					removeMissing: options.removeMissing,
 					mutateExisting: true,
 					allowOverwrite: true,
-					syncWrapper: this.syncWrapper.bind(this)
+					syncWrapper: this.syncWrapper.bind(this),
+					collisionMode: options.collisionMode
 				});
 				return;
 			}
@@ -470,10 +487,14 @@ export class ApiManager extends ComponentBase {
 				removeMissing: options.removeMissing,
 				mutateExisting: true,
 				allowOverwrite: true,
-				syncWrapper: this.syncWrapper.bind(this)
+				syncWrapper: this.syncWrapper.bind(this),
+				collisionMode: options.collisionMode
 			});
-			return;
+			return existingValue;
 		}
+
+		// For primitives and functions, return the next value
+		return nextValue;
 	}
 
 	/**
@@ -510,6 +531,7 @@ export class ApiManager extends ComponentBase {
 		const finalKey = parts[parts.length - 1];
 		const existing = parent ? parent[finalKey] : undefined;
 		const collisionMode = options.collisionMode || "merge";
+		const moduleId = options.moduleId; // Extract moduleId for lifecycle events
 
 		this.slothlet.debug("api", {
 			message: "setValueAtPath",
@@ -559,7 +581,12 @@ export class ApiManager extends ComponentBase {
 						mode: "replace"
 					});
 					// Replace mode: call mutateApiValue to preserve wrapper, syncWrapper will clear children
-					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode: "replace" }, this.config);
+					await this.mutateApiValue(
+						existing,
+						value,
+						{ removeMissing: false, allowOverwrite: true, collisionMode: "replace", moduleId },
+						this.config
+					);
 					return true;
 				} else {
 					// Primitives - just replace
@@ -778,6 +805,7 @@ export class ApiManager extends ComponentBase {
 					metadata: historyEntry.metadata,
 					mutateExisting: true,
 					forceOverwrite: true,
+					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback restoration
 					recordHistory: false
 				}
 			});
@@ -800,11 +828,13 @@ export class ApiManager extends ComponentBase {
 			}
 			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
 				mutateExisting: true,
-				allowOverwrite: true
+				allowOverwrite: true,
+				collisionMode: "replace" // CRITICAL: Must use replace mode for restoration
 			});
 			await this.setValueAtPath(this.slothlet.boundApi, parts, baseValue, {
 				mutateExisting: true,
-				allowOverwrite: true
+				allowOverwrite: true,
+				collisionMode: "replace" // CRITICAL: Must use replace mode for restoration
 			});
 		}
 	}
@@ -895,8 +925,8 @@ export class ApiManager extends ComponentBase {
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		const resolvedFolderPath = await this.resolveFolderPath(folderPath);
 
-		// Determine collision handling based on config.collision.addApi
-		const collisionMode = this.config.collision.addApi || "merge";
+		// Determine collision handling - check options first, then config.collision.addApi
+		const collisionMode = restOptions.collisionMode || this.config.collision.addApi || "merge";
 		const allowOverwrite = !!(
 			restOptions.forceOverwrite ||
 			restOptions.allowOverwrite ||
@@ -992,7 +1022,8 @@ export class ApiManager extends ComponentBase {
 		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 			mutateExisting,
 			allowOverwrite,
-			collisionMode
+			collisionMode,
+			moduleId // Pass moduleId for lifecycle events
 		});
 
 		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
@@ -1058,11 +1089,22 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Detect if this is a moduleId (contains underscore) or apiPath
-		const isModuleId = pathOrModuleId.includes("_");
+		// Detect if this is a moduleId or apiPath
+		// API paths contain dots (e.g., "plugins.tools"), moduleIds don't
+		const isModuleId = !pathOrModuleId.includes(".");
 		const apiPath = isModuleId ? null : pathOrModuleId;
 		// Extract moduleId from full moduleID format "moduleId:path" if present
-		const moduleId = isModuleId ? pathOrModuleId.split(":")[0] : null;
+		let moduleId = isModuleId ? pathOrModuleId.split(":")[0] : null;
+
+		// If it's a moduleId, find the actual registered moduleId (with suffix)
+		// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
+		if (moduleId && this.slothlet.handlers.ownership) {
+			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
+			const matchingModule = registeredModules.find((m) => m === moduleId || m.startsWith(`${moduleId}_`));
+			if (matchingModule) {
+				moduleId = matchingModule;
+			}
+		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "removeApi",
@@ -1091,11 +1133,13 @@ export class ApiManager extends ComponentBase {
 				if (restoredValue !== undefined) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
-						allowOverwrite: true
+						allowOverwrite: true,
+						collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 					});
 					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
 						mutateExisting: true,
-						allowOverwrite: true
+						allowOverwrite: true,
+						collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 					});
 					return;
 				}
@@ -1112,7 +1156,44 @@ export class ApiManager extends ComponentBase {
 		if (moduleId) {
 			const moduleIdKey = String(moduleId);
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
-			for (const removedPath of result.removed) {
+
+			// Collect all paths that were owned by this module
+			const allPaths = [...result.removed, ...result.rolledBack.map((r) => r.apiPath)];
+
+			// Deduplicate paths (ownership may track duplicates due to nested structures)
+			const uniquePaths = [...new Set(allPaths)];
+
+			// Filter paths: separate those with no owners (delete) vs those with owners (rollback)
+			const pathsToDelete = [];
+			const pathsToRollback = [];
+
+			for (const path of uniquePaths) {
+				const currentOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(path);
+
+				// Check if path has children by looking for paths starting with this path + "."
+				const hasChildren = uniquePaths.some((p) => p !== path && p.startsWith(path + "."));
+
+				// Only rollback if there's an owner AND it's not the module being removed
+				if (currentOwner && currentOwner.moduleId !== moduleIdKey) {
+					// Has different owner → rollback to current owner
+					pathsToRollback.push({ apiPath: path, restoredTo: currentOwner.moduleId });
+				} else if (!hasChildren) {
+					// No owner (or self-ownership) and no children → safe to delete
+					pathsToDelete.push(path);
+				}
+				// If has children but no owner, skip - children will handle their own cleanup
+			}
+
+			// Sort paths to delete by depth (deep to shallow)
+			// This ensures we delete children before parent containers
+			pathsToDelete.sort((a, b) => {
+				const depthA = (a.match(/\./g) || []).length;
+				const depthB = (b.match(/\./g) || []).length;
+				return depthB - depthA; // Reverse sort for deep-to-shallow
+			});
+
+			// Delete paths with no owners
+			for (const removedPath of pathsToDelete) {
 				const { parts } = this.normalizeApiPath(removedPath);
 				this.deletePath(this.slothlet.api, parts);
 				this.deletePath(this.slothlet.boundApi, parts);
@@ -1122,34 +1203,25 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
 			}
-			for (const rollback of result.rolledBack) {
-				// If restoring to the same moduleId we're removing, that's a self-restoration
-				// (duplicate registration), so delete instead
-				if (rollback.restoredTo === moduleIdKey) {
-					const { parts } = this.normalizeApiPath(rollback.apiPath);
-					this.deletePath(this.slothlet.api, parts);
-					this.deletePath(this.slothlet.boundApi, parts);
-					// Clean up user metadata
-					if (this.slothlet.handlers.metadata) {
-						const rootSegment = rollback.apiPath.split(".")[0];
-						this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
-					}
-					continue;
-				}
 
+			// Rollback paths that still have owners
+			for (const rollback of pathsToRollback) {
+				// Get the previous _impl from ownership and set it
 				const { parts } = this.normalizeApiPath(rollback.apiPath);
-				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
-				if (restoredValue !== undefined) {
-					await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true
-					});
-					await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
-						mutateExisting: true,
-						allowOverwrite: true
-					});
-				} else {
-					await this.restoreApiPath(rollback.apiPath, rollback.restoredTo);
+				const previousImpl = this.slothlet.handlers.ownership?.getCurrentValue?.(rollback.apiPath);
+
+				if (previousImpl !== undefined) {
+					// Get the existing wrapper and update its _impl
+					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
+					if (existingWrapper?.__setImpl) {
+						// Pass the restored moduleId for correct ownership tracking
+						existingWrapper.__setImpl(previousImpl, rollback.restoredTo);
+					}
+					// Also update boundApi
+					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
+					if (existingBoundWrapper?.__setImpl) {
+						existingBoundWrapper.__setImpl(previousImpl, rollback.restoredTo);
+					}
 				}
 			}
 
@@ -1191,11 +1263,13 @@ export class ApiManager extends ComponentBase {
 			if (restoredValue !== undefined) {
 				await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 					mutateExisting: true,
-					allowOverwrite: true
+					allowOverwrite: true,
+					collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 				});
 				await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
 					mutateExisting: true,
-					allowOverwrite: true
+					allowOverwrite: true,
+					collisionMode: "replace" // CRITICAL: Must use replace mode for rollback
 				});
 				return;
 			}
