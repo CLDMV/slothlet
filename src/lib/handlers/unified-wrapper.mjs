@@ -190,11 +190,12 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Set implementation (for materialization or reload)
-	 * @param {Object} newImpl - New implementation
-	 * @public
+	 * Set new implementation and adopt children
+	 * @param {*} newImpl - New implementation
+	 * @param {string} [moduleId] - Optional moduleId for lifecycle event (for replacements)
+	 * @private
 	 */
-	__setImpl(newImpl) {
+	__setImpl(newImpl, moduleId = null) {
 		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "__setImpl called",
@@ -211,7 +212,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			const extractedModuleId = wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null;
+			// Use provided moduleId (for replacements) or extract from metadata
+			const extractedModuleId = moduleId || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.apiPath,

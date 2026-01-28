@@ -6,15 +6,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { TEST_MATRIX, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Use TEST_MATRIX - ownership tracking is now always available via api.slothlet.api
 
 // Test modules directory - temporary folder next to this test file
 const testDir = path.join(__dirname, "temp-ownership-modules");
@@ -103,8 +101,8 @@ afterAll(async () => {
 	await cleanupTestModules();
 });
 
-// Basic API removal tests - work without ownership tracking
-describe.each(BASIC_MATRIX)("Basic API Removal > Config: '$name'", ({ config }) => {
+// Basic API removal tests
+describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
@@ -202,7 +200,7 @@ describe.each(BASIC_MATRIX)("Basic API Removal > Config: '$name'", ({ config }) 
 });
 
 // Module ownership tests - ownership tracking always available in v3
-describe.each(TEST_MATRIX)("Module Ownership > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 

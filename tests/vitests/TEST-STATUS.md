@@ -1,21 +1,3 @@
-/*
- * @Project: @cldmv/slothlet
- * @Filename: /tests/vitests/TEST-STATUS.md
- * @Date: 2026-01-23 15:47:00 -08:00 (1769212020)
- * @Author: Nate Hyson <CLDMV>
- * @Email: <Shinrai@users.noreply.github.com>
- * -----
- * @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- * @Last modified time: 2026-01-26 15:21:54 -08:00 (1769469714)
- * -----
- * @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-
-
-
-
-
 # V3 Vitest Status
 
 **Instructions for maintaining this file:**
@@ -90,7 +72,7 @@ Relative base: tests/vitests
 | suites/isolation/tv-config-isolation.test.vitest.mjs | Isolation | No | untested | |
 | suites/listener-cleanup/listener-cleanup.test.vitest.mjs | Lifecycle + EventEmitter + Hooks | No | untested | Related to eventemitter-context-propagation.md and hooks-system.md |
 | suites/listener-cleanup/third-party-cleanup.test.vitest.mjs | Lifecycle + EventEmitter | No | untested | Related to eventemitter-context-propagation.md |
-| suites/metadata/metadata-api-manager.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 21:12:45) | 96/96 tests pass (100%) - Tests metadata with api.add/remove cycles + internal API tests (self.slothlet.metadata.*). **NEW TESTS**: Added 5 internal API tests for add/remove scenarios. **FIXED**: (1) Null-to-undefined conversion in helper (2) getMetadata() now looks up user metadata by BOTH moduleID AND rootApiPath to support both api.add() (stores by apiPath) and metadata.set() (stores by moduleID). All tests passing. Related to metadata-tagging.md |
+| suites/metadata/metadata-api-manager.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-27) | ✅ pass (2026-01-27 19:17:00) | 96/96 tests pass (100%) - Tests metadata with api.add/remove cycles + internal API tests (self.slothlet.metadata.*). **FIXED (2026-01-27 19:17)**: (1) ModuleId detection: API paths contain dots, moduleIds don't - fixed removeApiComponent to use `!includes(".")` instead of `includes("_")`. (2) ModuleId prefix matching: `api.remove("removableInternal")` now finds and removes "removableInternal_abc123" by searching ownership.moduleToPath for matching prefix. (3) Prevented duplicate ownership registrations via currentOwner check in impl:changed subscription. (4) Added moduleId parameter to __setImpl for correct lifecycle event tracking during replacements. All tests passing. Related to metadata-tagging.md |
 | suites/metadata/metadata-collision-modes.test.vitest.mjs | Metadata - Collision Modes | ✅ Yes (2026-01-27 08:18:00) | ✅ pass (2026-01-27 08:18:00) | 96/96 tests pass (100%) - Tests metadata behavior across collision modes (skip/warn/replace/merge/merge-replace/error). **FIXED (2026-01-27)**: Replace mode now fully implemented in setValueAtPath - preserves unified wrapper via mutateApiValue. **FIXED (2026-01-27 earlier)**: (1) Unified wrapper pattern preserves references across addApi via __setImpl (2) syncWrapper receives collisionMode parameter (3) Merge/merge-replace modes update child impl while preserving wrappers. Related to metadata-tagging.md |
 | suites/metadata/metadata-edge-cases.test.vitest.mjs | Metadata - Edge Cases | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 21:12:45) | 112/112 tests pass (100%) - Tests edge cases: root contributor, deep nesting, special chars, large objects. All tests passing. Related to metadata-tagging.md |
 | suites/metadata/metadata-external-api.test.vitest.mjs | Metadata - External API | ✅ Yes (2026-01-26) | ✅ pass (2026-01-26 21:58:00) | 176/176 tests pass (100%) - Tests external metadata API (api.slothlet.metadata.set/remove/setGlobal). **ENHANCED**: (1) Added array/object parameter support to metadata.remove() - can now remove multiple keys or nested keys in one call. (2) Added 6 new tests for array/object removal. **FIXED**: (1) Tests using non-existent functions (rootMath.subtract → multiply, config.settings → nested.date.today). (2) Global metadata test expectations - global metadata is LIVE data, not snapshotted. (3) Test directory usage - reverted testFunc from API_TEST to API_SMART_FLATTEN with correct function. All tests passing. Related to metadata-tagging.md |

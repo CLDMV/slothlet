@@ -82,6 +82,20 @@ export class OwnershipManager extends ComponentBase {
 			this.pathToModule.set(apiPath, []);
 		}
 
+		// Check for duplicate registration - if this moduleId is already in the stack, don't add again
+		const stack = this.pathToModule.get(apiPath);
+		const existingEntry = stack.find((entry) => entry.moduleId === moduleId);
+		if (existingEntry) {
+			// Update existing entry instead of creating duplicate
+			existingEntry.source = source;
+			existingEntry.timestamp = Date.now();
+			existingEntry.value = value;
+			if (filePath !== null) {
+				existingEntry.filePath = filePath;
+			}
+			return existingEntry;
+		}
+
 		const entry = {
 			moduleId,
 			source,
