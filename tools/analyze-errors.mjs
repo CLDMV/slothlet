@@ -957,14 +957,63 @@ if (allConsoleLogs.length > 0) {
 
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
-console.log("\nTranslation Summary:");
+console.log("\n📊 Translation Statistics:");
 console.log(`  Total Error Codes Used:      ${usedErrorCodes.size}`);
 console.log(`  Total Translations:          ${translationKeys.length}`);
-console.log(`  Missing Translations:        ${missingTranslations.length}`);
-console.log(`  Unused Translations:         ${unusedTranslations.length}`);
-console.log(`  Placeholder Mismatches:      ${placeholderIssues.length}`);
-console.log(`  Invalid Key Format:          ${invalidKeys.length}`);
-console.log(`  Console.warn Calls:          ${allConsoleWarns.length}`);
-console.log(`  Improper Console.log:        ${allConsoleLogs.length}`);
+console.log(`  Unused Translations:         ${unusedTranslations.length} (may be intentional)`);
+
+console.log("\n" + "=".repeat(80));
+console.log("\n🔍 Quality Check Results:\n");
+
+// Count actual issues
+let hasIssues = false;
+
+if (missingTranslations.length > 0) {
+	console.log(`❌ Missing Translations:        ${missingTranslations.length} - MUST FIX`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Missing Translations:        0`);
+}
+
+if (placeholderIssues.length > 0) {
+	console.log(`❌ Placeholder Mismatches:      ${placeholderIssues.length} - MUST FIX`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Placeholder Mismatches:      0`);
+}
+
+if (invalidKeys.length > 0) {
+	console.log(`❌ Invalid Key Format:          ${invalidKeys.length} - MUST FIX`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Invalid Key Format:          0`);
+}
+
+if (allConsoleWarns.length > 0) {
+	console.log(`⚠️  Console.warn Calls:          ${allConsoleWarns.length} - Should convert to SlothletWarning`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Console.warn Calls:          0`);
+}
+
+if (allConsoleLogs.length > 0) {
+	console.log(`⚠️  Improper Console.log:        ${allConsoleLogs.length} - Should use slothlet.debug()`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Improper Console.log:        0`);
+}
+
+if (errorsWithIssues.length > 0) {
+	console.log(`⚠️  Error Throws with Issues:   ${errorsWithIssues.length} - Review above`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Error Throws with Issues:   0`);
+}
 
 console.log();
+
+if (!hasIssues) {
+	console.log("🎉 All checks passed! No issues found.\n");
+} else {
+	console.log("⚠️  Issues found - review output above for details.\n");
+}

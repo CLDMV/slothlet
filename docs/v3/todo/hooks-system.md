@@ -31,17 +31,17 @@ npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
 **V3 Status**: API surface exists but throws `NOT_IMPLEMENTED` errors
 
 **Stubbed Methods** (in `src/lib/builders/api_builder.mjs`):
-- `api.slothlet.hooks.on(tag, type, handler, options)` - Hook registration
-- `api.slothlet.hooks.off(nameOrPattern)` - Hook removal
-- `api.slothlet.hooks.enable(pattern)` - Enable hooks by pattern
-- `api.slothlet.hooks.disable(pattern)` - Disable hooks by pattern
-- `api.slothlet.hooks.clear(type)` - Clear all hooks of type
-- `api.slothlet.hooks.list(type)` - List registered hooks
+- `api.slothlet.hook.on(typePattern, handler, options)` - Hook registration (typePattern: "type:pattern", e.g., "before:math.*")
+- `api.slothlet.hook.remove(filter)` - Hook removal by filter ({ pattern, id, type })
+- `api.slothlet.hook.clear(filter?)` - Alias for remove() - removes hooks matching filter
+- `api.slothlet.hook.enable(filter?)` - Enable hooks (all or by filter object)
+- `api.slothlet.hook.disable(filter?)` - Disable hooks (all or by filter object)
+- `api.slothlet.hook.list(filter?)` - List registered hooks (all or filtered)
 
 All methods throw:
 ```javascript
 throw new this.SlothletError("NOT_IMPLEMENTED", {
-    feature: "slothlet.hooks.*",
+    feature: "slothlet.hook.*",
     hint: "Hooks system deferred to next prototype iteration"
 });
 ```
@@ -62,51 +62,133 @@ throw new this.SlothletError("NOT_IMPLEMENTED", {
    - Cannot prevent function execution
    - Receive original args + return value
 
-3. **`always` hooks** - Execute regardless of success/error
+3. **`always` hooks** - Execute regardless of function execution outcome
+   - Fires whether function succeeds, fails, or is short-circuited
    - Read-only observer pattern
-   - Receives result or error
+   - Receives result or error from execution
    - Cannot modify behavior
+   - **Note**: Only fires if function execution is attempted (requires path to exist)
 
 4. **`error` hooks** - Execute on errors only
    - Detailed error context with source tracking
    - Can suppress errors (report without throwing)
    - Source phases: before/function/after/always
 
-### Hook Registration Options
+### Hook Registration API
 
+**V3 Signature** (enhanced ergonomics):
 ```javascript
-api.slothlet.hooks.on(tag, type, handler, {
-    pattern: "**",              // Glob pattern matching API paths
-    priority: 0,                // Higher = earlier execution
-    subset: "before",           // Phase: before|primary|after
-    id: "hook-unique-id"        // Optional unique identifier
+api.slothlet.hook.on(typePattern, handler, options)
+```
+
+**Parameters**:
+- `typePattern` (string): Compound of type and pattern, separated by `:` (e.g., "before:math.*", "error:**")
+  - Format: `"<type>:<pattern>"`
+  - Type: "before", "after", "always", or "error"
+  - Pattern: Glob pattern matching API paths (wildcards: `*`, `**`)
+  - Examples: `"before:math.*"`, `"error:**"`, `"after:database.{create,update}"`
+- `handler` (function): Hook handler function
+- `options` (object, optional): Hook configuration
+  - `id` (string, optional): Unique identifier (auto-generated if not provided)
+  - `priority` (number, default 0): Higher = earlier execution
+  - `subset` (string, default "primary"): Phase - "before", "primary", or "after"
+
+**Examples**:
+```javascript
+// Simple hook with pattern
+api.slothlet.hook.on("before:math.*", handler);
+
+// Global error hook
+api.slothlet.hook.on("error:**", errorHandler);
+
+// With ID, priority, and subset
+api.slothlet.hook.on("before:**", securityHandler, {
+    id: "security",
+    subset: "before",
+    priority: 2000
 });
+
+// After hook with caching
+api.slothlet.hook.on("after:**", ({ path, args, result }) => {
+    const key = JSON.stringify({ path, args });
+    cache.set(key, result);
+    return result;
+}, { priority: 100 });
+
+// Pattern with braces
+api.slothlet.hook.on("always:database.{create,update,delete}", auditHandler);
 ```
 
 ### Pattern Matching Features
 
+**TypePattern Parsing**:
+- Format: `"type:pattern"` where only the **FIRST** `:` is the separator
+- Type: Everything before the first `:`
+- Pattern: Everything after the first `:`
+- Example: `"before:api:legacy:functions"` parses as:
+  - Type: `"before"`
+  - Pattern: `"api:legacy:functions"` (colons preserved in pattern)
+
+**Pattern Syntax** (applied to API paths):
 - Wildcards: `*` (single level), `**` (multiple levels)
 - Braces: `{a,b}` (alternatives)
 - Negation: `!pattern` (exclusion)
-- Examples:
-  - `"database.*"` - All database functions
-  - `"*.create"` - All create functions at any depth
-  - `"api.{user,auth}.**"` - User and auth namespaces
+- Colons: `:` treated as literal characters in patterns (only first `:` in typePattern is special)
 
-### Runtime Control
+**Examples**:
+  - `"before:database.*"` - All database functions
+  - `"error:*.create"` - All create functions at any depth
+  - `"always:api.{user,auth}.**"` - User and auth namespaces
+  - `"after:**"` - All functions (global pattern)
+
+### Runtime Control with Filters
 
 ```javascript
-// Disable all hooks temporarily
-api.slothlet.hooks.disable();
+// Disable all hooks
+api.slothlet.hook.disable();
 
-// Enable only database hooks
-api.slothlet.hooks.enable("database.*");
+// Disable hooks by pattern
+api.slothlet.hook.disable({ pattern: "database.*" });
 
-// Clear all before hooks
-api.slothlet.hooks.clear("before");
+// Disable specific hook by ID
+api.slothlet.hook.disable({ id: "security-check" });
 
-// List active hooks with metadata
-const hooks = api.slothlet.hooks.list();
+// Enable all hooks
+api.slothlet.hook.enable();
+
+// Enable hooks by pattern
+api.slothlet.hook.enable({ pattern: "math.*" });
+
+// Enable specific hook types
+api.slothlet.hook.enable({ type: "before" });
+
+// Remove hooks by ID
+api.slothlet.hook.remove({ id: "temp-hook" });
+
+// Remove hooks by pattern
+api.slothlet.hook.remove({ pattern: "test.*" });
+
+// Remove hooks by type
+api.slothlet.hook.remove({ type: "before" });
+
+// Remove with multiple filters
+api.slothlet.hook.remove({ type: "error", pattern: "database.*" });
+
+// Clear is an alias for remove
+api.slothlet.hook.clear({ type: "before" }); // Same as remove({ type: "before" })
+api.slothlet.hook.clear(); // Remove all hooks
+
+// List all hooks
+const allHooks = api.slothlet.hook.list();
+
+// List hooks by type
+const beforeHooks = api.slothlet.hook.list({ type: "before" });
+
+// List hooks by pattern
+const mathHooks = api.slothlet.hook.list({ pattern: "math.*" });
+
+// List enabled hooks only
+const enabledHooks = api.slothlet.hook.list({ enabled: true });
 ```
 
 ### Error Handling
@@ -128,6 +210,176 @@ const api = await slothlet({
         suppressErrors: true  // Report errors without throwing
     }
 });
+```
+
+---
+
+## Edge Cases & Behavior Clarifications
+
+### Hook Registration for Non-Existent Paths
+
+**Behavior**: Hooks can be registered for any API path, even if the path doesn't exist in the current API.
+
+**Rationale**: Hooks are stored in the hook system (not attached to API functions), enabling:
+- Pattern-based registration before modules are loaded
+- Hook persistence across hot-reload operations
+- Forward-compatible hook registration for future API additions
+
+**Execution Rules**:
+1. **Hook registration**: Always succeeds, regardless of path existence
+   ```javascript
+   // This succeeds even if sqrt() doesn't exist
+   api.slothlet.hook.on(
+       "before:math.sqrt",      // typePattern
+       ({ args }) => {          // handler
+           console.log("Validating sqrt args:", args);
+           return args;
+       },
+       { id: "validate-sqrt" }  // optional ID in options
+   );
+   ```
+
+2. **Hook execution with path traversal errors**: 
+   
+   **Critical Distinction**: When a call like `api.math.science.hard.sqrt()` is made but `api.math.science.hard` doesn't exist:
+   - The UnifiedWrapper proxy system DOES get invoked (it attempts to traverse the path)
+   - Error occurs INSIDE the wrapper when traversal fails
+   - **`always` and `error` hooks MUST fire** for this scenario
+   
+   **⚠️ IMPLEMENTATION UNCERTAINTY - Requires Early Testing**:
+   
+   **Unknown**: Whether we can track the full requested path during traversal.
+   
+   **Challenge**: Each proxy `get` trap only sees the immediate property name:
+   ```javascript
+   // User calls: api.math.science.hard.sqrt(16)
+   // Becomes a series of individual property accesses:
+   get(api, "math")           // Only knows "math", not full path
+   get(mathProxy, "science")  // Only knows "science", not full path
+   get(scienceProxy, "hard")  // Fails here - only knows "hard"
+   apply(...)                 // Never reached
+   ```
+   
+   **Possible Solutions to Test**:
+   1. **Path accumulation**: Build path incrementally through proxy chain (may work)
+   2. **Stack inspection**: Try to reconstruct intent from call stack (fragile)
+   3. **Partial context only**: Only report currentPath, not requestedPath (simpler but less useful)
+   
+   **Required Context for Hooks** (if full path tracking works):
+   - **Requested path**: The full path user attempted to call (`math.science.hard.sqrt`)
+   - **Current path**: Where traversal failed (`math.science` - couldn't find `hard`)
+   - **Error details**: Path resolution failure
+   
+   **Fallback Context** (if full path tracking impossible):
+   - **Current path**: Where traversal failed (`math.science`)
+   - **Missing property**: What property was requested (`hard`)
+   - **Error details**: Path resolution failure
+   
+   ```javascript
+   // IDEAL (if full path tracking works):
+   // always hooks receive:
+   {
+       requestedPath: "math.science.hard.sqrt",  // Full intended path
+       currentPath: "math.science",               // Where it failed
+       missingProperty: "hard",                   // What was missing
+       hasError: true,
+       error: "Cannot read property 'hard' of undefined",
+       args: [16]
+   }
+   
+   // FALLBACK (if only partial tracking works):
+   // always hooks receive:
+   {
+       currentPath: "math.science",               // Where it failed
+       missingProperty: "hard",                   // What was requested
+       hasError: true,
+       error: "Cannot read property 'hard' of undefined",
+       args: [16]  // Might not be available at get trap level
+   }
+   
+   // error hooks receive:
+   {
+       requestedPath: "math.science.hard.sqrt",   // If available
+       currentPath: "math.science",                // Always available
+       missingProperty: "hard",                    // Always available
+       source: "traversal",                        // New source type!
+       error: Error,
+       args: [16]  // If available
+   }
+   ```
+
+3. **Hook execution for existing paths**: 
+   - `before` hooks: Execute before function call, can mutate args or short-circuit
+   - `after` hooks: Execute after successful function return, can transform result
+   - `always` hooks: Execute after any outcome (success/error/short-circuit)
+   - `error` hooks: Execute only on errors (function errors, before/after hook errors, traversal errors)
+
+**Why Path Traversal Errors Fire Hooks**:
+UnifiedWrapper's proxy system intercepts ALL property access. When you call `api.math.science.hard.sqrt()`:
+1. Each property access goes through proxy `get` trap
+2. Final invocation goes through proxy `apply` trap  
+3. Error during traversal occurs INSIDE the wrapper system
+4. Hooks can observe the failure because wrapper was invoked
+
+**Example Scenario** (assuming full path tracking works):
+```javascript
+const api = await slothlet({ dir: "./api", hooks: true });
+
+// Register hooks for path that partially doesn't exist
+api.slothlet.hook.on("always:math.science.hard.sqrt", ({ requestedPath, currentPath, hasError, error }) => {
+    console.log("always hook fired!");
+    console.log("Requested:", requestedPath);  // May not be available
+    console.log("Failed at:", currentPath);
+    console.log("Error:", hasError);
+}, { id: "observe-sqrt" });
+
+api.slothlet.hook.on("error:math.science.hard.sqrt", ({ requestedPath, currentPath, source, error }) => {
+    console.log("error hook fired!");
+    console.log("Requested:", requestedPath);  // May not be available
+    console.log("Failed at:", currentPath);
+    console.log("Source:", source); // "traversal"
+}, { id: "catch-errors" });
+
+// Call with partial path missing
+try {
+    await api.math.science.hard.sqrt(16);  // api.math.science.hard doesn't exist
+} catch (error) {
+    // Both always and error hooks DID fire!
+    // Logs: "always hook fired!"
+    // Logs: "Requested: math.science.hard.sqrt" (if full path tracking works)
+    // Logs: "Failed at: math.science"
+    // Logs: "Error: true"
+    // Logs: "error hook fired!"
+    // Logs: "Source: traversal"
+}
+
+// Later: Add missing path via hot-reload
+await api.slothlet.api.add("math.science.hard", "./math-advanced");
+
+// Now hooks execute normally (no traversal error)
+await api.math.science.hard.sqrt(16);  
+// always hooks fire with hasError: false
+```
+
+**⚠️ Early Implementation Testing Required**:
+Before full hooks implementation, create a minimal test to verify:
+1. Can we accumulate the full path during proxy traversal?
+2. If not, can we provide enough context (currentPath + missingProperty)?
+3. How do we handle the `apply` trap never being called (no args available)?
+
+This will inform the final hook context API design.
+
+**Pattern Matching Caveat**:
+Wildcard patterns (`*`, `**`) match against existing API structure at registration time:
+```javascript
+// These hooks match existing structure
+api.slothlet.hook.on("before:math.*", handler, { id: "log-all" });
+// Matches: math.add, math.subtract (if they exist)
+// Ignores: math.sqrt (if it doesn't exist at registration time)
+
+// But hooks registered for specific non-existent paths can still observe traversal errors
+api.slothlet.hook.on("error:math.missing.func", handler, { id: "catch-missing" });
+// Will fire if someone calls api.math.missing.func() and path traversal fails
 ```
 
 ---
@@ -173,15 +425,15 @@ The following test files in `tests/vitests` are related to the hooks system:
 class HookManager extends ComponentBase {
     constructor(slothlet) { super(slothlet); }
     
-    // Registration
-    on(tag, type, handler, options = {})
-    off(nameOrPattern)
+    // Registration (V3 ergonomic signature)
+    on(typePattern, handler, options = {})  // typePattern: "type:pattern"
+    remove(filter = {})  // Filter: { type, pattern, id }
     
-    // Runtime control
-    enable(pattern)
-    disable(pattern)
-    clear(type)
-    list(type)
+    // Runtime control (enhanced with filter objects)
+    enable(filter = {})   // Filter: { type, pattern, id }
+    disable(filter = {})  // Filter: { type, pattern, id }
+    clear(filter = {})    // Alias for remove()
+    list(filter = {})     // Filter: { type, pattern, id, enabled }
     
     // Internal execution
     #executeBeforeHooks(apiPath, args)
@@ -200,13 +452,15 @@ class HookManager extends ComponentBase {
 **Location**: Modify `src/lib/handlers/unified-wrapper.mjs`
 
 **Changes needed**:
+- **Path tracking system**: Accumulate full path during proxy traversal (test feasibility early)
 - Add hook execution in `apply` trap (before function call)
 - Add hook execution after function return (after hooks)
 - Add try/catch for error hooks
 - Add always hooks in finally block
 - Track execution phases for error source
+- **Handle traversal errors in `get` trap**: Fire hooks when property access fails
 
-**Execution Flow**:
+**Execution Flow** (for successful function calls):
 ```javascript
 async apply(target, thisArg, args) {
     let phase = "before";
@@ -235,6 +489,38 @@ async apply(target, thisArg, args) {
         phase = "always";
         await this.#executeAlwaysHooks(args);
     }
+}
+```
+
+**Path Traversal Error Handling** (new requirement):
+```javascript
+get(target, prop, receiver) {
+    // ... existing get trap logic ...
+    
+    // If property doesn't exist and we're building a path
+    if (!(prop in target)) {
+        // Need to track:
+        // - currentPath: Where we are now
+        // - requestedProperty: What was requested
+        // - fullPath: What user intended (if trackable)
+        
+        // Fire error and always hooks with traversal error
+        await this.#executeErrorHooks(
+            new Error(`Cannot read property '${prop}'`),
+            "traversal",
+            undefined  // args not available at get trap level
+        );
+        
+        await this.#executeAlwaysHooks(
+            undefined,  // args not available
+            true        // hasError
+        );
+        
+        // Then throw the error
+        throw new Error(`Cannot read property '${prop}' of ${currentPath}`);
+    }
+    
+    // ... rest of get trap ...
 }
 ```
 
@@ -272,16 +558,31 @@ this.handlers.hookManager = new HookManager(this);
 
 **Replace stubs with real implementations**:
 ```javascript
-hooks: {
-    on: async function slothlet_hooks_on(tag, type, handler, options = {}) {
-        return slothlet.handlers.hookManager.on(tag, type, handler, options);
+hook: {  // Singular, not plural
+    on: async function slothlet_hook_on(typePattern, handler, options = {}) {
+        return slothlet.handlers.hookManager.on(typePattern, handler, options);
     },
     
-    off: async function slothlet_hooks_off(nameOrPattern) {
-        return slothlet.handlers.hookManager.off(nameOrPattern);
+    remove: async function slothlet_hook_remove(filter = {}) {
+        return slothlet.handlers.hookManager.remove(filter);
     },
     
-    // ... etc for enable, disable, clear, list
+    enable: async function slothlet_hook_enable(filter = {}) {
+        return slothlet.handlers.hookManager.enable(filter);
+    },
+    
+    disable: async function slothlet_hook_disable(filter = {}) {
+        return slothlet.handlers.hookManager.disable(filter);
+    },
+    
+    clear: async function slothlet_hook_clear(filter = {}) {
+        // Alias for remove
+        return slothlet.handlers.hookManager.remove(filter);
+    },
+    
+    list: async function slothlet_hook_list(filter = {}) {
+        return slothlet.handlers.hookManager.list(filter);
+    }
 }
 ```
 
@@ -340,7 +641,14 @@ hooks: {
 - Hook integration in V2 wrapper system
 
 **Breaking Changes**:
-- API namespace change: `api.hooks.*` (V2) → `api.slothlet.hooks.*` (V3)
+- API namespace change: `api.hooks.*` (V2) → `api.slothlet.hook.*` (V3, singular)
+- Method renamed: `.off()` (V2) → `.remove()` (V3, clearer naming)
+- `.clear()` is now an alias for `.remove()` (both use filter objects)
+- **Signature change**: `.on(type, handler, { pattern, ...options })` (V2) → `.on(typePattern, handler, options)` (V3)
+  - V2: `api.hooks.on("before", handler, { pattern: "math.*", priority: 100 })`
+  - V3: `api.slothlet.hook.on("before:math.*", handler, { priority: 100 })`
+  - TypePattern format: `"<type>:<pattern>"` (e.g., "before:math.*", "error:**")
+- Enhanced filters: `.disable()`, `.enable()`, `.remove()`, `.list()` accept filter objects ({ type, pattern, id })
 - Configuration structure may differ
 - Integration with new UnifiedWrapper architecture
 
@@ -358,10 +666,17 @@ hooks: {
 
 ## Next Steps
 
+### Phase 0: Path Tracking Feasibility (REQUIRED FIRST)
+1. **Create minimal path traversal test** - Test if we can track full requested path during proxy chain
+2. **Test `get` trap access to context** - Verify what information is available when property doesn't exist
+3. **Document findings** - Update this TODO with actual capabilities before implementation
+4. **Design final hook context API** - Based on what's technically possible
+
+### Phase 1: Implementation (After Path Tracking Tests)
 1. Review V2 hook-manager.mjs implementation in detail
 2. Design V3 HookManager class extending ComponentBase
 3. Implement pattern matching system (may reuse V2 code)
-4. Integrate with UnifiedWrapper apply trap
+4. Integrate with UnifiedWrapper apply trap (and possibly get trap for traversal errors)
 5. Write comprehensive test suite
 6. Update documentation
 7. Remove NOT_IMPLEMENTED stubs

@@ -227,18 +227,44 @@ export class ModesProcessor extends ComponentBase {
 				const propertyName = decision.preferredName || moduleName;
 				// Build module content based on decision
 				let moduleContent = {};
+
 				if (decision.useAutoFlattening) {
 					// C04: Single named export matches module name
 					moduleContent = mod[moduleName];
-				} else if (mod.default && moduleKeys.length > 0 && typeof mod.default === "function") {
-					// Hybrid pattern: default function + named exports
-					// Attach named exports as properties on the function (like logger(), logger.info())
-					moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
-					for (const key of moduleKeys) {
-						if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
-							continue;
+				} else if (mod.default && moduleKeys.length > 0) {
+					// Hybrid pattern: default + named exports
+					if (typeof mod.default === "function") {
+						// Default is function: attach named exports as properties (like logger(), logger.info())
+						moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
+						for (const key of moduleKeys) {
+							if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+								continue;
+							}
+							moduleContent[key] = mod[key];
 						}
-						moduleContent[key] = mod[key];
+					} else if (typeof mod.default === "object" && mod.default !== null) {
+						// Default is object: treat like ESM default export with named exports
+						// CJS pattern: module.exports = { default: obj, namedExport: fn }
+						// Result: api.property = obj (with named exports as properties)
+						// Don't clone for now - use the default object directly
+						moduleContent = mod.default;
+						// Add named exports that aren't already in the default object
+						for (const key of moduleKeys) {
+							if (key in mod.default) {
+								// Skip if already exists in default object
+								continue;
+							}
+							if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+								continue;
+							}
+							moduleContent[key] = mod[key];
+						}
+					} else {
+						// Default is primitive: create namespace
+						moduleContent.default = mod.default;
+						for (const key of moduleKeys) {
+							moduleContent[key] = mod[key];
+						}
 					}
 				} else if (mod.default && moduleKeys.length === 0) {
 					// Only default export - use it directly (no need to wrap in object)
@@ -311,14 +337,17 @@ export class ModesProcessor extends ComponentBase {
 							typeof mod.default === "function"
 								? this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, categoryName)
 								: moduleContent;
-						if (typeof callableModule === "function" && namedKeys.length > 0) {
+						// Attach named exports to the module (function or object)
+						if (namedKeys.length > 0) {
 							for (const key of namedKeys) {
+								// Skip if already in moduleContent (from earlier CJS default object handling)
+								if (key in callableModule) {
+									continue;
+								}
 								if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
 									continue;
 								}
-								if (callableModule[key] === undefined) {
-									callableModule[key] = mod[key];
-								}
+								callableModule[key] = mod[key];
 							}
 						}
 						moduleContent = callableModule;
@@ -326,7 +355,7 @@ export class ModesProcessor extends ComponentBase {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
 								effectiveMode,
 								apiPath: buildApiPath(categoryName),
-								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
+								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
 								moduleId: moduleId || file.moduleId,
@@ -340,7 +369,10 @@ export class ModesProcessor extends ComponentBase {
 							api[categoryName] = moduleContent;
 							targetApi = api[categoryName];
 						}
-						if (namedKeys.length > 0) {
+						// Only process named exports separately if the default was a function
+						// (For object defaults, named exports are already in callableModule)
+						const needsSeparateNamedExports = typeof mod.default === "function";
+						if (needsSeparateNamedExports && namedKeys.length > 0) {
 							for (const key of namedKeys) {
 								if (key === "default") {
 									continue;
@@ -599,7 +631,7 @@ export class ModesProcessor extends ComponentBase {
 					const wrapper = new UnifiedWrapper(this.slothlet, {
 						effectiveMode,
 						apiPath: buildApiPath(localPath),
-						initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(moduleContent, mode),
+						initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 						materializeOnCreate: config.backgroundMaterialize,
 						filePath: file.path,
 						moduleId: moduleId || file.moduleId,
@@ -741,11 +773,22 @@ export class ModesProcessor extends ComponentBase {
 								} else if (exports.default !== undefined) {
 									// Default export - use it
 									implToWrap = exports.default;
-									if (typeof implToWrap === "function" && moduleKeys.length > 0) {
-										for (const key of moduleKeys) {
-											if (key !== "default") {
-												const hasExisting = implToWrap[key] !== undefined;
-												if (!hasExisting) {
+									if (moduleKeys.length > 0) {
+										// Add named exports to the default (function or object)
+										if (typeof implToWrap === "function") {
+											// Function default: attach named exports as properties
+											for (const key of moduleKeys) {
+												if (key !== "default") {
+													const hasExisting = implToWrap[key] !== undefined;
+													if (!hasExisting) {
+														implToWrap[key] = exports[key];
+													}
+												}
+											}
+										} else if (typeof implToWrap === "object" && implToWrap !== null) {
+											// Object default: add named exports that aren't already present
+											for (const key of moduleKeys) {
+												if (key !== "default" && !(key in implToWrap)) {
 													implToWrap[key] = exports[key];
 												}
 											}
@@ -760,7 +803,7 @@ export class ModesProcessor extends ComponentBase {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									effectiveMode,
 									apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
-									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(implToWrap, mode),
+									initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
 									moduleId: moduleId || file.moduleId,
@@ -998,9 +1041,10 @@ export class ModesProcessor extends ComponentBase {
 										} else if (collisionMode === "error") {
 											throw new Error(`Collision detected: property "${key}" already exists on default export function at ${apiPath}`);
 										} else if (collisionMode === "warn") {
-											console.warn(
-												`Collision warning: property "${key}" already exists on default export function at ${apiPath}. Named export will overwrite.`
-											);
+											new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
+												key,
+												apiPath
+											});
 										}
 										// collisionMode === "replace" falls through to assignment
 									}
@@ -1041,8 +1085,6 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap.__childFilePaths = { ...implToWrap.__childFilePaths, ...this.__childFilePathsPreMaterialize };
 						}
 
-						console.log(`[MATERIALIZE] Returning implToWrap:`, implToWrap);
-						console.log(`[MATERIALIZE] implToWrap keys:`, Object.keys(implToWrap || {}));
 						return implToWrap;
 					}
 				}
@@ -1075,8 +1117,6 @@ export class ModesProcessor extends ComponentBase {
 
 			// Debug for math folder
 			if (dir.name === "math") {
-				console.log(`[MATERIALIZE] math folder materialized keys: ${Object.keys(materialized).join(", ")}`);
-				console.log(`[MATERIALIZE] math folder materialized:`, materialized);
 			}
 
 			const materializedKeys = Object.keys(materialized);

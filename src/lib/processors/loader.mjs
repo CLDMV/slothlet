@@ -160,10 +160,30 @@ export class Loader extends ComponentBase {
 			exports.default = module.default;
 		}
 
-		// Add named exports
+		// Add named exports (excluding module.exports which is a Node.js internal property)
 		for (const key of Object.keys(module)) {
-			if (key !== "default" && typeof key === "string") {
+			if (key !== "default" && key !== "module.exports" && typeof key === "string") {
 				exports[key] = module[key];
+			}
+		}
+
+		// CJS Default Export Normalization:
+		// When a CJS module does: module.exports = { default: something, namedExport: fn }
+		// Node.js wraps it as: { default: { default: something, namedExport: fn }, namedExport: fn }
+		// We need to unwrap this so it behaves like ESM: export default something; export { namedExport }
+		if (exports.default && typeof exports.default === "object" && exports.default !== null && "default" in exports.default) {
+			// Check if this looks like the CJS pattern:
+			// All named exports at root should also exist in exports.default
+			const rootNamedKeys = Object.keys(exports).filter((k) => k !== "default" && k !== "module.exports");
+			const defaultKeys = Object.keys(exports.default).filter((k) => k !== "default");
+
+			// If all root named exports exist in exports.default, this is the CJS pattern
+			const isCJSPattern = rootNamedKeys.every((k) => k in exports.default);
+
+			if (isCJSPattern && defaultKeys.length > 0) {
+				// Unwrap: promote exports.default.default to exports.default
+				// Named exports are already at root level from Node.js
+				exports.default = exports.default.default;
 			}
 		}
 
@@ -244,7 +264,23 @@ export class Loader extends ComponentBase {
 				return;
 			}
 
-			// If default is not a function (object/primitive), create namespace
+			// If default is an object, treat it like ESM "export default X; export { named }"
+			// This handles CJS pattern: module.exports = { default: obj, namedExport: fn }
+			// Should result in: api.property = obj (with named exports as properties)
+			if (typeof exports.default === "object" && exports.default !== null) {
+				// Default is an object - unwrap it and attach named exports as properties
+				// Result: api.property becomes the default object with named exports as properties
+				target[propertyName] = exports.default;
+				for (const key of exportKeys) {
+					if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], target[propertyName], exports.default)) {
+						continue;
+					}
+					target[propertyName][key] = exports[key];
+				}
+				return;
+			}
+
+			// If default is not a function or object (primitive), create namespace
 			target[propertyName] = {};
 			target[propertyName].default = exports.default;
 			for (const key of exportKeys) {

@@ -134,7 +134,9 @@ export class ApiAssignment extends ComponentBase {
 			// Effective mode after warn conversion
 			let effectiveMode = collisionMode;
 			if (collisionMode === "warn") {
-				console.warn(`[slothlet] Collision detected at "${String(key)}" - merging file and folder exports (collision mode: 'warn')`);
+				new this.slothlet.SlothletWarning("WARNING_COLLISION_FILE_FOLDER_MERGE", {
+					key: String(key)
+				});
 				// Treat warn as merge - merge file properties into lazy folder to preserve lazy capability
 				effectiveMode = "merge";
 			}
@@ -163,8 +165,6 @@ export class ApiAssignment extends ComponentBase {
 						const valueMetadata = this.slothlet.handlers?.metadata?.getMetadata(value);
 						const valueFilePath = valueMetadata?.filePath;
 
-						console.log(`[COLLISION MERGE] file wrapper filePath: ${valueFilePath}`);
-
 						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
 						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
 						if (!existingWrapper.__childFilePathsPreMaterialize) {
@@ -176,7 +176,6 @@ export class ApiAssignment extends ComponentBase {
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
 								existingWrapper.__childFilePathsPreMaterialize[key] = valueFilePath;
-								console.log(`[COLLISION MERGE] Mapping ${key} -> ${valueFilePath}`);
 							}
 							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 							// In live runtime, direct property access would return the wrapper instead of unwrapped value
@@ -202,8 +201,6 @@ export class ApiAssignment extends ComponentBase {
 							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
 							const existingFilePath = existingMetadata?.filePath;
 
-							console.log(`[COLLISION MERGE Case 2] file wrapper filePath: ${existingFilePath}`);
-
 							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
 							if (!valueWrapper.__childFilePathsPreMaterialize) {
 								valueWrapper.__childFilePathsPreMaterialize = {};
@@ -214,7 +211,6 @@ export class ApiAssignment extends ComponentBase {
 								// Store filePath mapping so child wrappers can inherit correct filePath
 								if (existingFilePath) {
 									valueWrapper.__childFilePathsPreMaterialize[key] = existingFilePath;
-									console.log(`[COLLISION MERGE Case 2] Mapping ${key} -> ${existingFilePath}`);
 								}
 								// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
 								// In live runtime, direct property access would return the wrapper instead of unwrapped value
