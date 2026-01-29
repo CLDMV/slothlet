@@ -1,8 +1,8 @@
 /**
- * @fileoverview Test for dynamic API extension using addApi method
+ * @fileoverview Test for dynamic API extension using api.slothlet.api.add method
  *
  * @description
- * Tests the addApi functionality using the full matrix approach to verify:
+ * Tests the api.slothlet.api.add functionality using the full matrix approach to verify:
  * - Loading modules from a new folder
  * - Merging them at a specified dotted path
  * - Working with both lazy and eager modes
@@ -21,8 +21,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe("addApi Functionality", () => {
-	// addApi works on all configurations, no filtering needed
+describe("api.slothlet.api.add Functionality", () => {
+	// api.slothlet.api.add works on all configurations, no filtering needed
 	const matrixConfigs = getMatrixConfigs({});
 
 	describe.each(matrixConfigs)("Config: $name", ({ config }) => {
@@ -42,7 +42,7 @@ describe("addApi Functionality", () => {
 			api = null;
 		});
 		/**
-		 * Test 1: Basic addApi - add API at new dotted path and root level
+		 * Test 1: Basic api.slothlet.api.add - add API at new dotted path and root level
 		 * Covers: test_addApi_eager and test_addApi_lazy from original
 		 */
 		it("should add API at new paths and root level with working endpoints", async () => {
@@ -150,9 +150,10 @@ describe("addApi Functionality", () => {
 			await expect(api.slothlet.api.add("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("Invalid API path");
 		});
 
+		// TODO: This option isn't even tested here and is also not an option in V3...
 		/**
 		 * Test 6: allowAddApiOverwrite - merging behavior
-		 * Tests that addApi MERGES regardless of allowAddApiOverwrite setting
+		 * Tests that api.slothlet.api.add MERGES regardless of allowAddApiOverwrite setting
 		 */
 		it("should merge APIs regardless of allowAddApiOverwrite setting", async () => {
 			await api.slothlet.api.add("test.endpoint", TEST_DIRS.API_TEST_MIXED);
@@ -165,6 +166,7 @@ describe("addApi Functionality", () => {
 			expect(mergedKeys.length).toBeGreaterThanOrEqual(initialKeys.length);
 		});
 
+		// TODO: This option isn't even tested here and is also not an option in V3...
 		/**
 		 * Test 7: Rule 12 cross-module ownership
 		 * Tests allowAddApiOverwrite: false blocks cross-module, true allows
@@ -196,7 +198,7 @@ describe("addApi Functionality", () => {
 					).resolves.not.toThrow();
 				}
 			} else {
-				// Without hotReload, no ownership tracking - just test basic addApi
+				// Without hotReload, no ownership tracking - just test basic api.slothlet.api.add
 				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_MIXED);
 				expect(api.funcTest).toBeDefined();
 

@@ -1,4 +1,19 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/node/test-comprehensive-cjs.cjs
+ *	@Date: 2026-01-21 00:12:02 -08:00 (1768983122)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-28 19:01:59 -08:00 (1769655719)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+
+// TODO: UPDATE FOR V3
+/**
  * @fileoverview Comprehensive CJS runner covering pure CJS, mixed CJS/ESM, context isolation,
  * and explicit default export handling for api_test_cjs assets. Internal file (not exported in
  * package.json).

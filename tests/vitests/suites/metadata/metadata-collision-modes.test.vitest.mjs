@@ -4,7 +4,7 @@
  * @description
  * Tests how metadata behaves with different collision modes in two contexts:
  * - collision.initial: During buildAPI (initial load) - math.mjs file vs math/ folder
- * - collision.addApi: During api.add() operations
+ * - collision.api: During api.add() operations
  *
  * Uses api_test_collisions directory which has:
  * - math.mjs (FILE): exports power(), sqrt(), modulo(), collisionVersion="math-collision-v1"
@@ -46,7 +46,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST_COLLISIONS,
-				collision: { initial: "merge" }
+				api: { collision: { initial: "merge" } }
 			});
 
 			// Merge mode: BOTH file and folder should be present
@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST_COLLISIONS,
-				collision: { initial: "skip" }
+				api: { collision: { initial: "skip" } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -109,7 +109,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST_COLLISIONS,
-				collision: { initial: "warn" }
+				api: { collision: { initial: "warn" } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -133,7 +133,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST_COLLISIONS,
-				collision: { initial: "replace" }
+				api: { collision: { initial: "replace" } }
 			});
 
 			expect(api.math).toBeDefined();
@@ -160,21 +160,20 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 				api = await slothlet({
 					...config,
 					dir: TEST_DIRS.API_TEST_COLLISIONS,
-					collision: { initial: "error" }
+					api: { collision: { initial: "error" } }
 				});
 			}).rejects.toThrow();
 		});
 	});
 
-	describe("collision.addApi: skip mode with metadata", () => {
+	describe("collision.api: skip mode with metadata", () => {
 		it("should skip add and preserve original metadata", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "skip" }
+				api: { collision: { api: "skip" } }
 			});
 
-			// Get original rootMath
 			await materialize(api, "rootMath.add", 1, 2);
 			const originalMeta = api.rootMath.add.__metadata;
 			const originalModuleId = originalMeta.moduleID;
@@ -197,12 +196,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		});
 	});
 
-	describe("collision.addApi: warn mode with metadata", () => {
+	describe("collision.api: warn mode with metadata", () => {
 		it("should warn and preserve original metadata", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "warn" }
+				api: { collision: { api: "warn" } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -227,12 +226,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		});
 	});
 
-	describe("collision.addApi: replace mode with metadata", () => {
+	describe("collision.api: replace mode with metadata", () => {
 		it("should replace API and metadata completely", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "replace" }
+				api: { collision: { api: "replace" } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -259,12 +258,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		});
 	});
 
-	describe("collision.addApi: merge mode with metadata", () => {
+	describe("collision.api: merge mode with metadata", () => {
 		it("should merge metadata from both sources", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "merge" }
+				api: { collision: { api: "merge" } }
 			});
 
 			// Add initial API with metadata
@@ -298,12 +297,12 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		});
 	});
 
-	describe("collision.addApi: error mode with metadata", () => {
+	describe("collision.api: error mode with metadata", () => {
 		it("should throw error and not modify metadata", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "error" }
+				api: { collision: { api: "error" } }
 			});
 
 			await materialize(api, "rootMath.add", 1, 2);
@@ -335,7 +334,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "merge" }
+				api: { collision: { api: "merge" } }
 			});
 
 			// Add API with metadata
@@ -362,7 +361,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: { addApi: "merge" }
+				api: { collision: { api: "merge" } }
 			});
 
 			// Add API with metadata

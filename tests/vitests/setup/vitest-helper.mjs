@@ -66,8 +66,8 @@ const CONFIG_SPACE = {
 	// apiDepth: [1, 3, Infinity],
 	// allowMutation: [false, true],
 	// collision: [
-	// 	{ initial: "merge", addApi: "merge" },      // Default - allow all overwrites
-	// 	{ initial: "error", addApi: "error" }       // Strict - prevent overwrites
+	// 	{ initial: "merge", api: "merge" },      // Default - allow all overwrites
+	// 	{ initial: "error", api: "error" }       // Strict - prevent overwrites
 	// ],
 	hooks: [false, true]
 };
@@ -146,7 +146,7 @@ function generateTestMatrix(configSpace) {
 		if (config.runtime === "live") nameParts.push("LIVE");
 
 		// Add collision mode indicator (only if not default merge/merge)
-		if (config.collision && (config.collision.initial === "error" || config.collision.addApi === "error")) {
+		if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) {
 			nameParts.push("STRICT");
 		}
 
@@ -173,7 +173,7 @@ export const TEST_MATRIX = generateTestMatrix(CONFIG_SPACE);
  * This matrix includes configs that allow overwrites via collision settings
  * @type {Array<{name: string, config: object}>}
  */
-// export const OWNERSHIP_MATRIX = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
+// export const OWNERSHIP_MATRIX = getMatrixConfigs({ collision: { initial: "merge", api: "merge" } });
 
 /**
  * Get filtered matrix configurations based on test requirements
@@ -182,13 +182,13 @@ export const TEST_MATRIX = generateTestMatrix(CONFIG_SPACE);
  *
  * @example
  * // Test needs collision merge mode
- * const mergeConfigs = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
+ * const mergeConfigs = getMatrixConfigs({ collision: { initial: "merge", api: "merge" } });
  *
  * @example
  * // Test needs live bindings with strict collision protection
  * const liveStrictConfigs = getMatrixConfigs({
  *   runtime: "live",
- *   collision: { initial: "error", addApi: "error" }
+ *   collision: { initial: "error", api: "error" }
  * });
  *
  * @example
@@ -212,7 +212,7 @@ export function getMatrixConfigs(requirements = {}) {
 				if (value.initial !== undefined && configValue.initial !== value.initial) {
 					return false;
 				}
-				if (value.addApi !== undefined && configValue.addApi !== value.addApi) {
+				if (value.api !== undefined && configValue.api !== value.api) {
 					return false;
 				}
 			} else if (configValue !== value) {
@@ -233,7 +233,7 @@ export function getMatrixConfigs(requirements = {}) {
  * @returns {Promise<void>}
  * @example
  * await runTestWithApi(api, async (api) => {
- *   await api.addApi("test", "./path");
+ *   await api.slothlet.api.add("test", "./path");
  * });
  */
 export async function runTestWithApi(api, testFunction) {
@@ -254,7 +254,7 @@ export const BASIC_MATRIX = getMatrixConfigs({
  * Used for testing collision protection features
  * @type {Array<{name: string, config: object}>}
  */
-// export const STRICT_MATRIX = getMatrixConfigs({ collision: { initial: "error", addApi: "error" } });
+// export const STRICT_MATRIX = getMatrixConfigs({ collision: { initial: "error", api: "error" } });
 
 /**
  * Collision configuration matrix (merge vs strict modes)
@@ -277,7 +277,7 @@ export const RUNTIME_MATRIX = getMatrixConfigs({ runtime: "live" });
  */
 export const COMPLEX_MATRIX = TEST_MATRIX.filter(({ config }) => {
 	let featureCount = 0;
-	if (config.collision && (config.collision.initial === "error" || config.collision.addApi === "error")) featureCount++;
+	if (config.collision && (config.collision.initial === "error" || config.collision.api === "error")) featureCount++;
 	if (config.runtime === "live") featureCount++;
 	if (config.hooks === true) featureCount++;
 	return featureCount >= 2;
@@ -357,7 +357,7 @@ export async function getAllApiTestFolders() {
  * @description
  * This helper simulates the original test-helper.mjs pattern where closures
  * defined in test files are executed from helper functions in different files.
- * Used to test stack-trace-based path resolution in addApi calls.
+ * Used to test stack-trace-based path resolution in api.slothlet.api.add calls.
  *
  * @param {object} api - Slothlet API instance
  * @param {function} closureFn - Closure function to execute

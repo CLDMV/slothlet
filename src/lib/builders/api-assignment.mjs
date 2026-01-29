@@ -61,8 +61,8 @@ export class ApiAssignment extends ComponentBase {
 	 * @param {boolean} [options.allowOverwrite=false] - Allow overwriting existing non-wrapper values
 	 * @param {boolean} [options.mutateExisting=false] - Sync existing wrappers instead of replacing
 	 * @param {boolean} [options.useCollisionDetection=false] - Enable collision detection using config.collision mode
-	 * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.addApi)
-	 * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "addApi"
+	 * @param {Object} [options.config] - Slothlet config (uses config.collision.initial or config.collision.api)
+	 * @param {string} [options.collisionContext="initial"] - Collision context: "initial" or "api"
 	 * @param {Function} [options.syncWrapper] - Function to sync two wrapper proxies
 	 * @returns {boolean} True if assignment succeeded, false if blocked by collision or other constraint
 	 *
@@ -114,7 +114,7 @@ export class ApiAssignment extends ComponentBase {
 
 		// Case 2: Collision detection with config
 		if (useCollisionDetection && config && existing !== undefined) {
-			// Get collision mode from config.collision.initial or config.collision.addApi
+			// Get collision mode from config.collision.initial or config.collision.api
 			const collisionMode = config.collision?.[collisionContext] || "merge";
 
 			if (collisionMode === "error") {

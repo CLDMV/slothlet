@@ -1,3 +1,21 @@
+/*
+ * @Project: @cldmv/slothlet
+ * @Filename: /tests/vitests/suites/metadata/metadata-api.test.vitest.mjs.backup
+ * @Date: 2026-01-25 12:34:18 -08:00 (1769373258)
+ * @Author: Nate Hyson <CLDMV>
+ * @Email: <Shinrai@users.noreply.github.com>
+ * -----
+ * @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ * @Last modified time: 2026-01-28 19:08:55 -08:00 (1769656135)
+ * -----
+ * @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+
+
+
+
+
 /**
  * @fileoverview Comprehensive tests for metadata API functionality.
  *
@@ -39,7 +57,7 @@ describe.each(getMatrixConfigs())("Metadata API > Config: '$name'", ({ config })
 		}
 	};
 
-	it("should attach metadata to functions via addApi", async () => {
+	it("should attach metadata to functions via api.slothlet.api.add", async () => {
 		const testPath = TEST_DIRS.API_TEST_MIXED;
 		await api.slothlet.api.add("metaTest", testPath, {
 			testKey: "testValue",

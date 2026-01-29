@@ -200,10 +200,3 @@ export class Resolver extends ComponentBase {
 		return pathToFileURL(absolutePath).href;
 	}
 }
-
-// Backwards-compatible standalone exports
-const resolver = new Resolver();
-export const getStack = (skipFn) => resolver.getStack(skipFn);
-export const toFsPath = (v) => (v && String(v).startsWith("file://") ? fileURLToPath(String(v)) : v ? String(v) : null);
-export const resolvePathFromCaller = (rel) => resolver.resolvePathFromCaller(rel);
-export const resolveUrlFromCaller = (rel) => resolver.resolveUrlFromCaller(rel);

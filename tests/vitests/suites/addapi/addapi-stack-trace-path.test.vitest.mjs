@@ -1,9 +1,9 @@
 /**
- * @fileoverview Test stack-trace-based path resolution in addApi calls
+ * @fileoverview Test stack-trace-based path resolution in api.slothlet.api.add calls
  *
  * @description
- * Tests that addApi correctly resolves relative paths when called through complex stack traces.
- * Specifically tests whether addApi can identify the correct base file for path resolution when
+ * Tests that api.slothlet.api.add correctly resolves relative paths when called through complex stack traces.
+ * Specifically tests whether api.slothlet.api.add can identify the correct base file for path resolution when
  * a closure is defined in one file but executed from a helper function in another file.
  *
  * Original test: tests/rewritten/test-actual-stack-scenario.mjs
@@ -39,7 +39,7 @@ describe("Stack Trace Path Resolution", () => {
 		});
 
 		it("should resolve relative path from closure definition location, not execution location", async () => {
-			// Build addApi options based on config capabilities
+			// Build api.slothlet.api.add options based on config capabilities
 			const addApiOptions = { moduleId: "testModule" };
 			if (config.hotReload) {
 				addApiOptions.forceOverwrite = true;

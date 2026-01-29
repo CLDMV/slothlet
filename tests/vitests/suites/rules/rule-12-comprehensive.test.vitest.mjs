@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Ownership-enabled configurations only (collision mode with merge)
-const OWNERSHIP_CONFIGS = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
+const OWNERSHIP_CONFIGS = getMatrixConfigs({ api: { collision: { initial: "merge", api: "merge" } } });
 
 // Basic configurations for validation testing
 const BASIC_CONFIGS = getMatrixConfigs({});
@@ -177,11 +177,11 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		});
 		apisToClean.push(api);
 
-		// First addApi should work
+		// First api.slothlet.api.add should work
 		await api.slothlet.api.add("normal.test", TEST_DIRS.API_TEST);
 		const originalApi = api.normal.test;
 
-		// Second addApi should be silently skipped (not throw)
+		// Second api.slothlet.api.add should be silently skipped (not throw)
 		await api.slothlet.api.add("normal.test", TEST_DIRS.API_TEST_MIXED);
 
 		// Verify API was NOT overwritten

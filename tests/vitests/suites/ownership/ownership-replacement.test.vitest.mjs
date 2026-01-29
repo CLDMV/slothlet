@@ -52,7 +52,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					const mergedConfig = {
 						...config,
 						dir: coreDir, // Start with core directory
-						collision: { addApi: "replace" } // Enable replacement for ownership tracking
+						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
@@ -153,7 +153,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					const mergedConfig = {
 						...config,
 						dir: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						collision: { addApi: "replace" } // Enable replacement for ownership tracking
+						api: { collision: { api: "replace" } } // Enable replacement for ownership tracking
 					};
 					const api = await slothlet(mergedConfig);
 
@@ -217,7 +217,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					const mergedConfig = {
 						...config,
 						dir: tempBase, // Use unique temp directory instead of shared api_tests/api_test
-						collision: { addApi: "merge" } // Use merge mode - different properties coexist
+						api: { collision: { api: "merge" } } // Use merge mode - different properties coexist
 					};
 					const api = await slothlet(mergedConfig);
 

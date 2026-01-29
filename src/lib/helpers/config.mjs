@@ -16,7 +16,7 @@ export class Config extends ComponentBase {
 	/**
 	 * Normalize collision configuration for handling property collisions
 	 * @param {string|Object} collision - Collision mode or object with per-context modes
-	 * @returns {Object} Normalized collision configuration with initial and addApi modes
+	 * @returns {Object} Normalized collision configuration with initial and api.slothlet.api.add modes
 	 * @public
 	 *
 	 * @description
@@ -32,12 +32,12 @@ export class Config extends ComponentBase {
 	 * @example
 	 * // String shorthand applies to both contexts
 	 * normalizeCollision("merge")
-	 * // => { initial: "merge", addApi: "merge" }
+	 * // => { initial: "merge", api: "merge" }
 	 *
 	 * @example
 	 * // Object allows per-context control
-	 * normalizeCollision({ initial: "warn", addApi: "error" })
-	 * // => { initial: "warn", addApi: "error" }
+	 * normalizeCollision({ initial: "warn", api: "error" })
+	 * // => { initial: "warn", api: "error" }
 	 */
 	normalizeCollision(collision) {
 		const validModes = ["skip", "warn", "replace", "merge", "merge-replace", "error"];
@@ -47,7 +47,7 @@ export class Config extends ComponentBase {
 		if (typeof collision === "string") {
 			const normalized = collision.toLowerCase();
 			const mode = validModes.includes(normalized) ? normalized : defaultMode;
-			return { initial: mode, addApi: mode };
+			return { initial: mode, api: mode };
 		}
 
 		// Object allows per-context control
@@ -59,12 +59,12 @@ export class Config extends ComponentBase {
 			};
 			return {
 				initial: validateMode(collision.initial),
-				addApi: validateMode(collision.addApi)
+				api: validateMode(collision.api)
 			};
 		}
 
 		// Default: merge for both contexts
-		return { initial: defaultMode, addApi: defaultMode };
+		return { initial: defaultMode, api: defaultMode };
 	}
 
 	/**
@@ -238,23 +238,24 @@ export class Config extends ComponentBase {
 			// Map allowMutation: false to all mutations disabled
 			mutations = { add: false, remove: false, reload: false };
 			if (!config.silent) {
-				new this.SlothletWarning("DEPRECATED_CONFIG_OPTION", {
+				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
 					option: "allowMutation",
 					replacement: "api.mutations: { add: false, remove: false, reload: false }",
-					hint: "The allowMutation config option is deprecated. Use api.mutations for granular control."
+					hint: "The allowMutation config option was part of v2. Use api.mutations for granular control in v3."
 				});
 			}
 		}
 
 		// Handle root-level collision config (backward compatibility)
+		// TODO: Remove before v3 release - this was a v3 development thing, not v2 backward compat
 		let collision = null;
 		if (config.collision && !config.api?.collision) {
 			collision = this.normalizeCollision(config.collision);
 			if (!config.silent) {
-				new this.SlothletWarning("DEPRECATED_CONFIG_OPTION", {
+				new this.SlothletWarning("V2_CONFIG_UNSUPPORTED", {
 					option: "collision",
 					replacement: "api.collision",
-					hint: "Root-level collision config is deprecated. Use api.collision instead."
+					hint: "Root-level collision config was part of v2. Use api.collision in v3."
 				});
 			}
 		}
@@ -263,6 +264,26 @@ export class Config extends ComponentBase {
 		const apiConfig = config.api || {};
 		const finalCollision = apiConfig.collision ? this.normalizeCollision(apiConfig.collision) : collision || this.normalizeCollision(null);
 		const finalMutations = apiConfig.mutations ? this.normalizeMutations(apiConfig.mutations) : mutations || this.normalizeMutations(null);
+
+		// Validate scope.merge strategy if provided
+		let scopeConfig = config.scope;
+		if (scopeConfig && typeof scopeConfig === "object" && scopeConfig.merge) {
+			const validMergeStrategies = ["shallow", "deep"];
+			if (!validMergeStrategies.includes(scopeConfig.merge)) {
+				throw new this.SlothletError(
+					"INVALID_CONFIG",
+					{
+						option: "scope.merge",
+						value: scopeConfig.merge,
+						expected: validMergeStrategies.join(" or "),
+						hint: `Invalid merge strategy: "${scopeConfig.merge}". Must be "shallow" or "deep".`,
+						validationError: true
+					},
+					null,
+					{ validationError: true }
+				);
+			}
+		}
 
 		// Build normalized config
 		return {
@@ -280,21 +301,9 @@ export class Config extends ComponentBase {
 				collision: finalCollision,
 				mutations: finalMutations
 			},
+			scope: scopeConfig,
 			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true
 		};
 	}
 }
-
-// ============================================================================
-// Backwards-compatible standalone exports
-// ============================================================================
-
-const configInstance = new Config();
-
-export const normalizeCollision = configInstance.normalizeCollision.bind(configInstance);
-export const normalizeRuntime = configInstance.normalizeRuntime.bind(configInstance);
-export const normalizeMode = configInstance.normalizeMode.bind(configInstance);
-export const normalizeDebug = configInstance.normalizeDebug.bind(configInstance);
-export const normalizeMutations = configInstance.normalizeMutations.bind(configInstance);
-export const transformConfig = configInstance.transformConfig.bind(configInstance);

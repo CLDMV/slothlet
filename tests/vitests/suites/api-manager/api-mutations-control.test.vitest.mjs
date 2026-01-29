@@ -55,35 +55,66 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	// ===== BACKWARD COMPATIBILITY TESTS =====
 
 	it("should map allowMutation: false to api.mutations disabled (backward compat)", async () => {
-		api = await createApiInstance(config, { allowMutation: false });
+		// Capture console.warn to verify warning is shown
+		const originalConsoleWarn = console.warn;
+		let warnOutput = "";
+		console.warn = (...args) => {
+			warnOutput += args.join(" ");
+		};
 
-		// API should be created
-		expect(api.slothlet.api).toBeDefined();
-		expect(api.slothlet.reload).toBeTypeOf("function");
+		try {
+			api = await createApiInstance(config, { allowMutation: false });
 
-		// But mutations should be blocked
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
-			"INVALID_CONFIG_MUTATIONS_DISABLED"
-		);
+			// Verify V2_CONFIG_UNSUPPORTED warning was shown
+			expect(warnOutput).toContain("V2_CONFIG_UNSUPPORTED");
+			expect(warnOutput).toContain("allowMutation");
+			expect(warnOutput).toContain("api.mutations");
 
-		await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			// API should be created
+			expect(api.slothlet.api).toBeDefined();
+			expect(api.slothlet.reload).toBeTypeOf("function");
 
-		await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+			// But mutations should be blocked
+			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+				"INVALID_CONFIG_MUTATIONS_DISABLED"
+			);
+
+			await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+
+			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		} finally {
+			console.warn = originalConsoleWarn;
+		}
 	});
 
 	it("should allow normal API usage when allowMutation: false", async () => {
-		api = await createApiInstance(config, { allowMutation: false });
+		// Capture console.warn to verify warning is shown
+		const originalConsoleWarn = console.warn;
+		let warnOutput = "";
+		console.warn = (...args) => {
+			warnOutput += args.join(" ");
+		};
 
-		// Normal API functions should still work (mutations blocked, but API callable)
-		const mathAdd = config.dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
-		expect(mathAdd).toBeDefined();
-		expect(typeof mathAdd).toBe("function");
+		try {
+			api = await createApiInstance(config, { allowMutation: false });
 
-		// Don't test the actual return value - depends on collision config
-		// (file vs folder wins, giving 8 vs 1008)
-		if (mathAdd) {
-			const result = await mathAdd(5, 3);
-			expect(typeof result).toBe("number");
+			// Verify V2_CONFIG_UNSUPPORTED warning was shown
+			expect(warnOutput).toContain("V2_CONFIG_UNSUPPORTED");
+			expect(warnOutput).toContain("allowMutation");
+
+			// Normal API functions should still work (mutations blocked, but API callable)
+			const mathAdd = config.dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
+			expect(mathAdd).toBeDefined();
+			expect(typeof mathAdd).toBe("function");
+
+			// Don't test the actual return value - depends on collision config
+			// (file vs folder wins, giving 8 vs 1008)
+			if (mathAdd) {
+				const result = await mathAdd(5, 3);
+				expect(typeof result).toBe("number");
+			}
+		} finally {
+			console.warn = originalConsoleWarn;
 		}
 	});
 
@@ -151,6 +182,27 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		const removeResult = await api.slothlet.api.remove("nonexistent");
 		expect(removeResult).toBe(false);
 	});
+
+	it("should block add even with forceOverwrite: true when mutations.add is false", async () => {
+		api = await createApiInstance(config, {
+			api: {
+				mutations: {
+					add: false,
+					remove: true,
+					reload: false
+				}
+			}
+		});
+
+		// forceOverwrite should NOT bypass mutations.add restriction
+		await expect(
+			api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-forced", forceOverwrite: true })
+		).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+	});
+
+	// TODO: Add proper ownership conflict tests once ownership system is fixed
+	// Current issue: Adding same directory twice with different moduleIds doesn't trigger
+	// OWNERSHIP_CONFLICT as expected. Need to investigate ownership tracking.
 
 	it.skip("should allow only reload with granular mutations control", async () => {
 		// SKIPPED: reload() not implemented yet
@@ -220,7 +272,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 			api: {
 				collision: {
 					initial: "merge",
-					addApi: "error"
+					api: "error"
 				}
 			}
 		});
@@ -233,14 +285,11 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "unique-test" });
 		expect(api[uniquePath]).toBeDefined();
 
-		// Trying to add again to same path should throw OWNERSHIP_CONFLICT (not mutations disabled)
-		try {
-			await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "unique-test2" });
-			expect.fail("Should have thrown collision error");
-		} catch (error) {
-			// Should throw ownership/collision error, NOT mutations disabled
-			expect(error.message).not.toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-		}
+		// Trying to add again to same path should throw error due to collision mode = 'error'
+		// This tests that collision config affects API path collision handling, not mutation availability
+		await expect(api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "unique-test2" })).rejects.toThrow(
+			"path already exists and collision mode is 'error'"
+		);
 	});
 
 	// ===== ERROR MESSAGE VALIDATION =====

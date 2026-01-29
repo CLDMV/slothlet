@@ -39,12 +39,14 @@ export function verifyRuntime() {
 	// Test 2: Context availability and data access
 	try {
 		const contextData = context || {};
-		results.contextTest.data = contextData;
+		// CRITICAL: Extract actual values from proxy, don't store proxy reference!
+		// Storing the proxy causes issues when reading results outside the execution context
+		results.contextTest.data = { ...contextData };
 		// Context can be an object OR a function (live binding proxy) - check if it has data
 		results.contextTest.available =
 			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && !!contextData.user;
 		results.contextTest.hasUserData = !!contextData.user;
-		results.contextTest.userData = contextData.user;
+		results.contextTest.userData = contextData.user ? { ...contextData.user } : null;
 
 		// Check for isolation testing data
 		if (contextData.runtimeTestId) {
@@ -249,4 +251,56 @@ export function comprehensiveRuntimeTest() {
 		isolation: testContextIsolation(),
 		performance: testPerformance()
 	};
+}
+
+/**
+ * Test self and reference propagation through API function calls.
+ * @function testSelfAndReference
+ * @returns {object} Self and reference test results
+ */
+export function testSelfAndReference() {
+	const results = {
+		hasSelfAccess: false,
+		canCallOtherModules: false,
+		referenceValues: {},
+		context: {}
+	};
+
+	try {
+		// Test self access - check if self is defined and has properties
+		results.hasSelfAccess = !!(self && typeof self === "object");
+
+		// Test calling other modules through self
+		// Use rootMath as it's a simpler module that should always be available
+		if (self && self.rootMath) {
+			const sum = self.rootMath(1, 2);
+			results.canCallOtherModules = sum === 3;
+		} else if (self && self.math && typeof self.math === "object" && self.math.add) {
+			const sum = self.math.add(1, 2);
+			results.canCallOtherModules = sum === 3;
+		}
+
+		// Test reference access (reference values are attached directly to self)
+		if (self) {
+			// Reference values are attached to self directly
+			results.referenceValues.testValue = self.testValue;
+			results.referenceValues.testFunc = self.testFunc;
+			results.referenceValues.nested = self.nested;
+		}
+
+		// Test context access
+		if (context) {
+			results.context = {
+				userId: context.userId,
+				appName: context.appName,
+				requestId: context.requestId,
+				version: context.version
+			};
+		}
+	} catch (error) {
+		results.error = error.message;
+		results.stack = error.stack;
+	}
+
+	return results;
 }

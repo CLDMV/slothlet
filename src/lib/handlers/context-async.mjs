@@ -51,21 +51,54 @@ export class AsyncContextManager {
 	 * @public
 	 */
 	runInContext(instanceID, fn, thisArg, args, currentWrapper) {
-		const store = this.instances.get(instanceID);
-		if (!store) {
-			throw new SlothletError("CONTEXT_NOT_FOUND", {
-				instanceID,
-				availableInstances: Array.from(this.instances.keys())
-			});
+		// Check if we're already in an active ALS context
+		const activeStore = this.als.getStore();
+		let baseStore;
+
+		if (activeStore && activeStore.instanceID === instanceID) {
+			// Already in context for this instance - use active store to preserve modifications
+			baseStore = activeStore;
+		} else {
+			// Not in context or different instance - get base store
+			baseStore = this.instances.get(instanceID);
+			if (!baseStore) {
+				throw new SlothletError("CONTEXT_NOT_FOUND", {
+					instanceID,
+					availableInstances: Array.from(this.instances.keys())
+				});
+			}
 		}
 
 		// Create a new store with currentWrapper for this execution
-		const executionStore = { ...store };
+		const executionStore = { ...baseStore };
 		if (currentWrapper) {
 			executionStore.currentWrapper = currentWrapper;
-			// TODO: Implement caller detection by checking parent context
 		}
 
+		// CRITICAL: Store parent context reference for multi-instance isolation
+		// When switching between instances, we need to preserve the calling context
+		// so that api1.run() → api2.function() → api1.function() can restore api1's context
+		if (activeStore && activeStore.instanceID !== instanceID) {
+			executionStore.parentContext = activeStore;
+		}
+
+		// Only wrap in als.run() if we're not already in the right context
+		if (activeStore && activeStore.instanceID === instanceID) {
+			// Already in correct context - just update currentWrapper and execute
+			try {
+				return fn.apply(thisArg, args);
+			} catch (error) {
+				throw new SlothletError(
+					"CONTEXT_EXECUTION_FAILED",
+					{
+						instanceID
+					},
+					error
+				);
+			}
+		}
+
+		// Not in context or switching instance - create new ALS context
 		return this.als.run(executionStore, () => {
 			try {
 				return fn.apply(thisArg, args);
