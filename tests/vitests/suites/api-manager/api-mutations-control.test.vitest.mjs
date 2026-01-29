@@ -55,66 +55,56 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	// ===== BACKWARD COMPATIBILITY TESTS =====
 
 	it("should map allowMutation: false to api.mutations disabled (backward compat)", async () => {
-		// Capture console.warn to verify warning is shown
-		const originalConsoleWarn = console.warn;
-		let warnOutput = "";
-		console.warn = (...args) => {
-			warnOutput += args.join(" ");
-		};
+		// Clear captured warnings before test
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
 
-		try {
-			api = await createApiInstance(config, { allowMutation: false });
+		api = await createApiInstance(config, { allowMutation: false });
 
-			// Verify V2_CONFIG_UNSUPPORTED warning was shown
-			expect(warnOutput).toContain("V2_CONFIG_UNSUPPORTED");
-			expect(warnOutput).toContain("allowMutation");
-			expect(warnOutput).toContain("api.mutations");
+		// Verify V2_CONFIG_UNSUPPORTED warning was shown
+		const warnings = SlothletWarning.captured;
+		expect(warnings.some((w) => w.code === "V2_CONFIG_UNSUPPORTED")).toBe(true);
+		const v2Warning = warnings.find((w) => w.code === "V2_CONFIG_UNSUPPORTED");
+		expect(v2Warning.message).toContain("allowMutation");
+		expect(v2Warning.message).toContain("api.mutations");
 
-			// API should be created
-			expect(api.slothlet.api).toBeDefined();
-			expect(api.slothlet.reload).toBeTypeOf("function");
+		// API should be created
+		expect(api.slothlet.api).toBeDefined();
+		expect(api.slothlet.reload).toBeTypeOf("function");
 
-			// But mutations should be blocked
-			await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
-				"INVALID_CONFIG_MUTATIONS_DISABLED"
-			);
+		// But mutations should be blocked
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+			"INVALID_CONFIG_MUTATIONS_DISABLED"
+		);
 
-			await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 
-			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
-		} finally {
-			console.warn = originalConsoleWarn;
-		}
+		await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 	});
 
 	it("should allow normal API usage when allowMutation: false", async () => {
-		// Capture console.warn to verify warning is shown
-		const originalConsoleWarn = console.warn;
-		let warnOutput = "";
-		console.warn = (...args) => {
-			warnOutput += args.join(" ");
-		};
+		// Clear captured warnings before test
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
 
-		try {
-			api = await createApiInstance(config, { allowMutation: false });
+		api = await createApiInstance(config, { allowMutation: false });
 
-			// Verify V2_CONFIG_UNSUPPORTED warning was shown
-			expect(warnOutput).toContain("V2_CONFIG_UNSUPPORTED");
-			expect(warnOutput).toContain("allowMutation");
+		// Verify V2_CONFIG_UNSUPPORTED warning was shown
+		const warnings = SlothletWarning.captured;
+		expect(warnings.some((w) => w.code === "V2_CONFIG_UNSUPPORTED")).toBe(true);
+		const v2Warning = warnings.find((w) => w.code === "V2_CONFIG_UNSUPPORTED");
+		expect(v2Warning.message).toContain("allowMutation");
 
-			// Normal API functions should still work (mutations blocked, but API callable)
-			const mathAdd = config.dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
-			expect(mathAdd).toBeDefined();
-			expect(typeof mathAdd).toBe("function");
+		// Normal API functions should still work (mutations blocked, but API callable)
+		const mathAdd = config.dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
+		expect(mathAdd).toBeDefined();
+		expect(typeof mathAdd).toBe("function");
 
-			// Don't test the actual return value - depends on collision config
-			// (file vs folder wins, giving 8 vs 1008)
-			if (mathAdd) {
-				const result = await mathAdd(5, 3);
-				expect(typeof result).toBe("number");
-			}
-		} finally {
-			console.warn = originalConsoleWarn;
+		// Don't test the actual return value - depends on collision config
+		// (file vs folder wins, giving 8 vs 1008)
+		if (mathAdd) {
+			const result = await mathAdd(5, 3);
+			expect(typeof result).toBe("number");
 		}
 	});
 

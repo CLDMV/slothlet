@@ -62,43 +62,35 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	});
 
 	it("should emit warning when blocking overwrites (unless silent: true)", async () => {
-		// Capture console.warn output
-		const warnings = [];
-		const originalWarn = console.warn;
-		console.warn = (...args) => warnings.push(args.join(" "));
+		// Clear captured warnings before test
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
 
-		try {
-			api = await createApiInstance(config, {
-				allowInitialOverwrite: false,
-				silent: false
-			});
+		api = await createApiInstance(config, {
+			allowInitialOverwrite: false,
+			silent: false
+		});
 
-			// Should have emitted a warning about the overwrite being blocked
-			expect(warnings.length).toBeGreaterThan(0);
-			expect(warnings.some((w) => w.includes("Cannot overwrite"))).toBe(true);
-			expect(warnings.some((w) => w.includes("conflictingName"))).toBe(true);
-		} finally {
-			console.warn = originalWarn;
-		}
+		// Should have emitted a warning about the overwrite being blocked
+		const warnings = SlothletWarning.captured;
+		expect(warnings.length).toBeGreaterThan(0);
+		expect(warnings.some((w) => w.message.includes("Cannot overwrite"))).toBe(true);
+		expect(warnings.some((w) => JSON.stringify(w.context).includes("conflictingName"))).toBe(true);
 	});
 
 	it("should NOT emit warning when silent: true", async () => {
-		// Capture console.warn output
-		const warnings = [];
-		const originalWarn = console.warn;
-		console.warn = (...args) => warnings.push(args.join(" "));
+		// Clear captured warnings before test
+		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
+		SlothletWarning.clearCaptured();
 
-		try {
-			api = await createApiInstance(config, {
-				allowInitialOverwrite: false,
-				silent: true
-			});
+		api = await createApiInstance(config, {
+			allowInitialOverwrite: false,
+			silent: true
+		});
 
-			// Should NOT have emitted warnings (silent mode)
-			expect(warnings.length).toBe(0);
-		} finally {
-			console.warn = originalWarn;
-		}
+		// Should NOT have emitted warnings (silent mode)
+		const warnings = SlothletWarning.captured;
+		expect(warnings.length).toBe(0);
 	});
 
 	it("should still allow normal API access when blocking overwrites", async () => {
