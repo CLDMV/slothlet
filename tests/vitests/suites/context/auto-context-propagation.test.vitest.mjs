@@ -29,6 +29,7 @@ describe("Auto Context Propagation", () => {
 			api = await slothlet({
 				dir: TEST_DIRS.API_TEST,
 				context: { user: "test-user", session: "auto-test-session" },
+				diagnostics: true, // Enable diagnostics for context testing
 				...config
 			});
 		});
@@ -47,7 +48,11 @@ describe("Auto Context Propagation", () => {
 		it("should preserve context automatically in EventEmitter callbacks", async () => {
 			// Verify API setup
 			expect(api).toBeTruthy();
-			expect(api.__ctx).toBeTruthy();
+
+			// V3: Use context.diagnostics() API
+			const contextDiag = api.slothlet.context.diagnostics();
+			expect(contextDiag).toBeTruthy();
+			expect(contextDiag.instanceID).toBeTruthy();
 
 			// Skip test if TCP module not available (e.g., in MIXED configurations with limited depth)
 			if (!api.tcp) {
@@ -56,8 +61,9 @@ describe("Auto Context Propagation", () => {
 			}
 
 			// Test API method call to establish context baseline (await for lazy modes)
+			// Note: math.mjs file collision test returns a+b+1000
 			const mathResult = await api.math.add(1, 2);
-			expect(mathResult).toBe(3);
+			expect(mathResult).toBe(1003);
 
 			// Test direct context access through API module (await for lazy modes)
 			const contextTest = await api.tcp.testContext();
