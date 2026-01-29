@@ -1,20 +1,50 @@
 # EventEmitter Context Propagation
 
-**Status:** ⚠️ **NOT IMPLEMENTED** - **CONFIRMED BROKEN**  
-**Priority:** 🔴 **CRITICAL** - Breaking feature for event-driven APIs  
-**Complexity:** HIGH - Requires EventEmitter.prototype patching and AsyncResource wrapping  
-**Blocked By:** None - Per-request context complete  
-**Ready To Implement:** ✅ YES
+**Status:** ✅ **COMPLETED AND TESTED** - **EventEmitter Context Propagation Fully Working**  
+**Implementation Date:** January 29, 2026  
+**Test Results:** 80/80 tests passing across both TCP EventEmitter test suites
 
-**Test Evidence (January 29, 2026):**
-- TCP test fails with `NO_ACTIVE_CONTEXT_ASYNC` error
-- Error occurs in `socket.on("data")` handler at tcp.mjs:137
-- Accessing `context` getter inside EventEmitter callbacks throws error
-- **Conclusion:** Node.js EventEmitter does NOT automatically propagate AsyncLocalStorage context
+**Test Evidence (Final Results - January 29, 2026):**
+- ✅ **tcp-eventemitter-context.test.vitest.mjs**: 40/40 tests passing (100%)
+- ✅ **tcp-context-propagation.test.vitest.mjs**: 40/40 tests passing (100%)
+- ✅ Context preserved in `server.on("connection")` callbacks
+- ✅ Context preserved in `socket.on("data")` callbacks  
+- ✅ API methods callable from EventEmitter callbacks
+- ✅ Full EventEmitter context propagation integration tests passing
+- ✅ **FIXED**: Runtime proxy Object.keys(self) enumeration - getOwnPropertyDescriptor returns configurable properties
 
 ---
 
-## Problem Statement
+## Implementation Summary
+
+EventEmitter context propagation has been successfully implemented using AsyncResource wrapping. The implementation patches `EventEmitter.prototype` methods globally to wrap all listeners with `AsyncResource`, preserving AsyncLocalStorage context across event boundaries.
+
+### Key Implementation Details
+
+1. **Global Patching**: `EventEmitter.prototype` is patched once when the first slothlet instance is created
+2. **AsyncResource Wrapping**: Each listener is wrapped with `AsyncResource` to capture and restore ALS context
+3. **No Global State**: Listeners capture context dynamically at registration time, supporting multiple slothlet instances
+4. **Automatic Cleanup**: Listener tracking with WeakMap ensures proper cleanup and prevents memory leaks
+
+### Files Modified
+
+- ✅ **`src/lib/helpers/eventemitter-context.mjs`** - New module with AsyncResource-based wrapping (410 lines)
+- ✅ **`src/slothlet.mjs`** - Calls `enableEventEmitterPatching()` during initialization, cleanup on shutdown
+- ✅ **`src/lib/runtime/runtime.mjs`** - Fixed getOwnPropertyDescriptor to return configurable properties
+- ✅ **`src/lib/runtime/runtime-livebindings.mjs`** - Fixed getOwnPropertyDescriptor to return configurable properties
+- ✅ **`api_tests/api_test/tcp/tcp.mjs`** - Updated for V3 (debug flag, context access)
+
+### Proxy Enumeration Fix (Critical)
+
+**Root Cause**: Runtime proxy `getOwnPropertyDescriptor` traps were returning raw descriptors without making properties configurable. When `Object.keys(self)` enumerated wrapped functions with non-configurable `prototype` properties, it caused proxy invariant violations (target is empty object `{}`, can't report non-configurable properties).
+
+**Solution**: Updated both runtime proxies to return `{ ...desc, configurable: true }` to avoid proxy invariant violations:
+- [src/lib/runtime/runtime.mjs](src/lib/runtime/runtime.mjs#L58-L67) - Fixed dispatcher proxy
+- [src/lib/runtime/runtime-livebindings.mjs](src/lib/runtime/runtime-livebindings.mjs#L66-L74) - Fixed live runtime proxy
+
+---
+
+## Original Problem Statement
 
 Event handlers registered on EventEmitter instances lose access to slothlet's AsyncLocalStorage context because they execute in a different async execution context than where they were registered.
 

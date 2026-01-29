@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-10 14:10:58 -08:00 (1768083058)
+ *	@Last modified time: 2026-01-29 09:34:10 -08:00 (1769708050)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -23,7 +23,8 @@ import { self, context } from "@cldmv/slothlet/runtime";
 // Helper to check if debug mode is enabled
 const isDebugEnabled = () => {
 	try {
-		return self?.__ctx?.config?.debug === true;
+		// V3: config.debug is an object with enabled property
+		return self?.slothlet?.config?.debug?.enabled === true;
 	} catch {
 		return false;
 	}
@@ -46,13 +47,17 @@ export const tcp =
 		 * @returns {object} Context test results
 		 */
 		testContext() {
+			// Try to enumerate self - let's see what breaks
 			const selfKeys = Object.keys(self);
+			const contextKeys = Object.keys(context);
 			const immediateContext = context;
 			const immediateUser = context?.user;
 
 			return {
 				selfAvailable: selfKeys.length > 1,
 				selfKeys: selfKeys,
+				contextAvailable: contextKeys.length > 1,
+				contextKeys: contextKeys,
 				contextAvailable: immediateUser === "test-user",
 				contextData: immediateContext,
 				contextUser: immediateUser,

@@ -7,6 +7,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
+import {
+	enableEventEmitterPatching,
+	disableEventEmitterPatching,
+	cleanupEventEmitterResources
+} from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -241,6 +246,10 @@ class Slothlet {
 		// Initialize context
 		const store = this.contextManager.initialize(this.instanceID, this.config);
 
+		// Enable EventEmitter context patching (once globally, safe to call multiple times)
+		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
+		enableEventEmitterPatching();
+
 		// Note: ownership manager already initialized via auto-discovery
 
 		// Generate base moduleId for ownership tracking
@@ -396,6 +405,10 @@ class Slothlet {
 		if (!this.isLoaded) {
 			return;
 		}
+
+		// Disable EventEmitter patching and cleanup AsyncResources
+		disableEventEmitterPatching();
+		cleanupEventEmitterResources();
 
 		// Cleanup context
 		if (this.instanceID && this.contextManager) {

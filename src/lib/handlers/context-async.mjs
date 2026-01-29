@@ -4,6 +4,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { runtime_isClassInstance, runtime_wrapClassInstance } from "../helpers/class-instance-wrapper.mjs";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -86,7 +87,13 @@ export class AsyncContextManager {
 		if (isActiveOurInstance) {
 			// Already in correct context - just update currentWrapper and execute
 			try {
-				return fn.apply(thisArg, args);
+				const result = fn.apply(thisArg, args);
+				// Wrap class instances to preserve context
+				if (runtime_isClassInstance(result)) {
+					const instanceCache = new WeakMap();
+					return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+				}
+				return result;
 			} catch (error) {
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
@@ -101,7 +108,13 @@ export class AsyncContextManager {
 		// Not in context or switching instance - create new ALS context
 		return this.als.run(executionStore, () => {
 			try {
-				return fn.apply(thisArg, args);
+				const result = fn.apply(thisArg, args);
+				// Wrap class instances to preserve context
+				if (runtime_isClassInstance(result)) {
+					const instanceCache = new WeakMap();
+					return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+				}
+				return result;
 			} catch (error) {
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",

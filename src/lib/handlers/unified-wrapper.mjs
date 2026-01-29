@@ -415,6 +415,12 @@ export class UnifiedWrapper extends ComponentBase {
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
+			} else if (wrapped === null) {
+				// _createChildWrapper returned null, meaning this value should be stored unwrapped
+				this._childCache.set(key, value);
+				if (descriptor.configurable && !keepImplProperties) {
+					delete this._impl[key];
+				}
 			}
 		}
 
@@ -477,6 +483,24 @@ export class UnifiedWrapper extends ComponentBase {
 
 		if (value && typeof value.__getState === "function") {
 			return value;
+		}
+
+		// Return null for built-in objects that require proper 'this' binding
+		// Returning null signals to the caller to store the value unwrapped
+		// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays
+		if (
+			value instanceof Map ||
+			value instanceof Set ||
+			value instanceof WeakMap ||
+			value instanceof WeakSet ||
+			value instanceof Date ||
+			value instanceof RegExp ||
+			value instanceof Promise ||
+			value instanceof Error ||
+			ArrayBuffer.isView(value) ||
+			value instanceof ArrayBuffer
+		) {
+			return null;
 		}
 
 		let childImpl = value;
@@ -858,13 +882,55 @@ export class UnifiedWrapper extends ComponentBase {
 				return cached;
 			}
 
+			// Check if the property exists on impl before caching
+			// This handles property descriptors (getters) correctly
 			let value = wrapper._impl ? wrapper._impl[prop] : undefined;
+
+			// If value is undefined, check if it's a getter on the impl
+			if (value === undefined && wrapper._impl) {
+				const descriptor = Object.getOwnPropertyDescriptor(wrapper._impl, prop);
+				if (descriptor && descriptor.get) {
+					// It's a getter - call it to get the actual value
+					value = descriptor.get.call(wrapper._impl);
+				}
+			}
 			if (value === undefined && Object.prototype.hasOwnProperty.call(target, prop)) {
 				value = target[prop];
 			}
 
 			if (value === undefined) {
 				return undefined;
+			}
+
+			// Return primitives directly without wrapping
+			// Primitives: string, number, boolean, bigint, symbol, null
+			const valueType = typeof value;
+			if (
+				value === null ||
+				valueType === "string" ||
+				valueType === "number" ||
+				valueType === "boolean" ||
+				valueType === "bigint" ||
+				valueType === "symbol"
+			) {
+				return value;
+			}
+
+			// Return built-in objects that require proper 'this' binding directly without wrapping
+			// These include: Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays
+			if (
+				value instanceof Map ||
+				value instanceof Set ||
+				value instanceof WeakMap ||
+				value instanceof WeakSet ||
+				value instanceof Date ||
+				value instanceof RegExp ||
+				value instanceof Promise ||
+				value instanceof Error ||
+				ArrayBuffer.isView(value) ||
+				value instanceof ArrayBuffer
+			) {
+				return value;
 			}
 
 			if (value && (typeof value === "object" || typeof value === "function") && (value.__wrapper || value.__getState)) {
