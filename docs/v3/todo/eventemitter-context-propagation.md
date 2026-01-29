@@ -1,10 +1,16 @@
 # EventEmitter Context Propagation
 
-**Status:** ⚠️ **NOT IMPLEMENTED**  
+**Status:** ⚠️ **NOT IMPLEMENTED** - **CONFIRMED BROKEN**  
 **Priority:** 🔴 **CRITICAL** - Breaking feature for event-driven APIs  
 **Complexity:** HIGH - Requires EventEmitter.prototype patching and AsyncResource wrapping  
 **Blocked By:** None - Per-request context complete  
 **Ready To Implement:** ✅ YES
+
+**Test Evidence (January 29, 2026):**
+- TCP test fails with `NO_ACTIVE_CONTEXT_ASYNC` error
+- Error occurs in `socket.on("data")` handler at tcp.mjs:137
+- Accessing `context` getter inside EventEmitter callbacks throws error
+- **Conclusion:** Node.js EventEmitter does NOT automatically propagate AsyncLocalStorage context
 
 ---
 
