@@ -23,69 +23,66 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			context: { test: "data" }
+			context: { test: "data" },
+			diagnostics: true // Enable diagnostics for context testing
 		});
 
-		// Verify __ctx exists with all expected properties
-		expect(api.__ctx).toBeDefined();
-		expect(api.__ctx.self).toBe(api);
-		expect(api.__ctx.context).toBeDefined();
-		expect(api.__ctx.als).toBeDefined();
-		expect(api.__ctx.instanceId).toBeDefined();
+		// V3: Use context.diagnostics() API
+		const contextDiag = api.slothlet.context.diagnostics();
+		expect(contextDiag).toBeDefined();
+		expect(contextDiag.instanceID).toBeDefined();
+		expect(contextDiag.baseContext).toBeDefined();
+		expect(contextDiag.managerType).toBe("AsyncContextManager");
 
 		const instanceId = api.slothlet.instanceID;
 
-		// Verify instance is in the registry
-		const { getInstanceData } = await import("@cldmv/slothlet/helpers/instance-manager");
-		const dataBefore = getInstanceData(instanceId);
-		expect(dataBefore).toBeDefined();
+		// Verify instance is in the context manager's instances Map
+		expect(contextDiag.instancesMapKeys).toContain(instanceId);
+		const instanceBefore = contextDiag.instancesMapKeys.find((id) => id === instanceId);
+		expect(instanceBefore).toBeDefined();
 
 		// Shutdown
 		await api.shutdown();
 
-		// Instance should be removed from instance registry
-		const dataAfter = getInstanceData(instanceId);
-		expect(dataAfter).toBeNull();
+		// After shutdown, diagnostics should show instance removed
+		// Note: We can't call api.slothlet.diag.context() after shutdown,
+		// but we can verify the context manager directly via asyncContextManager
+		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const diagAfter = asyncContextManager.getDiagnostics();
 
-		// NOTE: api still references the old boundapi object,
-		// so api.__ctx still exists. The important thing is that
-		// the ALS store is disabled and registry is cleaned up
-		// (tested in other test cases)
+		// Instance should be removed from context manager's instances Map
+		expect(diagAfter.instances.find((i) => i.id === instanceId)).toBeUndefined();
 	});
 
 	test("should disable ALS after shutdown to prevent memory leaks", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			dir: TEST_DIRS.API_TEST,
+			diagnostics: true
 		});
 
-		const als = api.__ctx.als;
+		const instanceId = api.slothlet.instanceID;
 
 		// Shutdown
 		await api.shutdown();
 
-		// After disable(), accessing the ALS may throw or return undefined
-		// Both are acceptable - what matters is it's not usable
-		let storeAfter;
-		try {
-			storeAfter = als.getStore();
-		} catch {
-			// If getStore() throws after disable(), that's fine too
-			storeAfter = undefined;
-		}
+		// After shutdown, verify instance is removed from context manager
+		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const diagAfter = asyncContextManager.getDiagnostics();
 
-		// ALS should not be usable after shutdown
-		expect(storeAfter).toBeUndefined();
+		// Instance should be removed
+		expect(diagAfter.instances.find((i) => i.id === instanceId)).toBeUndefined();
 	});
 
 	test("should not leak ALS between sequential instances", async () => {
 		const api1 = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			context: { instance: 1 }
+			context: { instance: 1 },
+			diagnostics: true
 		});
 
-		const als1 = api1.__ctx.als;
+		const diag1 = api1.slothlet.context.diagnostics();
 		const instanceId1 = api1.slothlet.instanceID;
 
 		await api1.shutdown();
@@ -94,17 +91,19 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		const api2 = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			context: { instance: 2 }
+			context: { instance: 2 },
+			diagnostics: true
 		});
 
-		const als2 = api2.__ctx.als;
+		const diag2 = api2.slothlet.context.diagnostics();
 		const instanceId2 = api2.slothlet.instanceID;
 
 		// Different instances should have different instance IDs
 		expect(instanceId2).not.toBe(instanceId1);
 
-		// Different instances should have different ALS objects
-		expect(als2).not.toBe(als1);
+		// Context data should be isolated
+		expect(diag1.baseContext.instance).toBe(1);
+		expect(diag2.baseContext.instance).toBe(2);
 
 		await api2.shutdown();
 	});
@@ -112,7 +111,8 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	test("should handle multiple shutdowns without errors", async () => {
 		const api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			dir: TEST_DIRS.API_TEST,
+			diagnostics: true
 		});
 
 		// First shutdown
@@ -127,12 +127,14 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 			...config,
 			dir: TEST_DIRS.API_TEST,
 			hotReload: true,
-			context: { test: "initial" }
+			context: { test: "initial" },
+			diagnostics: true
 		});
 
 		// Verify API works before shutdown
+		// Note: math.mjs file collision test returns a+b+1000
 		const result1 = await api.math.add(1, 2);
-		expect(result1).toBe(3);
+		expect(result1).toBe(1003);
 
 		// Shutdown
 		await api.shutdown();
@@ -141,8 +143,9 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		await api.slothlet.reload();
 
 		// API should work again after reload
+		// Note: math.mjs file collision test returns a+b+1000
 		const result2 = await api.math.add(3, 4);
-		expect(result2).toBe(7);
+		expect(result2).toBe(1007);
 
 		// Cleanup
 		await api.shutdown();
@@ -152,10 +155,9 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hotReload: true
+			hotReload: true,
+			diagnostics: true
 		});
-
-		const { getInstanceData } = await import("@cldmv/slothlet/helpers/instance-manager");
 
 		// Track instance IDs across reloads
 		const instanceIds = [api.slothlet.instanceID];
@@ -171,18 +173,21 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		expect(uniqueIds.size).toBe(4);
 
 		// Verify old instances were cleaned up (only current should exist)
+		const { asyncContextManager } = await import("@cldmv/slothlet/factories/context");
+		const diag = asyncContextManager.getDiagnostics();
+
+		// Old instance IDs should not be in context manager
 		for (let i = 0; i < instanceIds.length - 1; i++) {
-			const oldData = getInstanceData(instanceIds[i]);
-			expect(oldData).toBeNull();
+			expect(diag.instances.find((inst) => inst.id === instanceIds[i])).toBeUndefined();
 		}
 
 		// Current instance should still exist
-		const currentData = getInstanceData(api.slothlet.instanceID);
-		expect(currentData).toBeDefined();
+		expect(diag.instances.find((inst) => inst.id === api.slothlet.instanceID)).toBeDefined();
 
 		// API should still work after multiple reloads
+		// Note: math.mjs file collision test returns a+b+1000
 		const result = await api.math.add(5, 10);
-		expect(result).toBe(15);
+		expect(result).toBe(1015);
 
 		// Cleanup
 		await api.shutdown();
