@@ -62,7 +62,7 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 	});
 
 	it("should emit warning when blocking overwrites (unless silent: true)", async () => {
-		// Clear captured warnings before test
+		// Import SlothletWarning to clear before creating API
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
 
@@ -71,15 +71,15 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 			silent: false
 		});
 
-		// Should have emitted a warning about the overwrite being blocked
-		const warnings = SlothletWarning.captured;
+		// Can now access warnings via api.slothlet.diag namespace
+		const warnings = api.slothlet.diag.SlothletWarning.captured;
 		expect(warnings.length).toBeGreaterThan(0);
 		expect(warnings.some((w) => w.message.includes("Cannot overwrite"))).toBe(true);
 		expect(warnings.some((w) => JSON.stringify(w.context).includes("conflictingName"))).toBe(true);
 	});
 
 	it("should NOT emit warning when silent: true", async () => {
-		// Clear captured warnings before test
+		// Import SlothletWarning to clear before creating API
 		const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 		SlothletWarning.clearCaptured();
 
@@ -88,8 +88,8 @@ describe.each(MATRIX_CONFIGS)("allowInitialOverwrite - $name", ({ config }) => {
 			silent: true
 		});
 
-		// Should NOT have emitted warnings (silent mode)
-		const warnings = SlothletWarning.captured;
+		// Should NOT have emitted warnings (silent mode) - access via api namespace
+		const warnings = api.slothlet.diag.SlothletWarning.captured;
 		expect(warnings.length).toBe(0);
 	});
 

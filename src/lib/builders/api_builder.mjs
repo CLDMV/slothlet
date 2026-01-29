@@ -780,7 +780,18 @@ export class ApiBuilder extends ComponentBase {
 						}
 						return null;
 					}
-				}
+				},
+
+				/**
+				 * SlothletWarning class for accessing captured warnings in tests
+				 * @type {typeof SlothletWarning}
+				 * @example
+				 * // Access captured warnings in tests
+				 * api.slothlet.diag.SlothletWarning.clearCaptured();
+				 * // ... trigger warnings ...
+				 * const warnings = api.slothlet.diag.SlothletWarning.captured;
+				 */
+				SlothletWarning: slothlet.SlothletWarning
 			};
 		}
 
