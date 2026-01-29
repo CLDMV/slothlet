@@ -147,9 +147,6 @@ export class SlothletWarning {
 		this.message = translatedMessage;
 		this.context = context;
 
-		// Always capture warning for tests
-		SlothletWarning.captured.push(this);
-
 		// Emit warning to console unless suppressed
 		if (!SlothletWarning.suppressConsole) {
 			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
@@ -158,6 +155,9 @@ export class SlothletWarning {
 			if (Object.keys(context).length > 0) {
 				console.warn("Context:", context);
 			}
+		} else {
+			// Only capture when console is suppressed (for testing)
+			SlothletWarning.captured.push(this);
 		}
 	}
 
