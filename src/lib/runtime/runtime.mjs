@@ -56,7 +56,13 @@ export const self = new Proxy(
 		},
 		getOwnPropertyDescriptor(_, prop) {
 			const runtime = getCurrentRuntime();
-			return Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+			const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+			// If the property exists, return a descriptor that's always configurable
+			// to avoid proxy invariant violations (since the proxy target is an empty object)
+			if (desc) {
+				return { ...desc, configurable: true };
+			}
+			return undefined;
 		}
 	}
 );
