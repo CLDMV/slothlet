@@ -279,9 +279,24 @@ export class ApiBuilder extends ComponentBase {
 				 * @public
 				 */
 				get: (key) => {
-					// For live mode, directly get THIS instance's context
-					// Don't use tryGetContext() which returns the CURRENT instance
+					// SIMPLIFIED APPROACH: Just lookup by instance ID
+					// With child instance approach, we always find the right context by current instanceID
+
+					// For live mode, use currentInstanceID tracking
 					if (slothlet.contextManager.constructor.name === "LiveContextManager") {
+						const currentID = slothlet.contextManager.currentInstanceID;
+
+						// Check if current is this instance or a child of this instance
+						const isOurInstance = currentID === slothlet.instanceID || currentID?.startsWith(slothlet.instanceID + "__run_");
+
+						if (isOurInstance && currentID) {
+							const store = slothlet.contextManager.instances.get(currentID);
+							if (store) {
+								return key ? store.context[key] : { ...store.context };
+							}
+						}
+
+						// Fallback to base instance
 						const store = slothlet.contextManager.instances.get(slothlet.instanceID);
 						if (!store) {
 							const baseContext = slothlet.context || {};
@@ -290,29 +305,37 @@ export class ApiBuilder extends ComponentBase {
 						return key ? store.context[key] : { ...store.context };
 					}
 
-					// For async mode, search the parent context chain
-					let ctx;
-					try {
-						ctx = slothlet.contextManager.tryGetContext();
-					} catch (error) {
-						ctx = null;
+					// For async mode, get current store from ALS and lookup by its instanceID
+					if (slothlet.contextManager.constructor.name === "AsyncContextManager") {
+						let currentStore = slothlet.contextManager.tryGetContext();
+
+						// If we're in a .run() scope, currentStore will be the child instance
+						// If we're not in .run(), get base store for this instance
+						if (!currentStore) {
+							const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
+							const baseContext = baseStore?.context || {};
+							return key ? baseContext[key] : { ...baseContext };
+						}
+
+						// Check if current store belongs to this instance (base or child)
+						const isOurInstance =
+							currentStore.instanceID === slothlet.instanceID ||
+							currentStore.parentInstanceID === slothlet.instanceID ||
+							currentStore.instanceID.startsWith(slothlet.instanceID + "__run_");
+
+						if (isOurInstance) {
+							// We're in our own context (either base or .run() child)
+							return key ? currentStore.context[key] : { ...currentStore.context };
+						}
+
+						// We're in a different instance's context - return our base context
+						const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
+						const baseContext = baseStore?.context || {};
+						return key ? baseContext[key] : { ...baseContext };
 					}
 
-					// Search for THIS instance's context in the parent chain
-					// When multiple instances nest .run() calls, each instance should find its own context
-					let targetCtx = ctx;
-					while (targetCtx && targetCtx.instanceID !== slothlet.instanceID) {
-						targetCtx = targetCtx.parentContext;
-					}
-
-					// If we found this instance's context in the chain, use it
-					if (targetCtx && targetCtx.instanceID === slothlet.instanceID) {
-						return key ? targetCtx.context[key] : { ...targetCtx.context };
-					}
-
-					// Otherwise fall back to base instance context from instances Map
-					const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
-					const baseContext = baseStore?.context || {};
+					// Fallback for unknown context manager
+					const baseContext = slothlet.context || {};
 					return key ? baseContext[key] : { ...baseContext };
 				},
 
@@ -350,7 +373,8 @@ export class ApiBuilder extends ComponentBase {
 								? {
 										instanceID: currentCtx.instanceID,
 										context: currentCtx.context,
-										hasParent: !!currentCtx.parentContext
+										hasParent: !!currentCtx.parentContext,
+										parentInstanceID: currentCtx.parentInstanceID
 									}
 								: null;
 						} catch (error) {
@@ -789,6 +813,9 @@ export class ApiBuilder extends ComponentBase {
 	 */
 	createRunFunction() {
 		const slothlet = this.slothlet;
+		// Get the scope function reference (created first)
+		const scopeFunc = this.createScopeFunction();
+
 		const runFunction = {
 			run: async (contextData, callback, ...args) => {
 				// Check if per-request context is disabled
@@ -804,101 +831,14 @@ export class ApiBuilder extends ComponentBase {
 					throw new Error("Callback must be a function");
 				}
 
-				// Get current context manager
-				const contextManager = slothlet.contextManager;
-				if (!contextManager) {
-					throw new slothlet.SlothletError("NO_CONTEXT_MANAGER", {}, null, { validationError: true });
-				}
-
-				// Get default merge strategy from config
-				const mergeStrategy = slothlet.config.scope?.merge || "shallow";
-
-				// Helper for deep merge
-				const deepMerge = (target, source) => {
-					const result = { ...target };
-					for (const key in source) {
-						if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
-							result[key] = deepMerge(target[key] || {}, source[key]);
-						} else {
-							result[key] = source[key];
-						}
-					}
-					return result;
-				};
-
-				// For live binding mode, temporarily merge context
-				if (contextManager.constructor.name === "LiveContextManager") {
-					// CRITICAL: Get the store for THIS instance, not the currently active instance
-					const store = contextManager.instances.get(slothlet.instanceID);
-					if (!store) {
-						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
-					}
-
-					const originalContext = { ...store.context };
-					const previousInstanceID = contextManager.currentInstanceID;
-
-					try {
-						// Apply merge strategy
-						if (mergeStrategy === "deep") {
-							store.context = deepMerge(originalContext, contextData);
-						} else {
-							// Shallow merge (default)
-							Object.assign(store.context, contextData);
-						}
-
-						// Set as current instance for the duration of the callback
-						contextManager.currentInstanceID = slothlet.instanceID;
-
-						// Execute callback
-						return await callback(...args);
-					} finally {
-						// Restore original context and instance ID
-						store.context = originalContext;
-						contextManager.currentInstanceID = previousInstanceID;
-					}
-				}
-
-				// For async mode, use nested ALS run
-				if (contextManager.constructor.name === "AsyncContextManager") {
-					// Try to get current store, or use base store if not in active context
-					let currentStore = contextManager.tryGetContext();
-					const activeStore = currentStore; // Save for parentContext
-
-					if (!currentStore || currentStore.instanceID !== slothlet.instanceID) {
-						// Not in active context for THIS instance - get base store
-						const baseStore = contextManager.instances.get(slothlet.instanceID);
-						if (!baseStore) {
-							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
-						}
-						currentStore = baseStore;
-					}
-
-					// Create new store with merged context
-					const mergedContext =
-						mergeStrategy === "deep" ? deepMerge(currentStore.context, contextData) : { ...currentStore.context, ...contextData };
-
-					const mergedStore = {
-						instanceID: slothlet.instanceID, // CRITICAL: Must be THIS instance's ID
-						context: mergedContext,
-						self: currentStore.self,
-						config: currentStore.config,
-						createdAt: currentStore.createdAt
-					};
-
-					// CRITICAL: Set parentContext when switching from a different instance
-					// This allows api.slothlet.context.get() to search up the parent chain
-					if (activeStore && activeStore.instanceID !== slothlet.instanceID) {
-						mergedStore.parentContext = activeStore;
-					}
-
-					// Run callback in new ALS context
-					return await contextManager.als.run(mergedStore, async () => {
-						return await callback(...args);
-					});
-				}
-
-				throw new slothlet.SlothletError("UNSUPPORTED_CONTEXT_MANAGER", { manager: contextManager.constructor.name }, null, {
-					validationError: true
+				// Delegate to scope with structured options
+				// Use defaults from config for merge and isolation
+				return scopeFunc({
+					context: contextData,
+					fn: callback,
+					args: args,
+					merge: slothlet.config.scope?.merge || "shallow",
+					isolation: slothlet.config.scope?.isolation || "partial"
 				});
 			}
 		}.run;
@@ -930,11 +870,19 @@ export class ApiBuilder extends ComponentBase {
 					throw new Error("context must be an object");
 				}
 
-				const { context: contextData, fn, args = [], merge = "shallow" } = options;
+				const { context: contextData, fn, args = [], merge = "shallow", isolation } = options;
 
 				// Validate merge strategy
 				if (merge !== "shallow" && merge !== "deep") {
 					throw new Error(`Invalid merge strategy: "${merge}". Must be "shallow" or "deep".`);
+				}
+
+				// Get isolation mode (from options or config)
+				const isolationMode = isolation || slothlet.config.scope?.isolation || "partial";
+
+				// Validate isolation mode
+				if (isolationMode !== "partial" && isolationMode !== "full") {
+					throw new Error(`Invalid isolation mode: "${isolationMode}". Must be "partial" or "full".`);
 				}
 
 				// Get current context manager
@@ -956,69 +904,135 @@ export class ApiBuilder extends ComponentBase {
 					return result;
 				};
 
-				// For live binding mode, temporarily merge context
+				// Helper for deep clone (for full isolation)
+				const deepClone = (obj) => {
+					if (obj === null || typeof obj !== "object") return obj;
+					if (obj instanceof Date) return new Date(obj.getTime());
+					if (obj instanceof Array) return obj.map((item) => deepClone(item));
+					if (typeof obj === "function") return obj; // Don't clone functions
+					const cloned = {};
+					for (const key in obj) {
+						cloned[key] = deepClone(obj[key]);
+					}
+					return cloned;
+				};
+
+				// For live binding mode, use child instance approach
 				if (contextManager.constructor.name === "LiveContextManager") {
-					let store;
-					try {
-						store = contextManager.getContext();
-					} catch (error) {
-						// No active context - get instance store directly
-						store = contextManager.instances.get(slothlet.instanceID);
-						if (!store) {
-							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
+					// CRITICAL: Always get THIS instance's store (base or child), not just current active
+					let currentStore = null;
+					
+					// Check if current is THIS instance or a child of THIS instance
+					const currentID = contextManager.currentInstanceID;
+					if (currentID) {
+						const activeStore = contextManager.instances.get(currentID);
+						const isOurContext =
+							currentID === slothlet.instanceID ||
+							activeStore?.parentInstanceID === slothlet.instanceID ||
+							currentID.startsWith(slothlet.instanceID + "__run_");
+						
+						if (isOurContext) {
+							currentStore = activeStore;
 						}
 					}
+					
+					// Fall back to base store if not in our context
+					if (!currentStore) {
+						currentStore = contextManager.instances.get(slothlet.instanceID);
+					}
 
-					const originalContext = { ...store.context };
+					if (!currentStore) {
+						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
+					}
+
+					// Create merged context
+					const mergedContext =
+						merge === "deep" ? deepMerge(currentStore.context, contextData) : { ...currentStore.context, ...contextData };
+
+					// Create temporary child instance
+					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+					const childStore = {
+						instanceID: childInstanceID,
+						context: mergedContext,
+						self: isolationMode === "full" ? deepClone(currentStore.self) : currentStore.self,
+						config: currentStore.config,
+						createdAt: currentStore.createdAt,
+						parentInstanceID: slothlet.instanceID
+					};
+
+					// Register child instance
+					contextManager.instances.set(childInstanceID, childStore);
 					const previousInstanceID = contextManager.currentInstanceID;
 
 					try {
-						// Apply merge strategy
-						if (merge === "deep") {
-							store.context = deepMerge(originalContext, contextData);
-						} else {
-							// Shallow merge (default)
-							Object.assign(store.context, contextData);
-						}
-
-						// Set as current instance for the duration of the callback
-						contextManager.currentInstanceID = slothlet.instanceID;
+						// Set as current instance
+						contextManager.currentInstanceID = childInstanceID;
 
 						// Execute callback
 						return await fn(...args);
 					} finally {
-						// Restore original context and instance ID
-						store.context = originalContext;
+						// Restore previous instance ID and cleanup child
 						contextManager.currentInstanceID = previousInstanceID;
+						contextManager.instances.delete(childInstanceID);
 					}
 				}
 
-				// For async mode, use nested ALS run
+				// For async mode, use child instance approach
 				if (contextManager.constructor.name === "AsyncContextManager") {
-					// Try to get current store, or use base store if not in active context
-					let currentStore = contextManager.tryGetContext();
+					// CRITICAL: Get THIS instance's store (base or child), not just any active store
+					let currentStore = null;
+					
+					// Check if active ALS context is THIS instance or a child of THIS instance
+					const activeStore = contextManager.tryGetContext();
+					if (activeStore) {
+						const isOurContext =
+							activeStore.instanceID === slothlet.instanceID ||
+							activeStore.parentInstanceID === slothlet.instanceID ||
+							activeStore.instanceID.startsWith(slothlet.instanceID + "__run_");
+						
+						if (isOurContext) {
+							currentStore = activeStore;
+						}
+					}
+					
+					// Fall back to base store if not in our context
 					if (!currentStore) {
-						// Not in active context - create base store from instance config
-						currentStore = {
-							instanceID: slothlet.instanceID,
-							context: { ...(slothlet.context || {}) },
-							self: {} // Will be populated when actual API function is called
-						};
+						const baseStore = contextManager.instances.get(slothlet.instanceID);
+						if (!baseStore) {
+							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
+						}
+						currentStore = baseStore;
 					}
 
 					// Create new store with merged context
 					const mergedContext =
 						merge === "deep" ? deepMerge(currentStore.context, contextData) : { ...currentStore.context, ...contextData };
 
-					const mergedStore = {
-						...currentStore,
-						context: mergedContext
+					// Create temporary child instance
+					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+					const childStore = {
+						instanceID: childInstanceID,
+						context: mergedContext,
+						self: isolationMode === "full" ? deepClone(currentStore.self) : currentStore.self,
+						config: currentStore.config,
+						createdAt: currentStore.createdAt,
+						parentInstanceID: slothlet.instanceID
 					};
 
-					// Run callback in new ALS context
-					return await contextManager.als.run(mergedStore, async () => {
-						return await fn(...args);
-					});
+					// Register child instance
+					contextManager.instances.set(childInstanceID, childStore);
+
+					try {
+						// Run callback in new ALS context
+						return await contextManager.als.run(childStore, async () => {
+							return await fn(...args);
+						});
+					} finally {
+						// Cleanup: Remove temporary child instance
+						contextManager.instances.delete(childInstanceID);
+					}
 				}
 
 				throw new slothlet.SlothletError("UNSUPPORTED_CONTEXT_MANAGER", { manager: contextManager.constructor.name }, null, {

@@ -56,10 +56,25 @@ export class LiveContextManager {
 	 * @public
 	 */
 	runInContext(instanceID, fn, thisArg, args, currentWrapper) {
-		const store = this.instances.get(instanceID);
+		// CHILD INSTANCE APPROACH: Check if current is this instance OR a child of this instance
+		const currentID = this.currentInstanceID;
+		let isAlreadyInContext = false;
+
+		if (currentID) {
+			const currentStore = this.instances.get(currentID);
+			isAlreadyInContext =
+				currentID === instanceID ||
+				currentStore?.parentInstanceID === instanceID ||
+				currentID.startsWith(instanceID + "__run_");
+		}
+
+		// If already in correct context (base or child), just use current
+		const targetInstanceID = isAlreadyInContext ? currentID : instanceID;
+
+		const store = this.instances.get(targetInstanceID);
 		if (!store) {
 			throw new SlothletError("CONTEXT_NOT_FOUND", {
-				instanceID,
+				instanceID: targetInstanceID,
 				availableInstances: Array.from(this.instances.keys())
 			});
 		}
@@ -68,7 +83,7 @@ export class LiveContextManager {
 		const previousInstanceID = this.currentInstanceID;
 		const previousWrapper = store.currentWrapper;
 
-		this.currentInstanceID = instanceID;
+		this.currentInstanceID = targetInstanceID;
 		if (currentWrapper) {
 			store.currentWrapper = currentWrapper;
 			// TODO: Implement caller detection
