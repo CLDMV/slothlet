@@ -414,26 +414,32 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			context: { counter: 0 }
 		});
 
-		// Note: In live mode, api1.slothlet.self always points to BASE instance's self
-		// To test isolation, we use a test module that modifies self and check visibility
+		// Initialize state on the API
 
-		// Partial isolation shares self reference - mutations propagate to base
-		let insideValue = null;
+		// Verify initial state
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+		expect(await api1.isolationTest.isolationTest_getCounter()).toBe(0);
+
+		// Partial isolation: self is SHARED, so API mutations should persist
 		await api1.slothlet.context.run({ counter: 100 }, async () => {
+			// Verify context is isolated
 			const ctx = await api1.slothlet.context.get();
 			expect(ctx.counter).toBe(100);
 
-			// Test isolation semantics by checking if base self is accessible
-			// In partial mode, child self = base self (same reference)
-			// We'll verify by setting a value and checking if visible outside
-			// (Implementation detail: Cannot directly test self reference in live mode)
-			insideValue = "tested-partial-mode";
+			// Mutate API state via self (inside API functions)
+			await api1.isolationTest.isolationTest_setValue("modified-in-run");
+			await api1.isolationTest.isolationTest_increment();
+			await api1.isolationTest.isolationTest_setFlag(true);
 		});
 
-		// Verify context was properly scoped
+		// In partial mode, API mutations SHOULD persist (shared self)
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("modified-in-run");
+		expect(await api1.isolationTest.isolationTest_getCounter()).toBe(1);
+		expect(await api1.isolationTest.isolationTest_getFlag()).toBe(true);
+
+		// But context should be restored (always isolated)
 		const baseCtx = await api1.slothlet.context.get();
-		expect(baseCtx.counter).toBe(0); // Base context restored
-		expect(insideValue).toBe("tested-partial-mode"); // Execution completed
+		expect(baseCtx.counter).toBe(0);
 	});
 
 	it("should support full isolation mode (cloned self)", async () => {
@@ -444,21 +450,41 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			scope: { isolation: "full" }
 		});
 
-		// Test that full isolation mode creates a clone
-		// (Implementation detail: Cannot directly test self cloning without API functions)
-		let insideValue = null;
+		// Initialize state on the API
+
+		// Verify initial state
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+		expect(await api1.isolationTest.isolationTest_getCounter()).toBe(0);
+
+		// Full isolation: self is CLONED, so API mutations should NOT persist
 		await api1.slothlet.context.run({ counter: 100 }, async () => {
+			// Verify context is isolated
 			const ctx = await api1.slothlet.context.get();
 			expect(ctx.counter).toBe(100);
 
-			// Verify execution happens in isolated scope
-			insideValue = "tested-full-mode";
+			// Verify we can see initial state (cloned from base)
+			expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+			expect(await api1.isolationTest.isolationTest_getCounter()).toBe(0);
+
+			// Mutate API state via self (inside API functions)
+			await api1.isolationTest.isolationTest_setValue("modified-in-run");
+			await api1.isolationTest.isolationTest_increment();
+			await api1.isolationTest.isolationTest_setFlag(true);
+
+			// Verify mutations are visible inside .run()
+			expect(await api1.isolationTest.isolationTest_getValue()).toBe("modified-in-run");
+			expect(await api1.isolationTest.isolationTest_getCounter()).toBe(1);
+			expect(await api1.isolationTest.isolationTest_getFlag()).toBe(true);
 		});
 
-		// Verify context was properly scoped
+		// In full mode, API mutations should NOT persist (cloned self)
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+		expect(await api1.isolationTest.isolationTest_getCounter()).toBe(0);
+		expect(await api1.isolationTest.isolationTest_getFlag()).toBe(false);
+
+		// Context should be restored
 		const baseCtx = await api1.slothlet.context.get();
-		expect(baseCtx.counter).toBe(0); // Base context restored
-		expect(insideValue).toBe("tested-full-mode"); // Execution completed
+		expect(baseCtx.counter).toBe(0);
 	});
 
 	it("should support .scope() with isolation override", async () => {
@@ -469,8 +495,9 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 			scope: { isolation: "partial" } // Default to partial
 		});
 
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+
 		// Override with full isolation for this specific .scope() call
-		let insideValue = null;
 		await api1.slothlet.context.scope({
 			context: { counter: 200 },
 			isolation: "full",
@@ -478,15 +505,154 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 				const ctx = await api1.slothlet.context.get();
 				expect(ctx.counter).toBe(200);
 
-				// Verify execution happens with override
-				insideValue = "tested-override";
+				// Mutate API - should NOT persist due to full isolation override
+				await api1.isolationTest.isolationTest_setValue("modified");
 			}
 		});
 
-		// Verify context was properly scoped
+		// Mutation didn't persist (full isolation override)
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("initial");
+
+		// Now test partial works (default config)
+		await api1.slothlet.context.run({ counter: 300 }, async () => {
+			await api1.isolationTest.isolationTest_setValue("partial-modified");
+		});
+
+		// This mutation SHOULD persist (partial mode)
+		expect(await api1.isolationTest.isolationTest_getValue()).toBe("partial-modified");
+
+		// Context restored
 		const baseCtx = await api1.slothlet.context.get();
-		expect(baseCtx.counter).toBe(0); // Base context restored
-		expect(insideValue).toBe("tested-override"); // Execution completed
+		expect(baseCtx.counter).toBe(0);
+	});
+
+	it("should cleanup child instances after .run() completes", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { counter: 0 },
+			diagnostics: true // Enable diagnostics to access instance info
+		});
+
+		const baseInstanceID = api1.slothlet.instanceID;
+
+		// Record initial instance count using diagnostics
+		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialCount = initialDiag.instancesMapSize;
+
+		let childInstanceIDInsideRun = null;
+		let runDiag = null;
+
+		await api1.slothlet.context.run({ counter: 100 }, async () => {
+			// Inside .run(), get diagnostics to see child instance
+			runDiag = await api1.slothlet.context.diagnostics();
+
+			// Child instance should exist
+			expect(runDiag.instancesMapSize).toBe(initialCount + 1);
+
+			// Find the child instance ID (should have __run_ pattern)
+			const childIDs = runDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_"));
+			expect(childIDs.length).toBe(1);
+			childInstanceIDInsideRun = childIDs[0];
+
+			// Verify child instance is tracked
+			expect(runDiag.instancesMapKeys).toContain(childInstanceIDInsideRun);
+		});
+
+		// After .run() completes, child instance should be cleaned up
+		const afterDiag = await api1.slothlet.context.diagnostics();
+		expect(afterDiag.instancesMapSize).toBe(initialCount);
+		expect(afterDiag.instancesMapKeys).not.toContain(childInstanceIDInsideRun);
+
+		// Base instance should still exist
+		expect(afterDiag.instancesMapKeys).toContain(baseInstanceID);
+	});
+
+	it("should cleanup child instances even when .run() throws error", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { counter: 0 },
+			diagnostics: true
+		});
+
+		const baseInstanceID = api1.slothlet.instanceID;
+		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialCount = initialDiag.instancesMapSize;
+
+		let childInstanceIDInsideRun = null;
+
+		try {
+			await api1.slothlet.context.run({ counter: 100 }, async () => {
+				// Capture child instance ID
+				const runDiag = await api1.slothlet.context.diagnostics();
+				const childIDs = runDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_"));
+				childInstanceIDInsideRun = childIDs[0];
+
+				// Verify child exists
+				expect(runDiag.instancesMapKeys).toContain(childInstanceIDInsideRun);
+
+				// Throw error
+				throw new Error("Test error");
+			});
+			expect.fail("Should have thrown error");
+		} catch (error) {
+			expect(error.message).toContain("Test error");
+		}
+
+		// Even after error, child instance should be cleaned up
+		const afterDiag = await api1.slothlet.context.diagnostics();
+		expect(afterDiag.instancesMapSize).toBe(initialCount);
+		expect(afterDiag.instancesMapKeys).not.toContain(childInstanceIDInsideRun);
+	});
+
+	it("should cleanup nested child instances correctly", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { counter: 0 },
+			diagnostics: true
+		});
+
+		const baseInstanceID = api1.slothlet.instanceID;
+		const initialDiag = await api1.slothlet.context.diagnostics();
+		const initialCount = initialDiag.instancesMapSize;
+
+		let outerChildID = null;
+		let innerChildID = null;
+
+		await api1.slothlet.context.run({ level: "outer" }, async () => {
+			// Capture outer child ID
+			const outerDiag = await api1.slothlet.context.diagnostics();
+			const outerChildren = outerDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_"));
+			outerChildID = outerChildren[0];
+
+			expect(outerDiag.instancesMapSize).toBe(initialCount + 1);
+
+			await api1.slothlet.context.run({ level: "inner" }, async () => {
+				// Capture inner child ID
+				const innerDiag = await api1.slothlet.context.diagnostics();
+				const innerChildren = innerDiag.instancesMapKeys.filter((id) => id.startsWith(baseInstanceID + "__run_") && id !== outerChildID);
+				innerChildID = innerChildren[0];
+
+				// Both children should exist
+				expect(innerDiag.instancesMapSize).toBe(initialCount + 2);
+				expect(innerDiag.instancesMapKeys).toContain(outerChildID);
+				expect(innerDiag.instancesMapKeys).toContain(innerChildID);
+			});
+
+			// After inner .run(), inner child should be cleaned up
+			const afterInnerDiag = await api1.slothlet.context.diagnostics();
+			expect(afterInnerDiag.instancesMapKeys).not.toContain(innerChildID);
+			expect(afterInnerDiag.instancesMapSize).toBe(initialCount + 1);
+			expect(afterInnerDiag.instancesMapKeys).toContain(outerChildID);
+		});
+
+		// After outer .run(), both children should be cleaned up
+		const finalDiag = await api1.slothlet.context.diagnostics();
+		expect(finalDiag.instancesMapKeys).not.toContain(outerChildID);
+		expect(finalDiag.instancesMapKeys).not.toContain(innerChildID);
+		expect(finalDiag.instancesMapSize).toBe(initialCount);
 	});
 });
 

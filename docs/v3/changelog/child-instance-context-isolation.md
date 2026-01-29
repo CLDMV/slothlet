@@ -9,6 +9,13 @@
 
 Replaced parent chain traversal with a **child instance approach** for `.run()` and `.scope()` context isolation. This provides clearer semantics, better performance, and eliminates behavioral differences between async and live modes.
 
+**Key Implementation Details**:
+- Child instances follow pattern: `${baseID}__run_${timestamp}_{random}`
+- Partial isolation (default): context scoped, self shared (mutations persist)
+- Full isolation (opt-in): context scoped, self deep cloned (mutations isolated)
+- Deep clone uses `.__type` property to correctly handle wrapped objects
+- Test module pattern: export data objects, mutate via self references
+
 ## Motivation
 
 **Previous Implementation Issues**:
@@ -171,7 +178,11 @@ await api1.slothlet.context.run({ user: "alice" }, async () => {
   - Lines 815-847: `.run()` delegates to `.scope()`
   - Lines 853-1038: Unified `.scope()` implementation with child instance logic
   - Lines 280-327: Simplified `context.get()` (no parent chain)
-  - Added `deepClone()` helper for full isolation
+  - Lines 908-932: Added `deepClone()` helper for full isolation
+    - Uses `.__type` property instead of `typeof` to check wrapped object types
+    - Tries `structuredClone()` first, falls back to manual recursive clone
+    - Handles callable Proxies (API objects) by cloning their properties
+    - Per-property try/catch keeps original reference on clone errors
 
 ### Context Managers
 - `src/lib/handlers/context-async.mjs`:
@@ -187,7 +198,14 @@ await api1.slothlet.context.run({ user: "alice" }, async () => {
   - Updated nested run test assertions (cross-instance = base context)
   - Added isolation mode tests (partial/full)
   - Added `.scope()` override tests
-  - All 133 tests passing
+  - Added cleanup verification tests (normal, error, nested)
+  - All 157 tests passing
+
+- `api_tests/api_test/isolation-test.mjs`:
+  - Test module for isolation mode verification
+  - Exports `isolationTestState` object with mutable properties
+  - Functions mutate properties via `self.isolationTest.isolationTestState`
+  - Tests verify mutations persist (partial) or don't persist (full)
 
 ### Documentation
 - `docs/v3/todo/architecture-context-instanceid-management.md`:
@@ -201,7 +219,7 @@ await api1.slothlet.context.run({ user: "alice" }, async () => {
 
 ## Testing
 
-✅ All tests pass: **133/133** in `per-request-context.test.vitest.mjs`
+✅ All tests pass: **157/157** in `per-request-context.test.vitest.mjs`
 
 **Test Coverage**:
 - Shallow and deep merge strategies
@@ -209,9 +227,10 @@ await api1.slothlet.context.run({ user: "alice" }, async () => {
 - Nested `.run()` calls (same instance and cross-instance)
 - Concurrent request isolation
 - Multi-instance isolation
-- Partial isolation mode (shared self)
-- Full isolation mode (cloned self)
+- Partial isolation mode (shared self, mutations persist)
+- Full isolation mode (cloned self, mutations don't persist)
 - Isolation override per call
+- Child instance cleanup verification (normal, error, nested)
 - Error handling (scope disabled, invalid parameters)
 
 **Test Configurations**: Full matrix coverage

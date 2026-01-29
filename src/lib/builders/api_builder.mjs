@@ -905,23 +905,38 @@ export class ApiBuilder extends ComponentBase {
 				};
 
 				// Helper for deep clone (for full isolation)
+				// Handles callable Proxies (API objects) and nested structures properly
 				const deepClone = (obj) => {
-					if (obj === null || typeof obj !== "object") return obj;
-					if (obj instanceof Date) return new Date(obj.getTime());
-					if (obj instanceof Array) return obj.map((item) => deepClone(item));
-					if (typeof obj === "function") return obj; // Don't clone functions
-					const cloned = {};
-					for (const key in obj) {
-						cloned[key] = deepClone(obj[key]);
+					try {
+						return structuredClone(obj);
+					} catch (e) {
+						// Fallback for objects that can't be structured cloned (functions, proxies, symbols, etc.)
+						// Use .__type for wrapped objects, fallback to typeof for non-wrapped
+						const objType = obj?.__type || typeof obj;
+
+						if (obj === null || (objType !== "object" && objType !== "function")) return obj;
+						if (obj instanceof Date) return new Date(obj.getTime());
+						if (obj instanceof Array) return obj.map((item) => deepClone(item));
+						// For callable objects (like API proxy), clone properties but not the function itself
+						// Create new object and copy all properties (works for both objects and callable proxies)
+						const cloned = {};
+						for (const key in obj) {
+							try {
+								cloned[key] = deepClone(obj[key]);
+							} catch (err) {
+								// If cloning a property fails, keep the original reference
+								cloned[key] = obj[key];
+							}
+						}
+						return cloned;
 					}
-					return cloned;
 				};
 
 				// For live binding mode, use child instance approach
 				if (contextManager.constructor.name === "LiveContextManager") {
 					// CRITICAL: Always get THIS instance's store (base or child), not just current active
 					let currentStore = null;
-					
+
 					// Check if current is THIS instance or a child of THIS instance
 					const currentID = contextManager.currentInstanceID;
 					if (currentID) {
@@ -930,12 +945,12 @@ export class ApiBuilder extends ComponentBase {
 							currentID === slothlet.instanceID ||
 							activeStore?.parentInstanceID === slothlet.instanceID ||
 							currentID.startsWith(slothlet.instanceID + "__run_");
-						
+
 						if (isOurContext) {
 							currentStore = activeStore;
 						}
 					}
-					
+
 					// Fall back to base store if not in our context
 					if (!currentStore) {
 						currentStore = contextManager.instances.get(slothlet.instanceID);
@@ -982,7 +997,7 @@ export class ApiBuilder extends ComponentBase {
 				if (contextManager.constructor.name === "AsyncContextManager") {
 					// CRITICAL: Get THIS instance's store (base or child), not just any active store
 					let currentStore = null;
-					
+
 					// Check if active ALS context is THIS instance or a child of THIS instance
 					const activeStore = contextManager.tryGetContext();
 					if (activeStore) {
@@ -990,12 +1005,12 @@ export class ApiBuilder extends ComponentBase {
 							activeStore.instanceID === slothlet.instanceID ||
 							activeStore.parentInstanceID === slothlet.instanceID ||
 							activeStore.instanceID.startsWith(slothlet.instanceID + "__run_");
-						
+
 						if (isOurContext) {
 							currentStore = activeStore;
 						}
 					}
-					
+
 					// Fall back to base store if not in our context
 					if (!currentStore) {
 						const baseStore = contextManager.instances.get(slothlet.instanceID);

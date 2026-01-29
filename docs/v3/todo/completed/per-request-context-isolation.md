@@ -4,7 +4,7 @@
 **Priority:** 🟡 MEDIUM - Ergonomic enhancement for per-request isolation  
 **Complexity:** MEDIUM - Requires ALS context nesting and merge strategies  
 **Implementation Date:** 2026-01-28  
-**Test Results:** ✅ 77/77 tests passing (100%)  
+**Test Results:** ✅ 157/157 tests passing (100%)  
 **Related:** [docs/CONTEXT-PROPAGATION.md](../../CONTEXT-PROPAGATION.md) - Complete V2 documentation (604 lines)
 
 ---
@@ -13,12 +13,16 @@
 
 **✅ COMPLETED:**
 - ✅ `api.slothlet.context.run(contextData, callback, ...args)` - Per-request context isolation
-- ✅ `api.slothlet.context.scope({ context, fn, args, merge })` - Structured per-request context
+- ✅ `api.slothlet.context.scope({ context, fn, args, merge, isolation })` - Structured per-request context
 - ✅ Shallow merge support (default)
 - ✅ Deep merge support (config: `scope: { merge: "deep" }`)
+- ✅ Partial isolation mode (default) - shared self, mutations persist
+- ✅ Full isolation mode (opt-in) - cloned self, mutations don't persist
+- ✅ Per-call isolation override support
 - ✅ Works with AsyncLocalStorage (async runtime)
 - ✅ Works with Live Bindings (live runtime)
 - ✅ Nested context preservation
+- ✅ Child instance cleanup verification (normal, error, nested)
 - ✅ Argument forwarding (...args support)
 - ✅ Error handling for invalid parameters
 - ✅ Config validation: `scope: false` disables per-request context (throws error on usage)
@@ -27,11 +31,12 @@
 - ✅ Context properly propagates through nested API calls via AsyncContextManager optimization
 
 **Files Modified:**
-- `src/lib/builders/api_builder.mjs` - Added createRunFunction() and createScopeFunction()
+- `src/lib/builders/api_builder.mjs` - Added createRunFunction(), createScopeFunction(), deepClone() helper
 - `src/lib/builders/api_builder.mjs` - Updated createSlothletNamespace() to add context.run/scope
 - `src/lib/helpers/config.mjs` - Added scope.merge validation in transformConfig()
 - `src/lib/handlers/context-async.mjs` - Optimized runInContext() to preserve active ALS context
 - `tests/vitests/suites/context/per-request-context.test.vitest.mjs` - Updated to use api.slothlet.context.* API
+- `api_tests/api_test/isolation-test.mjs` - Test module for isolation mode verification
 
 ---
 

@@ -63,9 +63,7 @@ export class LiveContextManager {
 		if (currentID) {
 			const currentStore = this.instances.get(currentID);
 			isAlreadyInContext =
-				currentID === instanceID ||
-				currentStore?.parentInstanceID === instanceID ||
-				currentID.startsWith(instanceID + "__run_");
+				currentID === instanceID || currentStore?.parentInstanceID === instanceID || currentID.startsWith(instanceID + "__run_");
 		}
 
 		// If already in correct context (base or child), just use current
