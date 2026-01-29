@@ -217,9 +217,37 @@ The types object is attached to every Slothlet API instance at `api.slothlet.typ
 3. **Debug visibility** - developers can inspect materialization state
 4. **No typeof limitations** - bypasses proxy target type checking
 5. **Backward compatible** - doesn't affect existing `typeof` usage
+6. **Deep cloning support** - enables correct cloning of wrapped objects in isolation modes
+
+## Internal Usage
+
+### deepClone() Helper
+
+The `deepClone()` function in `api_builder.mjs` uses `__type` to correctly determine the type of wrapped objects during full isolation mode:
+
+```javascript
+const deepClone = (obj) => {
+    try {
+        return structuredClone(obj);
+    } catch (e) {
+        // Use .__type for wrapped objects, fallback to typeof for non-wrapped
+        const objType = obj?.__type || typeof obj;
+        
+        if (obj === null || (objType !== "object" && objType !== "function")) return obj;
+        // ... clone logic
+    }
+};
+```
+
+**Why this matters:**
+- `typeof` on wrapped API objects always returns `"function"` (proxy target type)
+- `__type` returns the actual implementation type (`"object"` or `"function"`)
+- This ensures deep clone correctly handles both callable and non-callable modules
+- Critical for full isolation mode where `self` must be deep cloned
 
 ## Related
 
 - [backgroundMaterialize config](./background-materialize.md)
+- [Child Instance Context Isolation](./child-instance-context-isolation.md) - Uses `__type` in deepClone
 - [Unified Wrapper](../MODULE-STRUCTURE.md#unified-wrapper)
 - [Lazy Loading](../PERFORMANCE.md#lazy-loading)
