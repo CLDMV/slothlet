@@ -122,6 +122,43 @@ export class Config extends ComponentBase {
 	}
 
 	/**
+	 * Normalize mutations configuration for API modification control
+	 * @param {Object} mutations - Mutations config object with add/remove/reload properties
+	 * @returns {Object} Normalized mutations configuration
+	 * @public
+	 *
+	 * @description
+	 * Normalizes mutation control configuration for API runtime modifications.
+	 * Controls whether api.slothlet.api.add(), api.slothlet.api.remove(), and
+	 * api.slothlet.reload() operations are allowed.
+	 *
+	 * @example
+	 * // Allow all mutations (default)
+	 * normalizeMutations({ add: true, remove: true, reload: true })
+	 * // => { add: true, remove: true, reload: true }
+	 *
+	 * @example
+	 * // Disable all mutations
+	 * normalizeMutations({ add: false, remove: false, reload: false })
+	 * // => { add: false, remove: false, reload: false }
+	 */
+	normalizeMutations(mutations) {
+		const defaults = { add: true, remove: true, reload: true };
+
+		// If mutations is not an object, use defaults
+		if (!mutations || typeof mutations !== "object") {
+			return defaults;
+		}
+
+		// Merge with defaults, ensuring boolean values
+		return {
+			add: mutations.add === false ? false : true,
+			remove: mutations.remove === false ? false : true,
+			reload: mutations.reload === false ? false : true
+		};
+	}
+
+	/**
 	 * Normalize debug configuration
 	 * @param {boolean|Object} debug - Debug flag or object with targeted flags
 	 * @returns {Object} Normalized debug object with all flags
@@ -194,6 +231,39 @@ export class Config extends ComponentBase {
 		// Resolve relative paths from caller's context
 		const resolvedDir = this.slothlet.helpers.resolver.resolvePathFromCaller(config.dir);
 
+		// ===== BACKWARD COMPATIBILITY =====
+		// Handle deprecated allowMutation config (v2 compatibility)
+		let mutations = null;
+		if (config.allowMutation === false) {
+			// Map allowMutation: false to all mutations disabled
+			mutations = { add: false, remove: false, reload: false };
+			if (!config.silent) {
+				new this.SlothletWarning("DEPRECATED_CONFIG_OPTION", {
+					option: "allowMutation",
+					replacement: "api.mutations: { add: false, remove: false, reload: false }",
+					hint: "The allowMutation config option is deprecated. Use api.mutations for granular control."
+				});
+			}
+		}
+
+		// Handle root-level collision config (backward compatibility)
+		let collision = null;
+		if (config.collision && !config.api?.collision) {
+			collision = this.normalizeCollision(config.collision);
+			if (!config.silent) {
+				new this.SlothletWarning("DEPRECATED_CONFIG_OPTION", {
+					option: "collision",
+					replacement: "api.collision",
+					hint: "Root-level collision config is deprecated. Use api.collision instead."
+				});
+			}
+		}
+
+		// Process api.* namespace (new v3 structure)
+		const apiConfig = config.api || {};
+		const finalCollision = apiConfig.collision ? this.normalizeCollision(apiConfig.collision) : collision || this.normalizeCollision(null);
+		const finalMutations = apiConfig.mutations ? this.normalizeMutations(apiConfig.mutations) : mutations || this.normalizeMutations(null);
+
 		// Build normalized config
 		return {
 			...config,
@@ -205,7 +275,11 @@ export class Config extends ComponentBase {
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
 			hooks: config.hooks === true,
-			collision: this.normalizeCollision(config.collision),
+			collision: finalCollision,
+			api: {
+				collision: finalCollision,
+				mutations: finalMutations
+			},
 			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true
 		};
@@ -222,4 +296,5 @@ export const normalizeCollision = configInstance.normalizeCollision.bind(configI
 export const normalizeRuntime = configInstance.normalizeRuntime.bind(configInstance);
 export const normalizeMode = configInstance.normalizeMode.bind(configInstance);
 export const normalizeDebug = configInstance.normalizeDebug.bind(configInstance);
+export const normalizeMutations = configInstance.normalizeMutations.bind(configInstance);
 export const transformConfig = configInstance.transformConfig.bind(configInstance);

@@ -203,6 +203,14 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.api.add("plugins", "./plugins");
 				 */
 				add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
+					// Check if add mutation is allowed
+					if (!config.api?.mutations?.add) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.add",
+							hint: "API mutation 'add' is disabled by configuration. Set api.mutations.add: true to enable.",
+							validationError: true
+						});
+					}
 					// Filter out internal options that shouldn't be user-controllable
 					const { recordHistory, ...filteredOptions } = options;
 					return slothlet.handlers.apiManager.addApiComponent({
@@ -224,6 +232,14 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.api.remove("plugins.tools");
 				 */
 				remove: async function slothlet_api_remove(pathOrModuleId) {
+					// Check if remove mutation is allowed
+					if (!config.api?.mutations?.remove) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.remove",
+							hint: "API mutation 'remove' is disabled by configuration. Set api.mutations.remove: true to enable.",
+							validationError: true
+						});
+					}
 					if (typeof pathOrModuleId !== "string") {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "pathOrModuleId",
@@ -521,9 +537,11 @@ export class ApiBuilder extends ComponentBase {
 			 * @returns {Promise<void>}
 			 */
 			reload: async () => {
-				if (!config.allowMutation) {
-					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATION_DISABLED", {
+				// Check if reload mutation is allowed
+				if (!config.api?.mutations?.reload) {
+					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
 						operation: "reload",
+						hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
 						validationError: true
 					});
 				}
