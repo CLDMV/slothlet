@@ -55,8 +55,15 @@ export class AsyncContextManager {
 		const activeStore = this.als.getStore();
 		let baseStore;
 
-		if (activeStore && activeStore.instanceID === instanceID) {
-			// Already in context for this instance - use active store to preserve modifications
+		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
+		const isActiveOurInstance =
+			activeStore &&
+			(activeStore.instanceID === instanceID ||
+				activeStore.parentInstanceID === instanceID ||
+				activeStore.instanceID.startsWith(instanceID + "__run_"));
+
+		if (isActiveOurInstance) {
+			// Already in context for this instance (base or child) - use active store to preserve modifications
 			baseStore = activeStore;
 		} else {
 			// Not in context or different instance - get base store
@@ -75,15 +82,8 @@ export class AsyncContextManager {
 			executionStore.currentWrapper = currentWrapper;
 		}
 
-		// CRITICAL: Store parent context reference for multi-instance isolation
-		// When switching between instances, we need to preserve the calling context
-		// so that api1.run() → api2.function() → api1.function() can restore api1's context
-		if (activeStore && activeStore.instanceID !== instanceID) {
-			executionStore.parentContext = activeStore;
-		}
-
 		// Only wrap in als.run() if we're not already in the right context
-		if (activeStore && activeStore.instanceID === instanceID) {
+		if (isActiveOurInstance) {
 			// Already in correct context - just update currentWrapper and execute
 			try {
 				return fn.apply(thisArg, args);

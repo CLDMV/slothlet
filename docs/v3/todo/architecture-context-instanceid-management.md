@@ -1,8 +1,208 @@
 # Architecture Discussion: Scope/Run Context Management with InstanceID
 
-## Problem Statement
+## ✅ RESOLVED: Child Instance Approach Implemented
 
-We have **two separate but related concerns** when managing context:
+**Status**: COMPLETED as of 2025-01-28
+**Solution**: Child instance approach with pattern-based recognition
+**Files Modified**:
+- `src/lib/builders/api_builder.mjs`: Unified .run() and .scope() implementations
+- `src/lib/handlers/context-async.mjs`: Child instance recognition in runInContext
+- `src/lib/handlers/context-live.mjs`: Child instance recognition in runInContext
+- Tests updated in `tests/vitests/suites/context/per-request-context.test.vitest.mjs`
+
+## Final Implementation Summary
+
+### Child Instance Pattern
+
+Instead of maintaining a parent chain, we now create **temporary child instances** for each `.run()` or `.scope()` call:
+
+```javascript
+// Child instance ID pattern
+const childInstanceID = `${baseInstanceID}__run_${timestamp}_{random}`;
+
+// Example: "slothlet_123abc__run_1234567890123_x9k2n"
+```
+
+Each child instance:
+- Has a unique instanceID following the pattern above
+- Stores `parentInstanceID` pointing to the base instance
+- Gets registered in `contextManager.instances` during execution
+- Gets automatically cleaned up in the `finally` block
+
+### Context Isolation Semantics
+
+**Cross-Instance Calls (Different Base Instances)**:
+```javascript
+await api1.slothlet.context.run({ user: "alice" }, async () => {
+    // Inside api1's .run()
+    const ctx1 = await api1.slothlet.context.get(); // ✅ Returns api1's child context
+    const ctx2 = await api2.slothlet.context.get(); // ✅ Returns api2's BASE context
+});
+```
+
+**Same-Instance Calls**:
+```javascript
+await api1.slothlet.context.run({ outer: "yes" }, async () => {
+    const ctx = await api1.slothlet.context.get(); // ✅ Returns child context
+    
+    await api1.slothlet.context.run({ inner: "yes" }, async () => {
+        const nested = await api1.slothlet.context.get(); // ✅ Returns inner child context
+    });
+});
+```
+
+### Isolation Modes
+
+**Partial Isolation (Default)**: `scope: { isolation: "partial" }`
+- Child `self` = base `self` (shared reference)
+- Mutations to API state persist across .run() boundaries
+- Context is isolated, but self is not cloned
+
+**Full Isolation**: `scope: { isolation: "full" }`
+- Child `self` = `deepClone(base self)` (cloned reference)  
+- Mutations to API state do NOT persist outside .run()
+- Both context AND self are isolated
+
+### Implementation Details
+
+**Child Instance Creation** (both modes):
+```javascript
+const childStore = {
+    instanceID: childInstanceID,
+    context: mergedContext, // Merged with parent context
+    self: isolation === "full" ? deepClone(currentStore.self) : currentStore.self,
+    config: currentStore.config,
+    createdAt: currentStore.createdAt,
+    parentInstanceID: slothlet.instanceID // Track parent
+};
+```
+
+**Recognition Logic** (in runInContext):
+```javascript
+const isOurContext = 
+    activeStore.instanceID === instanceID ||           // Exact match
+    activeStore.parentInstanceID === instanceID ||     // Child of this instance
+    activeStore.instanceID.startsWith(instanceID + "__run_"); // Pattern match
+```
+
+**Context Retrieval** (in .scope()):
+```javascript
+// CRITICAL: Get THIS instance's store, not just any active store
+let currentStore = null;
+
+const activeStore = contextManager.tryGetContext(); // or currentInstanceID for live
+if (activeStore) {
+    const isOurContext = 
+        activeStore.instanceID === slothlet.instanceID ||
+        activeStore.parentInstanceID === slothlet.instanceID ||
+        activeStore.instanceID.startsWith(slothlet.instanceID + "__run_");
+    
+    if (isOurContext) {
+        currentStore = activeStore; // Use child if in our context
+    }
+}
+
+// Fall back to base
+if (!currentStore) {
+    currentStore = contextManager.instances.get(slothlet.instanceID);
+}
+```
+
+### Unified .run() and .scope()
+
+`.run()` now delegates to `.scope()` with default parameters:
+
+```javascript
+// .run() implementation
+run: async (contextData, callback) => {
+    return await scopeFunction({
+        context: contextData,
+        fn: callback,
+        args: [],
+        merge: "shallow"
+    });
+}
+```
+
+This ensures:
+- Single implementation path (no code duplication)
+- Consistent behavior across both methods
+- Easier maintenance and testing
+
+### Mode Differences Eliminated
+
+Both **async** (ALS) and **live** (global state) modes now work identically:
+- Child instance creation: Same logic
+- Context retrieval: Same recognition pattern  
+- Cleanup: Same `finally` block pattern
+- Isolation modes: Same deepClone logic
+
+The only difference is the context storage mechanism:
+- **Async**: Uses ALS with `als.run(childStore, fn)`
+- **Live**: Uses global `currentInstanceID` tracking
+
+## Benefits of This Approach
+
+1. **Simplicity**: No parent chain traversal needed
+2. **Clear Semantics**: Cross-instance = base, same-instance = child
+3. **Performance**: Simple pattern matching vs chain walking
+4. **Unified Code**: Both modes work identically
+5. **Explicit Isolation**: Configurable partial/full isolation
+6. **Clean Lifecycle**: Child instances auto-cleaned in finally blocks
+
+## Breaking Changes
+
+**Cross-Instance Context Behavior Changed**:
+
+**Before** (parent chain approach):
+```javascript
+await api1.run({ user: "alice" }, async () => {
+    await api2.run({ requestId: "123" }, async () => {
+        const ctx1 = await api1.context.get();
+        // OLD: Would find api1's .run() context in parent chain
+        // Returns: { user: "alice" }
+    });
+});
+```
+
+**After** (child instance approach):
+```javascript
+await api1.run({ user: "alice" }, async () => {
+    await api2.run({ requestId: "123" }, async () => {
+        const ctx1 = await api1.context.get();
+        // NEW: Returns api1's BASE context (not .run() context)
+        // Returns: {} (or whatever base context is)
+    });
+});
+```
+
+**Rationale**: Cross-instance calls should not leak .run() context from different instances. If you need to access api1's context from inside api2, save it to a variable before entering api2.run().
+
+## Testing
+
+All 133 tests pass in `per-request-context.test.vitest.mjs`:
+- ✅ Shallow and deep merge
+- ✅ .run() and .scope() equivalence
+- ✅ Nested .run() calls (same instance)
+- ✅ Nested .run() calls (cross-instance)
+- ✅ Concurrent isolation
+- ✅ Multi-instance isolation
+- ✅ Partial isolation mode
+- ✅ Full isolation mode
+- ✅ Isolation override per call
+- ✅ Error handling
+
+## Related Files
+
+- `docs/v3/changelog/` - Create changelog entry for this change
+- `tests/vitests/TEST-STATUS.md` - Updated test status
+- Architecture documentation updated (this file)
+
+---
+
+## Original Problem Statement (For Reference)
+
+We had **two separate but related concerns** when managing context:
 
 1. **Base Instance Context**: Getting the correct instance's base context when api1 functions are called from within api2
 2. **Isolated Run Context**: Preserving .run()/.scope() modified context during execution
