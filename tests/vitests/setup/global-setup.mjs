@@ -39,6 +39,10 @@ export async function setup() {
 
 	ensureDevEnvFlags();
 
+	// Suppress SlothletWarning console output during tests (still captured for assertions)
+	const { SlothletWarning } = await import("../../../src/lib/errors.mjs");
+	SlothletWarning.suppressConsole = true;
+
 	// eslint-disable-next-line no-useless-catch
 	try {
 		// Import devcheck directly to avoid index.mjs try/catch

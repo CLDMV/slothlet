@@ -128,6 +128,10 @@ export class SlothletError extends Error {
  * @public
  */
 export class SlothletWarning {
+	// Static array to capture warnings for testing
+	static captured = [];
+	static suppressConsole = false;
+
 	/**
 	 * Create and emit a warning with automatic translation
 	 * @param {string} code - Warning code identifier
@@ -143,12 +147,17 @@ export class SlothletWarning {
 		this.message = translatedMessage;
 		this.context = context;
 
-		// Emit warning to console
-		console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+		// Always capture warning for tests
+		SlothletWarning.captured.push(this);
 
-		// Show context if provided
-		if (Object.keys(context).length > 0) {
-			console.warn("Context:", context);
+		// Emit warning to console unless suppressed
+		if (!SlothletWarning.suppressConsole) {
+			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
+
+			// Show context if provided
+			if (Object.keys(context).length > 0) {
+				console.warn("Context:", context);
+			}
 		}
 	}
 
@@ -158,6 +167,14 @@ export class SlothletWarning {
 	 */
 	toString() {
 		return `[${this.code}] ${this.name}: ${this.message}`;
+	}
+
+	/**
+	 * Clear captured warnings (for testing)
+	 * @public
+	 */
+	static clearCaptured() {
+		SlothletWarning.captured = [];
 	}
 }
 
