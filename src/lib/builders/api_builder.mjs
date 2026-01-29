@@ -310,8 +310,9 @@ export class ApiBuilder extends ComponentBase {
 						return key ? targetCtx.context[key] : { ...targetCtx.context };
 					}
 
-					// Otherwise fall back to base instance context
-					const baseContext = slothlet.context || {};
+					// Otherwise fall back to base instance context from instances Map
+					const baseStore = slothlet.contextManager.instances.get(slothlet.instanceID);
+					const baseContext = baseStore?.context || {};
 					return key ? baseContext[key] : { ...baseContext };
 				},
 
