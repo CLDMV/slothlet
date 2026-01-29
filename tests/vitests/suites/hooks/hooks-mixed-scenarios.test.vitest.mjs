@@ -49,21 +49,20 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			}
 		});
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Before hook error");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Before hook error");
 			},
-			{ id: "error-hook", priority: 200, pattern: "math.add" }
+			{ id: "error-hook", priority: 200 }
 		);
 
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.add",
 			({ error }) => {
 				errorCaught = true;
 				expect(error.message).toBe("Before hook error");
 			},
-			{ id: "error-handler", pattern: "math.add" }
+			{ id: "error-handler" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -85,22 +84,20 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 			}
 		});
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Test error");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Test error");
 			},
-			{ id: "error-hook", pattern: "math.add" }
+			{ id: "error-hook" }
 		);
 
 		for (let i = 0; i < 3; i++) {
-			api.hooks.on(
-				"error",
-				() => {
-					errorHandlers.push(i);
+			api.slothlet.hook.on(
+			"error:math.add",
+				() => { errorHandlers.push(i);
 				},
-				{ id: `error-handler-${i}`, pattern: "math.add", priority: 100 - i * 10 }
-			);
+				{ id: `error-handler-${i}`, priority: 100 - i * 10 }
+		);
 		}
 
 		await api.math.add(2, 3);
@@ -110,38 +107,26 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should handle mixed scenario: args modified, short-circuit, result transformed", async () => {
-		api.hooks.on("before", ({ args }) => [args[0] * 2, args[1] * 2], {
-			id: "modify-args",
-			priority: 300,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1] * 2], { id: "modify-args",
+			priority: 300 });
 
-		api.hooks.on("before", ({ args }) => args[0] + args[1] + 100, { id: "short-circuit", priority: 200, pattern: "math.add" });
+		api.slothlet.hook.on("before:math.add", ({ args }) => args[0] + args[1] + 100, { id: "short-circuit", priority: 200 });
 
-		api.hooks.on("after", ({ result }) => result * 10, {
-			id: "transform-result",
-			priority: 100,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("after:math.add", ({ result }) => result * 10, { id: "transform-result",
+			priority: 100 });
 
 		const result = await api.math.add(1, 2);
 		expect(result).toBe(106);
 	});
 
 	test("should handle before hooks modifying args with after hooks chaining transforms", async () => {
-		api.hooks.on("before", ({ args }) => [args[0] * 3, args[1] * 3], {
-			id: "multiply-args",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 3, args[1] * 3], { id: "multiply-args",
+			priority: 200 });
 
-		api.hooks.on("after", ({ result }) => result * 2, {
-			id: "double-result",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("after:math.add", ({ result }) => result * 2, { id: "double-result",
+			priority: 200 });
 
-		api.hooks.on("after", ({ result }) => result + 10, { id: "add-ten", priority: 100, pattern: "math.add" });
+		api.slothlet.hook.on("after:math.add", ({ result }) => result + 10, { id: "add-ten", priority: 100 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(40);
@@ -159,12 +144,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 
 		let hookExecuted = false;
 
-		api.hooks.on(
-			"before",
-			() => {
-				hookExecuted = true;
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { hookExecuted = true;
 			},
-			{ id: "test-hook", pattern: "math.add" }
+			{ id: "test-hook" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -185,20 +169,19 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 
 		let hookExecuted = false;
 
-		api.hooks.on(
-			"before",
-			() => {
-				hookExecuted = true;
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { hookExecuted = true;
 				return 42;
 			},
-			{ id: "test-hook", pattern: "math.add" }
+			{ id: "test-hook" }
 		);
 
 		let result = await api.math.add(2, 3);
 		expect(hookExecuted).toBe(false);
 		expect(result).toBe(5);
 
-		api.hooks.enable();
+		api.slothlet.hook.enable();
 		hookExecuted = false;
 
 		result = await api.math.add(2, 3);
@@ -207,16 +190,16 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should support pattern-specific hook enabling", async () => {
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			({ args }) => {
 				return [args[0] * 10, args[1] * 10];
 			},
-			{ id: "pattern-test", priority: 100, pattern: "math.*" }
+			{ id: "pattern-test", priority: 100 }
 		);
 
-		api.hooks.disable();
-		api.hooks.enable("math.*");
+		api.slothlet.hook.disable();
+		api.slothlet.hook.enable("math.*");
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(50);

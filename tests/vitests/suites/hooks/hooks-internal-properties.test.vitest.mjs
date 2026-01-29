@@ -1,5 +1,5 @@
 /**
- * @fileoverview Tests to verify that internal properties like api.hooks don't trigger hook execution.
+ * @fileoverview Tests to verify that internal properties like api.slothlet.hook don't trigger hook execution.
  *
  * Original test: tests/test-hooks-internal-properties.mjs
  * Original test count: 7 scenarios
@@ -30,27 +30,27 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		}
 	});
 
-	it("should not trigger hooks when accessing api.hooks", () => {
+	it("should not trigger hooks when accessing api.slothlet.hook", () => {
 		let hookExecuted = false;
 
 		// Register a hook that matches everything
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
 			},
-			{ id: "catch-all", pattern: "**" }
+			{ id: "catch-all" }
 		);
 
 		// Access hooks API properties - should NOT trigger hooks
-		const hooksObj = api.hooks;
-		const onMethod = api.hooks.on;
-		const offMethod = api.hooks.off;
-		const enableMethod = api.hooks.enable;
-		const disableMethod = api.hooks.disable;
-		const clearMethod = api.hooks.clear;
-		const listMethod = api.hooks.list;
+		const hooksObj = api.slothlet.hook;
+		const onMethod = api.slothlet.hook.on;
+		const offMethod = api.slothlet.hook.off;
+		const enableMethod = api.slothlet.hook.enable;
+		const disableMethod = api.slothlet.hook.disable;
+		const clearMethod = api.slothlet.hook.clear;
+		const listMethod = api.slothlet.hook.list;
 
 		expect(typeof hooksObj).toBe("object");
 		expect(typeof onMethod).toBe("function");
@@ -65,13 +65,13 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 	it("should not trigger hooks when accessing api.__ctx", () => {
 		let hookExecuted = false;
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
 			},
-			{ id: "catch-all", pattern: "**" }
+			{ id: "catch-all" }
 		);
 
 		// Access __ctx - should NOT trigger hooks
@@ -84,13 +84,13 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 	it("should not trigger hooks when accessing api.shutdown", () => {
 		let hookExecuted = false;
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
 			},
-			{ id: "catch-all", pattern: "**" }
+			{ id: "catch-all" }
 		);
 
 		// Access shutdown method - should NOT trigger hooks
@@ -103,13 +103,13 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 	it("should not trigger hooks when accessing api._impl", () => {
 		let hookExecuted = false;
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hookExecuted = true;
 				throw new Error(`Hook should not execute for path: ${path}`);
 			},
-			{ id: "catch-all", pattern: "**" }
+			{ id: "catch-all" }
 		);
 
 		// Access _impl if it exists - should NOT trigger hooks
@@ -119,13 +119,13 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	it("should not trigger hooks when calling api.hooks methods", () => {
+	it("should not trigger hooks when calling api.slothlet.hook methods", () => {
 		let hookExecuted = false;
 		let methodCallsExecuted = 0;
 
 		// Create a hook that should only execute for actual function calls
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				if (path.startsWith("hooks.")) {
 					hookExecuted = true;
@@ -133,14 +133,14 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 				}
 				methodCallsExecuted++;
 			},
-			{ id: "test-hook", pattern: "**" }
+			{ id: "test-hook" }
 		);
 
 		// Call hooks methods - should NOT trigger the catch-all hook
-		const hooksList = api.hooks.list();
-		api.hooks.enable();
-		api.hooks.disable();
-		api.hooks.enable(); // Re-enable for potential other tests
+		const hooksList = api.slothlet.hook.list();
+		api.slothlet.hook.enable();
+		api.slothlet.hook.disable();
+		api.slothlet.hook.enable(); // Re-enable for potential other tests
 
 		expect(typeof hooksList).toBeDefined();
 		expect(hookExecuted).toBe(false);
@@ -150,16 +150,16 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 	it("should only trigger hooks for actual API function calls", async () => {
 		let hooksTriggeredPaths = [];
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hooksTriggeredPaths.push(path);
 			},
-			{ id: "path-tracker", pattern: "**" }
+			{ id: "path-tracker" }
 		);
 
 		// Access internal properties (should not trigger hooks)
-		const ___unused1 = api.hooks;
+		const ___unused1 = api.slothlet.hook;
 		const ___unused2 = api.__ctx;
 		const ___unused3 = api.shutdown;
 
@@ -175,17 +175,17 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		let hookCalls = [];
 
 		// Access all internal properties first
-		const ___unused1 = api.hooks;
+		const ___unused1 = api.slothlet.hook;
 		const ___unused2 = api.__ctx;
 		const ___unused3 = api.shutdown;
 
 		// Now register a hook
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			({ path, args }) => {
 				hookCalls.push({ path: path, args: args });
 			},
-			{ id: "test-hook", pattern: "math.*" }
+			{ id: "test-hook" }
 		);
 
 		// Call a function - hook should still work

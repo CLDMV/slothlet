@@ -25,7 +25,7 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 		}
 		api = null;
 
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 	});
 
@@ -71,10 +71,9 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 		expect(results.contextTest.userData).toBe("test-user");
 
 		// Verify instanceId is available and matches between runtime test and actual API
-		const diagData = api.slothlet.diag.inspect();
 		expect(results.instanceIdTest.available).toBe(true);
 		// Verify instanceId from inside runtime-test.mjs matches the actual instanceId
-		expect(results.instanceIdTest.value).toBe(diagData.instanceId);
+		expect(results.instanceIdTest.value).toBe(api.slothlet.instanceID);
 	});
 
 	it("should pass comprehensive runtime verification", async () => {
@@ -118,7 +117,7 @@ describe("Runtime Implementation Verification", () => {
 	let instances = [];
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 		instances = [];
 	});
@@ -206,8 +205,6 @@ describe("Runtime Implementation Verification", () => {
 		expect(liveResults.contextTest.userData).toBe("live-user");
 
 		// Verify different instanceIds
-		const asyncDiag = asyncApi.slothlet.diag.inspect();
-		const liveDiag = liveApi.slothlet.diag.inspect();
-		expect(asyncDiag.instanceId).not.toBe(liveDiag.instanceId);
+		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);
 	});
 });

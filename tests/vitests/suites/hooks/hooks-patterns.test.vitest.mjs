@@ -72,13 +72,13 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 		let capturedPath = "";
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			({ path }) => {
 				called = true;
 				capturedPath = toHookPath(path);
 			},
-			{ pattern: "math.*" }
+			{}
 		);
 
 		// Should match
@@ -100,12 +100,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Multi-level wildcard (**) matches any depth", async () => {
 		const paths = [];
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "**" }
+			{}
 		);
 
 		await api.advanced.selfObject.addViaSelf(2, 3);
@@ -126,13 +126,13 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 		let capturedPath = "";
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.add",
 			({ path }) => {
 				called = true;
 				capturedPath = toHookPath(path);
 			},
-			{ pattern: "math.add" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -152,12 +152,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match either math or string
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:{math,string}.*",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "{math,string}.*" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -172,12 +172,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match all EXCEPT math.*
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:!math.*",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "!math.*" }
+			{}
 		);
 
 		// This should NOT match (math.*)
@@ -197,26 +197,26 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let count = 0;
 
 		// Register multiple hooks with same pattern
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			() => {
 				count++;
 			},
-			{ pattern: "math.*" }
+			{}
 		);
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			() => {
 				count++;
 			},
-			{ pattern: "math.*" }
+			{}
 		);
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			() => {
 				count++;
 			},
-			{ pattern: "math.*" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -228,12 +228,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Wildcard with exact suffix (*.create)", async () => {
 		let called = false;
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:*.add",
 			() => {
 				called = true;
 			},
-			{ pattern: "*.add" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -251,12 +251,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// {a,b}.{c,d} should expand to: a.c, a.d, b.c, b.d
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:{math,string}.{add,upper}",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "{math,string}.{add,upper}" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -271,12 +271,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 
 		// Match any top-level call
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:*",
 			() => {
 				called = true;
 			},
-			{ pattern: "*" }
+			{}
 		);
 
 		// Top-level functions if they exist
@@ -295,12 +295,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		const paths = [];
 
 		// Match any.anything.under.here (needs at least 2 dots)
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**.*.*",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "**.*.*" }
+			{}
 		);
 
 		// This has 2 dots: advanced.selfObject.addViaSelf
@@ -313,13 +313,9 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Empty pattern matches nothing", async () => {
 		let called = false;
 
-		api.hooks.on(
-			"before",
-			() => {
-				called = true;
-			},
-			{ pattern: "" }
-		);
+		api.slothlet.hook.on("before:math.add", () => {
+			called = true;
+		});
 
 		await api.math.add(2, 3);
 		expect(called).toBe(true); // Empty pattern matches all paths
@@ -331,8 +327,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 
 		// Should throw error for deep nesting (correct behavior)
 		expect(() => {
-			api.hooks.on(
-				"before",
+			api.slothlet.hook.on(
+				"before:**",
 				() => {
 					// Hook registered but may not be called
 				},
@@ -348,12 +344,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 		let called = false;
 
 		// Pattern with dots should be escaped properly
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			() => {
 				called = true;
 			},
-			{ pattern: "math.add" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -363,28 +359,28 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	it("Multiple patterns matching same path", async () => {
 		const calls = [];
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.*",
 			() => {
 				calls.push("pattern1");
 			},
-			{ pattern: "math.*" }
+			{}
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:*.add",
 			() => {
 				calls.push("pattern2");
 			},
-			{ pattern: "*.add" }
+			{}
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			() => {
 				calls.push("pattern3");
 			},
-			{ pattern: "**" }
+			{}
 		);
 
 		await api.math.add(2, 3);
@@ -397,15 +393,15 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name"
 	});
 
 	it("list() returns registered patterns", async () => {
-		api.hooks.on("before", () => {}, { pattern: "math.*" });
-		api.hooks.on("after", () => {}, { pattern: "*.add" });
-		api.hooks.on("error", () => {}, { pattern: "**" });
+		api.slothlet.hook.on("before:math.*", () => {});
+		api.slothlet.hook.on("after:*.add", () => {});
+		api.slothlet.hook.on("error:**", () => {});
 
-		const allHooks = api.hooks.list();
+		const allHooks = api.slothlet.hook.list();
 		expect(allHooks).toHaveProperty("registeredHooks");
 		expect(allHooks.registeredHooks).toHaveLength(3);
 
-		const beforeHooks = api.hooks.list("before");
+		const beforeHooks = api.slothlet.hook.list("before");
 		expect(beforeHooks).toHaveProperty("registeredHooks");
 		expect(beforeHooks.registeredHooks).toHaveLength(1);
 		expect(beforeHooks.registeredHooks[0].pattern).toBe("math.*");
@@ -438,12 +434,12 @@ describe("Hook Pattern Edge Cases", () => {
 		const paths = [];
 
 		// Match everything
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				paths.push(toHookPath(path));
 			},
-			{ pattern: "**" }
+			{}
 		);
 
 		// With depth 1, only first-level functions should be available

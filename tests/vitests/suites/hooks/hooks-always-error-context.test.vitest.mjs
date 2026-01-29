@@ -45,12 +45,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 	test("should provide empty errors array on success execution", async () => {
 		let alwaysContext = null;
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.add",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
-			{ id: "observe-execution", pattern: "math.add" }
+			{ id: "observe-execution" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -68,20 +68,19 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		let alwaysContext = null;
 
 		// Before hook short-circuits
-		api.hooks.on(
-			"before",
-			() => {
-				return 99; // Short-circuit
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { return 99; // Short-circuit
 			},
-			{ id: "short-circuit", pattern: "math.add", priority: 200 }
+			{ id: "short-circuit", priority: 200 }
 		);
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.add",
 			({ result, hasError, errors }) => {
 				alwaysContext = { result, hasError, errors };
 			},
-			{ id: "observe-execution", pattern: "math.add" }
+			{ id: "observe-execution" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -107,12 +106,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.divide",
 			({ path, result, hasError, errors }) => {
 				alwaysContext = { path, result, hasError, errors };
 			},
-			{ id: "observe-execution", pattern: "math.divide" }
+			{ id: "observe-execution" }
 		);
 
 		// Divide by zero should throw
@@ -144,8 +143,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		});
 
 		// Single always hook handles both success and error logging
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.*",
 			({ path, result, hasError, errors }) => {
 				if (hasError) {
 					logs.push({
@@ -162,7 +161,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 					});
 				}
 			},
-			{ id: "unified-logger", pattern: "math.*" }
+			{ id: "unified-logger" }
 		);
 
 		// Success case
@@ -205,12 +204,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			// suppressErrors: false (default)
 		});
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.divide",
 			({ path, result, hasError, errors, self, context }) => {
 				alwaysContext = { path, result, hasError, errors, self, context };
 			},
-			{ id: "observe-execution", pattern: "math.divide" }
+			{ id: "observe-execution" }
 		);
 
 		let caughtError = null;
@@ -245,8 +244,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:**",
 			({ hasError }) => {
 				metrics.calls++;
 				if (hasError) {
@@ -255,7 +254,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 					metrics.successes++;
 				}
 			},
-			{ id: "metrics-tracker", pattern: "**" }
+			{ id: "metrics-tracker" }
 		);
 
 		// Execute various operations
@@ -287,8 +286,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 			}
 		});
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:**",
 			({ path, hasError, errors }) => {
 				if (hasError) {
 					errorLog.push({
@@ -299,7 +298,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 					});
 				}
 			},
-			{ id: "error-correlator", pattern: "**" }
+			{ id: "error-correlator" }
 		);
 
 		// Generate some errors

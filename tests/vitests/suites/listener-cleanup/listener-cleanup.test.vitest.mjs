@@ -72,9 +72,9 @@ describe.each(getMatrixConfigs({}))("Listener Cleanup - $name", ({ config }) => 
 		emitter3.prependListener("priority", handler1);
 
 		if (config.hooks) {
-			api.hooks.on("before", () => undefined, { pattern: "**" });
-			api.hooks.on("after", ({ result }) => result, { pattern: "**" });
-			api.hooks.on("always", () => undefined, { pattern: "**" });
+			api.slothlet.hook.on("before:**", () => undefined);
+			api.slothlet.hook.on("after:**", ({ result }) => result);
+			api.slothlet.hook.on("always:**", () => undefined);
 		}
 
 		// Trigger listeners to ensure they are active.

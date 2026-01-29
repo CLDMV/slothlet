@@ -51,8 +51,8 @@ describe.each(getMatrixConfigs({}))("TV Config Isolation - $name", ({ config }) 
 		const instance1Info = await api1.config.getInstanceInfo();
 		const instance2Info = await api2.config.getInstanceInfo();
 
-		// Instance IDs should be different
-		expect(instance1Info.instanceId).not.toBe(instance2Info.instanceId);
+		// Instance IDs should be different (using slothlet instance IDs, not module instance IDs)
+		expect(api1.slothlet.instanceID).not.toBe(api2.slothlet.instanceID);
 
 		await api1.shutdown();
 		await api2.shutdown();

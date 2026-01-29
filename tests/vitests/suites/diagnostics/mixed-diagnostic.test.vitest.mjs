@@ -5,15 +5,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config: '$name'", ({ config }) => {
-	let slothlet;
+describe.each(getMatrixConfigs({}))("Mixed Diagnostic > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
-		slothlet = slothletModule.default;
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST_MIXED
+		});
 	});
 
 	afterEach(async () => {
@@ -23,60 +25,30 @@ describe.each(getMatrixConfigs({ hotReload: true }))("Mixed Diagnostic > Config:
 		}
 	});
 
-	it("should have correct API type and structure", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
+	it("should have correct API type and structure", () => {
 		expect(typeof api).toBe("object");
 		expect(api).toBeDefined();
 	});
 
-	it("should expose reload() method when hotReload is enabled", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
-		expect(typeof api.reload).toBe("function");
+	it("should expose reload() method on api.slothlet", () => {
+		expect(typeof api.slothlet.reload).toBe("function");
 	});
 
-	it("should expose mathEsm API", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
+	it("should expose mathEsm API", () => {
 		expect(typeof api.mathEsm).toBe("object");
 		expect(api.mathEsm).toBeDefined();
 	});
 
-	it("should expose mathCjs API", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
+	it("should expose mathCjs API", () => {
 		expect(typeof api.mathCjs).toBe("object");
 		expect(api.mathCjs).toBeDefined();
 	});
 
 	it("should successfully execute reload()", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
 	});
 
 	it("should maintain API structure after reload", async () => {
-		api = await slothlet({
-			...config,
-			dir: TEST_DIRS.API_TEST_MIXED
-		});
-
 		const beforeKeys = Object.keys(api).filter((k) => k !== "slothlet");
 		await api.slothlet.reload();
 		const afterKeys = Object.keys(api).filter((k) => k !== "slothlet");

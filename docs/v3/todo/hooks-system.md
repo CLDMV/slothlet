@@ -56,23 +56,56 @@ throw new this.SlothletError("NOT_IMPLEMENTED", {
    - Can mutate arguments (return array of new args)
    - Can short-circuit execution (return value directly)
    - Chained by priority (highest first)
+   - **MUST be in execution chain** - Modifies behavior, blocks execution
 
 2. **`after` hooks** - Execute after function returns
    - Transform return value (chaining)
    - Cannot prevent function execution
    - Receive original args + return value
+   - **MUST be in execution chain** - Modifies return value, blocks execution
 
 3. **`always` hooks** - Execute regardless of function execution outcome
    - Fires whether function succeeds, fails, or is short-circuited
    - Read-only observer pattern
    - Receives result or error from execution
    - Cannot modify behavior
+   - **MUST be in execution chain** - Timing guarantees (fires before caller receives result)
    - **Note**: Only fires if function execution is attempted (requires path to exist)
 
 4. **`error` hooks** - Execute on errors only
    - Detailed error context with source tracking
    - Can suppress errors (report without throwing)
    - Source phases: before/function/after/always
+   - **MUST be in execution chain** - Can prevent error propagation (suppressErrors)
+
+**Chain Requirement Analysis:**
+
+| Hook Type | Modifies Execution? | Can Defer/Async? | Must Be In Chain? | Reason |
+|-----------|---------------------|------------------|-------------------|---------|
+| `before` | ✅ Yes (args, short-circuit) | ❌ No | ✅ YES | Blocks execution, modifies inputs |
+| `after` | ✅ Yes (return value) | ❌ No | ✅ YES | Transforms output, blocks return |
+| `always` | ❌ No (read-only) | ❌ No | ✅ YES | Timing guarantee - must complete before return |
+| `error` | ✅ Yes (suppress errors) | ❌ No | ✅ YES | Can prevent error throw |
+
+**Why `always` hooks can't be deferred:**
+
+Even though `always` hooks are read-only, they execute in the `finally` block which is part of the synchronous execution flow. If we deferred them:
+
+```javascript
+// Current (synchronous in chain):
+const result = await api.math.add(1, 2);
+// always hooks have fired by now
+console.log("Done");  // User sees this after hooks complete
+
+// If deferred (dangerous):
+const result = await api.math.add(1, 2);
+console.log("Done");  // User sees this first
+// always hooks fire sometime later (timing unpredictable)
+```
+
+Users expect `always` hooks to complete before the function returns to the caller, maintaining execution order guarantees. Deferring would break this contract and make debugging extremely difficult.
+
+**Conclusion:** All 4 hook types MUST be in the execution chain to maintain behavioral correctness and timing guarantees.
 
 ### Hook Registration API
 
@@ -613,9 +646,179 @@ hook: {  // Singular, not plural
 
 ## Performance Considerations
 
-- **Zero overhead when disabled**: No pattern matching if hooks globally disabled
-- **Pattern caching**: Compile patterns once, reuse compiled versions
-- **Early exit**: Skip hook execution if no hooks registered for path
+### ⚠️ CRITICAL: Hook Storage Architecture
+
+**Problem with Naive Implementation:**
+A single flat list that filters all hooks on every function call would cause O(n) pattern matching overhead where n = total registered hooks. With 1000+ hooks, this becomes a major bottleneck.
+
+**Required: Pattern-Grouped Storage**
+
+Hooks stored by type → subset → pattern - each hook stored ONCE (no duplication):
+
+```javascript
+class HookManager {
+    #hooks = {
+        // Group by type → subset → pattern (hooks stored once)
+        before: {
+            before: {               // subset: "before"
+                "math.*": [hook1]
+            },
+            primary: {              // subset: "primary" (default)
+                "math.add": [hook2],
+                "**": [hook3]
+            },
+            after: {                // subset: "after"
+                "database.*": [hook4]
+            }
+        },
+        after: {
+            before: {},
+            primary: {},
+            after: {}
+        },
+        always: {
+            before: {},
+            primary: {},
+            after: {}
+        },
+        error: {
+            before: {},
+            primary: {},
+            after: {}
+        },
+        
+        // Global metadata index
+        byId: new Map()  // Quick lookup by hook ID
+    };
+}
+```
+
+**Hook Registration:**
+
+```javascript
+on(typePattern, handler, options = {}) {
+    const [type, pattern] = this.#parseTypePattern(typePattern);
+    const subset = options.subset || "primary";
+    
+    const hook = {
+        id: options.id || this.#generateId(),
+        type,
+        pattern,
+        handler,
+        priority: options.priority || 0,
+        subset,
+        enabled: true,
+        _compiled: null  // Lazy compile pattern on first use
+    };
+    
+    // Store in type → subset → pattern group (create if needed)
+    if (!this.#hooks[type][subset][pattern]) {
+        this.#hooks[type][subset][pattern] = [];
+    }
+    this.#hooks[type][subset][pattern].push(hook);
+    
+    // Add to ID index
+    this.#hooks.byId.set(hook.id, hook);
+    
+    return hook.id;
+}
+```
+
+**Hook Lookup Algorithm:**
+
+```javascript
+async #getHooksForPath(type, apiPath) {
+    // Fast path: globally disabled
+    if (!this.config.hooks.enabled) return [];
+    
+    const typeIndex = this.#hooks[type];
+    const hooks = [];
+    
+    // Process subsets in order: before → primary → after
+    for (const subset of ["before", "primary", "after"]) {
+        const subsetIndex = typeIndex[subset];
+        
+        // Check each pattern group in this subset
+        for (const [pattern, patternHooks] of Object.entries(subsetIndex)) {
+            // Try exact match first (no compilation needed)
+            if (pattern === apiPath) {
+                hooks.push(...patternHooks.filter(h => h.enabled));
+                continue;
+            }
+            
+            // Check if pattern matches with cached compilation
+            for (const hook of patternHooks) {
+                if (!hook.enabled) continue;
+                
+                if (!hook._compiled) {
+                    hook._compiled = this.#compilePattern(hook.pattern);
+                }
+                
+                if (hook._compiled.test(apiPath)) {
+                    hooks.push(hook);
+                }
+            }
+        }
+    }
+    
+    // Sort by priority once (highest first)
+    return hooks.sort((a, b) => b.priority - a.priority);
+}
+
+// List all hooks for a type (used by list() method)
+#getAllHooksForType(type) {
+    const typeIndex = this.#hooks[type];
+    const allHooks = [];
+    
+    for (const subsetIndex of Object.values(typeIndex)) {
+        for (const patternHooks of Object.values(subsetIndex)) {
+            allHooks.push(...patternHooks);
+        }
+    }
+    
+    return allHooks;
+}
+```
+
+**Performance Characteristics:**
+
+- **Type grouping:** O(1) to get relevant hook type
+- **Subset ordering:** O(1) constant (always 3 subsets: before/primary/after)
+- **Pattern iteration:** O(p) where p = number of unique patterns (typically p << n total hooks)
+- **Exact match check:** O(1) string comparison before regex compilation
+- **Pattern compilation:** Cached on first use, reused for all subsequent calls
+- **Disabled hooks:** Filtered during iteration (no separate enable/disable index needed)
+
+**Performance Comparison: Naive vs. Pattern-Grouped**
+
+| Scenario | Naive Flat List | Pattern-Grouped | Improvement |
+|----------|-----------------|-----------------|-------------|
+| **1000 hooks, 50 patterns** | O(1000) iterations | O(50) iterations | **20x faster** |
+| **10,000 hooks, 200 patterns** | O(10,000) iterations | O(200) iterations | **50x faster** |
+| **100 hooks, 100 patterns** | O(100) iterations | O(100) iterations | Same (worst case) |
+| **Exact match "math.add"** | O(n) scan + regex | O(1) string equality | **100-1000x faster** |
+
+**Real-World Example:**
+
+Application with 1000 hooks:
+- 10 global patterns (`**`, `*.create`, etc.) → 100 hooks
+- 20 namespace patterns (`database.*`, `api.*`, etc.) → 500 hooks  
+- 20 exact matches (`math.add`, `user.login`, etc.) → 400 hooks
+- **Total unique patterns: 50**
+
+Function call to `api.math.add`:
+- **Naive approach:** Check all 1000 hooks = 1000 pattern matches
+- **Pattern-grouped:** Check 50 pattern groups = 50 pattern matches
+- **With exact match:** 1 string comparison, then ~10 wildcard checks
+- **Result: ~100x faster for exact matches, ~20x faster average**
+
+**Additional Optimizations:**
+
+- **Zero overhead when disabled**: Single boolean check before any processing
+- **Pattern caching**: Compile patterns once, store on hook object
+- **Exact match fast path**: String equality check before regex
+- **Type isolation**: Only check hooks of relevant type (before/after/always/error)
+- **Subset ordering**: Natural execution order without additional sorting
 - **Async optimization**: Only await if hooks return promises
 - **Memory cleanup**: Remove hooks on shutdown to prevent leaks
 

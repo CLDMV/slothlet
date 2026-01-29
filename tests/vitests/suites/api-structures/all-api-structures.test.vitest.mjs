@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @fileoverview Comprehensive API structure validation for all test folders
  *
  * @description
@@ -27,29 +27,34 @@ describe("All API Structures Validation", () => {
 		const matrixConfigs = getMatrixConfigs({});
 		const matrixPairs = [];
 
-		// Separate eager and lazy configs
-		const eagerConfigs = matrixConfigs.filter((config) => config.config.mode === "eager");
-		const lazyConfigs = matrixConfigs.filter((config) => config.config.mode === "lazy");
+		// Group configs by their parameters (excluding mode)
+		const configGroups = new Map();
 
-		// Match eager configs with corresponding lazy configs
-		for (const eagerConfig of eagerConfigs) {
-			const lazyConfig = lazyConfigs.find((lazy) => {
-				// Match all config parameters except mode
-				return (
-					lazy.config.runtime === eagerConfig.config.runtime &&
-				lazy.config.allowAddApiOverwrite === eagerConfig.config.allowAddApiOverwrite &&
-				lazy.config.hotReload === eagerConfig.config.hotReload &&
-				lazy.config.apiDepth === eagerConfig.config.apiDepth &&
-				lazy.config.hooks === eagerConfig.config.hooks
-			);
-		});
+		for (const config of matrixConfigs) {
+			// Create a key from all config params except mode
+			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.apiDepth}_${config.config.hooks}`;
 
-		if (lazyConfig) {
-			// Create a descriptive base name from config parameters
-			const baseName = `${eagerConfig.config.runtime}_${eagerConfig.config.allowAddApiOverwrite ? "overwrite" : "nooverwrite"}_${eagerConfig.config.hotReload ? "hotreload" : "nohotreload"}_depth${eagerConfig.config.apiDepth}_${eagerConfig.config.hooks ? "hooks" : "nohooks"}`;
+			if (!configGroups.has(key)) {
+				configGroups.set(key, { eager: null, lazy: null });
+			}
+
+			const group = configGroups.get(key);
+			if (config.config.mode === "eager") {
+				group.eager = config;
+			} else {
+				group.lazy = config;
+			}
+		}
+
+		// Create pairs from groups that have both modes
+		for (const [key, group] of configGroups) {
+			if (group.eager && group.lazy) {
+				const baseName = `${group.eager.config.runtime}_${group.eager.config.allowApiOverwrite ? "overwrite" : "nooverwrite"}_depth${group.eager.config.apiDepth}_${group.eager.config.hooks ? "hooks" : "nohooks"}`;
+
+				matrixPairs.push({
 					name: baseName,
-					lazy: lazyConfig,
-					eager: eagerConfig
+					lazy: group.lazy,
+					eager: group.eager
 				});
 			}
 		}
@@ -106,9 +111,6 @@ describe("All API Structures Validation", () => {
 			// Add matrix configuration parameters
 			if (config.allowApiOverwrite) {
 				args.push("--allowApiOverwrite");
-			}
-			if (config.hotReload) {
-				args.push("--hotReload");
 			}
 			if (config.apiDepth !== undefined) {
 				args.push("--apiDepth", config.apiDepth.toString());

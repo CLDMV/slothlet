@@ -11,7 +11,7 @@ function mockMd5(input) {
 	return "mock-md5-hash-" + input.length;
 }
 
-// EAGER configs with hooks (EAGER_HOOKS, EAGER_HOT_HOOKS)
+// EAGER configs with hooks
 const matrixConfigs = getMatrixConfigs({ mode: "eager", hooks: true, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
@@ -24,8 +24,8 @@ describe("API (eager-hooks)", () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				api_mode: "function",
-				reference: { md5: mockMd5 }
+				reference: { md5: mockMd5 },
+				diagnostics: true
 			});
 		});
 
@@ -61,8 +61,10 @@ describe("API (eager-hooks)", () => {
 				expect(result).toBe("mock-md5-hash-4");
 			});
 
-			it("describe function", () => {
-				expect(typeof api.describe).toBe("function");
+			it("describe function (v3: requires diagnostics)", () => {
+				expect(typeof api.slothlet.diag.describe).toBe("function");
+				const keys = api.slothlet.diag.describe();
+				expect(Array.isArray(keys)).toBe(true);
 			});
 
 			it("shutdown function", () => {

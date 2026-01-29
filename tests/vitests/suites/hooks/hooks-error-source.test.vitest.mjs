@@ -55,8 +55,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.add",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -64,16 +64,15 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				};
 			},
-			{ id: "error-monitor", pattern: "math.add" }
+			{ id: "error-monitor" }
 		);
 
 		// Before hook that throws
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Validation failed");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Validation failed");
 			},
-			{ id: "failing-validator", pattern: "math.add" }
+			{ id: "failing-validator" }
 		);
 
 		// Attempt to call function - error will be captured by error hook
@@ -111,8 +110,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.multiply",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -120,16 +119,15 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				};
 			},
-			{ id: "error-monitor", pattern: "math.multiply" }
+			{ id: "error-monitor" }
 		);
 
 		// Before hook that simulates function error by throwing in function execution
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Function error");
+		api.slothlet.hook.on(
+			"before:math.multiply",
+			() => { throw new Error("Function error");
 			},
-			{ id: "function-error-simulator", pattern: "math.multiply" }
+			{ id: "function-error-simulator" }
 		);
 
 		// Attempt to call function that will throw via hook
@@ -164,8 +162,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.add",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -173,16 +171,15 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				};
 			},
-			{ id: "error-monitor", pattern: "math.add" }
+			{ id: "error-monitor" }
 		);
 
 		// After hook that throws
-		api.hooks.on(
-			"after",
-			() => {
-				throw new Error("Cleanup failed");
+		api.slothlet.hook.on(
+			"after:math.add",
+			() => { throw new Error("Cleanup failed");
 			},
-			{ id: "failing-cleanup", pattern: "math.add" }
+			{ id: "failing-cleanup" }
 		);
 
 		// Attempt to call function - error will be captured by error hook
@@ -219,8 +216,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		let errorContext = null;
 
 		// Error hook to capture context
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.add",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -228,16 +225,15 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				};
 			},
-			{ id: "error-monitor", pattern: "math.add" }
+			{ id: "error-monitor" }
 		);
 
 		// Always hook that throws (but doesn't propagate)
-		api.hooks.on(
-			"always",
-			() => {
-				throw new Error("Always hook failed");
+		api.slothlet.hook.on(
+			"always:math.add",
+			() => { throw new Error("Always hook failed");
 			},
-			{ id: "failing-always", pattern: "math.add" }
+			{ id: "failing-always" }
 		);
 
 		// Call function - should succeed despite always hook error
@@ -269,8 +265,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const errorContexts = [];
 
 		// Error hook to capture all contexts
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:**",
 			({ path, error, source }) => {
 				errorContexts.push({
 					path,
@@ -278,25 +274,23 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				});
 			},
-			{ id: "error-collector", pattern: "**" }
+			{ id: "error-collector" }
 		);
 
 		// Before hook that throws
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Before failed");
+		api.slothlet.hook.on(
+			"before:math.multiply",
+			() => { throw new Error("Before failed");
 			},
-			{ id: "failing-before", pattern: "math.multiply" }
+			{ id: "failing-before" }
 		);
 
 		// Always hook that throws (but doesn't propagate)
-		api.hooks.on(
-			"always",
-			() => {
-				throw new Error("Always failed");
+		api.slothlet.hook.on(
+			"always:math.add",
+			() => { throw new Error("Always failed");
 			},
-			{ id: "failing-always", pattern: "math.add" }
+			{ id: "failing-always" }
 		);
 
 		// Test first error (before hook)
@@ -346,8 +340,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 
 		let errorContext = null;
 
-		api.hooks.on(
-			"error",
+		api.slothlet.hook.on(
+			"error:math.add",
 			({ path, error, source }) => {
 				errorContext = {
 					path,
@@ -355,15 +349,14 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 					source
 				};
 			},
-			{ id: "error-monitor", pattern: "math.add" }
+			{ id: "error-monitor" }
 		);
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Test error");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Test error");
 			},
-			{ id: "test-fail", pattern: "math.add" }
+			{ id: "test-fail" }
 		);
 
 		// Attempt function call
