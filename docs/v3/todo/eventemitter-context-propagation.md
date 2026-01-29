@@ -1,56 +1,18 @@
-# CRITICAL: EventEmitter Context Propagation Missing in V3
+# EventEmitter Context Propagation
 
-**Status:** ⚠️ **NOT IMPLEMENTED** - No stubs, no documentation, no code  
+**Status:** ⚠️ **NOT IMPLEMENTED**  
 **Priority:** 🔴 **CRITICAL** - Breaking feature for event-driven APIs  
-**Impact:** User code using EventEmitters will lose AsyncLocalStorage context across event boundaries  
-**Blocked By:** Requires per-request context (api.run/scope) - ✅ NOW IMPLEMENTED as of 2026-01-28  
-**Ready To Implement:** ✅ YES - Per-request context working, can now add EventEmitter patching
-
----
-
-### How to Run Tests Properly
-
-**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
-```powershell
-npm run debug 2>&1 | Select-Object -Last 40
-npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
-```
-
-**Why tail?**
-- ❌ **WRONG:** Running without tailing shows the START of output, not results
-- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
-
-**📋 When EventEmitter context tests pass 100%:**
-- Add EventEmitter-related test files to `tests/vitests/baseline-tests.json`
-- But ONLY if `npm run debug` AND `npm run testv3 -- --baseline` both pass
-- This ensures we catch regressions in working tests immediately
+**Complexity:** HIGH - Requires EventEmitter.prototype patching and AsyncResource wrapping  
+**Blocked By:** None - Per-request context complete  
+**Ready To Implement:** ✅ YES
 
 ---
 
 ## Problem Statement
 
-V3 of slothlet is **completely missing** the EventEmitter context propagation system that was a core feature of V2. This is a critical architectural gap that will cause silent context loss for any API that uses event-driven patterns (TCP servers, HTTP servers, custom EventEmitters, etc.).
+Event handlers registered on EventEmitter instances lose access to slothlet's AsyncLocalStorage context because they execute in a different async execution context than where they were registered.
 
-### What's Missing
-
-**No EventEmitter patching system in V3:**
-- ❌ No `als-eventemitter.mjs` equivalent
-- ❌ No `auto-wrap.mjs` equivalent  
-- ❌ No AsyncResource-based listener wrapping
-- ❌ No documentation about EventEmitter support
-- ❌ No stubs or placeholders indicating this needs to be implemented
-
-**Search Results:**
-```bash
-# Searching V3 codebase (src/):
-grep -r "EventEmitter" src/         # 0 matches
-grep -r "AsyncResource" src/        # 0 matches (only AsyncLocalStorage import)
-grep -r "async_hooks" src/          # 1 match (AsyncLocalStorage only)
-```
-
-### Why This Is Critical
-
-When API modules use EventEmitters (a fundamental Node.js pattern), event handler callbacks execute in a **different async context** than where they were registered. Without proper context propagation:
+### Example of the Problem
 
 ```javascript
 // What users expect to work:
@@ -73,106 +35,147 @@ export function startServer() {
 }
 ```
 
-**This silently breaks:**
-- TCP servers (net.createServer)
-- HTTP servers (http.createServer)
+**This affects:**
+- TCP servers (`net.createServer`)
+- HTTP/HTTPS servers (`http.createServer`)
 - WebSocket servers
 - Custom EventEmitters
-- Any event-driven API code
-- Third-party libraries that use events
+- Third-party libraries using events
+- Any event-driven API pattern
 
 ---
 
-## V2 Implementation (What Needs To Be Ported)
+## V3 Design Considerations
 
-V2 had **two critical files** that handled EventEmitter context propagation:
+### Integration Options
 
-### 1. `src2/lib/helpers/als-eventemitter.mjs` (393 lines)
+**Option 1: Global EventEmitter.prototype Patching**
+- ✅ Automatic - no API author changes needed
+- ✅ Works for all EventEmitters (including third-party)
+- ⚠️ Modifies global prototype
+- ⚠️ Could conflict with other libraries
 
-**Purpose:** Patches `EventEmitter.prototype` globally to preserve AsyncLocalStorage context across all event listeners using Node.js AsyncResource API.
+**Option 2: Per-Instance Wrapping**
+- ✅ No global patching
+- ✅ Explicit opt-in
+- ⚠️ API authors must remember to wrap
+- ⚠️ Easy to forget, leading to subtle bugs
 
-**Key Components:**
+**Option 3: Hybrid (Recommended)**
+- Global patching as default (can be disabled)
+- Explicit wrappers available for granular control
+- Config option: `eventEmitter: { autoWrap: true/false }`
+- Best of both worlds
 
-#### A. EventEmitter Prototype Patching
+### Core Implementation Strategy
+
+**Use Node.js AsyncResource API:**
 ```javascript
-enableAlsForEventEmitters(als) {
-    // Patches EventEmitter.prototype methods:
-    // - on, once, addListener
-    // - prependListener, prependOnceListener  
-    // - off, removeListener, removeAllListeners
-}
-```
+import { AsyncResource } from "node:async_hooks";
+import { EventEmitter } from "node:events";
 
-#### B. Listener Wrapping with AsyncResource
-```javascript
-function runtime_wrapListener(listener) {
-    const alsInstance = activeAls;
-    const store = alsInstance.getStore(); // Capture context at registration time
+function wrapListener(listener, contextManager, instanceID) {
+    // Capture context at registration time
+    const store = contextManager.getStore();
+    const resource = new AsyncResource("slothlet-event-listener");
     
-    const resource = new AsyncResource("slothlet-als-listener");
-    
-    const runtime_wrappedListener = function(...args) {
-        // Re-enter the ALS store captured at registration
+    const wrappedListener = function(...args) {
+        // Execute listener within captured context
         return resource.runInAsyncScope(() => 
-            alsInstance.run(resolvedStore, () => 
+            contextManager.runInContext(instanceID, () =>
                 listener.apply(this, args)
-            ), 
-            this, 
-            ...args
+            ),
+            this
         );
     };
     
-    return runtime_wrappedListener;
+    // Track for cleanup
+    wrappedListener._slothletOriginal = listener;
+    wrappedListener._slothletResource = resource;
+    
+    return wrappedListener;
 }
 ```
 
-#### C. Tracking and Cleanup
+### Patching Strategy
+
+**Patch EventEmitter.prototype methods:**
+1. `on` / `addListener` - Wrap listener before adding
+2. `once` - Wrap listener, ensure cleanup after first call
+3. `prependListener` / `prependOnceListener` - Same wrapping
+4. `removeListener` / `off` - Clean up AsyncResource
+5. `removeAllListeners` - Batch cleanup
+
+**Key Implementation Details:**
 ```javascript
-// Track all wrapped listeners for proper cleanup
-const globalListenerTracker = new WeakMap();
-const globalResourceSet = new Set();
-const allPatchedListeners = new Set();
+const originalOn = EventEmitter.prototype.on;
 
-// Clean up AsyncResource on removeListener
-if (wrapped._slothletResource) {
-    const resource = wrapped._slothletResource;
-    globalResourceSet.delete(resource);
-    resource.emitDestroy();
-}
-```
-
-#### D. Key Features
-- **Capture-at-registration:** Context is captured when `.on()` is called, not when event fires
-- **AsyncResource isolation:** Each listener gets its own AsyncResource
-- **Proper cleanup:** Resources are destroyed when listeners are removed
-- **Global tracking:** All patched listeners tracked for shutdown cleanup
-- **Runtime ALS injection:** Runtime can inject the shared ALS instance
-
-### 2. `src2/lib/helpers/auto-wrap.mjs` (85 lines)
-
-**Purpose:** Automatically wraps Node.js built-in modules (like `net`) so that EventEmitter instances created within API context are automatically context-aware.
-
-**Key Components:**
-
-#### A. Module-Level Auto-Wrapping
-```javascript
-export async function autoWrapEventEmitters(nodeModule) {
-    const { self } = await import("@cldmv/slothlet/runtime/async");
-    if (!self?.__ctx) {
-        return nodeModule; // Not in slothlet context
+EventEmitter.prototype.on = function(event, listener) {
+    // Check if we're in slothlet context
+    const contextManager = getActiveContextManager();
+    if (!contextManager) {
+        // Not in slothlet, use original
+        return originalOn.call(this, event, listener);
     }
     
-    const { makeWrapper } = await import("@cldmv/slothlet/runtime/async");
-    const wrapper = makeWrapper(self.__ctx);
+    // Wrap listener with context preservation
+    const wrapped = wrapListener(listener, contextManager, getInstanceID());
     
-    // Create wrapped version
+    // Track wrapped listener for removal
+    trackListener(this, event, listener, wrapped);
+    
+    // Call original with wrapped listener
+    return originalOn.call(this, event, wrapped);
+};
+```
+
+---
+
+## V2 Implementation Reference
+
+V2 had two files handling EventEmitter context propagation. These provide implementation guidance but should be redesigned for V3's architecture.
+
+### V2 File 1: `src2/lib/helpers/als-eventemitter.mjs`
+
+**Core Concepts to Port:**
+1. AsyncResource-based listener wrapping (✅ Good approach, reuse)
+2. Capture context at registration time (✅ Critical pattern)
+3. Track wrapped listeners in WeakMap (✅ Prevents memory leaks)
+4. Clean up AsyncResource on removeListener (✅ Essential)
+5. Global tracking for shutdown cleanup (✅ Important)
+
+**V2 Code Pattern (Reference):**
+**V2 Code Pattern (Reference):**
+```javascript
+// V2 approach - capture at registration, execute in captured context
+function runtime_wrapListener(listener) {
+    const alsInstance = activeAls;
+    const store = alsInstance.getStore();
+    const resource = new AsyncResource("slothlet-als-listener");
+    
+    return function(...args) {
+        return resource.runInAsyncScope(() => 
+            alsInstance.run(store, () => listener.apply(this, args)),
+            this, ...args
+        );
+    };
+}
+```
+
+### V2 File 2: `src2/lib/helpers/auto-wrap.mjs`
+
+**Purpose:** Convenience wrappers for Node.js built-in modules so EventEmitter instances are automatically context-aware.
+
+**Core Concept:**
+```javascript
+// V2 approach - wrap module methods that return EventEmitters
+export async function autoWrapEventEmitters(nodeModule) {
     const wrappedModule = { ...nodeModule };
     
-    // Wrap EventEmitter constructors
     if (typeof nodeModule.createServer === "function") {
         wrappedModule.createServer = function(...args) {
             const server = originalCreateServer.apply(this, args);
-            return wrapper(server); // Return wrapped instance
+            return wrapEmitterInstance(server); // Wrap the returned server
         };
     }
     
@@ -180,295 +183,229 @@ export async function autoWrapEventEmitters(nodeModule) {
 }
 ```
 
-#### B. Convenient Getters
+**V3 Should Simplify:**
+- Don't need module-level wrapping if global patching works
+- Provide opt-in wrappers for explicit control
+- Make it easier (less boilerplate) than V2
+
+---
+
+## V3 Implementation Plan
+
+### Phase 1: Core EventEmitter Patching
+
+1. **Create helper module:** `src/lib/helpers/event-emitter-context.mjs`
+2. **Implement listener wrapping** using AsyncResource
+3. **Patch EventEmitter.prototype methods:**
+   - `on`, `once`, `addListener`
+   - `prependListener`, `prependOnceListener`
+   - `off`, `removeListener`, `removeAllListeners`
+4. **Implement tracking system** (WeakMap for wrapped listeners)
+5. **Add cleanup logic** for AsyncResource instances
+
+### Phase 2: Context Manager Integration
+
+1. **Hook into context-async.mjs initialization**
+   - Enable patching when context manager is created
+   - Provide contextManager reference to patching system
+2. **Add shutdown cleanup**
+   - Remove all wrapped listeners
+   - Destroy all AsyncResource instances
+   - Restore original EventEmitter methods
+3. **Config option:** `eventEmitter: { enabled: true, autoWrap: true }`
+
+### Phase 3: Convenience Wrappers (Optional)
+
+1. **Explicit wrapper function**
+   ```javascript
+   export function wrapEmitter(emitter) {
+       // Manually wrap specific emitter instance
+   }
+   ```
+2. **Runtime export** for API modules
+   ```javascript
+   import { wrapEmitter } from "@cldmv/slothlet/runtime";
+   ```
+
+### Phase 4: Testing
+
+1. **TCP server test** - `net.createServer` context preservation
+2. **HTTP server test** - `http.createServer` context preservation
+3. **Custom EventEmitter test** - User-defined EventEmitter subclasses
+4. **Nested handlers test** - socket.on("data") inside server.on("connection")
+5. **Listener removal test** - Verify AsyncResource cleanup
+6. **Shutdown cleanup test** - Verify all resources destroyed
+7. **Performance benchmark** - Measure overhead
+
+---
+
+## Test Requirements
+
+### TCP Server Test Module
+
 ```javascript
-export async function getNet() {
-    const originalNet = await import("node:net");
-    return autoWrapEventEmitters(originalNet.default || originalNet);
+// api_tests/api_test/tcp-server.mjs
+import { self, context } from "@cldmv/slothlet/runtime";
+import net from "node:net";
+
+export function createServer() {
+    const connections = [];
+    
+    const server = net.createServer((socket) => {
+        // Should have context access
+        const user = context.user;
+        const requestId = context.requestId;
+        
+        connections.push({ user, requestId, timestamp: Date.now() });
+        
+        socket.on("data", (data) => {
+            // Nested handler should also have context
+            self.logger.log(`Data from ${context.user}: ${data}`);
+        });
+        
+        socket.on("end", () => {
+            // Context in cleanup handlers too
+            self.logger.log(`${context.user} disconnected`);
+        });
+    });
+    
+    return { server, connections };
 }
 ```
 
-**Usage in API modules:**
-```javascript
-// Instead of: import net from "node:net";
-import { getNet } from "@cldmv/slothlet/src/lib/helpers/auto-wrap";
-const net = await getNet(); // Returns wrapped version
+### Test Suite
 
-// Now server and sockets automatically preserve context
-const server = net.createServer((socket) => {
-    console.log(context.user); // ✅ Works!
+```javascript
+describe.each(getMatrixConfigs({}))("EventEmitter Context - $name", ({ config }) => {
+    test("Context preserved in server.on('connection')", async () => {
+        const api = await slothlet({
+            ...config,
+            dir: TEST_DIRS.API_TEST,
+            context: { user: "alice", requestId: "req-123" }
+        });
+        
+        const { server, connections } = api.createServer();
+        server.listen(0); // Random port
+        
+        const port = server.address().port;
+        const client = net.connect(port);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        expect(connections).toHaveLength(1);
+        expect(connections[0].user).toBe("alice");
+        expect(connections[0].requestId).toBe("req-123");
+        
+        client.end();
+        server.close();
+        await api.shutdown();
+    });
+    
+    test("Context preserved in nested socket.on('data')", async () => {
+        // Test nested event handlers
+    });
+    
+    test("Context preserved with .run() isolation", async () => {
+        // Test per-request context works with EventEmitters
+        await api.slothlet.context.run({ userId: "bob" }, async () => {
+            const { server } = api.createServer();
+            // Server should see "bob" in handlers
+        });
+    });
 });
 ```
 
 ---
 
-## Related Test Files
+## Key Design Questions
 
-The following test files in `tests/vitests` are related to EventEmitter context propagation:
+### 1. Where to Hook the Patching?
 
-- **`suites/context/tcp-eventemitter-context.test.vitest.mjs`** - Tests EventEmitter context preservation across TCP socket events
-- **`suites/context/tcp-context-propagation.test.vitest.mjs`** - Tests context propagation in TCP server scenarios
-- **`suites/context/auto-context-propagation.test.vitest.mjs`** - Tests automatic context propagation
-- **`suites/listener-cleanup/listener-cleanup.test.vitest.mjs`** - Tests EventEmitter listener cleanup on shutdown
-- **`suites/listener-cleanup/third-party-cleanup.test.vitest.mjs`** - Tests cleanup of third-party EventEmitter listeners
+**Option A:** In Slothlet class constructor
+- ✅ Early initialization
+- ✅ Simple lifecycle
+- ⚠️ Always patches, even if not needed
 
----
+**Option B:** In context-async.mjs initialization
+- ✅ Only patches when ALS runtime is used
+- ✅ Tied to actual context system
+- ⚠️ More complex initialization sequence
 
-## What V3 Needs
+**Option C:** Lazy patching on first API load
+- ✅ Zero overhead if no EventEmitters used
+- ⚠️ More complex detection logic
+- ⚠️ Could miss early EventEmitters
 
-### Required Components
+**Recommendation:** Option B - patch in context-async.mjs initialization
 
-1. **EventEmitter Patching System**
-   - Port `als-eventemitter.mjs` to V3 architecture
-   - Integrate with V3's UnifiedWrapper system
-   - Use V3's context-async.mjs instead of separate runtime
-   - Support both async and live runtime modes
+### 2. How to Handle Live Binding Runtime?
 
-2. **Auto-Wrapping Helpers**
-   - Port `auto-wrap.mjs` concept
-   - Provide convenient wrappers for common Node.js modules:
-     - `net` (TCP servers)
-     - `http`/`https` (HTTP servers)  
-     - `events` (custom EventEmitters)
-   - Make it easy for API authors to opt-in
+Live binding runtime doesn't use AsyncLocalStorage. Options:
 
-3. **Integration Points**
+**Option A:** Skip EventEmitter patching for live mode
+- Context is lost in event handlers
+- Document limitation
 
-   **A. Component-Based Architecture:**
-   ```javascript
-   // V3 uses ComponentBase pattern
-   export class EventEmitterHelper extends ComponentBase {
-       static slothletProperty = "eventEmitterHelper";
-       
-       enablePatching() {
-           // Patch EventEmitter.prototype
-       }
-       
-       disablePatching() {
-           // Restore original methods
-       }
-       
-       wrapEmitter(emitter) {
-           // Wrap specific instance
-       }
-   }
-   ```
+**Option B:** Different wrapping strategy for live mode
+- More complex
+- Two codepaths to maintain
 
-   **B. Runtime Integration:**
-   ```javascript
-   // src/lib/handlers/context-async.mjs needs to:
-   // 1. Import the EventEmitter helper
-   // 2. Call enablePatching() during initialization
-   // 3. Call disablePatching() during shutdown
-   ```
+**Option C:** Recommend async runtime for EventEmitter-heavy apps
+- Simpler codebase
+- Clear guidance to users
 
-   **C. UnifiedWrapper Support:**
-   ```javascript
-   // UnifiedWrapper may need EventEmitter-specific handling
-   // Check if target is EventEmitter subclass
-   if (target instanceof EventEmitter) {
-       // Apply additional event-specific wrapping
-   }
-   ```
+**Recommendation:** Option C initially, consider Option B if needed
 
-4. **Documentation Updates**
-   - Update `docs/CONTEXT-PROPAGATION.md` with V3-specific details
-   - Add EventEmitter examples to API documentation
-   - Document auto-wrap helpers usage
-   - Add migration notes for V2 → V3 users
+### 3. Cleanup Strategy?
 
-5. **Testing Requirements**
-   - Test TCP server context propagation
-   - Test HTTP server context propagation
-   - Test custom EventEmitters
-   - Test nested event handlers
-   - Test listener removal and cleanup
-   - Test shutdown behavior
-   - Test with both async and live runtime modes
+**On removeListener:**
+- Destroy individual AsyncResource
+- Remove from tracking WeakMap
+- Clean up references
 
----
+**On shutdown:**
+- Iterate all tracked resources
+- Destroy all AsyncResource instances
+- Restore original EventEmitter.prototype methods
+- Clear all tracking structures
 
-## Architecture Considerations for V3
+### 4. Config API?
 
-### Differences from V2
-
-**V2 Architecture:**
-- Separate runtime files (`runtime/async.mjs`, `runtime/live.mjs`)
-- `makeWrapper()` function for wrapping objects
-- Separate ALS instance management
-
-**V3 Architecture:**
-- Unified `context-async.mjs` handler
-- ComponentBase pattern for all helpers
-- UnifiedWrapper for proxy-based wrapping
-- Single AsyncLocalStorage instance in context manager
-
-### Integration Strategy
-
-**Option 1: Global EventEmitter Patching (V2 approach)**
-- ✅ Automatic - works for all EventEmitters
-- ✅ No API author changes needed
-- ⚠️ Affects global prototype
-- ⚠️ Could conflict with other libraries
-
-**Option 2: Explicit Wrapping (Safer)**
-- ✅ No global patching
-- ✅ Explicit opt-in per module
-- ⚠️ API authors must use wrapped versions
-- ⚠️ Easy to forget and lose context
-
-**Option 3: Hybrid Approach (Recommended)**
-- Global patching for AsyncLocalStorage runtime (like V2)
-- Explicit wrapping helpers available for granular control
-- Documentation guides users to best practices
-- Disable global patching if conflicts detected
-
-### Performance Considerations
-
-**V2 Metrics:**
-- AsyncResource overhead: ~2-5% per event
-- Wrapping overhead: Minimal (WeakMap lookup)
-- Cleanup overhead: Negligible
-
-**V3 Should:**
-- Benchmark against V2 performance
-- Consider lazy patching (only patch when first EventEmitter is created in API context)
-- Reuse AsyncResource instances when possible
-- Ensure WeakMap cleanup doesn't leak memory
-
----
-
-## Implementation Checklist
-
-### Phase 1: Core Infrastructure
-- [ ] Create `src/lib/helpers/event-emitter-helper.mjs` component class
-- [ ] Port AsyncResource-based listener wrapping logic
-- [ ] Integrate with V3's context manager (AsyncLocalStorage access)
-- [ ] Add enable/disable patching methods
-- [ ] Add global tracking for cleanup
-
-### Phase 2: Integration
-- [ ] Hook into `context-async.mjs` initialization
-- [ ] Add shutdown cleanup to context manager
-- [ ] Test with UnifiedWrapper compatibility
-- [ ] Handle both async and live runtime modes
-
-### Phase 3: Auto-Wrapping Helpers
-- [ ] Create `src/lib/helpers/auto-wrap-net.mjs`
-- [ ] Create `src/lib/helpers/auto-wrap-http.mjs`  
-- [ ] Provide convenient module getter functions
-- [ ] Document usage patterns
-
-### Phase 4: Testing
-- [ ] Add TCP server test (net.createServer)
-- [ ] Add HTTP server test (http.createServer)
-- [ ] Add custom EventEmitter test
-- [ ] Add nested event handler test
-- [ ] Add cleanup and removal test
-- [ ] Add performance benchmarks
-
-### Phase 5: Documentation
-- [ ] Update `CONTEXT-PROPAGATION.md` for V3
-- [ ] Add EventEmitter examples to API docs
-- [ ] Document auto-wrap helper usage
-- [ ] Add V2→V3 migration notes
-- [ ] Update changelog
-
----
-
-## Code References
-
-### V2 Files (Source Material)
-```
-src2/lib/helpers/als-eventemitter.mjs    (393 lines)
-src2/lib/helpers/auto-wrap.mjs           (85 lines)
+**Proposed config:**
+```javascript
+const api = await slothlet({
+    dir: "./api",
+    eventEmitter: {
+        enabled: true,        // Enable EventEmitter patching
+        autoWrap: true,       // Patch globally or require explicit wrapping
+        asyncResourceName: "slothlet-event-listener"
+    }
+});
 ```
 
-### V3 Integration Points
-```
-src/lib/handlers/context-async.mjs       (AsyncLocalStorage runtime)
-src/lib/handlers/unified-wrapper.mjs     (Proxy-based wrapping)
-src/lib/factories/component-base.mjs     (Component pattern)
-```
-
-### Documentation Files
-```
-docs/CONTEXT-PROPAGATION.md              (Claims EventEmitter support works)
-docs/changelog/v2.3.md                   (EventEmitter feature announcement)
-```
+**Alternative:** No config, always enabled for async runtime
 
 ---
 
-## Risk Assessment
+## Success Criteria
 
-**Critical Risks:**
-
-1. **Silent Failures**
-   - Users won't get errors, context will just be `undefined`
-   - Data corruption risk (wrong user's context in multi-tenant apps)
-   - Security risk (accessing wrong session data)
-
-2. **Documentation Mismatch**
-   - `CONTEXT-PROPAGATION.md` claims EventEmitter support works
-   - Users will expect it based on docs
-   - No migration guide warns about this gap
-
-3. **V2→V3 Breaking Change**
-   - Users upgrading from V2 will silently lose EventEmitter context
-   - No deprecation warnings
-   - No runtime errors to indicate the issue
-
-**Mitigation:**
-- Add this to `BREAKING-CHANGES-V3.md` immediately
-- Add runtime warning if EventEmitter is detected in API modules
-- Prioritize implementation before V3 stable release
+-  EventEmitter.prototype patched to preserve ALS context
+-  Context accessible in all event handlers (\`server.on\`, \`socket.on\`, etc.)
+-  Nested event handlers work correctly
+-  AsyncResource properly created and destroyed
+-  removeListener/removeAllListeners clean up resources
+-  Shutdown cleanup destroys all resources
+-  Works with tcp-eventemitter-context.test.vitest.mjs (currently failing)
+-  Performance overhead < 10% vs unwrapped
+-  No memory leaks
+-  Full test coverage
 
 ---
 
-## Questions to Resolve
+## Related
 
-1. **Should EventEmitter patching be opt-in or automatic?**
-   - V2: Automatic via `runtime: "async"` config
-   - V3: Consider explicit opt-in to avoid surprises?
-
-2. **How does this interact with UnifiedWrapper?**
-   - Should UnifiedWrapper detect EventEmitter subclasses?
-   - Should auto-wrapping happen at module load or instance creation?
-
-3. **What about live-binding runtime?**
-   - V2 auto-wrap only worked with async runtime
-   - Does V3 live runtime need EventEmitter support?
-   - Different approach needed?
-
-4. **Memory management strategy?**
-   - V2 used WeakMaps and Sets for tracking
-   - V3 UnifiedWrapper already tracks instances
-   - Can we reuse existing tracking infrastructure?
-
-5. **Third-party EventEmitter subclasses?**
-   - V2 patched `EventEmitter.prototype` (catches all subclasses)
-   - V3 should do the same or provide explicit wrappers?
-
----
-
-## Related Issues
-
-- `BREAKING-CHANGES-V3.md` - Should document EventEmitter gap
-- `V2-V3-GAP-LIST.md` - Should list this as a missing feature
-- `docs/CONTEXT-PROPAGATION.md` - Incorrectly claims EventEmitter support exists in V3
-
----
-
-## Next Steps
-
-1. **Immediate:** Add to BREAKING-CHANGES-V3.md
-2. **Short-term:** Create EventEmitterHelper component class
-3. **Medium-term:** Port core patching logic from V2
-4. **Long-term:** Add auto-wrap helpers and documentation
-
----
-
-**Document Created:** 2026-01-24  
-**Priority:** CRITICAL  
-**Estimated Effort:** 3-5 days (core patching) + 2-3 days (helpers + docs + tests)  
-**Risk if not implemented:** Silent context loss, data corruption, security issues in production
+- [Class Instance Context Propagation](./class-instance-context-propagation.md) - Similar wrapping challenge
+- [Per-Request Context Isolation](./completed/per-request-context-isolation.md) - Context foundation
+- [CONTEXT-PROPAGATION.md](../../CONTEXT-PROPAGATION.md) - User documentation
+- V2 Reference: \`src2/lib/helpers/als-eventemitter.mjs\`
+- V2 Reference: \`src2/lib/helpers/auto-wrap.mjs\`
