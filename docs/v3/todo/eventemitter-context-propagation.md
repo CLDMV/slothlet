@@ -2,7 +2,9 @@
 
 **Status:** ⚠️ **NOT IMPLEMENTED** - No stubs, no documentation, no code  
 **Priority:** 🔴 **CRITICAL** - Breaking feature for event-driven APIs  
-**Impact:** User code using EventEmitters will lose AsyncLocalStorage context across event boundaries
+**Impact:** User code using EventEmitters will lose AsyncLocalStorage context across event boundaries  
+**Blocked By:** Requires per-request context (api.run/scope) - ✅ NOW IMPLEMENTED as of 2026-01-28  
+**Ready To Implement:** ✅ YES - Per-request context working, can now add EventEmitter patching
 
 ---
 

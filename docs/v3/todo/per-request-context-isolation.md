@@ -1,9 +1,120 @@
-# Per-Request Context Isolation (api.run / api.scope)
+# Per-Request Context Isolation (api.slothlet.context.run / api.slothlet.context.scope)
 
-**Status:** ❌ NOT IMPLEMENTED  
+**Status:** ✅ **FULLY IMPLEMENTED**  
 **Priority:** 🟡 MEDIUM - Ergonomic enhancement for per-request isolation  
 **Complexity:** MEDIUM - Requires ALS context nesting and merge strategies  
+**Implementation Date:** 2026-01-28  
+**Test Results:** ✅ 77/77 tests passing (100%)  
 **Related:** [docs/CONTEXT-PROPAGATION.md](../../CONTEXT-PROPAGATION.md) - Complete V2 documentation (604 lines)
+
+---
+
+## Implementation Summary
+
+**✅ COMPLETED:**
+- ✅ `api.slothlet.context.run(contextData, callback, ...args)` - Per-request context isolation
+- ✅ `api.slothlet.context.scope({ context, fn, args, merge })` - Structured per-request context
+- ✅ Shallow merge support (default)
+- ✅ Deep merge support (config: `scope: { merge: "deep" }`)
+- ✅ Works with AsyncLocalStorage (async runtime)
+- ✅ Works with Live Bindings (live runtime)
+- ✅ Nested context preservation
+- ✅ Argument forwarding (...args support)
+- ✅ Error handling for invalid parameters
+- ✅ Config validation: `scope: false` disables per-request context (throws error on usage)
+- ✅ Config validation: Invalid merge strategies throw at initialization time
+- ✅ All runtime modes supported (EAGER, LAZY, EAGER_LIVE, LAZY_LIVE)
+- ✅ Context properly propagates through nested API calls via AsyncContextManager optimization
+
+**Files Modified:**
+- `src/lib/builders/api_builder.mjs` - Added createRunFunction() and createScopeFunction()
+- `src/lib/builders/api_builder.mjs` - Updated createSlothletNamespace() to add context.run/scope
+- `src/lib/helpers/config.mjs` - Added scope.merge validation in transformConfig()
+- `src/lib/handlers/context-async.mjs` - Optimized runInContext() to preserve active ALS context
+- `tests/vitests/suites/context/per-request-context.test.vitest.mjs` - Updated to use api.slothlet.context.* API
+
+---
+
+### V3 API Reference (Implemented)
+
+#### api.slothlet.context.run(contextData, callback, ...args)
+
+**Purpose:** Executes a callback function with isolated context data.
+
+**Parameters:**
+- `contextData` (Object) - Context data to merge with current context
+- `callback` (Function) - Function to execute with isolated context
+- `...args` (any) - Arguments to pass to the callback
+
+**Returns:** Result of the callback function
+
+**Example:**
+
+```javascript
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({
+    dir: "./api",
+    context: { app: "myApp", version: "1.0" }
+});
+
+// Execute with isolated per-request context
+const result = await api.slothlet.context.run(
+    { userId: "alice", requestId: "req-123" },
+    async (data) => {
+        // Inside callback, context has both global and request-specific data
+        // context = { app: "myApp", version: "1.0", userId: "alice", requestId: "req-123" }
+        return api.processRequest(data);
+    },
+    { payload: "test data" }
+);
+
+// After callback, context reverts to { app: "myApp", version: "1.0" }
+```
+
+---
+
+#### api.slothlet.context.scope({ context, fn, args, merge })
+
+**Purpose:** Executes a function with isolated context using structured options.
+
+**Parameters:**
+- `context` (Object) - Context data to merge
+- `fn` (Function) - Function to execute
+- `args` (Array, optional) - Arguments array for the function
+- `merge` (String, optional) - Merge strategy: `"shallow"` (default) or `"deep"`
+
+**Returns:** Result of the function
+
+**Example:**
+
+```javascript
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({
+    dir: "./api",
+    context: { config: { timeout: 5000 } }
+});
+
+// Shallow merge (default) - replaces entire config object
+const result1 = await api.slothlet.context.scope({
+    context: { config: { retries: 3 } },
+    fn: async () => {
+        // context.config = { retries: 3 } (config.timeout lost)
+        return api.fetchData();
+    }
+});
+
+// Deep merge - merges nested properties
+const result2 = await api.slothlet.context.scope({
+    context: { config: { retries: 3 } },
+    fn: async () => {
+        // context.config = { timeout: 5000, retries: 3 } (merged)
+        return api.fetchData();
+    },
+    merge: "deep"
+});
+```
 
 ---
 

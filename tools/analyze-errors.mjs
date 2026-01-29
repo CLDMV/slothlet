@@ -268,8 +268,8 @@ function parseConsoleLogs(content, filePath) {
 function parseErrorThrows(content, filePath) {
 	const errors = [];
 
-	// Find throw statements for SlothletError and new SlothletWarning
-	const throwPattern = /(?:throw\s+(?:await\s+)?(?:new\s+)?SlothletError|new\s+SlothletWarning)(?:\.create)?/g;
+	// Find throw statements for SlothletError and new SlothletWarning (including this.SlothletError/this.SlothletWarning)
+	const throwPattern = /(?:throw\s+(?:await\s+)?(?:new\s+)?(?:this\.)?SlothletError|new\s+(?:this\.)?SlothletWarning)(?:\.create)?/g;
 
 	const throwStarts = [];
 	let match;

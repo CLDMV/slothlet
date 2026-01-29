@@ -286,10 +286,10 @@ async function runSingleFile(filePath, maxOldSpaceMb) {
 
 		const baseEnv = { ...process.env };
 		if (!baseEnv.NODE_ENV) baseEnv.NODE_ENV = "development";
-		const hasDevCondition = baseEnv.NODE_OPTIONS?.includes("--conditions=development");
+		const hasDevCondition = baseEnv.NODE_OPTIONS?.includes("--conditions=slothlet-dev");
 		if (!hasDevCondition) {
 			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";
-			baseEnv.NODE_OPTIONS = `${existing}--conditions=development`.trim();
+			baseEnv.NODE_OPTIONS = `${existing}--conditions=slothlet-dev`.trim();
 		}
 		if (maxOldSpaceMb && !baseEnv.NODE_OPTIONS?.includes("--max-old-space-size")) {
 			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";

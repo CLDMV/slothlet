@@ -1,8 +1,8 @@
 /**
- * @fileoverview Test addApi path resolution from different call stack depths
+ * @fileoverview Test api.slothlet.api.add path resolution from different call stack depths
  *
  * @description
- * Tests that addApi resolves paths correctly regardless of:
+ * Tests that api.slothlet.api.add resolves paths correctly regardless of:
  * - Call stack depth (direct call vs through helper functions)
  * - Helper function location (same file, different file, nested)
  * - Working directory changes
@@ -18,11 +18,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
-describe("addApi Path Resolution", () => {
+describe("api.slothlet.api.add Path Resolution", () => {
 	let api;
 
 	/**
-	 * Helper function in the same file - simulates passing addApi through a layer
+	 * Helper function in the same file - simulates passing api.slothlet.api.add through a layer
 	 */
 	async function helperInSameFile(api, path, metadata, options) {
 		return await api.slothlet.api.add("helper.same", path, metadata, options);
@@ -50,9 +50,9 @@ describe("addApi Path Resolution", () => {
 			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST });
 		});
 		/**
-		 * Test 1: Direct addApi call from test file
+		 * Test 1: Direct api.slothlet.api.add call from test file
 		 */
-		it("should resolve paths correctly for direct addApi call", async () => {
+		it("should resolve paths correctly for direct api.slothlet.api.add call", async () => {
 			await api.slothlet.api.add("direct.test", `../../../../${API_TEST_BASE}/api_test_mixed`);
 			expect(api.direct).toBeDefined();
 			expect(api.direct.test).toBeDefined();
@@ -103,8 +103,8 @@ describe("addApi Path Resolution", () => {
 		});
 
 		/**
-		 * Test 6: Direct addApi call FROM nested directory file
-		 * Tests that when the addApi call itself is IN the nested file,
+		 * Test 6: Direct api.slothlet.api.add call FROM nested directory file
+		 * Tests that when the api.slothlet.api.add call itself is IN the nested file,
 		 * the path should resolve relative to that nested file's location
 		 */
 		it("should resolve paths correctly for direct call FROM nested directory file", async () => {
@@ -121,7 +121,7 @@ describe("addApi Path Resolution", () => {
 		 */
 		it("should resolve paths correctly for double-nested closure call", async () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
-			// Call through nested helper, which calls helperInSameFile, which calls addApi
+			// Call through nested helper, which calls helperInSameFile, which calls api.slothlet.api.add
 			await executeWithApi(api, async (api) => {
 				await helperInSameFile(api, `../../../../${API_TEST_BASE}/api_test`, {}, {});
 			});

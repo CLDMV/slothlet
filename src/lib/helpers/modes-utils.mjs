@@ -84,7 +84,7 @@ export class ModesUtils extends ComponentBase {
 	/**
 	 * Helper to determine collision mode for ownership conflicts
 	 * @param {Object} config - Slothlet configuration
-	 * @param {string} collisionContext - Either 'initial' or 'addApi'
+	 * @param {string} collisionContext - Either 'initial' or 'api'
 	 * @returns {string} Collision mode from config
 	 * @public
 	 */
@@ -92,12 +92,3 @@ export class ModesUtils extends ComponentBase {
 		return config.collision?.[collisionContext] || "merge";
 	}
 }
-
-// Backwards-compatible standalone exports
-const modesUtilsInstance = new ModesUtils();
-
-export const getSafeFunctionName = modesUtilsInstance.getSafeFunctionName.bind(modesUtilsInstance);
-export const ensureNamedExportFunction = modesUtilsInstance.ensureNamedExportFunction.bind(modesUtilsInstance);
-export const createNamedMaterializeFunc = modesUtilsInstance.createNamedMaterializeFunc.bind(modesUtilsInstance);
-export const cloneWrapperImpl = modesUtilsInstance.cloneWrapperImpl.bind(modesUtilsInstance);
-export const getOwnershipCollisionMode = modesUtilsInstance.getOwnershipCollisionMode.bind(modesUtilsInstance);

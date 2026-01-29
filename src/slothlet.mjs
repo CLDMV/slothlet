@@ -157,7 +157,7 @@ class Slothlet {
 			// This prevents duplicate registrations during replacement operations
 			this.handlers.lifecycle.subscribe("impl:created", (data) => {
 				// Get collision mode from config or use default
-				const collisionMode = this.config.collision?.addApi || "merge";
+				const collisionMode = this.config.collision?.api || "merge";
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 				this.handlers.ownership.register({
@@ -174,7 +174,7 @@ class Slothlet {
 			// This handles the case where a module replaces another module's impl
 			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
 				// Get collision mode from config or use default
-				const collisionMode = this.config.collision?.addApi || "merge";
+				const collisionMode = this.config.collision?.api || "merge";
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 

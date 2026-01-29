@@ -5,9 +5,9 @@
  * @description
  * Tests edge cases and consistency:
  * - Nested API paths with flattening
- * - Multiple addApi calls
+ * - Multiple api.slothlet.api.add calls
  * - Function execution after flattening
- * - Primary load vs addApi consistency
+ * - Primary load vs api.slothlet.api.add consistency
  * - AutoFlatten=false behavior
  * - Mixed files and folders
  */
@@ -67,7 +67,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		await api.shutdown();
 	});
 
-	test("Multiple addApi calls with different flattening", async () => {
+	test("Multiple api.slothlet.api.add calls with different flattening", async () => {
 		const api = await slothlet({
 			...config,
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
@@ -136,8 +136,8 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		await api.shutdown();
 	});
 
-	test("Primary load vs addApi behavior consistency", async () => {
-		// Test that primary loading doesn't apply addApi flattening rules
+	test("Primary load vs api.slothlet.api.add behavior consistency", async () => {
+		// Test that primary loading doesn't apply api.slothlet.api.add flattening rules
 		const primaryApi = await slothlet({
 			...config,
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`)
@@ -166,7 +166,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			{}
 		);
 
-		// AddApi should flatten
+		// api.slothlet.api.add should flatten
 		expect(typeof addApiInstance.config.getConfig).toBe("function");
 
 		await primaryApi.shutdown();
@@ -195,7 +195,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		await api.shutdown();
 	});
 
-	test("AddApi with both files and folders - special handling", async () => {
+	test("api.slothlet.api.add with both files and folders - special handling", async () => {
 		const api = await slothlet({
 			...config,
 			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
@@ -207,7 +207,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 			{}
 		);
 
-		// Should flatten addapi content to root level
+		// Should flatten api.slothlet.api.add content to root level
 		expect(typeof api.plugins.initializeMainPlugin).toBe("function");
 		expect(typeof api.plugins.pluginGlobalMethod).toBe("function");
 		expect(api.plugins.pluginVersion).toBe("1.0.0");
@@ -217,7 +217,7 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		api.plugins.utils.helpers;
 		api.plugins.services.api;
 
-		// Should preserve folder structure for non-addapi content
+		// Should preserve folder structure for non-api.slothlet.api.add content
 		expect(isValidFolderType(api.plugins.config, config.mode)).toBe(true);
 		expect(isValidFolderType(api.plugins.utils, config.mode)).toBe(true);
 		expect(isValidFolderType(api.plugins.services, config.mode)).toBe(true);

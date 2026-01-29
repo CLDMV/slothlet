@@ -98,10 +98,11 @@
   - Features: Ownership-based removal, stack history
 
 - [x] **api.slothlet.api.reload()** ✅ IMPLEMENTED
-  - Status: Fully functional API reload
+  - Status: Component reload functional (reload specific API paths/modules)
   - Location: `src/lib/handlers/api-manager.mjs`
   - Tests: Reload tests in api-manager suite
-  - Features: Replace modules with new implementations
+  - Features: Replace specific modules with new implementations
+  - Note: Full instance reload (`api.slothlet.reload()`) is NOT implemented
 
 - [x] **Ownership Tracking System** ✅ IMPLEMENTED
   - Status: Stack-based history with bidirectional tracking
@@ -144,21 +145,27 @@
 ### Configuration System
 
 - [x] **Standard Configuration Options** ✅ IMPLEMENTED
-  - All V2 config options working:
-    - `dir` - Directory path
-    - `mode` / `lazy` - Loading strategy
-    - `runtime` - ALS vs live-bindings
-    - `apiDepth` - Traversal depth
-    - `debug` - Verbose logging
+  - Core V3 config options working:
+    - `dir` - Directory path (required)
+    - `mode` - Loading strategy ("eager" or "lazy")
+    - `runtime` - Context isolation ("async" or "live")
+    - `debug` - Verbose logging (boolean or object)
+    - `diagnostics` - Enable diagnostic API (boolean)
     - `context` - User context data
     - `reference` - Merged reference object
-    - `sanitize` - Naming rules
-    - `allowApiOverwrite` - Overwrite protection
+    - `sanitize` - Naming rules (object with rules array)
+    - `backgroundMaterialize` - Background materialization (boolean)
+    - `silent` - Suppress warnings (boolean)
+  - Removed from V3: `apiDepth`, `lazy` (use `mode: "lazy"`), `allowApiOverwrite`
 
 - [x] **Collision Configuration** ✅ IMPLEMENTED
-  - Status: Collision handling configuration exists in V3
-  - Features: Control collision behavior for API operations
-  - Evidence: Collision configuration present in codebase
+  - Status: Full collision and mutation control in V3
+  - Location: `src/lib/helpers/config.mjs`
+  - Structure:
+    - `config.api.collision` - Collision handling (initial/addApi contexts)
+    - `config.api.mutations` - Mutation control (add/remove/reload operations)
+  - Modes: skip, warn, replace, merge, merge-replace, error
+  - Tests: 160 collision tests + 112 mutation control tests passing
 
 ### Developer Experience
 
@@ -172,10 +179,18 @@
   - Flags: `--slothletdebug`, `SLOTHLET_DEBUG=true`
   - Coverage: Module analysis, flattening decisions, API structure
 
-- [x] **Error Handling** ✅ IMPLEMENTED (Basic)
-  - Status: Standard JavaScript error handling
-  - Custom Error Class: `SlothletError` in `src/lib/errors/index.mjs`
-  - Note: Enhanced error messages planned for future
+- [x] **Error Handling** ✅ IMPLEMENTED
+  - Status: Enhanced error system with i18n support
+  - Custom Error Classes:
+    - `SlothletError` - Main error class with context
+    - `SlothletWarning` - Non-fatal warnings
+    - `SlothletDebug` - Debug output system
+  - Location: `src/lib/errors/index.mjs`
+  - Features:
+    - Error codes with context objects
+    - Validation error flagging
+    - Translation support (i18n)
+    - Detailed error messages with hints
 
 ---
 
@@ -244,48 +259,14 @@ Event handlers execute in different async context than registration, causing:
 - Custom EventEmitters
 - Third-party event-driven libraries
 
-### 3. Per-Request Context (Scope System)
-
-- [ ] **api.run() Method** ❌ NOT IMPLEMENTED
-  - V2 API: `api.run(context, callback, ...args)` - Execute callback with isolated context
-  - Status: Not present in V3
-  - Use Case: Per-request isolation without creating new instances
-
-- [ ] **api.scope() Method** ❌ NOT IMPLEMENTED
-  - V2 API: `api.scope({ context, fn, args, merge })` - Create scoped API instance
-  - Status: Not present in V3
-  - Use Case: Create request-specific API with isolated context
-
-**Impact:** MEDIUM - Alternative: Create multiple instances (works but less ergonomic)
-
-**V2 Documentation:** 
-- [docs/CONTEXT-PROPAGATION.md](../../CONTEXT-PROPAGATION.md) - Complete API reference
-- [docs/changelog/v2.9.md](../../changelog/v2.9.md) - V2.9 release notes
+**Note on V2 Scope Methods:**
+V2 had `api.run()` and `api.scope()` methods for per-request context isolation. V3 does not have these methods and has no active TODO document for them. Current workaround is creating multiple slothlet instances for isolation.
 
 ---
 
 ## ⚠️ Configuration Gaps
 
-### 1. allowMutation Config
-
-- [ ] **config.api.mutations** ❌ NOT IMPLEMENTED
-  - V2 Feature: `allowMutation` config option to control API modifications
-  - V3 Status: No equivalent configuration
-  - TODO File: `docs/v3/todo/allowMutation-config-option.md`
-  - Proposed V3 Structure:
-    ```javascript
-    config: {
-      api: {
-        mutations: {
-          add: true/false,     // Allow api.slothlet.api.add()
-          remove: true/false,  // Allow api.slothlet.api.remove()
-          reload: true/false   // Allow api.slothlet.api.reload()
-        }
-      }
-    }
-    ```
-
-**Impact:** LOW - Methods work, just missing fine-grained control
+**None** - All V2 configuration features have been ported or replaced with V3 equivalents.
 
 ---
 
@@ -293,48 +274,18 @@ Event handlers execute in different async context than registration, causing:
 
 ### 1. CJS Default Export Handling
 
-- [ ] **CJS module.exports Normalization** ❌ NOT IMPLEMENTED
-  - Issue: CJS modules expose `.default` property unnecessarily
-  - TODO File: `docs/v3/todo/cjs-default-exports.md` (82 lines)
+- [x] **CJS module.exports Normalization** ✅ IMPLEMENTED
+  - Status: CJS modules now work identically to ESM
+  - Implementation: Node.js CJS wrapper automatically normalizes exports
   - Current Behavior:
     ```javascript
     // CJS: module.exports = { multiply: ..., divide: ... }
-    api.mathCjs.default.multiply(2, 3) // ❌ Shouldn't need .default
-    ```
-  - Expected Behavior:
-    ```javascript
     api.mathCjs.multiply(2, 3) // ✅ Direct access like ESM
     ```
+  - Test Coverage: `tests/vitests/suites/cjs/cjs-default-exports.test.vitest.mjs` - 64/64 passing
+  - Details: CJS modules using `module.exports = { default: obj, namedExport: fn }` pattern behave identically to ESM `export default obj; export { namedExport }`
 
-**Impact:** LOW - Inconsistency between ESM and CJS API paths
-
-**Fix:** Normalize in `src/lib/processors/loader.mjs` extractExports()
-
----
-
-## 🎯 Experimental Features (V2 Status Unknown)
-
-These features are documented in V3 but status in V2 is unclear:
-
-### Engine Modes
-
-- [ ] **Worker Mode** ⚠️ EXPERIMENTAL
-  - Status: In development (both V2 and V3)
-  - Feature: Thread isolation for API execution
-
-- [ ] **Fork Mode** ⚠️ EXPERIMENTAL
-  - Status: In development (both V2 and V3)
-  - Feature: Process isolation for API execution
-
-- [ ] **Child Mode** ⚠️ EXPERIMENTAL
-  - Status: In development (both V2 and V3)
-  - Feature: Child process execution
-
-- [ ] **VM Mode** ⚠️ EXPERIMENTAL
-  - Status: In development (both V2 and V3)
-  - Feature: Virtual machine context isolation
-
-**Note:** These modes are marked experimental in both V2 and V3 README
+**Impact:** COMPLETE - No inconsistency between ESM and CJS API paths
 
 ---
 
@@ -343,16 +294,19 @@ These features are documented in V3 but status in V2 is unclear:
 ### Implementation Status
 
 **Core Features:**
-- ✅ Implemented: 21 features (includes collision config)
-- ❌ Not Implemented: 3 major features (Hooks, EventEmitter, Scope)
-- ⚠️ Partial/Config Gaps: 1 feature (allowMutation config - has TODO)
-- 🔧 Minor Missing: 1 feature (CJS normalization)
+- ✅ Implemented: 23 features (includes collision config, mutations config, CJS normalization, enhanced errors)
+- ❌ Not Implemented: 2 major features (Hooks, EventEmitter Context Propagation)
+- ⚠️ Partial: 1 feature (api.slothlet.reload() stub only - component reload works)
+- 📝 No V3 Plan: V2's api.run() and api.scope() methods (no TODO document)
 
 **Test Coverage:**
 - Baseline Tests: 1232/1232 passing (12 test files)
 - Metadata Tests: 672 tests passing (6 suites)
 - Ownership Tests: 96 tests passing (2 suites)
 - API Manager Tests: 136 tests passing (3 suites)
+- Collision Tests: 160 tests passing (1 suite)
+- Mutations Tests: 112 tests passing (1 suite)
+- CJS Tests: 64 tests passing (1 suite)
 
 **Documentation:**
 - V3 Comprehensive Docs: 2 major systems documented (1600+ lines)
@@ -364,13 +318,15 @@ These features are documented in V3 but status in V2 is unclear:
 **🔴 HIGH PRIORITY (Blocking production parity):**
 1. **Hooks System** - Major feature, extensively documented, 376-line TODO
 2. **EventEmitter Context Propagation** - Critical for event-driven APIs
+3. **Full Instance Reload** - api.slothlet.reload() currently throws NOT_IMPLEMENTED
 
-**🟡 MEDIUM PRIORITY (Nice to have):**
-3. **Per-Request Context (api.run/scope)** - Ergonomic improvement
+**🟡 MEDIUM PRIORITY (V2 parity considerations):**
+4. **Per-Request Context Methods** - V2 had api.run() and api.scope() - no V3 TODO exists
 
-**🟢 LOW PRIORITY (Minor enhancements):**
-4. **allowMutation Config** - Fine-grained control (has TODO file)
-5. **CJS Default Export Normalization** - API consistency
+**🟢 COMPLETED:**
+- ✅ allowMutation Config → Implemented as api.mutations (2026-01-28)
+- ✅ CJS Default Export Normalization → Node.js handles automatically
+- ✅ Enhanced Error Messages → Implemented with i18n support
 
 ---
 

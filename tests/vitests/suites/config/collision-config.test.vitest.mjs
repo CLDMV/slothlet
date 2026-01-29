@@ -15,7 +15,7 @@
  *
  * Tests both contexts:
  * - collision.initial: During buildAPI (initial load) - math.mjs file collides with math/ folder
- * - collision.addApi: During api.add() operations using math-collision.mjs from api_test_collections
+ * - collision.api: During api.slothlet.api.add() operations using math-collision.mjs from api_test_collections
  *
  * @module tests/vitests/config/collision-config.test.vitest
  */
@@ -73,7 +73,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		it("should default to merge mode for both contexts", async () => {
 			api = await createApiInstance(config);
 
-			// Default should be { initial: "merge", addApi: "merge" }
+			// Default should be { initial: "merge", api.slothlet.api.add: "merge" }
 			// API should load successfully with no errors
 			const math = getMath(api, config.dir);
 			expect(math).toBeDefined();
@@ -96,7 +96,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 	describe("String shorthand", () => {
 		it("should apply string collision mode to both contexts (skip)", async () => {
-			// String shorthand: collision: "skip" => { initial: "skip", addApi: "skip" }
+			// String shorthand: collision: "skip" => { initial: "skip", api: "skip" }
 			api = await createApiInstance(config, { collision: "skip" });
 
 			const math = getMath(api, config.dir);
@@ -105,7 +105,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const addResult = await originalAdd(2, 3);
 			expect([5, 1005]).toContain(addResult); // Either file (1005) or folder (5)
 
-			// Try to add collision content to math path (should be skipped by addApi: "skip")
+			// Try to add collision content to math path (should be skipped by api: "skip")
 			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-skip-shorthand"
 			});
@@ -121,7 +121,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		});
 
 		it("should normalize collision mode case-insensitively (MERGE)", async () => {
-			// String shorthand with uppercase: collision: "MERGE" => { initial: "merge", addApi: "merge" }
+			// String shorthand with uppercase: collision: "MERGE" => { initial: "merge", api: "merge" }
 			api = await createApiInstance(config, { collision: "MERGE" });
 
 			const math = getMath(api, config.dir);
@@ -144,7 +144,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		});
 
 		it("should default invalid modes to merge", async () => {
-			// Invalid mode defaults to merge: collision: "invalid" => { initial: "merge", addApi: "merge" }
+			// Invalid mode defaults to merge: collision: "invalid" => { initial: "merge", api: "merge" }
 			api = await createApiInstance(config, { collision: "invalid-mode" });
 
 			const math = getMath(api, config.dir);
@@ -172,7 +172,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge mode: should merge file and folder exports, keeping FIRST version of conflicts", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "merge" }
+				api: { collision: { initial: "merge", api: "merge" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -204,7 +204,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge-replace mode: should merge file and folder exports, REPLACING conflicts with SECOND version", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge-replace", addApi: "merge-replace" }
+				api: { collision: { initial: "merge-replace", api: "merge-replace" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -234,7 +234,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("skip mode: should keep first loaded (folder or file)", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "skip", addApi: "merge" }
+				api: { collision: { initial: "skip", api: "merge" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -259,7 +259,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("replace mode: should replace with last loaded (folder or file)", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "replace", addApi: "merge" }
+				api: { collision: { initial: "replace", api: "merge" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -284,7 +284,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("warn mode: should warn and merge file and folder exports", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "warn", addApi: "merge" },
+				api: { collision: { initial: "warn", api: "merge" } },
 				silent: false
 			});
 
@@ -310,16 +310,16 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		it("error mode: should throw error on collision", async () => {
 			await expect(async () => {
 				api = await createApiInstance(config, {
-					collision: { initial: "error", addApi: "merge" }
+					api: { collision: { initial: "error", api: "merge" } }
 				});
 			}).rejects.toThrow();
 		});
 	});
 
-	describe("collision.addApi modes", () => {
+	describe("collision.api modes", () => {
 		it("merge mode: should preserve original and add new properties", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "merge" }
+				api: { collision: { initial: "merge", api: "merge" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -346,7 +346,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("merge-replace mode: should add new properties and REPLACE conflicting ones", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "merge-replace" }
+				api: { collision: { initial: "merge", api: "merge-replace" } }
 			});
 
 			const math = getMath(api, config.dir);
@@ -381,7 +381,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("replace mode: should completely replace existing value", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "replace" }
+				api: { collision: { initial: "merge", api: "replace" } }
 			});
 
 			const mathOld = getMath(api, config.dir);
@@ -415,7 +415,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("skip mode: should silently keep existing value", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "skip" }
+				collision: { initial: "merge", api: "skip" }
 			});
 
 			const math = getMath(api, config.dir);
@@ -439,7 +439,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("warn mode: should warn and keep existing value", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "warn" },
+				api: { collision: { initial: "merge", api: "warn" } },
 				silent: false
 			});
 
@@ -461,7 +461,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 		it("error mode: should throw error on collision", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "error" }
+				collision: { initial: "merge", api: "error" }
 			});
 
 			const math = getMath(api, config.dir);
@@ -477,9 +477,9 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	});
 
 	describe("Per-context configuration", () => {
-		it("should allow different modes for initial vs addApi", async () => {
+		it("should allow different modes for initial vs api", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "warn", addApi: "error" }
+				collision: { initial: "merge", api: "error" }
 			});
 
 			// Initial load should succeed (warn mode)
@@ -520,7 +520,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 	describe("Collision with complex structures", () => {
 		it("should merge nested properties correctly", async () => {
 			api = await createApiInstance(config, {
-				collision: { initial: "merge", addApi: "merge" }
+				api: { collision: { initial: "merge", api: "merge" } }
 			});
 
 			// Math module has nested structure

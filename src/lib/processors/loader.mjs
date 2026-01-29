@@ -30,7 +30,7 @@ export class Loader extends ComponentBase {
 	 * Load a single module
 	 * @param {string} filePath - Path to module file
 	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
-	 * @param {string} [moduleID] - Module ID for additional cache busting (used in addApi)
+	 * @param {string} [moduleID] - Module ID for additional cache busting (used in api.slothlet.api.add)
 	 * @returns {Promise<Object>} Loaded module
 	 * @public
 	 */
@@ -38,7 +38,7 @@ export class Loader extends ComponentBase {
 		try {
 			const fileUrl = pathToFileURL(filePath).href;
 			// Cache bust using instanceID to prevent cross-instance pollution
-			// Add moduleID for addApi calls to prevent cache reuse between different API paths
+			// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
 			let cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
 			if (moduleID) {
 				cacheBustedUrl += `&module=${moduleID}`;

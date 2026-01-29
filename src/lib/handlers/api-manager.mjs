@@ -714,7 +714,7 @@ export class ApiManager extends ComponentBase {
 		const maxDepth = 10; // Prevent excessive recursion
 
 		// Get collision mode from config (defaults to "merge")
-		const collisionMode = this.config.collision?.addApi || "merge";
+		const collisionMode = this.config.collision?.api || "merge";
 
 		const registerRecursive = (currentValue, pathParts, depth = 0) => {
 			// Depth limit check
@@ -777,14 +777,14 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Restore a path from addApi history or core load.
+	 * Restore a path from api.slothlet.api.add history or core load.
 	 * @param {string} apiPath - API path to restore.
 	 * @param {?string} moduleId - ModuleId to restore.
 	 * @returns {Promise<void>}
 	 * @private
 	 *
 	 * @description
-	 * Attempts to reapply a previous addApi entry or rebuild the core API for the path.
+	 * Attempts to reapply a previous api.slothlet.api.add entry or rebuild the core API for the path.
 	 *
 	 * @example
 	 * await this.restoreApiPath("plugins", "plugins-core");
@@ -925,18 +925,20 @@ export class ApiManager extends ComponentBase {
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
 		const resolvedFolderPath = await this.resolveFolderPath(folderPath);
 
-		// Determine collision handling - check options first, then config.collision.addApi
-		const collisionMode = restOptions.collisionMode || this.config.collision.addApi || "merge";
-		const allowOverwrite = !!(
-			restOptions.forceOverwrite ||
-			restOptions.allowOverwrite ||
-			collisionMode === "replace" ||
-			collisionMode === "merge"
-		);
+		// Determine collision handling
+		// forceOverwrite flag forces replace mode (overrides config)
+		// Otherwise use explicit collisionMode option or fall back to config default
+		let collisionMode;
+		if (restOptions.forceOverwrite) {
+			collisionMode = "replace";
+		} else {
+			collisionMode = restOptions.collisionMode || this.config.api?.collision?.api || "error";
+		}
+
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
 		const moduleId = restOptions.moduleId ? String(restOptions.moduleId) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
-		if ((restOptions.forceOverwrite || restOptions.allowOverwrite) && !moduleId) {
+		if (restOptions.forceOverwrite && !moduleId) {
 			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
 				apiPath: normalizedPath,
 				validationError: true
@@ -1021,14 +1023,12 @@ export class ApiManager extends ComponentBase {
 
 		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 			mutateExisting,
-			allowOverwrite,
 			collisionMode,
 			moduleId // Pass moduleId for lifecycle events
 		});
 
 		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 			mutateExisting,
-			allowOverwrite,
 			collisionMode
 		});
 
@@ -1301,7 +1301,7 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Reload API modules from addApi history.
+	 * Reload API modules from api.slothlet.api.add history.
 	 * @param {object} params - Reload parameters.
 	 * @param {?string} params.apiPath - API path to reload.
 	 * @param {?string} params.moduleId - ModuleId to reload.
@@ -1309,7 +1309,7 @@ export class ApiManager extends ComponentBase {
 	 * @package
 	 *
 	 * @description
-	 * Replays recorded addApi calls using mutateExisting to preserve references.
+	 * Replays recorded api.slothlet.api.add calls using mutateExisting to preserve references.
 	 *
 	 * @example
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });

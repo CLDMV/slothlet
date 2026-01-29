@@ -3,7 +3,7 @@
  *
  * @description
  * Tests basic hot reload operations: reload(), instanceId regeneration,
- * addApi preservation, removeApi tracking, and reference identity.
+ * api.slothlet.api.add preservation, removeApi tracking, and reference identity.
  *
  * @module tests/vitests/processed/hot-reload/hot-reload-basic.test.vitest
  */
@@ -73,7 +73,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(await mathAddAfter(4, 5)).toBe(9);
 	});
 
-	it("preserves addApi modules with moduleId across reloads", async () => {
+	it("preserves api.slothlet.api.add modules with moduleId across reloads", async () => {
 		api = await createApiInstance(config);
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
@@ -84,7 +84,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 	});
 
-	it("preserves addApi modules without moduleId across reloads", async () => {
+	it("preserves api.slothlet.api.add modules without moduleId across reloads", async () => {
 		api = await createApiInstance(config);
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED);
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
@@ -116,7 +116,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(api).toBe(reference);
 	});
 
-	it("keeps multiple addApi modules registered after reload", async () => {
+	it("keeps multiple api.slothlet.api.add modules registered after reload", async () => {
 		api = await createApiInstance(config);
 		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
 		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-2" });
@@ -127,7 +127,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(api.extra2?.mathCjs).toBeTypeOf("object");
 	});
 
-	it("reloads using the latest addApi overwrite", async () => {
+	// TODO: allowAddApiOverwrite isn't in v3...
+	it("reloads using the latest api.slothlet.api.add overwrite", async () => {
 		api = await createApiInstance(config, { allowAddApiOverwrite: true });
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-x" });
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, {}, { moduleId: "module-x" });

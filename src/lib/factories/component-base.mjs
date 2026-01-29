@@ -84,7 +84,7 @@ export class ComponentBase {
 	 * Provides access to the Slothlet config for collision modes, debug settings, etc.
 	 *
 	 * @example
-	 * const collisionMode = this.config.collision.addApi;
+	 * const collisionMode = this.config.collision.api;
 	 */
 	get config() {
 		return this.slothlet.config;

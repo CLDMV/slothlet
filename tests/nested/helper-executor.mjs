@@ -2,9 +2,9 @@
  * @fileoverview Helper executor in nested directory for path resolution testing
  * @module nested/helper-executor
  * @description
- * This file exists in a nested directory (tests/nested/) to test that addApi
+ * This file exists in a nested directory (tests/nested/) to test that api.slothlet.api.add
  * resolves paths correctly even when called through a function in a different directory.
- * The path resolution should be relative to where addApi was DEFINED (the test file),
+ * The path resolution should be relative to where api.slothlet.api.add was DEFINED (the test file),
  * not where this executor is located.
  */
 
@@ -20,7 +20,7 @@ export async function executeWithApi(api, fn) {
 }
 
 /**
- * Execute addApi through this nested helper
+ * Execute api.slothlet.api.add through this nested helper
  * @param {object} api - Slothlet API instance
  * @param {string} apiPath - API path
  * @param {string} folderPath - Folder path (relative to caller, not this file)

@@ -9,7 +9,7 @@
  * - Wrapped functions (for hot-reload reference preservation)
  *
  * NOTE: reload() does a full reload and creates new references (expected behavior).
- * Only reloadApi() and addApi with mutateExisting preserve references via wrappers.
+ * Only reloadApi() and api.slothlet.api.add with mutateExisting preserve references via wrappers.
  *
  * @module tests/vitests/processed/hot-reload/hot-reload-reference-identity.test.vitest
  */

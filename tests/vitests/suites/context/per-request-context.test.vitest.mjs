@@ -35,12 +35,14 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 			...config,
 			dir: TEST_DIRS.API_TEST,
 			context: { appName: "test", version: "1.0" },
+			reference: { testValue: 42, testFunc: (x) => x * 2 },
 			scope: { merge: "shallow" }
 		});
 
 		let contextInside;
-		await api.run({ userId: 123, requestId: "req-abc" }, async () => {
-			contextInside = await api.requestContext.getContext();
+		await api.slothlet.context.run({ userId: 123, requestId: "req-abc" }, async () => {
+			// Call actual API function to verify context propagates
+			contextInside = await api.slothlet.context.get();
 		});
 
 		expect(contextInside.userId).toBe(123);
@@ -49,7 +51,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		expect(contextInside.version).toBe("1.0");
 
 		// Context outside should not have request data
-		const contextOutside = await api.requestContext.getContext();
+		const contextOutside = await api.slothlet.context.get();
 		expect(contextOutside.userId).toBeUndefined();
 		expect(contextOutside.requestId).toBeUndefined();
 		expect(contextOutside.appName).toBe("test");
@@ -64,10 +66,11 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		let contextInside;
-		await api.scope({
+		await api.slothlet.context.scope({
 			context: { userId: 456, traceId: "trace-xyz" },
 			fn: async () => {
-				contextInside = await api.requestContext.getContext();
+				// Call actual API function
+				contextInside = await api.slothlet.context.get();
 			}
 		});
 
@@ -92,7 +95,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		let configValue;
-		await api.run(
+		await api.slothlet.context.run(
 			{
 				userId: 999,
 				config: {
@@ -101,7 +104,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 				}
 			},
 			async () => {
-				configValue = await api.requestContext.get("config");
+				configValue = await api.slothlet.context.get("config");
 			}
 		);
 
@@ -120,8 +123,8 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		let baseValue;
-		await api.run({ base: { level2: "new" } }, async () => {
-			baseValue = await api.requestContext.get("base");
+		await api.slothlet.context.run({ base: { level2: "new" } }, async () => {
+			baseValue = await api.slothlet.context.get("base");
 		});
 
 		// Shallow merge replaces entire object
@@ -137,7 +140,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		let capturedArgs;
-		await api.run(
+		await api.slothlet.context.run(
 			{ requestId: "test" },
 			async (arg1, arg2, arg3) => {
 				capturedArgs = [arg1, arg2, arg3];
@@ -158,7 +161,7 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		let capturedArgs;
-		await api.scope({
+		await api.slothlet.context.scope({
 			context: { requestId: "test" },
 			fn: async (arg1, arg2) => {
 				capturedArgs = [arg1, arg2];
@@ -177,13 +180,15 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		});
 
 		const results = await Promise.all([
-			api.run({ requestId: "req-1" }, async () => {
+			api.slothlet.context.run({ requestId: "req-1" }, async () => {
 				await new Promise((resolve) => setTimeout(resolve, 10));
-				return await api.requestContext.get("requestId");
+				// Call actual API function
+				return await api.slothlet.context.get("requestId");
 			}),
-			api.run({ requestId: "req-2" }, async () => {
+			api.slothlet.context.run({ requestId: "req-2" }, async () => {
 				await new Promise((resolve) => setTimeout(resolve, 5));
-				return await api.requestContext.get("requestId");
+				// Call actual API function
+				return await api.slothlet.context.get("requestId");
 			})
 		]);
 
@@ -198,11 +203,13 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 			context: { level: "base" }
 		});
 
-		const result = await api.run({ level: 1, userId: 100 }, async () => {
-			const level1Context = await api.requestContext.getContext();
+		const result = await api.slothlet.context.run({ level: 1, userId: 100 }, async () => {
+			// Call actual API function
+			const level1Context = await api.slothlet.context.get();
 
-			const innerResult = await api.run({ level: 2, spanId: "span-456" }, async () => {
-				return await api.requestContext.getContext();
+			const innerResult = await api.slothlet.context.run({ level: 2, spanId: "span-456" }, async () => {
+				// Call actual API function
+				return await api.slothlet.context.get();
 			});
 
 			return { level1Context, level2Context: innerResult };
@@ -215,22 +222,188 @@ describe.each(ALL_CONFIGS)("Per-Request Context (.run/.scope) > Config: '$name'"
 		expect(result.level2Context.userId).toBe(100); // Inherited from parent request
 	});
 
-	it("should maintain base context outside .run()", async () => {
+	it("should maintain base context outside .run() and not modify existing values", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
 			context: { appName: "test", version: "1.0" }
 		});
 
-		await api.run({ userId: 123 }, async () => {
-			const inside = await api.requestContext.getContext();
+		await api.slothlet.context.run({ userId: 123, appName: "modified-inside" }, async () => {
+			// Call actual API function
+			const inside = await api.slothlet.context.get();
 			expect(inside.userId).toBe(123);
+			expect(inside.appName).toBe("modified-inside"); // Modified inside .run()
+			expect(inside.version).toBe("1.0"); // Inherited from base
 		});
 
-		const outside = await api.requestContext.getContext();
-		expect(outside.userId).toBeUndefined();
-		expect(outside.appName).toBe("test");
-		expect(outside.version).toBe("1.0");
+		// Verify base context is unchanged
+		const outside = await api.slothlet.context.get();
+		expect(outside.userId).toBeUndefined(); // New value doesn't leak
+		expect(outside.appName).toBe("test"); // Original value preserved
+		expect(outside.version).toBe("1.0"); // Original value preserved
+	});
+});
+
+// Multi-instance isolation tests
+describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'", ({ config }) => {
+	let slothlet;
+	let api1;
+	let api2;
+
+	beforeEach(async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		slothlet = slothletModule.default;
+	});
+
+	afterEach(async () => {
+		if (api1) {
+			await api1.shutdown();
+			api1 = null;
+		}
+		if (api2) {
+			await api2.shutdown();
+			api2 = null;
+		}
+	});
+
+	it("should isolate context between multiple slothlet instances", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app1", instanceName: "first" }
+		});
+
+		api2 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app2", instanceName: "second" }
+		});
+
+		// Verify each instance has its own base context
+		const ctx1 = await api1.slothlet.context.get();
+		const ctx2 = await api2.slothlet.context.get();
+
+		expect(ctx1.appName).toBe("app1");
+		expect(ctx1.instanceName).toBe("first");
+		expect(ctx2.appName).toBe("app2");
+		expect(ctx2.instanceName).toBe("second");
+	});
+
+	it("should not allow .run() on one instance to affect another instance", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app1" }
+		});
+
+		api2 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app2" }
+		});
+
+		// Run .run() on api1 with modified context
+		await api1.slothlet.context.run({ userId: 111, appName: "app1-modified" }, async () => {
+			// Inside api1.run()
+			const ctx1Inside = await api1.slothlet.context.get();
+			expect(ctx1Inside.userId).toBe(111);
+			expect(ctx1Inside.appName).toBe("app1-modified");
+
+			// api2 context should be completely unaffected
+			const ctx2Inside = await api2.slothlet.context.get();
+			expect(ctx2Inside.userId).toBeUndefined();
+			expect(ctx2Inside.appName).toBe("app2"); // Original value
+		});
+
+		// After api1.run() completes, both instances should have original contexts
+		const ctx1After = await api1.slothlet.context.get();
+		const ctx2After = await api2.slothlet.context.get();
+
+		expect(ctx1After.userId).toBeUndefined();
+		expect(ctx1After.appName).toBe("app1");
+		expect(ctx2After.userId).toBeUndefined();
+		expect(ctx2After.appName).toBe("app2");
+	});
+
+	it("should support concurrent .run() calls across multiple instances", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app1" }
+		});
+
+		api2 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app2" }
+		});
+
+		// Run concurrent .run() calls on both instances
+		const results = await Promise.all([
+			api1.slothlet.context.run({ requestId: "req-instance1" }, async () => {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return {
+					requestId: await api1.slothlet.context.get("requestId"),
+					appName: await api1.slothlet.context.get("appName")
+				};
+			}),
+			api2.slothlet.context.run({ requestId: "req-instance2" }, async () => {
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				return {
+					requestId: await api2.slothlet.context.get("requestId"),
+					appName: await api2.slothlet.context.get("appName")
+				};
+			})
+		]);
+
+		// Each instance should maintain its own isolated context
+		expect(results[0].requestId).toBe("req-instance1");
+		expect(results[0].appName).toBe("app1");
+		expect(results[1].requestId).toBe("req-instance2");
+		expect(results[1].appName).toBe("app2");
+	});
+
+	it("should support nested .run() across different instances", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app1" }
+		});
+
+		api2 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: { appName: "app2" }
+		});
+
+		await api1.slothlet.context.run({ level: "api1-outer", userId: 100 }, async () => {
+			const ctx1Outer = await api1.slothlet.context.get();
+			expect(ctx1Outer.level).toBe("api1-outer");
+			expect(ctx1Outer.userId).toBe(100);
+			expect(ctx1Outer.appName).toBe("app1");
+
+			// Nest api2.run() inside api1.run()
+			await api2.slothlet.context.run({ level: "api2-inner", userId: 200 }, async () => {
+				// api1.slothlet.context.get() searches the parent context chain
+				// It finds api1's .run() context preserved in the chain
+				const ctx1Inner = await api1.slothlet.context.get();
+				expect(ctx1Inner.level).toBe("api1-outer"); // Found in parent chain
+				expect(ctx1Inner.userId).toBe(100); // Found in parent chain
+				expect(ctx1Inner.appName).toBe("app1"); // Base context value
+
+				// api2 should have its own isolated context
+				const ctx2Inner = await api2.slothlet.context.get();
+				expect(ctx2Inner.level).toBe("api2-inner");
+				expect(ctx2Inner.userId).toBe(200);
+				expect(ctx2Inner.appName).toBe("app2");
+			});
+
+			// After api2.run() completes, api1 context is RESTORED
+			const ctx1After = await api1.slothlet.context.get();
+			expect(ctx1After.level).toBe("api1-outer");
+			expect(ctx1After.userId).toBe(100);
+		});
 	});
 });
 
@@ -260,7 +433,7 @@ describe("Per-Request Context Error Handling", () => {
 		});
 
 		try {
-			await api.run({ userId: 123 }, async () => {});
+			await api.slothlet.context.run({ userId: 123 }, async () => {});
 			expect.fail("Should have thrown error");
 		} catch (error) {
 			expect(error.message).toContain("Per-request context");
@@ -286,7 +459,7 @@ describe("Per-Request Context Error Handling", () => {
 		});
 
 		try {
-			await api.run({ userId: 123 });
+			await api.slothlet.context.run({ userId: 123 });
 			expect.fail("Should have thrown error");
 		} catch (error) {
 			expect(error.message).toContain("Callback must be a function");
@@ -301,7 +474,7 @@ describe("Per-Request Context Error Handling", () => {
 		});
 
 		try {
-			await api.scope({
+			await api.slothlet.context.scope({
 				context: { userId: 123 }
 			});
 			expect.fail("Should have thrown error");
@@ -318,7 +491,7 @@ describe("Per-Request Context Error Handling", () => {
 		});
 
 		try {
-			await api.scope({
+			await api.slothlet.context.scope({
 				fn: async () => {}
 			});
 			expect.fail("Should have thrown error");
