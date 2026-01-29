@@ -15,7 +15,7 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	let instances = [];
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 		instances = [];
 	});
@@ -51,6 +51,7 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 	it("should isolate instance context between multiple instances", async () => {
 		const api1 = await slothlet({
 			...config,
+			diagnostics: true,
 			dir: TEST_DIRS.API_TEST,
 			context: { name: "instance1", value: 100 }
 		});
@@ -58,17 +59,18 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 
 		const api2 = await slothlet({
 			...config,
+			diagnostics: true,
 			dir: TEST_DIRS.API_TEST,
 			context: { name: "instance2", value: 200 }
 		});
 		instances.push(api2);
 
 		// Verify contexts are isolated
-		expect(api1.__ctx.context.name).toBe("instance1");
-		expect(api1.__ctx.context.value).toBe(100);
+		expect(api1.slothlet.diag.context.name).toBe("instance1");
+		expect(api1.slothlet.diag.context.value).toBe(100);
 
-		expect(api2.__ctx.context.name).toBe("instance2");
-		expect(api2.__ctx.context.value).toBe(200);
+		expect(api2.slothlet.diag.context.name).toBe("instance2");
+		expect(api2.slothlet.diag.context.value).toBe(200);
 	});
 
 	it("should allow each instance to operate independently", async () => {
@@ -145,7 +147,7 @@ describe("Multi-Instance Mode Mixing", () => {
 	let instances = [];
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 		instances = [];
 	});
@@ -164,16 +166,11 @@ describe("Multi-Instance Mode Mixing", () => {
 			dir: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			hotReload: false,
 			hooks: false
 		});
 		instances.push(eagerApi);
 
 		const lazyApi = await slothlet({
-			dir: TEST_DIRS.API_TEST,
-			mode: "lazy",
-			runtime: "async",
-			hotReload: false,
 			hooks: false
 		});
 		instances.push(lazyApi);
@@ -195,7 +192,6 @@ describe("Multi-Instance Mode Mixing", () => {
 			dir: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async",
-			hotReload: false,
 			hooks: false
 		});
 		instances.push(asyncApi);
@@ -204,7 +200,6 @@ describe("Multi-Instance Mode Mixing", () => {
 			dir: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "live",
-			hotReload: false,
 			hooks: false
 		});
 		instances.push(liveApi);

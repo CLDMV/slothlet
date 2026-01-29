@@ -15,13 +15,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { OWNERSHIP_MATRIX, getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-// Ownership-enabled configurations only (hotReload: true)
-const OWNERSHIP_CONFIGS = OWNERSHIP_MATRIX;
+// Ownership-enabled configurations only (collision mode with merge)
+const OWNERSHIP_CONFIGS = getMatrixConfigs({ collision: { initial: "merge", addApi: "merge" } });
 
-// Basic configurations (hotReload: false) for validation testing
-const BASIC_CONFIGS = getMatrixConfigs({ hotReload: false });
+// Basic configurations for validation testing
+const BASIC_CONFIGS = getMatrixConfigs({});
 
 describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: ___name, config }) => {
 	let slothlet;

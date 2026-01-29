@@ -1,16 +1,15 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/processed/api/lazy/api-lazy-hooks.test.vitest.mjs
+ *	@Filename: /tests/vitests/suites/api/lazy/api-lazy-hooks.test.vitest.mjs
  *	@Date: 2026-01-12 18:06:09 -08:00 (1768269969)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-12 18:11:06 -08:00 (1768270266)
+ *	@Last modified time: 2026-01-28 12:15:58 -08:00 (1769631358)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
@@ -25,7 +24,7 @@ function mockMd5(input) {
 	return "mock-md5-hash-" + input.length;
 }
 
-// LAZY configs with hooks (LAZY_HOOKS, LAZY_HOT_HOOKS)
+// LAZY configs with hooks
 const matrixConfigs = getMatrixConfigs({ mode: "lazy", hooks: true, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
@@ -38,8 +37,8 @@ describe("API (lazy-hooks)", () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				api_mode: "function",
-				reference: { md5: mockMd5 }
+				reference: { md5: mockMd5 },
+				diagnostics: true
 			});
 		});
 
@@ -75,8 +74,10 @@ describe("API (lazy-hooks)", () => {
 				expect(result).toBe("mock-md5-hash-4");
 			});
 
-			it("describe function", () => {
-				expect(typeof api.describe).toBe("function");
+			it("describe function (v3: requires diagnostics)", async () => {
+				expect(typeof api.slothlet.diag.describe).toBe("function");
+				const keys = await api.slothlet.diag.describe();
+				expect(Array.isArray(keys)).toBe(true);
 			});
 
 			it("shutdown function", () => {

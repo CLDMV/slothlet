@@ -38,21 +38,19 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Short Circuit > Config: 
 		let functionCalled = false;
 		let shortCircuitExecuted = false;
 
-		api.hooks.on(
-			"after",
-			() => {
-				functionCalled = true;
+		api.slothlet.hook.on(
+			"after:math.add",
+			() => { functionCalled = true;
 			},
-			{ id: "detect-call", pattern: "math.add" }
+			{ id: "detect-call" }
 		);
 
-		api.hooks.on(
-			"before",
-			() => {
-				shortCircuitExecuted = true;
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { shortCircuitExecuted = true;
 				return 42;
 			},
-			{ id: "short-circuit", priority: 200, pattern: "math.add" }
+			{ id: "short-circuit", priority: 200 }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -65,51 +63,39 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Short Circuit > Config: 
 	test("should support before hook short-circuit with object", async () => {
 		const shortCircuitValue = { data: "bypassed", computed: true };
 
-		api.hooks.on("before", () => shortCircuitValue, {
-			id: "short-circuit-obj",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", () => shortCircuitValue, { id: "short-circuit-obj",
+			priority: 200 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toEqual(shortCircuitValue);
 	});
 
 	test("should support before hook short-circuit with string", async () => {
-		api.hooks.on("before", () => "intercepted", {
-			id: "short-circuit-string",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", () => "intercepted", { id: "short-circuit-string",
+			priority: 200 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe("intercepted");
 	});
 
 	test("should support before hook short-circuit with null", async () => {
-		api.hooks.on("before", () => null, {
-			id: "short-circuit-null",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", () => null, { id: "short-circuit-null",
+			priority: 200 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBeNull();
 	});
 
 	test("should support before hook short-circuit with 0", async () => {
-		api.hooks.on("before", () => 0, { id: "short-circuit-zero", priority: 200, pattern: "math.add" });
+		api.slothlet.hook.on("before:math.add", () => 0, { id: "short-circuit-zero", priority: 200 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(0);
 	});
 
 	test("should support before hook short-circuit with false", async () => {
-		api.hooks.on("before", () => false, {
-			id: "short-circuit-false",
-			priority: 200,
-			pattern: "math.add"
-		});
+		api.slothlet.hook.on("before:math.add", () => false, { id: "short-circuit-false",
+			priority: 200 });
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(false);
@@ -118,15 +104,15 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Short Circuit > Config: 
 	test("should execute always hooks after short-circuit", async () => {
 		let alwaysExecuted = false;
 
-		api.hooks.on("before", () => 99, { id: "short-circuit", priority: 200, pattern: "math.add" });
+		api.slothlet.hook.on("before:math.add", () => 99, { id: "short-circuit", priority: 200 });
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.add",
 			({ result }) => {
 				alwaysExecuted = true;
 				expect(result).toBe(99);
 			},
-			{ id: "always-hook", pattern: "math.add" }
+			{ id: "always-hook" }
 		);
 
 		await api.math.add(2, 3);
@@ -136,13 +122,13 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Short Circuit > Config: 
 	test("should execute always hooks after normal completion", async () => {
 		let alwaysExecuted = false;
 
-		api.hooks.on(
-			"always",
+		api.slothlet.hook.on(
+			"always:math.add",
 			({ result }) => {
 				alwaysExecuted = true;
 				expect(result).toBe(5);
 			},
-			{ id: "always-hook", pattern: "math.add" }
+			{ id: "always-hook" }
 		);
 
 		await api.math.add(2, 3);
@@ -150,12 +136,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Short Circuit > Config: 
 	});
 
 	test("should not allow always hooks to modify result", async () => {
-		api.hooks.on(
-			"always",
-			() => {
-				return 999;
+		api.slothlet.hook.on(
+			"always:math.add",
+			() => { return 999;
 			},
-			{ id: "always-attempt-modify", pattern: "math.add" }
+			{ id: "always-attempt-modify" }
 		);
 
 		const result = await api.math.add(2, 3);

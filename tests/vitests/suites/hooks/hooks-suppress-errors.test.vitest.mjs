@@ -35,13 +35,12 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	function registerErrorHook() {
 		const flags = { called: false };
 		const lastContext = { current: null };
-		api.hooks.on(
-			"error",
-			(errorContext) => {
-				flags.called = true;
+		api.slothlet.hook.on(
+			"error:**",
+			(errorContext) => { flags.called = true;
 				lastContext.current = errorContext;
 			},
-			{ id: "error-monitor", pattern: "**" }
+			{ id: "error-monitor" }
 		);
 		return { flags, lastContext };
 	}
@@ -62,12 +61,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags } = registerErrorHook();
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Before hook failed");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Before hook failed");
 			},
-			{ id: "failing-before", pattern: "math.add" }
+			{ id: "failing-before" }
 		);
 
 		await expect(async () => await api.math.add(2, 3)).rejects.toThrow("Before hook failed");
@@ -79,12 +77,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Before hook failed");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Before hook failed");
 			},
-			{ id: "failing-before", pattern: "math.add" }
+			{ id: "failing-before" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -100,12 +97,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Function execution failed");
+		api.slothlet.hook.on(
+			"before:math.multiply",
+			() => { throw new Error("Function execution failed");
 			},
-			{ id: "inject-error", pattern: "math.multiply" }
+			{ id: "inject-error" }
 		);
 
 		const result = await api.math.multiply(3, 4);
@@ -120,12 +116,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags, lastContext } = registerErrorHook();
 
-		api.hooks.on(
-			"after",
-			() => {
-				throw new Error("After hook failed");
+		api.slothlet.hook.on(
+			"after:math.add",
+			() => { throw new Error("After hook failed");
 			},
-			{ id: "failing-after", pattern: "math.add" }
+			{ id: "failing-after" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -141,12 +136,11 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const { flags } = registerErrorHook();
 
-		api.hooks.on(
-			"always",
-			() => {
-				throw new Error("Always hook failed");
+		api.slothlet.hook.on(
+			"always:math.add",
+			() => { throw new Error("Always hook failed");
 			},
-			{ id: "failing-always", pattern: "math.add" }
+			{ id: "failing-always" }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -167,22 +161,21 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const errors = [];
 
-		api.hooks.on(
-			"error",
-			(context) => {
-				errors.push({ path: context.path, message: context.error.message });
+		api.slothlet.hook.on(
+			"error:**",
+			(context) => { errors.push({ path: context.path, message: context.error.message });
 			},
-			{ id: "error-collector", pattern: "**" }
+			{ id: "error-collector" }
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				if (path === "math.add") {
 					throw new Error("Add failed");
 				}
 			},
-			{ id: "fail-add", pattern: "**" }
+			{ id: "fail-add" }
 		);
 
 		const result1 = await api.math.add(2, 3);
@@ -197,22 +190,21 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 	it("respects hooks enable/disable toggling with suppressErrors", async () => {
 		await createApi({ suppressErrors: true });
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Test");
+		api.slothlet.hook.on(
+			"before:**",
+			() => { throw new Error("Test");
 			},
-			{ id: "fail", pattern: "**" }
+			{ id: "fail" }
 		);
 
 		const suppressed = await api.math.add(1, 2);
 		expect(suppressed).toBeUndefined();
 
-		api.hooks.disable();
+		api.slothlet.hook.disable();
 		const normal = await api.math.add(1, 2);
 		expect(normal).toBe(3);
 
-		api.hooks.enable();
+		api.slothlet.hook.enable();
 		const suppressedAgain = await api.math.add(1, 2);
 		expect(suppressedAgain).toBeUndefined();
 	});
@@ -222,34 +214,30 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const flags = { all: [] };
 
-		api.hooks.on(
-			"error",
-			() => {
-				flags.all.push("h1");
+		api.slothlet.hook.on(
+			"error:**",
+			() => { flags.all.push("h1");
 			},
-			{ id: "error1", pattern: "**" }
+			{ id: "error1" }
 		);
-		api.hooks.on(
-			"error",
-			() => {
-				flags.all.push("h2");
+		api.slothlet.hook.on(
+			"error:math.*",
+			() => { flags.all.push("h2");
 			},
-			{ id: "error2", pattern: "math.*" }
+			{ id: "error2" }
 		);
-		api.hooks.on(
-			"error",
-			() => {
-				flags.all.push("h3");
+		api.slothlet.hook.on(
+			"error:math.add",
+			() => { flags.all.push("h3");
 			},
-			{ id: "error3", pattern: "math.add" }
+			{ id: "error3" }
 		);
 
-		api.hooks.on(
-			"before",
-			() => {
-				throw new Error("Test");
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => { throw new Error("Test");
 			},
-			{ id: "fail", pattern: "math.add" }
+			{ id: "fail" }
 		);
 
 		const result = await api.math.add(1, 2);

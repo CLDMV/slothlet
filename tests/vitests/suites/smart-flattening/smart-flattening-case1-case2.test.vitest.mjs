@@ -12,7 +12,7 @@ import { describe, test, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_MATRIX, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
 
 const _filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(_filename);
@@ -26,7 +26,7 @@ async function materialize(func, ...args) {
 	}
 }
 
-describe.each(TEST_MATRIX)("Smart Flattening Case 1-2 - $name", ({ name: ___name, config }) => {
+describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name: ___name, config }) => {
 	// ========================================================================
 	// CASE 1: SINGLE FILE MATCHING API PATH
 	// ========================================================================

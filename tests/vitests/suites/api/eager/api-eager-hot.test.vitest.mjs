@@ -1,16 +1,15 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/processed/api/eager/api-eager-hot.test.vitest.mjs
+ *	@Filename: /tests/vitests/suites/api/eager/api-eager-hot.test.vitest.mjs
  *	@Date: 2026-01-12 18:04:43 -08:00 (1768269883)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-12 18:10:55 -08:00 (1768270255)
+ *	@Last modified time: 2026-01-28 12:15:57 -08:00 (1769631357)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
@@ -25,8 +24,8 @@ function mockMd5(input) {
 	return "mock-md5-hash-" + input.length;
 }
 
-// EAGER configs with hotReload (EAGER_HOT, EAGER_LIVE_HOT)
-const matrixConfigs = getMatrixConfigs({ mode: "eager", hotReload: true, hooks: false });
+// EAGER configs (no hooks)
+const matrixConfigs = getMatrixConfigs({ mode: "eager", hooks: false });
 const { apiTests } = testConfig.testConfig;
 
 describe("API (eager-hot)", () => {
@@ -38,8 +37,8 @@ describe("API (eager-hot)", () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				api_mode: "function",
-				reference: { md5: mockMd5 }
+				reference: { md5: mockMd5 },
+				diagnostics: true
 			});
 		});
 
@@ -75,8 +74,10 @@ describe("API (eager-hot)", () => {
 				expect(result).toBe("mock-md5-hash-4");
 			});
 
-			it("describe function", () => {
-				expect(typeof api.describe).toBe("function");
+			it("describe function (v3: requires diagnostics)", () => {
+				expect(typeof api.slothlet.diag.describe).toBe("function");
+				const keys = api.slothlet.diag.describe();
+				expect(Array.isArray(keys)).toBe(true);
 			});
 
 			it("shutdown function", () => {

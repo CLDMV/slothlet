@@ -15,7 +15,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 	let slothlet;
 
 	beforeEach(async () => {
-		const slothletModule = await import("../../../../index2.mjs");
+		const slothletModule = await import("@cldmv/slothlet");
 		slothlet = slothletModule.default;
 	});
 

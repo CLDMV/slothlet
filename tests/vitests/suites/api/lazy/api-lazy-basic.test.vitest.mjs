@@ -24,8 +24,8 @@ function mockMd5(input) {
 	return "mock-md5-hash-" + input.length;
 }
 
-// Only LAZY config (no hooks, no hot, no live)
-const matrixConfigs = getMatrixConfigs({ mode: "lazy", hooks: false, hotReload: false, runtime: "async" });
+// Only LAZY config (no hooks, no live)
+const matrixConfigs = getMatrixConfigs({ mode: "lazy", hooks: false, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
 describe("API (lazy-basic)", () => {
@@ -38,7 +38,8 @@ describe("API (lazy-basic)", () => {
 				...config,
 				dir: TEST_DIRS.API_TEST,
 				api_mode: "function",
-				reference: { md5: mockMd5 }
+				reference: { md5: mockMd5 },
+				diagnostics: true
 			});
 		});
 
@@ -74,8 +75,11 @@ describe("API (lazy-basic)", () => {
 				expect(result).toBe("mock-md5-hash-4");
 			});
 
-			it("describe function", () => {
-				expect(typeof api.describe).toBe("function");
+			it("describe function (v3: requires diagnostics)", async () => {
+				// In v3, describe is at api.slothlet.diag.describe() and requires diagnostics:true
+				expect(typeof api.slothlet.diag.describe).toBe("function");
+				const keys = await api.slothlet.diag.describe();
+				expect(Array.isArray(keys)).toBe(true);
 			});
 
 			it("shutdown function", () => {

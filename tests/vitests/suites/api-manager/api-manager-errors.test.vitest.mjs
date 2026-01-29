@@ -24,8 +24,8 @@ async function createApiInstance(baseConfig, overrides = {}) {
 	return slothlet({ ...baseConfig, ...overrides });
 }
 
-const NON_HOT_CONFIG = { ...getMatrixConfigs({ hotReload: false })[0].config, dir: TEST_DIRS.API_TEST };
-const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({ hotReload: true })[0].config, dir: TEST_DIRS.API_TEST };
+const NON_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
+const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
 
 describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when hotReload is disabled", async () => {

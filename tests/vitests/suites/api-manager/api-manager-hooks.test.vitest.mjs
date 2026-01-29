@@ -39,7 +39,7 @@ const BASE_DIRS = [
 	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
 ];
 
-const HOOKED_HOT_RELOAD_MATRIX = getMatrixConfigs({ hotReload: true, hooks: true }).flatMap(({ name, config }) =>
+const HOOKED_HOT_RELOAD_MATRIX = getMatrixConfigs({ hooks: true }).flatMap(({ name, config }) =>
 	BASE_DIRS.map(({ label, dir }) => ({
 		name: `${name} | ${label}`,
 		config: { ...config, dir }
@@ -60,12 +60,12 @@ describe.each(HOOKED_HOT_RELOAD_MATRIX)("Hot Reload Hooks - $name", ({ config })
 		api = await createApiInstance(config);
 		let hookCalled = false;
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ path }) => {
 				hookCalled = Boolean(path);
 			},
-			{ pattern: "**" }
+			{ }
 		);
 
 		const mathAdd = getMathAdd(api, config.dir);

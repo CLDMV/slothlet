@@ -38,31 +38,31 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 	test("should chain multiple before hooks for argument modifications (primitives)", async () => {
 		const modifications = [];
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.add",
 			({ args }) => {
 				modifications.push("hook1");
 				return [args[0] * 2, args[1]];
 			},
-			{ id: "hook1-double", priority: 300, pattern: "math.add" }
+			{ id: "hook1-double", priority: 300 }
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.add",
 			({ args }) => {
 				modifications.push("hook2");
 				return [args[0], args[1] + 10];
 			},
-			{ id: "hook2-add10", priority: 200, pattern: "math.add" }
+			{ id: "hook2-add10", priority: 200 }
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:math.add",
 			({ args }) => {
 				modifications.push("hook3");
 				return [args[1], args[0]];
 			},
-			{ id: "hook3-swap", priority: 100, pattern: "math.add" }
+			{ id: "hook3-swap", priority: 100 }
 		);
 
 		const result = await api.math.add(2, 3);
@@ -75,48 +75,48 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 	});
 
 	test("should chain multiple before hooks for argument modifications (objects)", async () => {
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], a: 1 }, ...args.slice(1)];
 				}
 				return undefined;
 			},
-			{ id: "add-a", priority: 300, pattern: "**" }
+			{ id: "add-a", priority: 300 }
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], b: 2 }, ...args.slice(1)];
 				}
 				return undefined;
 			},
-			{ id: "add-b", priority: 200, pattern: "**" }
+			{ id: "add-b", priority: 200 }
 		);
 
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					return [{ ...args[0], c: 3 }, ...args.slice(1)];
 				}
 				return undefined;
 			},
-			{ id: "add-c", priority: 100, pattern: "**" }
+			{ id: "add-c", priority: 100 }
 		);
 
 		let verified = false;
-		api.hooks.on(
-			"before",
+		api.slothlet.hook.on(
+			"before:**",
 			({ args }) => {
 				if (typeof args[0] === "object") {
 					verified = args[0].a === 1 && args[0].b === 2 && args[0].c === 3;
 				}
 			},
-			{ id: "verify", priority: 50, pattern: "**" }
+			{ id: "verify", priority: 50 }
 		);
 
 		await api.math.add({ original: true }, 5);
@@ -126,10 +126,9 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Before Chaining > Config
 
 	test("should modify args through 5 hooks in sequence", async () => {
 		for (let i = 0; i < 5; i++) {
-			api.hooks.on("before", ({ args }) => [args[0] * 2, args[1]], {
+			api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1]], {
 				id: `multiply-hook-${i}`,
-				priority: 500 - i * 100,
-				pattern: "math.add"
+				priority: 500 - i * 100
 			});
 		}
 

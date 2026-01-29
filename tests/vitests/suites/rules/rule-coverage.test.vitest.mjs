@@ -11,11 +11,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Read the mapping table from API-RULE-MAPPING.md
-const mappingDocPath = join(__dirname, "../../../docs/API-RULE-MAPPING.md");
+const mappingDocPath = join(__dirname, "../../../../docs/API-RULE-MAPPING.md");
 const mappingDoc = readFileSync(mappingDocPath, "utf-8");
 
 // Read the implementation file
-const flattenPath = join(__dirname, "../../../src3/lib/helpers/flatten.mjs");
+const flattenPath = join(__dirname, "../../../../src/lib/processors/flatten.mjs");
 const flattenCode = readFileSync(flattenPath, "utf-8");
 
 /**
