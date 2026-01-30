@@ -212,7 +212,11 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 					// Filter out internal options that shouldn't be user-controllable
-					const { recordHistory, ...filteredOptions } = options;
+					// - recordHistory: internal tracking flag
+					// - collisionMode: must be set at initialization for security (prevents bypassing collision config)
+					// - mutateExisting: internal flag set automatically based on collision mode
+					// User-controllable options: moduleId, forceOverwrite
+					const { recordHistory, collisionMode, mutateExisting, ...filteredOptions } = options;
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
