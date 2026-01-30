@@ -328,12 +328,9 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		// Should throw error for deep nesting (correct behavior)
 		// In v3, pattern is part of the first argument typePattern string
 		expect(() => {
-			api.slothlet.hook.on(
-				`before:${pattern}`,
-				() => {
-					// Hook registered but may not be called
-				}
-			);
+			api.slothlet.hook.on(`before:${pattern}`, () => {
+				// Hook registered but may not be called
+			});
 		}).toThrow("Brace expansion exceeds maximum nesting depth of 10");
 
 		// No need to test function call since registration throws
