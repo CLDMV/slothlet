@@ -272,6 +272,31 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
+			 * @param {string} str - String to sanitize (e.g., filename, path segment)
+			 * @returns {string} Sanitized property name safe for API use
+			 * @public
+			 *
+			 * @description
+			 * Sanitizes a string using the same rules applied during API path construction.
+			 * Useful for predicting what API path a given filename will become.
+			 *
+			 * @example
+			 * api.slothlet.sanitize("my-module.mjs")  // => "myModule"
+			 * api.slothlet.sanitize("auto-IP.mjs")    // => "autoIP"
+			 */
+			sanitize: function slothlet_sanitize(str) {
+				if (typeof str !== "string") {
+					throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+						argument: "str",
+						expected: "string",
+						received: typeof str,
+						validationError: true
+					});
+				}
+				return slothlet.helpers.sanitize.sanitizePropertyName(str);
+			},
+
+			/**
 			 * Context API for per-request context isolation.
 			 * @type {object}
 			 */
