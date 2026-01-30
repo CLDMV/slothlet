@@ -80,7 +80,7 @@ describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ co
 		// But sanitize itself doesn't strip extensions
 		const sanitizedWithExt = api.slothlet.sanitize("math.mjs");
 		expect(sanitizedWithExt).toBe("mathMjs");
-		
+
 		// Without extension matches the actual API name
 		const sanitizedNoExt = api.slothlet.sanitize("math");
 		expect(api[sanitizedNoExt]).toBeDefined();
@@ -91,7 +91,7 @@ describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ co
 		// Test that sanitize can predict how a module name (without extension) will be exposed
 		const moduleName = "string";
 		const predictedPath = api.slothlet.sanitize(moduleName);
-		
+
 		// api.string should exist if string.mjs exists in TEST_DIRS.API_TEST
 		if (api[predictedPath]) {
 			expect(typeof api[predictedPath]).toBe("object");

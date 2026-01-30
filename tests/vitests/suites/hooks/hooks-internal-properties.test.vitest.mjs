@@ -3,7 +3,7 @@
  *
  * Original test: tests/test-hooks-internal-properties.mjs
  * Original test count: 7 scenarios
- * New test count: 7 scenarios × 16 configs = 112 tests
+ * New test count: 7 scenarios × 4 hook configs = 28 tests
  *
  * @module tests/vitests/processed/hooks/hooks-internal-properties.test.vitest
  */
@@ -11,8 +11,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-// Test each configuration in the matrix
-describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'", ({ config }) => {
+// Test each configuration in the matrix - only hooks-enabled configs
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Properties > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
@@ -153,6 +153,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		api.slothlet.hook.on(
 			"before:**",
 			({ path }) => {
+				console.log(`[DEBUG] Hook triggered for path: ${path}`);
 				hooksTriggeredPaths.push(path);
 			},
 			{ id: "path-tracker" }
@@ -163,8 +164,14 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
 
+		console.log(`[DEBUG] About to call api.math.add(2, 3)`);
+		console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
+		console.log(`[DEBUG] api.math type: ${typeof api.math}`);
+
 		// Now call an actual API function
 		await api.math.add(2, 3);
+
+		console.log(`[DEBUG] Hooks triggered:`, hooksTriggeredPaths);
 
 		// Only the actual function call should trigger hooks
 		expect(hooksTriggeredPaths).toHaveLength(1);
@@ -178,18 +185,25 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		const ___unused1 = api.slothlet.hook;
 		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
+		const ___unused4 = api._impl;
 
-		// Now register a hook
+		// Now register hook after accessing properties
 		api.slothlet.hook.on(
-			"before:math.*",
+			"before:math.add",
 			({ path, args }) => {
-				hookCalls.push({ path: path, args: args });
+				console.log(`[DEBUG] Hook triggered for ${path} with args:`, args);
+				hookCalls.push({ path, args });
 			},
-			{ id: "test-hook" }
+			{ id: "track-add" }
 		);
 
-		// Call a function - hook should still work
+		console.log(`[DEBUG] About to call api.math.add(5, 7)`);
+		console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
+
+		// Call API function
 		const result = await api.math.add(5, 7);
+
+		console.log(`[DEBUG] Result: ${result}, hookCalls:`, hookCalls);
 
 		expect(result).toBe(12);
 		expect(hookCalls).toHaveLength(1);

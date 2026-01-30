@@ -997,6 +997,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Declare variables outside try-catch-finally so they're accessible in all blocks
 			let result;
 			let finalResult;
+			let isAsync = false; // Track if we're dealing with a promise
 
 			try {
 				// Execute before hooks synchronously
@@ -1006,8 +1007,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 					// Check for short-circuit
 					if (beforeResult.shortCircuit) {
-						// Execute always hooks synchronously for short-circuit
-						hookManager.executeAlwaysHooks(wrapper.apiPath, args, beforeResult.value, false, api, ctx);
+						// Set finalResult so finally block can call always hooks with correct value
+						finalResult = beforeResult.value;
 						return beforeResult.value;
 					}
 				}
@@ -1093,6 +1094,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// Check if result is a Promise (async function)
 				if (result && typeof result === "object" && typeof result.then === "function") {
+					// Mark as async so finally block skips always hooks (we handle them in the promise chain)
+					isAsync = true;
 					// Async result - attach hooks to Promise chain
 					return result.then(
 						(resolvedResult) => {
@@ -1117,13 +1120,13 @@ export class UnifiedWrapper extends ComponentBase {
 									hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
 									hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
 								}
-								
+
 								// Check if errors should be suppressed
 								const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
 								if (suppressErrors) {
 									return undefined;
 								}
-								
+
 								throw error;
 							}
 						},
@@ -1143,13 +1146,13 @@ export class UnifiedWrapper extends ComponentBase {
 								const originalError = unwrapError(error);
 								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
 							}
-							
+
 							// Check if errors should be suppressed
 							const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
 							if (suppressErrors) {
 								return undefined;
 							}
-							
+
 							throw error;
 						}
 					);
@@ -1176,19 +1179,20 @@ export class UnifiedWrapper extends ComponentBase {
 					};
 					hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
-				
+
 				// Check if errors should be suppressed
 				const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
 				if (suppressErrors) {
 					// Don't throw - return undefined after always hooks run
 					return undefined;
 				}
-				
+
 				throw error;
 			} finally {
 				// Always hooks execute once for synchronous code paths
 				// (async paths handle always hooks in their promise chains)
-				if (hasHooks && !(typeof result === "object" && result !== null && typeof result.then === "function")) {
+				// Skip only if we're dealing with an async result (promise)
+				if (hasHooks && !isAsync) {
 					// Track error state with a flag set in catch block
 					const syncError = this.lastSyncError;
 					this.lastSyncError = null;

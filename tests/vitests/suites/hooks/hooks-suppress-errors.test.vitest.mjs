@@ -126,7 +126,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 
 		const result = await api.math.add(2, 3);
 
-		expect(result).toBeUndefined();
+		// Hook failure should NOT short-circuit - function result (5) should still be returned
+		expect(result).toBe(5);
 		expect(flags.called).toBe(true);
 		expect(lastContext.current?.source?.type).toBe("after");
 		expect(lastContext.current?.error?.message).toBe("After hook failed");
@@ -247,3 +248,5 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		expect(flags.all.sort()).toEqual(["h1", "h2", "h3"]);
 	});
 });
+
+

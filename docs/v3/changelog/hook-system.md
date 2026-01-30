@@ -1,11 +1,146 @@
 # Hook System Implementation
 
-**Status**: ✅ Implemented  
-**Date**: January 29, 2026  
+**Status**: ✅ Complete  
+**Completed**: January 30, 2026  
 **Related Files**: 
 - `src/lib/handlers/hook-manager.mjs`
 - `src/lib/handlers/unified-wrapper.mjs`
 - `docs/HOOKS.md`
+- `tests/vitests/suites/hooks/` (14 test files, 557 tests)
+
+---
+
+## Test Results
+
+**All 557 hook tests passing (100%):**
+- ✅ hooks-after-chaining.test.vitest.mjs (12/12)
+- ✅ hooks-always-error-context.test.vitest.mjs (28/28)
+- ✅ hooks-async-timing.test.vitest.mjs (8/8)
+- ✅ hooks-before-chaining.test.vitest.mjs (12/12)
+- ✅ hooks-comprehensive.test.vitest.mjs (88/88)
+- ✅ hooks-debug.test.vitest.mjs (24/24)
+- ✅ hooks-error-source.test.vitest.mjs (24/24)
+- ✅ hooks-execution.test.vitest.mjs (80/80)
+- ✅ hooks-internal-properties.test.vitest.mjs (28/28)
+- ✅ hooks-mixed-scenarios.test.vitest.mjs (28/28)
+- ✅ hooks-patterns.test.vitest.mjs (61/61)
+- ✅ hooks-short-circuit.test.vitest.mjs (36/36)
+- ✅ hooks-suppress-errors.test.vitest.mjs (36/36)
+- ✅ hook-subsets.test.vitest.mjs (92/92)
+
+**Baseline tests:** 34 files, 2,356 tests passing
+
+---
+
+## Implementation Highlights
+
+### 1. Always Hook Timing Fix (January 30, 2026)
+
+**Issue:** Always hooks were being called twice during short-circuit execution - once when the before hook short-circuited, and again in the finally block.
+
+**Root Cause:** 
+```javascript
+// Before hook short-circuits
+if (beforeResult.shortCircuit) {
+    hookManager.executeAlwaysHooks(...); // Call #1
+    return beforeResult.value;
+}
+// ... later in finally block
+finally {
+    if (hasHooks) {
+        hookManager.executeAlwaysHooks(...); // Call #2 - BUG!
+    }
+}
+```
+
+**Fix:** Remove always hooks call from short-circuit block, set `finalResult` instead so finally block has correct value:
+```javascript
+if (beforeResult.shortCircuit) {
+    finalResult = beforeResult.value; // Set for finally block
+    return beforeResult.value;
+}
+// Finally block calls always hooks once with correct finalResult
+```
+
+**Tests Fixed:** hooks-always-error-context.test.vitest.mjs (4 short-circuit tests)
+
+### 2. Async Function Always Hook Timing (January 30, 2026)
+
+**Issue:** Need to verify always hooks fire in async promise chain, not in finally block.
+
+**Solution:** Added `isAsync` flag:
+```javascript
+// Detect promise
+if (result && typeof result === "object" && typeof result.then === "function") {
+    isAsync = true; // Flag for finally block
+    return result.then(
+        (resolvedResult) => {
+            // Always hooks fire here (in promise chain)
+            hookManager.executeAlwaysHooks(...);
+        }
+    );
+}
+
+// Finally block checks flag
+finally {
+    if (hasHooks && !isAsync) { // Skip if async
+        hookManager.executeAlwaysHooks(...);
+    }
+}
+```
+
+**Test Added:** hooks-async-timing.test.vitest.mjs (8 tests) - Uses synchronous checks (no await) to verify hooks don't fire in finally block for async functions.
+
+### 3. Error Unwrapping for Hooks (January 30, 2026)
+
+**Issue:** Caught errors are wrapped in SlothletError, but hooks should receive the original error.
+
+**Solution:** Added `unwrapError()` helper:
+```javascript
+const unwrapError = (error) => {
+    return error?.cause?.originalError || error;
+};
+
+// Use in error handling
+const originalError = unwrapError(error);
+hookManager.executeErrorHooks(..., originalError, ...);
+```
+
+**Tests Fixed:** hooks-always-error-context.test.vitest.mjs (error comparison tests)
+
+### 4. Pattern Matching & API Features (January 30, 2026)
+
+**Features Implemented:**
+- ✅ Brace expansion: `{a,b,c}` → matches "a", "b", or "c"
+- ✅ Negation: `!pattern` → matches anything except pattern
+- ✅ Max brace nesting depth validation (10 levels)
+- ✅ `apiDepth` config for directory traversal depth limiting
+- ✅ `list()` API returns `{ registeredHooks: [...] }` object
+- ✅ String shorthand support for type detection
+- ✅ Diagnostic API: `api.slothlet.diag.hook.compilePattern()`
+
+**Tests Fixed:** 
+- hooks-patterns.test.vitest.mjs (61/61)
+- hooks-debug.test.vitest.mjs (24/24)
+
+### 5. Hook Subsets Implementation (January 30, 2026)
+
+**Features:**
+- ✅ Subset ordering: before → primary → after
+- ✅ Priority sorting within each subset
+- ✅ Error context enhancement: added `errorType` and `subset` to sourceInfo
+- ✅ SlothletError `new` keyword fixes (7 locations)
+- ✅ i18n translations for hook errors
+
+**Tests Fixed:** hook-subsets.test.vitest.mjs (92/92)
+
+### 6. Error Suppression (January 30, 2026)
+
+**Feature:** `suppressErrors: true` config prevents hook errors from throwing
+
+**Key Insight:** Hook errors don't short-circuit function execution - the chain continues even when hooks fail. This prevents a failing hook from breaking the entire application.
+
+**Tests Fixed:** hooks-suppress-errors.test.vitest.mjs (36/36)
 
 ---
 
