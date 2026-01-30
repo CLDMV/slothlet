@@ -25,9 +25,8 @@ This document provides comprehensive reference for all `api.slothlet.*` methods 
 - `moduleId` (string): Unique identifier for ownership tracking. Default: auto-generated
 
 **Collision Handling:**
-- Uses `collision.addApi` config option to determine behavior on path conflicts
-- Modes: `"skip"`, `"warn"`, `"replace"`, `"merge"` (default), `"error"`
-- Can be overridden per-call with `options.mutateExisting` and `options.allowOverwrite`
+- Uses `api.collision.api` config option to determine behavior on path conflicts
+- Modes: `"skip"`, `"warn"`, `"replace"`, `"merge"` (default), `"merge-replace"`, `"error"`
 
 **Dependencies:**
 - No longer requires `allowMutation: true` (v3 allows runtime modifications by default)
@@ -59,7 +58,7 @@ await api.slothlet.api.add("utils", "./utils", {}, {
 - `pathOrModuleId` (string): Either an API path (e.g., `"plugins"`) or module ID used during add
 
 **Dependencies:**
-- Requires `allowMutation: true` in initial config
+- Requires `api.mutations.remove: true` in config (default: true)
 
 **Examples:**
 ```javascript
@@ -180,6 +179,12 @@ await api.slothlet.run(() => {
   - `"async"`: Uses AsyncLocalStorage for per-request context
   - `"live"`: Uses live bindings (experimental)
 
+#### `apiDepth`
+- **Type:** `number`
+- **Default:** `Infinity`
+- **Purpose:** Limits the maximum depth of API nesting during module loading
+- **Use case:** Performance optimization for deeply nested module structures
+
 ### Collision Configuration
 
 #### `collision`
@@ -197,9 +202,11 @@ await api.slothlet.run(() => {
 **Object Format (per-context control):**
 ```javascript
 {
-  collision: {
-    initial: "merge",  // During initial API build
-    addApi: "merge"    // During api.slothlet.api.add()
+  api: {
+    collision: {
+      initial: "merge",  // During initial API build
+      api: "merge"       // During api.slothlet.api.add()
+    }
   }
 }
 ```
@@ -223,6 +230,10 @@ await api.slothlet.run(() => {
   - Preserves existing properties, adds new ones
   - For wrapper conflicts, syncs child implementations
 
+- **`"merge-replace"`** - Merge properties (add new + overwrite existing)
+  - Use case: Similar to merge but new values take precedence
+  - Adds new properties and overwrites existing ones with new values
+
 - **`"error"`** - Throw error on collision
   - Use case: Strict immutable mode, prevent any overwrites
   - Throws `SlothletError` with `OWNERSHIP_CONFLICT` code
@@ -232,28 +243,36 @@ await api.slothlet.run(() => {
 // Development mode - merge everything
 const api = await slothlet({
   dir: "./api",
-  collision: "merge"
+  api: {
+    collision: "merge"
+  }
 });
 
 // Strict mode - no collisions allowed
 const api = await slothlet({
   dir: "./api",
-  collision: "error"
+  api: {
+    collision: "error"
+  }
 });
 
 // Different per-context
 const api = await slothlet({
   dir: "./api",
-  collision: {
-    initial: "skip",    // First file wins during startup
-    addApi: "replace"   // Later plugins override
+  api: {
+    collision: {
+      initial: "skip",  // First file wins during startup
+      api: "replace"    // Later plugins override
+    }
   }
 });
 
 // Case-insensitive and validated
 const api = await slothlet({
   dir: "./api",
-  collision: "MERGE"  // Normalized to "merge"
+  api: {
+    collision: "MERGE"  // Normalized to "merge"
+  }
 });
 ```
 
@@ -267,37 +286,68 @@ const api = await slothlet({
 
 // NEW v3 collision config:
 {
-  collision: {
-    initial: "merge",
-    addApi: "skip"
+  api: {
+    collision: {
+      initial: "merge",
+      api: "skip"
+    }
   }
 }
 ```
 
-### Deprecated Mutation Controls (v2 compatibility)
+### API Mutation Controls
 
-#### `allowMutation` (REMOVED in v3)
-- **v2 Behavior:** Enabled/disabled runtime API modification methods
-- **v3 Change:** Runtime modifications always available via `api.slothlet.api.*`
-- **Migration:** Remove this flag - use `collision: "error"` for immutable mode
+#### `api.mutations`
+- **Type:** `object`
+- **Default:** `{ add: true, remove: true, reload: true }`
+- **Purpose:** Controls which runtime API modification methods are available
+- **Properties:**
+  - `add` (boolean): Enable/disable `api.slothlet.api.add()` method
+  - `remove` (boolean): Enable/disable `api.slothlet.api.remove()` method
+  - `reload` (boolean): Enable/disable `api.slothlet.reload()` method
 
-#### `allowInitialOverwrite` (REMOVED in v3)
-- **v2 Behavior:** Allowed overwriting during initial API build
-- **v3 Replacement:** Use `collision.initial` mode
-- **Migration:** `allowInitialOverwrite: true` → `collision.initial: "merge"`
+**Examples:**
+```javascript
+// Disable all mutations (immutable mode)
+const api = await slothlet({
+  dir: "./api",
+  api: {
+    mutations: {
+      add: false,
+      remove: false,
+      reload: false
+    }
+  }
+});
 
-#### `allowAddApiOverwrite` (REMOVED in v3)
-- **v2 Behavior:** Allowed `api.add()` to overwrite existing paths
-- **v3 Replacement:** Use `collision.addApi` mode
-- **Migration:** `allowAddApiOverwrite: true` → `collision.addApi: "replace"`
+// Allow add but disable remove/reload
+const api = await slothlet({
+  dir: "./api",
+  api: {
+    mutations: {
+      add: true,
+      remove: false,
+      reload: false
+    }
+  }
+});
+```
 
-### Hot Reload Features
+**Migration from v2:**
+```javascript
+// OLD v2:
+{ allowMutation: false }
 
-#### `hotReload`
-- **Type:** `boolean`
-- **Default:** `false`
-- **Purpose:** Enables ownership tracking for advanced module management
-- **Enables:** Module ownership tracking and conflict detection
+// NEW v3:
+{
+  api: {
+    mutations: {
+      add: false,
+      remove: false,
+      reload: false
+    }
+  }
+}
 
 ### Context and References
 
@@ -318,7 +368,7 @@ const api = await slothlet({
 #### `backgroundMaterialize`
 - **Type:** `boolean`
 - **Default:** `false`
-- **Purpose:** Pre-load lazy modules during initialization
+- **Purpose:** Pre-load lazy modules during initialization (lazy mode only)
 - **Trade-off:** Faster first access vs slower startup
 - **Enables:** Accurate `typeof` checks immediately after init
 
@@ -337,20 +387,83 @@ const api = await slothlet({
   - `ownership`: Ownership tracking and conflicts
   - `context`: Context propagation and management
 
+**Examples:**
+```javascript
+// Enable all debug logging
+const api = await slothlet({
+  dir: "./api",
+  debug: true
+});
+
+// Enable specific categories
+const api = await slothlet({
+  dir: "./api",
+  debug: {
+    api: true,
+    ownership: true
+  }
+});
+
+### Scope Configuration
+
+#### `scope`
+- **Type:** `object`
+- **Default:** `{ merge: "shallow" }`
+- **Purpose:** Controls how context is merged in `api.slothlet.scope()` calls
+- **Properties:**
+  - `merge` (string): Merge strategy - `"shallow"` or `"deep"`
+
+**Examples:**
+```javascript
+// Use deep merge for nested context objects
+const api = await slothlet({
+  dir: "./api",
+  scope: {
+    merge: "deep"
+  }
+});
+```
+
 ### Feature Flags
 
-#### `hooks`
-- **Type:** `boolean`
+#### `hook`
+- **Type:** `boolean | string | object`
 - **Default:** `false`
-- **Purpose:** Enables hooks system (not yet implemented in v3)
-- **Current status:** Throws `NOT_IMPLEMENTED` errors
-- **Future:** Event system for API operations
+- **Purpose:** Enables hooks system for API lifecycle events
+- **Formats:**
+  - `true`: Enable all hooks with pattern `"**"`
+  - `false`: Disable hooks
+  - `string`: Enable hooks with specific pattern (e.g., `"math.*"`)
+  - `object`: Full configuration with `{ enabled, pattern, suppressErrors }`
+- **Properties (object mode):**
+  - `enabled` (boolean): Enable/disable hooks
+  - `pattern` (string): Glob pattern for which API paths trigger hooks (default: `"**"`)
+  - `suppressErrors` (boolean): If true, errors in hooks don't propagate to caller
 
-#### `diagnostics`
-- **Type:** `boolean`
-- **Default:** `false`
-- **Purpose:** Enables diagnostic mode with additional introspection
-- **Behavior:** Preserves mutation methods even when `allowMutation: false`
+**Examples:**
+```javascript
+// Enable all hooks
+const api = await slothlet({
+  dir: "./api",
+  hook: true
+});
+
+// Enable hooks for specific paths
+const api = await slothlet({
+  dir: "./api",
+  hook: "math.**"
+});
+
+// Full configuration
+const api = await slothlet({
+  dir: "./api",
+  hook: {
+    enabled: true,
+    pattern: "**",
+    suppressErrors: false
+  }
+});
+```
 
 #### `silent`
 - **Type:** `boolean`
@@ -363,16 +476,25 @@ const api = await slothlet({
 ```javascript
 const api = await slothlet({
   dir: "./api",
-  collision: "error"  // Strict immutable mode
+  api: {
+    collision: "error",  // Strict immutable mode
+    mutations: {
+      add: false,
+      remove: false,
+      reload: false
+    }
+  }
 });
 ```
 
-### Development with Hot Reload
+### Development with Hooks
 ```javascript
 const api = await slothlet({
   dir: "./api",
-  hotReload: true,
-  collision: "merge",  // Default merge behavior
+  hook: true,
+  api: {
+    collision: "merge"  // Default merge behavior
+  },
   debug: { api: true, ownership: true }
 });
 ```
@@ -384,7 +506,9 @@ const api = await slothlet({
   mode: "eager",  // Faster calls
   runtime: "async",  // Stable context
   silent: true,  // No console output
-  collision: "error"  // Strict mode
+  api: {
+    collision: "error"  // Strict mode
+  }
 });
 ```
 
@@ -392,10 +516,12 @@ const api = await slothlet({
 ```javascript
 const api = await slothlet({
   dir: "./core-api",
-  hotReload: true,
-  collision: {
-    initial: "merge",    // Merge core modules
-    addApi: "replace"    // Plugins override core
+  hook: true,
+  api: {
+    collision: {
+      initial: "merge",  // Merge core modules
+      api: "replace"     // Plugins override core
+    }
   }
 });
 
@@ -407,12 +533,16 @@ await api.slothlet.api.add("plugins", "./plugins");
 
 ### "Ownership conflict" or collision errors
 **Cause:** Collision mode set to `"error"` or ownership conflict with `"warn"` mode
-**Solution:** Use `collision: "merge"` or `collision: "replace"` mode for your use case
+**Solution:** Use `api.collision: "merge"` or `"replace"` mode for your use case
 
 ### API methods added via `api.add()` are undefined
 **Cause:** Collision mode `"skip"` or `"warn"` kept existing value instead of merging
-**Solution:** Use `collision.addApi: "merge"` or `"replace"` mode
+**Solution:** Use `api.collision.api: "merge"` or `"replace"` mode
 
 ### Path collision silently ignored
 **Cause:** Collision mode set to `"skip"`
-**Solution:** Use `collision: "merge"` or `"warn"` to see conflicts
+**Solution:** Use `api.collision: "merge"` or `"warn"` to see conflicts
+
+### Mutation methods throw errors
+**Cause:** Mutation methods disabled via `api.mutations` config
+**Solution:** Enable the specific mutation method needed (add/remove/reload)

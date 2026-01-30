@@ -1101,21 +1101,29 @@ export class UnifiedWrapper extends ComponentBase {
 								if (hasHooks) {
 									const afterResult = hookManager.executeAfterHooks(wrapper.apiPath, resolvedResult, args, api, ctx);
 									const finalResult = afterResult.modified ? afterResult.result : resolvedResult;
-									hookManager.executeAlwaysHooks(wrapper.apiPath, args, finalResult, false, api, ctx);
+									hookManager.executeAlwaysHooks(wrapper.apiPath, args, finalResult, false, [], api, ctx);
 									return finalResult;
 								}
 								return resolvedResult;
 							} catch (error) {
 								// Error in after hook during async resolution
 								if (hasHooks) {
+									const originalError = unwrapError(error);
 									const sourceInfo = {
 										type: "after",
 										timestamp: Date.now(),
-										stack: error.stack
+										stack: originalError.stack
 									};
-									hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
-									hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, api, ctx);
+									hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
+									hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
 								}
+								
+								// Check if errors should be suppressed
+								const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+								if (suppressErrors) {
+									return undefined;
+								}
+								
 								throw error;
 							}
 						},
@@ -1135,6 +1143,13 @@ export class UnifiedWrapper extends ComponentBase {
 								const originalError = unwrapError(error);
 								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
 							}
+							
+							// Check if errors should be suppressed
+							const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+							if (suppressErrors) {
+								return undefined;
+							}
+							
 							throw error;
 						}
 					);
@@ -1161,6 +1176,14 @@ export class UnifiedWrapper extends ComponentBase {
 					};
 					hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
+				
+				// Check if errors should be suppressed
+				const suppressErrors = wrapper.slothlet.config?.hook?.suppressErrors === true;
+				if (suppressErrors) {
+					// Don't throw - return undefined after always hooks run
+					return undefined;
+				}
+				
 				throw error;
 			} finally {
 				// Always hooks execute once for synchronous code paths
