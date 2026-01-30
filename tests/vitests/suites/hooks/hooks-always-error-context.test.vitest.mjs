@@ -70,7 +70,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		// Before hook short-circuits
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { return 99; // Short-circuit
+			() => {
+				return 99; // Short-circuit
 			},
 			{ id: "short-circuit", priority: 200 }
 		);
@@ -225,7 +226,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error
 		expect(alwaysContext).not.toBeNull();
 		expect(alwaysContext.hasError).toBe(true);
 		expect(alwaysContext.errors).toHaveLength(1);
-		expect(alwaysContext.errors[0]).toBe(caughtError);
+		// Compare error messages instead of instances (caught error is wrapped SlothletError, hooks get unwrapped error)
+		expect(alwaysContext.errors[0].message).toBe("Cannot divide by zero");
 	});
 
 	test("should support metrics tracking with error rates", async () => {

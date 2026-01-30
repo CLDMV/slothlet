@@ -6,6 +6,20 @@
 	"suites/cjs/cjs-default-exports.test.vitest.mjs",
 	"suites/config/collision-config.test.vitest.mjs",
 	"suites/context/per-request-context.test.vitest.mjs",
+	"suites/hooks/hooks-after-chaining.test.vitest.mjs",
+	"suites/hooks/hooks-always-error-context.test.vitest.mjs",
+	"suites/hooks/hooks-async-timing.test.vitest.mjs",
+	"suites/hooks/hooks-before-chaining.test.vitest.mjs",
+	"suites/hooks/hooks-comprehensive.test.vitest.mjs",
+	"suites/hooks/hooks-debug.test.vitest.mjs",
+	"suites/hooks/hooks-error-source.test.vitest.mjs",
+	"suites/hooks/hooks-execution.test.vitest.mjs",
+	"suites/hooks/hooks-internal-properties.test.vitest.mjs",
+	"suites/hooks/hooks-mixed-scenarios.test.vitest.mjs",
+	"suites/hooks/hooks-patterns.test.vitest.mjs",
+	"suites/hooks/hooks-short-circuit.test.vitest.mjs",
+	"suites/hooks/hooks-suppress-errors.test.vitest.mjs",
+	"suites/hooks/hook-subsets.test.vitest.mjs",
 	"suites/isolation/tv-config-isolation.test.vitest.mjs",
 	"suites/metadata/metadata-api-manager.test.vitest.mjs",
 	"suites/metadata/metadata-collision-modes.test.vitest.mjs",
@@ -17,5 +31,6 @@
 	"suites/ownership/ownership-replacement.test.vitest.mjs",
 	"suites/proxies/proxy-baseline.test.vitest.mjs",
 	"suites/ref/reference-readonly-properties.test.vitest.mjs",
-	"suites/rules/rule-coverage.test.vitest.mjs"
+	"suites/rules/rule-coverage.test.vitest.mjs",
+	"processed/api/api-sanitize.test.vitest.mjs"
 ]
