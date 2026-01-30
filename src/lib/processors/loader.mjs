@@ -61,11 +61,13 @@ export class Loader extends ComponentBase {
 	 * @param {string} dir - Directory to scan
 	 * @param {Object} [options={}] - Scan options
 	 * @param {boolean} [options.isRootScan=true] - Whether this is the root directory scan (shows empty dir warning)
+	 * @param {number} [options.currentDepth=0] - Current traversal depth
+	 * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth
 	 * @returns {Promise<Object>} Directory structure
 	 * @public
 	 */
 	async scanDirectory(dir, options = {}) {
-		const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true } = options;
+		const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true, currentDepth = 0, maxDepth = Infinity } = options;
 
 		try {
 			await stat(dir);
@@ -90,8 +92,9 @@ export class Loader extends ComponentBase {
 			const fullPath = join(dir, entry.name);
 
 			if (entry.isDirectory()) {
-				if (recursive) {
-					const subStructure = await this.scanDirectory(fullPath, { ...options, isRootScan: false });
+				// Only recurse if within depth limit
+				if (recursive && currentDepth < maxDepth) {
+					const subStructure = await this.scanDirectory(fullPath, { ...options, isRootScan: false, currentDepth: currentDepth + 1 });
 					structure.directories.push({
 						path: fullPath,
 						name: entry.name,

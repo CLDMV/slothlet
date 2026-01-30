@@ -55,14 +55,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("hook1");
+			() => {
+				execution.push("hook1");
 			},
 			{ id: "hook1", priority: 100 }
 		);
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("hook2");
+			() => {
+				execution.push("hook2");
 			},
 			{ id: "hook2", priority: 200 }
 		);
@@ -77,14 +79,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("first");
+			() => {
+				execution.push("first");
 			},
 			{ id: "first", priority: 100 }
 		);
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("second");
+			() => {
+				execution.push("second");
 			},
 			{ id: "second", priority: 100 }
 		);
@@ -99,7 +103,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { hookCalled = true;
+			() => {
+				hookCalled = true;
 				// Return undefined (no modification)
 			},
 			{ id: "hook1" }
@@ -128,7 +133,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 	it("should handle before hooks returning single value", async () => {
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { return 42; // Should be wrapped in array
+			() => {
+				return 42; // Should be wrapped in array
 			},
 			{ id: "hook1" }
 		);
@@ -149,7 +155,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 			},
 			{
 				id: "hook1",
-				priority: 100 }
+				priority: 100
+			}
 		);
 
 		api.slothlet.hook.on(
@@ -160,7 +167,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 			},
 			{
 				id: "hook2",
-				priority: 200 }
+				priority: 200
+			}
 		);
 
 		const result = await api.math.add(2, 3);
@@ -241,14 +249,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:math.*",
-			() => { mathHookCalled = true;
+			() => {
+				mathHookCalled = true;
 			},
 			{ id: "math-only" }
 		);
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { allHookCalled = true;
+			() => {
+				allHookCalled = true;
 			},
 			{ id: "all" }
 		);
@@ -264,7 +274,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { hookCalled = true;
+			() => {
+				hookCalled = true;
 			},
 			{ id: "test-hook" }
 		);
@@ -282,14 +293,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("hook1");
+			() => {
+				execution.push("hook1");
 			},
 			{ id: "hook1" }
 		);
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("hook2");
+			() => {
+				execution.push("hook2");
 			},
 			{ id: "hook2" }
 		);
@@ -307,14 +320,16 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { hooksCalled++;
+			() => {
+				hooksCalled++;
 			},
 			{ id: "hook1" }
 		);
 
 		api.slothlet.hook.on(
 			"before:**",
-			() => { hooksCalled++;
+			() => {
+				hooksCalled++;
 			},
 			{ id: "hook2" }
 		);
@@ -332,7 +347,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { execution.push("undefined-hook");
+			() => {
+				execution.push("undefined-hook");
 				// Return undefined
 			},
 			{ id: "undefined-hook", priority: 300 }
@@ -397,31 +413,36 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		// Multiple hooks with different priorities
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("p50");
+			() => {
+				execution.push("p50");
 			},
 			{ id: "p50", priority: 50 }
 		);
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("p200");
+			() => {
+				execution.push("p200");
 			},
 			{ id: "p200", priority: 200 }
 		);
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("p100-1");
+			() => {
+				execution.push("p100-1");
 			},
 			{ id: "p100-1", priority: 100 }
 		);
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("p100-2");
+			() => {
+				execution.push("p100-2");
 			},
 			{ id: "p100-2", priority: 100 }
 		);
 		api.slothlet.hook.on(
 			"before:**",
-			() => { execution.push("p300");
+			() => {
+				execution.push("p300");
 			},
 			{ id: "p300", priority: 300 }
 		);
@@ -436,7 +457,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 
 		api.slothlet.hook.on(
 			"always:**",
-			() => { alwaysHookCalled = true;
+			() => {
+				alwaysHookCalled = true;
 			},
 			{ id: "always-hook" }
 		);
@@ -468,7 +490,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 	it("should handle hook errors gracefully", async () => {
 		api.slothlet.hook.on(
 			"before:**",
-			() => { throw new Error("Hook error");
+			() => {
+				throw new Error("Hook error");
 			},
 			{ id: "error-hook" }
 		);

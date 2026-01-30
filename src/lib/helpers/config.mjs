@@ -308,11 +308,12 @@ export class Config extends ComponentBase {
 			dir: resolvedDir,
 			mode: this.normalizeMode(config.mode),
 			runtime: this.normalizeRuntime(config.runtime),
+			apiDepth: config.apiDepth !== undefined ? config.apiDepth : Infinity,
 			reference: config.reference || null,
 			context: config.context || null,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
-		hook: hookConfig,
+			hook: hookConfig,
 			collision: finalCollision,
 			api: {
 				collision: finalCollision,
