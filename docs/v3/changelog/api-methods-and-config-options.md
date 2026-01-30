@@ -116,6 +116,35 @@ await api.slothlet.reload();
 
 ---
 
+### `api.slothlet.sanitize(str)`
+
+**Purpose:** Sanitizes a string using the same rules applied during API path construction.
+
+**Parameters:**
+- `str` (string): String to sanitize (e.g., filename, path segment)
+
+**Returns:** Sanitized property name safe for API use
+
+**Use Cases:**
+- Predict what API path a given filename will become
+- Validate naming conventions before creating files
+- Debug API path resolution issues
+
+**Examples:**
+```javascript
+// File name sanitization
+api.slothlet.sanitize("my-module.mjs");  // => "myModule"
+api.slothlet.sanitize("auto-IP.mjs");    // => "autoIP"
+api.slothlet.sanitize("user_settings.mjs");  // => "userSettings"
+
+// Predict API paths
+const filename = "data-processor.mjs";
+const apiPath = api.slothlet.sanitize(filename);
+console.log(`File ${filename} will be accessible at api.${apiPath}`);
+```
+
+---
+
 ### `api.slothlet.shutdown()`
 
 **Purpose:** Shuts down the slothlet instance and cleans up resources.
