@@ -25,9 +25,9 @@ async function createApiInstance(baseConfig, overrides = {}) {
 }
 
 // All configurations with hooks enabled
-const HOOK_SUBSET_MATRIX = getMatrixConfigs({ hooks: true }).map(({ name, config }) => ({
+const HOOK_SUBSET_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).map(({ name, config }) => ({
 	name,
-	config: { ...config, dir: TEST_DIRS.API_TEST }
+	config: { ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } }
 }));
 
 describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
@@ -43,7 +43,6 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 	it("debug: check hook configuration", async () => {
 		api = await createApiInstance(config);
 		console.log("Config:", config);
-		console.log("HookManager enabled (__ctx):", api.__ctx?.hookManager?.enabled);
 		console.log("Hooks API available:", !!api.slothlet.hook);
 		console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
 		console.log("math.add.__slothletPath:", api.math.add.__slothletPath);

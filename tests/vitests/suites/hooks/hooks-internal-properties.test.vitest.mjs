@@ -20,7 +20,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 
@@ -62,7 +62,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 		expect(hookExecuted).toBe(false);
 	});
 
-	it("should not trigger hooks when accessing api.__ctx", () => {
+	it("should not trigger hooks when accessing api.slothlet namespace", () => {
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
@@ -74,10 +74,10 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 			{ id: "catch-all" }
 		);
 
-		// Access __ctx - should NOT trigger hooks
-		const ctx = api.__ctx;
+		// Access slothlet namespace - should NOT trigger hooks
+		const slothletNs = api.slothlet;
 
-		expect(typeof ctx).toBe("object");
+		expect(typeof slothletNs).toBe("object");
 		expect(hookExecuted).toBe(false);
 	});
 
@@ -160,7 +160,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 
 		// Access internal properties (should not trigger hooks)
 		const ___unused1 = api.slothlet.hook;
-		const ___unused2 = api.__ctx;
+		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
 
 		// Now call an actual API function
@@ -176,7 +176,7 @@ describe.each(getMatrixConfigs())("Hooks Internal Properties > Config: '$name'",
 
 		// Access all internal properties first
 		const ___unused1 = api.slothlet.hook;
-		const ___unused2 = api.__ctx;
+		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
 
 		// Now register a hook

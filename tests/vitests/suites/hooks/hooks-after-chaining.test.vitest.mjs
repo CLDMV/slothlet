@@ -12,7 +12,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaining > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
@@ -22,7 +22,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks After Chaining > Config:
 
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			dir: TEST_DIRS.API_TEST,
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 

@@ -7,15 +7,17 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
-describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'", ({ config }) => {
+
+describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))("Hooks Debug > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
-		// Create API instance with hooks enabled and the test config
+		// Create API instance with hooks enabled, diagnostics, and the test config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			diagnostics: true,
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 
@@ -25,23 +27,26 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 		}
 	});
 
-	it("should expose hook management API", () => {
+	it("should expose hook diagnostic API when diagnostics enabled", () => {
 		// Verify hooks API exists
 		expect(api.slothlet.hook).toBeDefined();
 		expect(typeof api.slothlet.hook.on).toBe("function");
 		expect(typeof api.slothlet.hook.list).toBe("function");
 
-		// Verify internal context
-		expect(api.__ctx).toBeDefined();
-		expect(api.__ctx.hookManager).toBeDefined();
-		expect(typeof api.__ctx.hookManager.enabled).toBe("boolean");
-	});
+		// Verify diagnostics context
+		expect(api.slothlet.diag).toBeDefined();
+		expect(api.slothlet.diag.hook).toBeDefined();
+		expect(typeof api.slothlet.diag.hook.enabled).toBe("boolean");
+		expect(typeof api.slothlet.diag.hook.compilePattern).toBe("function");
 
-	it("should register and list hooks correctly", () => {
-		// Register a test hook
-		api.slothlet.hook.on("before:**", () => {
+		// Register a hook to test functionality
+		api.slothlet.hook.on(
+			"before:math.add",
+			() => {
 				// Debug hook - just for testing registration
-			}, { id: "test-hook",  priority: 100 });
+			},
+			{ id: "test-hook", priority: 100 }
+		);
 
 		// Verify hook was registered
 		const hooksList = api.slothlet.hook.list();
@@ -57,54 +62,51 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 	});
 
 	it("should expose hook manager internal methods", () => {
-		const manager = api.__ctx.hookManager;
+		const diag = api.slothlet.diag.hook;
 
-		// Test pattern compilation methods exist
-		expect(typeof manager._expandBraces).toBe("function");
-		expect(typeof manager._patternToRegex).toBe("function");
+		// Test pattern compilation method exists
+		expect(typeof diag.compilePattern).toBe("function");
 
-		// Test pattern compilation functionality
-		const testPattern = "**";
-		const expandedBraces = manager._expandBraces(testPattern);
-		expect(Array.isArray(expandedBraces)).toBe(true);
-		expect(expandedBraces.length).toBeGreaterThan(0);
+		// Test basic patterns
+		const matcher = diag.compilePattern("math.*");
+		expect(typeof matcher).toBe("function");
+		expect(matcher("math.add")).toBe(true);
+		expect(matcher("math.sub")).toBe(true);
+		expect(matcher("user.login")).toBe(false);
 
-		const regexString = manager._patternToRegex(expandedBraces[0]);
-		expect(typeof regexString).toBe("string");
-		expect(regexString.length).toBeGreaterThan(0);
-
-		// Test regex compilation and matching
-		const fullRegex = new RegExp(`^${regexString}$`);
-		expect(fullRegex.test("math.add")).toBe(true);
+		// Test pattern compilation functionality with globstar
+		const globMatcher = diag.compilePattern("**");
+		expect(typeof globMatcher).toBe("function");
+		expect(globMatcher("math.add")).toBe(true);
+		expect(globMatcher("any.deep.path")).toBe(true);
 	});
 
 	it("should compile hook patterns correctly", () => {
-		const manager = api.__ctx.hookManager;
+		const diag = api.slothlet.diag.hook;
 
 		// Register a hook and verify pattern compilation
-		api.slothlet.hook.on("before:math.*", () => {}, { id: "pattern-test-hook" });
+		api.slothlet.hook.on("before:math.*", () => {}, { id: "pattern-test" });
 
-		// Check compiled patterns - hooks might be in a map or array
-		let foundTestHook = false;
-		const hooksToCheck = manager.hooks instanceof Map ? manager.hooks.values() : Object.values(manager.hooks || {});
+		// Test wildcard patterns
+		const singleWildcard = diag.compilePattern("math.*");
+		expect(singleWildcard("math.add")).toBe(true);
+		expect(singleWildcard("math.sub")).toBe(true);
+		expect(singleWildcard("user.login")).toBe(false);
 
-		for (const hook of hooksToCheck) {
-			if (hook.name === "pattern-test-hook") {
-				foundTestHook = true;
-				expect(hook.pattern).toBe("math.*");
-				expect(hook.compiledPattern).toBeDefined();
-				expect(hook.compiledPattern.test("math.add")).toBe(true);
-				expect(hook.compiledPattern.test("string.reverse")).toBe(false);
-				break;
-			}
-		}
+		// Test double wildcard patterns
+		const doubleWildcard = diag.compilePattern("**");
+		expect(doubleWildcard("math.add")).toBe(true);
+		expect(doubleWildcard("user.login")).toBe(true);
+		expect(doubleWildcard("deep.nested.path")).toBe(true);
 
-		// If no hooks structure found, at least verify the hook was registered
-		if (!foundTestHook) {
-			const hooksList = api.slothlet.hook.list();
-			expect(hooksList).toBeDefined();
-			// The hook should be registered in some form
-		}
+		// Test question mark pattern
+		const questionMark = diag.compilePattern("tes?");
+		expect(questionMark("test")).toBe(true);
+		expect(questionMark("test2")).toBe(false);
+
+		// Verify the hook was registered (list should contain it)
+		const hooksList = api.slothlet.hook.list();
+		expect(hooksList).toBeDefined();
 	});
 
 	it("should expose function metadata for debugging", async () => {
@@ -123,39 +125,47 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Debug > Config: '$name'"
 	});
 
 	it("should enable hook pattern debugging", () => {
-		const manager = api.__ctx.hookManager;
+		const diag = api.slothlet.diag.hook;
 
 		// Test various pattern types
+		const globPattern = diag.compilePattern("*.add");
+		expect(globPattern("math.add")).toBe(true);
+		expect(globPattern("user.add")).toBe(true);
+		expect(globPattern("math.sub")).toBe(false);
+
+		const deepPattern = diag.compilePattern("*.*.*");
+		expect(deepPattern("a.b.c")).toBe(true);
+		expect(deepPattern("a.b")).toBe(false);
+
+		// Test multiple patterns
 		const patterns = ["**", "math.*", "*.add", "math.add"];
 		const testPath = "math.add";
 
 		for (const pattern of patterns) {
-			const expandedBraces = manager._expandBraces(pattern);
-			expect(Array.isArray(expandedBraces)).toBe(true);
+			const matcher = diag.compilePattern(pattern);
+			expect(typeof matcher).toBe("function");
 
-			for (const expanded of expandedBraces) {
-				const regexString = manager._patternToRegex(expanded);
-				expect(typeof regexString).toBe("string");
-
-				const fullRegex = new RegExp(`^${regexString}$`);
-				const shouldMatch = ["**", "math.*", "*.add", "math.add"].includes(pattern);
-				expect(fullRegex.test(testPath)).toBe(shouldMatch);
-			}
+			// All these patterns should match "math.add"
+			const shouldMatch = ["**", "math.*", "*.add", "math.add"].includes(pattern);
+			expect(matcher(testPath)).toBe(shouldMatch);
 		}
 	});
 
 	it("should track hook manager state", () => {
-		const manager = api.__ctx.hookManager;
+		const diag = api.slothlet.diag.hook;
 
 		// Verify initial state
-		expect(typeof manager.enabled).toBe("boolean");
+		expect(typeof diag.enabled).toBe("boolean");
+		expect(diag.enabled).toBe(true); // Hooks are enabled in test config
 
-		// enabledPattern might not exist in all configurations
-		if (manager.enabledPattern !== undefined) {
-			expect(typeof manager.enabledPattern).toBe("string");
-		}
+		// Register hooks and verify they're tracked
+		api.slothlet.hook.on("before:test", () => {}, { id: "state-test-1" });
+		api.slothlet.hook.on("after:test", () => {}, { id: "state-test-2" });
 
-		// State should be consistent
-		expect(manager.enabled).toBe(true); // hooks enabled in config
+		const hooks = api.slothlet.hook.list();
+		expect(hooks.length).toBeGreaterThanOrEqual(2);
+
+		// State should be consistent - hooks are enabled
+		expect(diag.enabled).toBe(true);
 	});
 });

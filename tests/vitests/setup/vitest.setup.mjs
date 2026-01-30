@@ -15,7 +15,7 @@
  * // Automatically invoked by setup(); no manual call required.
  * ensureDevEnvFlags();
  */
-/* function ensureDevEnvFlags() {
+function ensureDevEnvFlags() {
 	if (!process.env.NODE_ENV) {
 		process.env.NODE_ENV = "development";
 	}
@@ -27,14 +27,14 @@
 		process.env.NODE_OPTIONS = next;
 	}
 }
-ensureDevEnvFlags();
+// ensureDevEnvFlags();
 /**
  * Run devcheck prior to all Vitest workers with ensured dev env flags.
  * @returns {Promise<void>} Resolves when devcheck completes.
  */
 // export async function globalSetup() {
 // export default async function setup() {
-/* export async function setup() {
+export async function setup() {
 	// console.log("🚀 GLOBAL SETUP: Starting devcheck validation...");
 	// console.log("🚀 GLOBAL SETUP: NODE_ENV =", process.env.NODE_ENV);
 	// console.log("🚀 GLOBAL SETUP: NODE_OPTIONS =", process.env.NODE_OPTIONS);
@@ -56,4 +56,6 @@ ensureDevEnvFlags();
 	// const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 	const { SlothletWarning } = await import("../../../src/lib/errors");
 	SlothletWarning.suppressConsole = true;
-} */
+}
+
+setup();

@@ -54,11 +54,11 @@ function toHookPath(pathValue) {
 	}
 }
 
-describe.each(getMatrixConfigs({ hooks: true }))("Hook Pattern Matching - $name", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Matching - $name", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
-		api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST });
+		api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
 	});
 
 	afterEach(async () => {
@@ -418,8 +418,8 @@ describe("Hook Pattern Edge Cases", () => {
 		api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			lazy: false,
-			hooks: true,
-			apiDepth: 1
+			apiDepth: 1,
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 

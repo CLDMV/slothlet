@@ -17,7 +17,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test each configuration in the matrix
-describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Always Error Context > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
@@ -30,7 +30,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: config.hooks || true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 
@@ -100,10 +100,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
@@ -136,10 +137,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		// Single always hook handles both success and error logging
@@ -200,7 +202,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 			// suppressErrors: false (default)
 		});
 
@@ -238,10 +240,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
@@ -280,10 +283,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Always Error Context > C
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(

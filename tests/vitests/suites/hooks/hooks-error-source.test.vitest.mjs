@@ -24,9 +24,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const describe_each_matrix = getMatrixConfigs({ hooks: true });
-
-describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Error Hook Source Tracking > Config: '$name'", ({ config }) => {
 	const apis = [];
 
 	afterEach(async () => {
@@ -48,7 +46,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -70,7 +68,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// Before hook that throws
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { throw new Error("Validation failed");
+			() => {
+				throw new Error("Validation failed");
 			},
 			{ id: "failing-validator" }
 		);
@@ -103,7 +102,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -125,7 +124,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// Before hook that simulates function error by throwing in function execution
 		api.slothlet.hook.on(
 			"before:math.multiply",
-			() => { throw new Error("Function error");
+			() => {
+				throw new Error("Function error");
 			},
 			{ id: "function-error-simulator" }
 		);
@@ -155,7 +155,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -177,7 +177,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// After hook that throws
 		api.slothlet.hook.on(
 			"after:math.add",
-			() => { throw new Error("Cleanup failed");
+			() => {
+				throw new Error("Cleanup failed");
 			},
 			{ id: "failing-cleanup" }
 		);
@@ -209,7 +210,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -231,7 +232,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// Always hook that throws (but doesn't propagate)
 		api.slothlet.hook.on(
 			"always:math.add",
-			() => { throw new Error("Always hook failed");
+			() => {
+				throw new Error("Always hook failed");
 			},
 			{ id: "failing-always" }
 		);
@@ -258,7 +260,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -280,7 +282,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// Before hook that throws
 		api.slothlet.hook.on(
 			"before:math.multiply",
-			() => { throw new Error("Before failed");
+			() => {
+				throw new Error("Before failed");
 			},
 			{ id: "failing-before" }
 		);
@@ -288,7 +291,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		// Always hook that throws (but doesn't propagate)
 		api.slothlet.hook.on(
 			"always:math.add",
-			() => { throw new Error("Always failed");
+			() => {
+				throw new Error("Always failed");
 			},
 			{ id: "failing-always" }
 		);
@@ -334,7 +338,7 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		apis.push(api);
 
@@ -354,7 +358,8 @@ describe.each(describe_each_matrix)("Error Hook Source Tracking > Config: '$name
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { throw new Error("Test error");
+			() => {
+				throw new Error("Test error");
 			},
 			{ id: "test-fail" }
 		);

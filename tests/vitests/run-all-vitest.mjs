@@ -47,6 +47,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 
+// eslint-disable-next-line no-useless-catch
+try {
+	// Import devcheck directly to avoid index.mjs try/catch
+	await import("@cldmv/slothlet/devcheck");
+	// console.log("🚀 GLOBAL SETUP: Devcheck completed");
+} catch (error) {
+	// console.log("🚀 GLOBAL SETUP: Devcheck failed:", error.message);
+	throw error;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");

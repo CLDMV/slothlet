@@ -13,7 +13,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Mixed Scenarios > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
@@ -24,7 +24,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: config.hooks || true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 
@@ -43,15 +43,17 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { throw new Error("Before hook error");
+			() => {
+				throw new Error("Before hook error");
 			},
 			{ id: "error-hook", priority: 200 }
 		);
@@ -78,26 +80,29 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { throw new Error("Test error");
+			() => {
+				throw new Error("Test error");
 			},
 			{ id: "error-hook" }
 		);
 
 		for (let i = 0; i < 3; i++) {
 			api.slothlet.hook.on(
-			"error:math.add",
-				() => { errorHandlers.push(i);
+				"error:math.add",
+				() => {
+					errorHandlers.push(i);
 				},
 				{ id: `error-handler-${i}`, priority: 100 - i * 10 }
-		);
+			);
 		}
 
 		await api.math.add(2, 3);
@@ -107,24 +112,20 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 	});
 
 	test("should handle mixed scenario: args modified, short-circuit, result transformed", async () => {
-		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1] * 2], { id: "modify-args",
-			priority: 300 });
+		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 2, args[1] * 2], { id: "modify-args", priority: 300 });
 
 		api.slothlet.hook.on("before:math.add", ({ args }) => args[0] + args[1] + 100, { id: "short-circuit", priority: 200 });
 
-		api.slothlet.hook.on("after:math.add", ({ result }) => result * 10, { id: "transform-result",
-			priority: 100 });
+		api.slothlet.hook.on("after:math.add", ({ result }) => result * 10, { id: "transform-result", priority: 100 });
 
 		const result = await api.math.add(1, 2);
 		expect(result).toBe(106);
 	});
 
 	test("should handle before hooks modifying args with after hooks chaining transforms", async () => {
-		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 3, args[1] * 3], { id: "multiply-args",
-			priority: 200 });
+		api.slothlet.hook.on("before:math.add", ({ args }) => [args[0] * 3, args[1] * 3], { id: "multiply-args", priority: 200 });
 
-		api.slothlet.hook.on("after:math.add", ({ result }) => result * 2, { id: "double-result",
-			priority: 200 });
+		api.slothlet.hook.on("after:math.add", ({ result }) => result * 2, { id: "double-result", priority: 200 });
 
 		api.slothlet.hook.on("after:math.add", ({ result }) => result + 10, { id: "add-ten", priority: 100 });
 
@@ -137,16 +138,18 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: false
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { hookExecuted = true;
+			() => {
+				hookExecuted = true;
 			},
 			{ id: "test-hook" }
 		);
@@ -162,16 +165,18 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Mixed Scenarios > Config
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: false
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;
 
 		api.slothlet.hook.on(
 			"before:math.add",
-			() => { hookExecuted = true;
+			() => {
+				hookExecuted = true;
 				return 42;
 			},
 			{ id: "test-hook" }

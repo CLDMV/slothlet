@@ -6,13 +6,14 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-12 16:35:24 -08:00 (1768264524)
+ *	@Last modified time: 2026-01-29 16:41:27 -08:00 (1769733687)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { defineConfig } from "vitest/config";
 import { DefaultReporter } from "vitest/reporters";
+// import path from "node:path";
 
 export class CustomReporter extends DefaultReporter {
 	onPathsCollected(paths) {
@@ -20,6 +21,15 @@ export class CustomReporter extends DefaultReporter {
 
 		this.renderSucceed = false;
 	}
+}
+
+process.env.NODE_ENV = "development";
+
+// Ensure NODE_OPTIONS is set BEFORE any vitest initialization
+if (!process.env.NODE_OPTIONS || !process.env.NODE_OPTIONS.includes("slothlet-")) {
+	const devFlag = "--conditions=slothlet-dev";
+	const current = process.env.NODE_OPTIONS || "";
+	process.env.NODE_OPTIONS = current ? `${current} ${devFlag}` : devFlag;
 }
 
 // Determine which slothlet version to use based on NODE_OPTIONS
@@ -51,8 +61,9 @@ export default defineConfig({
 		exclude: ["node_modules", "tests/vitests_v2/**"],
 		environment: "node",
 		globals: true,
-		globalSetup: ["./tests/vitests/setup/global-setup.mjs"],
-		nodeOptions: [`--conditions=${slothletCondition}`],
+		// globalSetup: "./tests/vitests/setup/global-setup.mjs",
+		setupFiles: ["./tests/vitests/setup/vitest.setup.mjs"],
+		nodeOptions: [`--conditions=${slothletCondition}`, "--import=./tests/vitests/setup/env-preload.mjs"],
 		env: {
 			NODE_ENV: "development"
 		},
