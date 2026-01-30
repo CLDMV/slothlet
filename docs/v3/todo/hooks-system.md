@@ -40,9 +40,10 @@ npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
 
 All methods throw:
 ```javascript
-throw new this.SlothletError("NOT_IMPLEMENTED", {
-    feature: "slothlet.hook.*",
-    hint: "Hooks system deferred to next prototype iteration"
+throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
+    feature: "slothlet.hooks.*",
+    hint: "Hooks system deferred to next prototype iteration",
+    stub: true
 });
 ```
 
@@ -126,7 +127,7 @@ api.slothlet.hook.on(typePattern, handler, options)
   - `priority` (number, default 0): Higher = earlier execution
   - `subset` (string, default "primary"): Phase - "before", "primary", or "after"
 
-**Examples**:
+**Examples** (proposed V3 API, not yet implemented):
 ```javascript
 // Simple hook with pattern
 api.slothlet.hook.on("before:math.*", handler);
@@ -174,7 +175,7 @@ api.slothlet.hook.on("always:database.{create,update,delete}", auditHandler);
   - `"always:api.{user,auth}.**"` - User and auth namespaces
   - `"after:**"` - All functions (global pattern)
 
-### Runtime Control with Filters
+### Runtime Control (proposed V3 API, not yet implemented)
 
 ```javascript
 // Disable all hooks

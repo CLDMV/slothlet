@@ -464,7 +464,8 @@ export class ApiManager extends ComponentBase {
 					mutateExisting: true,
 					allowOverwrite: true,
 					syncWrapper: this.syncWrapper.bind(this),
-					collisionMode: options.collisionMode
+					collisionMode: options.collisionMode,
+					moduleId: options.moduleId
 				});
 				return;
 			}
@@ -488,7 +489,8 @@ export class ApiManager extends ComponentBase {
 				mutateExisting: true,
 				allowOverwrite: true,
 				syncWrapper: this.syncWrapper.bind(this),
-				collisionMode: options.collisionMode
+				collisionMode: options.collisionMode,
+				moduleId: options.moduleId
 			});
 			return existingValue;
 		}

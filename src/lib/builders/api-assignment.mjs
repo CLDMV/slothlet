@@ -97,7 +97,8 @@ export class ApiAssignment extends ComponentBase {
 			config = null,
 			collisionContext = "initial",
 			syncWrapper = null,
-			collisionMode = "merge" // Default to merge for hot reload
+			collisionMode = "merge", // Default to merge for hot reload
+			moduleId = null
 		} = options;
 
 		// Get existing value
@@ -106,7 +107,7 @@ export class ApiAssignment extends ComponentBase {
 		// Case 1: Both are wrapper proxies - sync them if mutateExisting is true
 		if (existing !== undefined && this.isWrapperProxy(existing) && this.isWrapperProxy(value)) {
 			if (mutateExisting && syncWrapper) {
-				syncWrapper(existing, value, config, collisionMode);
+				syncWrapper(existing, value, config, collisionMode, moduleId);
 				return true;
 			}
 			// If not mutating, fall through to collision detection
@@ -345,7 +346,7 @@ export class ApiAssignment extends ComponentBase {
 			return;
 		}
 
-		const { removeMissing = false, ...assignOptions } = options;
+		const { removeMissing = false, moduleId = null, ...assignOptions } = options;
 
 		// Merge source keys into target
 		const sourceKeys = new Set(Object.keys(sourceApi));
@@ -386,7 +387,7 @@ export class ApiAssignment extends ComponentBase {
 						key
 					});
 				}
-				this.assignToApiPath(targetApi, key, sourceValue, assignOptions);
+				this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleId });
 			}
 		}
 

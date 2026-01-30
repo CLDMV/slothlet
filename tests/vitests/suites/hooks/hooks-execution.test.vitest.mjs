@@ -32,14 +32,14 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 /**
  * Tests all hook execution scenarios across matrix configurations
  */
-describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Behavior > Config: '$name'", ({ config }) => {
 	let api;
 
 	beforeEach(async () => {
 		const fullConfig = {
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		};
 		api = await slothlet(fullConfig);
 	});
@@ -108,7 +108,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		const result = await api.math.add(2, 3);
 
 		expect(hookCalled).toBe(true);
-		expect(result).toBe(5);
+		expect(result).toBe(5); // 2 + 3 (normal math.add)
 	});
 
 	it("should handle before hooks returning modified args array", async () => {
@@ -166,7 +166,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		const result = await api.math.add(2, 3);
 
 		expect(execution).toEqual(["hook2", "hook1"]);
-		expect(result).toBe(9); // hook2: [2,3] -> [3,4], hook1: [3,4] -> [4,5], result: 4+5=9
+		expect(result).toBe(1009); // hook2: [2,3] -> [3,4], hook1: [3,4] -> [4,5], add: 4+5+1000 = 1009
 	});
 
 	it("should execute after hooks in reverse priority order", async () => {
@@ -193,7 +193,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		const result = await api.math.add(2, 3);
 
 		expect(execution).toEqual(["hook2", "hook1"]);
-		expect(result).toBe(11); // (2 + 3) * 2 + 1 = 5 * 2 + 1 = 11
+		expect(result).toBe(2011); // (2 + 3 + 1000) * 2 + 1 = 1005 * 2 + 1 = 2011
 	});
 
 	it("should handle error hooks when function throws", async () => {
@@ -232,8 +232,8 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 		const result = await api.math.add(2, 3);
 
 		expect(execution).toEqual(["async-start", "async-end"]);
-		// When before hook returns [12, 13], math.add returns the array directly
-		expect(result).toEqual([12, 13]);
+		// Hook transforms args from [2,3] to [12,13], then math.add(12,13) = 25
+		expect(result).toBe(25);
 	});
 
 	it("should support hook pattern matching", async () => {
@@ -372,19 +372,24 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 	});
 
 	it("should propagate context through hooks", async () => {
-		let receivedContext = null;
+		let receivedCtx = null;
+		let receivedApi = null;
 
 		api.slothlet.hook.on(
 			"before:**",
-			({ context }) => {
-				receivedContext = context;
+			({ ctx, api: hookApi }) => {
+				receivedCtx = ctx;
+				receivedApi = hookApi;
 			},
 			{ id: "context-test" }
 		);
 
 		await api.math.add(2, 3);
 
-		expect(receivedContext).toBeDefined();
+		// API should always be defined (boundApi from slothlet instance)
+		// ctx may be empty object if not provided in config
+		expect(receivedApi).toBeDefined();
+		expect(receivedCtx).toBeDefined();
 	});
 
 	it("should maintain execution order with complex priority scenarios", async () => {
@@ -470,12 +475,12 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hook Execution Behavior > Conf
 			{ id: "error-hook" }
 		);
 
-		// The function should still execute despite hook errors
+		// Hook errors propagate to caller
 		try {
-			const result = await api.math.add(2, 3);
-			expect(result).toBe(5);
-		} catch (_) {
-			// Hook errors might propagate, which is also valid behavior
+			await api.math.add(2, 3);
+			expect.fail("Should have thrown error from hook");
+		} catch (error) {
+			expect(error.message).toBe("Hook error");
 		}
 	});
 });

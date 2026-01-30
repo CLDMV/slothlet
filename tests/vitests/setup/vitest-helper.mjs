@@ -69,7 +69,11 @@ const CONFIG_SPACE = {
 	// 	{ initial: "merge", api: "merge" },      // Default - allow all overwrites
 	// 	{ initial: "error", api: "error" }       // Strict - prevent overwrites
 	// ],
-	hooks: [false, true]
+	// hooks: [false, true]
+	hook: [
+		{ enabled: true }, // Default - enabled
+		{ enabled: false } // disabled
+	]
 };
 
 /**
@@ -150,7 +154,7 @@ function generateTestMatrix(configSpace) {
 			nameParts.push("STRICT");
 		}
 
-		if (config.hooks) nameParts.push("HOOKS");
+		if (config.hook && config.hook.enabled) nameParts.push("HOOKS");
 
 		const name = nameParts.join("_");
 
@@ -213,6 +217,17 @@ export function getMatrixConfigs(requirements = {}) {
 					return false;
 				}
 				if (value.api !== undefined && configValue.api !== value.api) {
+					return false;
+				}
+			} else if (key === "hook" && typeof value === "object" && typeof configValue === "object") {
+				// Deep equality check for hook objects
+				if (value.enabled !== undefined && configValue.enabled !== value.enabled) {
+					return false;
+				}
+				if (value.pattern !== undefined && configValue.pattern !== value.pattern) {
+					return false;
+				}
+				if (value.suppressErrors !== undefined && configValue.suppressErrors !== value.suppressErrors) {
 					return false;
 				}
 			} else if (configValue !== value) {

@@ -414,125 +414,152 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Hooks API (stubbed until v3 hooks are implemented).
+			 * Hook API for intercepting function calls.
 			 * @type {object}
 			 */
-			hooks: {
+			hook: {
 				/**
-				 * @param {string} _tag - Hook tag.
-				 * @param {string} _type - Hook type.
-				 * @param {function} _handler - Hook handler.
-				 * @param {Record<string, unknown>} [_options={}] - Hook options.
-				 * @returns {never}
+				 * Register a hook for API functions.
+				 * @param {string} typePattern - Combined type and pattern (e.g., "before:math.*")
+				 * @param {function} handler - Hook handler function
+				 * @param {object} [options={}] - Hook options
+				 * @param {string} [options.id] - Unique identifier (auto-generated if not provided)
+				 * @param {number} [options.priority=0] - Higher = earlier execution
+				 * @param {string} [options.subset="primary"] - Phase: "before", "primary", or "after"
+				 * @returns {string} Hook ID
 				 * @public
 				 *
-				 * @description
-				 * Stub for hook registration until hooks are implemented in v3.
-				 *
 				 * @example
-				 * api.slothlet.hooks.on("before", "before", () => undefined, { pattern: "**" });
+				 * api.slothlet.hook.on("before:math.*", ({ args }) => {
+				 *   console.log("Calling math function with:", args);
+				 *   return args;
+				 * });
 				 */
-				on: async function slothlet_hooks_on(_tag, _type, _handler, _options = {}) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.on",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				on: function slothlet_hook_on(typePattern, handler, options = {}) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
+							hint: "Hook manager not initialized"
+						});
+					}
+					return slothlet.handlers.hookManager.on(typePattern, handler, options);
 				},
 
 				/**
-				 * @param {string} _nameOrPattern - Hook name or pattern.
-				 * @returns {never}
+				 * Remove hooks matching filter criteria.
+				 * @param {object} [filter={}] - Filter criteria
+				 * @param {string} [filter.id] - Remove hook by ID
+				 * @param {string} [filter.type] - Remove hooks by type (before/after/always/error)
+				 * @param {string} [filter.pattern] - Remove hooks matching pattern
+				 * @returns {number} Number of hooks removed
 				 * @public
 				 *
-				 * @description
-				 * Stub for hook removal until hooks are implemented in v3.
-				 *
 				 * @example
-				 * api.slothlet.hooks.off("before");
+				 * api.slothlet.hook.remove({ id: "my-hook" });
+				 * api.slothlet.hook.remove({ type: "before", pattern: "math.*" });
 				 */
-				off: async function slothlet_hooks_off(_nameOrPattern) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.off",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				remove: function slothlet_hook_remove(filter = {}) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
+							hint: "Hook manager not initialized"
+						});
+					}
+					return slothlet.handlers.hookManager.remove(filter);
 				},
 
 				/**
-				 * @param {string} [_pattern] - Optional enable pattern.
-				 * @returns {never}
+				 * Alias for remove() - removes hooks matching filter.
+				 * @param {object} [filter={}] - Filter criteria
+				 * @returns {number} Number of hooks removed
 				 * @public
-				 *
-				 * @description
-				 * Stub for hook enabling until hooks are implemented in v3.
-				 *
-				 * @example
-				 * api.slothlet.hooks.enable("**");
 				 */
-				enable: async function slothlet_hooks_enable(_pattern) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.enable",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				clear: function slothlet_hook_clear(filter = {}) {
+					return this.remove(filter);
 				},
 
 				/**
-				 * @param {string} [_pattern] - Optional disable pattern.
-				 * @returns {never}
+				 * Alias for remove() for V2 compatibility - removes hooks by ID.
+				 * @param {string|object} idOrFilter - Hook ID (string) or filter object
+				 * @returns {number} Number of hooks removed
 				 * @public
 				 *
-				 * @description
-				 * Stub for hook disabling until hooks are implemented in v3.
-				 *
 				 * @example
-				 * api.slothlet.hooks.disable("**");
+				 * api.slothlet.hook.off("my-hook"); // Remove by ID
+				 * api.slothlet.hook.off({ pattern: "math.*" }); // Remove by pattern
 				 */
-				disable: async function slothlet_hooks_disable(_pattern) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.disable",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				off: function slothlet_hook_off(idOrFilter) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { message: "Hook manager not initialized" });
+					}
+					// If string, treat as ID
+					const filter = typeof idOrFilter === "string" ? { id: idOrFilter } : idOrFilter;
+					return slothlet.handlers.hookManager.remove(filter);
 				},
 
 				/**
-				 * @param {string} [_type] - Optional hook type filter.
-				 * @returns {never}
+				 * Enable hooks matching filter criteria.
+				 * @param {object} [filter={}] - Filter criteria (empty = enable all)
+				 * @param {string} [filter.id] - Enable hook by ID
+				 * @param {string} [filter.type] - Enable hooks by type
+				 * @param {string} [filter.pattern] - Enable hooks matching pattern
+				 * @returns {number} Number of hooks enabled
 				 * @public
 				 *
-				 * @description
-				 * Stub for hook clearing until hooks are implemented in v3.
-				 *
 				 * @example
-				 * api.slothlet.hooks.clear("before");
+				 * api.slothlet.hook.enable(); // Enable all
+				 * api.slothlet.hook.enable({ pattern: "math.*" });
 				 */
-				clear: async function slothlet_hooks_clear(_type) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.clear",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				enable: function slothlet_hook_enable(filter = {}) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
+							hint: "Hook manager not initialized"
+						});
+					}
+					return slothlet.handlers.hookManager.enable(filter);
 				},
 
 				/**
-				 * @param {string} [_type] - Optional hook type filter.
-				 * @returns {never}
+				 * Disable hooks matching filter criteria.
+				 * @param {object} [filter={}] - Filter criteria (empty = disable all)
+				 * @param {string} [filter.id] - Disable hook by ID
+				 * @param {string} [filter.type] - Disable hooks by type
+				 * @param {string} [filter.pattern] - Disable hooks matching pattern
+				 * @returns {number} Number of hooks disabled
 				 * @public
 				 *
-				 * @description
-				 * Stub for hook listing until hooks are implemented in v3.
+				 * @example
+				 * api.slothlet.hook.disable(); // Disable all
+				 * api.slothlet.hook.disable({ pattern: "database.*" });
+				 */
+				disable: function slothlet_hook_disable(filter = {}) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
+							hint: "Hook manager not initialized"
+						});
+					}
+					return slothlet.handlers.hookManager.disable(filter);
+				},
+
+				/**
+				 * List registered hooks matching filter criteria.
+				 * @param {object} [filter={}] - Filter criteria (empty = list all)
+				 * @param {string} [filter.id] - List hook by ID
+				 * @param {string} [filter.type] - List hooks by type
+				 * @param {string} [filter.pattern] - List hooks matching pattern
+				 * @param {boolean} [filter.enabled] - Filter by enabled state
+				 * @returns {Array<object>} Array of hook objects
+				 * @public
 				 *
 				 * @example
-				 * api.slothlet.hooks.list("before");
+				 * const allHooks = api.slothlet.hook.list();
+				 * const beforeHooks = api.slothlet.hook.list({ type: "before" });
 				 */
-				list: async function slothlet_hooks_list(_type) {
-					throw new slothlet.SlothletError("NOT_IMPLEMENTED", {
-						feature: "slothlet.hooks.list",
-						hint: "Hooks system deferred to next prototype iteration",
-						stub: true
-					});
+				list: function slothlet_hook_list(filter = {}) {
+					if (!slothlet.handlers?.hookManager) {
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
+							hint: "Hook manager not initialized"
+						});
+					}
+					return slothlet.handlers.hookManager.list(filter);
 				}
 			},
 
@@ -723,7 +750,7 @@ export class ApiBuilder extends ComponentBase {
 
 		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
 		// Note: Hooks are not yet implemented in v3, but the config option is ready
-		if (!config.hooks && config.diagnostics !== true) {
+		if (!config.hook?.enabled && config.diagnostics !== true) {
 			delete namespace.hooks;
 		}
 
@@ -791,7 +818,41 @@ export class ApiBuilder extends ComponentBase {
 				 * // ... trigger warnings ...
 				 * const warnings = api.slothlet.diag.SlothletWarning.captured;
 				 */
-				SlothletWarning: slothlet.SlothletWarning
+				SlothletWarning: slothlet.SlothletWarning,
+
+				/**
+				 * Hook system diagnostics (only when hooks enabled)
+				 * @type {object}
+				 */
+				hook: slothlet.handlers?.hookManager
+					? {
+							/**
+							 * Hook manager enabled state
+							 * @type {boolean}
+							 */
+							get enabled() {
+								return slothlet.handlers.hookManager.enabled;
+							},
+
+							/**
+							 * Expand brace patterns in a glob pattern
+							 * @param {string} pattern - Pattern with braces
+							 * @returns {string[]} Array of expanded patterns
+							 */
+							compilePattern: (pattern) => {
+								return slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern);
+							},
+
+							/**
+							 * Convert a glob pattern to a RegExp
+							 * @param {string} pattern - Glob pattern
+							 * @returns {RegExp} Compiled regular expression
+							 */
+							compilePattern: (pattern) => {
+								return slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern);
+							}
+						}
+					: undefined
 			};
 		}
 

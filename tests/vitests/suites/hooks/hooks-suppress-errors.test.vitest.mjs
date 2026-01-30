@@ -9,7 +9,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const describe_each_matrix = getMatrixConfigs({ hooks: true });
+const describe_each_matrix = getMatrixConfigs({ hook: { enabled: true } });
 
 describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", ({ config }) => {
 	let api;
@@ -23,7 +23,8 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: { enabled: true, pattern: "**", ...hooksConfig }
+			hook: { enabled: true, pattern: "**", ...hooksConfig },
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 		return api;
 	}

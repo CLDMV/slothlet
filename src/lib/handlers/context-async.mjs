@@ -4,7 +4,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { runtime_isClassInstance, runtime_wrapClassInstance } from "../helpers/class-instance-wrapper.mjs";
+import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime

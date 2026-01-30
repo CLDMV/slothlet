@@ -5,6 +5,13 @@
 import util from "node:util";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
+/**
+ * Symbol to detect errors already processed by hook error handlers
+ * Must match the symbol from hook-manager.mjs
+ * @private
+ */
+const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
+
 const wrapperDebugEnabled =
 	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
 	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
@@ -955,88 +962,200 @@ export class UnifiedWrapper extends ComponentBase {
 		 *
 		 * @description
 		 * Invokes the underlying impl with context binding when callable.
+		 * Integrates hook execution (before/after/always/error) synchronously.
+		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args) => {
 			if (wrapper._invalid) {
 				throw new TypeError(`${wrapper.apiPath || "api"} is invalidated`);
 			}
 
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
-				wrapper._materialize();
-			}
+			// Get hook manager if available
+			const hookManager = wrapper.slothlet.handlers?.hookManager;
+			// Early exit if hooks disabled globally or this is a hook API function
+			const hasHooks = hookManager && hookManager.enabled && !wrapper.apiPath.startsWith("slothlet.hook");
 
-			if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
-				return new Promise((resolve, reject) => {
-					const checkMaterialized = () => {
-						if (wrapper._state.materialized) {
-							const impl = wrapper._impl;
-							if (typeof impl === "function") {
-								if (wrapper.slothlet.contextManager) {
-									resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args));
+			// Get api (bound API) and ctx (user context) for hooks
+			const api = wrapper.slothlet.boundApi;
+			const ctx = wrapper.slothlet.config?.context || {};
+
+			// Declare variables outside try-catch-finally so they're accessible in all blocks
+			let result;
+			let finalResult;
+
+			try {
+				// Execute before hooks synchronously
+				if (hasHooks) {
+					const beforeResult = hookManager.executeBeforeHooks(wrapper.apiPath, args, api, ctx);
+					args = beforeResult.args;
+
+					// Check for short-circuit
+					if (beforeResult.shortCircuit) {
+						// Execute always hooks synchronously for short-circuit
+						hookManager.executeAlwaysHooks(wrapper.apiPath, args, beforeResult.value, false, api, ctx);
+						return beforeResult.value;
+					}
+				}
+
+				// Materialize if needed (lazy mode)
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+					wrapper._materialize();
+				}
+
+				// Wait for materialization if in flight (returns Promise)
+				if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
+					return new Promise((resolve, reject) => {
+						const checkMaterialized = () => {
+							if (wrapper._state.materialized) {
+								const impl = wrapper._impl;
+								if (typeof impl === "function") {
+									if (wrapper.slothlet.contextManager) {
+										resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
+									} else {
+										resolve(impl.apply(thisArg, args));
+									}
+								} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+									if (wrapper.contextManager) {
+										resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper));
+									} else {
+										resolve(impl.default.apply(impl, args));
+									}
 								} else {
-									resolve(impl.apply(thisArg, args));
+									reject(
+										new wrapper.slothlet.SlothletError(
+											"INVALID_CONFIG_NOT_A_FUNCTION",
+											{
+												apiPath: wrapper.apiPath,
+												actualType: typeof impl
+											},
+											null,
+											{ validationError: true }
+										)
+									);
 								}
 								return;
 							}
-							if (impl && typeof impl === "object" && typeof impl.default === "function") {
-								if (wrapper.contextManager) {
-									resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args));
-								} else {
-									resolve(impl.default.apply(impl, args));
-								}
+							if (!wrapper._state.inFlight) {
+								reject(
+									new wrapper.slothlet.SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
+										validationError: true
+									})
+								);
 								return;
 							}
-							reject(
-								new wrapper.slothlet.SlothletError(
-									"INVALID_CONFIG_NOT_A_FUNCTION",
-									{
-										apiPath: wrapper.apiPath,
-										actualType: typeof impl
-									},
-									null,
-									{ validationError: true }
-								)
-							);
-							return;
+							setImmediate(checkMaterialized);
+						};
+						checkMaterialized();
+					});
+				}
+
+				// Execute the actual function
+				const impl = wrapper._impl;
+
+				if (typeof impl === "function") {
+					if (wrapper.slothlet.contextManager) {
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper);
+					} else {
+						result = impl.apply(thisArg, args);
+					}
+				} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+					if (wrapper.slothlet.contextManager) {
+						result = wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper);
+					} else {
+						result = impl.default.apply(impl, args);
+					}
+				} else {
+					throw new wrapper.SlothletError(
+						"INVALID_CONFIG_NOT_A_FUNCTION",
+						{
+							apiPath: wrapper.apiPath,
+							actualType: typeof impl
+						},
+						null,
+						{ validationError: true }
+					);
+				}
+
+				// Check if result is a Promise (async function)
+				if (result && typeof result === "object" && typeof result.then === "function") {
+					// Async result - attach hooks to Promise chain
+					return result.then(
+						(resolvedResult) => {
+							try {
+								// Execute after hooks synchronously with resolved value
+								if (hasHooks) {
+									const afterResult = hookManager.executeAfterHooks(wrapper.apiPath, resolvedResult, args, api, ctx);
+									const finalResult = afterResult.modified ? afterResult.result : resolvedResult;
+									hookManager.executeAlwaysHooks(wrapper.apiPath, args, finalResult, false, api, ctx);
+									return finalResult;
+								}
+								return resolvedResult;
+							} catch (error) {
+								// Error in after hook during async resolution
+								if (hasHooks) {
+									const sourceInfo = {
+										type: "after",
+										timestamp: Date.now(),
+										stack: error.stack
+									};
+									hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
+									hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, api, ctx);
+								}
+								throw error;
+							}
+						},
+						(error) => {
+							// Async function error
+							if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+								const sourceInfo = {
+									type: "function",
+									timestamp: Date.now(),
+									stack: error.stack
+								};
+								hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
+							}
+							// Always hooks execute for rejected promises
+							if (hasHooks) {
+								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, api, ctx);
+							}
+							throw error;
 						}
-						if (!wrapper._state.inFlight) {
-							reject(
-								new wrapper.slothlet.SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
-									validationError: true
-								})
-							);
-							return;
-						}
-						setImmediate(checkMaterialized);
+					);
+				}
+
+				// Sync result - execute after hooks (can modify result)
+				finalResult = result;
+				if (hasHooks) {
+					const afterResult = hookManager.executeAfterHooks(wrapper.apiPath, result, args, api, ctx);
+					if (afterResult.modified) {
+						finalResult = afterResult.result;
+					}
+				}
+				return finalResult;
+			} catch (error) {
+				// Synchronous error (from before hook or function)
+				this.lastSyncError = error; // Flag for finally block
+				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+					const sourceInfo = {
+						type: "function",
+						timestamp: Date.now(),
+						stack: error.stack
 					};
-					checkMaterialized();
-				});
-			}
-
-			const impl = wrapper._impl;
-			if (typeof impl === "function") {
-				if (wrapper.slothlet.contextManager) {
-					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper);
+					hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
 				}
-				return impl.apply(thisArg, args);
-			}
-
-			if (impl && typeof impl === "object" && typeof impl.default === "function") {
-				if (wrapper.slothlet.contextManager) {
-					return wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper);
+				throw error;
+			} finally {
+				// Always hooks execute once for synchronous code paths
+				// (async paths handle always hooks in their promise chains)
+				if (hasHooks && !(typeof result === "object" && result !== null && typeof result.then === "function")) {
+					// Track error state with a flag set in catch block
+					const syncError = this.lastSyncError;
+					this.lastSyncError = null;
+					// Use finalResult if available (successful sync call), undefined if error
+					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
+					hookManager.executeAlwaysHooks(wrapper.apiPath, args, resultValue, !!syncError, api, ctx);
 				}
-				return impl.default.apply(impl, args);
 			}
-
-			throw new wrapper.SlothletError(
-				"INVALID_CONFIG_NOT_A_FUNCTION",
-				{
-					apiPath: wrapper.apiPath,
-					actualType: typeof impl
-				},
-				null,
-				{ validationError: true }
-			);
 		};
 
 		/**

@@ -19,7 +19,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // Test each configuration in the matrix
-describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: '$name'", ({ config }) => {
+describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Comprehensive > Config: '$name'", ({ config }) => {
 	let slothlet;
 	let api;
 
@@ -32,7 +32,7 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: config.hooks || true
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 	});
 
@@ -364,10 +364,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		// Error-throwing before hook
@@ -402,10 +403,11 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: true,
 				suppressErrors: true
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		// Error-throwing before hook
@@ -482,9 +484,10 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: false
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;
@@ -508,9 +511,10 @@ describe.each(getMatrixConfigs({ hooks: true }))("Hooks Comprehensive > Config: 
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hooks: {
+			hook: {
 				enabled: false
-			}
+			},
+			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
 		});
 
 		let hookExecuted = false;

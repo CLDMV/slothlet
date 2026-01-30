@@ -285,6 +285,23 @@ export class Config extends ComponentBase {
 			}
 		}
 
+		// Parse hook configuration (V2-style support)
+		let hookConfig = { enabled: false, pattern: "**", suppressErrors: false };
+		if (config.hook === true || config.hook === false) {
+			// Boolean: enabled/disabled with all patterns
+			hookConfig.enabled = config.hook;
+			hookConfig.pattern = config.hook ? "**" : null;
+		} else if (typeof config.hook === "string") {
+			// String: enabled with specific pattern
+			hookConfig.enabled = true;
+			hookConfig.pattern = config.hook;
+		} else if (config.hook && typeof config.hook === "object") {
+			// Object: { enabled, pattern, suppressErrors }
+			hookConfig.enabled = config.hook.enabled !== false; // Default true if object provided
+			hookConfig.pattern = config.hook.pattern || "**";
+			hookConfig.suppressErrors = config.hook.suppressErrors || false;
+		}
+
 		// Build normalized config
 		return {
 			...config,
@@ -295,7 +312,7 @@ export class Config extends ComponentBase {
 			context: config.context || null,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
-			hooks: config.hooks === true,
+		hook: hookConfig,
 			collision: finalCollision,
 			api: {
 				collision: finalCollision,

@@ -250,7 +250,7 @@ class Slothlet {
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
 		enableEventEmitterPatching();
 
-		// Note: ownership manager already initialized via auto-discovery
+		// Note: ownership manager and hook manager already initialized via auto-discovery
 
 		// Generate base moduleId for ownership tracking
 		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
