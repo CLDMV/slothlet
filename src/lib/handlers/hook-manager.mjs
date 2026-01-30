@@ -444,6 +444,7 @@ export class HookManager extends ComponentBase {
 				// Execute error hooks for before hook failure
 				const sourceInfo = {
 					type: "before",
+					subset: hook.subset,
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
@@ -497,6 +498,7 @@ export class HookManager extends ComponentBase {
 				// Execute error hooks for after hook failure
 				const sourceInfo = {
 					type: "after",
+					subset: hook.subset,
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
@@ -547,6 +549,7 @@ export class HookManager extends ComponentBase {
 				// Execute error hooks for always hook failure
 				const sourceInfo = {
 					type: "always",
+					subset: hook.subset,
 					hookTag: hook.id,
 					hookId: hook.id,
 					timestamp: Date.now(),
@@ -582,6 +585,7 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					error,
+					errorType: error?.constructor?.name || "Error",
 					source,
 					timestamp: new Date(),
 					api,
