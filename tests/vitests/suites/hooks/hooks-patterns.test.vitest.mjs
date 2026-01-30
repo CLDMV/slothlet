@@ -326,13 +326,13 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 		const pattern = "{a,{b,{c,{d,{e,{f,{g,{h,{i,{j,{k,l}}}}}}}}}}}";
 
 		// Should throw error for deep nesting (correct behavior)
+		// In v3, pattern is part of the first argument typePattern string
 		expect(() => {
 			api.slothlet.hook.on(
-				"before:**",
+				`before:${pattern}`,
 				() => {
 					// Hook registered but may not be called
-				},
-				{ pattern }
+				}
 			);
 		}).toThrow("Brace expansion exceeds maximum nesting depth of 10");
 
@@ -419,7 +419,8 @@ describe("Hook Pattern Edge Cases", () => {
 			dir: TEST_DIRS.API_TEST,
 			lazy: false,
 			apiDepth: 1,
-			collision: { initial: "replace", api: "replace" } // Use folder version, ignore file collisions
+			hook: { enabled: true }, // Enable hooks for pattern matching
+			api: { collision: { initial: "replace", api: "replace" } } // Use folder version, ignore file collisions
 		});
 	});
 

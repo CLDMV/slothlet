@@ -17,15 +17,15 @@
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet }) {
+export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet, apiDepth = Infinity }) {
 	const api = {};
 
 	// Access components via slothlet instance
 	const { modesProcessor } = slothlet.builders;
 	const { loader } = slothlet.processors;
 
-	// Scan directory structure
-	const structure = await loader.scanDirectory(dir);
+	// Scan directory structure with depth limit
+	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth });
 
 	// Process root files (with root contributor pattern support)
 	// Pass synthetic root directory with children.directories for consistent handling

@@ -112,7 +112,8 @@ export class Builder extends ComponentBase {
 				collisionContext,
 				moduleId,
 				userMetadata,
-				slothlet: this.slothlet
+				slothlet: this.slothlet,
+				apiDepth: this.slothlet.config.apiDepth
 			});
 		} else if (mode === "lazy") {
 			rawAPI = await buildLazyAPI({
@@ -121,7 +122,8 @@ export class Builder extends ComponentBase {
 				collisionContext,
 				moduleId,
 				userMetadata,
-				slothlet: this.slothlet
+				slothlet: this.slothlet,
+				apiDepth: this.slothlet.config.apiDepth
 			});
 		} else {
 			throw new this.SlothletError(
