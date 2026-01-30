@@ -21,16 +21,18 @@ This document provides comprehensive reference for all `api.slothlet.*` methods 
 - `options` (object, optional): Configuration options for the add operation
 
 **Options:**
-- `mutateExisting` (boolean): Allow merging into existing API paths instead of requiring empty paths. Default: `false`
 - `moduleId` (string): Unique identifier for ownership tracking. Default: auto-generated
+- `forceOverwrite` (boolean): Force complete replacement of existing values regardless of collision mode. Requires explicit `moduleId`. Use with caution.
 
 **Collision Handling:**
 - Uses `api.collision.api` config option to determine behavior on path conflicts
+- Collision mode is set at initialization and cannot be overridden per-call for security reasons
+- `forceOverwrite` option provides explicit override for cases requiring complete replacement
 - Modes: `"skip"`, `"warn"`, `"replace"`, `"merge"` (default), `"merge-replace"`, `"error"`
 
 **Dependencies:**
-- No longer requires `allowMutation: true` (v3 allows runtime modifications by default)
-- Collision behavior controlled by `collision.addApi` config option
+- Requires `api.mutations.add: true` in config (default: true)
+- Collision behavior controlled by `api.collision.api` config setting
 
 **Examples:**
 ```javascript
@@ -42,9 +44,16 @@ await api.slothlet.api.add("plugins", "./plugins", {}, {
   moduleId: "plugins-v1"
 });
 
-// Merge into existing path
-await api.slothlet.api.add("utils", "./utils", {}, {
-  mutateExisting: true
+// With metadata
+await api.slothlet.api.add("plugins", "./plugins", {
+  version: "1.0.0",
+  author: "me"
+});
+
+// Force complete replacement (requires moduleId)
+await api.slothlet.api.add("config", "./new-config", {}, {
+  moduleId: "config-v2",
+  forceOverwrite: true
 });
 ```
 
