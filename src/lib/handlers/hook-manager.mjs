@@ -373,6 +373,7 @@ export class HookManager extends ComponentBase {
 		// Process subsets in order: before → primary → after
 		for (const subset of ["before", "primary", "after"]) {
 			const subsetIndex = typeIndex[subset];
+			const subsetHooks = [];
 
 			// Check each pattern group in this subset
 			for (const pattern in subsetIndex) {
@@ -380,7 +381,7 @@ export class HookManager extends ComponentBase {
 
 				// Try exact match first (no compilation needed)
 				if (pattern === apiPath) {
-					hooks.push(...patternHooks.filter((h) => h.enabled));
+					subsetHooks.push(...patternHooks.filter((h) => h.enabled));
 					continue;
 				}
 
@@ -393,14 +394,19 @@ export class HookManager extends ComponentBase {
 					}
 
 					if (hook._compiled(apiPath)) {
-						hooks.push(hook);
+						subsetHooks.push(hook);
 					}
 				}
 			}
+
+			// Sort hooks within this subset by priority (highest first)
+			subsetHooks.sort((a, b) => b.priority - a.priority);
+
+			// Add sorted subset hooks to final list
+			hooks.push(...subsetHooks);
 		}
 
-		// Sort by priority once (highest first)
-		return hooks.sort((a, b) => b.priority - a.priority);
+		return hooks;
 	}
 
 	/**

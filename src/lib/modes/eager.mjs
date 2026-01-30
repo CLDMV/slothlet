@@ -17,7 +17,15 @@
  * @returns {Promise<Object>} Built API object
  * @public
  */
-export async function buildEagerAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet, apiDepth = Infinity }) {
+export async function buildEagerAPI({
+	dir,
+	apiPathPrefix = "",
+	collisionContext = "initial",
+	moduleId,
+	userMetadata = {},
+	slothlet,
+	apiDepth = Infinity
+}) {
 	const api = {};
 
 	// Access components via slothlet instance

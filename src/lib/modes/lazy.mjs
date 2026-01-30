@@ -35,7 +35,15 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
-export async function buildLazyAPI({ dir, apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {}, slothlet, apiDepth = Infinity }) {
+export async function buildLazyAPI({
+	dir,
+	apiPathPrefix = "",
+	collisionContext = "initial",
+	moduleId,
+	userMetadata = {},
+	slothlet,
+	apiDepth = Infinity
+}) {
 	const api = {};
 
 	// Access components via slothlet instance
