@@ -307,6 +307,14 @@ class Slothlet {
 	/**
 	 * Reload entire instance (creates new references)
 	 * @public
+	 *
+	 * @description
+	 * Reloads all modules in the API by clearing caches and re-importing.
+	 * Preserves hook registrations and instance configuration.
+	 *
+	 * @example
+	 * // Reload all modules to pick up code changes
+	 * await api.slothlet.reload();
 	 */
 	async reload() {
 		if (!this.isLoaded) {
@@ -316,8 +324,81 @@ class Slothlet {
 			});
 		}
 
-		// TODO: Implement full reload
-		throw new SlothletError("INVALID_CONFIG_RELOAD_NOT_IMPL", {}, null, { validationError: true });
+		// 1. Clear CommonJS module caches
+		await this._clearModuleCaches();
+
+		// 2. Generate new cache-busting ID (timestamp ensures fresh imports for ESM)
+		const reloadId = `reload_${Date.now()}`;
+		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
+
+		// 3. Rebuild raw API with cache-busted imports (loader will use reloadId)
+		// Pass reloadId as moduleID to force cache-busting in loadModule
+		this.api = await this.builders.builder.buildAPI({
+			dir: this.config.dir,
+			mode: this.config.mode,
+			moduleId: `${baseModuleId}_${reloadId}` // Combined ID for ownership + cache-busting
+		});
+
+		// 4. Build final API with builtins attached
+		const apiWithBuiltins = await this.buildFinalAPI(this.api);
+
+		// 5. Inject runtime-aware metadata functions
+		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
+
+		// 6. Re-register all API paths with ownership manager
+		if (this.handlers.ownership) {
+			// Clear old registrations for base modules only
+			// TODO: Need to track base moduleId from original load to clear properly
+			this.registerAPIWithOwnership(apiWithBuiltins, baseModuleId, "");
+		}
+
+		// 7. Re-apply init metadata if it exists
+		if (this.config.metadata && typeof this.config.metadata === "object") {
+			this.handlers.metadata.registerUserMetadata(baseModuleId, "", this.config.metadata);
+		}
+
+		// 8. Update bound API reference
+		this.boundApi = apiWithBuiltins;
+
+		// 9. Update store references (preserves context)
+		// Get the store from the context manager's instances Map
+		const store = this.contextManager.instances.get(this.instanceID);
+		if (store) {
+			store.self = this.boundApi;
+			// Keep existing store.context - user context persists across reloads
+		}
+
+		// 10. Re-apply reference object if it exists
+		if (this.reference && typeof this.reference === "object") {
+			Object.assign(this.boundApi, this.reference);
+		}
+
+		// Note: Hooks are preserved automatically - they're in the hook manager
+		// and will automatically attach to new function instances by path matching
+
+		return this.boundApi;
+	}
+
+	/**
+	 * Clear Node.js module caches for reloading
+	 * @private
+	 */
+	async _clearModuleCaches() {
+		// Clear CommonJS require cache
+		// Only clear modules from the configured dir to avoid breaking dependencies
+		const targetDir = this.config.dir;
+		const { resolve } = await import("node:path");
+		const absoluteTargetDir = resolve(targetDir);
+
+		// Clear require.cache for CJS modules
+		for (const key of Object.keys(require.cache)) {
+			if (key.startsWith(absoluteTargetDir)) {
+				delete require.cache[key];
+			}
+		}
+
+		// ESM modules are cached by URL and can't be cleared directly
+		// The loadModule will handle cache-busting via query params for ESM
 	}
 
 	/**
