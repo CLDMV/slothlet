@@ -527,11 +527,12 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Function arguments
 	 * @param {*} [resultOrError] - Function result or error
 	 * @param {boolean} [hasError=false] - Whether an error occurred
+	 * @param {Array<Error>} [errors=[]] - Array of errors that occurred
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
 	 * @public
 	 */
-	executeAlwaysHooks(path, args, resultOrError, hasError = false, api, ctx) {
+	executeAlwaysHooks(path, args, resultOrError, hasError = false, errors = [], api, ctx) {
 		const hooks = this.getHooksForPath("always", path);
 
 		for (const hook of hooks) {
@@ -540,8 +541,8 @@ export class HookManager extends ComponentBase {
 					path,
 					args,
 					result: hasError ? undefined : resultOrError,
-					error: hasError ? resultOrError : undefined,
 					hasError,
+					errors: errors,
 					api,
 					ctx
 				});

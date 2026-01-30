@@ -12,6 +12,21 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
  */
 const ERROR_HOOK_PROCESSED = Symbol.for("@cldmv/slothlet/hook-error-processed");
 
+/**
+ * Extract the original error from a SlothletError wrapper if present.
+ * Hooks should receive the actual error that occurred, not the wrapped SlothletError.
+ * @param {Error} error - Error to unwrap
+ * @returns {Error} Original error if wrapped, otherwise the error itself
+ * @private
+ */
+function unwrapError(error) {
+	// If error is a SlothletError with an originalError, return that
+	if (error && error.name === "SlothletError" && error.originalError) {
+		return error.originalError;
+	}
+	return error;
+}
+
 const wrapperDebugEnabled =
 	process.env.SLOTHLET_DEBUG_WRAPPER === "1" ||
 	process.env.SLOTHLET_DEBUG_WRAPPER === "true" ||
@@ -1107,16 +1122,18 @@ export class UnifiedWrapper extends ComponentBase {
 						(error) => {
 							// Async function error
 							if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+								const originalError = unwrapError(error);
 								const sourceInfo = {
 									type: "function",
 									timestamp: Date.now(),
-									stack: error.stack
+									stack: originalError.stack
 								};
-								hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
+								hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
 							}
 							// Always hooks execute for rejected promises
 							if (hasHooks) {
-								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, api, ctx);
+								const originalError = unwrapError(error);
+								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
 							}
 							throw error;
 						}
@@ -1136,12 +1153,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// Synchronous error (from before hook or function)
 				this.lastSyncError = error; // Flag for finally block
 				if (hasHooks && !error[ERROR_HOOK_PROCESSED]) {
+					const originalError = unwrapError(error);
 					const sourceInfo = {
 						type: "function",
 						timestamp: Date.now(),
-						stack: error.stack
+						stack: originalError.stack
 					};
-					hookManager.executeErrorHooks(wrapper.apiPath, error, sourceInfo, args, api, ctx);
+					hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
 				}
 				throw error;
 			} finally {
@@ -1153,7 +1171,8 @@ export class UnifiedWrapper extends ComponentBase {
 					this.lastSyncError = null;
 					// Use finalResult if available (successful sync call), undefined if error
 					const resultValue = syncError ? undefined : typeof finalResult !== "undefined" ? finalResult : result;
-					hookManager.executeAlwaysHooks(wrapper.apiPath, args, resultValue, !!syncError, api, ctx);
+					const errors = syncError ? [unwrapError(syncError)] : [];
+					hookManager.executeAlwaysHooks(wrapper.apiPath, args, resultValue, !!syncError, errors, api, ctx);
 				}
 			}
 		};
