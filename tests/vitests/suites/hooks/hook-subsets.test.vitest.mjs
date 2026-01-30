@@ -819,7 +819,7 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 			// Math-specific hooks with subsets
 			api.slothlet.hook.on(
-				"before:**",
+				"before:math.*",
 				() => {
 					mathLog.push("before");
 				},

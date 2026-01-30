@@ -116,7 +116,7 @@ export class HookManager extends ComponentBase {
 
 		// Validate type
 		if (!this.#validTypes.has(type)) {
-			throw this.slothlet.SlothletError("INVALID_HOOK_TYPE", {
+			throw new this.slothlet.SlothletError("INVALID_HOOK_TYPE", {
 				type,
 				validTypes: Array.from(this.#validTypes)
 			});
@@ -124,7 +124,7 @@ export class HookManager extends ComponentBase {
 
 		// Validate handler
 		if (typeof handler !== "function") {
-			throw this.slothlet.SlothletError("INVALID_HOOK_HANDLER", {
+			throw new this.slothlet.SlothletError("INVALID_HOOK_HANDLER", {
 				receivedType: typeof handler
 			});
 		}
@@ -134,13 +134,13 @@ export class HookManager extends ComponentBase {
 
 		// Check for duplicate ID
 		if (this.#byId.has(id)) {
-			throw this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id });
+			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id });
 		}
 
 		// Get subset (default: primary)
 		const subset = options.subset || "primary";
 		if (!this.#validSubsets.has(subset)) {
-			throw this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
+			throw new this.slothlet.SlothletError("INVALID_HOOK_SUBSET", {
 				subset,
 				validSubsets: Array.from(this.#validSubsets)
 			});
@@ -608,7 +608,7 @@ export class HookManager extends ComponentBase {
 	 */
 	#parseTypePattern(typePattern) {
 		if (typeof typePattern !== "string") {
-			throw this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 				typePattern,
 				expected: "string in format 'type:pattern'"
 			});
@@ -616,7 +616,7 @@ export class HookManager extends ComponentBase {
 
 		const colonIndex = typePattern.indexOf(":");
 		if (colonIndex === -1) {
-			throw this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 				typePattern,
 				expected: "string in format 'type:pattern' with at least one colon"
 			});
@@ -626,7 +626,7 @@ export class HookManager extends ComponentBase {
 		const pattern = typePattern.substring(colonIndex + 1);
 
 		if (!type || !pattern) {
-			throw this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
+			throw new this.slothlet.SlothletError("INVALID_TYPE_PATTERN", {
 				typePattern,
 				expected: "non-empty type and pattern"
 			});

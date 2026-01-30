@@ -103,7 +103,17 @@
 		"HINT_INVALID_CONFIG_RELOAD_NOT_IMPL": "Reload functionality is not yet implemented. This will be added in a future iteration.",
 		"HINT_WARNING_RESERVED_PROPERTY_CONFLICT": "The 'slothlet' property name is reserved for built-in API methods. Rename your API module or property to avoid conflicts with slothlet.shutdown(), slothlet.api.*, etc.",
 		"HINT_DEPRECATED_CONFIG_OPTION": "This configuration option is deprecated and will be removed in a future version. Update your configuration to use the recommended replacement.",
-		"HINT_ERROR_RUNTIME_IMPORT_FAILED": "The runtime module could not be loaded. This may occur if @cldmv/slothlet/runtime export is unavailable or there's a circular dependency. Some features requiring runtime access may be limited."
+		"HINT_ERROR_RUNTIME_IMPORT_FAILED": "The runtime module could not be loaded. This may occur if @cldmv/slothlet/runtime export is unavailable or there's a circular dependency. Some features requiring runtime access may be limited.",
+		"INVALID_HOOK_TYPE": "Invalid hook type \"{type}\". Must be one of: {validTypes}.",
+		"INVALID_HOOK_HANDLER": "Hook handler must be a function. Received type: {receivedType}.",
+		"DUPLICATE_HOOK_ID": "A hook with ID \"{id}\" already exists. Use a unique ID or omit the id option to auto-generate one.",
+		"INVALID_HOOK_SUBSET": "Invalid hook subset \"{subset}\". Must be \"before\", \"primary\", or \"after\".",
+		"INVALID_TYPE_PATTERN": "Invalid type pattern \"{typePattern}\". {expected}",
+		"HINT_INVALID_HOOK_TYPE": "Use one of the valid hook types: before, after, always, or error.",
+		"HINT_INVALID_HOOK_HANDLER": "Provide a function as the hook handler, not a string or other type.",
+		"HINT_DUPLICATE_HOOK_ID": "Either use a different id value or remove the id option to let Slothlet auto-generate a unique ID.",
+		"HINT_INVALID_HOOK_SUBSET": "Subsets control execution order. Use 'before' for pre-processing, 'primary' (default) for main hooks, or 'after' for post-processing.",
+		"HINT_INVALID_TYPE_PATTERN": "Type patterns must be in the format 'type:pattern', such as 'before:math.*' or 'error:**'."
 	},
 	"metadata": {
 		"code": "en-us",
