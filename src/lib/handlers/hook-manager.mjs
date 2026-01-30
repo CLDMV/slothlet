@@ -397,6 +397,11 @@ export class HookManager extends ComponentBase {
 			try {
 				const result = hook.handler({ path, args, api, ctx });
 
+				// Before hooks must be synchronous - reject Promises
+				if (result && typeof result === "object" && typeof result.then === "function") {
+					throw new Error(`Before hook "${hook.id}" for path "${path}" returned a Promise. Before hooks must be synchronous.`);
+				}
+
 				// Check for short-circuit (hook returns value directly)
 				if (result !== undefined && !Array.isArray(result)) {
 					return { args, shortCircuit: true, value: result };
