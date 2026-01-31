@@ -1,231 +1,194 @@
-# Hot Reload System - COMPLETE ✅
+# Hot Reload System Implementation
 
-**Status**: COMPLETE  
-**Priority**: HIGH  
-**Created**: January 30, 2026  
-**Completed**: January 30, 2026  
-**Target Version**: v4.0.x
-
-## Overview
-
-The reload system provides a simple API for reloading all modules in the Slothlet instance at runtime. This is a production feature that allows applications to pick up code changes without requiring a full process restart.
-
-## Implementation Status
-
-### Functional APIs ✅
-- `api.slothlet.reload()` - Reloads all modules in the API
-- `api.slothlet.api.reload()` - Alternative access path (same functionality)
+## Status: Partially Complete ✅
 
 ### Completed Features
-- ✅ Module cache invalidation (CommonJS)
-- ✅ ESM cache-busting via query parameters with timestamps
-- ✅ Full API structure rebuild
-- ✅ Hook preservation across reloads
-- ✅ Context data preservation
-- ✅ Live binding updates (`self`, `reference`)
-- ✅ Works in both eager and lazy loading modes
-- ✅ Multiple sequential reloads supported
-- ✅ Proper error handling
-- ✅ Configuration control via `api.mutations.reload`
 
-## Implementation Summary
+#### ✅ Full Instance Reload (`api.slothlet.reload()`)
+- **Status**: COMPLETE
+- **Tests**: 56/56 passing (100%)
+- **Implementation**: `src/slothlet.mjs` - `async reload()` method
+- **Features**:
+  - Fresh module loading with ESM/CJS cache busting
+  - Preserves instance ID and user reference to API object
+  - Replays operation history (add/remove API calls)
+  - Maintains context isolation across reload
+  - Console.log display fix for nested objects
+  - UnifiedWrapper proxy forwarding system
 
-### What Was Implemented
-
-1. **Core Reload Logic** (`src/slothlet.mjs`)
-   - `reload()` method in Slothlet class
-   - CommonJS cache clearing for configured directory
-   - ESM cache-busting using timestamp-based query parameters
-   - Full API rebuild with new module instances
-   - Hook preservation (hooks automatically re-attach by path matching)
-   - Context manager store updates for live bindings
-
-2. **Cache Invalidation Strategy**
-   - **CommonJS**: Direct `require.cache` deletion for modules in config.dir
-   - **ESM**: Cache-busting via `?slothlet_instance=ID&module=baseID_reload_timestamp`
-   - Timestamp ensures every reload gets fresh modules from disk
-
-3. **Live Binding Updates**
-   - Updates `contextManager.instances` Map with new API reference
-   - `self` proxy automatically resolves to new API
-   - `context` data preserved across reloads
-   - `reference` object re-applied after reload
-
-4. **Hook Preservation**
-   - Hooks stored in hook manager persist across reloads
-   - Pattern matching automatically attaches hooks to new function instances
-   - All hook types (before, after, always) preserved
-
-### Test Coverage ✅
-
-**Test File**: `tests/vitests/suites/core/core-reload.test.vitest.mjs`  
-**Total Tests**: 64 tests (8 tests × 8 matrix configurations)  
-**Status**: All passing
-
-Tests verify:
-- ✅ Basic reload functionality
-- ✅ Hook preservation (before, after, always)
-- ✅ API structure consistency
-- ✅ Context data preservation
-- ✅ Multiple sequential reloads
-- ✅ Alternative API access path
-- ✅ Config-based enable/disable
-
-### How It Works
-
+**Technical Details**:
 ```javascript
-// 1. Clear CommonJS require cache for modules in config.dir
-for (const key of Object.keys(require.cache)) {
-    if (key.startsWith(absoluteTargetDir)) {
-        delete require.cache[key];
-    }
-}
+// User keeps same reference across reloads
+const api = await slothlet({ dir: "./api" });
+api.customProp = "test"; // Custom properties
 
-// 2. Generate cache-busting ID with timestamp
-const reloadId = `reload_${Date.now()}`;
-const moduleId = `${baseModuleId}_${reloadId}`;
-
-// 3. Rebuild API (loader uses moduleId for cache-busting query params)
-this.api = await this.builders.builder.buildAPI({
-    dir: this.config.dir,
-    mode: this.config.mode,
-    moduleId // Used in: filePath?slothlet_instance=ID&module=moduleId
-});
-
-// 4. Update context manager's instances Map
-const store = this.contextManager.instances.get(this.instanceID);
-store.self = this.boundApi; // New API reference
-
-// 5. Hooks automatically re-attach (managed by hook system)
-```
-
-## Known Limitations & Considerations
-
-1. **In-Flight Operations**
-   - Async operations that started before reload will complete using old module code
-   - New calls after reload use new module code
-   - This is expected and acceptable behavior
-
-2. **Module-Level State**
-   - Module-level variables/state is cleared on reload (by design)
-   - State should be stored in `context` if persistence needed across reloads
-
-3. **Ownership Tracking**
-   - Currently generates new moduleId for each reload
-   - Old module ownership records not explicitly cleaned up
-   - May need enhancement for long-running apps with many reloads
-
-4. **Performance**
-   - Full rebuild on every reload (no selective reloading)
-   - For large APIs, reload may take time
-   - Consider impact in production (likely only used in dev/staging)
-
-## Usage Examples
-
-### Basic Reload
-
-```javascript
-const api = await slothlet({
-    dir: "./api",
-    api: {
-        mutations: {
-            reload: true // Must be explicitly enabled
-        }
-    }
-});
-
-// Call function
-console.log(await api.math.add(1, 2)); // 3
-
-// ... edit ./api/math.mjs on disk ...
-
-// Reload to pick up changes
+// Reload clears everything and rebuilds
 await api.slothlet.reload();
 
-// Call function with new code
-console.log(await api.math.add(1, 2)); // Uses reloaded code
+// Custom properties gone, modules refreshed
+console.log(api.customProp); // undefined
+console.log(api.config); // Shows actual nested values, not {}
 ```
 
-### With Hooks
+**Key Mechanisms**:
+1. **Proxy Forwarding**: `boundApi` proxy forwards to `_currentApi` (updated on reload)
+2. **Cache Busting**: Temporary instance IDs force ESM re-import
+3. **Operation Replay**: Chronological replay of `add()`/`remove()` calls
+4. **Context Preservation**: Instance ID maintained for AsyncLocalStorage continuity
 
+### Pending Features
+
+#### 🔄 Targeted Module Reload (`api.slothlet.reload("path")`)
+- **Status**: NOT STARTED
+- **Tests**: Not yet written
+- **Priority**: Medium
+- **Description**: Reload specific module or subtree without full instance reload
+
+**Planned API**:
 ```javascript
-// Register hooks
-api.slothlet.hook.on("before:*", (ctx) => {
-    console.log("Before:", ctx.path);
+// Reload single module
+await api.slothlet.reload("math.advanced");
+
+// Reload subtree
+await api.slothlet.reload("plugins");
+```
+
+**Requirements**:
+- Selective cache invalidation (only target module + dependencies)
+- Preserve non-reloaded modules in memory
+- Update ownership tracking for replaced modules only
+- Maintain context for non-reloaded parts
+- Handle dependency graph updates
+
+**Challenges**:
+- Dependency tracking (which modules depend on reloaded module?)
+- Partial ownership updates (don't clear entire history)
+- Lazy wrapper invalidation (materialized proxies must re-lazy)
+- Reference preservation for parent objects containing reloaded module
+
+---
+
+## Implementation History
+
+### Phase 1: Foundation (January 2026)
+- ✅ Proxy-based reference preservation system
+- ✅ ESM/CJS cache busting mechanisms
+- ✅ Operation history tracking in api-manager
+- ✅ Console.log display fix for UnifiedWrapper proxies
+
+### Phase 2: Full Reload (January 2026)
+- ✅ Complete instance reload with preserved instance ID
+- ✅ Chronological operation replay (add/remove)
+- ✅ Custom property cleanup during reload
+- ✅ All 56 reload tests passing
+
+### Phase 3: Targeted Reload (Pending)
+- 🔄 Selective module invalidation
+- 🔄 Dependency graph tracking
+- 🔄 Partial ownership updates
+- 🔄 Reference preservation for non-reloaded modules
+
+---
+
+## Design Decisions
+
+### Why Proxy Forwarding?
+JavaScript doesn't allow reassigning through references:
+```javascript
+let api = { x: 1 };
+const ref = api;
+api = { x: 2 }; // ref still points to { x: 1 }
+```
+
+Solution: `boundApi` is a stable proxy that forwards to mutable `_currentApi`:
+```javascript
+this.boundApi = new Proxy(function(){}, {
+  get: (target, prop) => this._currentApi[prop],
+  // ... other traps
 });
-
-await api.math.add(1, 2); // Hook fires
-
-// Reload
-await api.slothlet.reload();
-
-await api.math.add(3, 4); // Hook still fires (preserved)
 ```
 
-### Context Preservation
-
+### Why Operation Replay?
+Users can modify API at runtime:
 ```javascript
-// Set context data
-api.slothlet.context.userId = "user123";
-
-// Reload
-await api.slothlet.reload();
-
-// Context data persists
-console.log(api.slothlet.context.userId); // "user123"
+await api.slothlet.api.add("plugins", "./plugins");
+await api.slothlet.api.remove("test-module");
 ```
 
-## Production Considerations
+Reload must restore these modifications:
+1. Save operation history before reload
+2. Fresh load (clean slate)
+3. Replay operations in chronological order
 
-- Reload is NOT just for development - it's a production feature
-- Use cases:
-  - Zero-downtime code updates
-  - Hot-fix deployment without process restart
-  - A/B testing code variations
-  - Dynamic plugin loading
+### Why Custom Property Cleanup?
+Users can attach runtime properties:
+```javascript
+api.customProp = "runtime-value";
+api.config.tempData = { ... };
+```
 
-- Best practices:
-  - Enable via config (`api.mutations.reload: true`)
-  - Coordinate reloads across multiple instances (external orchestration)
-  - Test reload in staging first
-  - Monitor for errors after reload
-  - Consider queuing/draining active requests before reload
+Reload should restore "clean" state (only module exports, no runtime mutations).
+
+---
+
+## Related Systems
+
+### Dependencies
+- **Context Manager** (`src/lib/runtime/`) - Instance ID and AsyncLocalStorage
+- **API Manager** (`src/lib/handlers/api-manager.mjs`) - Operation history tracking
+- **Ownership Manager** (`src/lib/handlers/ownership.mjs`) - Module ownership and rollback
+- **UnifiedWrapper** (`src/lib/handlers/unified-wrapper.mjs`) - Proxy system and cache
+- **Modes Processor** (`src/lib/builders/modes-processor.mjs`) - Module loading
+
+### Integration Points
+- Lifecycle events (`impl:created`, `impl:changed`, `impl:removed`)
+- Ownership registration and rollback
+- Context store management
+- Module cache invalidation
+
+---
+
+## Testing
+
+### Full Reload Tests (`tests/vitests/suites/core/core-reload-full.test.vitest.mjs`)
+- ✅ 56/56 tests passing (100%)
+- Covers: basic reload, operation replay, context preservation, multiple reloads, error handling
+
+### Targeted Reload Tests
+- 🔄 Not yet implemented
+
+---
 
 ## Future Enhancements
 
-Potential improvements (not currently planned):
+### Hot Module Replacement (HMR)
+- Watch file system for changes
+- Auto-trigger targeted reload on file save
+- Preserve application state across reloads
+- IDE integration (VS Code extension?)
 
-- Selective reload (specific modules/paths only)
-- Reload hooks (before/after reload callbacks)
-- Automatic file watching integration
-- Rollback mechanism on reload failure
-- Graceful request draining before reload
-- Ownership cleanup for old module registrations
+### Reload Hooks
+```javascript
+api.slothlet.hooks.before("reload", async (modules) => {
+  // Cleanup before reload
+});
 
-## Documentation Status
+api.slothlet.hooks.after("reload", async (modules) => {
+  // Re-initialize after reload
+});
+```
 
-### Completed
-- ✅ Implementation documentation (this file)
-- ✅ JSDoc comments in `src/slothlet.mjs` for `reload()` method
-- ✅ Usage examples
-- ✅ Test coverage documentation
+### Dependency Graph
+- Track which modules import which other modules
+- Intelligent cascading reloads (reload dependents too)
+- Circular dependency detection and handling
 
-### Todo
-- ⏳ Add reload examples to main README.md
-- ⏳ Update API reference documentation
-- ⏳ Add reload section to user guide
-- ⏳ Document in changelog
+---
 
-## References
+## Documentation
 
-- Implementation: [src/slothlet.mjs](../../src/slothlet.mjs) - `reload()` method
-- Tests: [tests/vitests/suites/core/core-reload.test.vitest.mjs](../../tests/vitests/suites/core/core-reload.test.vitest.mjs)
-- Cache-busting: [src/lib/processors/loader.mjs](../../src/lib/processors/loader.mjs) - `loadModule()` method
-- Context manager: [src/lib/handlers/context-async.mjs](../../src/lib/handlers/context-async.mjs)
-
-## References
-
-- [Node.js Module System](https://nodejs.org/api/modules.html)
-- [ES Module Caching](https://nodejs.org/api/esm.html#esm_resolution_algorithm)
-- Related Issue: TBD
-- Related PR: TBD
+- ✅ Implementation complete in `src/slothlet.mjs`
+- ✅ JSDoc documentation complete
+- ✅ Test coverage 100% for full reload
+- 🔄 User guide pending (how to use reload in production)
+- 🔄 Performance benchmarks pending
