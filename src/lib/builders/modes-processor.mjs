@@ -874,7 +874,8 @@ export class ModesProcessor extends ComponentBase {
 							flatten,
 							apiPathPrefix,
 							moduleId,
-							sourceFolder
+							sourceFolder,
+							userMetadata // Pass userMetadata to lazy wrappers!
 						),
 						{
 							useCollisionDetection: true,
@@ -990,8 +991,18 @@ export class ModesProcessor extends ComponentBase {
 			}
 			const categoryName = this.slothlet.helpers.sanitize.sanitizePropertyName(dir.name);
 			const materialized = {};
-			// Compute parent API path prefix from this wrapper's apiPath
-			// e.g., 'plugins.utilities' → 'plugins'
+
+			// Compute actual subdirectory sourceFolder path
+			// If parent sourceFolder exists, append this directory name
+			// Otherwise use config dir as base
+			const actualSourceFolder = sourceFolder
+				? `${sourceFolder}/${dir.name}`.replace(/\\/g, "/")
+				: `${this.slothlet.config?.dir}/${dir.name}`.replace(/\\/g, "/");
+
+			// Compute parent API path prefix - strip the last segment (which is this directory)
+			// e.g., if this wrapper is 'lookup.config', and we're materializing 'config' directory,
+			//       we want children to be 'lookup.config.X', not 'lookup.config.config.X'
+			// So we strip the last segment: 'lookup.config' → 'lookup'
 			const parentPrefix = apiPath.includes(".") ? apiPath.split(".").slice(0, -1).join(".") : "";
 			const subDirs = dir.children.directories || [];
 			if (dir.children.files.length === 1 && subDirs.length === 0) {
@@ -1106,8 +1117,8 @@ export class ModesProcessor extends ComponentBase {
 				parentPrefix, // Use computed parent prefix so children get correct paths
 				"initial",
 				moduleId, // Pass parent moduleId to children
-				sourceFolder, // Pass parent sourceFolder to children
-				userMetadata // Pass parent userMetadata to children
+				actualSourceFolder, // Use computed actual subdirectory path for metadata
+				{} // Don't pass userMetadata during materialization - it was already registered during api.add()
 			);
 			if (config.debug?.modes) {
 				this.slothlet.debug("modes", {
@@ -1177,8 +1188,8 @@ export class ModesProcessor extends ComponentBase {
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
 			materializeOnCreate: config.backgroundMaterialize,
-			filePath: null, // Don't set filePath yet - will be set during materialization
-			moduleId: moduleId, // Use parent moduleId}:${dir.name}`
+			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
+			moduleId: moduleId, // Use parent moduleId
 			sourceFolder
 		});
 		return wrapper.createProxy();
