@@ -217,7 +217,19 @@ export class OwnershipManager extends ComponentBase {
 	 */
 	getCurrentValue(apiPath) {
 		const owner = this.getCurrentOwner(apiPath);
-		return owner ? owner.value : undefined;
+		if (!owner) return undefined;
+
+		const value = owner.value;
+
+		// If value is a wrapper proxy, unwrap it to get the raw implementation
+		// Ownership stores wrappers for rollback capability, but when restoring,
+		// we need the raw impl to avoid double-wrapping
+		// Functions can also be wrappers (callable proxies), so check both objects and functions
+		if (value && (typeof value === "object" || typeof value === "function") && "__impl" in value) {
+			return value.__impl;
+		}
+
+		return value;
 	}
 
 	/**

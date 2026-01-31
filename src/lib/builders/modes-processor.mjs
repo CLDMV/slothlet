@@ -298,12 +298,14 @@ export class ModesProcessor extends ComponentBase {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									effectiveMode,
 									apiPath: buildApiPath(categoryName),
+									initialImpl: exportedValue,
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
 									moduleId: moduleId || file.moduleId,
 									sourceFolder
 								});
 								// Assign wrapper to API
+								api[categoryName] = wrapper.createProxy();
 								targetApi = api[categoryName];
 							} else {
 								this.slothlet.debug("modes", {
