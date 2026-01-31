@@ -247,8 +247,9 @@ class Slothlet {
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
 		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
-			// Reload: reuse existing store
-			store = this.contextManager.instances.get(preservedInstanceID);
+			// Reload: DONT reuse store, delete old and create fresh
+			this.contextManager.cleanup(preservedInstanceID);
+			store = this.contextManager.initialize(this.instanceID, this.config);
 		} else {
 			// Fresh load: initialize new store
 			store = this.contextManager.initialize(this.instanceID, this.config);
@@ -336,38 +337,63 @@ class Slothlet {
 		// 1. Save current instance ID and state
 		const preservedInstanceID = this.instanceID;
 		const preservedOwnership = this.handlers.ownership ? this.handlers.ownership.exportState() : null;
-		
+		const oldBoundApi = this.boundApi; // Save reference to OLD API object
+
 		// 2. Save operation history from api-manager (for replay)
-		const operationHistory = this.handlers.apiManager?.state?.addHistory
-			? [...this.handlers.apiManager.state.addHistory]
-			: [];
+		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
 
 		// 3. Clear CommonJS module caches
 		await this._clearModuleCaches();
 
 		// 4. Call load() with preserved instance ID (this reuses 90% of load logic)
+		// This will create a FRESH API and reassign this.boundApi
 		const reloadedApi = await this.load(this.config, preservedInstanceID);
 
-		// 5. Restore ownership state if it was preserved
-		if (preservedOwnership && this.handlers.ownership) {
-			this.handlers.ownership.importState(preservedOwnership);
-		}
+		// 5. DON'T restore ownership state - let it be fresh
+		// if (preservedOwnership && this.handlers.ownership) {
+		// 	this.handlers.ownership.importState(preservedOwnership);
+		// }
 
 		// 6. Replay operation history in chronological order
+		// Use forceOverwrite to ensure clean replacement (custom properties disappear)
+		// TEMPORARILY DISABLED FOR DEBUGGING
+		/*
 		for (const operation of operationHistory) {
-			await this.handlers.apiManager.addApiComponent({
-				apiPath: operation.apiPath,
-				folderPath: operation.folderPath,
-				options: operation.options || {},
-				moduleId: operation.moduleId
-			});
+			if (operation.type === "add") {
+				await this.handlers.apiManager.addApiComponent({
+					apiPath: operation.apiPath,
+					folderPath: operation.folderPath,
+					options: { ...(operation.options || {}), recordHistory: false, forceOverwrite: true },
+					moduleId: operation.moduleId
+				});
+			} else if (operation.type === "remove") {
+				await this.handlers.apiManager.removeApiComponent(operation.identifier);
+			}
+		}
+		*/
+
+		// 7. NOW mutate the OLD API object in place (tests expect same reference)
+		// Clear all existing properties from old API
+		for (const key of Object.keys(oldBoundApi)) {
+			delete oldBoundApi[key];
+		}
+		// Copy all properties from reloaded API to old API (after operations)
+		Object.assign(oldBoundApi, this.boundApi);
+
+		// Point this.boundApi back to the OLD reference (the one tests are holding)
+		this.boundApi = oldBoundApi;
+
+		// 8. Update context store's self reference
+		const store = this.contextManager.instances.get(preservedInstanceID);
+		if (store) {
+			store.self = this.boundApi;
 		}
 
 		// Note: Hooks are preserved automatically - they're in the hook manager
 		// Note: Context manager preserves store via instanceID
 		// Note: Reference and metadata are re-applied by load()
 
-		return reloadedApi;
+		return this.boundApi;
 	}
 
 	/**
@@ -379,6 +405,8 @@ class Slothlet {
 		// Only clear modules from the configured dir to avoid breaking dependencies
 		const targetDir = this.config.dir;
 		const { resolve } = await import("node:path");
+		const { createRequire } = await import("node:module");
+		const require = createRequire(import.meta.url);
 		const absoluteTargetDir = resolve(targetDir);
 
 		// Clear require.cache for CJS modules

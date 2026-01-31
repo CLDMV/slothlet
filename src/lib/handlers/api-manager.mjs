@@ -68,7 +68,8 @@ export class ApiManager extends ComponentBase {
 		this.state = {
 			addHistory: [],
 			removedModuleIds: new Set(),
-			initialConfig: slothlet?.config || null
+			initialConfig: slothlet?.config || null,
+			operationHistory: [] // Chronological log of all add/remove operations
 		};
 	}
 
@@ -1056,6 +1057,15 @@ export class ApiManager extends ComponentBase {
 					options: { ...restOptions, metadata, moduleId },
 					moduleId
 				});
+
+				// Track in operation history for reload replay
+				this.state.operationHistory.push({
+					type: "add",
+					apiPath: normalizedPath,
+					folderPath: resolvedFolderPath,
+					options: { ...restOptions, metadata, moduleId },
+					moduleId
+				});
 			}
 
 			if (moduleId) {
@@ -1238,6 +1248,12 @@ export class ApiManager extends ComponentBase {
 
 			this.state.removedModuleIds.add(moduleIdKey);
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleId) !== moduleIdKey);
+
+			// Track in operation history for reload replay
+			this.state.operationHistory.push({
+				type: "remove",
+				identifier: pathOrModuleId
+			});
 			// Return true if we actually removed something
 			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
 		}
