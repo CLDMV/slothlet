@@ -1364,15 +1364,59 @@ export class UnifiedWrapper extends ComponentBase {
 			return true;
 		};
 
-		wrapper._proxy = new Proxy(proxyTarget, {
-			get: getTrap,
-			apply: applyTrap,
-			has: hasTrap,
-			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
-			ownKeys: ownKeysTrap,
-			set: setTrap
-		});
+	/**
+	 * @private
+	 * @param {Object} target - Proxy target
+	 * @param {string|symbol} prop - Property name to delete
+	 * @returns {boolean} True when deletion succeeds
+	 *
+	 * @description
+	 * Handles property deletion from wrapper proxies, removing from childCache and impl.
+	 */
+	const deletePropertyTrap = (target, prop) => {
+		// Don't allow deletion of internal properties
+		const internalKeys = new Set([
+			"__impl",
+			"__setImpl",
+			"__getState",
+			"__materialize",
+			"__invalidate",
+			"__wrapper",
+			"__metadata",
+			"_impl",
+			"_state",
+			"_invalid"
+		]);
+		if (internalKeys.has(prop)) {
+			return false;
+		}
 
-		return wrapper._proxy;
-	}
+		// Remove from childCache
+		if (wrapper._childCache.has(prop)) {
+			wrapper._childCache.delete(prop);
+		}
+
+		// Remove from _impl if it's an object
+		if (wrapper._impl && typeof wrapper._impl === "object" && prop in wrapper._impl) {
+			delete wrapper._impl[prop];
+		}
+
+		// Remove from proxy target
+		delete target[prop];
+
+		return true;
+	};
+
+	wrapper._proxy = new Proxy(proxyTarget, {
+		get: getTrap,
+		apply: applyTrap,
+		has: hasTrap,
+		getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
+		ownKeys: ownKeysTrap,
+		set: setTrap,
+		deleteProperty: deletePropertyTrap
+	});
+
+	return wrapper._proxy;
+}
 }
