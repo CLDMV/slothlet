@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 13:10:34 -08:00 (1769893834)
+ *	@Last modified time: 2026-01-31 13:37:36 -08:00 (1769895456)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -785,7 +785,13 @@ export class UnifiedWrapper extends ComponentBase {
 							current = currentWrapper._childCache.get(prop);
 							continue;
 						}
-						if (currentWrapper._impl && prop in currentWrapper._impl) {
+						// Check if _impl is an object before using 'in' operator
+						if (
+							currentWrapper._impl &&
+							typeof currentWrapper._impl === "object" &&
+							currentWrapper._impl !== null &&
+							prop in currentWrapper._impl
+						) {
 							current = currentWrapper._impl[prop];
 							continue;
 						}
@@ -796,6 +802,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 				if (typeof current === "function") {
 					return current(...args);
+				}
+
+				// Handle util.inspect checking for hasAttribute on primitives
+				// When Node.js inspects an object, it checks for hasAttribute on all properties
+				// If we're checking hasAttribute on a primitive value, just return undefined
+				if (propChain[propChain.length - 1] === "hasAttribute") {
+					return undefined;
 				}
 
 				// If current is undefined/null after traversing the chain, throw an error
