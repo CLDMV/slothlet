@@ -87,6 +87,60 @@ export function getNestedProperty(obj, pathParts) {
 }
 
 /**
+ * Materialize an API property by accessing it and returning its value.
+ * Handles functions, objects, and primitives correctly in both lazy and eager modes.
+ * For functions, calls them with provided args. For objects/primitives, returns them directly.
+ *
+ * @param {object} api - Slothlet API instance
+ * @param {string} path - Dot-separated path to the property (e.g., "folder.config.settings.getPluginConfig")
+ * @param {...any} args - Arguments to pass if the property is a function
+ * @returns {Promise<any>} The materialized value (called function result or direct value)
+ *
+ * @example
+ * // Call a function
+ * const result = await materialize(api, "math.add", 2, 3);
+ *
+ * @example
+ * // Access an object (triggers materialization in lazy mode)
+ * const config = await materialize(api, "folder.config");
+ */
+export async function materialize(api, path, ...args) {
+	const parts = path.split(".");
+	let target = api;
+	for (let i = 0; i < parts.length - 1; i++) {
+		target = target[parts[i]];
+	}
+	const value = target[parts[parts.length - 1]];
+
+	// Trigger materialization if __materialize exists (for lazy mode)
+	if (typeof value?.__materialize === "function") {
+		await value.__materialize();
+	}
+
+	// Check actual type using __type property (for lazy mode compatibility)
+	// __type returns Symbol(inFlight) or Symbol(unmaterialized) for lazy wrappers,
+	// or the actual type string ("function", "object", etc.) after materialization
+	const typeInfo = value?.__type;
+	const isFunction = typeInfo === "function" || (typeof typeInfo !== "symbol" && typeof value === "function");
+
+	if (isFunction && args.length > 0) {
+		// It's a function with args - call it
+		try {
+			return await value(...args);
+		} catch (_) {
+			return await value(...args);
+		}
+	} else if (isFunction && args.length === 0) {
+		// It's a function with no args - just return it (don't call)
+		// This allows accessing function metadata without calling the function
+		return value;
+	} else {
+		// It's an object or primitive - just return it (accessing it triggers materialization)
+		return value;
+	}
+}
+
+/**
  * Invoke a nested function on the API.
  * @param {object|Function} api
  * @param {string[]} pathParts

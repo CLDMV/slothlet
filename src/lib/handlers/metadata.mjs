@@ -278,14 +278,37 @@ export class Metadata extends ComponentBase {
 		// - setUserMetadata() stores by moduleID (for external metadata.set())
 		const moduleID = systemData.moduleID || systemData.moduleId;
 		const apiPath = systemData.apiPath;
-		const rootApiPath = apiPath ? apiPath.split(".")[0].split("/")[0] : null;
+
+		// Traverse UP the apiPath chain to collect inherited metadata
+		// Example: "mixed.config.settings.getPluginConfig" checks:
+		//   - "mixed.config.settings.getPluginConfig"
+		//   - "mixed.config.settings"
+		//   - "mixed.config"
+		//   - "mixed"
+		const collectMetadataFromParents = (path) => {
+			if (!path) return {};
+
+			const parts = path.split(".");
+			const collected = {};
+
+			// Start from root and work down (parent metadata merged first, child overrides)
+			for (let i = 1; i <= parts.length; i++) {
+				const parentPath = parts.slice(0, i).join(".");
+				const parentMeta = this.#userMetadataStore.get(parentPath);
+				if (parentMeta?.metadata) {
+					Object.assign(collected, parentMeta.metadata);
+				}
+			}
+
+			return collected;
+		};
 
 		const userMetadataByModule = moduleID ? this.#userMetadataStore.get(moduleID) : null;
-		const userMetadataByPath = rootApiPath ? this.#userMetadataStore.get(rootApiPath) : null;
+		const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
 
 		// Merge both user metadata sources (path < moduleID priority)
 		const userData = {
-			...(userMetadataByPath?.metadata || {}),
+			...userMetadataByPath,
 			...(userMetadataByModule?.metadata || {})
 		};
 

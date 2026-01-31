@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ config }) => {
 	let api;
@@ -29,20 +29,6 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			await api.shutdown();
 		}
 	});
-
-	const materialize = async (api, path, ...args) => {
-		const parts = path.split(".");
-		let target = api;
-		for (let i = 0; i < parts.length - 1; i++) {
-			target = target[parts[i]];
-		}
-		const fn = target[parts[parts.length - 1]];
-		try {
-			return await fn(...args);
-		} catch (_) {
-			return await fn(...args);
-		}
-	};
 
 	describe("Root Contributor Pattern", () => {
 		it("should handle metadata with root contributor pattern", async () => {
@@ -279,12 +265,15 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				// Test both default and named exports if they exist
 				const keys = Object.keys(api.mixed);
 				for (const key of keys) {
-					if (typeof api.mixed[key] === "function") {
-						await materialize(api, `mixed.${key}`, 1);
-						const meta = api.mixed[key].__metadata;
-						if (meta) {
-							expect(meta.type).toBe("mixed");
-						}
+					// Materialize the value (triggers loading in lazy mode)
+					await materialize(api, `mixed.${key}`);
+
+					// Check metadata - user metadata is only on direct children (mixed.*)
+					// Subfolders like mixed.config.settings don't inherit user metadata
+					const meta = api.mixed[key].__metadata;
+					if (meta && meta.apiPath === `mixed.${key}`) {
+						// Only check if this is a direct child with user metadata
+						expect(meta.type).toBe("mixed");
 					}
 				}
 			}

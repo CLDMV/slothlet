@@ -232,7 +232,7 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: sourceFolder
 				});
 				// Set impl to empty object so it acts as a namespace container
-				containerWrapper.__setImpl({});
+				containerWrapper.__setImpl({}, moduleId);
 				current[part] = containerWrapper.createProxy();
 				current = current[part];
 				continue;
@@ -1066,6 +1066,7 @@ export class ApiManager extends ComponentBase {
 		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 			mutateExisting,
 			collisionMode,
+			moduleId, // Pass moduleId for lifecycle events (boundApi container needs it too)
 			sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 		});
 
