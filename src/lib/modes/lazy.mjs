@@ -57,6 +57,7 @@ export async function buildLazyAPI({
 	// Pass synthetic root directory with children.directories so processFiles can create lazy wrappers
 	const rootDirectory = {
 		name: ".",
+		path: dir, // Add path so folder wrappers can be tagged with metadata
 		children: {
 			files: structure.files,
 			directories: structure.directories

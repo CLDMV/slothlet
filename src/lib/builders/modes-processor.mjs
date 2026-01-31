@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/builders/modes-processor.mjs
+ *	@Date: 2026-01-30 22:47:23 -08:00 (1769842043)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-31 13:10:33 -08:00 (1769893833)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Mode processing orchestration - file/directory processing for eager/lazy modes
  * @module @cldmv/slothlet/builders/modes-processor
  *
@@ -50,7 +63,9 @@ export class ModesProcessor extends ComponentBase {
 		const { loader, flatten } = this.slothlet.processors;
 		const { contextManager, instanceID, config } = this.slothlet;
 		// Register user metadata for this moduleID (if provided)
-		if (metadata && moduleId && Object.keys(userMetadata).length > 0) {
+		// CRITICAL: Skip registration during addApi context - let api-manager handle it after collision resolution
+		// This ensures metadata is only registered when the API is actually added (not skipped/warned)
+		if (metadata && moduleId && Object.keys(userMetadata).length > 0 && collisionContext !== "addApi") {
 			const apiPath = apiPathPrefix || "";
 			try {
 				metadata.registerUserMetadata(moduleId, apiPath, userMetadata);
@@ -113,6 +128,21 @@ export class ModesProcessor extends ComponentBase {
 					sourceFolder
 				});
 				api[categoryName] = wrapper.createProxy();
+
+				// Tag folder wrapper with system metadata so folders have metadata accessible
+				if (this.slothlet.handlers?.metadata) {
+					this.slothlet.handlers.metadata.tagSystemMetadata(
+						wrapper,
+						{
+							filePath: directory.path,
+							apiPath: buildApiPath(categoryName),
+							moduleId: moduleId || "base",
+							sourceFolder: sourceFolder || directory.path
+						},
+						{ _fromLifecycle: true }
+					);
+				}
+
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Category wrapper assigned to API",
@@ -836,7 +866,7 @@ export class ModesProcessor extends ComponentBase {
 					await this.processFiles(
 						targetApi,
 						subDir.children.files,
-						{ name: subDirName, children: subDir.children },
+						{ name: subDirName, path: subDir.path, children: subDir.children }, // Preserve path for metadata
 						currentDepth + 1,
 						mode,
 						false, // Not root
@@ -1036,10 +1066,11 @@ export class ModesProcessor extends ComponentBase {
 						if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
 						} else if (exports.default !== undefined) {
-							implToWrap = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(exports.default, categoryName);
-							// Hybrid pattern: default function + named exports
-							// Attach named exports as properties on the function
-							if (typeof implToWrap === "function" && moduleKeys.length > 0) {
+							implToWrap = exports.default;
+
+							// Hybrid pattern: default (function OR object) + named exports
+							// Attach named exports as properties
+							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								const collisionMode = this.slothlet.config?.collision?.initial || "merge";
 								for (const key of moduleKeys) {
 									if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
@@ -1052,7 +1083,7 @@ export class ModesProcessor extends ComponentBase {
 											// Keep existing property from default export
 											continue;
 										} else if (collisionMode === "error") {
-											throw new Error(`Collision detected: property "${key}" already exists on default export function at ${apiPath}`);
+											throw new Error(`Collision detected: property "${key}" already exists on default export at ${apiPath}`);
 										} else if (collisionMode === "warn") {
 											new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
 												key,

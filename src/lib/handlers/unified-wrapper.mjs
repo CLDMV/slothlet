@@ -1,4 +1,30 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/handlers/unified-wrapper.mjs
+ *	@Date: 2026-01-30 16:47:31 -08:00 (1769820451)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-31 13:10:34 -08:00 (1769893834)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/handlers/unified-wrapper.mjs
+ *	@Date: 2026-01-30 16:47:31 -08:00 (1769820451)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-31 11:09:55 -08:00 (1769886595)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding
  * @module @cldmv/slothlet/handlers/unified-wrapper
  */
@@ -591,12 +617,19 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Builds property chain (e.g., ["advanced", "calc", "power"]) and waits for all parent
 	 * wrappers to materialize before accessing the final property.
 	 *
+	 * Waiting proxies are ONLY created when not materialized or in-flight.
+	 * Once materialized, we return actual cached values, not waiting proxies.
+	 * Therefore, waiting proxies always represent in-flight/unmaterialized state.
+	 *
 	 * @private
 	 * @param {Array<string|symbol>} [propChain=[]] - Property chain to resolve.
 	 * @returns {Proxy} Proxy that waits for materialization before applying calls.
 	 */
 	_createWaitingProxy(propChain = []) {
 		const wrapper = this;
+
+		// Waiting proxies always use function target since they represent unknown/in-flight values
+		// Native typeof will always return "function" - use __type property for actual state
 		const waitingTarget = createNamedProxyTarget(`${wrapper.apiPath}_waitingProxy`, "waitingProxyTarget");
 
 		// Link waiting proxy back to wrapper so metadata can be found
@@ -606,6 +639,45 @@ export class UnifiedWrapper extends ComponentBase {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
 				if (prop === "__wrapper") return wrapper;
+
+				// Trigger materialization if needed (fire-and-forget)
+				// This ensures lazy wrappers start loading when accessed
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+					wrapper._materialize();
+				}
+
+				if (prop === util.inspect.custom) {
+					// Custom inspect for console.log
+					// If in flight, return waiting proxy target
+					if (wrapper._state.inFlight) {
+						return waitingTarget;
+					}
+					// If unmaterialized, return waiting proxy target
+					if (!wrapper._state.materialized) {
+						return waitingTarget;
+					}
+					// Check if property exists after materialization
+					if (wrapper._impl) {
+						let current = wrapper._impl;
+						for (const chainProp of propChain) {
+							if (!current || current === null) {
+								return undefined;
+							}
+							current = current[chainProp];
+						}
+						// Return the actual value for inspection
+						return current;
+					}
+					return waitingTarget;
+				}
+				if (prop === "__type") {
+					// Waiting proxies ALWAYS return IN_FLIGHT because:
+					// - If not started: we don't create waiting proxies (return actual values from childCache or trigger materialization)
+					// - If in-flight: we create waiting proxies (this case)
+					// - If complete: we return actual cached values (not waiting proxies)
+					// Therefore, by definition, waiting proxies only exist during materialization = IN_FLIGHT
+					return TYPE_STATES.IN_FLIGHT;
+				}
 				if (prop === "__metadata") {
 					// Return metadata through wrapper
 					if (wrapper.slothlet.handlers?.metadata) {
@@ -628,6 +700,48 @@ export class UnifiedWrapper extends ComponentBase {
 					// For waiting proxies, we can't access impl yet, so use target
 					return Function.prototype.valueOf.bind(waitingTarget);
 				}
+
+				// If materialization is in flight, return TYPE_STATES.IN_FLIGHT for __type checks
+				// For other properties, return a waiting proxy to continue the chain
+				if (wrapper._state.inFlight) {
+					// Materialization started but not complete yet
+					// Return waiting proxy to allow chaining, but __type will return IN_FLIGHT symbol
+					return wrapper._createWaitingProxy([...propChain, prop]);
+				}
+
+				// CRITICAL: After materialization, check childCache for the resolved property chain
+				// This allows waiting proxies to resolve to actual cached values instead of creating more waiting proxies
+				if (wrapper._state.materialized) {
+					// Start from the parent wrapper and traverse using childCache
+					let current = wrapper;
+
+					// Traverse propChain through childCache
+					for (const chainProp of propChain) {
+						if (current && current._childCache && current._childCache.has(chainProp)) {
+							const cached = current._childCache.get(chainProp);
+							// Get the wrapper from cached proxy
+							if (cached && cached.__wrapper) {
+								current = cached.__wrapper;
+							} else {
+								// Cached value is not a wrapper (primitive or unwrapped object)
+								return undefined;
+							}
+						} else {
+							// Property doesn't exist in cache chain
+							return undefined;
+						}
+					}
+
+					// Now check if the final prop exists in the resolved wrapper's childCache
+					if (current && current._childCache && current._childCache.has(prop)) {
+						return current._childCache.get(prop);
+					}
+
+					// Property doesn't exist
+					return undefined;
+				}
+
+				// Not yet materialized and not in flight - create waiting proxy that will trigger materialization
 				return wrapper._createWaitingProxy([...propChain, prop]);
 			},
 
@@ -684,11 +798,10 @@ export class UnifiedWrapper extends ComponentBase {
 					return current(...args);
 				}
 
-				// If current is undefined/null after traversing the chain, return undefined instead of throwing
-				// This handles cases where test frameworks try to call methods that don't exist
-				// during introspection/cleanup (e.g., after api.remove())
+				// If current is undefined/null after traversing the chain, throw an error
+				// The property doesn't exist after materialization
 				if (current === undefined || current === null) {
-					return undefined;
+					throw new Error(`${wrapper.apiPath}.${chainLabel} is not a function or does not exist`);
 				}
 
 				throw new Error(`${wrapper.apiPath}.${chainLabel} is not a function`);
@@ -906,10 +1019,9 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize();
 			}
 
-			if (wrapper.mode === "lazy" && (wrapper._state.inFlight || !wrapper._impl)) {
-				return wrapper._createWaitingProxy([prop]);
-			}
-
+			// CRITICAL: Check childCache BEFORE creating waiting proxy
+			// In lazy mode with collisions, children may already be in childCache (from file/folder merge)
+			// Return these children directly instead of creating a waiting proxy
 			if (wrapper._childCache.has(prop)) {
 				const cached = wrapper._childCache.get(prop);
 				// If it's a wrapper with a primitive impl, return the unwrapped value
@@ -930,6 +1042,10 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				// For objects and functions, return the wrapper/proxy as-is
 				return cached;
+			}
+
+			if (wrapper.mode === "lazy" && (wrapper._state.inFlight || !wrapper._impl)) {
+				return wrapper._createWaitingProxy([prop]);
 			}
 
 			// Check if the property exists on impl before caching
@@ -1364,59 +1480,59 @@ export class UnifiedWrapper extends ComponentBase {
 			return true;
 		};
 
-	/**
-	 * @private
-	 * @param {Object} target - Proxy target
-	 * @param {string|symbol} prop - Property name to delete
-	 * @returns {boolean} True when deletion succeeds
-	 *
-	 * @description
-	 * Handles property deletion from wrapper proxies, removing from childCache and impl.
-	 */
-	const deletePropertyTrap = (target, prop) => {
-		// Don't allow deletion of internal properties
-		const internalKeys = new Set([
-			"__impl",
-			"__setImpl",
-			"__getState",
-			"__materialize",
-			"__invalidate",
-			"__wrapper",
-			"__metadata",
-			"_impl",
-			"_state",
-			"_invalid"
-		]);
-		if (internalKeys.has(prop)) {
-			return false;
-		}
+		/**
+		 * @private
+		 * @param {Object} target - Proxy target
+		 * @param {string|symbol} prop - Property name to delete
+		 * @returns {boolean} True when deletion succeeds
+		 *
+		 * @description
+		 * Handles property deletion from wrapper proxies, removing from childCache and impl.
+		 */
+		const deletePropertyTrap = (target, prop) => {
+			// Don't allow deletion of internal properties
+			const internalKeys = new Set([
+				"__impl",
+				"__setImpl",
+				"__getState",
+				"__materialize",
+				"__invalidate",
+				"__wrapper",
+				"__metadata",
+				"_impl",
+				"_state",
+				"_invalid"
+			]);
+			if (internalKeys.has(prop)) {
+				return false;
+			}
 
-		// Remove from childCache
-		if (wrapper._childCache.has(prop)) {
-			wrapper._childCache.delete(prop);
-		}
+			// Remove from childCache
+			if (wrapper._childCache.has(prop)) {
+				wrapper._childCache.delete(prop);
+			}
 
-		// Remove from _impl if it's an object
-		if (wrapper._impl && typeof wrapper._impl === "object" && prop in wrapper._impl) {
-			delete wrapper._impl[prop];
-		}
+			// Remove from _impl if it's an object
+			if (wrapper._impl && typeof wrapper._impl === "object" && prop in wrapper._impl) {
+				delete wrapper._impl[prop];
+			}
 
-		// Remove from proxy target
-		delete target[prop];
+			// Remove from proxy target
+			delete target[prop];
 
-		return true;
-	};
+			return true;
+		};
 
-	wrapper._proxy = new Proxy(proxyTarget, {
-		get: getTrap,
-		apply: applyTrap,
-		has: hasTrap,
-		getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
-		ownKeys: ownKeysTrap,
-		set: setTrap,
-		deleteProperty: deletePropertyTrap
-	});
+		wrapper._proxy = new Proxy(proxyTarget, {
+			get: getTrap,
+			apply: applyTrap,
+			has: hasTrap,
+			getOwnPropertyDescriptor: getOwnPropertyDescriptorTrap,
+			ownKeys: ownKeysTrap,
+			set: setTrap,
+			deleteProperty: deletePropertyTrap
+		});
 
-	return wrapper._proxy;
-}
+		return wrapper._proxy;
+	}
 }

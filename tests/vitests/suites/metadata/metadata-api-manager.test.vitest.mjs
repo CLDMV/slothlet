@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ config }) => {
 	let api;
@@ -29,20 +29,6 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			await api.shutdown();
 		}
 	});
-
-	const materialize = async (api, path, ...args) => {
-		const parts = path.split(".");
-		let target = api;
-		for (let i = 0; i < parts.length - 1; i++) {
-			target = target[parts[i]];
-		}
-		const fn = target[parts[parts.length - 1]];
-		try {
-			return await fn(...args);
-		} catch (_) {
-			return await fn(...args);
-		}
-	};
 
 	describe("api.add() Metadata Behavior", () => {
 		it("should attach metadata to newly added API", async () => {

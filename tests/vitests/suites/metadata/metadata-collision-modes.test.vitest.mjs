@@ -27,20 +27,6 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		}
 	});
 
-	const materialize = async (api, path, ...args) => {
-		const parts = path.split(".");
-		let target = api;
-		for (let i = 0; i < parts.length - 1; i++) {
-			target = target[parts[i]];
-		}
-		const fn = target[parts[parts.length - 1]];
-		try {
-			return await fn(...args);
-		} catch (_) {
-			return await fn(...args);
-		}
-	};
-
 	describe("collision.initial modes", () => {
 		it("should handle merge mode - both file and folder functions available", async () => {
 			api = await slothlet({
