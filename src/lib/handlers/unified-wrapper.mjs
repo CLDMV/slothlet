@@ -196,10 +196,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Custom inspect output for Node.js util.inspect.
-	 * @returns {string} Debug-friendly wrapper label.
+	 * @returns {*} The actual implementation for inspection.
 	 */
 	[util.inspect.custom]() {
-		return this.displayName;
+		return this._impl;
 	}
 
 	/**
@@ -733,6 +733,24 @@ export class UnifiedWrapper extends ComponentBase {
 			enumerable: false,
 			configurable: true
 		});
+		// Add custom inspect to proxyTarget
+		Object.defineProperty(proxyTarget, util.inspect.custom, {
+			value: function () {
+				const obj = {};
+				for (const [key, value] of wrapper._childCache.entries()) {
+					// Unwrap wrapper to get actual _impl value
+					if (value && value.__wrapper) {
+						obj[key] = value.__wrapper._impl;
+					} else {
+						obj[key] = value;
+					}
+				}
+				return obj;
+			},
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
 		wrapper._proxyTarget = proxyTarget;
 		// NOTE: Do NOT copy _childCache entries to _proxyTarget
 		// They are wrapper objects, and in live runtime direct property access would return wrappers
@@ -812,6 +830,16 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === "_invalid") return wrapper._invalid;
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
+			if (prop === util.inspect.custom) {
+				// Build object from _childCache for console.log inspection
+				return () => {
+					const obj = {};
+					for (const [key, value] of wrapper._childCache.entries()) {
+						obj[key] = value;
+					}
+					return obj;
+				};
+			}
 			if (prop === Symbol.toStringTag) {
 				// Return "Object" for object exports, "Function" for function exports
 				const impl = wrapper._impl;
