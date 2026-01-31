@@ -308,4 +308,36 @@ export class OwnershipManager extends ComponentBase {
 		this.moduleToPath.clear();
 		this.pathToModule.clear();
 	}
+
+	/**
+	 * Export ownership state for preservation during reload
+	 * @returns {Object} Serializable ownership state
+	 * @public
+	 */
+	exportState() {
+		return {
+			moduleToPath: Array.from(this.moduleToPath.entries()).map(([id, paths]) => [id, Array.from(paths)]),
+			pathToModule: Array.from(this.pathToModule.entries())
+		};
+	}
+
+	/**
+	 * Import ownership state from exported data
+	 * @param {Object} state - Previously exported state
+	 * @public
+	 */
+	importState(state) {
+		// Clear current state
+		this.clear();
+
+		// Restore moduleToPath
+		for (const [id, paths] of state.moduleToPath) {
+			this.moduleToPath.set(id, new Set(paths));
+		}
+
+		// Restore pathToModule
+		for (const [path, stack] of state.pathToModule) {
+			this.pathToModule.set(path, stack);
+		}
+	}
 }
