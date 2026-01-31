@@ -72,7 +72,7 @@ export async function buildLazyAPI({
 		0,
 		"lazy",
 		true, // isRoot=true for root contributor detection
-		true, // recursive=true to process subdirectories
+		false, // recursive=false to create lazy wrappers for subdirectories (not eager load)
 		false, // populateDirectly=false for root level
 		apiPathPrefix,
 		collisionContext,

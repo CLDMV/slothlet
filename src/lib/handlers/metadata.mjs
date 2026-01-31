@@ -296,6 +296,15 @@ export class Metadata extends ComponentBase {
 			...systemData // System metadata LAST = highest priority (immutable)
 		};
 
+		// If there's a nested 'metadata' key, spread it to root level and remove the nested key
+		if (combined.metadata && typeof combined.metadata === "object") {
+			const { metadata, ...rest } = combined;
+			return this.#deepFreeze({
+				...rest,
+				...metadata
+			});
+		}
+
 		return this.#deepFreeze(combined);
 	}
 
@@ -442,19 +451,36 @@ export class Metadata extends ComponentBase {
 	 * Register user metadata for an API path
 	 *
 	 * @description
-	 * Stores user-provided metadata keyed by apiPath (root segment only).
-	 * Each apiPath entry tracks its associated paths for cleanup purposes.
+	 * Stores user-provided metadata keyed by BOTH moduleId and apiPath.
+	 * Each entry tracks its associated paths for cleanup purposes.
+	 * Supports both 2-param (apiPath, metadata) and 3-param (moduleId, apiPath, metadata) signatures.
 	 *
-	 * @param {string} apiPath - API path (e.g., "nested", "math", etc.)
-	 * @param {Object} metadata - User metadata object to store/merge
+	 * @param {string} moduleIdOrApiPath - Module ID (3-param) or API path (2-param)
+	 * @param {string|Object} apiPathOrMetadata - API path (3-param) or metadata (2-param)
+	 * @param {Object} [metadata] - User metadata object (3-param only)
 	 * @package
 	 */
-	registerUserMetadata(apiPath, metadata = {}) {
-		if (!apiPath || typeof apiPath !== "string") {
+	registerUserMetadata(moduleIdOrApiPath, apiPathOrMetadata, metadata) {
+		// Handle both 2-param and 3-param signatures
+		let moduleId, apiPath, metadataObj;
+
+		if (arguments.length === 2) {
+			// 2-param signature: registerUserMetadata(apiPath, metadata)
+			apiPath = moduleIdOrApiPath;
+			metadataObj = apiPathOrMetadata;
+			moduleId = null;
+		} else {
+			// 3-param signature: registerUserMetadata(moduleId, apiPath, metadata)
+			moduleId = moduleIdOrApiPath;
+			apiPath = apiPathOrMetadata;
+			metadataObj = metadata || {};
+		}
+
+		if (!apiPath && !moduleId) {
 			throw new this.SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "apiPath",
+					argument: "apiPath or moduleId",
 					expected: "non-empty string",
 					received: typeof apiPath
 				},
@@ -463,18 +489,33 @@ export class Metadata extends ComponentBase {
 			);
 		}
 
-		// Get or create user metadata entry for this apiPath
-		let entry = this.#userMetadataStore.get(apiPath);
-		if (!entry) {
-			entry = { metadata: {}, apiPaths: new Set() };
-			this.#userMetadataStore.set(apiPath, entry);
+		// Register by apiPath if provided
+		if (apiPath && typeof apiPath === "string") {
+			let entry = this.#userMetadataStore.get(apiPath);
+			if (!entry) {
+				entry = { metadata: {}, apiPaths: new Set() };
+				this.#userMetadataStore.set(apiPath, entry);
+			}
+			// Merge new metadata with existing
+			entry.metadata = { ...entry.metadata, ...metadataObj };
+			// Track apiPath for cleanup
+			entry.apiPaths.add(apiPath);
 		}
 
-		// Merge new metadata with existing
-		entry.metadata = { ...entry.metadata, ...metadata };
-
-		// Track apiPath for cleanup
-		entry.apiPaths.add(apiPath);
+		// Register by moduleId if provided (for getMetadata() lookups)
+		if (moduleId && typeof moduleId === "string") {
+			let entry = this.#userMetadataStore.get(moduleId);
+			if (!entry) {
+				entry = { metadata: {}, apiPaths: new Set() };
+				this.#userMetadataStore.set(moduleId, entry);
+			}
+			// Merge new metadata with existing
+			entry.metadata = { ...entry.metadata, ...metadataObj };
+			// Track apiPath for cleanup
+			if (apiPath) {
+				entry.apiPaths.add(apiPath);
+			}
+		}
 	}
 
 	/**

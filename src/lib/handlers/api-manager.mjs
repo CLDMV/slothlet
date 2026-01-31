@@ -32,6 +32,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -215,13 +216,24 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * const parent = this.ensureParentPath(api, ["plugins", "tools"]);
 	 */
-	ensureParentPath(root, parts) {
+	ensureParentPath(root, parts, options = {}) {
+		const { moduleId, sourceFolder } = options;
 		let current = root;
 		for (let i = 0; i < parts.length - 1; i += 1) {
 			const part = parts[i];
 			const next = current[part];
 			if (next === undefined) {
-				current[part] = {};
+				// Create a UnifiedWrapper for the container instead of plain object
+				const containerPath = parts.slice(0, i + 1).join(".");
+				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+					mode: this.config.mode,
+					apiPath: containerPath,
+					moduleId: moduleId,
+					sourceFolder: sourceFolder
+				});
+				// Set impl to empty object so it acts as a namespace container
+				containerWrapper.__setImpl({});
+				current[part] = containerWrapper.createProxy();
 				current = current[part];
 				continue;
 			}
@@ -530,7 +542,10 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async setValueAtPath(root, parts, value, options) {
-		const parent = this.ensureParentPath(root, parts);
+		const parent = this.ensureParentPath(root, parts, {
+			moduleId: options.moduleId,
+			sourceFolder: options.sourceFolder
+		});
 		const finalKey = parts[parts.length - 1];
 		const existing = parent ? parent[finalKey] : undefined;
 		const collisionMode = options.collisionMode || "merge";
@@ -1024,15 +1039,34 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// Wrap apiToMerge in a UnifiedWrapper for the root added path (e.g., "lookup")
+		// This ensures api.lookup.__metadata exists and works properly
+		// The wrapper acts as a namespace container for the loaded API modules
+		if (!apiToMerge.__wrapper) {
+			const containerWrapper = new UnifiedWrapper(this.slothlet, {
+				apiPath: normalizedPath,
+				mode: this.config.mode,
+				moduleId: moduleId,
+				filePath: resolvedFolderPath,
+				sourceFolder: resolvedFolderPath
+			});
+			// Set the apiToMerge object as the impl
+			containerWrapper.__setImpl(apiToMerge, moduleId);
+			// Replace apiToMerge with the wrapped proxy
+			apiToMerge = containerWrapper.createProxy();
+		}
+
 		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 			mutateExisting,
 			collisionMode,
-			moduleId // Pass moduleId for lifecycle events
+			moduleId, // Pass moduleId for lifecycle events
+			sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 		});
 
 		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 			mutateExisting,
-			collisionMode
+			collisionMode,
+			sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 		});
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
