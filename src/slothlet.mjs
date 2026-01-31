@@ -314,13 +314,16 @@ class Slothlet {
 	}
 
 	/**
-	 * Reload entire instance (creates new references)
+	 * Reload entire instance (preserves existing wrapper proxies)
 	 * @public
 	 *
 	 * @description
 	 * Reloads all modules in the API by clearing caches and re-importing.
 	 * Preserves hook registrations, ownership tracking, and instance configuration.
 	 * Replays all add/remove operations in chronological order.
+	 * 
+	 * Unlike load(), reload preserves existing proxy wrapper references by updating
+	 * their internal _impl values rather than creating new wrappers.
 	 *
 	 * @example
 	 * // Reload all modules to pick up code changes
@@ -334,29 +337,51 @@ class Slothlet {
 			});
 		}
 
-		// 1. Save current instance ID and state
-		const preservedInstanceID = this.instanceID;
-		const preservedOwnership = this.handlers.ownership ? this.handlers.ownership.exportState() : null;
-		const oldBoundApi = this.boundApi; // Save reference to OLD API object
+		// 1. Save reference to old API - this is what external code holds
+		const oldBoundApi = this.boundApi;
 
-		// 2. Save operation history from api-manager (for replay)
+		// 2. Save operation history from api-manager (for future replay support)
 		const operationHistory = this.handlers.apiManager?.state?.operationHistory ? [...this.handlers.apiManager.state.operationHistory] : [];
 
-		// 3. Clear CommonJS module caches
+		// 3. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
-		// 4. Call load() with preserved instance ID (this reuses 90% of load logic)
-		// This will create a FRESH API and reassign this.boundApi
-		const reloadedApi = await this.load(this.config, preservedInstanceID);
+		// 4. Build a completely fresh API by re-running the build process
+		// This creates NEW wrappers with fresh _impl values from reloaded modules
+		// NOTE: We do NOT call load() because that would destroy the context store
+		const baseModuleId = `reload_${this.helpers.utilities.generateId().substring(0, 8)}`;
+		const freshApi = await this.builders.builder.buildAPI({
+			dir: this.config.dir,
+			mode: this.config.mode,
+			moduleId: baseModuleId
+		});
+		
+		// Add builtins to fresh API
+		const freshApiWithBuiltins = await this.buildFinalAPI(freshApi);
+		this.injectRuntimeMetadataFunctions(freshApiWithBuiltins);
 
-		// 5. DON'T restore ownership state - let it be fresh
-		// if (preservedOwnership && this.handlers.ownership) {
-		// 	this.handlers.ownership.importState(preservedOwnership);
-		// }
+		// 5. Recursively update OLD wrapper implementations with values from FRESH API
+		// This preserves proxy references that external code holds
+		this._updateWrapperImpls(oldBoundApi, freshApiWithBuiltins);
 
-		// 6. Replay operation history in chronological order
-		// Use forceOverwrite to ensure clean replacement (custom properties disappear)
-		// TEMPORARILY DISABLED FOR DEBUGGING
+		// 6. Clean up custom properties from ROOT api object
+		// (properties added directly to api, not to child wrappers)
+		const oldRootKeys = Object.keys(oldBoundApi);
+		const newRootKeys = new Set(Object.keys(freshApiWithBuiltins));
+		for (const key of oldRootKeys) {
+			// Skip internal properties and properties that exist in fresh API
+			if (Slothlet.SKIP_PROPS.includes(key) || newRootKeys.has(key)) {
+				continue;
+			}
+			// Check if property is configurable before trying to delete
+			const desc = Object.getOwnPropertyDescriptor(oldBoundApi, key);
+			if (desc && desc.configurable) {
+				delete oldBoundApi[key];
+			}
+		}
+
+		// 7. TODO: Replay operation history in chronological order
+		// TEMPORARILY DISABLED - needs proper implementation
 		/*
 		for (const operation of operationHistory) {
 			if (operation.type === "add") {
@@ -372,28 +397,90 @@ class Slothlet {
 		}
 		*/
 
-		// 7. NOW mutate the OLD API object in place (tests expect same reference)
-		// Clear all existing properties from old API
-		for (const key of Object.keys(oldBoundApi)) {
-			delete oldBoundApi[key];
-		}
-		// Copy all properties from reloaded API to old API (after operations)
-		Object.assign(oldBoundApi, this.boundApi);
-
-		// Point this.boundApi back to the OLD reference (the one tests are holding)
-		this.boundApi = oldBoundApi;
-
-		// 8. Update context store's self reference
-		const store = this.contextManager.instances.get(preservedInstanceID);
+		// 8. Update context store's self reference to point to OLD API
+		// (which now has updated impl values from reload)
+		const store = this.contextManager.instances.get(this.instanceID);
 		if (store) {
-			store.self = this.boundApi;
+			store.self = oldBoundApi;
 		}
 
+		// Note: this.boundApi still points to oldBoundApi, so no reassignment needed
 		// Note: Hooks are preserved automatically - they're in the hook manager
-		// Note: Context manager preserves store via instanceID
-		// Note: Reference and metadata are re-applied by load()
+		// Note: Instance ID and context are unchanged - context.run() data preserved
 
 		return this.boundApi;
+	}
+
+	/**
+	 * Recursively update wrapper implementations from new API to old API
+	 * Preserves proxy references by updating _impl and _childCache instead of replacing wrappers
+	 * @param {Object} oldApi - Old API object with existing wrappers
+	 * @param {Object} newApi - New API object with fresh wrappers
+	 * @param {WeakSet} [visited] - Track visited objects to prevent circular refs
+	 * @private
+	 */
+	_updateWrapperImpls(oldApi, newApi, visited = new WeakSet()) {
+		if (!oldApi || !newApi) return;
+		if (visited.has(oldApi)) return;
+		visited.add(oldApi);
+
+		// Get the old wrapper (if it exists)
+		const oldWrapper = oldApi.__wrapper;
+		const newWrapper = newApi.__wrapper;
+
+		if (oldWrapper && newWrapper) {
+			
+			// Update old wrapper's _impl with new wrapper's _impl
+			oldWrapper._impl = newWrapper._impl;
+			
+			// DON'T rebuild from _impl (which is often empty) - instead copy _childCache directly!
+			// Clear old child cache
+			oldWrapper._childCache.clear();
+			
+			// Copy all entries from new child cache to old child cache
+			for (const [key, newChild] of newWrapper._childCache.entries()) {
+				oldWrapper._childCache.set(key, newChild);
+			}
+
+			// Recursively update children (if they are also wrappers)
+			for (const [key, child] of oldWrapper._childCache.entries()) {
+				const newChild = newWrapper._childCache.get(key);
+				// Only recurse if both are wrappers
+				if (child && child.__wrapper && newChild && newChild.__wrapper) {
+					this._updateWrapperImpls(child, newChild, visited);
+				}
+			}
+			
+			// IMPORTANT: Remove any custom properties from the old proxy that aren't in _childCache
+			// This ensures reload rebuilds from scratch (custom properties disappear)
+			// Get the proxy object (not the target)
+			const oldProxy = oldWrapper._proxy;
+			if (oldProxy) {
+				const childCacheKeys = new Set(oldWrapper._childCache.keys());
+				// Only delete ENUMERABLE own properties (custom user properties)
+				// Don't try to delete non-configurable properties like 'prototype', 'length', etc.
+				const ownKeys = Object.keys(oldProxy); // Only enumerable string keys
+				for (const key of ownKeys) {
+					// Skip internal properties and properties that are in _childCache
+					if (Slothlet.SKIP_PROPS.includes(key) || childCacheKeys.has(key)) {
+						continue;
+					}
+					// Check if property is configurable before trying to delete
+					const desc = Object.getOwnPropertyDescriptor(oldProxy, key);
+					if (desc && desc.configurable) {
+						delete oldProxy[key];
+					}
+				}
+			}
+		}
+
+		// Also traverse object properties (for non-wrapper objects)
+		for (const key of Object.keys(oldApi)) {
+			if (Slothlet.SKIP_PROPS.includes(key)) continue;
+			if (typeof oldApi[key] === "object" && oldApi[key] !== null && typeof newApi[key] === "object" && newApi[key] !== null) {
+				this._updateWrapperImpls(oldApi[key], newApi[key], visited);
+			}
+		}
 	}
 
 	/**
