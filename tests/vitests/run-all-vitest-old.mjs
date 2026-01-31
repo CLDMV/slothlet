@@ -8,10 +8,6 @@
  * and providing a final summary report similar to Vitest's native output.
  * Captures test counts, timing, heap usage, and error details.
  *
- * Supports passing through all standard Vitest CLI arguments while maintaining
- * special flags like --baseline. Acts as middleware to run tests sequentially
- * and avoid OOM issues in massive test suites.
- *
  * @example
  * // Run all test files in suites/ directory
  * node tests/vitests/run-all-vitest.mjs
@@ -43,26 +39,6 @@
  * @example
  * // With custom heap limit
  * VITEST_HEAP_MB=8192 node tests/vitests/run-all-vitest.mjs tests/vitests/suites/smart-flattening
- *
- * @example
- * // Pass through Vitest arguments (reporter, coverage, etc.)
- * node tests/vitests/run-all-vitest.mjs --reporter=verbose
- *
- * @example
- * // Combine special flags, test patterns, and vitest args
- * node tests/vitests/run-all-vitest.mjs --baseline --reporter=json --outputFile=results.json
- *
- * @example
- * // Use with coverage
- * node tests/vitests/run-all-vitest.mjs suites/config --coverage
- *
- * @example
- * // Hide detailed error output (show only file names and counts)
- * node tests/vitests/run-all-vitest.mjs --no-error-details
- *
- * @example
- * // Combine with test patterns
- * node tests/vitests/run-all-vitest.mjs --no-error-details --baseline
  */
 
 import { spawn } from "node:child_process";
@@ -89,65 +65,6 @@ const vitestConfigPath = path.join(".configs", "vitest.config.mjs");
 
 // Configuration
 const WORKER_COUNT = process.env.VITEST_WORKERS ? parseInt(process.env.VITEST_WORKERS, 10) : 4;
-
-/**
- * Display help message
- */
-function showHelp() {
-	console.log(`
-${chalk.bold("Slothlet Vitest Test Runner")}
-Sequential test runner to avoid OOM issues with massive test suites.
-
-${chalk.bold("USAGE:")}
-  node tests/vitests/run-all-vitest2.mjs [OPTIONS] [PATTERNS]
-
-${chalk.bold("SPECIAL FLAGS:")}
-  --baseline              Load test list from baseline-tests.json
-  --no-error-details      Hide detailed error output (show only counts)
-  --help, -h              Show this help message
-
-${chalk.bold("TEST PATTERNS:")}
-  [file]                  Run specific test file (supports partial paths)
-  [folder]                Run all tests in folder
-  
-  Examples:
-    suites/config/background-materialize.test.vitest.mjs
-    suites/metadata
-    metadata-collision-modes.test.vitest.mjs
-
-${chalk.bold("VITEST FLAGS:")}
-  All standard Vitest CLI flags are supported and passed through:
-  -t, --testNamePattern   Filter tests by name pattern (regex)
-  --reporter              Change reporter (verbose, dot, json, etc.)
-  --coverage              Run with coverage
-  --bail                  Stop on first failure
-  
-  See Vitest documentation for full list of options.
-
-${chalk.bold("ENVIRONMENT VARIABLES:")}
-  VITEST_HEAP_MB         Set max heap size per test (default: Node.js default)
-  VITEST_WORKERS         Number of parallel workers (default: 4)
-
-${chalk.bold("EXAMPLES:")}
-  # Run all baseline tests
-  npm run testv32 -- --baseline
-
-  # Run specific test file
-  npm run testv32 -- suites/config/background-materialize.test.vitest.mjs
-
-  # Filter tests by name
-  npm run testv32 -- suites/metadata -t "lazy materialization"
-
-  # Hide detailed errors
-  npm run testv32 -- --baseline --no-error-details
-
-  # With custom heap and workers
-  VITEST_HEAP_MB=8192 VITEST_WORKERS=2 npm run testv32 -- suites/smart-flattening
-
-  # Combine flags
-  npm run testv32 -- --baseline -t "LAZY" --reporter=verbose
-`);
-}
 
 /**
  * Discover all Vitest test files in a directory
@@ -187,59 +104,13 @@ async function discoverFilesInDir(dir) {
 }
 
 /**
- * Parse CLI arguments to separate special flags, vitest flags, and test file patterns
- * @param {string[]} args - Raw CLI arguments
- * @returns {Object} Parsed arguments object
- */
-function parseArguments(args) {
-	const specialFlags = ["--baseline", "--no-error-details", "--help"];
-	const vitestPassthroughArgs = [];
-	const testPatterns = [];
-	let baseline = false;
-	let showErrorDetails = true;
-	let help = false;
-
-	for (let i = 0; i < args.length; i++) {
-		const arg = args[i];
-
-		if (arg === "--baseline") {
-			baseline = true;
-		} else if (arg === "--no-error-details") {
-			showErrorDetails = false;
-		} else if (arg === "--help" || arg === "-h") {
-			help = true;
-		} else if (arg.startsWith("--") || arg.startsWith("-")) {
-			// Pass through any vitest flags (--reporter, --coverage, --watch, etc.)
-			vitestPassthroughArgs.push(arg);
-			// Check if this flag takes a value (next arg doesn't start with -)
-			if (i + 1 < args.length && !args[i + 1].startsWith("-")) {
-				vitestPassthroughArgs.push(args[i + 1]);
-				i++; // Skip next arg since we consumed it
-			}
-		} else {
-			// Test file pattern or path
-			testPatterns.push(arg);
-		}
-	}
-
-	return {
-		baseline,
-		showErrorDetails,
-		help,
-		vitestPassthroughArgs,
-		testPatterns
-	};
-}
-
-/**
  * Discover Vitest test files based on CLI arguments or default to all processed/ files
- * @param {string[]} testPatterns - Test file patterns (file paths, folder paths, partial paths, or empty for all)
- * @param {boolean} baseline - Whether to load baseline test list
+ * @param {string[]} args - Command-line arguments (file paths, folder paths, partial paths, --baseline flag, or empty for all)
  * @returns {Promise<string[]>} Array of test file paths relative to project root
  */
-async function discoverVitestFiles(testPatterns, baseline) {
+async function discoverVitestFiles(args) {
 	// Check if --baseline flag is provided
-	if (baseline) {
+	if (args.length > 0 && args[0] === "--baseline") {
 		const baselineJsonPath = path.resolve(__dirname, "baseline-tests.json");
 		try {
 			const jsonContent = await fs.readFile(baselineJsonPath, "utf8");
@@ -257,8 +128,8 @@ async function discoverVitestFiles(testPatterns, baseline) {
 		}
 	}
 
-	// If no test patterns provided, run all files in suites/
-	if (testPatterns.length === 0) {
+	// If no arguments provided, run all files in suites/
+	if (args.length === 0) {
 		const suitesDir = path.resolve(__dirname, "suites");
 		const files = await discoverFilesInDir(suitesDir);
 		return files.sort((a, b) => a.localeCompare(b));
@@ -267,7 +138,7 @@ async function discoverVitestFiles(testPatterns, baseline) {
 	const files = [];
 	const suitesDir = path.resolve(__dirname, "suites");
 
-	for (const arg of testPatterns) {
+	for (const arg of args) {
 		const absPath = path.isAbsolute(arg) ? arg : path.resolve(projectRoot, arg);
 
 		try {
@@ -416,13 +287,12 @@ function parseVitestOutput(output) {
  * Run a single test file with Vitest
  * @param {string} filePath - Test file path relative to project root
  * @param {number | undefined} maxOldSpaceMb - Optional heap size limit
- * @param {string[]} vitestArgs - Additional vitest arguments to pass through
  * @returns {Promise<Object>} Test results
  */
-async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = []) {
+async function runSingleFile(filePath, maxOldSpaceMb) {
 	return new Promise((resolve) => {
 		const startTime = Date.now();
-		const args = [vitestEntrypoint, "--config", vitestConfigPath, "run", ...vitestArgs, filePath];
+		const args = [vitestEntrypoint, "--config", vitestConfigPath, "run", filePath];
 
 		const baseEnv = { ...process.env };
 		if (!baseEnv.NODE_ENV) baseEnv.NODE_ENV = "development";
@@ -497,91 +367,16 @@ async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = []) {
 }
 
 /**
- * Deduplicate similar error messages by grouping configs
- * @param {string[]} errors - Array of error messages (each is a complete error block with FAIL line + details)
- * @returns {string} Deduplicated error output as a single string
- */
-function deduplicateErrors(errors) {
-	// Join all errors into one string
-	const fullText = errors.join("\n");
-	const lines = fullText.split("\n");
-
-	// Find FAIL lines with Config: and group them
-	const failLineMap = new Map(); // pattern -> {lines: [original lines], configs: [config values]}
-	const lineIndices = new Map(); // original line -> index in lines array
-
-	lines.forEach((line, idx) => {
-		if (line.includes("FAIL") && line.includes("Config:")) {
-			lineIndices.set(line, idx);
-
-			// Extract pattern: everything except the config value
-			// Match: ... Config: 'XXX' ...  or Config: ''XXX''
-			const cleaned = stripAnsi(line);
-			const match = cleaned.match(/^(.+Config:\s+)'*([^'>]+)'*(.+)$/);
-			if (match) {
-				const [, before, config, after] = match;
-				const pattern = before.trim() + "|||" + after.trim(); // Use ||| as separator
-
-				if (!failLineMap.has(pattern)) {
-					failLineMap.set(pattern, { lines: [], configs: [] });
-				}
-				failLineMap.get(pattern).lines.push(line);
-				failLineMap.get(pattern).configs.push(config.replace(/'/g, "")); // Remove quotes
-			}
-		}
-	});
-
-	// Build result: replace duplicates with consolidated line
-	const result = [];
-	const skipIndices = new Set();
-
-	for (const [pattern, data] of failLineMap.entries()) {
-		if (data.configs.length > 1) {
-			// Mark all but first for skipping
-			for (let i = 1; i < data.lines.length; i++) {
-				const idx = lineIndices.get(data.lines[i]);
-				if (idx !== undefined) {
-					skipIndices.add(idx);
-				}
-			}
-
-			// Build consolidated line from first occurrence
-			const firstLine = data.lines[0];
-			const configArray = `[${data.configs.map((c) => `'${c}'`).join(",")}]`;
-			const consolidated = stripAnsi(firstLine).replace(/(Config:\s+)'*[^'>]+'*/, `$1${configArray}`);
-
-			// Replace first occurrence
-			const firstIdx = lineIndices.get(firstLine);
-			if (firstIdx !== undefined) {
-				lines[firstIdx] = consolidated;
-			}
-		}
-	}
-
-	// Filter out skipped lines
-	const filtered = lines.filter((_, idx) => !skipIndices.has(idx));
-
-	return filtered.join("\n");
-}
-
-/**
  * Main runner: executes all test files and provides final report
  */
 async function runAllFiles() {
 	// Parse CLI arguments - everything after script name
-	const rawArgs = process.argv.slice(2);
-	const { baseline, showErrorDetails, help, vitestPassthroughArgs, testPatterns } = parseArguments(rawArgs);
+	const args = process.argv.slice(2);
 
-	// Show help and exit if requested
-	if (help) {
-		showHelp();
-		process.exit(0);
-	}
-
-	const testFiles = await discoverVitestFiles(testPatterns, baseline);
+	const testFiles = await discoverVitestFiles(args);
 	if (testFiles.length === 0) {
-		if (testPatterns.length > 0) {
-			console.log(`❌ No Vitest test files found matching: ${testPatterns.join(", ")}`);
+		if (args.length > 0) {
+			console.log(`❌ No Vitest test files found matching: ${args.join(", ")}`);
 		} else {
 			console.log("❌ No Vitest test files found in tests/vitests/suites/");
 		}
@@ -593,17 +388,14 @@ async function runAllFiles() {
 	const scriptStartTime = Date.now();
 	const scriptStartTimeFormatted = new Date().toLocaleTimeString("en-US", { hour12: false });
 
-	if (testPatterns.length > 0) {
-		console.log(`\n🧪 Running ${testFiles.length} test files matching: ${testPatterns.join(", ")}`);
+	if (args.length > 0) {
+		console.log(`\n🧪 Running ${testFiles.length} test files matching: ${args.join(", ")}`);
 	} else {
 		console.log(`\n🧪 Running ${testFiles.length} test files in parallel`);
 	}
 	console.log(`⚙️  Workers: ${WORKER_COUNT}`);
 	if (maxOldSpaceMb) {
 		console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
-	}
-	if (vitestPassthroughArgs.length > 0) {
-		console.log(`🔧 Vitest args: ${vitestPassthroughArgs.join(" ")}`);
 	}
 	console.log(""); // Blank line
 
@@ -613,7 +405,7 @@ async function runAllFiles() {
 		console.log(`▶️  ${filePath}`);
 		console.log("=".repeat(80));
 
-		const result = await runSingleFile(filePath, maxOldSpaceMb, vitestPassthroughArgs);
+		const result = await runSingleFile(filePath, maxOldSpaceMb);
 
 		if (result.code === 0) {
 			const durationSec = (result.duration / 1000).toFixed(2);
@@ -779,20 +571,6 @@ async function runAllFiles() {
 			if (result.testsSkip > 0) testCounts.push(chalk.yellow(`${result.testsSkip} skipped`));
 			const countStr = testCounts.length > 0 ? ` (${testCounts.join(", ")})` : "";
 			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}`);
-
-			// Show error details indented under each failed test file (if not suppressed)
-			if (showErrorDetails && result.errors.length > 0) {
-				// Deduplicate errors before displaying
-				const deduplicatedText = deduplicateErrors(result.errors);
-
-				// Indent each line by 4 spaces
-				const indentedError = deduplicatedText
-					.split("\n")
-					.map((line) => (line.trim() ? `    ${line}` : ""))
-					.join("\n");
-				console.log(indentedError);
-				console.log(""); // Blank line between test files
-			}
 		});
 		console.log("");
 		process.exit(1);
