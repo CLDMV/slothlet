@@ -1091,7 +1091,8 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await manager.removeApiComponent("plugins_abc123"); // Remove by module ID
 	 */
-	async removeApiComponent(pathOrModuleId) {
+	async removeApiComponent(pathOrModuleId, options = {}) {
+		const recordHistory = options.recordHistory !== false;
 		if (typeof pathOrModuleId !== "string" || !pathOrModuleId) {
 			throw new this.SlothletError("INVALID_ARGUMENT", {
 				argument: "pathOrModuleId",
@@ -1265,17 +1266,19 @@ export class ApiManager extends ComponentBase {
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleId) !== moduleIdKey);
 
 			// Track in operation history for reload replay - record each removed apiPath
-			for (const removedPath of pathsToDelete) {
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: removedPath
-				});
-			}
-			for (const rollback of pathsToRollback) {
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: rollback.apiPath
-				});
+			if (recordHistory) {
+				for (const removedPath of pathsToDelete) {
+					this.state.operationHistory.push({
+						type: "remove",
+						apiPath: removedPath
+					});
+				}
+				for (const rollback of pathsToRollback) {
+					this.state.operationHistory.push({
+						type: "remove",
+						apiPath: rollback.apiPath
+					});
+				}
 			}
 			// Return true if we actually removed something
 			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
@@ -1304,10 +1307,12 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 				}
 				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
+				if (recordHistory) {
+					this.state.operationHistory.push({
+						type: "remove",
+						apiPath: normalizedPath
+					});
+				}
 				return true;
 			}
 			// Path doesn't exist - nothing to remove
@@ -1321,10 +1326,12 @@ export class ApiManager extends ComponentBase {
 				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 			}
 			// Track in operation history for reload replay
-			this.state.operationHistory.push({
-				type: "remove",
-				apiPath: normalizedPath
-			});
+			if (recordHistory) {
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
+			}
 			return true;
 		}
 		if (ownershipResult.action === "restore") {
@@ -1344,18 +1351,22 @@ export class ApiManager extends ComponentBase {
 					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 				});
 				// Track in operation history for reload replay
-				this.state.operationHistory.push({
-					type: "remove",
-					apiPath: normalizedPath
-				});
+				if (recordHistory) {
+					this.state.operationHistory.push({
+						type: "remove",
+						apiPath: normalizedPath
+					});
+				}
 				return true;
 			}
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
 			// Track in operation history for reload replay
-			this.state.operationHistory.push({
-				type: "remove",
-				apiPath: normalizedPath
-			});
+			if (recordHistory) {
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
+			}
 			return true;
 		}
 		return false;

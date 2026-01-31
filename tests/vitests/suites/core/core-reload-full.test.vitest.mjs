@@ -106,6 +106,7 @@ for (const { config, name } of configs) {
 
 			// Verify state before reload
 			expect(api.test1).toBeUndefined(); // Was removed
+			expect("test1" in api).toBe(false); // Property actually deleted
 			expect(api.test2).toBeDefined();
 			expect(api.test3).toBeDefined();
 
@@ -118,6 +119,7 @@ for (const { config, name } of configs) {
 
 			// Verify operations replayed in order
 			expect(api.test1).toBeUndefined(); // Should still be removed
+			expect("test1" in api).toBe(false); // Property should still be deleted (not just undefined)
 			expect(api.test2).toBeDefined(); // Should be restored
 			expect(api.test3).toBeDefined(); // Should be restored
 
@@ -142,6 +144,7 @@ for (const { config, name } of configs) {
 
 			await api.slothlet.api.remove("path1");
 			expect(api.path1).toBeUndefined();
+			expect("path1" in api).toBe(false); // Verify actually deleted
 
 			await api.slothlet.api.add("path3", TEST_DIRS.API_TEST);
 
@@ -150,6 +153,7 @@ for (const { config, name } of configs) {
 
 			// Verify final state matches operation sequence
 			expect(api.path1).toBeUndefined(); // Removed
+			expect("path1" in api).toBe(false); // Should still be deleted (not just undefined)
 			expect(api.path2).toBeDefined(); // Present
 			expect(api.path3).toBeDefined(); // Present
 			expect(api.path2.math.add(5, 5)).toBe(1010);
@@ -167,8 +171,10 @@ for (const { config, name } of configs) {
 
 			// Before reload: inter1 gone, inter2 present, inter3 gone, inter4 present
 			expect(api.inter1).toBeUndefined();
+			expect("inter1" in api).toBe(false);
 			expect(api.inter2).toBeDefined();
 			expect(api.inter3).toBeUndefined();
+			expect("inter3" in api).toBe(false);
 			expect(api.inter4).toBeDefined();
 
 			// Full reload
@@ -176,8 +182,10 @@ for (const { config, name } of configs) {
 
 			// After reload: same state (chronological order preserved)
 			expect(api.inter1).toBeUndefined();
+			expect("inter1" in api).toBe(false); // Property should be deleted (not just undefined)
 			expect(api.inter2).toBeDefined();
 			expect(api.inter3).toBeUndefined();
+			expect("inter3" in api).toBe(false); // Property should be deleted (not just undefined)
 			expect(api.inter4).toBeDefined();
 
 			// Implementations should work
@@ -193,6 +201,7 @@ for (const { config, name } of configs) {
 
 			// Verify state before reload
 			expect(api.mixed1).toBeUndefined();
+			expect("mixed1" in api).toBe(false); // Actually deleted
 			expect(api.mixed2).toBeDefined();
 			expect(api.mixed2.math.add(2, 2)).toBe(1004);
 
@@ -201,6 +210,7 @@ for (const { config, name } of configs) {
 
 			// Verify same state after reload
 			expect(api.mixed1).toBeUndefined();
+			expect("mixed1" in api).toBe(false); // Should still be deleted (not just undefined)
 			expect(api.mixed2).toBeDefined();
 			expect(api.mixed2.math.add(2, 2)).toBe(1004);
 		});

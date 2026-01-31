@@ -428,8 +428,8 @@ class Slothlet {
 					moduleId: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleId for replay
 				});
 			} else if (operation.type === "remove") {
-				// Manually set to undefined since removeApiComponent may not be working
-				this._currentApi[operation.apiPath] = undefined;
+				// Call actual removeApiComponent to properly clean up ownership, metadata, etc.
+				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
 			}
 		}
 

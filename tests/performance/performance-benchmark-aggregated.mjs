@@ -1099,18 +1099,23 @@ function displayAggregatedResults(aggregated) {
 
 	// Startup comparison
 	const startupSpeedup = (aggregated.startup.eager.avg / aggregated.startup.lazy.avg).toFixed(1);
+	const startupWinnerDisplay = parseFloat(startupSpeedup) > 1 ? "Lazy" : "Eager";
+	const startupSpeedupDisplay =
+		parseFloat(startupSpeedup) > 1 ? parseFloat(startupSpeedup).toFixed(1) : (1 / parseFloat(startupSpeedup)).toFixed(1);
 	console.log("\n📊 STARTUP PERFORMANCE:");
 	console.log(`   Eager: ${formatTime(aggregated.startup.eager.avg)} (avg)`);
 	console.log(`   Lazy:  ${formatTime(aggregated.startup.lazy.avg)} (avg)`);
-	console.log(`   Winner: Lazy mode (${startupSpeedup}x faster)`);
+	console.log(`   Winner: ${startupWinnerDisplay} mode (${startupSpeedupDisplay}x faster)`);
 
 	// Function call comparison
 	const callSpeedup = (aggregated.functionCalls.eager.avg / aggregated.functionCalls.lazySubsequent.avg).toFixed(2);
 	const callWinner = parseFloat(callSpeedup) > 1 ? "Lazy" : "Eager";
+	const lazyTotalWithMaterialization = aggregated.functionCalls.lazySubsequent.avg + aggregated.functionCalls.lazyFirst.time;
 	console.log("\n📊 FUNCTION CALL PERFORMANCE:");
 	console.log(`   Eager:           ${formatTime(aggregated.functionCalls.eager.avg)} (avg)`);
 	console.log(`   Lazy (first):    ${formatTime(aggregated.functionCalls.lazyFirst.time)} (materialization)`);
 	console.log(`   Lazy (subsequent): ${formatTime(aggregated.functionCalls.lazySubsequent.avg)} (avg)`);
+	console.log(`   Lazy (avg w/ materialization): ${formatTime(lazyTotalWithMaterialization)} (first call cost amortized)`);
 	console.log(`   Winner: ${callWinner} mode (${Math.abs(callSpeedup)}x ${parseFloat(callSpeedup) > 1 ? "faster" : "slower"})`);
 
 	// Complex module comparison
@@ -1189,10 +1194,17 @@ function displayAggregatedResults(aggregated) {
 	const startupSpeedupRatio = (aggregated.startup.eager.avg / aggregated.startup.lazy.avg).toFixed(1);
 	const callSpeedupRatio = (aggregated.functionCalls.eager.avg / aggregated.functionCalls.lazySubsequent.avg).toFixed(1);
 
-	console.log(`✅ Lazy startup is ${startupSpeedupRatio}x faster because:`);
-	console.log("   - No upfront module loading and compilation");
-	console.log("   - Deferred file system operations");
-	console.log("   - Minimal initial memory allocation");
+	if (parseFloat(startupSpeedupRatio) > 1) {
+		console.log(`✅ Lazy startup is ${startupSpeedupRatio}x faster because:`);
+		console.log("   - No upfront module loading and compilation");
+		console.log("   - Deferred file system operations");
+		console.log("   - Minimal initial memory allocation");
+	} else {
+		console.log(`✅ Eager startup is ${(1 / parseFloat(startupSpeedupRatio)).toFixed(1)}x faster because:`);
+		console.log("   - Better optimization with full module graph");
+		console.log("   - No proxy overhead during initialization");
+		console.log("   - Predictable startup characteristics");
+	}
 
 	if (parseFloat(callSpeedupRatio) > 1) {
 		console.log(`\n✅ Lazy function calls are ${callSpeedupRatio}x faster because:`);
@@ -1222,13 +1234,19 @@ function displayAggregatedResults(aggregated) {
 	console.log("   • You have a large API with many unused endpoints");
 
 	console.log("\n⚖️  TRADE-OFF SUMMARY:");
-	console.log(`   • Startup:     Lazy wins (${formatTime(aggregated.startup.lazy.avg)} vs ${formatTime(aggregated.startup.eager.avg)})`);
+	const startupTradeoffWinner = aggregated.startup.lazy.avg < aggregated.startup.eager.avg ? "Lazy" : "Eager";
+	const startupFaster =
+		startupTradeoffWinner === "Lazy" ? formatTime(aggregated.startup.lazy.avg) : formatTime(aggregated.startup.eager.avg);
+	const startupSlower =
+		startupTradeoffWinner === "Lazy" ? formatTime(aggregated.startup.eager.avg) : formatTime(aggregated.startup.lazy.avg);
+	console.log(`   • Startup:     ${startupTradeoffWinner} wins (${startupFaster} vs ${startupSlower})`);
 	console.log(
 		`   • Calls:       ${callWinner} wins (${formatTime(
 			Math.min(aggregated.functionCalls.eager.avg, aggregated.functionCalls.lazySubsequent.avg)
 		)} vs ${formatTime(Math.max(aggregated.functionCalls.eager.avg, aggregated.functionCalls.lazySubsequent.avg))})`
 	);
 	console.log(`   • Memory:      Lazy wins (only loads used modules)`);
+	console.log(`                  ⚠️  Note: Once materialized, modules stay in memory - lazy's memory advantage is only for unused modules`);
 	console.log(`   • Consistency: Eager wins (no materialization surprises)`);
 
 	console.log("\n💡 PERFORMANCE NOTES:");
@@ -1242,6 +1260,9 @@ function displayAggregatedResults(aggregated) {
 	console.log(`   • Lazy startup:  ${formatTime(aggregated.startup.lazy.avg)}`);
 	console.log(`   • Eager calls:   ${formatTime(aggregated.functionCalls.eager.avg)}`);
 	console.log(`   • Lazy calls:    ${formatTime(aggregated.functionCalls.lazySubsequent.avg)}`);
+	console.log(
+		`   • Lazy calls (w/ materialization): ${formatTime(aggregated.functionCalls.lazySubsequent.avg + aggregated.functionCalls.lazyFirst.time)}`
+	);
 	console.log(`   • Materialization: ${formatTime(aggregated.functionCalls.lazyFirst.time)}`);
 }
 
@@ -1251,7 +1272,7 @@ async function main() {
 		return;
 	}
 
-	const module = await import("../../index2.mjs");
+	const module = await import("@cldmv/slothlet");
 	slothlet = module?.default ?? module?.slothlet ?? module;
 	if (typeof slothlet !== "function") {
 		throw new Error("slothlet entrypoint did not export a callable function");
