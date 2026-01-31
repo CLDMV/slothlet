@@ -1138,6 +1138,11 @@ export class ApiManager extends ComponentBase {
 					const rootSegment = normalizedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
 				}
+				// Track in operation history for reload replay
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
 				return true;
 			}
 			if (ownershipResult.action === "restore") {
@@ -1156,9 +1161,19 @@ export class ApiManager extends ComponentBase {
 						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
 						moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 					});
+					// Track in operation history for reload replay
+					this.state.operationHistory.push({
+						type: "remove",
+						apiPath: normalizedPath
+					});
 					return true;
 				}
 				await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
+				// Track in operation history for reload replay
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
 				return true;
 			}
 			if (ownershipResult.action === "none" && history.length === 0) {
@@ -1249,11 +1264,19 @@ export class ApiManager extends ComponentBase {
 			this.state.removedModuleIds.add(moduleIdKey);
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleId) !== moduleIdKey);
 
-			// Track in operation history for reload replay
-			this.state.operationHistory.push({
-				type: "remove",
-				identifier: pathOrModuleId
-			});
+			// Track in operation history for reload replay - record each removed apiPath
+			for (const removedPath of pathsToDelete) {
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: removedPath
+				});
+			}
+			for (const rollback of pathsToRollback) {
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: rollback.apiPath
+				});
+			}
 			// Return true if we actually removed something
 			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
 		}
@@ -1280,6 +1303,11 @@ export class ApiManager extends ComponentBase {
 				if (this.slothlet.handlers.metadata) {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 				}
+				// Track in operation history for reload replay
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
 				return true;
 			}
 			// Path doesn't exist - nothing to remove
@@ -1292,6 +1320,11 @@ export class ApiManager extends ComponentBase {
 			if (this.slothlet.handlers.metadata) {
 				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 			}
+			// Track in operation history for reload replay
+			this.state.operationHistory.push({
+				type: "remove",
+				apiPath: normalizedPath
+			});
 			return true;
 		}
 		if (ownershipResult.action === "restore") {
@@ -1310,9 +1343,19 @@ export class ApiManager extends ComponentBase {
 					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
 					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
 				});
+				// Track in operation history for reload replay
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: normalizedPath
+				});
 				return true;
 			}
 			await this.restoreApiPath(normalizedPath, ownershipResult.restoreModuleId);
+			// Track in operation history for reload replay
+			this.state.operationHistory.push({
+				type: "remove",
+				apiPath: normalizedPath
+			});
 			return true;
 		}
 		return false;

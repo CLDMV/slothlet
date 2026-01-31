@@ -1143,8 +1143,13 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	const significantNestedDifferences = compared.nestedDifferences.filter(
 		(diff) =>
 			diff.path !== "__slothletInstance.debugLogger.config.mode" &&
+			diff.path !== "__slothletInstance.config.mode" &&
 			diff.path !== "__slothletInstance.handlers.metadata._instanceId" &&
-			diff.path !== "__slothletInstance.handlers.apiManager.state.initialConfig.mode"
+			diff.path !== "__slothletInstance.handlers.apiManager.state.initialConfig.mode" &&
+			!diff.path.includes("prototype.constructor.__slothletInstance.debugLogger.config.mode") &&
+			!diff.path.includes("prototype.constructor.__slothletInstance.config.mode") &&
+			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.apiManager.state.initialConfig.mode") &&
+			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.metadata._instanceId")
 	);
 
 	if (significantNestedDifferences.length > 0) {

@@ -403,3 +403,19 @@ export class Sanitize extends ComponentBase {
 		return preservePatterns.some((pattern) => pattern.test(name));
 	}
 }
+
+// ============================================================================
+// Standalone Function Export (for backward compatibility)
+// ============================================================================
+
+/**
+ * Standalone sanitizePropertyName function for backward compatibility
+ * @param {string} input - Input string to sanitize
+ * @param {object} options - Sanitization options
+ * @returns {string} Sanitized property name
+ * @public
+ */
+export function sanitizePropertyName(input, options = {}) {
+	const sanitizer = new Sanitize(null); // No slothlet instance needed for this method
+	return sanitizer.sanitizePropertyName(input, options);
+}
