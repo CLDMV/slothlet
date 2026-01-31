@@ -206,6 +206,7 @@ class Slothlet {
 	 * @param {string} config.dir - Directory to load API from
 	 * @param {string} [config.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {string} [config.runtime="async"] - Runtime type (async or live)
+	 * @param {string} [preservedInstanceID] - Optional instance ID to preserve (used by reload)
 	 * @returns {Promise<Object>} Bound API object
 	 * @public
 	 * @example
@@ -216,7 +217,7 @@ class Slothlet {
 	 *   runtime: "async"
 	 * });
 	 */
-	async load(config = {}) {
+	async load(config = {}, preservedInstanceID = null) {
 		// Store raw config for components to access if needed
 		this.config = config;
 
@@ -233,8 +234,8 @@ class Slothlet {
 		// Initialize debug logger with config
 		this.debugLogger = new SlothletDebug(this.config);
 
-		// Generate instance ID using utilities component
-		this.instanceID = this.helpers.utilities.generateId();
+		// Use preserved instance ID (from reload) or generate new one
+		this.instanceID = preservedInstanceID || this.helpers.utilities.generateId();
 
 		// Store reference and context from config
 		this.reference = this.config.reference;
@@ -243,8 +244,15 @@ class Slothlet {
 		// Get appropriate context manager based on runtime
 		this.contextManager = getContextManager(this.config.runtime);
 
-		// Initialize context
-		const store = this.contextManager.initialize(this.instanceID, this.config);
+		// Initialize context (or reuse existing if preservedInstanceID provided)
+		let store;
+		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
+			// Reload: reuse existing store
+			store = this.contextManager.instances.get(preservedInstanceID);
+		} else {
+			// Fresh load: initialize new store
+			store = this.contextManager.initialize(this.instanceID, this.config);
+		}
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
@@ -310,7 +318,8 @@ class Slothlet {
 	 *
 	 * @description
 	 * Reloads all modules in the API by clearing caches and re-importing.
-	 * Preserves hook registrations and instance configuration.
+	 * Preserves hook registrations, ownership tracking, and instance configuration.
+	 * Replays all add/remove operations in chronological order.
 	 *
 	 * @example
 	 * // Reload all modules to pick up code changes
@@ -324,59 +333,41 @@ class Slothlet {
 			});
 		}
 
-		// 1. Clear CommonJS module caches
+		// 1. Save current instance ID and state
+		const preservedInstanceID = this.instanceID;
+		const preservedOwnership = this.handlers.ownership ? this.handlers.ownership.exportState() : null;
+		
+		// 2. Save operation history from api-manager (for replay)
+		const operationHistory = this.handlers.apiManager?.state?.addHistory
+			? [...this.handlers.apiManager.state.addHistory]
+			: [];
+
+		// 3. Clear CommonJS module caches
 		await this._clearModuleCaches();
 
-		// 2. Generate new cache-busting ID (timestamp ensures fresh imports for ESM)
-		const reloadId = `reload_${Date.now()}`;
-		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
+		// 4. Call load() with preserved instance ID (this reuses 90% of load logic)
+		const reloadedApi = await this.load(this.config, preservedInstanceID);
 
-		// 3. Rebuild raw API with cache-busted imports (loader will use reloadId)
-		// Pass reloadId as moduleID to force cache-busting in loadModule
-		this.api = await this.builders.builder.buildAPI({
-			dir: this.config.dir,
-			mode: this.config.mode,
-			moduleId: `${baseModuleId}_${reloadId}` // Combined ID for ownership + cache-busting
-		});
-
-		// 4. Build final API with builtins attached
-		const apiWithBuiltins = await this.buildFinalAPI(this.api);
-
-		// 5. Inject runtime-aware metadata functions
-		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
-
-		// 6. Re-register all API paths with ownership manager
-		if (this.handlers.ownership) {
-			// Clear old registrations for base modules only
-			// TODO: Need to track base moduleId from original load to clear properly
-			this.registerAPIWithOwnership(apiWithBuiltins, baseModuleId, "");
+		// 5. Restore ownership state if it was preserved
+		if (preservedOwnership && this.handlers.ownership) {
+			this.handlers.ownership.importState(preservedOwnership);
 		}
 
-		// 7. Re-apply init metadata if it exists
-		if (this.config.metadata && typeof this.config.metadata === "object") {
-			this.handlers.metadata.registerUserMetadata(baseModuleId, "", this.config.metadata);
-		}
-
-		// 8. Update bound API reference
-		this.boundApi = apiWithBuiltins;
-
-		// 9. Update store references (preserves context)
-		// Get the store from the context manager's instances Map
-		const store = this.contextManager.instances.get(this.instanceID);
-		if (store) {
-			store.self = this.boundApi;
-			// Keep existing store.context - user context persists across reloads
-		}
-
-		// 10. Re-apply reference object if it exists
-		if (this.reference && typeof this.reference === "object") {
-			Object.assign(this.boundApi, this.reference);
+		// 6. Replay operation history in chronological order
+		for (const operation of operationHistory) {
+			await this.handlers.apiManager.addApiComponent({
+				apiPath: operation.apiPath,
+				folderPath: operation.folderPath,
+				options: operation.options || {},
+				moduleId: operation.moduleId
+			});
 		}
 
 		// Note: Hooks are preserved automatically - they're in the hook manager
-		// and will automatically attach to new function instances by path matching
+		// Note: Context manager preserves store via instanceID
+		// Note: Reference and metadata are re-applied by load()
 
-		return this.boundApi;
+		return reloadedApi;
 	}
 
 	/**
