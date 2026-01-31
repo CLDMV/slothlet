@@ -188,6 +188,7 @@
 		"publish:manual": "npm publish --access public",
 		"test": "node tests/test-conditional.mjs",
 		"testv3": "node tests/vitests/run-all-vitest.mjs",
+		"baseline": "npm run testv3 -- --baseline",
 		"test:pre-build": "node tests/test-conditional.mjs",
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
