@@ -132,8 +132,10 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 		const lazyLg = lazyApi.devices.lg;
 		const eagerLg = eagerApi.devices.lg;
 
-		// Wait for async materialization to complete (100ms)
-		// await new Promise(resolve => setTimeout(resolve, 100));
+		// V3 note: lazy mode's materialization is async - _impl is set via callback
+		// during async execution. Small delay allows lazy_setImpl to execute and populate _childCache.
+		// This matches v2's behavior where state.materialized was set synchronously during async function execution.
+		await new Promise(resolve => setTimeout(resolve, 20));
 
 		// NOW access the properties after materialization completes
 		const lazyController0 = lazyLg[0];
@@ -169,8 +171,9 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 		const lazyLg = lazyApi.devices.lg;
 		const eagerLg = eagerApi.devices.lg;
 
-		// Wait for async materialization to complete (100ms)
-		// await new Promise(resolve => setTimeout(resolve, 100));
+		// V3 note: lazy mode's materialization is async - _impl is set via callback
+		// during async execution. Small delay allows lazy_setImpl to execute and populate _childCache.
+		await new Promise(resolve => setTimeout(resolve, 20));
 
 		// NOW access the properties after materialization completes
 		const lazyController0 = lazyLg[0];
