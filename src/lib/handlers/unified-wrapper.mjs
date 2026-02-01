@@ -673,6 +673,34 @@ export class UnifiedWrapper extends ComponentBase {
 			get(___target, prop) {
 				if (prop === "then") return undefined;
 				if (prop === "__wrapper") return wrapper;
+				if (prop === "__impl") {
+					// For waiting proxies, return the impl after resolving through childCache
+					// This allows waiting proxies to behave like regular wrappers for inspection
+					if (wrapper._impl !== null && wrapper._impl !== undefined) {
+						// Resolve through propChain to get the actual child wrapper
+						let current = wrapper;
+						for (const chainProp of propChain) {
+							if (current._childCache && current._childCache.has(chainProp)) {
+								const cached = current._childCache.get(chainProp);
+								if (cached && cached.__wrapper) {
+									current = cached.__wrapper;
+								} else {
+									// Not a wrapper, return undefined
+									return undefined;
+								}
+							} else if (current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
+								// Custom proxy - can't traverse further
+								return current._impl;
+							} else {
+								return undefined;
+							}
+						}
+						// Return the resolved wrapper's impl
+						return current._impl;
+					}
+					// Not yet materialized
+					return null;
+				}
 
 				// Trigger materialization if needed (fire-and-forget)
 				// This ensures lazy wrappers start loading when accessed
@@ -737,25 +765,31 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// CRITICAL: Check if wrapper._impl is already set (matches v2's state.materialized check)
 				// This allows synchronous property access to work even during materialization
-				// CRITICAL: If wrapper._impl is a custom proxy at the ROOT (propChain is empty),
-				// delegate property access directly to the proxy. This handles custom proxy behavior
-				// like array access on the devices proxy itself.
-				// For nested properties (propChain has items), we MUST use childCache traversal instead.
+				// CRITICAL: If wrapper._impl is a custom proxy, delegate ALL property access to it
+				// This handles custom proxy behavior like array access on devices proxy
+				// Custom proxies return plain objects/values that should NOT be wrapped
 				if (
 					wrapper._impl !== null &&
 					wrapper._impl !== undefined &&
-					propChain.length === 0 &&
 					typeof wrapper._impl === "object" &&
 					util.types.isProxy(wrapper._impl)
 				) {
-					// Direct delegation to custom proxy at root level
-					return wrapper._impl[prop];
+					// Direct delegation to custom proxy
+					// Traverse propChain through the custom proxy first
+					let result = wrapper._impl;
+					for (const chainProp of propChain) {
+						result = result[chainProp];
+					}
+					// Then access the requested prop on the result
+					return result[prop];
 				}
 
-				// CRITICAL: After materialization, check childCache for the resolved property chain
-				// This allows waiting proxies to resolve to actual cached values instead of creating more waiting proxies
-				// Check materialized FIRST before inFlight - async may have completed even though inFlight hasn't been cleared yet
-				if (wrapper._state.materialized) {
+				// CRITICAL: After materialization OR if _impl is set, resolve through property chain
+				// Check _impl FIRST (not just _state.materialized) to match v2 behavior where
+				// once state.materialized variable was set, values were returned synchronously
+				// This allows waiting proxies to resolve immediately once _impl is available,
+				// even if _state.inFlight is still true (materialization finishing up)
+				if (wrapper._impl !== null && wrapper._impl !== undefined) {
 					// Start from the parent wrapper and traverse using childCache
 					let current = wrapper;
 					let remainingChain = [...propChain];
