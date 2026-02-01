@@ -1319,17 +1319,17 @@ export class ApiManager extends ComponentBase {
 			}
 
 			// After deleting all leaf paths, clean up empty parent containers
-			// Extract unique root segments from deleted paths
-			const rootSegments = new Set(pathsToDelete.map((p) => p.split(".")[0]));
-			for (const rootSegment of rootSegments) {
-				// Check if root container is now empty and should be removed
-				const rootValue = this.slothlet.boundApi[rootSegment];
-				if (rootValue && typeof rootValue === "object") {
-					const keys = Object.keys(rootValue);
-					if (keys.length === 0) {
-						delete this.slothlet.api[rootSegment];
-						delete this.slothlet.boundApi[rootSegment];
-					}
+			// Use first path (should be deep leaf) to get root segment - malformed paths may exist but shouldn't be processed
+			if (pathsToDelete.length > 0) {
+				const rootSegment = pathsToDelete[0].split(".")[0];
+
+				// Delete root segment from API directly (API root is not wrapped, just a plain function/object)
+				// This ensures api.cycled returns undefined after deletion in both lazy and eager modes
+				if (rootSegment in this.slothlet.api) {
+					delete this.slothlet.api[rootSegment];
+				}
+				if (rootSegment in this.slothlet.boundApi) {
+					delete this.slothlet.boundApi[rootSegment];
 				}
 			}
 
