@@ -99,8 +99,8 @@ export async function buildLazyAPI({
  * @private
  */
 function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadata = {}) {
-	// Create materialization function (POC pattern: returns implementation, no wrapper param)
-	const materializeFunc = createNamedMaterializeFunc(apiPath, async () => {
+	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
+	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
 		slothlet.debug("modes", {
 			message: "Lazy materializeFunc started",
 			apiPath,
@@ -216,7 +216,13 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 			apiPath,
 			keys: Object.keys(materialized)
 		});
-		// POC pattern: return the materialized implementation
+		// CRITICAL: Set _impl synchronously (matches v2 behavior where 'materialized' variable is set immediately)
+		// This allows property access to work without waiting for the function to return
+		if (lazy_setImpl) {
+			lazy_setImpl(materialized);
+		}
+
+		// POC pattern: return the materialized implementation (for backward compatibility)
 		return materialized;
 	});
 

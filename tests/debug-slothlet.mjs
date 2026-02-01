@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-25 18:01:10 -08:00 (1769392870)
+ *	@Last modified time: 2026-01-31 17:02:01 -08:00 (1769907721)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -571,6 +571,12 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			]
 		},
 
+		// deep math
+		{
+			section: "deep2.folder.math",
+			calls: [{ path: ["deep2", "folder", "math", "add"], args: [2, 3] }]
+		},
+
 		// multi_func
 		{ section: "multi_func.alpha", calls: [{ path: ["multi_func", "alpha"], args: ["alpha"] }] },
 		{
@@ -790,6 +796,13 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "empty (empty folder/object)",
 			calls: [{ path: ["empty"], args: [], isObject: true }]
+		},
+
+		// deep config
+		{
+			section: "deep.folder.config",
+			// calls: [{ path: ["deep", "folder", "config"], args: [], isObject: true }]
+			calls: [{ path: ["deep", "folder", "config", "get"], args: ["host"] }]
 		}
 	];
 

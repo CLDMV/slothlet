@@ -1,14 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /api_tests/api_test/config.mjs
+ *	@Filename: /api_tests/api_test/deep/folder/config.mjs
  *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
+ *	@Last modified time: 2026-01-31 17:17:20 -08:00 (1769908640)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -65,3 +65,20 @@ export const config = {
 	secure: true,
 	verbose: true
 };
+const config2 = {
+	host: "https://slothlet",
+	username: "admin",
+	password: "password",
+	site: "default",
+	secure: true,
+	verbose: true
+};
+
+export function get(key) {
+	console.log("config.get - config:", config);
+	console.log("config.get - typeof config:", typeof config);
+	console.log("config.get - Object.keys(config):", Object.keys(config));
+	console.log("config.get - config[key]:", config[key]);
+	console.log("config.get - config.host:", config.host);
+	return config2[key];
+}
