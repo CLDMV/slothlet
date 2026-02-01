@@ -763,12 +763,13 @@ export class UnifiedWrapper extends ComponentBase {
 					return Function.prototype.valueOf.bind(waitingTarget);
 				}
 
-				// CRITICAL: Check if wrapper._impl is already set (matches v2's state.materialized check)
-				// This allows synchronous property access to work even during materialization
-				// CRITICAL: If wrapper._impl is a custom proxy, delegate ALL property access to it
+				// CRITICAL: Wait for full materialization before accessing custom proxy
+				// Using _state.materialized ensures all lifecycle events, metadata, and ownership are complete
+				// Using _impl !== null is TOO EARLY - allows access during async materialization
 				// This handles custom proxy behavior like array access on devices proxy
 				// Custom proxies return plain objects/values that should NOT be wrapped
 				if (
+					wrapper._state.materialized &&
 					wrapper._impl !== null &&
 					wrapper._impl !== undefined &&
 					typeof wrapper._impl === "object" &&
