@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 20:58:26 -08:00 (1769921906)
+ *	@Last modified time: 2026-02-01 13:52:10 -08:00 (1769982730)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -869,10 +869,22 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				let current = wrapper.createProxy();
+				let lastWrapper = wrapper;
 
 				for (const prop of propChain) {
 					if (!current) {
-						// If we're trying to access hasAttribute (or other inspect properties) on undefined,
+						// PRIORITY 1: If the chain involves ANY symbol access (like util.inspect.custom), silently return undefined
+						// Check the entire propChain, not just what we've iterated so far
+						// This prevents errors during Node.js inspection operations, regardless of wrapper state
+						if (propChain.some((p) => typeof p === "symbol")) {
+							return undefined;
+						}
+						// PRIORITY 2: Check if root wrapper or last tracked wrapper was invalidated/deleted during async materialization
+						// This happens when api.remove() is called while lazy wrappers are still materializing
+						if (wrapper._invalid || wrapper._impl === null || (lastWrapper && (lastWrapper._invalid || lastWrapper._impl === null))) {
+							return undefined;
+						}
+						// PRIORITY 3: If we're trying to access hasAttribute (or other inspect properties) on undefined,
 						// return undefined instead of throwing - this happens when Node.js inspects non-existent properties
 						const finalProp = propChain[propChain.length - 1];
 						if (
@@ -905,6 +917,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 					if (current && current.__wrapper) {
 						const currentWrapper = current.__wrapper;
+						lastWrapper = currentWrapper; // Track the wrapper we're accessing
 						if (currentWrapper._childCache?.has(prop)) {
 							current = currentWrapper._childCache.get(prop);
 							continue;
@@ -1178,6 +1191,7 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize();
 			}
 
+			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
 			// CRITICAL: Check childCache BEFORE creating waiting proxy
 			// In lazy mode with collisions, children may already be in childCache (from file/folder merge)
 			// Return these children directly instead of creating a waiting proxy
@@ -1233,6 +1247,18 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					return cached;
 				}
+			}
+
+			// If lazy mode is materialized and property doesn't exist in childCache or _impl, return undefined
+			// This prevents creating waiting proxies for properties that were deleted
+			if (
+				wrapper.mode === "lazy" &&
+				wrapper._state.materialized &&
+				!wrapper._childCache.has(prop) &&
+				wrapper._impl &&
+				!(prop in wrapper._impl)
+			) {
+				return undefined;
 			}
 
 			if (wrapper.mode === "lazy" && (wrapper._state.inFlight || !wrapper._impl)) {
@@ -1710,9 +1736,11 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Handles property deletion from wrapper proxies, removing from childCache and impl.
 		 */
 		const deletePropertyTrap = (target, prop) => {
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
-				wrapper._materialize();
-			}
+			// Don't materialize when deleting - just delete directly
+			// If lazy wrapper hasn't materialized yet, that's fine - we're deleting it anyway
+			// if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			// 	wrapper._materialize();
+			// }
 
 			// Don't allow deletion of internal properties
 			const internalKeys = new Set([
