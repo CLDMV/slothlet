@@ -695,7 +695,7 @@ async function runAllFiles() {
 			console.log(chalk.green(`✓ ${result.file}${testInfo}${heapInfo}`));
 		});
 	}
-
+	/* 
 	// Failed test files with detailed errors
 	if (failedFiles.length > 0) {
 		console.log("\n" + "=".repeat(80));
@@ -720,9 +720,38 @@ async function runAllFiles() {
 			}
 		});
 	}
-
+ */
 	// Final summary (Vitest-style)
 	console.log("\n" + chalk.bold("=".repeat(80)));
+
+	// Exit with appropriate code
+	if (failedFiles.length > 0) {
+		console.log(`\n❌ ${failedFiles.length} test file(s) failed`);
+		console.log(chalk.bold.red("\nFailed Test Files:"));
+		failedFiles.forEach((result) => {
+			const testCounts = [];
+			if (result.testsFail > 0) testCounts.push(chalk.red(`${result.testsFail} failed`));
+			if (result.testsPass > 0) testCounts.push(chalk.green(`${result.testsPass} passed`));
+			if (result.testsSkip > 0) testCounts.push(chalk.yellow(`${result.testsSkip} skipped`));
+			const countStr = testCounts.length > 0 ? ` (${testCounts.join(", ")})` : "";
+			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}`);
+
+			// Show error details indented under each failed test file (if not suppressed)
+			if (showErrorDetails && result.errors.length > 0) {
+				// Deduplicate errors before displaying
+				const deduplicatedText = deduplicateErrors(result.errors);
+
+				// Indent each line by 4 spaces
+				const indentedError = deduplicatedText
+					.split("\n")
+					.map((line) => (line.trim() ? `    ${line}` : ""))
+					.join("\n");
+				console.log(indentedError);
+				console.log(""); // Blank line between test files
+			}
+		});
+		console.log("");
+	}
 
 	// Test Files Summary (failed first, like Vitest)
 	if (totalTestFilesFail > 0 && totalTestFilesPass > 0) {
@@ -770,31 +799,6 @@ async function runAllFiles() {
 
 	// Exit with appropriate code
 	if (failedFiles.length > 0) {
-		console.log(`\n❌ ${failedFiles.length} test file(s) failed`);
-		console.log(chalk.bold.red("\nFailed Test Files:"));
-		failedFiles.forEach((result) => {
-			const testCounts = [];
-			if (result.testsFail > 0) testCounts.push(chalk.red(`${result.testsFail} failed`));
-			if (result.testsPass > 0) testCounts.push(chalk.green(`${result.testsPass} passed`));
-			if (result.testsSkip > 0) testCounts.push(chalk.yellow(`${result.testsSkip} skipped`));
-			const countStr = testCounts.length > 0 ? ` (${testCounts.join(", ")})` : "";
-			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}`);
-
-			// Show error details indented under each failed test file (if not suppressed)
-			if (showErrorDetails && result.errors.length > 0) {
-				// Deduplicate errors before displaying
-				const deduplicatedText = deduplicateErrors(result.errors);
-
-				// Indent each line by 4 spaces
-				const indentedError = deduplicatedText
-					.split("\n")
-					.map((line) => (line.trim() ? `    ${line}` : ""))
-					.join("\n");
-				console.log(indentedError);
-				console.log(""); // Blank line between test files
-			}
-		});
-		console.log("");
 		process.exit(1);
 	} else {
 		console.log(`\n✅ All ${passedFiles.length} test files passed\n`);

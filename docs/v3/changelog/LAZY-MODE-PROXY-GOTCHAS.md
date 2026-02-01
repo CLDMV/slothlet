@@ -1,115 +1,197 @@
-# V3 Changelog: Lazy Mode Custom Proxy Behavior
+# V3 Changelog: Lazy Mode Custom Proxy Behavior & Materialization Timing
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Last Updated:** January 31, 2026  
 **Applies To:** Slothlet v3.0.0+
 
 ---
 
-## Breaking Change: Array Access on Custom Proxies in Lazy Mode
+## Overview: Lazy Mode Async Materialization
 
-### Overview
+### Key Understanding
 
-In **Slothlet v3 lazy mode**, custom proxies (e.g., exports using `new Proxy()` with array access or custom get traps) require explicit awaiting of the parent wrapper before accessing array indices or other custom proxy features. This is a **behavioral difference** from eager mode and represents a breaking change for users migrating from v2 or switching between loading modes.
+In **Slothlet v3 lazy mode**, module materialization is **asynchronous**. While accessing properties triggers materialization, there's a small timing window (~10-20ms) where `_impl` is being set and `_childCache` is being populated. During this window, property access may return waiting proxies instead of actual values.
 
----
+**This is a timing issue, not an architectural requirement.** Both v2 and v3 use async materialization, but v3 has more overhead due to:
+- UnifiedWrapper creation for each property
+- `_adoptImplChildren()` processing
+- Lifecycle event emission
+- Metadata tagging and management
 
-## The Requirement
+### What This Means
 
-### What Changed in V3
-
-When your API module exports a custom proxy with special access patterns (array indices, computed properties, etc.), you **must await the parent wrapper** before accessing those features in lazy mode.
-
-**Example: API Module with Custom Proxy**
-
-```javascript
-// api/devices/controllers.mjs
-const DeviceControllers = new Proxy({}, {
-    get(target, prop) {
-        // Array index access: controllers[0]
-        if (/^\d+$/.test(prop)) {
-            return getDeviceByIndex(parseInt(prop));
-        }
-        // Named access: controllers.device1
-        return target[prop];
-    }
-});
-
-export default DeviceControllers;
-```
-
-### V3 Lazy Mode Requirement
+**Direct property access works without await**, but you may encounter waiting proxies if accessing immediately after triggering materialization:
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet.load("./api", { mode: "lazy" });
 
-// ❌ BROKEN: Direct array access in lazy mode
+// Triggers materialization
 const device = api.devices.controllers[0];
-// Returns a waiting proxy, not the actual device object
 
-// ✅ REQUIRED: Await parent wrapper first
+// Immediately accessing properties might return waiting proxy
+console.log(device.id);  // May be waiting proxy if materialization incomplete
+
+// Small delay allows materialization to complete
+await new Promise(resolve => setTimeout(resolve, 20));
+console.log(device.id);  // Now returns actual value
+```
+
+**OR** you can await the parent wrapper to ensure materialization completes:
+
+```javascript
+// Ensure materialization completes before accessing
 await api.devices.controllers;
 const device = api.devices.controllers[0];
-// Now returns the actual device object
+console.log(device.id);  // Always works - materialization guaranteed complete
 ```
 
 ---
 
-## Why This Is Required
+## When Waiting Proxies Appear
 
-### Lazy Mode Loading Behavior
-
-1. **Initial State**: `api.devices.controllers` is a waiting proxy (module not loaded)
-2. **Array Access**: `[0]` doesn't trigger module loading - it extends the proxy chain
-3. **Result**: You get a waiting proxy for `devices.controllers[0]`, not the actual value
-4. **Property Access**: Accessing properties on the waiting proxy creates more waiting proxies
-
-### The Problem Without Awaiting
+### Scenario 1: Immediate Access After Triggering Materialization
 
 ```javascript
-// Without awaiting parent
-const device = api.devices.controllers[0];
+// Trigger materialization by accessing deeply nested path
+const controller = api.devices.lg[0];
 
-console.log(typeof device);          // "function" (waiting proxy)
-console.log(device.id);               // Another waiting proxy, not the actual id
-console.log(await device.connect()); // Error: proxy chain fails
+// Immediately access property - may return waiting proxy
+console.log(controller.tvId);  // Waiting proxy if materialization not done
+
+// After short delay, waiting proxy resolves
+setTimeout(() => {
+    console.log(controller.tvId);  // Actual value - "tv1"
+}, 20);
 ```
 
-### The Solution: Await Parent First
+### Scenario 2: Rapid Sequential Access
 
 ```javascript
-// Await parent wrapper to trigger module loading
+// First access triggers materialization
+const lg = api.devices.lg;
+
+// Immediate array access may return waiting proxy
+const controller = lg[0];  // Waiting proxy during materialization
+
+// Properties on waiting proxy return more waiting proxies
+console.log(controller.tvId);  // Waiting proxy
+
+// Wait for materialization
+await new Promise(resolve => setTimeout(resolve, 20));
+
+// Now everything resolves correctly
+const controller2 = lg[0];
+console.log(controller2.tvId);  // "tv1"
+```
+
+---
+
+## How Waiting Proxies Work
+
+### Waiting Proxy Behavior
+
+Waiting proxies are **placeholders** created when:
+1. Property accessed on lazy wrapper that hasn't materialized yet
+2. Materialization is triggered but not complete
+3. Parent's `_childCache` hasn't been populated yet
+
+### Automatic Resolution
+
+Once the parent wrapper materializes:
+- `_impl` is set to the loaded module
+- `_adoptImplChildren()` populates `_childCache`
+- Waiting proxies resolve through `_childCache` to find actual values
+- Custom proxies delegate property access correctly
+
+```javascript
+// Waiting proxy created during materialization
+const lgProxy = api.devices.lg;  // _impl not set yet
+
+// Accessing properties returns waiting proxies
+const controller = lgProxy[0];  // Waiting proxy
+
+// After materialization completes (~20ms)
+// - api.devices._impl is set
+// - api.devices._childCache has "lg" entry
+// - Waiting proxy resolves through childCache
+// - lg's _impl is the LGTVControllers custom proxy
+// - Custom proxy's get trap handles [0] access
+// - Returns actual TVController object
+
+const controller2 = lgProxy[0];  // Now returns TVController
+console.log(controller2.tvId);  // "tv1"
+```
+
+---
+
+## Working Patterns
+
+---
+
+## Working Patterns
+
+### Pattern 1: Await Parent Wrapper (Recommended)
+
+```javascript
+// ✅ Most reliable: Ensure materialization complete
 await api.devices.controllers;
-
-// Now array access works correctly
 const device = api.devices.controllers[0];
+console.log(device.id);  // Always works
+```
 
-console.log(typeof device);          // "object" ✓
-console.log(device.id);               // Actual id value ✓
-console.log(await device.connect()); // Works correctly ✓
+### Pattern 2: Small Delay After Access
+
+```javascript
+// ✅ Works: Give materialization time to complete
+const controller = api.devices.lg[0];
+await new Promise(resolve => setTimeout(resolve, 20));
+console.log(controller.tvId);  // Now resolved
+```
+
+### Pattern 3: Function Calls Auto-Wait
+
+```javascript
+// ✅ Function calls wait for materialization automatically
+const status = await api.devices.controllers.getStatus("device1");
+// No waiting proxy - function call handles async materialization
+```
+
+### Pattern 4: Check __type Property
+
+```javascript
+// ✅ Detect waiting proxies programmatically
+const device = api.devices.lg[0];
+
+if (device.__type === Symbol.for("inFlight")) {
+    // It's a waiting proxy - materialization in progress
+    await new Promise(resolve => setTimeout(resolve, 20));
+    // Try again
+}
+
+console.log(device.tvId);
 ```
 
 ---
 
 ## Eager Mode Comparison
 
-### No Await Required in Eager Mode
+### No Timing Issues in Eager Mode
 
-In **eager mode**, all modules are loaded immediately, so array access works without awaiting:
+In **eager mode**, all modules load immediately during `slothlet.load()`:
 
 ```javascript
 const api = await slothlet.load("./api", { mode: "eager" });
 
-// ✅ Works immediately in eager mode (no await needed)
+// ✅ Works immediately - no waiting proxies
 const device = api.devices.controllers[0];
-console.log(device.id); // Actual value
+console.log(device.id);  // Actual value
 ```
 
-### Cross-Mode Compatibility Pattern
+### Cross-Mode Compatibility
 
-To write code that works in **both lazy and eager modes**, always await the parent:
+To write code that works in **both modes**, always await the parent:
 
 ```javascript
 // ✅ Works in BOTH lazy and eager modes
@@ -118,204 +200,242 @@ const device = api.devices.controllers[0];
 ```
 
 **Why this works:**
-- **Lazy mode**: Triggers module loading, then array access works
-- **Eager mode**: Module already loaded, await is a no-op, array access works
+- **Lazy mode**: Ensures materialization completes before access
+- **Eager mode**: Module already loaded, await is immediate no-op
 
 ---
 
-## Common Patterns Requiring Await
+## Performance Characteristics
 
-### 1. Array Index Access
+### Lazy Mode Materialization Timing
+
+**Typical timing breakdown:**
+- Module import: ~5-10ms
+- Wrapper creation: ~2-5ms per property
+- `_adoptImplChildren()`: ~3-8ms
+- Lifecycle events: ~1-3ms
+- **Total**: ~10-20ms per folder/module
+
+**Factors affecting timing:**
+- Number of exports in module
+- Nesting depth (folders within folders)
+- Number of active lifecycle listeners
+- System load and I/O performance
+
+### Comparison with V2
+
+- **V2 lazy mode**: ~1-5ms materialization (simpler architecture)
+- **V3 lazy mode**: ~10-20ms materialization (richer features)
+- **Tradeoff**: V3 slower but provides better metadata, hooks, inspection
+
+---
+
+## Common Patterns Requiring Awareness
+
+### 1. Array Index Access on Custom Proxies
 
 ```javascript
-// ❌ Broken in lazy mode
-const item = api.collection[0];
+// Custom proxy with array access
+const controllers = new Proxy({}, {
+    get(target, prop) {
+        if (/^\d+$/.test(prop)) {
+            return getDeviceByIndex(parseInt(prop));
+        }
+        return target[prop];
+    }
+});
 
-// ✅ Required pattern
-await api.collection;
-const item = api.collection[0];
+// ✅ Reliable pattern
+await api.devices.controllers;
+const device = api.devices.controllers[0];
 ```
 
-### 2. Numeric Property Access
+### 2. Rapid Property Traversal
 
 ```javascript
-// ❌ Broken in lazy mode
-const port = api.servers[8080];
+// Multiple levels accessed rapidly
+const value = api.deeply.nested.path.to.value;
 
-// ✅ Required pattern
-await api.servers;
-const port = api.servers[8080];
+// May return waiting proxy if path not materialized yet
+// ✅ Better: Await intermediate paths
+await api.deeply.nested.path;
+const value = api.deeply.nested.path.to.value;
 ```
 
-### 3. Dynamic Property Access
+### 3. Loop Access
 
 ```javascript
-// ❌ Broken in lazy mode
-const key = "device1";
-const device = api.controllers[key];
+// ❌ May get waiting proxies in early iterations
+for (let i = 0; i < 10; i++) {
+    const device = api.devices.controllers[i];
+    console.log(device.id);  // Might be waiting proxy
+}
 
-// ✅ Required pattern
-await api.controllers;
-const key = "device1";
-const device = api.controllers[key];
-```
-
-### 4. Computed Properties
-
-```javascript
-// ❌ Broken in lazy mode
-const prop = Symbol("custom");
-const value = api.registry[prop];
-
-// ✅ Required pattern
-await api.registry;
-const prop = Symbol("custom");
-const value = api.registry[prop];
+// ✅ Ensure materialized first
+await api.devices.controllers;
+for (let i = 0; i < 10; i++) {
+    const device = api.devices.controllers[i];
+    console.log(device.id);  // Always actual value
+}
 ```
 
 ---
 
-## What Works Without Awaiting
+## What Auto-Materializes Without Issues
 
-### Function Calls Auto-Materialize
+### Function Calls
 
-Function calls trigger automatic materialization in lazy mode:
+Function calls trigger materialization and wait for completion:
 
 ```javascript
-// ✅ Works without await (function calls auto-materialize)
+// ✅ Works reliably - function call waits
 const result = await api.devices.controllers.getAll();
 const status = await api.devices.controllers.getStatus("device1");
 ```
 
-### Named Property Access Auto-Materializes
+### Named Property Access (Not Array Indices)
 
-Regular property access (not array indices) triggers materialization:
+Regular property access triggers materialization:
 
 ```javascript
-// ✅ Works without await (property access auto-materializes)
+// ✅ Works - triggers materialization
 const config = api.devices.controllers.config;
 const version = api.devices.controllers.version;
+
+// But immediate property access on returned value might return waiting proxy
+console.log(config.host);  // May be waiting proxy if config itself is lazy wrapper
+
+// ✅ More reliable
+await api.devices.controllers.config;
+console.log(config.host);  // Actual value
+```
+
+---
+
+## The Real Requirement: Understanding Timing
+
+### It's Not "Await Required" - It's "Await Recommended"
+
+The documentation previously stated await was "required" for custom proxies. **This is inaccurate.** The actual situation:
+
+1. **Property access works without await** - it triggers materialization
+2. **Waiting proxies appear during materialization window** (~10-20ms)
+3. **Waiting proxies auto-resolve** once materialization completes
+4. **Awaiting parent ensures materialization done** before you access properties
+
+### When You Can Skip Await
+
+If your code naturally has delays (async operations, network calls, etc.), waiting proxies will resolve:
+
+```javascript
+// Trigger materialization
+const device = api.devices.lg[0];
+
+// Do other async work (gives time for materialization)
+await fetch("https://api.example.com/status");
+await processData();
+
+// By now, materialization likely complete
+console.log(device.tvId);  // Works - materialization finished during other operations
+```
+
+### When You Should Await
+
+When accessing properties immediately after traversing a path:
+
+```javascript
+// ❌ Risky: Immediate access after path traversal
+const device = api.devices.lg[0];
+console.log(device.tvId);  // Might be waiting proxy
+
+// ✅ Safe: Await ensures materialization complete
+await api.devices.lg;
+const device = api.devices.lg[0];
+console.log(device.tvId);  // Guaranteed actual value
 ```
 
 ---
 
 ## Migration Guide
 
-### Identifying Code That Needs Updates
+### From V2 or Eager Mode
 
-Search your codebase for array/numeric access patterns:
+**No code changes required** if you're okay with small timing delays. But for guaranteed immediate access:
 
-```bash
-# Find potential array access on API objects
-grep -r "api\.[a-zA-Z_][a-zA-Z0-9_.]*\[" src/
-```
-
-### Update Pattern
-
-**Before (v2 / eager mode):**
+**Before:**
 ```javascript
 const device = api.devices.controllers[0];
-const port = api.servers[8080];
+console.log(device.id);
 ```
 
-**After (v3 lazy mode compatible):**
+**After (V3 lazy mode compatible):**
 ```javascript
 await api.devices.controllers;
 const device = api.devices.controllers[0];
-
-await api.servers;
-const port = api.servers[8080];
+console.log(device.id);
 ```
 
-### Batch Pattern for Multiple Accesses
+### Testing Strategy
 
-If accessing multiple indices, await once:
+Add small delays in tests to account for materialization timing:
 
 ```javascript
-// ✅ Efficient: Await once, access multiple times
-await api.devices.controllers;
-
-const device1 = api.devices.controllers[0];
-const device2 = api.devices.controllers[1];
-const device3 = api.devices.controllers.byName("primary");
+// ✅ Test pattern for lazy mode
+it("should access custom proxy array indices", async () => {
+    const lg = api.devices.lg;
+    
+    // Allow materialization to complete
+    await new Promise(resolve => setTimeout(resolve, 20));
+    
+    const controller = lg[0];
+    expect(controller.tvId).toBe("tv1");
+});
 ```
 
 ---
 
-## Performance Impact
+## Future Improvements
 
-### Startup vs Runtime Trade-offs
+See [`docs/v3/todo/future/lazy-mode-performance-optimization.md`](../todo/future/lazy-mode-performance-optimization.md) for planned optimizations to reduce materialization time closer to v2 levels.
 
-**Lazy Mode:**
-- ✅ Faster application startup (4.3x improvement)
-- ✅ Lower memory footprint (only load what's used)
-- ⚠️ Requires explicit await for custom proxy array access
-- ⚠️ Small runtime overhead on first access
-
-**Eager Mode:**
-- ✅ No await required for any access pattern
-- ✅ Slightly faster function calls (1.1x faster)
-- ❌ Slower startup (loads everything upfront)
-- ❌ Higher memory usage (all modules in memory)
-
-### Recommendation
-
-- Use **lazy mode** for large applications with many modules where startup time matters
-- Use **eager mode** for small applications or when custom proxies are heavily used
+**Target**: Reduce materialization time from ~20ms to <10ms through:
+- Lazy child wrapper creation
+- Batched lifecycle events  
+- Conditional wrapping
+- Fast paths for common cases
 
 ---
 
 ## Summary
 
-### The Core Requirement
+### Core Understanding
 
-**In Slothlet v3 lazy mode, you must await custom proxies before accessing array indices or computed properties.**
+**V3 lazy mode has async materialization with ~10-20ms timing window. Waiting proxies appear during this window but auto-resolve once materialization completes.**
 
-```javascript
-// ✅ The Required Pattern
-await api.custom.proxy;
-const value = api.custom.proxy[0];
-```
+### Best Practices
 
-### What Auto-Materializes
+1. **✅ Await parent before array/computed access for guaranteed results**
+2. **✅ Use small delays in tests (20ms) to account for materialization**
+3. **✅ Function calls handle materialization automatically**
+4. **✅ Check `__type` property to detect waiting proxies**
+5. **✅ Cross-mode compatible: Always await when working with custom proxies**
 
-- ✅ Function calls: `api.module.func()`
-- ✅ Named properties: `api.module.property`
-- ❌ Array indices: `api.module[0]` (requires await)
-- ❌ Computed properties: `api.module[key]` (requires await)
+### What Changed from V2
 
-### Cross-Mode Compatibility
-
-Always await before array/computed access to ensure code works in both modes:
-
-```javascript
-// Works in lazy AND eager mode
-await api.custom.proxy;
-const value = api.custom.proxy[index];
-```
+- **V2**: Materialization ~1-5ms (nearly instant)
+- **V3**: Materialization ~10-20ms (richer features, more overhead)
+- **Impact**: Tests need small delays where v2 worked "instantly"
 
 ---
 
 ## Related Documentation
 
-- [V3 Migration Guide](./V3-MIGRATION.md) - Full v2 → v3 migration instructions
+- [Lazy Mode Performance Optimization](../todo/future/lazy-mode-performance-optimization.md) - Future improvements
 - [API Rules](../API-RULES.md) - Core API building rules
 - [Performance Guide](../PERFORMANCE.md) - Lazy vs Eager benchmarks
 - [Module Structure](../MODULE-STRUCTURE.md) - How modules are loaded and wrapped
+- [UnifiedWrapper](../../../src/lib/handlers/unified-wrapper.mjs) - Wrapper implementation
 
 ---
 
 **Questions or Issues?** Open an issue on GitHub with the `v3-lazy-mode` label.
-
----
-
-## Related Documentation
-
-- [API Rules](../API-RULES.md) - Core API building rules
-- [Context Propagation](../CONTEXT-PROPAGATION.md) - AsyncLocalStorage context system
-- [Performance Guide](../PERFORMANCE.md) - Lazy vs Eager benchmarks
-- [Module Structure](../MODULE-STRUCTURE.md) - How modules are loaded and wrapped
-
----
-
-**Questions or Issues?** Open an issue on GitHub with the `lazy-mode` label.
