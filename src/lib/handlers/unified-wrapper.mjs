@@ -225,7 +225,19 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Custom inspect output for Node.js util.inspect.
 	 * @returns {*} The actual implementation for inspection.
 	 */
-	[util.inspect.custom]() {
+	[util.inspect.custom](depth, options, inspect) {
+		// If we have children in _childCache AND we're not a function/callable, show them
+		// (functions with attached properties might have children, but we want to show the function itself)
+		if (this._childCache && this._childCache.size > 0 && !this.isCallable) {
+			const inspectObj = {};
+			for (const [key, wrapper] of this._childCache.entries()) {
+				// Return the proxy/wrapper directly - Node will recursively inspect it
+				inspectObj[key] = wrapper;
+			}
+			return inspectObj;
+		}
+
+		// For callables or leaf nodes - return actual _impl value
 		return this._impl;
 	}
 
@@ -929,16 +941,17 @@ export class UnifiedWrapper extends ComponentBase {
 		// Add custom inspect to proxyTarget
 		Object.defineProperty(proxyTarget, util.inspect.custom, {
 			value: function () {
-				const obj = {};
-				for (const [key, value] of wrapper._childCache.entries()) {
-					// Unwrap wrapper to get actual _impl value
-					if (value && value.__wrapper) {
-						obj[key] = value.__wrapper._impl;
-					} else {
+				// If childCache has entries, show them
+				if (wrapper._childCache.size > 0 && !wrapper.isCallable) {
+					const obj = {};
+					for (const [key, value] of wrapper._childCache.entries()) {
+						// Return the value directly - if it's a proxy, Node will inspect it recursively
 						obj[key] = value;
 					}
+					return obj;
 				}
-				return obj;
+				// Otherwise return _impl (functions, primitives, etc)
+				return wrapper._impl;
 			},
 			writable: false,
 			enumerable: false,
@@ -1024,13 +1037,18 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
-				// Build object from _childCache for console.log inspection
+				// Return function that builds object from _childCache or returns _impl
 				return () => {
-					const obj = {};
-					for (const [key, value] of wrapper._childCache.entries()) {
-						obj[key] = value;
+					// If childCache has entries and we're not a callable, show children
+					if (wrapper._childCache.size > 0 && !wrapper.isCallable) {
+						const obj = {};
+						for (const [key, value] of wrapper._childCache.entries()) {
+							obj[key] = value;
+						}
+						return obj;
 					}
-					return obj;
+					// Otherwise return _impl
+					return wrapper._impl;
 				};
 			}
 			if (prop === Symbol.toStringTag) {
