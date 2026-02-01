@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 20:46:43 -08:00 (1769921203)
+ *	@Last modified time: 2026-01-31 20:58:26 -08:00 (1769921906)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -872,6 +872,12 @@ export class UnifiedWrapper extends ComponentBase {
 
 				for (const prop of propChain) {
 					if (!current) {
+						// If we're trying to access hasAttribute (or other inspect properties) on undefined,
+						// return undefined instead of throwing - this happens when Node.js inspects non-existent properties
+						const finalProp = propChain[propChain.length - 1];
+						if (finalProp === "hasAttribute" || finalProp === Symbol.toStringTag || finalProp === "constructor") {
+							return undefined;
+						}
 						throw new Error(`${wrapper.apiPath}.${chainLabel} - cannot access ${String(prop)} of undefined`);
 					}
 
