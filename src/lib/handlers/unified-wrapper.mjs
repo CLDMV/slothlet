@@ -875,7 +875,13 @@ export class UnifiedWrapper extends ComponentBase {
 						// If we're trying to access hasAttribute (or other inspect properties) on undefined,
 						// return undefined instead of throwing - this happens when Node.js inspects non-existent properties
 						const finalProp = propChain[propChain.length - 1];
-						if (finalProp === "hasAttribute" || finalProp === Symbol.toStringTag || finalProp === "constructor") {
+						if (
+							finalProp === "hasAttribute" ||
+							finalProp === Symbol.toStringTag ||
+							finalProp === "constructor" ||
+							typeof finalProp === "symbol" ||
+							typeof prop === "symbol"
+						) {
 							return undefined;
 						}
 						throw new Error(`${wrapper.apiPath}.${chainLabel} - cannot access ${String(prop)} of undefined`);

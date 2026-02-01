@@ -60,12 +60,12 @@ describe("api.slothlet.api.add Functionality", () => {
 			// Add API at root level
 			await api.slothlet.api.add("utilities", TEST_DIRS.API_TEST_CJS);
 			expect(api.utilities).toBeDefined();
-			
+
 			// Trigger materialization for lazy mode before checking typeof
 			if (api.utilities.rootMath) {
 				await api.utilities.rootMath.add(1, 1);
 			}
-			
+
 			// api.utilities might be a function (root contributor) or object
 			// Both are valid depending on the module structure
 			const utilitiesType = typeof api.utilities;
