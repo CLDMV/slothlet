@@ -694,7 +694,21 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Actually delete the property first
+		// CRITICAL: Delete from wrapper's childCache AND _impl if current is a proxy
+		// Properties are stored in childCache and _impl, not on the proxy itself
+		if (current.__wrapper) {
+			const wrapper = current.__wrapper;
+			// Delete from childCache (cached proxy instances)
+			if (wrapper._childCache && wrapper._childCache.has(finalKey)) {
+				wrapper._childCache.delete(finalKey);
+			}
+			// Delete from _impl (the actual implementation object)
+			if (wrapper._impl && typeof wrapper._impl === "object") {
+				delete wrapper._impl[finalKey];
+			}
+		}
+
+		// Also delete the property from the object/proxy itself
 		delete current[finalKey];
 
 		// AFTER deletion, clean up wrapper state for removed proxy
