@@ -681,7 +681,7 @@ export class ApiManager extends ComponentBase {
 		const removedImpl = current[finalKey];
 		const apiPath = parts.join(".");
 
-		// Emit lifecycle event for removal
+		// Emit lifecycle event for removal BEFORE deletion
 		if (removedImpl && this.slothlet.handlers?.lifecycle) {
 			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
 			this.slothlet.handlers.lifecycle.emit("impl:removed", {
@@ -694,7 +694,35 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// Actually delete the property first
 		delete current[finalKey];
+
+		// AFTER deletion, clean up wrapper state for removed proxy
+		if (removedImpl && typeof removedImpl === "object") {
+			// If this is a proxy with a wrapper, clean it up
+			if (removedImpl.__wrapper) {
+				const wrapper = removedImpl.__wrapper;
+				// Set impl to null to prevent stale access
+				if (wrapper._impl !== undefined) {
+					wrapper._impl = null;
+				}
+				// Clear child cache to release references
+				if (wrapper._childCache) {
+					wrapper._childCache.clear();
+				}
+				// Mark as un-materialized so it won't try to access null impl
+				if (wrapper._state) {
+					wrapper._state.materialized = false;
+					wrapper._state.inFlight = false;
+				}
+			}
+		}
+
+		// Clean up user metadata for removed impl using root segment
+		if (this.slothlet.handlers?.metadata) {
+			const rootSegment = apiPath.split(".")[0];
+			this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+		}
 
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
