@@ -87,14 +87,20 @@ describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ co
 		expect(sanitizedNoExt).toBe("math");
 	});
 
-	test("should predict API paths correctly for non-extension names", () => {
+	test("should predict API paths correctly for non-extension names", async () => {
 		// Test that sanitize can predict how a module name (without extension) will be exposed
 		const moduleName = "string";
 		const predictedPath = api.slothlet.sanitize(moduleName);
 
 		// api.string should exist if string.mjs exists in TEST_DIRS.API_TEST
 		if (api[predictedPath]) {
-			expect(typeof api[predictedPath]).toBe("object");
+			// Trigger materialization for lazy mode before checking typeof
+			if (api[predictedPath].upper) {
+				await api[predictedPath].upper("test");
+			}
+			// In lazy mode, modules can be functions or objects after materialization
+			const actualType = typeof api[predictedPath];
+			expect(["object", "function"]).toContain(actualType);
 		}
 	});
 

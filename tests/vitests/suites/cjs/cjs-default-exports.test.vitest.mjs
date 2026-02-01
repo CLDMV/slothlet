@@ -51,11 +51,11 @@ describe("CJS Default Exports", () => {
 			it("should not expose extra .default layer in API", async () => {
 				// Verify that we DON'T have api.explicitDefault.default
 				// (which would happen if the CJS wrapper wasn't normalized)
-				
+
 				// In lazy mode, we need to trigger materialization first
 				// Call any function to materialize the module
 				await api.explicitDefault.multiply(1, 1);
-				
+
 				expect(api.explicitDefault.default).toBeUndefined();
 				expect(api.explicitDefault.default2).toBeUndefined();
 			});
@@ -63,7 +63,7 @@ describe("CJS Default Exports", () => {
 			it("should have all three expected properties", async () => {
 				// Trigger materialization first in lazy mode
 				await api.explicitDefault.multiply(1, 1);
-				
+
 				// Get all enumerable keys
 				const keys = Object.keys(api.explicitDefault);
 
@@ -78,7 +78,7 @@ describe("CJS Default Exports", () => {
 			it("should work with Object.getOwnPropertyNames", async () => {
 				// Trigger materialization first in lazy mode
 				await api.explicitDefault.multiply(1, 1);
-				
+
 				const props = Object.getOwnPropertyNames(api.explicitDefault);
 
 				// Should have all three function properties
@@ -103,7 +103,7 @@ describe("CJS Default Exports", () => {
 			it("should preserve function names", async () => {
 				// Trigger materialization first in lazy mode
 				await api.explicitDefault.multiply(1, 1);
-				
+
 				// Verify function names are preserved
 				expect(api.explicitDefault.multiply.name).toBe("multiply");
 				expect(api.explicitDefault.divide.name).toBe("divide");
