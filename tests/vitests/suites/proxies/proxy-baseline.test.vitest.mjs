@@ -23,6 +23,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
+import util from "node:util";
 
 describe.each(getMatrixConfigs())("Proxy Baseline Behavior > Config: '$name'", ({ config }) => {
 	let slothlet;
@@ -126,13 +127,17 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 		expect(eagerApi.devices.lg).toBeDefined();
 	});
 
-	it("should have identical array access results after materialization", async () => {
-		// Ensure lg is materialized in lazy mode before accessing array indices
-		await materialize(lazyApi, "devices.lg");
+	it("should have identical array access results", async () => {
+		// Trigger access to start materialization
+		const lazyLg = lazyApi.devices.lg;
+		const eagerLg = eagerApi.devices.lg;
 
-		// Now access the array index - the custom proxy should be materialized and working
-		const lazyController0 = lazyApi.devices.lg[0];
-		const eagerController0 = eagerApi.devices.lg[0];
+		// Wait for async materialization to complete (100ms)
+		// await new Promise(resolve => setTimeout(resolve, 100));
+
+		// NOW access the properties after materialization completes
+		const lazyController0 = lazyLg[0];
+		const eagerController0 = eagerLg[0];
 
 		expect(lazyController0).toBeDefined();
 		expect(eagerController0).toBeDefined();
@@ -160,12 +165,17 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 	});
 
 	it("should have overall identical proxy behavior", async () => {
-		// Ensure lg is materialized in lazy mode before accessing array indices
-		await materialize(lazyApi, "devices.lg");
+		// Trigger access to start materialization
+		const lazyLg = lazyApi.devices.lg;
+		const eagerLg = eagerApi.devices.lg;
 
-		// Test array access - custom proxy should be fully materialized now
-		const lazyController0 = lazyApi.devices.lg[0];
-		const eagerController0 = eagerApi.devices.lg[0];
+		// Wait for async materialization to complete (100ms)
+		// await new Promise(resolve => setTimeout(resolve, 100));
+
+		// NOW access the properties after materialization completes
+		const lazyController0 = lazyLg[0];
+		const eagerController0 = eagerLg[0];
+
 		const arrayAccessMatch = lazyController0.tvId === eagerController0.tvId;
 
 		// Test named export

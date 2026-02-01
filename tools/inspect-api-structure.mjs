@@ -1,38 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/inspect-api-structure.mjs
- *	@Date: 2026-01-21 00:12:03 -08:00 (1768983123)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-22 19:39:44 -08:00 (1769139584)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /tools/inspect-api-structure.mjs
- *	@Date: 2026-01-10 20:37:02 -08:00 (1768106222)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-22 19:36:52 -08:00 (1769139412)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /tools/inspect-api-structure.mjs
  *	@Date: 2025-10-23 11:11:42 -07:00 (1761243102)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-19 22:19:46 -08:00 (1768889986)
+ *	@Last modified time: 2026-01-31 17:04:22 -08:00 (1769907862)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
