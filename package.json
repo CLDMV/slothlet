@@ -193,7 +193,7 @@
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
 		"test:unit": "node tests/vitests_v2/run-all-vitest.mjs",
-		"vitest": "vitest --config .configs/vitest.config.mjs run",
+		"vitest": "node tests/vitests/run-all-vitest.mjs",
 		"vitest:all": "node tests/vitests_v2/run-all-vitest.mjs",
 		"vitest:single": "vitest --config .configs/vitest.config.mjs run",
 		"vitest:list-tests": "node tools/list-vitest-tests.mjs",

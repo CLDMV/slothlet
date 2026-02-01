@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/run-all-vitest.mjs
+ *	@Date: 2026-01-31 17:28:23 -08:00 (1769909303)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-01-31 19:04:13 -08:00 (1769915053)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Run all Vitest test files sequentially and provide comprehensive report
  * @module tests/vitests/run-all-vitest
  * @internal
@@ -99,7 +112,7 @@ ${chalk.bold("Slothlet Vitest Test Runner")}
 Sequential test runner to avoid OOM issues with massive test suites.
 
 ${chalk.bold("USAGE:")}
-  node tests/vitests/run-all-vitest2.mjs [OPTIONS] [PATTERNS]
+  npm run vitest [OPTIONS] [PATTERNS]
 
 ${chalk.bold("SPECIAL FLAGS:")}
   --baseline              Load test list from baseline-tests.json
@@ -130,22 +143,22 @@ ${chalk.bold("ENVIRONMENT VARIABLES:")}
 
 ${chalk.bold("EXAMPLES:")}
   # Run all baseline tests
-  npm run testv32 -- --baseline
+  npm run vitest -- --baseline
 
   # Run specific test file
-  npm run testv32 -- suites/config/background-materialize.test.vitest.mjs
+  npm run vitest -- suites/config/background-materialize.test.vitest.mjs
 
   # Filter tests by name
-  npm run testv32 -- suites/metadata -t "lazy materialization"
+  npm run vitest -- suites/metadata -t "lazy materialization"
 
   # Hide detailed errors
-  npm run testv32 -- --baseline --no-error-details
+  npm run vitest -- --baseline --no-error-details
 
   # With custom heap and workers
-  VITEST_HEAP_MB=8192 VITEST_WORKERS=2 npm run testv32 -- suites/smart-flattening
+  VITEST_HEAP_MB=8192 VITEST_WORKERS=2 npm run vitest -- suites/smart-flattening
 
   # Combine flags
-  npm run testv32 -- --baseline -t "LAZY" --reporter=verbose
+  npm run vitest -- --baseline -t "LAZY" --reporter=verbose
 `);
 }
 
