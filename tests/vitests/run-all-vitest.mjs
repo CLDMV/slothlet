@@ -753,6 +753,8 @@ async function runAllFiles() {
 		console.log("");
 	}
 
+	console.log(chalk.bold("=".repeat(80)));
+
 	// Test Files Summary (failed first, like Vitest)
 	if (totalTestFilesFail > 0 && totalTestFilesPass > 0) {
 		console.log(
@@ -794,8 +796,6 @@ async function runAllFiles() {
 	} else {
 		console.log(`       ${chalk.bold("Heap")}  script ${scriptHeapMb} MB (RSS ${scriptRssMb} MB)`);
 	}
-
-	console.log(chalk.bold("=".repeat(80)));
 
 	// Exit with appropriate code
 	if (failedFiles.length > 0) {
