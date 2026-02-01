@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 14:04:04 -08:00 (1769897044)
+ *	@Last modified time: 2026-01-31 20:46:43 -08:00 (1769921203)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -237,7 +237,11 @@ export class UnifiedWrapper extends ComponentBase {
 			return inspectObj;
 		}
 
-		// For callables or leaf nodes - return actual _impl value
+		// For callables or leaf nodes - return actual _impl value if materialized
+		// For unmaterialized lazy wrappers, return the proxy to show it's a function
+		if (this.mode === "lazy" && !this._state.materialized && this._proxy) {
+			return this._proxy;
+		}
 		return this._impl;
 	}
 
@@ -763,13 +767,12 @@ export class UnifiedWrapper extends ComponentBase {
 					return Function.prototype.valueOf.bind(waitingTarget);
 				}
 
-				// CRITICAL: Wait for full materialization before accessing custom proxy
-				// Using _state.materialized ensures all lifecycle events, metadata, and ownership are complete
-				// Using _impl !== null is TOO EARLY - allows access during async materialization
+				// CRITICAL: Check if wrapper._impl is already set
+				// This allows property access once _impl is populated (matches v2 behavior)
+				// Lifecycle events, metadata, and ownership may still be in progress
 				// This handles custom proxy behavior like array access on devices proxy
 				// Custom proxies return plain objects/values that should NOT be wrapped
 				if (
-					wrapper._state.materialized &&
 					wrapper._impl !== null &&
 					wrapper._impl !== undefined &&
 					typeof wrapper._impl === "object" &&
@@ -985,6 +988,10 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					return obj;
 				}
+				// For lazy unmaterialized wrappers with null _impl, return the proxy target
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+					return proxyTarget;
+				}
 				// Otherwise return _impl (functions, primitives, etc)
 				return wrapper._impl;
 			},
@@ -1081,6 +1088,13 @@ export class UnifiedWrapper extends ComponentBase {
 							obj[key] = value;
 						}
 						return obj;
+					}
+					// For lazy wrappers with null _impl, return the proxy target or proxy itself
+					if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+						console.log(
+							`[util.inspect.custom] Lazy unmaterialized: apiPath=${wrapper.apiPath}, _proxyTarget=${wrapper._proxyTarget}, _proxy=${wrapper._proxy}`
+						);
+						return wrapper._proxyTarget || wrapper._proxy;
 					}
 					// Otherwise return _impl
 					return wrapper._impl;
@@ -1684,6 +1698,10 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Handles property deletion from wrapper proxies, removing from childCache and impl.
 		 */
 		const deletePropertyTrap = (target, prop) => {
+			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				wrapper._materialize();
+			}
+
 			// Don't allow deletion of internal properties
 			const internalKeys = new Set([
 				"__impl",
@@ -1701,8 +1719,12 @@ export class UnifiedWrapper extends ComponentBase {
 				return false;
 			}
 
-			// Remove from childCache
+			// If deleting a child wrapper, invalidate it
 			if (wrapper._childCache.has(prop)) {
+				const childWrapper = wrapper._childCache.get(prop);
+				if (childWrapper && childWrapper.__invalidate) {
+					childWrapper.__invalidate();
+				}
 				wrapper._childCache.delete(prop);
 			}
 
