@@ -124,7 +124,7 @@ export class ModesProcessor extends ComponentBase {
 					apiPath: buildApiPath(categoryName),
 					initialImpl,
 					filePath: directory.path,
-					moduleId: categoryName,
+					moduleId: moduleId || categoryName,
 					sourceFolder
 				});
 				api[categoryName] = wrapper.createProxy();
