@@ -1,8 +1,22 @@
 # Baseline Test Failures - February 1, 2026
 
-**Overall Status: 88 failures / 2356 tests (96.3% pass rate)**
+**Current Status: 40 failures / 2356 tests (98.3% pass rate)**
+**Previous: 88 failures (96.3% pass rate)**
+**Fixed: 48 tests**
 
-## Summary of Changes Made Today
+## Recent Fixes
+
+### ✅ Fixed: collision-config.test.vitest.mjs (48 failures → ALL PASSING)
+**Root cause**: Tests were using incorrect api.add() behavior expectations
+
+**The Fix**: Updated tests to use `api.add("", folder)` for root-level loading
+- Old (incorrect): `api.add("math", folder_with_math.mjs)` expected to merge math.mjs exports into api.math
+- New (correct): `api.add("", folder_with_math.mjs)` loads to root, math.mjs naturally collides with api.math
+- The behavior where `api.add("math", folder)` loads folder UNDER "math" path is now correct
+
+---
+
+### 3. addapi-stack-trace-path.test.vitest.mjs - 4 failures (4 passed)
 
 1. ✅ **Removed _childCache Map** - Converted to property-based storage using `Object.defineProperty()`
 2. ✅ **Fixed api.add() path duplication** - Folder loads correctly under specified path
@@ -42,37 +56,9 @@
 
 ---
 
-### 2. collision-config.test.vitest.mjs - 48 failures (112 passed)
+## Remaining Failed Test Files (3 total - 40 failures)
 
-**Issue: Collision file functions missing (all 48 failures)**
-- **Affected tests**: All collision mode tests across all 8 matrix configs
-  - "String shorthand > normalize collision mode case-insensitively (MERGE)"
-  - "String shorthand > default invalid modes to merge"
-  - "collision.api modes > merge mode"
-  - "collision.api modes > merge-replace mode"
-  - "collision.api modes > replace mode"
-  - "Collision with complex structures > merge nested properties"
-
-- **Expected**: Functions from collision file exist: `math.power`, `math.sqrt`, `math.modulo`
-- **Actual**: All collision file functions are `undefined`
-- **Root cause**: **CRITICAL** - Collision resolution not properly merging properties from colliding modules
-
-**Details**:
-```javascript
-// Test uses api_test_collisions which has:
-// - math.mjs (FILE): exports power(), sqrt(), modulo(), collisionVersion="math-collision-v1"
-// - math/ (FOLDER): exports add(), multiply(), divide(), subtract()
-
-// Expected behavior (merge mode):
-api.math.add()      // ✅ From folder
-api.math.power()    // ❌ Missing - from file
-api.math.sqrt()     // ❌ Missing - from file
-api.math.modulo()   // ❌ Missing - from file
-```
-
----
-
-### 3. add-api.test.vitest.mjs - 8 failures (48 passed)
+### 1. metadata-collision-modes.test.vitest.mjs - 28 failures (68 passed)
 
 **Issue: api.add() validation not rejecting null**
 - **Affected test**: "should throw appropriate errors for invalid inputs" (all 8 matrix configs)
@@ -83,7 +69,7 @@ api.math.modulo()   // ❌ Missing - from file
 
 ---
 
-### 4. addapi-stack-trace-path.test.vitest.mjs - 4 failures (4 passed)
+### 2. add-api.test.vitest.mjs - 8 failures (48 passed)
 
 **Issue: API structure type mismatch**
 - **Affected test**: "should resolve relative path from closure definition location" (LAZY modes only)
@@ -95,13 +81,7 @@ api.math.modulo()   // ❌ Missing - from file
 
 ## Priority Issues to Fix
 
-### 🔴 CRITICAL (48 failures)
-**collision-config.test.vitest.mjs - Collision resolution broken**
-- Collision file properties not being merged
-- All collision modes affected (merge, merge-replace, replace)
-- **Impact**: Core collision resolution system not working
-
-### 🟡 HIGH (16 failures)
+###  HIGH (16 failures)
 **metadata-collision-modes.test.vitest.mjs - conflictingMetadata cleanup**
 - Flag persisting when should be removed
 - Affects skip and warn modes
