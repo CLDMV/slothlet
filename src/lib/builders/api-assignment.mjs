@@ -158,6 +158,15 @@ export class ApiAssignment extends ComponentBase {
 					const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
 					const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
 
+					// Store collision mode on the lazy wrapper so it knows how to handle properties during materialization
+					// Use effectiveMode (which includes warn→merge conversion)
+					if (existingIsLazyUnmaterialized) {
+						existingWrapper._collisionMode = effectiveMode;
+					}
+					if (valueIsLazyUnmaterialized) {
+						valueWrapper._collisionMode = effectiveMode;
+					}
+
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
 						// Copy value's childCache (file exports) into existing (lazy folder)

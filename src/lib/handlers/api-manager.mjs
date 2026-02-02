@@ -1139,22 +1139,30 @@ export class ApiManager extends ComponentBase {
 
 		// For root-level additions (empty path), merge keys directly into API
 		// For nested paths, wrap in container
+		// Track if any API assignments succeeded (for metadata registration)
+		let anyAssignmentSucceeded = false;
+
 		if (parts.length === 0) {
 			// Root level - merge each key from newApi directly into api
 			for (const key of Object.keys(newApi)) {
-				await this.setValueAtPath(this.slothlet.api, [key], newApi[key], {
+				const result1 = await this.setValueAtPath(this.slothlet.api, [key], newApi[key], {
 					mutateExisting,
 					collisionMode,
 					moduleId,
 					sourceFolder: resolvedFolderPath
 				});
 
-				await this.setValueAtPath(this.slothlet.boundApi, [key], newApi[key], {
+				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], newApi[key], {
 					mutateExisting,
 					collisionMode,
 					moduleId,
 					sourceFolder: resolvedFolderPath
 				});
+
+				// If at least one succeeded, mark as successful
+				if (result1 || result2) {
+					anyAssignmentSucceeded = true;
+				}
 			}
 		} else {
 			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
@@ -1174,19 +1182,24 @@ export class ApiManager extends ComponentBase {
 				apiToMerge = containerWrapper.createProxy();
 			}
 
-			await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
+			const result1 = await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleId, // Pass moduleId for lifecycle events
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
 
-			await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
+			const result2 = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleId, // Pass moduleId for lifecycle events (boundApi container needs it too)
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
+
+			// If at least one succeeded, mark as successful
+			if (result1 || result2) {
+				anyAssignmentSucceeded = true;
+			}
 		}
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
@@ -1194,7 +1207,7 @@ export class ApiManager extends ComponentBase {
 		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
 		// e.g., "testMerge.config" → "testMerge", "nested.deep.path" → "nested"
 		// For root level (empty path), register metadata on each top-level key
-		if (metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+		if (anyAssignmentSucceeded && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
 			if (parts.length === 0) {
 				// Root level - register metadata on each key from newApi
 				for (const key of Object.keys(newApi)) {

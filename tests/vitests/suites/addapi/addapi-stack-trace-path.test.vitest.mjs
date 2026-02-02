@@ -57,7 +57,11 @@ describe("Stack Trace Path Resolution", () => {
 				expect(api.test.path).toBeDefined();
 
 				// Verify specific API structure from api_test_mixed
-				expect(typeof api.test.path).toBe("object");
+				// Note: In LAZY mode, api.test.path is a callable proxy (typeof === 'function')
+				// but still has the expected namespace properties. Check for properties instead.
+				expect(api.test.path.mathCjs).toBeDefined();
+				expect(api.test.path.mathEsm).toBeDefined();
+				expect(api.test.path.interop).toBeDefined();
 			};
 
 			// Execute the closure through helper function in different file
