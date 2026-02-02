@@ -172,15 +172,19 @@ export class ApiAssignment extends ComponentBase {
 							existingWrapper.__childFilePathsPreMaterialize = {};
 						}
 
-						for (const [key, child] of valueWrapper._childCache.entries()) {
-							existingWrapper._childCache.set(key, child);
+						const valueChildKeys = Object.keys(valueWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+						for (const key of valueChildKeys) {
+							const child = valueWrapper._proxyTarget[key];
+							Object.defineProperty(existingWrapper._proxyTarget, key, {
+								value: child,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
 								existingWrapper.__childFilePathsPreMaterialize[key] = valueFilePath;
 							}
-							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-							// In live runtime, direct property access would return the wrapper instead of unwrapped value
-							// The proxy's get trap will handle unwrapping from _childCache
 						}
 
 						return true; // Keep existing (lazy folder with copied file exports)
@@ -207,15 +211,19 @@ export class ApiAssignment extends ComponentBase {
 								valueWrapper.__childFilePathsPreMaterialize = {};
 							}
 
-							for (const [key, child] of existingWrapper._childCache.entries()) {
-								valueWrapper._childCache.set(key, child);
+							const existingChildKeys = Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+							for (const key of existingChildKeys) {
+								const child = existingWrapper._proxyTarget[key];
+								Object.defineProperty(valueWrapper._proxyTarget, key, {
+									value: child,
+									writable: false,
+									enumerable: true,
+									configurable: true
+								});
 								// Store filePath mapping so child wrappers can inherit correct filePath
 								if (existingFilePath) {
 									valueWrapper.__childFilePathsPreMaterialize[key] = existingFilePath;
 								}
-								// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-								// In live runtime, direct property access would return the wrapper instead of unwrapped value
-								// The proxy's get trap will handle unwrapping from _childCache
 							}
 						} else {
 							// Merge-replace mode: Don't copy anything
@@ -235,29 +243,41 @@ export class ApiAssignment extends ComponentBase {
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
 					// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
-					if (existingWrapper._impl && existingWrapper._childCache.size === 0) {
+					const existingChildCount = Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper").length;
+					const valueChildCount = Object.keys(valueWrapper._proxyTarget).filter((k) => k !== "__wrapper").length;
+					if (existingWrapper._impl && existingChildCount === 0) {
 						existingWrapper._adoptImplChildren();
 					}
-					if (valueWrapper._impl && valueWrapper._childCache.size === 0) {
+					if (valueWrapper._impl && valueChildCount === 0) {
 						valueWrapper._adoptImplChildren();
 					}
 
-					// Merge value's child cache into existing's child cache
+					// Merge value's child properties into existing's child properties
 					// CRITICAL: In merge mode, only ADD new keys, don't OVERWRITE existing ones
 					// In merge-replace mode, ADD new keys AND OVERWRITE existing ones
-					for (const [key, child] of valueWrapper._childCache.entries()) {
-						const keyExists = existingWrapper._childCache.has(key);
+					const valueChildKeys2 = Object.keys(valueWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+					for (const key of valueChildKeys2) {
+						const child = valueWrapper._proxyTarget[key];
+						const keyExists = key in existingWrapper._proxyTarget && key !== "__wrapper";
 
 						if (!keyExists) {
-							existingWrapper._childCache.set(key, child);
-							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-							// In live runtime, direct property access would return the wrapper instead of unwrapped value
-							// The proxy's get trap will handle unwrapping from _childCache
+							Object.defineProperty(existingWrapper._proxyTarget, key, {
+								value: child,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
 						} else if (isMergeReplace) {
-							existingWrapper._childCache.set(key, child);
-							// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
-							// In live runtime, direct property access would return the wrapper instead of unwrapped value
-							// The proxy's get trap will handle unwrapping from _childCache
+							const descriptor = Object.getOwnPropertyDescriptor(existingWrapper._proxyTarget, key);
+							if (descriptor?.configurable) {
+								delete existingWrapper._proxyTarget[key];
+							}
+							Object.defineProperty(existingWrapper._proxyTarget, key, {
+								value: child,
+								writable: false,
+								enumerable: true,
+								configurable: true
+							});
 						}
 					}
 					// The value wrapper has the materializeFunc that will load folder's exports
