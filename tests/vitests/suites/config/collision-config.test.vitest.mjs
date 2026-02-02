@@ -106,7 +106,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect([5, 1005]).toContain(addResult); // Either file (1005) or folder (5)
 
 			// Try to add collision content to math path (should be skipped by api: "skip")
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-skip-shorthand"
 			});
 
@@ -130,7 +130,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
 
 			// Add collision content to math path (should merge despite uppercase)
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-merge-uppercase"
 			});
 
@@ -153,7 +153,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
 
 			// Add collision content - should merge (invalid mode defaults to merge)
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-invalid-mode"
 			});
 
@@ -328,7 +328,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST) after initial merge
 
 			// Add math-collision.mjs content to existing math path - should merge
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-collision"
 			});
 
@@ -359,7 +359,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			// Based on our earlier examination, math-collision.mjs doesn't have 'add'
 			// So let's test that original 'add' is preserved and new functions are added
 
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-collision-replace"
 			});
 
@@ -389,7 +389,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(originalAdd).toBeTypeOf("function");
 
 			// Replace math path with math-collision.mjs content
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-collision"
 			});
 
@@ -424,7 +424,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(await originalAdd(2, 3)).toBe(1005); // File's version (FIRST)
 
 			// Try to add collision content to math path (should be skipped)
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-skip"
 			});
 
@@ -447,7 +447,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			const originalAdd = math.add;
 
 			// Try to add collision content to math path (should warn and skip)
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "math-warn"
 			});
 
@@ -469,7 +469,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// Try to add collision content to math path (should throw)
 			await expect(
-				api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+				api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 					moduleId: "math-error"
 				})
 			).rejects.toThrow();
@@ -487,7 +487,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 
 			// api.add() collision should throw (error mode)
 			await expect(
-				api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+				api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 					moduleId: "test-error"
 				})
 			).rejects.toThrow();
@@ -528,7 +528,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 
 			// Add collision content to math path (should merge at all levels)
-			await api.slothlet.api.add("math", TEST_DIRS.API_TEST_COLLECTIONS, {
+			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
 				moduleId: "nested-merge"
 			});
 
