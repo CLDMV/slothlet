@@ -76,27 +76,84 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Normalize and validate an API path.
-	 * @param {string} apiPath - Dot-delimited API path.
+	 * @param {string|string[]} apiPath - Dot-delimited API path, array of path segments, or empty/null for root.
 	 * @returns {{ apiPath: string, parts: string[] }} Normalized path data.
 	 * @throws {SlothletError} When apiPath is invalid.
 	 * @private
 	 *
 	 * @description
-	 * Ensures the API path is a non-empty string and contains no empty segments.
+	 * Ensures the API path is valid. Accepts:
+	 * - String: "some.path" → parts: ["some", "path"]
+	 * - Array: ["some", "path"] → parts: ["some", "path"]
+	 * - Empty string, null, or undefined → root level (parts: [])
+	 * Non-empty paths must contain no empty segments.
 	 *
 	 * @example
 	 * const { apiPath, parts } = this.normalizeApiPath("plugins.tools");
+	 * const { apiPath, parts } = this.normalizeApiPath(["plugins", "tools"]);
+	 * const { apiPath, parts } = this.normalizeApiPath(""); // Root level: parts = []
 	 */
 	normalizeApiPath(apiPath) {
-		if (!apiPath || typeof apiPath !== "string") {
+		// Allow empty string, null, or undefined for root-level operations
+		if (apiPath === "" || apiPath === null || apiPath === undefined) {
+			return { apiPath: "", parts: [] };
+		}
+
+		// Handle array input - convert to dot-separated string
+		if (Array.isArray(apiPath)) {
+			// Validate array elements
+			if (apiPath.length === 0) {
+				return { apiPath: "", parts: [] };
+			}
+
+			for (let i = 0; i < apiPath.length; i++) {
+				if (typeof apiPath[i] !== "string") {
+					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+						apiPath,
+						segment: apiPath[i],
+						index: i,
+						reason: "array elements must be strings",
+						validationError: true
+					});
+				}
+				if (apiPath[i].trim() === "") {
+					throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+						apiPath,
+						segment: apiPath[i],
+						index: i,
+						reason: "array contains empty string segments",
+						validationError: true
+					});
+				}
+			}
+
+			// Check for reserved names
+			if (apiPath[0] === "slothlet" || (apiPath.length === 1 && (apiPath[0] === "shutdown" || apiPath[0] === "destroy"))) {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
+					validationError: true
+				});
+			}
+
+			return { apiPath: apiPath.join("."), parts: apiPath };
+		}
+
+		if (typeof apiPath !== "string") {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
-				reason: "must be a non-empty string",
+				reason: "must be a string, array of strings, empty string (root), or null/undefined (root)",
 				validationError: true
 			});
 		}
 
 		const normalized = apiPath.trim();
+
+		// Empty string after trim means root
+		if (normalized === "") {
+			return { apiPath: "", parts: [] };
+		}
+
 		const parts = normalized.split(".");
 		if (parts.length === 0 || parts.some((part) => part.trim() === "")) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
@@ -1035,8 +1092,9 @@ export class ApiManager extends ComponentBase {
 		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: resolvedFolderPath,
 			mode: this.config.mode,
-			// Use apiPathPrefix to ensure wrappers have correct full API paths including namespace
-			// This is critical for metadata.moduleID to match the actual access path
+			// Use apiPathPrefix so wrappers have correct full API paths
+			// User specified the path, folder loads normally under that path
+			// Empty string means root level (no prefix)
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
 			moduleId: moduleId,
@@ -1063,89 +1121,87 @@ export class ApiManager extends ComponentBase {
 				.map((k) => ({ key: k, type: typeof newApi[k] }))
 		});
 
-		// Extract nested API if buildAPI returned { [apiPath]: {...} } structure
-		// This happens when the folder contains a file matching the target path name
-		// Example: api.add("config", folder) where folder has config.mjs WITHOUT apiPathPrefix
-		// buildAPI returns { config: {...} }, we want just {...}
-		//
-		// HOWEVER: When apiPathPrefix is used, buildAPI returns the content directly
-		// (e.g., { main: ..., config: ... } for apiPathPrefix="math"), so we use the whole newApi
+		// Use the full newApi structure - user specified the path, folder loads under it
+		// Example: api.add("math", folder_with_math.mjs) creates api.math.math.add
+		// Example: api.add("", folder) or api.add(null, folder) loads directly to root
+		// This is expected - user said "load under math", folder creates "math" namespace
 		let apiToMerge = newApi;
-		const finalKey = parts[parts.length - 1];
-		const newApiKeys = Object.keys(newApi);
-		this.slothlet.debug("api", {
-			message: "addApiComponent finalKey",
-			finalKey,
-			newApiKeys
-		});
-
-		// Only extract finalKey if we're NOT using apiPathPrefix (prefix means content is already structured)
-		if (newApi[finalKey] !== undefined && !normalizedPath.includes(".")) {
-			this.slothlet.debug("api", {
-				message: "addApiComponent extracting key",
-				finalKey,
-				isWrapper: this.isWrapperProxy(newApi[finalKey])
-			});
-			apiToMerge = newApi[finalKey];
-			if (this.config.debug?.api) {
-				this.slothlet.debug("api", {
-					message: "addApiComponent extracted key",
-					finalKey,
-					extractedKeys: Object.keys(apiToMerge)
-				});
-			}
-		} else {
-			this.slothlet.debug("api", {
-				message: "addApiComponent using full newApi",
-				reason: "apiPathPrefix mode or no finalKey match"
-			});
-		}
 
 		if (this.config.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "addApiComponent apiToMerge keys",
-				keys: Object.keys(apiToMerge)
+				keys: Object.keys(apiToMerge),
+				isRootLevel: parts.length === 0
 			});
 		}
 
-		// Wrap apiToMerge in a UnifiedWrapper for the root added path (e.g., "lookup")
-		// This ensures api.lookup.__metadata exists and works properly
-		// The wrapper acts as a namespace container for the loaded API modules
-		if (!apiToMerge.__wrapper) {
-			const containerWrapper = new UnifiedWrapper(this.slothlet, {
-				apiPath: normalizedPath,
-				mode: this.config.mode,
-				moduleId: moduleId,
-				filePath: resolvedFolderPath,
-				sourceFolder: resolvedFolderPath
+		// For root-level additions (empty path), merge keys directly into API
+		// For nested paths, wrap in container
+		if (parts.length === 0) {
+			// Root level - merge each key from newApi directly into api
+			for (const key of Object.keys(newApi)) {
+				await this.setValueAtPath(this.slothlet.api, [key], newApi[key], {
+					mutateExisting,
+					collisionMode,
+					moduleId,
+					sourceFolder: resolvedFolderPath
+				});
+
+				await this.setValueAtPath(this.slothlet.boundApi, [key], newApi[key], {
+					mutateExisting,
+					collisionMode,
+					moduleId,
+					sourceFolder: resolvedFolderPath
+				});
+			}
+		} else {
+			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
+			// This ensures api.lookup.__metadata exists and works properly
+			// The wrapper acts as a namespace container for the loaded API modules
+			if (!apiToMerge.__wrapper) {
+				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+					apiPath: normalizedPath,
+					mode: this.config.mode,
+					moduleId: moduleId,
+					filePath: resolvedFolderPath,
+					sourceFolder: resolvedFolderPath
+				});
+				// Set the apiToMerge object as the impl
+				containerWrapper.__setImpl(apiToMerge, moduleId);
+				// Replace apiToMerge with the wrapped proxy
+				apiToMerge = containerWrapper.createProxy();
+			}
+
+			await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
+				mutateExisting,
+				collisionMode,
+				moduleId, // Pass moduleId for lifecycle events
+				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
-			// Set the apiToMerge object as the impl
-			containerWrapper.__setImpl(apiToMerge, moduleId);
-			// Replace apiToMerge with the wrapped proxy
-			apiToMerge = containerWrapper.createProxy();
+
+			await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
+				mutateExisting,
+				collisionMode,
+				moduleId, // Pass moduleId for lifecycle events (boundApi container needs it too)
+				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
+			});
 		}
-
-		await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
-			mutateExisting,
-			collisionMode,
-			moduleId, // Pass moduleId for lifecycle events
-			sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-		});
-
-		const boundApiSet = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
-			mutateExisting,
-			collisionMode,
-			moduleId, // Pass moduleId for lifecycle events (boundApi container needs it too)
-			sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
-		});
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
 		// Metadata will be looked up via apiPath stored in system metadata on each wrapper
 		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
 		// e.g., "testMerge.config" → "testMerge", "nested.deep.path" → "nested"
-		if (boundApiSet && metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
-			const rootSegment = normalizedPath.split(".")[0];
-			this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
+		// For root level (empty path), register metadata on each top-level key
+		if (metadata && Object.keys(metadata).length > 0 && this.slothlet.handlers.metadata) {
+			if (parts.length === 0) {
+				// Root level - register metadata on each key from newApi
+				for (const key of Object.keys(newApi)) {
+					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
+				}
+			} else {
+				const rootSegment = normalizedPath.split(".")[0];
+				this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
+			}
 		}
 
 		if (this.slothlet.handlers.ownership && moduleId) {
