@@ -120,7 +120,7 @@ export class ModesProcessor extends ComponentBase {
 					});
 				}
 				const wrapper = new UnifiedWrapper(this.slothlet, {
-					effectiveMode,
+					mode: effectiveMode,
 					apiPath: buildApiPath(categoryName),
 					initialImpl,
 					filePath: directory.path,
@@ -326,7 +326,7 @@ export class ModesProcessor extends ComponentBase {
 							// CRITICAL: Wrap the object so all its functions get context wrapping
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									effectiveMode,
+									mode: effectiveMode,
 									apiPath: buildApiPath(categoryName),
 									initialImpl: exportedValue,
 									materializeOnCreate: config.backgroundMaterialize,
@@ -385,7 +385,7 @@ export class ModesProcessor extends ComponentBase {
 						moduleContent = callableModule;
 						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
-								effectiveMode,
+								mode: effectiveMode,
 								apiPath: buildApiPath(categoryName),
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								materializeOnCreate: config.backgroundMaterialize,
@@ -411,7 +411,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (shouldWrap) {
 									const namedWrapper = new UnifiedWrapper(this.slothlet, {
-										effectiveMode,
+										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: mod[key],
 										materializeOnCreate: config.backgroundMaterialize,
@@ -469,7 +469,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const [propKey, propValue] of Object.entries(matchingObj)) {
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
-										effectiveMode,
+										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${propKey}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
 										materializeOnCreate: config.backgroundMaterialize,
@@ -504,7 +504,7 @@ export class ModesProcessor extends ComponentBase {
 								if (key !== moduleName) {
 									if (shouldWrap) {
 										const wrapper = new UnifiedWrapper(this.slothlet, {
-											effectiveMode,
+											mode: effectiveMode,
 											apiPath: buildApiPath(`${categoryName}.${key}`),
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 											materializeOnCreate: config.backgroundMaterialize,
@@ -559,7 +559,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (shouldWrap) {
 									const wrapper = new UnifiedWrapper(this.slothlet, {
-										effectiveMode,
+										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 										materializeOnCreate: config.backgroundMaterialize,
@@ -624,7 +624,7 @@ export class ModesProcessor extends ComponentBase {
 							const preferredName = key;
 							if (shouldWrap) {
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									effectiveMode,
+									mode: effectiveMode,
 									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 									materializeOnCreate: config.backgroundMaterialize,
@@ -661,7 +661,7 @@ export class ModesProcessor extends ComponentBase {
 				if (shouldWrap) {
 					const localPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 					const wrapper = new UnifiedWrapper(this.slothlet, {
-						effectiveMode,
+						mode: effectiveMode,
 						apiPath: buildApiPath(localPath),
 						initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 						materializeOnCreate: config.backgroundMaterialize,
@@ -833,7 +833,7 @@ export class ModesProcessor extends ComponentBase {
 
 								// Flatten: put the module content directly at targetApi[subDirName]
 								const wrapper = new UnifiedWrapper(this.slothlet, {
-									effectiveMode,
+									mode: effectiveMode,
 									apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
 									initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 									materializeOnCreate: config.backgroundMaterialize,
@@ -946,7 +946,7 @@ export class ModesProcessor extends ComponentBase {
 					// Wrap in UnifiedWrapper if needed
 					if (shouldWrap) {
 						const wrapper = new UnifiedWrapper(this.slothlet, {
-							effectiveMode,
+							mode: effectiveMode,
 							apiPath: buildApiPath(moduleName),
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
 							materializeOnCreate: config.backgroundMaterialize,

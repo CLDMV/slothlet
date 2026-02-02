@@ -142,11 +142,30 @@ export class ApiAssignment extends ComponentBase {
 				effectiveMode = "merge";
 			}
 
+			// CRITICAL: Store collision mode on lazy wrappers BEFORE any collision handling
+			// This must happen for ALL modes (merge, merge-replace, replace) so materialization knows how to handle properties
+			const existingIsWrapper = this.isWrapperProxy(existing);
+			const valueIsWrapper = this.isWrapperProxy(value);
+
+			if (existingIsWrapper && valueIsWrapper) {
+				const existingWrapper = existing.__wrapper;
+				const valueWrapper = value.__wrapper;
+				const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
+				const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
+
+				// Store collision mode on lazy wrappers so they know how to handle properties during materialization
+				// Use effectiveMode (which includes warn→merge conversion)
+				if (existingIsLazyUnmaterialized) {
+					existingWrapper._collisionMode = effectiveMode;
+				}
+				if (valueIsLazyUnmaterialized) {
+					valueWrapper._collisionMode = effectiveMode;
+				}
+			}
+
 			if (effectiveMode === "merge" || effectiveMode === "merge-replace") {
 				const isMergeReplace = effectiveMode === "merge-replace";
 				// Special handling for wrapper proxies - merge their implementations
-				const existingIsWrapper = this.isWrapperProxy(existing);
-				const valueIsWrapper = this.isWrapperProxy(value);
 
 				if (existingIsWrapper && valueIsWrapper) {
 					// Both are wrappers - merge their child caches (properties are moved there during adoption)
@@ -157,15 +176,6 @@ export class ApiAssignment extends ComponentBase {
 					// When the lazy wrapper materializes, it will merge with the copied childCache
 					const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
 					const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
-
-					// Store collision mode on the lazy wrapper so it knows how to handle properties during materialization
-					// Use effectiveMode (which includes warn→merge conversion)
-					if (existingIsLazyUnmaterialized) {
-						existingWrapper._collisionMode = effectiveMode;
-					}
-					if (valueIsLazyUnmaterialized) {
-						valueWrapper._collisionMode = effectiveMode;
-					}
 
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
