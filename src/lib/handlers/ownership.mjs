@@ -37,7 +37,8 @@ export class OwnershipManager extends ComponentBase {
 		if (!moduleId || typeof moduleId !== "string") {
 			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
 		}
-		if (!apiPath || typeof apiPath !== "string") {
+		// Allow empty string for root-level registrations
+		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
 			throw new this.SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
 		}
 
