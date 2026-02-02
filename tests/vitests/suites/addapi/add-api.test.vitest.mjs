@@ -86,18 +86,13 @@ describe("api.slothlet.api.add Functionality", () => {
 		});
 
 		/**
-		 * Test 3: Error handling - 8 error conditions
+		 * Test 3: Error handling - 5 error conditions
 		 * Covers: test_addApi_errors from original
+		 * Note: null, "", and whitespace-only paths are now valid (root-level addition after trimming)
 		 */
 		it("should throw appropriate errors for invalid inputs", async () => {
 			// Non-existent folder
 			await expect(api.slothlet.api.add("test", "/non/existent/path")).rejects.toThrow("Configuration error");
-
-			// Non-string apiPath
-			await expect(api.slothlet.api.add(null, TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
-
-			// Empty apiPath
-			await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
 
 			// Consecutive dots
 			await expect(api.slothlet.api.add("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
@@ -107,9 +102,6 @@ describe("api.slothlet.api.add Functionality", () => {
 
 			// Trailing dot
 			await expect(api.slothlet.api.add("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
-
-			// Whitespace-only apiPath
-			await expect(api.slothlet.api.add("   ", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow(/non-empty/);
 
 			// Non-string folderPath
 			await expect(api.slothlet.api.add("test", null)).rejects.toThrow("Configuration error");

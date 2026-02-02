@@ -446,14 +446,27 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		const observedKeys = new Set();
 
-		// CRITICAL: If _proxyTarget already has entries (from collision merge), this is a MERGE scenario
-		// In merge mode, we should NEVER delete existing entries - only add new ones
+		// CRITICAL: Check stored collision mode to determine how to handle existing properties
+		// - For "replace" mode: Clear existing properties before adopting new ones
+		// - For "merge" or "merge-replace": Keep existing properties and merge
 		const existingKeys = this._proxyTarget ? Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper") : [];
-		const isMergeScenario = existingKeys.length > 0;
-
-		// Add existing _proxyTarget keys to observedKeys so they don't get deleted
-		for (const key of existingKeys) {
-			observedKeys.add(key);
+		const storedCollisionMode = this._collisionMode; // Set during collision in api-assignment.mjs
+		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
+		
+		// If collision mode is "replace", clear existing properties from collision
+		if (storedCollisionMode === "replace" && existingKeys.length > 0) {
+			for (const key of existingKeys) {
+				const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
+				if (descriptor?.configurable) {
+					delete this._proxyTarget[key];
+				}
+			}
+			// Don't add to observedKeys - let them be replaced
+		} else {
+			// For merge modes, add existing _proxyTarget keys to observedKeys so they don't get deleted
+			for (const key of existingKeys) {
+				observedKeys.add(key);
+			}
 		}
 
 		const skipKeys = typeof this._impl === "function" ? new Set(["length", "name", "prototype"]) : null;
