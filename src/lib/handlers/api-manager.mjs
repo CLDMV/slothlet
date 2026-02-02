@@ -325,67 +325,93 @@ export class ApiManager extends ComponentBase {
 		// THE ACTUAL FIX: Transfer _childCache entries directly
 		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
-		if (nextWrapper._childCache && existingWrapper._childCache) {
-			if (config?.debug?.api) {
-				this.slothlet.debug("api", {
-					message: "syncWrapper before merge",
-					existingCacheSize: existingWrapper._childCache.size,
-					nextCacheSize: nextWrapper._childCache.size
-				});
-				this.slothlet.debug("api", {
-					message: "syncWrapper next wrapper impl keys",
-					implKeys: Object.keys(nextWrapper._impl || {})
-				});
-				this.slothlet.debug("api", {
-					message: "syncWrapper next wrapper childCache keys",
-					childCacheKeys: Array.from(nextWrapper._childCache.keys())
-				});
+		// Transfer children from _proxyTarget properties
+		const existingChildKeys = Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+		const nextChildKeys = Object.keys(nextWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+
+		if (config?.debug?.api) {
+			this.slothlet.debug("api", {
+				message: "syncWrapper before merge",
+				existingCacheSize: existingChildKeys.length,
+				nextCacheSize: nextChildKeys.length
+			});
+			this.slothlet.debug("api", {
+				message: "syncWrapper next wrapper impl keys",
+				implKeys: Object.keys(nextWrapper._impl || {})
+			});
+			this.slothlet.debug("api", {
+				message: "syncWrapper next wrapper childCache keys",
+				childCacheKeys: nextChildKeys
+			});
+		}
+
+		// Merge child wrappers from next to existing based on collision mode
+		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
+		if (collisionMode === "replace") {
+			// CRITICAL: Use __setImpl to trigger lifecycle events for ownership tracking
+			// This ensures impl:changed fires with the correct moduleId
+			if (existingWrapper.__setImpl && nextWrapper._impl !== undefined) {
+				// Pass moduleId for correct ownership tracking in lifecycle events
+				existingWrapper.__setImpl(nextWrapper._impl, moduleId);
+			} else if (nextWrapper._impl === undefined) {
+				// For lazy mode or unmaterialized wrappers, clear the existing impl
+				// so that materialization will load the correct module
+				existingWrapper._impl = null;
+			} else {
+				// Fallback for non-unified wrappers
+				if (nextWrapper._impl !== undefined) {
+					existingWrapper._impl = nextWrapper._impl;
+					// Update callable status
+					if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
+						existingWrapper.isCallable = true;
+					}
+				}
 			}
 
-			// Merge child wrappers from next to existing based on collision mode
-			// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
-			if (collisionMode === "replace") {
-				// CRITICAL: Use __setImpl to trigger lifecycle events for ownership tracking
-				// This ensures impl:changed fires with the correct moduleId
-				if (existingWrapper.__setImpl && nextWrapper._impl !== undefined) {
-					// Pass moduleId for correct ownership tracking in lifecycle events
-					existingWrapper.__setImpl(nextWrapper._impl, moduleId);
-				} else if (nextWrapper._impl === undefined) {
-					// For lazy mode or unmaterialized wrappers, clear the existing impl
-					// so that materialization will load the correct module
-					existingWrapper._impl = null;
-				} else {
-					// Fallback for non-unified wrappers
-					if (nextWrapper._impl !== undefined) {
-						existingWrapper._impl = nextWrapper._impl;
-						// Update callable status
-						if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
-							existingWrapper.isCallable = true;
-						}
-					}
-				}
+			// Clear existing children by deleting properties
+			for (const key of existingChildKeys) {
+				delete existingWrapper._proxyTarget[key];
+			}
+			existingWrapper._adoptImplChildren();
 
-				// Clear existing child cache and adopt children from the new impl
-				existingWrapper._childCache.clear();
-				existingWrapper._adoptImplChildren();
-
-				// Also copy any child wrappers that nextWrapper already has in its cache
-				// (this handles cases where nextWrapper was built with pre-existing children)
-				for (const [key, childValue] of nextWrapper._childCache.entries()) {
-					existingWrapper._childCache.set(key, childValue);
+			// Also copy any child wrappers that nextWrapper already has
+			// (this handles cases where nextWrapper was built with pre-existing children)
+			for (const key of nextChildKeys) {
+				const childValue = nextWrapper._proxyTarget[key];
+				Object.defineProperty(existingWrapper._proxyTarget, key, {
+					value: childValue,
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
+			}
+		} else if (collisionMode === "merge") {
+			// Keep existing, only add new keys
+			for (const key of nextChildKeys) {
+				if (!(key in existingWrapper._proxyTarget)) {
+					const childValue = nextWrapper._proxyTarget[key];
+					Object.defineProperty(existingWrapper._proxyTarget, key, {
+						value: childValue,
+						writable: false,
+						enumerable: true,
+						configurable: true
+					});
 				}
-			} else if (collisionMode === "merge") {
-				// Keep existing, only add new keys
-				for (const [key, childValue] of nextWrapper._childCache.entries()) {
-					if (!existingWrapper._childCache.has(key)) {
-						existingWrapper._childCache.set(key, childValue);
-					}
+			}
+		} else if (collisionMode === "merge-replace") {
+			// Add new keys and replace existing
+			for (const key of nextChildKeys) {
+				const childValue = nextWrapper._proxyTarget[key];
+				// Delete existing first if present
+				if (key in existingWrapper._proxyTarget) {
+					delete existingWrapper._proxyTarget[key];
 				}
-			} else if (collisionMode === "merge-replace") {
-				// Add new keys and replace existing
-				for (const [key, childValue] of nextWrapper._childCache.entries()) {
-					existingWrapper._childCache.set(key, childValue);
-				}
+				Object.defineProperty(existingWrapper._proxyTarget, key, {
+					value: childValue,
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
 			}
 		}
 
@@ -698,9 +724,9 @@ export class ApiManager extends ComponentBase {
 		// Properties are stored in childCache and _impl, not on the proxy itself
 		if (current.__wrapper) {
 			const wrapper = current.__wrapper;
-			// Delete from childCache (cached proxy instances)
-			if (wrapper._childCache && wrapper._childCache.has(finalKey)) {
-				wrapper._childCache.delete(finalKey);
+			// Delete from _proxyTarget (cached proxy instances)
+			if (finalKey in wrapper._proxyTarget) {
+				delete wrapper._proxyTarget[finalKey];
 			}
 			// Delete from _impl (the actual implementation object)
 			if (wrapper._impl && typeof wrapper._impl === "object") {
@@ -720,9 +746,10 @@ export class ApiManager extends ComponentBase {
 				if (wrapper._impl !== undefined) {
 					wrapper._impl = null;
 				}
-				// Clear child cache to release references
-				if (wrapper._childCache) {
-					wrapper._childCache.clear();
+				// Clear children from _proxyTarget to release references
+				const childKeys = Object.keys(wrapper._proxyTarget).filter((k) => k !== "__wrapper");
+				for (const key of childKeys) {
+					delete wrapper._proxyTarget[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
 				if (wrapper._state) {
@@ -801,7 +828,7 @@ export class ApiManager extends ComponentBase {
 				visited.add(currentValue);
 
 				// Skip special properties that shouldn't be recursively registered
-				const skipProps = new Set(["__wrapper", "__metadata", "__materialize", "__type", "_impl", "_childCache"]);
+				const skipProps = new Set(["__wrapper", "__metadata", "__materialize", "__type", "_impl"]);
 
 				for (const [key, child] of Object.entries(currentValue)) {
 					if (!skipProps.has(key)) {
@@ -1028,8 +1055,8 @@ export class ApiManager extends ComponentBase {
 					key: k,
 					apiPath: newApi[k].__wrapper.apiPath,
 					implKeys: Object.keys(newApi[k].__wrapper._impl || {}),
-					childCacheSize: newApi[k].__wrapper._childCache?.size,
-					childCacheKeys: Array.from(newApi[k].__wrapper._childCache?.keys() || [])
+					childCacheSize: Object.keys(newApi[k].__wrapper._proxyTarget).filter((k) => k !== "__wrapper").length,
+					childCacheKeys: Object.keys(newApi[k].__wrapper._proxyTarget).filter((k) => k !== "__wrapper")
 				})),
 			nonWrappers: Object.keys(newApi)
 				.filter((k) => !newApi[k]?.__wrapper)

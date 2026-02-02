@@ -158,14 +158,10 @@ export class UnifiedWrapper extends ComponentBase {
 			typeof isCallable === "boolean"
 				? isCallable
 				: typeof initialImpl === "function" || (initialImpl && typeof initialImpl.default === "function");
-
-		// Initialize _proxyTarget EARLY - before any child adoption
-		// Use callable target for functions, plain object otherwise
-		const shouldBeCallable = this.isCallable || (mode === "lazy" && !initialImpl);
-		this._proxyTarget = shouldBeCallable ? createNamedProxyTarget(apiPath, "proxyTarget") : {};
-
+		this._childCache = new Map();
 		this._waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
 		this._proxy = null;
+		this._proxyTarget = null;
 		this._invalid = false;
 		this._impl = initialImpl;
 		this._userMetadata = userMetadata || {}; // Store user metadata for inheritance
@@ -215,12 +211,11 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			this._adoptImplChildren();
 			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
-				const childKeys = Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper");
 				this.slothlet.debug("wrapper", {
 					message: "UnifiedWrapper constructor - after adopt",
 					apiPath,
-					childCount: childKeys.length,
-					childKeySample: childKeys.slice(0, 5)
+					childCacheSize: this._childCache.size,
+					childCacheKeySample: Array.from(this._childCache.keys()).slice(0, 5)
 				});
 			}
 		}
@@ -231,14 +226,13 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @returns {*} The actual implementation for inspection.
 	 */
 	[util.inspect.custom](depth, options, inspect) {
-		// If we have children in _proxyTarget AND we're not a function/callable, show them
+		// If we have children in _childCache AND we're not a function/callable, show them
 		// (functions with attached properties might have children, but we want to show the function itself)
-		const childKeys = this._proxyTarget ? Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper") : [];
-		if (childKeys.length > 0 && !this.isCallable) {
+		if (this._childCache && this._childCache.size > 0 && !this.isCallable) {
 			const inspectObj = {};
-			for (const key of childKeys) {
+			for (const [key, wrapper] of this._childCache.entries()) {
 				// Return the proxy/wrapper directly - Node will recursively inspect it
-				inspectObj[key] = this._proxyTarget[key];
+				inspectObj[key] = wrapper;
 			}
 			return inspectObj;
 		}
@@ -406,7 +400,7 @@ export class UnifiedWrapper extends ComponentBase {
 	__invalidate() {
 		this._invalid = true;
 		this._impl = null;
-		// Clear all child properties from _proxyTarget
+		this._childCache.clear();
 		if (this._proxyTarget && (typeof this._proxyTarget === "object" || typeof this._proxyTarget === "function")) {
 			for (const key of Reflect.ownKeys(this._proxyTarget)) {
 				if (key === "__wrapper") {
@@ -425,8 +419,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @returns {void}
 	 *
 	 * @description
-	 * Moves child properties off the impl and into the _proxyTarget as properties
-	 * so this wrapper only represents the current API path.
+	 * Moves child properties off the impl and into cached wrappers so this
+	 * wrapper only represents the current API path.
 	 *
 	 * @example
 	 * wrapper._adoptImplChildren();
@@ -446,13 +440,12 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 		const observedKeys = new Set();
 
-		// CRITICAL: If _proxyTarget already has entries (from collision merge), this is a MERGE scenario
+		// CRITICAL: If childCache already has entries (from collision merge), this is a MERGE scenario
 		// In merge mode, we should NEVER delete existing entries - only add new ones
-		const existingKeys = this._proxyTarget ? Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper") : [];
-		const isMergeScenario = existingKeys.length > 0;
+		const isMergeScenario = this._childCache.size > 0;
 
-		// Add existing _proxyTarget keys to observedKeys so they don't get deleted
-		for (const key of existingKeys) {
+		// Add existing childCache keys to observedKeys so they don't get deleted
+		for (const key of this._childCache.keys()) {
 			observedKeys.add(key);
 		}
 
@@ -475,11 +468,12 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			observedKeys.add(key);
 
-			// CRITICAL: Check if _proxyTarget already has this key (from collision merge)
-			if (key in this._proxyTarget && key !== "__wrapper") {
+			// CRITICAL: Check if childCache already has this key (from collision merge)
+			// childCache contains RAW functions/values, not wrappers, so just check if key exists
+			if (this._childCache.has(key)) {
 				// Keep existing entry (don't replace) - preserves merge-mode behavior
 				// CRITICAL: Remove this key from impl to prevent conflicts
-				// The _proxyTarget entry takes precedence in merge mode
+				// The childCache entry takes precedence in merge mode
 				if (descriptor.configurable) {
 					delete this._impl[key];
 				}
@@ -488,24 +482,16 @@ export class UnifiedWrapper extends ComponentBase {
 
 			const wrapped = this._createChildWrapper(key, value);
 			if (wrapped) {
-				// Store wrapper as property using defineProperty
-				Object.defineProperty(this._proxyTarget, key, {
-					value: wrapped,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				this._childCache.set(key, wrapped);
+				// NOTE: Do NOT set wrapped on _proxyTarget - it's a wrapper object
+				// In live runtime, direct property access would return the wrapper instead of unwrapped value
+				// The proxy's get trap will handle unwrapping from _childCache
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
 			} else if (wrapped === null) {
 				// _createChildWrapper returned null, meaning this value should be stored unwrapped
-				Object.defineProperty(this._proxyTarget, key, {
-					value: value,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				this._childCache.set(key, value);
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
 				}
@@ -515,16 +501,18 @@ export class UnifiedWrapper extends ComponentBase {
 		// Only clean up unobserved keys if this is NOT a merge scenario
 		// In merge mode (isMergeScenario=true), we want to keep ALL existing entries
 		if (!isMergeScenario) {
-			const currentKeys = this._proxyTarget ? Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper") : [];
-			for (const key of currentKeys) {
+			for (const key of this._childCache.keys()) {
 				if (!observedKeys.has(key)) {
-					const existing = this._proxyTarget[key];
+					const existing = this._childCache.get(key);
 					if (existing && typeof existing.__invalidate === "function") {
 						existing.__invalidate();
 					}
-					const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
-					if (descriptor?.configurable) {
-						delete this._proxyTarget[key];
+					this._childCache.delete(key);
+					if (this._proxyTarget && Object.prototype.hasOwnProperty.call(this._proxyTarget, key)) {
+						const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
+						if (descriptor?.configurable) {
+							delete this._proxyTarget[key];
+						}
 					}
 				}
 			}
@@ -536,16 +524,12 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
-			const existingKeys = existingWrapper._proxyTarget ? Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper") : [];
-			for (const key of existingKeys) {
-				if (!(key in this._proxyTarget) || key === "__wrapper") {
-					const child = existingWrapper._proxyTarget[key];
-					Object.defineProperty(this._proxyTarget, key, {
-						value: child,
-						writable: false,
-						enumerable: true,
-						configurable: true
-					});
+			for (const [key, child] of existingWrapper._childCache.entries()) {
+				if (!this._childCache.has(key)) {
+					this._childCache.set(key, child);
+					// NOTE: Do NOT set child on _proxyTarget - it's a wrapper object
+					// In live runtime, direct property access would return the wrapper instead of unwrapped value
+					// The proxy's get trap will handle unwrapping from _childCache
 				}
 			}
 
@@ -694,14 +678,14 @@ export class UnifiedWrapper extends ComponentBase {
 				if (prop === "then") return undefined;
 				if (prop === "__wrapper") return wrapper;
 				if (prop === "__impl") {
-					// For waiting proxies, return the impl after resolving through _proxyTarget properties
+					// For waiting proxies, return the impl after resolving through childCache
 					// This allows waiting proxies to behave like regular wrappers for inspection
 					if (wrapper._impl !== null && wrapper._impl !== undefined) {
 						// Resolve through propChain to get the actual child wrapper
 						let current = wrapper;
 						for (const chainProp of propChain) {
-							if (current._proxyTarget && chainProp in current._proxyTarget && chainProp !== "__wrapper") {
-								const cached = current._proxyTarget[chainProp];
+							if (current._childCache && current._childCache.has(chainProp)) {
+								const cached = current._childCache.get(chainProp);
 								if (cached && cached.__wrapper) {
 									current = cached.__wrapper;
 								} else {
@@ -754,7 +738,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "__type") {
 					// Waiting proxies ALWAYS return IN_FLIGHT because:
-					// - If not started: we don't create waiting proxies (return actual values from _proxyTarget or trigger materialization)
+					// - If not started: we don't create waiting proxies (return actual values from childCache or trigger materialization)
 					// - If in-flight: we create waiting proxies (this case)
 					// - If complete: we return actual cached values (not waiting proxies)
 					// Therefore, by definition, waiting proxies only exist during materialization = IN_FLIGHT
@@ -810,11 +794,11 @@ export class UnifiedWrapper extends ComponentBase {
 				// This allows waiting proxies to resolve immediately once _impl is available,
 				// even if _state.inFlight is still true (materialization finishing up)
 				if (wrapper._impl !== null && wrapper._impl !== undefined) {
-					// Start from the parent wrapper and traverse using _proxyTarget properties
+					// Start from the parent wrapper and traverse using childCache
 					let current = wrapper;
 					let remainingChain = [...propChain];
 
-					// Traverse propChain through _proxyTarget until we hit a custom proxy
+					// Traverse propChain through childCache until we hit a custom proxy
 					for (let i = 0; i < propChain.length; i++) {
 						const chainProp = propChain[i];
 
@@ -830,8 +814,8 @@ export class UnifiedWrapper extends ComponentBase {
 							return proxyResult[prop];
 						}
 
-						if (current && current._proxyTarget && chainProp in current._proxyTarget && chainProp !== "__wrapper") {
-							const cached = current._proxyTarget[chainProp];
+						if (current && current._childCache && current._childCache.has(chainProp)) {
+							const cached = current._childCache.get(chainProp);
 
 							// Get the wrapper from cached proxy
 							if (cached && cached.__wrapper) {
@@ -842,7 +826,7 @@ export class UnifiedWrapper extends ComponentBase {
 								return undefined;
 							}
 						} else {
-							// Property doesn't exist in property chain
+							// Property doesn't exist in cache chain
 							return undefined;
 						}
 					}
@@ -853,9 +837,9 @@ export class UnifiedWrapper extends ComponentBase {
 						return current._impl[prop];
 					}
 
-					// Now check if the final prop exists in the resolved wrapper's _proxyTarget
-					if (current && current._proxyTarget && prop in current._proxyTarget && prop !== "__wrapper") {
-						return current._proxyTarget[prop];
+					// Now check if the final prop exists in the resolved wrapper's childCache
+					if (current && current._childCache && current._childCache.has(prop)) {
+						return current._childCache.get(prop);
 					}
 
 					// Property doesn't exist
@@ -934,8 +918,8 @@ export class UnifiedWrapper extends ComponentBase {
 					if (current && current.__wrapper) {
 						const currentWrapper = current.__wrapper;
 						lastWrapper = currentWrapper; // Track the wrapper we're accessing
-						if (currentWrapper._proxyTarget && prop in currentWrapper._proxyTarget && prop !== "__wrapper") {
-							current = currentWrapper._proxyTarget[prop];
+						if (currentWrapper._childCache?.has(prop)) {
+							current = currentWrapper._childCache.get(prop);
 							continue;
 						}
 						// Check if _impl is an object before using 'in' operator
@@ -999,45 +983,51 @@ export class UnifiedWrapper extends ComponentBase {
 			wrapper._materialize(); // Fire-and-forget background materialization
 		}
 
-		// Use the _proxyTarget that was already initialized in constructor
-		const proxyTarget = wrapper._proxyTarget;
+		// Determine if this wrapper represents a callable (function)
+		// For eager mode or materialized lazy: check actual impl
+		// For unmaterialized lazy: default to function (standard lazy behavior)
+		const isCallable =
+			wrapper.isCallable ||
+			typeof wrapper._impl === "function" ||
+			(wrapper._impl && typeof wrapper._impl.default === "function") ||
+			(wrapper.mode === "lazy" && !wrapper._state.materialized);
 
-		// Ensure __wrapper is defined
-		if (!("__wrapper" in proxyTarget)) {
-			Object.defineProperty(proxyTarget, "__wrapper", {
-				value: wrapper,
-				writable: false,
-				enumerable: false,
-				configurable: true
-			});
-		}
-
-		// Add custom inspect to proxyTarget if not already present
-		if (!(util.inspect.custom in proxyTarget)) {
-			Object.defineProperty(proxyTarget, util.inspect.custom, {
-				value: function () {
-					// If _proxyTarget has children, show them
-					const childKeys = Object.keys(wrapper._proxyTarget).filter((k) => k !== "__wrapper");
-					if (childKeys.length > 0 && !wrapper.isCallable) {
-						const obj = {};
-						for (const key of childKeys) {
-							// Return the value directly - if it's a proxy, Node will inspect it recursively
-							obj[key] = wrapper._proxyTarget[key];
-						}
-						return obj;
+		const nameHint =
+			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
+		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
+		Object.defineProperty(proxyTarget, "__wrapper", {
+			value: wrapper,
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
+		// Add custom inspect to proxyTarget
+		Object.defineProperty(proxyTarget, util.inspect.custom, {
+			value: function () {
+				// If childCache has entries, show them
+				if (wrapper._childCache.size > 0 && !wrapper.isCallable) {
+					const obj = {};
+					for (const [key, value] of wrapper._childCache.entries()) {
+						// Return the value directly - if it's a proxy, Node will inspect it recursively
+						obj[key] = value;
 					}
-					// For lazy unmaterialized wrappers with null _impl, return the proxy target
-					if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
-						return proxyTarget;
-					}
-					// Otherwise return _impl (functions, primitives, etc)
-					return wrapper._impl;
-				},
-				writable: false,
-				enumerable: false,
-				configurable: true
-			});
-		}
+					return obj;
+				}
+				// For lazy unmaterialized wrappers with null _impl, return the proxy target
+				if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+					return proxyTarget;
+				}
+				// Otherwise return _impl (functions, primitives, etc)
+				return wrapper._impl;
+			},
+			writable: false,
+			enumerable: false,
+			configurable: true
+		});
+		wrapper._proxyTarget = proxyTarget;
+		// NOTE: Do NOT copy _childCache entries to _proxyTarget
+		// They are wrapper objects, and in live runtime direct property access would return wrappers
+		// The proxy's get trap will handle unwrapping from _childCache
 
 		/**
 		 * @private
@@ -1047,7 +1037,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {unknown} Resolved property value
 		 *
 		 * @description
-		 * Resolves properties from _proxyTarget properties, impl values, or target properties.
+		 * Resolves properties from cached wrappers, impl values, or target properties.
 		 */
 		const getTrap = (target, prop, receiver) => {
 			if (prop === "__impl") return wrapper._impl;
@@ -1114,14 +1104,13 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
-				// Return function that builds object from _proxyTarget or returns _impl
+				// Return function that builds object from _childCache or returns _impl
 				return () => {
-					// If _proxyTarget has children and we're not a callable, show children
-					const childKeys = Object.keys(wrapper._proxyTarget).filter((k) => k !== "__wrapper");
-					if (childKeys.length > 0 && !wrapper.isCallable) {
+					// If childCache has entries and we're not a callable, show children
+					if (wrapper._childCache.size > 0 && !wrapper.isCallable) {
 						const obj = {};
-						for (const key of childKeys) {
-							obj[key] = wrapper._proxyTarget[key];
+						for (const [key, value] of wrapper._childCache.entries()) {
+							obj[key] = value;
 						}
 						return obj;
 					}
@@ -1203,11 +1192,11 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
-			// CRITICAL: Check _proxyTarget BEFORE creating waiting proxy
-			// In lazy mode with collisions, children may already be in _proxyTarget (from file/folder merge)
+			// CRITICAL: Check childCache BEFORE creating waiting proxy
+			// In lazy mode with collisions, children may already be in childCache (from file/folder merge)
 			// Return these children directly instead of creating a waiting proxy
-			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
-				const cached = wrapper._proxyTarget[prop];
+			if (wrapper._childCache.has(prop)) {
+				const cached = wrapper._childCache.get(prop);
 				// If it's a wrapper with a primitive impl, return the unwrapped value
 				// This ensures live runtime gets the actual value, not the wrapper object
 				if (cached && cached.__wrapper && cached.__wrapper._impl !== null && cached.__wrapper._impl !== undefined) {
@@ -1246,9 +1235,9 @@ export class UnifiedWrapper extends ComponentBase {
 					return wrapper._impl[prop];
 				}
 
-				// For regular objects/functions, check _proxyTarget or _impl properties
-				if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
-					const cached = wrapper._proxyTarget[prop];
+				// For regular objects/functions, check childCache or _impl properties
+				if (wrapper._childCache.has(prop)) {
+					const cached = wrapper._childCache.get(prop);
 					// If cached is a wrapper in lazy mode that needs materialization, trigger it
 					if (cached && cached.__wrapper) {
 						const cachedWrapper = cached.__wrapper;
@@ -1260,12 +1249,12 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// If lazy mode is materialized and property doesn't exist in _proxyTarget or _impl, return undefined
+			// If lazy mode is materialized and property doesn't exist in childCache or _impl, return undefined
 			// This prevents creating waiting proxies for properties that were deleted
 			if (
 				wrapper.mode === "lazy" &&
 				wrapper._state.materialized &&
-				!(prop in wrapper._proxyTarget) &&
+				!wrapper._childCache.has(prop) &&
 				wrapper._impl &&
 				!(prop in wrapper._impl)
 			) {
@@ -1362,12 +1351,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			const wrapped = wrapper._createChildWrapper(prop, value);
 			if (wrapped) {
-				Object.defineProperty(wrapper._proxyTarget, prop, {
-					value: wrapped,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
+				wrapper._childCache.set(prop, wrapped);
 				return wrapped;
 			}
 
@@ -1617,7 +1601,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {boolean} True if property exists
 		 *
 		 * @description
-		 * Checks for properties on impl, target, and _proxyTarget.
+		 * Checks for properties on impl, target, and cached wrappers.
 		 */
 		const hasTrap = (target, prop) => {
 			if (
@@ -1635,7 +1619,7 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper._materialize();
 			}
 
-			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
+			if (wrapper._childCache.has(prop)) {
 				return true;
 			}
 
@@ -1653,7 +1637,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {PropertyDescriptor|undefined} Descriptor for the property
 		 *
 		 * @description
-		 * Provides descriptors for target, impl, and _proxyTarget properties.
+		 * Provides descriptors for target, impl, and cached wrapper properties.
 		 */
 		const getOwnPropertyDescriptorTrap = (target, prop) => {
 			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
@@ -1670,23 +1654,20 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			if (prop === "prototype" && typeof target === "function") {
-				const desc = Object.getOwnPropertyDescriptor(target, "prototype");
-				// Only return descriptor if property actually exists
-				if (desc) {
-					return desc;
-				}
+				return Object.getOwnPropertyDescriptor(target, "prototype");
 			}
 
 			if (Object.prototype.hasOwnProperty.call(target, prop)) {
 				return Object.getOwnPropertyDescriptor(target, prop);
 			}
 
-			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
-				const desc = Object.getOwnPropertyDescriptor(wrapper._proxyTarget, prop);
-				// Return descriptor if it exists
-				if (desc) {
-					return desc;
-				}
+			if (wrapper._childCache.has(prop)) {
+				return {
+					configurable: true,
+					enumerable: true,
+					value: wrapper._childCache.get(prop),
+					writable: false
+				};
 			}
 
 			if (wrapper._impl && (typeof wrapper._impl === "object" || typeof wrapper._impl === "function") && prop in wrapper._impl) {
@@ -1702,7 +1683,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {Array<string|symbol>} Property keys
 		 *
 		 * @description
-		 * Returns property keys from target, impl, and _proxyTarget.
+		 * Returns property keys from target, impl, and cached wrappers.
 		 */
 		const ownKeysTrap = (target) => {
 			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
@@ -1715,11 +1696,8 @@ export class UnifiedWrapper extends ComponentBase {
 			for (const key of implKeys) {
 				keys.add(key);
 			}
-			const proxyTargetKeys = Reflect.ownKeys(wrapper._proxyTarget);
-			for (const key of proxyTargetKeys) {
-				if (key !== "__wrapper") {
-					keys.add(key);
-				}
+			for (const key of wrapper._childCache.keys()) {
+				keys.add(key);
 			}
 			keys.delete("__wrapper");
 
@@ -1742,20 +1720,9 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			const internalKeys = new Set(["__impl", "__setImpl", "__getState", "__materialize", "__invalidate", "_impl", "_state", "_invalid"]);
 			if (!internalKeys.has(prop)) {
-				// Delete property first if it exists (to allow reassignment)
-				if (prop in wrapper._proxyTarget) {
-					delete wrapper._proxyTarget[prop];
-				}
-				Object.defineProperty(wrapper._proxyTarget, prop, {
-					value: value,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
-			} else {
-				// For internal properties, just assign directly
-				target[prop] = value;
+				wrapper._childCache.set(prop, value);
 			}
+			target[prop] = value;
 			return true;
 		};
 
@@ -1766,7 +1733,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * @returns {boolean} True when deletion succeeds
 		 *
 		 * @description
-		 * Handles property deletion from wrapper proxies, removing from _proxyTarget and impl.
+		 * Handles property deletion from wrapper proxies, removing from childCache and impl.
 		 */
 		const deletePropertyTrap = (target, prop) => {
 			// Don't materialize when deleting - just delete directly
@@ -1793,15 +1760,12 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// If deleting a child wrapper, invalidate it
-			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
-				const childWrapper = wrapper._proxyTarget[prop];
+			if (wrapper._childCache.has(prop)) {
+				const childWrapper = wrapper._childCache.get(prop);
 				if (childWrapper && childWrapper.__invalidate) {
 					childWrapper.__invalidate();
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(wrapper._proxyTarget, prop);
-				if (descriptor?.configurable) {
-					delete wrapper._proxyTarget[prop];
-				}
+				wrapper._childCache.delete(prop);
 			}
 
 			// Remove from _impl if it's an object
