@@ -1713,7 +1713,10 @@ export class UnifiedWrapper extends ComponentBase {
 			const implKeys =
 				wrapper._impl && (typeof wrapper._impl === "object" || typeof wrapper._impl === "function") ? Reflect.ownKeys(wrapper._impl) : [];
 			for (const key of implKeys) {
-				keys.add(key);
+				// Skip 'prototype' from impl - it causes descriptor invariant violations
+				if (key !== "prototype") {
+					keys.add(key);
+				}
 			}
 			const proxyTargetKeys = Reflect.ownKeys(wrapper._proxyTarget);
 			for (const key of proxyTargetKeys) {
