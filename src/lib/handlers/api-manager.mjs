@@ -895,7 +895,9 @@ export class ApiManager extends ComponentBase {
 			}
 		};
 
-		registerRecursive(value, apiPath.split("."));
+		// Handle empty string properly - split would give [""], we want []
+		const initialParts = apiPath === "" ? [] : apiPath.split(".");
+		registerRecursive(value, initialParts);
 	}
 
 	/**

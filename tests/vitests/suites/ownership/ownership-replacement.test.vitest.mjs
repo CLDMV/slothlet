@@ -70,7 +70,8 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect(baseModuleId).toMatch(/^base_/);
 
 					// Load v1 with moduleId (overwrites core)
-					await api.slothlet.api.add("feature", v1Dir, {}, { moduleId: "module-v1" });
+					// Use root-level addition ("") so feature.mjs creates api.feature directly
+					await api.slothlet.api.add("", v1Dir, {}, { moduleId: "module-v1" });
 
 					// Verify v1 replaced core's implementation
 					expect(await api.feature.doSomething()).toBe("v1-implementation");
@@ -84,7 +85,7 @@ describe("Ownership Tracking on Cross-Module Replacement", () => {
 					expect([...ownershipAfterV1].pop()).toBe("module-v1");
 
 					// Load v2 with different moduleId (cross-module overwrite)
-					await api.slothlet.api.add("feature", v2Dir, {}, { moduleId: "module-v2" });
+					await api.slothlet.api.add("", v2Dir, {}, { moduleId: "module-v2" });
 
 					// Verify v2 replaced v1's implementation
 					expect(await api.feature.doSomething()).toBe("v2-implementation");
