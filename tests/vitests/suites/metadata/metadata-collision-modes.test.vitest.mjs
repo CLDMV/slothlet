@@ -130,9 +130,15 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			expect(api.math).toBeDefined();
 
+			// Trigger materialization for lazy mode
+			if (api.math.__materialize) {
+				await api.math.__materialize();
+			}
+
 			// Either file OR folder won, not both (last one replaces first)
-			const hasFileFunctions = typeof api.math.power === "function";
-			const hasFolderFunctions = typeof api.math.add === "function";
+			// In lazy mode, we need to check actual existence, not just typeof
+			const hasFileFunctions = api.math.power !== undefined && typeof api.math.power === "function";
+			const hasFolderFunctions = api.math.add !== undefined && typeof api.math.add === "function";
 
 			expect(hasFileFunctions || hasFolderFunctions).toBe(true);
 			expect(hasFileFunctions && hasFolderFunctions).toBe(false); // NOT both
