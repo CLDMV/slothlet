@@ -704,12 +704,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 		if (!childFilePath) {
 			// No existing metadata on child - try __childFilePaths map from lazy materialization
+			const keyStr = typeof key === "symbol" ? String(key) : key;
 			console.log(
-				`[WRAP-CHILD-PATH] apiPath="${this.apiPath}" key="${key}" has_impl=${!!this._impl} has__childFilePaths=${!!(this._impl && this._impl.__childFilePaths)} has__childFilePathsPreMaterialize=${!!this.__childFilePathsPreMaterialize} parentFilePath="${parentMetadata?.filePath}"`
+				`[WRAP-CHILD-PATH] apiPath="${this.apiPath}" key="${keyStr}" has_impl=${!!this._impl} has__childFilePaths=${!!(this._impl && this._impl.__childFilePaths)} has__childFilePathsPreMaterialize=${!!this.__childFilePathsPreMaterialize} parentFilePath="${parentMetadata?.filePath}"`
 			);
 			if (this._impl && this._impl.__childFilePaths) {
 				console.log(
-					`[WRAP-CHILD-PATH] __childFilePaths keys=[${Object.keys(this._impl.__childFilePaths).join(",")}] key="${key}" found=${!!this._impl.__childFilePaths[key]}`
+					`[WRAP-CHILD-PATH] __childFilePaths keys=[${Object.keys(this._impl.__childFilePaths).join(",")}] key="${keyStr}" found=${!!this._impl.__childFilePaths[key]}`
 				);
 			}
 			if (this._impl && this._impl.__childFilePaths && this._impl.__childFilePaths[key]) {
@@ -745,7 +746,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const nestedWrapper = new UnifiedWrapper(this.slothlet, {
 			mode: "eager",
-			apiPath: this.apiPath ? `${this.apiPath}.${String(key)}` : String(key),
+			apiPath: this.apiPath ? `${this.apiPath}.${typeof key === "symbol" ? String(key) : key}` : String(key),
 			initialImpl: childImpl,
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
