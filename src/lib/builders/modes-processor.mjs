@@ -1123,10 +1123,23 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 
-						// CRITICAL: If collision merge set __childFilePathsPreMaterialize on wrapper,
-						// copy it to implToWrap so _createChildWrapper can find file function paths
-						if (implToWrap && typeof implToWrap === "object" && this.__childFilePathsPreMaterialize) {
-							implToWrap.__childFilePaths = { ...implToWrap.__childFilePaths, ...this.__childFilePathsPreMaterialize };
+						// CRITICAL: Create __childFilePaths for ALL children in this folder
+						// Map each child to the file.path they came from
+						if (implToWrap && typeof implToWrap === "object") {
+							// Initialize __childFilePaths with all children mapped to file.path
+							const childPaths = {};
+							for (const key of Object.keys(implToWrap)) {
+								if (typeof key !== "symbol" && key !== "__childFilePaths" && key !== "__filePath") {
+									childPaths[key] = file.path;
+								}
+							}
+
+							// Merge with collision-merged children paths if they exist
+							if (this.__childFilePathsPreMaterialize) {
+								Object.assign(childPaths, this.__childFilePathsPreMaterialize);
+							}
+
+							implToWrap.__childFilePaths = childPaths;
 						}
 
 						return implToWrap;
