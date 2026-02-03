@@ -357,6 +357,15 @@ export class UnifiedWrapper extends ComponentBase {
 					const lazy_setImpl = (value) => {
 						this._impl = value;
 						this._invalid = false;
+
+						// CRITICAL: Update wrapper's filePath BEFORE adopting children
+						// This happens for lazy folder wrappers that import a file
+						// Use the file path stored on the impl by modes-processor
+						if (!this.filePath && this._impl && this._impl.__filePath) {
+							this.filePath = this._impl.__filePath;
+							console.log(`[MATERIALIZE-UPDATE-PATH] apiPath="${this.apiPath}" updated filePath from null to "${this.filePath}"`);
+						}
+
 						this._adoptImplChildren();
 					};
 					const result = await this._materializeFunc(lazy_setImpl);
@@ -500,10 +509,16 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
+		// Define metadata/helper keys that should never be adopted as children
+		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
 		const skipKeys = typeof this._impl === "function" ? new Set(["length", "name", "prototype"]) : null;
 
 		for (const key of ownKeys) {
 			if (internalKeys.has(key)) {
+				continue;
+			}
+			// Skip metadata/helper keys
+			if (typeof key === "string" && metadataKeys.has(key)) {
 				continue;
 			}
 			if (skipKeys && typeof key === "string" && skipKeys.has(key)) {
@@ -689,14 +704,25 @@ export class UnifiedWrapper extends ComponentBase {
 
 		if (!childFilePath) {
 			// No existing metadata on child - try __childFilePaths map from lazy materialization
+			console.log(
+				`[WRAP-CHILD-PATH] apiPath="${this.apiPath}" key="${key}" has_impl=${!!this._impl} has__childFilePaths=${!!(this._impl && this._impl.__childFilePaths)} has__childFilePathsPreMaterialize=${!!this.__childFilePathsPreMaterialize} parentFilePath="${parentMetadata?.filePath}"`
+			);
+			if (this._impl && this._impl.__childFilePaths) {
+				console.log(
+					`[WRAP-CHILD-PATH] __childFilePaths keys=[${Object.keys(this._impl.__childFilePaths).join(",")}] key="${key}" found=${!!this._impl.__childFilePaths[key]}`
+				);
+			}
 			if (this._impl && this._impl.__childFilePaths && this._impl.__childFilePaths[key]) {
 				childFilePath = this._impl.__childFilePaths[key];
+				console.log(`[WRAP-CHILD-PATH] Using __childFilePaths: "${childFilePath}"`);
 			} else if (this.__childFilePathsPreMaterialize && this.__childFilePathsPreMaterialize[key]) {
 				// Check pre-materialize mapping from collision merge
 				childFilePath = this.__childFilePathsPreMaterialize[key];
+				console.log(`[WRAP-CHILD-PATH] Using __childFilePathsPreMaterialize: "${childFilePath}"`);
 			} else {
 				// Fall back to parent's filePath (will be directory path for lazy wrappers)
 				childFilePath = parentMetadata?.filePath || null;
+				console.log(`[WRAP-CHILD-PATH] Using fallback parentMetadata?.filePath: "${childFilePath}"`);
 			}
 
 			// Extract SHORT moduleId from parent's FULL moduleID format "moduleId:apiPath"

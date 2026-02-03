@@ -83,9 +83,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Verify metadata filePath points to only one source
 			if (hasFileFunctions) {
+				await materialize(api, "math.power", 2, 3);
 				const meta = api.math.power.__metadata;
 				expect(meta.filePath).toMatch(/[/\\]math\.mjs$/);
 			} else {
+				await materialize(api, "math.add", 5, 7);
 				const meta = api.math.add.__metadata;
 				expect(meta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
 			}
@@ -107,6 +109,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			expect(hasFileFunctions).toBe(true);
 			expect(hasFolderFunctions).toBe(true);
+
+			// Materialize both functions to ensure lazy folders have loaded
+			await materialize(api, "math.power", 2, 3);
+			await materialize(api, "math.add", 5, 7);
 
 			// Verify metadata filePath from both sources
 			const powerMeta = api.math.power.__metadata;
@@ -133,9 +139,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Verify metadata filePath points to only one source
 			if (hasFileFunctions) {
+				await materialize(api, "math.power", 2, 3);
 				const meta = api.math.power.__metadata;
 				expect(meta.filePath).toMatch(/[/\\]math\.mjs$/);
 			} else {
+				await materialize(api, "math.add", 5, 7);
 				const meta = api.math.add.__metadata;
 				expect(meta.filePath).toMatch(/[/\\]math[/\\]math\.mjs$/);
 			}
