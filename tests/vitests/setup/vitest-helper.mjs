@@ -111,20 +111,27 @@ export async function materialize(api, path, ...args) {
 		target = target[parts[i]];
 	}
 	const value = target[parts[parts.length - 1]];
+	
+	console.log(`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`);
 
 	// Trigger materialization if __materialize exists (for lazy mode)
 	if (typeof value?.__materialize === "function") {
+		console.log(`[MATERIALIZE] Calling value.__materialize()`);
 		await value.__materialize();
+		console.log(`[MATERIALIZE] __materialize() completed`);
 	}
 
 	// Check actual type using __type property (for lazy mode compatibility)
 	// __type returns Symbol(inFlight) or Symbol(unmaterialized) for lazy wrappers,
 	// or the actual type string ("function", "object", etc.) after materialization
 	const typeInfo = value?.__type;
+	console.log(`[MATERIALIZE] typeof typeInfo="${typeof typeInfo}" typeInfo="${String(typeInfo)}" isSymbol=${typeof typeInfo === "symbol"}`);
 	const isFunction = typeInfo === "function" || (typeof typeInfo !== "symbol" && typeof value === "function");
+	console.log(`[MATERIALIZE] isFunction=${isFunction} args.length=${args.length}`);
 
 	if (isFunction && args.length > 0) {
 		// It's a function with args - call it
+		console.log(`[MATERIALIZE] Calling value(${args.join(", ")})`);
 		try {
 			return await value(...args);
 		} catch (_) {
