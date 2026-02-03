@@ -1162,7 +1162,9 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			!diff.path.includes("prototype.constructor.__slothletInstance.debugLogger.config.mode") &&
 			!diff.path.includes("prototype.constructor.__slothletInstance.config.mode") &&
 			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.apiManager.state.initialConfig.mode") &&
-			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.metadata._instanceId")
+			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.metadata._instanceId") &&
+			// __childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
+			!diff.path.includes("__childFilePaths")
 	);
 
 	if (significantNestedDifferences.length > 0) {
