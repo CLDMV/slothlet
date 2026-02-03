@@ -9,8 +9,10 @@
 **npm run debug** and **npm run baseline** MUST pass 100% before this issue is resolved.
 
 Final status:
-- ✅ `npm run baseline` - 2355/2356 tests passing (fixed 4 LAZY mode tests, 1 unrelated failure)
+- ✅ `npm run debug` - PASSES (fixed __childFilePaths exclusion)
+- ✅ `npm run baseline` - 2355/2356 tests passing (fixed 4 LAZY mode tests)
 - ✅ **4/4 LAZY mode replace tests NOW PASSING**
+- ❌ 1 unrelated failure: metadata-api-manager "multiple add/remove/add cycles" (LAZY_LIVE config only)
 
 ## ✅ SOLUTION IMPLEMENTED
 
