@@ -1230,6 +1230,13 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Resolves properties from _proxyTarget properties, impl values, or target properties.
 		 */
 		const getTrap = (target, prop, receiver) => {
+			// Debug logging for collision scenarios
+			if ((prop === "power" || prop === "add")) {
+				console.log(
+					`[GET-START] apiPath="${wrapper.apiPath}" prop="${String(prop)}" mode="${wrapper.mode}" collisionMode="${wrapper._state.collisionMode || "none"}" materialized=${wrapper._state.materialized} hasImpl=${wrapper._impl !== null} inProxyTarget=${prop in wrapper._proxyTarget}`
+				);
+			}
+
 			if (prop === "__impl") return wrapper._impl;
 			if (prop === "__type") {
 				// Trigger materialization if needed
@@ -1387,6 +1394,12 @@ export class UnifiedWrapper extends ComponentBase {
 			// In lazy mode with collisions, children may already be in _proxyTarget (from file/folder merge)
 			// Return these children directly instead of creating a waiting proxy
 			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
+				// CRITICAL: In replace mode, check if property should exist at all
+				if (wrapper._state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
+					console.log(
+						`[GET-CACHED-REPLACE] apiPath="${wrapper.apiPath}" prop="${String(prop)}" collisionMode="${wrapper._state.collisionMode}" _proxyTarget has: ${Object.keys(wrapper._proxyTarget).join(", ")}`
+					);
+				}
 				console.log(
 					`[GET-CACHED] apiPath="${wrapper.apiPath}" prop="${String(prop)}" materialized=${wrapper._state.materialized} hasImpl=${wrapper._impl !== null}`
 				);
@@ -1431,6 +1444,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// For regular objects/functions, check _proxyTarget or _impl properties
 				if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
+					if (prop === "power" || prop === "add") {
+						console.log(`[GET-PROXYGET] Accessing "${prop}" from wrapper._id=${wrapper._id} apiPath="${wrapper.apiPath}" collisionMode="${wrapper._state.collisionMode || "none"}"`);
+						console.log(`[GET-PROXYGET] Found in _proxyTarget, keys in _proxyTarget: ${Object.keys(wrapper._proxyTarget).join(", ")}`);
+					}
 					const cached = wrapper._proxyTarget[prop];
 					// If cached is a wrapper in lazy mode that needs materialization, trigger it
 					if (cached && cached.__wrapper) {
@@ -1461,6 +1478,8 @@ export class UnifiedWrapper extends ComponentBase {
 				if (!wrapper._state.materialized && !wrapper._state.inFlight) {
 					wrapper._materialize();
 				}
+
+				console.log(`[LAZY-GET] prop="${String(prop)}" collisionMode="${wrapper._state.collisionMode || "none"}" willCreateWaitingProxy=true apiPath="${wrapper.apiPath}"`);
 
 				// If _impl is already set and is a custom proxy, delegate even during inFlight
 				// This allows custom proxies to work immediately after being loaded

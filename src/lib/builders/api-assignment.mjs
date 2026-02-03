@@ -118,6 +118,9 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		// Case 2: Collision detection with config
+		console.log(
+			`[COLLISION-CHECK] key="${key}" useCollisionDetection=${useCollisionDetection} hasConfig=${!!config} hasExisting=${existing !== undefined} existingType=${typeof existing}`
+		);
 		if (useCollisionDetection && config && existing !== undefined) {
 			console.log(`[COLLISION-DETECT] key="${key}" context="${collisionContext}" existing=${typeof existing} value=${typeof value}`);
 			// Get collision mode from config.collision.initial or config.collision.api
@@ -178,7 +181,42 @@ export class ApiAssignment extends ComponentBase {
 					console.log(`[COLLISION] Setting collision mode="${effectiveMode}" on VALUE wrapper apiPath="${valueWrapper.apiPath}"`);
 					valueWrapper._state.collisionMode = effectiveMode;
 					console.log(`[COLLISION] Verified: valueWrapper._state.collisionMode="${valueWrapper._state.collisionMode}"`);
+					
+					// CRITICAL: In replace mode, trigger immediate materialization
+					// This ensures _impl is populated as soon as possible
+					if (effectiveMode === "replace") {
+						console.log(`[COLLISION-REPLACE-MATERIALIZE] Triggering immediate materialization for replace mode wrapper apiPath="${valueWrapper.apiPath}"`);
+						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
+					}
 				}
+			}
+
+			// Replace mode: Last loaded completely replaces first loaded
+			if (effectiveMode === "replace") {
+				if (existingIsWrapper && valueIsWrapper) {
+					const existingWrapper = existing.__wrapper;
+					const valueWrapper = value.__wrapper;
+
+					const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
+					const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
+
+					// For lazy folder replacing eager file: Just assign the lazy folder, don't copy anything
+					if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
+						console.log(`[COLLISION-REPLACE] Not copying file properties - replace mode will clear everything on materialization`);
+						console.log(`[COLLISION-REPLACE] BEFORE assignment: targetApi[${key}].__wrapper._id = ${existing.__wrapper._id}`);
+						console.log(
+							`[COLLISION-ASSIGN] Replacing existing with lazy folder. key="${key}" valueWrapper._state.collisionMode="${valueWrapper._state.collisionMode}"`
+						);
+						targetApi[key] = value;
+						console.log(`[COLLISION-REPLACE] AFTER assignment: targetApi[${key}].__wrapper._id = ${targetApi[key].__wrapper._id}`);
+						console.log(`[COLLISION-REPLACE] Expected valueWrapper._id = ${valueWrapper._id}, Got = ${targetApi[key].__wrapper._id}`);
+						return true; // Assignment completed
+					}
+					// For other combinations, fall through to default replacement logic
+				}
+				// Default: Just replace
+				targetApi[key] = value;
+				return true;
 			}
 
 			if (effectiveMode === "merge" || effectiveMode === "merge-replace") {
