@@ -1,6 +1,6 @@
 {
 	"translations": {
-		"INVALID_CONFIG_API_PATH_INVALID": "Ruta de API inválida '{apiPath}': {reason}. Las rutas de API deben ser cadenas no vacías con notación de puntos que no entren en conflicto con nombres reservados. Segmento en índice {index}: '{segment}'.",
+		"INVALID_CONFIG_API_PATH_INVALID": "Ruta de API inválida '{apiPath}': {reason}. Las rutas de API deben ser cadenas no vacías en notación de puntos que no entren en conflicto con nombres reservados.",
 		"INVALID_CONFIG_MUTATION_DISABLED": "No se puede realizar '{operation}' - la mutación está deshabilitada. Configure allowMutation: true para habilitar operaciones de modificación de API (add/remove/reload).",
 		"INVALID_METADATA_TARGET": "Objetivo de metadatos inválido: se esperaba {expected}, se recibió {target}. Las operaciones de metadatos requieren una referencia de función u objeto.",
 		"METADATA_NO_MODULE_ID": "No se puede establecer metadatos de usuario: no se encontró moduleID en metadatos del sistema. Asegúrese de que la función/objeto de destino se cargó a través de Slothlet.",

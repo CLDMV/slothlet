@@ -433,7 +433,7 @@ export class Metadata extends ComponentBase {
 				if (!Array.isArray(nestedKeys)) {
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
 						key: metadataKey,
-						value: nestedKeys,
+						type: typeof nestedKeys,
 						expected: "array"
 					});
 				}

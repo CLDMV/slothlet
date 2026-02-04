@@ -134,9 +134,6 @@ class Slothlet {
 				}
 			}
 		}
-
-		// Special case: contextManager is set during load based on runtime
-		this.contextManager = null;
 	}
 
 	/**
