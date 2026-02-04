@@ -758,9 +758,7 @@ for (const error of allErrors) {
 	const extraInUsage = usedPlaceholders.filter((p) => !translationSet.has(p));
 
 	// Check for forbidden placeholders (error/message should be in originalError param, not context)
-	// Exception: SlothletWarning is allowed to use {error} in context (informational only)
-	const isWarning = error.errorCode.startsWith("WARNING_") || error.fullMatch.includes("SlothletWarning");
-	const forbiddenInContext = isWarning ? [] : usedPlaceholders.filter((p) => p === "error" || p === "message");
+	const forbiddenInContext = usedPlaceholders.filter((p) => p === "error" || p === "message");
 
 	if (missingInUsage.length > 0 || extraInUsage.length > 0 || forbiddenInContext.length > 0 || validationErrorIssue) {
 		const relPath = relative(rootDir, error.filePath);
