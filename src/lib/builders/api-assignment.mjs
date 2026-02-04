@@ -92,7 +92,12 @@ export class ApiAssignment extends ComponentBase {
 	assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
 		const valueId = valueIsWrapper ? value.__wrapper?._id : "not-wrapper";
-		console.log(`[ASSIGN-TO-API] key="${key}" valueId=${valueId} typeof value="${typeof value}"`);
+		this.slothlet.debug("api", {
+			message: "ASSIGN-TO-API",
+			key,
+			valueId,
+			typeOf: typeof value
+		});
 
 		const {
 			allowOverwrite = false,
@@ -118,11 +123,22 @@ export class ApiAssignment extends ComponentBase {
 		}
 
 		// Case 2: Collision detection with config
-		console.log(
-			`[COLLISION-CHECK] key="${key}" useCollisionDetection=${useCollisionDetection} hasConfig=${!!config} hasExisting=${existing !== undefined} existingType=${typeof existing}`
-		);
+		this.slothlet.debug("api", {
+			message: "COLLISION-CHECK",
+			key,
+			useCollisionDetection,
+			hasConfig: !!config,
+			hasExisting: existing !== undefined,
+			existingType: typeof existing
+		});
 		if (useCollisionDetection && config && existing !== undefined) {
-			console.log(`[COLLISION-DETECT] key="${key}" context="${collisionContext}" existing=${typeof existing} value=${typeof value}`);
+			this.slothlet.debug("api", {
+				message: "COLLISION-DETECT",
+				key,
+				context: collisionContext,
+				existingType: typeof existing,
+				valueType: typeof value
+			});
 			// Get collision mode from config.collision.initial or config.collision.api
 			const collisionMode = config.collision?.[collisionContext] || "merge";
 
@@ -155,9 +171,14 @@ export class ApiAssignment extends ComponentBase {
 			const existingIsWrapper = this.isWrapperProxy(existing);
 			const valueIsWrapper = this.isWrapperProxy(value);
 
-			console.log(
-				`[COLLISION] key="${key}" existingIsWrapper=${existingIsWrapper} valueIsWrapper=${valueIsWrapper} hasExistingWrapper=${existing?.__wrapper ? "yes" : "no"} hasValueWrapper=${value?.__wrapper ? "yes" : "no"}`
-			);
+			this.slothlet.debug("api", {
+				message: "COLLISION: wrapper detection",
+				key,
+				existingIsWrapper,
+				valueIsWrapper,
+				hasExistingWrapper: existing?.__wrapper ? "yes" : "no",
+				hasValueWrapper: value?.__wrapper ? "yes" : "no"
+			});
 
 			if (existingIsWrapper && valueIsWrapper) {
 				const existingWrapper = existing.__wrapper;
@@ -165,27 +186,48 @@ export class ApiAssignment extends ComponentBase {
 				const existingIsLazyUnmaterialized = existingWrapper.mode === "lazy" && !existingWrapper._state.materialized;
 				const valueIsLazyUnmaterialized = valueWrapper.mode === "lazy" && !valueWrapper._state.materialized;
 
-				console.log(
-					`[COLLISION] key="${key}" effectiveMode="${effectiveMode}" existingLazy=${existingIsLazyUnmaterialized} valueLazy=${valueIsLazyUnmaterialized}`
-				);
+				this.slothlet.debug("api", {
+					message: "COLLISION: lazy detection",
+					key,
+					effectiveMode,
+					existingLazy: existingIsLazyUnmaterialized,
+					valueLazy: valueIsLazyUnmaterialized
+				});
 
 				// Store collision mode on lazy wrappers so they know how to handle properties during materialization
 				// Use effectiveMode (which includes warn→merge conversion)
 				// CRITICAL: Store in _state object so it persists across proxy boundaries
 				if (existingIsLazyUnmaterialized) {
-					console.log(`[COLLISION] Setting collision mode="${effectiveMode}" on EXISTING wrapper apiPath="${existingWrapper.apiPath}"`);
+					this.slothlet.debug("api", {
+						message: "COLLISION: Setting collision mode on EXISTING wrapper",
+						effectiveMode,
+						apiPath: existingWrapper.apiPath
+					});
 					existingWrapper._state.collisionMode = effectiveMode;
-					console.log(`[COLLISION] Verified: existingWrapper._state.collisionMode="${existingWrapper._state.collisionMode}"`);
+					this.slothlet.debug("api", {
+						message: "COLLISION: Verified existing wrapper collision mode",
+						collisionMode: existingWrapper._state.collisionMode
+					});
 				}
 				if (valueIsLazyUnmaterialized) {
-					console.log(`[COLLISION] Setting collision mode="${effectiveMode}" on VALUE wrapper apiPath="${valueWrapper.apiPath}"`);
+					this.slothlet.debug("api", {
+						message: "COLLISION: Setting collision mode on VALUE wrapper",
+						effectiveMode,
+						apiPath: valueWrapper.apiPath
+					});
 					valueWrapper._state.collisionMode = effectiveMode;
-					console.log(`[COLLISION] Verified: valueWrapper._state.collisionMode="${valueWrapper._state.collisionMode}"`);
+					this.slothlet.debug("api", {
+						message: "COLLISION: Verified value wrapper collision mode",
+						collisionMode: valueWrapper._state.collisionMode
+					});
 					
 					// CRITICAL: In replace mode, trigger immediate materialization
 					// This ensures _impl is populated as soon as possible
 					if (effectiveMode === "replace") {
-						console.log(`[COLLISION-REPLACE-MATERIALIZE] Triggering immediate materialization for replace mode wrapper apiPath="${valueWrapper.apiPath}"`);
+						this.slothlet.debug("api", {
+							message: "COLLISION-REPLACE-MATERIALIZE: Triggering immediate materialization",
+							apiPath: valueWrapper.apiPath
+						});
 						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
 					}
 				}
@@ -202,14 +244,30 @@ export class ApiAssignment extends ComponentBase {
 
 					// For lazy folder replacing eager file: Just assign the lazy folder, don't copy anything
 					if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
-						console.log(`[COLLISION-REPLACE] Not copying file properties - replace mode will clear everything on materialization`);
-						console.log(`[COLLISION-REPLACE] BEFORE assignment: targetApi[${key}].__wrapper._id = ${existing.__wrapper._id}`);
-						console.log(
-							`[COLLISION-ASSIGN] Replacing existing with lazy folder. key="${key}" valueWrapper._state.collisionMode="${valueWrapper._state.collisionMode}"`
-						);
+						this.slothlet.debug("api", {
+							message: "COLLISION-REPLACE: Not copying file properties - replace mode will clear everything on materialization"
+						});
+						this.slothlet.debug("api", {
+							message: "COLLISION-REPLACE: BEFORE assignment",
+							key,
+							currentWrapperId: existing.__wrapper._id
+						});
+						this.slothlet.debug("api", {
+							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
+							key,
+							collisionMode: valueWrapper._state.collisionMode
+						});
 						targetApi[key] = value;
-						console.log(`[COLLISION-REPLACE] AFTER assignment: targetApi[${key}].__wrapper._id = ${targetApi[key].__wrapper._id}`);
-						console.log(`[COLLISION-REPLACE] Expected valueWrapper._id = ${valueWrapper._id}, Got = ${targetApi[key].__wrapper._id}`);
+						this.slothlet.debug("api", {
+							message: "COLLISION-REPLACE: AFTER assignment",
+							key,
+							newWrapperId: targetApi[key].__wrapper._id
+						});
+						this.slothlet.debug("api", {
+							message: "COLLISION-REPLACE: Verification",
+							expectedId: valueWrapper._id,
+							actualId: targetApi[key].__wrapper._id
+						});
 						return true; // Assignment completed
 					}
 					// For other combinations, fall through to default replacement logic
@@ -271,7 +329,9 @@ export class ApiAssignment extends ComponentBase {
 						if (effectiveMode === "replace") {
 							// Replace mode: Don't copy anything from existing file
 							// Let the lazy folder materialize clean and completely replace the file
-							console.log(`[COLLISION-REPLACE] Not copying file properties - replace mode will clear everything on materialization`);
+							this.slothlet.debug("api", {
+								message: "COLLISION-REPLACE: Not copying file properties - replace mode will clear everything on materialization"
+							});
 						} else if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
@@ -286,9 +346,13 @@ export class ApiAssignment extends ComponentBase {
 							}
 
 							const existingChildKeys = Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper");
-							console.log(
-								`[COLLISION-COPY] existingChildKeys=[${existingChildKeys.join(",")}] from existingWrapper apiPath="${existingWrapper.apiPath}" to valueWrapper apiPath="${valueWrapper.apiPath}" valueWrapper.id=${valueWrapper._id || "no-id"}`
-							);
+							this.slothlet.debug("api", {
+								message: "COLLISION-COPY: Copying existing child keys",
+								existingChildKeys: existingChildKeys.join(","),
+								fromApiPath: existingWrapper.apiPath,
+								toApiPath: valueWrapper.apiPath,
+								valueWrapperId: valueWrapper._id || "no-id"
+							});
 
 							// Track collision-merged properties so materialization knows these are from file, not folder children
 							if (!valueWrapper.__collisionMergedKeys) {
@@ -297,9 +361,13 @@ export class ApiAssignment extends ComponentBase {
 
 							for (const key of existingChildKeys) {
 								const child = existingWrapper._proxyTarget[key];
-								console.log(
-									`[COLLISION-COPY] Copying key="${key}" child.name="${child?.name}" typeof child="${typeof child}" to valueWrapper.id=${valueWrapper._id || "no-id"}`
-								);
+								this.slothlet.debug("api", {
+									message: "COLLISION-COPY: Copying individual key",
+									key,
+									childName: child?.name,
+									typeOf: typeof child,
+									valueWrapperId: valueWrapper._id || "no-id"
+								});
 								Object.defineProperty(valueWrapper._proxyTarget, key, {
 									value: child,
 									writable: false,
@@ -318,9 +386,10 @@ export class ApiAssignment extends ComponentBase {
 							// This starts loading the folder module so children become available sooner
 							// Fire-and-forget: We don't await because collision handling must remain synchronous
 							// The folder children will be added to _proxyTarget during materialization
-							console.log(
-								`[COLLISION-TRIGGER-MAT] Triggering early materialization (fire-and-forget) for lazy folder apiPath="${valueWrapper.apiPath}"`
-							);
+							this.slothlet.debug("api", {
+								message: "COLLISION-TRIGGER-MAT: Triggering early materialization (fire-and-forget)",
+								apiPath: valueWrapper.apiPath
+							});
 							valueWrapper.__needsImmediateChildAdoption = true;
 							if (valueWrapper._materializeFunc && !valueWrapper._state?.materialized && !valueWrapper._state?.inFlight) {
 								valueWrapper._materialize().catch((err) => {
@@ -339,9 +408,11 @@ export class ApiAssignment extends ComponentBase {
 						}
 
 						// Assign value to API (replace existing with lazy folder wrapper)
-						console.log(
-							`[COLLISION-ASSIGN] Replacing existing with lazy folder. key="${key}" valueWrapper._state.collisionMode="${valueWrapper._state.collisionMode}"`
-						);
+					this.slothlet.debug("api", {
+						message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
+						key,
+						collisionMode: valueWrapper._state.collisionMode
+					});
 						targetApi[key] = value;
 						return true; // Assignment completed
 					}

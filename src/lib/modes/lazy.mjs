@@ -218,7 +218,10 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 		});
 		// Log what's in materialized for "math" in collision scenarios
 		if (apiPath === "math") {
-			console.log(`[MATERIALIZE-COMPLETE] apiPath="math" materialized keys: ${Object.keys(materialized).join(", ")}`);
+			slothlet.debug("modes", {
+				message: "MATERIALIZE-COMPLETE: apiPath=math materialized keys",
+				keys: Object.keys(materialized).join(", ")
+			});
 		}
 		// CRITICAL: Set _impl synchronously (matches v2 behavior where 'materialized' variable is set immediately)
 		// This allows property access to work without waiting for the function to return
@@ -244,7 +247,11 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 
 	// Store directory structure for later access (e.g., replace mode pre-population)
 	wrapper._directoryStructure = dir;
-	console.log(`[LAZY-CREATE] apiPath="${apiPath}" stored _directoryStructure with ${dir?.children?.files?.length || 0} files`);
+	slothlet.debug("modes", {
+		message: "LAZY-CREATE: stored _directoryStructure",
+		apiPath,
+		fileCount: dir?.children?.files?.length || 0
+	});
 
 	return wrapper.createProxy();
 }
