@@ -44,7 +44,9 @@ export class SlothletError extends Error {
 			}
 		}
 
-		super(translatedMessage);
+		// Include error code in message for better debugging and test matching
+		const messageWithCode = `[${code}] ${translatedMessage}`;
+		super(messageWithCode);
 		this.name = "SlothletError";
 
 		// Make code and context non-enumerable to prevent them from being dumped

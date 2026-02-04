@@ -352,8 +352,7 @@ export class Metadata extends ComponentBase {
 		if (typeof target !== "function" && typeof target !== "object") {
 			throw new this.SlothletError("INVALID_METADATA_TARGET", {
 				target: typeof target,
-				expected: "function or object",
-				hint: "setUserMetadata expects a function or object reference"
+				expected: "function or object"
 			});
 		}
 
@@ -367,7 +366,7 @@ export class Metadata extends ComponentBase {
 		if (!moduleID) {
 			throw new this.SlothletError(
 				"METADATA_NO_MODULE_ID",
-				{ hint: "Cannot set user metadata without moduleID in system metadata" },
+				{},
 				null,
 				{ validationError: true }
 			);
@@ -397,8 +396,7 @@ export class Metadata extends ComponentBase {
 		if (typeof target !== "function" && typeof target !== "object") {
 			throw new this.SlothletError("INVALID_METADATA_TARGET", {
 				target: typeof target,
-				expected: "function or object",
-				hint: "removeUserMetadata expects a function or object reference"
+				expected: "function or object"
 			});
 		}
 
@@ -424,8 +422,7 @@ export class Metadata extends ComponentBase {
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
 						key: k,
 						type: typeof k,
-						expected: "string",
-						hint: "Array elements must be strings when removing multiple metadata keys"
+						expected: "string"
 					});
 				}
 				delete entry.metadata[k];
@@ -437,8 +434,7 @@ export class Metadata extends ComponentBase {
 					throw new this.SlothletError("INVALID_METADATA_KEY", {
 						key: metadataKey,
 						value: nestedKeys,
-						expected: "array",
-						hint: "Object values must be arrays of nested keys to remove"
+						expected: "array"
 					});
 				}
 
@@ -449,8 +445,7 @@ export class Metadata extends ComponentBase {
 							throw new this.SlothletError("INVALID_METADATA_KEY", {
 								key: nestedKey,
 								type: typeof nestedKey,
-								expected: "string",
-								hint: "Nested keys must be strings"
+							expected: "string"
 							});
 						}
 						delete metadataValue[nestedKey];
@@ -464,8 +459,7 @@ export class Metadata extends ComponentBase {
 			throw new this.SlothletError("INVALID_METADATA_KEY", {
 				key: key,
 				type: typeof key,
-				expected: "string, string[], or object",
-				hint: "Key must be a string, array of strings, or object with array values"
+				expected: "string, string[], or object"
 			});
 		}
 	}
