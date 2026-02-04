@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/class-instance-wrapper.mjs
+ *	@Date: 2026-01-29 03:08:11 -08:00 (1738150091)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Class instance context wrapping for AsyncLocalStorage preservation
  * @module @cldmv/slothlet/helpers/class-instance-wrapper
  * @package
@@ -112,10 +125,10 @@ export function runtime_wrapClassInstance(instance, contextManager, instanceID, 
 	}
 
 	// DEBUG logging
-	if (process.env.DEBUG_CLASS_WRAP === "1") {
-		console.log("[CLASS_WRAP] Wrapping class instance:", instance.constructor?.name || "Unknown");
-		console.log("[CLASS_WRAP] Instance keys:", Object.keys(instance).slice(0, 10));
-	}
+	// if (process.env.DEBUG_CLASS_WRAP === "1") {
+	// 	console.log("[CLASS_WRAP] Wrapping class instance:", instance.constructor?.name || "Unknown");
+	// 	console.log("[CLASS_WRAP] Instance keys:", Object.keys(instance).slice(0, 10));
+	// }
 
 	// Cache for wrapped methods to avoid creating new function instances on repeated access
 	const methodCache = new Map();

@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/handlers/lifecycle.mjs
+ *	@Date: 2026-01-27 11:05:55 -08:00 (1737999955)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Centralized lifecycle event management for impl changes
  * @description Provides event system for tracking impl creation, modification, and removal.
  *              Allows metadata, ownership, and other systems to subscribe to lifecycle events.

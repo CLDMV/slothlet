@@ -925,9 +925,13 @@ export class UnifiedWrapper extends ComponentBase {
 					return waitingTarget;
 				}
 				if (prop === "__type") {
-					console.log(
-						`[WAITING-TYPE] apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}] materialized=${wrapper._state.materialized} hasImpl=${wrapper._impl !== null}`
-					);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-TYPE",
+						apiPath: wrapper.apiPath,
+						propChain: propChain.join(","),
+						materialized: wrapper._state.materialized,
+						hasImpl: wrapper._impl !== null
+					});
 					// CRITICAL: After wrapper materialization, resolve the propChain and return actual type
 					// This fixes collision merge scenarios where waiting proxies are created before materialization
 					// After materialization, these proxies should report the correct type, not IN_FLIGHT
@@ -940,9 +944,11 @@ export class UnifiedWrapper extends ComponentBase {
 								const currentWrapper = current.__wrapper;
 								if (currentWrapper._proxyTarget && chainProp in currentWrapper._proxyTarget) {
 									current = currentWrapper._proxyTarget[chainProp];
-									console.log(
-										`[WAITING-TYPE-WALK] chainProp="${String(chainProp)}" found in _proxyTarget, typeof current="${typeof current}"`
-									);
+									this.slothlet.debug("wrapper", {
+										message: "WAITING-TYPE-WALK: found in _proxyTarget",
+										chainProp: String(chainProp),
+										typeOf: typeof current
+									});
 									continue;
 								}
 								if (
@@ -952,23 +958,38 @@ export class UnifiedWrapper extends ComponentBase {
 									chainProp in currentWrapper._impl
 								) {
 									current = currentWrapper._impl[chainProp];
-									console.log(`[WAITING-TYPE-WALK] chainProp="${String(chainProp)}" found in _impl, typeof current="${typeof current}"`);
+									this.slothlet.debug("wrapper", {
+										message: "WAITING-TYPE-WALK: found in _impl",
+										chainProp: String(chainProp),
+										typeOf: typeof current
+									});
 									continue;
 								}
 							}
+							this.slothlet.debug("wrapper", {
+								message: "WAITING-TYPE-WALK: accessed directly",
+								chainProp: String(chainProp),
+								typeOf: typeof current
+							});
 							current = current[chainProp];
-							console.log(`[WAITING-TYPE-WALK] chainProp="${String(chainProp)}" accessed directly, typeof current="${typeof current}"`);
 						}
 						// Return the actual type of the resolved value
 						const resolvedType =
 							typeof current === "function" ? "function" : typeof current === "object" && current !== null ? "object" : typeof current;
-						console.log(
-							`[WAITING-TYPE-RESOLVED] apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}] resolvedType="${resolvedType}"`
-						);
+						this.slothlet.debug("wrapper", {
+							message: "WAITING-TYPE-RESOLVED",
+							apiPath: wrapper.apiPath,
+							propChain: propChain.join(","),
+							resolvedType
+						});
 						return resolvedType;
 					}
 					// Waiting proxies return IN_FLIGHT if wrapper not yet materialized
-					console.log(`[WAITING-TYPE-INFLIGHT] apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}] returning IN_FLIGHT`);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-TYPE-INFLIGHT: returning IN_FLIGHT",
+						apiPath: wrapper.apiPath,
+						propChain: propChain.join(",")
+					});
 					return TYPE_STATES.IN_FLIGHT;
 				}
 				if (prop === "__metadata") {
@@ -1078,7 +1099,11 @@ export class UnifiedWrapper extends ComponentBase {
 				// For lazy folders in merge mode, file properties are copied to _proxyTarget during collision handling
 				// These properties should be accessible immediately without waiting for full materialization
 				if (wrapper._proxyTarget && prop in wrapper._proxyTarget && prop !== "__wrapper") {
-					console.log(`[WAITING-GET-PREMATURE] apiPath="${wrapper.apiPath}" prop="${prop}" found in _proxyTarget before materialization`);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-GET-PREMATURE: found in _proxyTarget before materialization",
+						apiPath: wrapper.apiPath,
+						prop
+					});
 					return wrapper._proxyTarget[prop];
 				}
 
@@ -1086,17 +1111,27 @@ export class UnifiedWrapper extends ComponentBase {
 				// This ensures folder children are available in _proxyTarget before returning
 				// Without this, folder properties remain as waiting proxies instead of being accessible
 				if (wrapper.__needsImmediateChildAdoption && wrapper._materializeFunc && !wrapper._state.materialized && !wrapper._state.inFlight) {
-					console.log(
-						`[WAITING-GET-IMMEDIATE-MAT] apiPath="${wrapper.apiPath}" prop="${prop}" triggering immediate materialization for collision-merged folder`
-					);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-GET-IMMEDIATE-MAT: triggering immediate materialization for collision-merged folder",
+						apiPath: wrapper.apiPath,
+						prop
+					});
 					// Trigger materialization NOW (async but we'll check after)
 					wrapper._materialize().catch((err) => {
-						console.error(`[WAITING-GET-IMMEDIATE-MAT-ERROR] apiPath="${wrapper.apiPath}" materialization failed:`, err);
+						this.slothlet.debug("wrapper", {
+							message: "WAITING-GET-IMMEDIATE-MAT-ERROR: materialization failed",
+							apiPath: wrapper.apiPath,
+							error: err.message
+						});
 					});
 					// Now check if prop is in _proxyTarget after materialization started
 					// _adoptImplChildren runs synchronously within _materialize before any awaits
 					if (prop in wrapper._proxyTarget) {
-						console.log(`[WAITING-GET-IMMEDIATE-MAT-SUCCESS] apiPath="${wrapper.apiPath}" prop="${prop}" now available in _proxyTarget`);
+						this.slothlet.debug("wrapper", {
+							message: "WAITING-GET-IMMEDIATE-MAT-SUCCESS: now available in _proxyTarget",
+							apiPath: wrapper.apiPath,
+							prop
+						});
 						return wrapper._proxyTarget[prop];
 					}
 				}
@@ -1113,25 +1148,41 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 
 			async apply(___target, ___thisArg, args) {
-				console.log(`[WAITING-APPLY-ENTRY] apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}] args=[${args.join(",")}]`);
+				this.slothlet.debug("wrapper", {
+					message: "WAITING-APPLY-ENTRY",
+					apiPath: wrapper.apiPath,
+					propChain: propChain.join(","),
+					args: args.join(",")
+				});
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
-					console.log(`[WAITING-APPLY-MATERIALIZE] Triggering materialization for wrapper apiPath="${wrapper.apiPath}"`);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-APPLY-MATERIALIZE: Triggering materialization",
+						apiPath: wrapper.apiPath
+					});
 					await wrapper._materialize();
-					console.log(`[WAITING-APPLY-MATERIALIZED] Materialization complete for wrapper apiPath="${wrapper.apiPath}"`);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-APPLY-MATERIALIZED: Materialization complete",
+						apiPath: wrapper.apiPath
+					});
 				}
 
-				console.log(
-					`[WAITING-APPLY-START-WALK] Starting propChain walk. wrapper.apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}]`
-				);
+				this.slothlet.debug("wrapper", {
+					message: "WAITING-APPLY-START-WALK: Starting propChain walk",
+					apiPath: wrapper.apiPath,
+					propChain: propChain.join(",")
+				});
 				let current = wrapper.createProxy();
 				let lastWrapper = wrapper;
 
 				for (const prop of propChain) {
-					console.log(
-						`[WAITING-APPLY-WALK] prop="${String(prop)}" typeof current="${typeof current}" current=${current?.constructor?.name}`
-					);
+					this.slothlet.debug("wrapper", {
+						message: "WAITING-APPLY-WALK",
+						prop: String(prop),
+						typeOf: typeof current,
+						constructorName: current?.constructor?.name
+					});
 					if (!current) {
 						// PRIORITY 1: If the chain involves ANY symbol access (like util.inspect.custom), silently return undefined
 						// Check the entire propChain, not just what we've iterated so far
@@ -1197,9 +1248,14 @@ export class UnifiedWrapper extends ComponentBase {
 					current = current[prop];
 				}
 
-				console.log(
-					`[WAITING-APPLY] apiPath="${wrapper.apiPath}" propChain=[${propChain.join(",")}] typeof current="${typeof current}" current.name="${current?.name}" isFunction=${typeof current === "function"}`
-				);
+				this.slothlet.debug("wrapper", {
+					message: "WAITING-APPLY",
+					apiPath: wrapper.apiPath,
+					propChain: propChain.join(","),
+					typeOf: typeof current,
+					currentName: current?.name,
+					isFunction: typeof current === "function"
+				});
 
 				if (typeof current === "function") {
 					return current(...args);
@@ -1299,10 +1355,17 @@ export class UnifiedWrapper extends ComponentBase {
 		 */
 		const getTrap = (target, prop, receiver) => {
 			// Debug logging for collision scenarios
-			if ((prop === "power" || prop === "add")) {
-				console.log(
-					`[GET-START] apiPath="${wrapper.apiPath}" prop="${String(prop)}" mode="${wrapper.mode}" collisionMode="${wrapper._state.collisionMode || "none"}" materialized=${wrapper._state.materialized} hasImpl=${wrapper._impl !== null} inProxyTarget=${prop in wrapper._proxyTarget}`
-				);
+			if (prop === "power" || prop === "add") {
+				this.slothlet.debug("wrapper", {
+					message: "GET-START",
+					apiPath: wrapper.apiPath,
+					prop: String(prop),
+					mode: wrapper.mode,
+					collisionMode: wrapper._state.collisionMode || "none",
+					materialized: wrapper._state.materialized,
+					hasImpl: wrapper._impl !== null,
+					inProxyTarget: prop in wrapper._proxyTarget
+				});
 			}
 
 			if (prop === "__impl") return wrapper._impl;
@@ -1382,9 +1445,12 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					// For lazy wrappers with null _impl, return the proxy target or proxy itself
 					if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
-						console.log(
-							`[util.inspect.custom] Lazy unmaterialized: apiPath=${wrapper.apiPath}, _proxyTarget=${wrapper._proxyTarget}, _proxy=${wrapper._proxy}`
-						);
+						this.slothlet.debug("wrapper", {
+							message: "util.inspect.custom: Lazy unmaterialized",
+							apiPath: wrapper.apiPath,
+							_proxyTarget: wrapper._proxyTarget,
+							_proxy: wrapper._proxy
+						});
 						return wrapper._proxyTarget || wrapper._proxy;
 					}
 					// Otherwise return _impl
@@ -1464,13 +1530,21 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper._state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
-					console.log(
-						`[GET-CACHED-REPLACE] apiPath="${wrapper.apiPath}" prop="${String(prop)}" collisionMode="${wrapper._state.collisionMode}" _proxyTarget has: ${Object.keys(wrapper._proxyTarget).join(", ")}`
-					);
+					this.slothlet.debug("wrapper", {
+						message: "GET-CACHED-REPLACE",
+						apiPath: wrapper.apiPath,
+						prop: String(prop),
+						collisionMode: wrapper._state.collisionMode,
+						proxyTargetKeys: Object.keys(wrapper._proxyTarget).join(", ")
+					});
 				}
-				console.log(
-					`[GET-CACHED] apiPath="${wrapper.apiPath}" prop="${String(prop)}" materialized=${wrapper._state.materialized} hasImpl=${wrapper._impl !== null}`
-				);
+				this.slothlet.debug("wrapper", {
+					message: "GET-CACHED",
+					apiPath: wrapper.apiPath,
+					prop: String(prop),
+					materialized: wrapper._state.materialized,
+					hasImpl: wrapper._impl !== null
+				});
 				const cached = wrapper._proxyTarget[prop];
 				// If it's a wrapper with a primitive impl, return the unwrapped value
 				// This ensures live runtime gets the actual value, not the wrapper object
@@ -1513,8 +1587,17 @@ export class UnifiedWrapper extends ComponentBase {
 				// For regular objects/functions, check _proxyTarget or _impl properties
 				if (prop in wrapper._proxyTarget && prop !== "__wrapper") {
 					if (prop === "power" || prop === "add") {
-						console.log(`[GET-PROXYGET] Accessing "${prop}" from wrapper._id=${wrapper._id} apiPath="${wrapper.apiPath}" collisionMode="${wrapper._state.collisionMode || "none"}"`);
-						console.log(`[GET-PROXYGET] Found in _proxyTarget, keys in _proxyTarget: ${Object.keys(wrapper._proxyTarget).join(", ")}`);
+						this.slothlet.debug("wrapper", {
+							message: "GET-PROXYGET: Accessing",
+							prop,
+							wrapperId: wrapper._id,
+							apiPath: wrapper.apiPath,
+							collisionMode: wrapper._state.collisionMode || "none"
+						});
+						this.slothlet.debug("wrapper", {
+							message: "GET-PROXYGET: Found in _proxyTarget",
+							proxyTargetKeys: Object.keys(wrapper._proxyTarget).join(", ")
+						});
 					}
 					const cached = wrapper._proxyTarget[prop];
 					// If cached is a wrapper in lazy mode that needs materialization, trigger it
@@ -1547,7 +1630,12 @@ export class UnifiedWrapper extends ComponentBase {
 					wrapper._materialize();
 				}
 
-				console.log(`[LAZY-GET] prop="${String(prop)}" collisionMode="${wrapper._state.collisionMode || "none"}" willCreateWaitingProxy=true apiPath="${wrapper.apiPath}"`);
+				this.slothlet.debug("wrapper", {
+					message: "LAZY-GET: will create waiting proxy",
+					prop: String(prop),
+					collisionMode: wrapper._state.collisionMode || "none",
+					apiPath: wrapper.apiPath
+				});
 
 				// If _impl is already set and is a custom proxy, delegate even during inFlight
 				// This allows custom proxies to work immediately after being loaded

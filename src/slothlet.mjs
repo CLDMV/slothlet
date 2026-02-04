@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/slothlet.mjs
+ *	@Date: 2026-02-03 19:50:15 -08:00 (1770177015)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-03 20:49:08 -08:00 (1770180548)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Main Slothlet orchestrator
  * @module @cldmv/slothlet
  */
@@ -124,9 +137,13 @@ class Slothlet {
 					}
 				} catch (error) {
 					// Component file failed to import - this is fatal
-					throw new this.SlothletError("MODULE_IMPORT_FAILED", {
-						modulePath: filePath
-					}, error);
+					throw new this.SlothletError(
+						"MODULE_IMPORT_FAILED",
+						{
+							modulePath: filePath
+						},
+						error
+					);
 				}
 			}
 		}

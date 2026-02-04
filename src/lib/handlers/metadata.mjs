@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/handlers/metadata.mjs
+ *	@Date: 2026-01-20 20:25:54 -08:00 (1737432354)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Metadata API handler for accessing function metadata
  * @module @cldmv/slothlet/handlers/metadata
  * @package
@@ -364,12 +377,7 @@ export class Metadata extends ComponentBase {
 		const moduleID = systemData.moduleID || systemData.moduleId;
 
 		if (!moduleID) {
-			throw new this.SlothletError(
-				"METADATA_NO_MODULE_ID",
-				{},
-				null,
-				{ validationError: true }
-			);
+			throw new this.SlothletError("METADATA_NO_MODULE_ID", {}, null, { validationError: true });
 		}
 
 		// Get or create user metadata entry for this moduleID
@@ -445,7 +453,7 @@ export class Metadata extends ComponentBase {
 							throw new this.SlothletError("INVALID_METADATA_KEY", {
 								key: nestedKey,
 								type: typeof nestedKey,
-							expected: "string"
+								expected: "string"
 							});
 						}
 						delete metadataValue[nestedKey];

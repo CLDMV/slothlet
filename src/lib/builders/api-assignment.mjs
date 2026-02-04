@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/builders/api-assignment.mjs
+ *	@Date: 2026-01-23 21:51:45 -08:00 (1737694305)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Unified API assignment logic extracted from processFiles
  * @module @cldmv/slothlet/lib/builders/api-assignment
  * @description
@@ -220,7 +233,7 @@ export class ApiAssignment extends ComponentBase {
 						message: "COLLISION: Verified value wrapper collision mode",
 						collisionMode: valueWrapper._state.collisionMode
 					});
-					
+
 					// CRITICAL: In replace mode, trigger immediate materialization
 					// This ensures _impl is populated as soon as possible
 					if (effectiveMode === "replace") {
@@ -408,11 +421,11 @@ export class ApiAssignment extends ComponentBase {
 						}
 
 						// Assign value to API (replace existing with lazy folder wrapper)
-					this.slothlet.debug("api", {
-						message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
-						key,
-						collisionMode: valueWrapper._state.collisionMode
-					});
+						this.slothlet.debug("api", {
+							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
+							key,
+							collisionMode: valueWrapper._state.collisionMode
+						});
 						targetApi[key] = value;
 						return true; // Assignment completed
 					}
