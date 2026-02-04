@@ -1202,6 +1202,85 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
+		// CRITICAL: Await any fire-and-forget materializations before proceeding
+		// During collision handling, lazy folder wrappers trigger materialization in the background
+		// We must wait for these to complete before returning, otherwise:
+		// 1. Metadata may not be fully registered for nested children
+		// 2. Immediate remove() calls may not clean up all metadata
+		// 3. Tests may see inconsistent state
+		if (anyAssignmentSucceeded) {
+			const pendingMaterializations = [];
+			const seenWrappers = new Set();
+
+			// Helper to recursively find wrappers with pending materialization
+			const collectPendingMaterializations = (obj, depth = 0) => {
+				if (!obj || typeof obj !== "object" || depth > 10) return;
+
+				if (obj.__wrapper) {
+					const wrapper = obj.__wrapper;
+					// Skip if we've already processed this wrapper (avoid infinite recursion)
+					if (seenWrappers.has(wrapper)) return;
+					seenWrappers.add(wrapper);
+
+					// Check if materialization is in-flight
+					if (wrapper._materializationPromise) {
+						pendingMaterializations.push(wrapper._materializationPromise);
+					}
+
+					// Check child cache (_proxyTarget) for nested wrappers that might be materializing
+					if (wrapper._proxyTarget && typeof wrapper._proxyTarget === "object") {
+						for (const key of Object.keys(wrapper._proxyTarget)) {
+							if (key !== "__wrapper") {
+								collectPendingMaterializations(wrapper._proxyTarget[key], depth + 1);
+							}
+						}
+					}
+				}
+
+				// Recurse into child properties
+				for (const key of Object.keys(obj)) {
+					if (key !== "__wrapper") {
+						collectPendingMaterializations(obj[key], depth + 1);
+					}
+				}
+			};
+
+			// Collect from the actual API path where we just added
+			// This ensures we catch any fire-and-forget materializations that were triggered
+			if (parts.length === 0) {
+				// Root level - check each key we just added
+				for (const key of Object.keys(newApi)) {
+					if (this.slothlet.api[key]) {
+						collectPendingMaterializations(this.slothlet.api[key]);
+					}
+				}
+			} else {
+				// Nested path - check the container we just modified
+				let current = this.slothlet.api;
+				for (const part of parts) {
+					if (current && current[part]) {
+						current = current[part];
+					} else {
+						break;
+					}
+				}
+				if (current) {
+					collectPendingMaterializations(current);
+				}
+			}
+
+			// Wait for all pending materializations to complete
+			if (pendingMaterializations.length > 0) {
+				if (this.config.debug?.api) {
+					this.slothlet.debug("api", {
+						message: `Awaiting ${pendingMaterializations.length} pending materialization(s) before completing add`,
+						apiPath: normalizedPath
+					});
+				}
+				await Promise.all(pendingMaterializations);
+			}
+		}
+
 		// Only register user metadata if the API was actually set (not skipped due to collision)
 		// Metadata will be looked up via apiPath stored in system metadata on each wrapper
 		// CRITICAL: Use root segment only (first part) for metadata key to ensure proper merging
