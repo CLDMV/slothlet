@@ -1,8 +1,8 @@
 # Lazy Mode Collision Replace Mode Investigation
 
 **Date:** February 3, 2026  
-**Status:** ✅ **RESOLVED - Test Fix Applied**  
-**Priority:** COMPLETED
+**Status:** ✅ **FULLY RESOLVED - ALL TESTS PASSING**  
+**Priority:** ✅ COMPLETED
 
 ## Goal
 
@@ -10,9 +10,9 @@
 
 Final status:
 - ✅ `npm run debug` - PASSES (fixed __childFilePaths exclusion)
-- ✅ `npm run baseline` - 2355/2356 tests passing (fixed 4 LAZY mode tests)
+- ✅ `npm run baseline` - 2356/2356 tests passing (ALL PASSING)
 - ✅ **4/4 LAZY mode replace tests NOW PASSING**
-- ❌ 1 unrelated failure: metadata-api-manager "multiple add/remove/add cycles" (LAZY_LIVE config only)
+- ✅ **Metadata race condition resolved** (fixed fire-and-forget materialization timing issue)
 
 ## ✅ SOLUTION IMPLEMENTED
 
@@ -327,18 +327,38 @@ This is **not fixable** without breaking core lazy mode functionality. The test 
 
 ## ✅ Final Status Summary
 
+**Investigation COMPLETE - All Issues Resolved:**
+
 **Baseline Results:**
-- ✅ 2355/2356 tests passing (was 2352/2356)
+- ✅ **2356/2356 tests passing (100%)**
 - ✅ Fixed 4 LAZY mode replace collision tests
-- ❌ 1 unrelated test failure (metadata removal test)
+- ✅ Fixed metadata race condition (fire-and-forget materialization)
 
-**Root Cause Found:** Replace collision mode code was nested inside merge condition (never executed).
+**Root Causes Found and Fixed:**
 
-**Fixes Applied:**
-1. **Code fix:** Added separate replace mode handler in api-assignment.mjs (lines 187-209)
-2. **Code fix:** Fixed collision mode property path: `_state.collisionMode` (not `_collisionMode`)
-3. **Test fix:** Updated test to call `await api.math.__materialize()` before property checks
-4. **Test fix:** Changed property checks to `api.math.power !== undefined && typeof api.math.power === "function"`
+1. **Replace Collision Mode Code Issue:**
+   - Replace mode code was nested inside merge condition (never executed)
+   - **Fix:** Added separate replace mode handler in api-assignment.mjs (lines 187-209)
+   - **Fix:** Fixed collision mode property path: `_state.collisionMode` (not `_collisionMode`)
+
+2. **Test Implementation Issue:**
+   - Tests used synchronous `typeof` checks on lazy wrappers before materialization
+   - Waiting proxies always return `"function"` to enable chaining
+   - **Fix:** Updated test to call `await api.math.__materialize()` before property checks
+   - **Fix:** Changed property checks to `api.math.power !== undefined && typeof api.math.power === "function"`
+
+3. **Metadata Race Condition:**
+   - Fire-and-forget materialization during collision handling continued after `addApiComponent` returned
+   - Background materializations registered metadata after removal, leaving orphaned entries
+   - **Fix:** Added await logic for pending materializations in api-manager.mjs (lines 1205-1280)
+   - **Fix:** Checks `this.slothlet.api[key]` (actual API) instead of just `newApi` (objects being added)
+   - **Fix:** Traverses `wrapper._proxyTarget` recursively with deduplication and depth limiting
+
+**Final Verification:**
+- All collision mode tests passing (EAGER and LAZY)
+- All metadata lifecycle tests passing (including add/remove cycles)
+- No regressions introduced
+- Full baseline: 2356/2356 ✅
 
 ---
 
@@ -640,12 +660,13 @@ else {
 ## Success Criteria
 
 - [x] All 4 LAZY mode replace tests pass ✅
-- [ ] `npm run debug` passes 100% (not yet tested)
-- [x] `npm run baseline` passes with 4 fewer failures (2355/2356) ✅
+- [x] `npm run debug` passes 100% ✅
+- [x] `npm run baseline` passes with 2356/2356 ✅
 - [x] No new console errors or warnings ✅
 - [x] Both EAGER and LAZY modes behave correctly for collision replace ✅
+- [x] Metadata race condition resolved ✅
 
-**Note:** One unrelated test failure remains (metadata removal test expecting undefined but getting a value). This is not related to collision mode fixes.
+**ALL SUCCESS CRITERIA MET - INVESTIGATION COMPLETE**
 
 ## Related Issues
 
