@@ -32,6 +32,32 @@ const translations = translationsData.translations || {};
 const hintKeys = Object.keys(translations).filter((k) => k.startsWith("HINT_"));
 
 /**
+ * Configuration for file header check folders
+ */
+const FILE_HEADER_CHECK_FOLDERS = [
+	{ path: ".", recursive: false }, // Root folder only (non-recursive)
+	{ path: "tools", recursive: true }, // tools/ folder (recursive)
+	{ path: "tests", recursive: true }, // tests/ folder (recursive)
+	{ path: "api_tests", recursive: true } // api_tests/ folder (recursive)
+];
+
+const FILE_HEADER_IGNORE_FOLDERS = [
+	"tests/vitests_v2" // Ignore tests/vitests_v2
+];
+
+/**
+ * Check if a path should be ignored
+ */
+function shouldIgnorePath(filePath, ignoreFolders) {
+	const relPath = relative(rootDir, filePath);
+	return ignoreFolders.some((ignoreFolder) => {
+		const normalizedIgnore = ignoreFolder.replace(/\\/g, "/");
+		const normalizedRel = relPath.replace(/\\/g, "/");
+		return normalizedRel.startsWith(normalizedIgnore + "/") || normalizedRel === normalizedIgnore;
+	});
+}
+
+/**
  * Recursively find all .mjs files
  */
 async function findMjsFiles(dir, files = []) {
@@ -49,6 +75,51 @@ async function findMjsFiles(dir, files = []) {
 	}
 
 	return files;
+}
+
+/**
+ * Find all .mjs files in specified folders with optional recursion
+ */
+async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
+	const allFiles = [];
+
+	for (const config of folderConfigs) {
+		const folderPath = join(rootDir, config.path);
+
+		try {
+			const stats = await stat(folderPath);
+
+			if (!stats.isDirectory()) {
+				continue;
+			}
+
+			if (config.recursive) {
+				// Recursive search
+				const files = await findMjsFiles(folderPath);
+				// Filter out ignored paths
+				const filteredFiles = files.filter((file) => !shouldIgnorePath(file, ignoreFolders));
+				allFiles.push(...filteredFiles);
+			} else {
+				// Non-recursive - only get direct .mjs files
+				const entries = await readdir(folderPath);
+				for (const entry of entries) {
+					if (entry.endsWith(".mjs")) {
+						const fullPath = join(folderPath, entry);
+						if (!shouldIgnorePath(fullPath, ignoreFolders)) {
+							allFiles.push(fullPath);
+						}
+					}
+				}
+			}
+		} catch (err) {
+			// Folder doesn't exist, skip it
+			if (VERBOSE) {
+				console.log(`⚠️  Folder not found: ${config.path}`);
+			}
+		}
+	}
+
+	return allFiles;
 }
 
 /**
@@ -263,6 +334,21 @@ function parseConsoleLogs(content, filePath) {
 }
 
 /**
+ * Check if file has proper file header
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {boolean} True if file has proper header
+ */
+function hasProperFileHeader(content, filePath) {
+	// Expected header format (first 12 lines)
+	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, or root level (/)
+	const headerPattern =
+		/^\/\*\*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*Nate Hyson\s*<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*Nate Hyson\s*<CLDMV>\s*\(Shinrai@users\.noreply\.github\.com\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
+
+	return headerPattern.test(content);
+}
+
+/**
  * Parse SlothletError and SlothletWarning throws from file content
  */
 function parseErrorThrows(content, filePath) {
@@ -469,6 +555,7 @@ function checkHintExists(errorCode) {
 // Main execution
 console.log("\n=== SlothletError Analysis ===\n");
 
+// Get all files from src/ for error analysis
 const files = await findMjsFiles(srcDir);
 const allErrors = [];
 
@@ -955,6 +1042,49 @@ if (allConsoleLogs.length > 0) {
 	console.log(`✅ All console.log calls are inside SlothletDebug class\n`);
 }
 
+// ===== FILE HEADER DETECTION =====
+console.log("\n" + "=".repeat(80));
+console.log("=== File Header Detection ===");
+console.log("=".repeat(80) + "\n");
+
+// Get all files from configured folders for header check
+const headerCheckFiles = await findMjsFilesInFolders(FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS);
+
+const filesWithoutHeaders = [];
+for (const file of headerCheckFiles) {
+	const content = await readFile(file, "utf-8");
+	if (!hasProperFileHeader(content, file)) {
+		filesWithoutHeaders.push(file);
+	}
+}
+
+if (filesWithoutHeaders.length > 0) {
+	console.log(`❌ Found ${filesWithoutHeaders.length} files missing proper file header:\n`);
+	console.log(`   All src files should have the standard file header with project metadata.\n`);
+
+	filesWithoutHeaders.forEach((file, idx) => {
+		const relPath = relative(rootDir, file);
+		console.log(`[${idx + 1}] ${relPath}`);
+	});
+
+	console.log();
+	console.log(`📝 Header Format Instructions:\n`);
+	console.log(`   See src/slothlet.mjs for the correct header format.\n`);
+	console.log(`   Required fields:`);
+	console.log(`   - @Project: @cldmv/slothlet`);
+	console.log(`   - @Filename: /[relative-path-from-root]`);
+	console.log(`   - @Date: [First commit date of file from git history] (use: git log --follow --format=%aI --reverse [file] | head -1)`);
+	console.log(`   - @Author: Nate Hyson <CLDMV>`);
+	console.log(`   - @Email: <Shinrai@users.noreply.github.com>`);
+	console.log(`   - @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)`);
+	console.log(`   - @Last modified time: [Current timestamp]`);
+	console.log(`   - @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.\n`);
+	console.log(`   NOTE: The @Date field should be the first date the file appeared in git history.`);
+	console.log(`         Use git log to find this: git log --follow --format=%aI --reverse [filename] | head -1\n`);
+} else {
+	console.log(`✅ All files have proper file headers\n`);
+}
+
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\n📊 Translation Statistics:");
@@ -1008,6 +1138,13 @@ if (errorsWithIssues.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Error Throws with Issues:   0`);
+}
+
+if (filesWithoutHeaders.length > 0) {
+	console.log(`⚠️  Files without Headers:       ${filesWithoutHeaders.length} - Add proper file headers`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Files without Headers:       0`);
 }
 
 console.log();

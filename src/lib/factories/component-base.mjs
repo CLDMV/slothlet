@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/factories/component-base.mjs
+ *	@Date: 2026-01-24 09:30:16 -08:00 (1737735016)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Base class for Slothlet component classes providing common Slothlet access.
  * @module @cldmv/slothlet/factories/component-base
  * @package

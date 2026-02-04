@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/processors/loader.mjs
+ *	@Date: 2026-01-24 08:43:52 -08:00 (1737730432)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Loader component for module loading, directory scanning, and API merging
  * @description
  * Provides the Loader class which handles module loading with cache-busting,
