@@ -329,7 +329,10 @@ export class UnifiedWrapper extends ComponentBase {
 		// If materialization is already in progress, return the existing promise
 		// This allows multiple callers to await the same materialization without polling
 		if (this._materializationPromise) {
-			console.log(`[MATERIALIZE-AWAIT] apiPath="${this.apiPath}" awaiting existing materialization promise`);
+			this.slothlet.debug("wrapper", {
+				message: "MATERIALIZE-AWAIT: awaiting existing materialization promise",
+				apiPath: this.apiPath
+			});
 			return this._materializationPromise;
 		}
 
@@ -363,7 +366,11 @@ export class UnifiedWrapper extends ComponentBase {
 						// Use the file path stored on the impl by modes-processor
 						if (!this.filePath && this._impl && this._impl.__filePath) {
 							this.filePath = this._impl.__filePath;
-							console.log(`[MATERIALIZE-UPDATE-PATH] apiPath="${this.apiPath}" updated filePath from null to "${this.filePath}"`);
+							this.slothlet.debug("wrapper", {
+								message: "MATERIALIZE-UPDATE-PATH: updated filePath from null",
+								apiPath: this.apiPath,
+								filePath: this.filePath
+							});
 						}
 
 						this._adoptImplChildren();
@@ -462,9 +469,13 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	_adoptImplChildren() {
 		const preExistingKeys = this._proxyTarget ? Object.keys(this._proxyTarget).filter((k) => k !== "__wrapper") : [];
-		console.log(
-			`[ADOPT-START] apiPath="${this.apiPath}" wrapper.id=${this._id || "no-id"} preExistingKeys=[${preExistingKeys.join(",")}] collisionMode="${this._state.collisionMode}"`
-		);
+		this.slothlet.debug("wrapper", {
+			message: "ADOPT-START",
+			apiPath: this.apiPath,
+			wrapperId: this._id || "no-id",
+			preExistingKeys: preExistingKeys.join(","),
+			collisionMode: this._state.collisionMode
+		});
 
 		if (!this._impl || (typeof this._impl !== "object" && typeof this._impl !== "function")) {
 			return;
@@ -487,13 +498,21 @@ export class UnifiedWrapper extends ComponentBase {
 		const storedCollisionMode = this._state.collisionMode; // Set during collision in api-assignment.mjs
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
-		console.log(
-			`[ADOPT] apiPath="${this.apiPath}" mode="${this.mode}" storedCollisionMode="${storedCollisionMode}" existingKeys=[${existingKeys.join(",")}] isMergeScenario=${isMergeScenario}`
-		);
+		this.slothlet.debug("wrapper", {
+			message: "ADOPT",
+			apiPath: this.apiPath,
+			mode: this.mode,
+			storedCollisionMode,
+			existingKeys: existingKeys.join(","),
+			isMergeScenario
+		});
 
 		// If collision mode is "replace", clear existing properties from collision
 		if (storedCollisionMode === "replace" && existingKeys.length > 0) {
-			console.log(`[ADOPT] REPLACE MODE: Clearing ${existingKeys.length} existing properties`);
+			this.slothlet.debug("wrapper", {
+				message: "ADOPT: REPLACE MODE - Clearing existing properties",
+				count: existingKeys.length
+			});
 
 			for (const key of existingKeys) {
 				const descriptor = Object.getOwnPropertyDescriptor(this._proxyTarget, key);
@@ -534,7 +553,13 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			// Skip logging if key is a symbol (can't convert to string)
 			if (typeof key !== "symbol") {
-				console.log(`[ADOPT-PROCESS] apiPath="${this.apiPath}" key="${key}" typeof value="${typeof value}" value.name="${value?.name}"`);
+				this.slothlet.debug("wrapper", {
+					message: "ADOPT-PROCESS",
+					apiPath: this.apiPath,
+					key,
+					typeOf: typeof value,
+					valueName: value?.name
+				});
 			}
 			observedKeys.add(key);
 
@@ -543,9 +568,13 @@ export class UnifiedWrapper extends ComponentBase {
 				// Check if this is a collision-merged property (from file)
 				// Skip logging if key is a symbol
 				if (typeof key !== "symbol") {
-					console.log(
-						`[ADOPT-CHECK] apiPath="${this.apiPath}" key="${key}" has__collisionMergedKeys=${!!this.__collisionMergedKeys} inSet=${this.__collisionMergedKeys?.has(key)}`
-					);
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-CHECK",
+						apiPath: this.apiPath,
+						key,
+						has__collisionMergedKeys: !!this.__collisionMergedKeys,
+						inSet: this.__collisionMergedKeys?.has(key)
+					});
 				}
 				const isCollisionMerged = this.__collisionMergedKeys && this.__collisionMergedKeys.has(key);
 
@@ -553,7 +582,11 @@ export class UnifiedWrapper extends ComponentBase {
 					// This key was added during collision merge (file property)
 					// Keep existing entry (don't replace with folder child of same name)
 					if (typeof key !== "symbol") {
-						console.log(`[ADOPT-SKIP] apiPath="${this.apiPath}" key="${key}" is collision-merged, skipping`);
+						this.slothlet.debug("wrapper", {
+							message: "ADOPT-SKIP: is collision-merged, skipping",
+							apiPath: this.apiPath,
+							key
+						});
 					}
 					if (descriptor.configurable) {
 						delete this._impl[key];
@@ -564,18 +597,31 @@ export class UnifiedWrapper extends ComponentBase {
 				// This could be from a previous materialization or folder children that should coexist
 				// DON'T skip - fall through to add folder child alongside file properties
 				if (typeof key !== "symbol") {
-					console.log(`[ADOPT-ALLOW] apiPath="${this.apiPath}" key="${key}" is NOT collision-merged, allowing`);
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-ALLOW: is NOT collision-merged, allowing",
+						apiPath: this.apiPath,
+						key
+					});
 				}
 			}
 
 			const wrapped = this._createChildWrapper(key, value);
 			if (typeof key !== "symbol") {
-				console.log(`[ADOPT-WRAP] apiPath="${this.apiPath}" key="${key}" wrapped=${wrapped ? "YES" : wrapped === null ? "NULL" : "NO"}`);
+				this.slothlet.debug("wrapper", {
+					message: "ADOPT-WRAP",
+					apiPath: this.apiPath,
+					key,
+					wrapped: wrapped ? "YES" : wrapped === null ? "NULL" : "NO"
+				});
 			}
 			if (wrapped) {
 				// Store wrapper as property using defineProperty
 				if (typeof key !== "symbol") {
-					console.log(`[ADOPT-DEFINE] apiPath="${this.apiPath}" key="${key}" defining on _proxyTarget`);
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-DEFINE: defining on _proxyTarget",
+						apiPath: this.apiPath,
+						key
+					});
 				}
 				Object.defineProperty(this._proxyTarget, key, {
 					value: wrapped,
@@ -584,7 +630,11 @@ export class UnifiedWrapper extends ComponentBase {
 					configurable: true
 				});
 				if (typeof key !== "symbol") {
-					console.log(`[ADOPT-DEFINED] apiPath="${this.apiPath}" key="${key}" defined successfully`);
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-DEFINED: defined successfully",
+						apiPath: this.apiPath,
+						key
+					});
 				}
 				if (descriptor.configurable && !keepImplProperties) {
 					delete this._impl[key];
@@ -705,25 +755,43 @@ export class UnifiedWrapper extends ComponentBase {
 		if (!childFilePath) {
 			// No existing metadata on child - try __childFilePaths map from lazy materialization
 			const keyStr = typeof key === "symbol" ? String(key) : key;
-			console.log(
-				`[WRAP-CHILD-PATH] apiPath="${this.apiPath}" key="${keyStr}" has_impl=${!!this._impl} has__childFilePaths=${!!(this._impl && this._impl.__childFilePaths)} has__childFilePathsPreMaterialize=${!!this.__childFilePathsPreMaterialize} parentFilePath="${parentMetadata?.filePath}"`
-			);
+			this.slothlet.debug("wrapper", {
+				message: "WRAP-CHILD-PATH: checking for child file path",
+				apiPath: this.apiPath,
+				key: keyStr,
+				has_impl: !!this._impl,
+				has__childFilePaths: !!(this._impl && this._impl.__childFilePaths),
+				has__childFilePathsPreMaterialize: !!this.__childFilePathsPreMaterialize,
+				parentFilePath: parentMetadata?.filePath
+			});
 			if (this._impl && this._impl.__childFilePaths) {
-				console.log(
-					`[WRAP-CHILD-PATH] __childFilePaths keys=[${Object.keys(this._impl.__childFilePaths).join(",")}] key="${keyStr}" found=${!!this._impl.__childFilePaths[key]}`
-				);
+				this.slothlet.debug("wrapper", {
+					message: "WRAP-CHILD-PATH: __childFilePaths available",
+					keys: Object.keys(this._impl.__childFilePaths).join(","),
+					key: keyStr,
+					found: !!this._impl.__childFilePaths[key]
+				});
 			}
 			if (this._impl && this._impl.__childFilePaths && this._impl.__childFilePaths[key]) {
 				childFilePath = this._impl.__childFilePaths[key];
-				console.log(`[WRAP-CHILD-PATH] Using __childFilePaths: "${childFilePath}"`);
+				this.slothlet.debug("wrapper", {
+					message: "WRAP-CHILD-PATH: Using __childFilePaths",
+					childFilePath
+				});
 			} else if (this.__childFilePathsPreMaterialize && this.__childFilePathsPreMaterialize[key]) {
 				// Check pre-materialize mapping from collision merge
 				childFilePath = this.__childFilePathsPreMaterialize[key];
-				console.log(`[WRAP-CHILD-PATH] Using __childFilePathsPreMaterialize: "${childFilePath}"`);
+				this.slothlet.debug("wrapper", {
+					message: "WRAP-CHILD-PATH: Using __childFilePathsPreMaterialize",
+					childFilePath
+				});
 			} else {
 				// Fall back to parent's filePath (will be directory path for lazy wrappers)
 				childFilePath = parentMetadata?.filePath || null;
-				console.log(`[WRAP-CHILD-PATH] Using fallback parentMetadata?.filePath: "${childFilePath}"`);
+				this.slothlet.debug("wrapper", {
+					message: "WRAP-CHILD-PATH: Using fallback parentMetadata?.filePath",
+					childFilePath
+				});
 			}
 
 			// Extract SHORT moduleId from parent's FULL moduleID format "moduleId:apiPath"
