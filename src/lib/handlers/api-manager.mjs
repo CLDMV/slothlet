@@ -132,6 +132,8 @@ export class ApiManager extends ComponentBase {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath,
 					reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
+					index: undefined,
+					segment: undefined,
 					validationError: true
 				});
 			}
@@ -143,6 +145,8 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
 				reason: "must be a string, array of strings, empty string (root), or null/undefined (root)",
+				index: undefined,
+				segment: undefined,
 				validationError: true
 			});
 		}
@@ -159,6 +163,8 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
 				reason: "contains empty path segments",
+				index: undefined,
+				segment: undefined,
 				validationError: true
 			});
 		}
@@ -167,6 +173,8 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
 				reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
+				index: undefined,
+				segment: undefined,
 				validationError: true
 			});
 		}
@@ -301,6 +309,8 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: parts.slice(0, i + 1).join("."),
 				reason: "path segment does not exist or is not traversable",
+				index: undefined,
+				segment: undefined,
 				validationError: true
 			});
 		}
@@ -649,6 +659,8 @@ export class ApiManager extends ComponentBase {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath: parts.join("."),
 					reason: "path already exists and collision mode is 'error'",
+					index: undefined,
+					segment: undefined,
 					validationError: true
 				});
 			}
@@ -1557,6 +1569,8 @@ export class ApiManager extends ComponentBase {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
 				reason: "apiPath is required for removeApi operation",
+				index: undefined,
+				segment: undefined,
 				validationError: true
 			});
 		}

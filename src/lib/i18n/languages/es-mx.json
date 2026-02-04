@@ -1,12 +1,12 @@
 {
 	"translations": {
-		"INVALID_CONFIG_API_PATH_INVALID": "Ruta de API inválida '{apiPath}': {reason}. Las rutas de API deben ser cadenas no vacías en notación de puntos que no entren en conflicto con nombres reservados.",
+		"INVALID_CONFIG_API_PATH_INVALID": "Ruta de API inválida '{apiPath}': {reason}. Las rutas de API deben ser cadenas no vacías en notación de puntos que no entren en conflicto con nombres reservados. Segmento en índice {index}: '{segment}'.",
 		"INVALID_CONFIG_MUTATION_DISABLED": "No se puede realizar '{operation}' - la mutación está deshabilitada. Configure allowMutation: true para habilitar operaciones de modificación de API (add/remove/reload).",
 		"INVALID_METADATA_TARGET": "Objetivo de metadatos inválido: se esperaba {expected}, se recibió {target}. Las operaciones de metadatos requieren una referencia de función u objeto.",
 		"METADATA_NO_MODULE_ID": "No se puede establecer metadatos de usuario: no se encontró moduleID en metadatos del sistema. Asegúrese de que la función/objeto de destino se cargó a través de Slothlet.",
 		"INVALID_METADATA_KEY": "Clave de metadatos inválida: se esperaba {expected}, se recibió {type} para la clave '{key}'. Las claves de metadatos deben estar correctamente formateadas.",
 		"WARNING_METADATA_MISMATCH": "Advertencia de seguridad: No coincide la ruta del archivo de metadatos para '{apiPath}'. El rastreo de pila muestra '{stackFile}' pero los metadatos muestran '{metadataFile}'. Esto puede indicar recarga en caliente o manipulación.",
-		"WARNING_INIT_COMPONENT_SKIPPED": "Se omitió la carga del archivo de componente '{file}': {error}. Los archivos de componentes no críticos que fallan al importarse se omitirán.",
+		"WARNING_INIT_COMPONENT_SKIPPED": "Se omitió la carga del archivo de componente '{file}': {errorMessage}. Los archivos de componentes no críticos que fallan al importarse se omitirán.",
 		"CONTEXT_NOT_FOUND": "No se encontró contexto activo para la instancia {instanceID}. {hint}",
 		"CONTEXT_ALREADY_EXISTS": "Ya existe un contexto para la instancia {instanceID}. {hint}",
 		"NO_ACTIVE_CONTEXT": "No se encontró contexto de AsyncLocalStorage activo. {hint}",
