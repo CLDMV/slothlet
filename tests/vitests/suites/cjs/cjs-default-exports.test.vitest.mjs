@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/cjs/cjs-default-exports.test.vitest.mjs
+ *	@Date: 2026-01-28T12:05:03-08:00 (1769630703)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:50 -08:00 (1770266390)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @file CJS Default Export Handling Tests
  * @description
  * Tests that CJS modules using `module.exports = { default: obj, namedExport: fn }`

@@ -1,13 +1,16 @@
 /**
- * @file api/devices/firetv.mjs - Fire TV control (stripped for testing)
- * @description Minimal device control module for testing slothlet proxy behavior
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/firetv.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:15 -08:00 (1770266415)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * Initializes Fire TV/Android TV controller (mock)
- * @param {Object} config - Android TV configuration
- * @returns {Promise<Object|null>} Mock device instance or null if disabled
- */
 export async function initialize(config) {
 	if (!config || !config.enabled) {
 		console.log("Fire TV device disabled in configuration, skipping");
@@ -103,3 +106,4 @@ export const REMOTE_KEYS = {
 export function isValidRemoteKey(key) {
 	return Object.values(REMOTE_KEYS).includes(key);
 }
+

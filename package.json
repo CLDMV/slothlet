@@ -207,6 +207,7 @@
 		"lint": "eslint --config .configs/eslint.config.mjs .",
 		"inspect": "node tools/inspect-api-structure.mjs",
 		"analyze": "node tools/analyze-errors.mjs",
+		"fix:headers": "node tools/fix-headers.mjs",
 		"build": "node tools/build-with-tests.mjs",
 		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
 		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",

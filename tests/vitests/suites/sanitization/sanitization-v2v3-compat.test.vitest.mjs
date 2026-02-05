@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs
+ *	@Date: 2026-01-16T16:19:10-08:00 (1768609150)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:00 -08:00 (1770266400)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * Comprehensive sanitization test suite for V2 and V3
  * Tests all options individually and in combination
  */

@@ -1,25 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_tv_test/lifecycle.mjs
- *	@Date: 2025-10-30 09:25:21 -07:00 (1761841521)
+ *	@Date: 2025-10-30T11:42:43-07:00 (1761849763)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-30 10:17:26 -07:00 (1761844646)
+ *	@Last modified time: 2026-02-04 20:40:16 -08:00 (1770266416)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * @fileoverview Module lifecycle utility functions.
- * @module @cldmv/node-android-tv-remote/utils/lifecycle
- * @public
- *
- * @description
- * Provides utilities for managing module initialization, monitoring, and shutdown
- * across the entire API surface. This centralizes the logic for discovering and
- * calling lifecycle methods on all modules.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // Slothlet runtime imports for live bindings
@@ -108,3 +97,4 @@ export const methods = {
 
 // Export empty default object to maintain namespace since utils/defaults.mjs exports default
 export default {};
+

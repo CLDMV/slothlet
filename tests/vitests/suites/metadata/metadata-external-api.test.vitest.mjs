@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/metadata/metadata-external-api.test.vitest.mjs
+ *	@Date: 2026-01-25T14:50:54-08:00 (1769381454)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:57 -08:00 (1770266397)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Tests for external metadata API (set/remove/setGlobal).
  *
  * Tests the public API for manipulating metadata from OUTSIDE API context:

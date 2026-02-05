@@ -1,21 +1,16 @@
 /**
- * Math collision test file for testing collision.addApi configuration.
- *
- * This file exports functions that will collide with the existing math/ namespace
- * when loaded via api.slothlet.api.add("math", ...).
- *
- * The api_test/math/ folder already exports: add, multiply, divide, subtract
- * This file provides additional functions that should be added to the same namespace.
- *
- * @module api_test_collections/math-collision
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_collisions/math.mjs
+ *	@Date: 2026-01-23T08:17:46-08:00 (1769185066)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:11 -08:00 (1770266411)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * Calculate power of a number.
- * @param {number} base - The base number.
- * @param {number} exponent - The exponent.
- * @returns {number} The result of base^exponent.
- */
 export function power(base, exponent) {
 	return Math.pow(base, exponent);
 }
@@ -44,3 +39,4 @@ export function modulo(a, b) {
  * @type {string}
  */
 export const collisionVersion = "math-collision-v1";
+

@@ -1,13 +1,16 @@
 /**
- * @fileoverview First collision test file - loaded first alphabetically.
- * Exports a default function that will collide with conflict-2.mjs at root level.
- * @module api_test/conflict-1
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_multiple_roots/conflict-1.mjs
+ *	@Date: 2026-01-23T17:35:04-08:00 (1769218504)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:12 -08:00 (1770266412)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * First version of conflicting function.
- * @returns {string} Version identifier.
- */
 export default function conflictingName() {
 	return "from-file-1";
 }
@@ -15,3 +18,4 @@ export default function conflictingName() {
 export function rootFunctionShout(name) {
 	return `HELLO 1, ${name.toUpperCase()}!`;
 }
+

@@ -1,14 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/prepend-license.mjs
- *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 07:01:45 -07:00 (1761141705)
+ *	@Last modified time: 2026-02-04 20:39:40 -08:00 (1770266380)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

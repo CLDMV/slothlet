@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/hooks/hooks-suppress-errors.test.vitest.mjs
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:56 -08:00 (1770266396)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Validates hook suppressErrors behavior across hook-enabled matrix configs.
  *
  * Original test: tests/test-hooks-suppress-errors.mjs
@@ -248,5 +261,4 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 		expect(flags.all.sort()).toEqual(["h1", "h2", "h3"]);
 	});
 });
-
 

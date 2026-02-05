@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/hooks/hooks-async-timing.test.vitest.mjs
+ *	@Date: 2026-01-30T11:45:13-08:00 (1769802313)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:54 -08:00 (1770266394)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Vitest tests for always hooks timing with async functions.
  * @module tests/vitests/suites/hooks/hooks-async-timing.test.vitest
  *

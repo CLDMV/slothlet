@@ -1,20 +1,27 @@
 /**
- * State management API module for Android TV Remote.
- * Provides organized access to configuration, device state, defaults, metadata, and device information.
- * @module state
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/state.mjs
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:03 -08:00 (1770266403)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // Slothlet runtime imports for live bindings
 import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
- * Gets the current configuration settings.
- * @returns {Object} Configuration object
- * @example
- * const config = api.state.getConfig();
- * console.log('Host:', config.host);
- * console.log('Port:', config.port);
- */
+	* Gets the current configuration settings.
+	*	@returns {Object} Configuration object
+	*	@example
+	* const config = api.state.getConfig();
+	* console.log('Host:', config.host);
+	* console.log('Port:', config.port);
+	*/
 export function getConfig() {
 	return {
 		host: context.host,
@@ -31,13 +38,13 @@ export function getConfig() {
 }
 
 /**
- * Gets the current connection state.
- * @returns {Promise<Object>} Connection state information
- * @example
- * const connectionState = await api.state.getConnectionState();
- * console.log('Connected:', connectionState.connected);
- * console.log('Status:', connectionState.status);
- */
+	* Gets the current connection state.
+	*	@returns {Promise<Object>} Connection state information
+	*	@example
+	* const connectionState = await api.state.getConnectionState();
+	* console.log('Connected:', connectionState.connected);
+	* console.log('Status:', connectionState.status);
+	*/
 export async function getConnectionState() {
 	return {
 		connected: self.connection.isConnected(),
@@ -49,24 +56,24 @@ export async function getConnectionState() {
 }
 
 /**
- * Gets default configuration values.
- * @returns {Object} Default configuration object
- * @example
- * const defaults = api.state.getDefaults();
- * console.log('Default port:', defaults.port);
- */
+	* Gets default configuration values.
+	*	@returns {Object} Default configuration object
+	*	@example
+	* const defaults = api.state.getDefaults();
+	* console.log('Default port:', defaults.port);
+	*/
 export function getDefaults() {
 	return context.configDefaults ? { ...context.configDefaults } : {};
 }
 
 /**
- * Gets device metadata collected during initialization.
- * @returns {Promise<Object>} Device metadata object
- * @example
- * const metadata = await api.state.getMetadata();
- * console.log('Device model:', metadata.device?.model);
- * console.log('Android version:', metadata.device?.version);
- */
+	* Gets device metadata collected during initialization.
+	*	@returns {Promise<Object>} Device metadata object
+	*	@example
+	* const metadata = await api.state.getMetadata();
+	* console.log('Device model:', metadata.device?.model);
+	* console.log('Android version:', metadata.device?.version);
+	*/
 export async function getMetadata() {
 	// Check if we need to refresh metadata
 	const now = Date.now();
@@ -85,12 +92,12 @@ export async function getMetadata() {
 }
 
 /**
- * Gets basic device information without display info.
- * @returns {Promise<Object>} Device information object
- * @example
- * const device = await api.state.getDevice();
- * console.log('Device info:', device);
- */
+	* Gets basic device information without display info.
+	*	@returns {Promise<Object>} Device information object
+	*	@example
+	* const device = await api.state.getDevice();
+	* console.log('Device info:', device);
+	*/
 export async function getDevice() {
 	// Ensure we have fresh device properties
 	if (!context.cachedDeviceInfo) {
@@ -107,12 +114,12 @@ export async function getDevice() {
 }
 
 /**
- * Gets comprehensive device information including display details.
- * @returns {Promise<Object>} Complete device information object
- * @example
- * const deviceWithDisplay = await api.state.getDeviceWithDisplay();
- * console.log('Display info:', deviceWithDisplay.display);
- */
+	* Gets comprehensive device information including display details.
+	*	@returns {Promise<Object>} Complete device information object
+	*	@example
+	* const deviceWithDisplay = await api.state.getDeviceWithDisplay();
+	* console.log('Display info:', deviceWithDisplay.display);
+	*/
 export async function getDeviceWithDisplay() {
 	const device = await getDevice();
 
@@ -126,14 +133,14 @@ export async function getDeviceWithDisplay() {
 }
 
 /**
- * Gets the current application state.
- * @returns {Promise<Object|null>} Current application information
- * @example
- * const currentApp = await api.state.getCurrentApp();
- * if (currentApp) {
- *   console.log('Current app:', currentApp.packageName);
- * }
- */
+	* Gets the current application state.
+	*	@returns {Promise<Object|null>} Current application information
+	*	@example
+	* const currentApp = await api.state.getCurrentApp();
+	* if (currentApp) {
+	*   console.log('Current app:', currentApp.packageName);
+	* }
+	*/
 export async function getCurrentApp() {
 	// Refresh app info if needed
 	if (context.pendingAppInfoRefresh) {
@@ -144,12 +151,12 @@ export async function getCurrentApp() {
 }
 
 /**
- * Gets device power state information.
- * @returns {Promise<Object>} Power state information
- * @example
- * const powerState = await api.state.getPowerState();
- * console.log('Device awake:', powerState.mWakefulness === 'Awake');
- */
+	* Gets device power state information.
+	*	@returns {Promise<Object>} Power state information
+	*	@example
+	* const powerState = await api.state.getPowerState();
+	* console.log('Device awake:', powerState.mWakefulness === 'Awake');
+	*/
 export async function getPowerState() {
 	await self.connection.ensureConnected();
 
@@ -158,14 +165,14 @@ export async function getPowerState() {
 }
 
 /**
- * Gets current audio state information.
- * @returns {Promise<Object|null>} Audio state information
- * @example
- * const audioState = await api.state.getAudioState();
- * if (audioState) {
- *   console.log('Audio info:', audioState);
- * }
- */
+	* Gets current audio state information.
+	*	@returns {Promise<Object|null>} Audio state information
+	*	@example
+	* const audioState = await api.state.getAudioState();
+	* if (audioState) {
+	*   console.log('Audio info:', audioState);
+	* }
+	*/
 export async function getAudioState() {
 	// Ensure we have fresh audio info
 	if (!context.cachedAudioInfo) {
@@ -176,14 +183,14 @@ export async function getAudioState() {
 }
 
 /**
- * Gets network information for the device.
- * @returns {Promise<Object|null>} Network information
- * @example
- * const networkInfo = await api.state.getNetworkInfo();
- * if (networkInfo) {
- *   console.log('WiFi connected:', networkInfo.wifi.connected);
- * }
- */
+	* Gets network information for the device.
+	*	@returns {Promise<Object|null>} Network information
+	*	@example
+	* const networkInfo = await api.state.getNetworkInfo();
+	* if (networkInfo) {
+	*   console.log('WiFi connected:', networkInfo.wifi.connected);
+	* }
+	*/
 export async function getNetworkInfo() {
 	// Ensure we have fresh network info
 	if (!context.cachedNetwork) {
@@ -194,32 +201,32 @@ export async function getNetworkInfo() {
 }
 
 /**
- * Gets the list of installed packages.
- * @param {Object} [options={}] - Options for package listing
- * @param {boolean} [options.systemApps=false] - Include system apps
- * @param {boolean} [options.thirdPartyOnly=true] - Only third-party apps
- * @returns {Promise<string[]>} Array of package names
- * @example
- * const packages = await api.state.getInstalledPackages();
- * console.log('Installed apps:', packages.length);
- */
+	* Gets the list of installed packages.
+	*	@param {Object} [options={}] - Options for package listing
+	*	@param {boolean} [options.systemApps=false] - Include system apps
+	*	@param {boolean} [options.thirdPartyOnly=true] - Only third-party apps
+	*	@returns {Promise<string[]>} Array of package names
+	*	@example
+	* const packages = await api.state.getInstalledPackages();
+	* console.log('Installed apps:', packages.length);
+	*/
 export async function getInstalledPackages(options = {}) {
 	const { systemApps = false, thirdPartyOnly = true } = options;
 	return await self.helpers.fetchInstalledPackages(systemApps, thirdPartyOnly);
 }
 
 /**
- * Refreshes device information cache.
- * @param {Object} [options={}] - Refresh options
- * @param {boolean} [options.force=false] - Force refresh even if recently updated
- * @returns {Promise<void>}
- * @example
- * // Refresh device info
- * await api.state.refreshDeviceInfo();
- *
- * // Force refresh
- * await api.state.refreshDeviceInfo({ force: true });
- */
+	* Refreshes device information cache.
+	*	@param {Object} [options={}] - Refresh options
+	*	@param {boolean} [options.force=false] - Force refresh even if recently updated
+	*	@returns {Promise<void>}
+	*	@example
+	* // Refresh device info
+	* await api.state.refreshDeviceInfo();
+	*
+	* // Force refresh
+	* await api.state.refreshDeviceInfo({ force: true });
+	*/
 export async function refreshDeviceInfo(options = {}) {
 	const { force = false } = options;
 
@@ -241,42 +248,42 @@ export async function refreshDeviceInfo(options = {}) {
 }
 
 /**
- * Refreshes application information cache.
- * @returns {Promise<void>}
- * @example
- * await api.state.refreshAppInfo();
- */
+	* Refreshes application information cache.
+	*	@returns {Promise<void>}
+	*	@example
+	* await api.state.refreshAppInfo();
+	*/
 export async function refreshAppInfo() {
 	await self.helpers.refreshCurrentAppInfo();
 }
 
 /**
- * Refreshes network information cache.
- * @returns {Promise<void>}
- * @example
- * await api.state.refreshNetworkInfo();
- */
+	* Refreshes network information cache.
+	*	@returns {Promise<void>}
+	*	@example
+	* await api.state.refreshNetworkInfo();
+	*/
 export async function refreshNetworkInfo() {
 	context.cachedNetwork = await self.helpers.fetchNetworkDetails();
 }
 
 /**
- * Refreshes audio information cache.
- * @returns {Promise<void>}
- * @example
- * await api.state.refreshAudioInfo();
- */
+	* Refreshes audio information cache.
+	*	@returns {Promise<void>}
+	*	@example
+	* await api.state.refreshAudioInfo();
+	*/
 export async function refreshAudioInfo() {
 	context.cachedAudioInfo = await self.helpers.fetchAudioInfo();
 }
 
 /**
- * Refreshes all cached information.
- * @returns {Promise<void>}
- * @example
- * // Refresh everything
- * await api.state.refreshAll();
- */
+	* Refreshes all cached information.
+	*	@returns {Promise<void>}
+	*	@example
+	* // Refresh everything
+	* await api.state.refreshAll();
+	*/
 export async function refreshAll() {
 	if (!context.quiet) {
 		context.emitLog("info", "Refreshing all cached information...", "state.refreshAll");
@@ -290,21 +297,21 @@ export async function refreshAll() {
 }
 
 /**
- * Creates a complete snapshot of the current device state.
- * @param {Object} [options={}] - Snapshot options
- * @param {boolean} [options.includeDisplay=true] - Include display information
- * @param {boolean} [options.compact=false] - Create compact snapshot
- * @returns {Promise<Object>} Complete device state snapshot
- * @example
- * const snapshot = await api.state.createSnapshot();
- * console.log('Device snapshot:', snapshot);
- *
- * // Compact snapshot without display
- * const compactSnapshot = await api.state.createSnapshot({
- *   includeDisplay: false,
- *   compact: true
- * });
- */
+	* Creates a complete snapshot of the current device state.
+	*	@param {Object} [options={}] - Snapshot options
+	*	@param {boolean} [options.includeDisplay=true] - Include display information
+	*	@param {boolean} [options.compact=false] - Create compact snapshot
+	*	@returns {Promise<Object>} Complete device state snapshot
+	*	@example
+	* const snapshot = await api.state.createSnapshot();
+	* console.log('Device snapshot:', snapshot);
+	*
+	* // Compact snapshot without display
+	* const compactSnapshot = await api.state.createSnapshot({
+	*   includeDisplay: false,
+	*   compact: true
+	* });
+	*/
 export async function createSnapshot(options = {}) {
 	const { includeDisplay = true, compact = false } = options;
 
@@ -335,3 +342,8 @@ export async function createSnapshot(options = {}) {
 
 	return compact ? context.compactObject(snapshot) : snapshot;
 }
+
+
+
+
+

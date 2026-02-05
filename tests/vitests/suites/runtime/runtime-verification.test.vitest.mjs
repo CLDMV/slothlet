@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/runtime/runtime-verification.test.vitest.mjs
+ *	@Date: 2026-01-16T21:11:21-08:00 (1768626681)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:59 -08:00 (1770266399)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Runtime verification tests that validate async vs live context manager implementation
  * @module tests/vitests/suites/runtime/runtime-verification.test.vitest
  * @memberof tests.vitests

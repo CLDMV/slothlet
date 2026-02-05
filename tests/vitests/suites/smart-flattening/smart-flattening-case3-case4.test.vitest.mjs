@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:00 -08:00 (1770266400)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Smart flattening tests - Case 3 (Multiple files) and Case 4 (No flattening).
  * @module smart-flattening-case3-case4.test.vitest
  *

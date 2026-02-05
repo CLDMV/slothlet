@@ -1,9 +1,19 @@
 /**
- * Test folder for smart flattening Case 3: Multiple files with one matching API path
- * Scenario: addApi("utils", "./utils-folder") where folder contains utils.mjs + other files
- * Expected: api.utils.{utils-functions} + api.utils.other (utils.mjs flattened, others preserved)
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/smart_flatten/api_smart_flatten_multiple/utils.mjs
+ *	@Date: 2026-01-04T16:31:08-08:00 (1767573068)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:23 -08:00 (1770266423)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * ADB API module for Android TV Remote - Dummy implementation for testing.
+ */
 export function utilFunction() {
 	return "utility function";
 }
@@ -20,3 +30,4 @@ export default {
 	module: "utils-main",
 	functions: ["utilFunction", "helperMethod", "formatData"]
 };
+

@@ -1,21 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_root_issue/order.mjs
- *	@Date: 2025-10-23 12:24:58 -07:00 (1761247498)
+ *	@Date: 2025-10-23T13:13:39-07:00 (1761250419)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 12:30:44 -07:00 (1761247844)
+ *	@Last modified time: 2026-02-04 20:40:13 -08:00 (1770266413)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * @fileoverview Order management functions for root-level API testing.
- * Root-level default export should flatten but currently breaks with multi-default detection.
- * Expected: With multiple root defaults, this should not flatten (conflict resolution)
- * Bug: Multi-default detection applies to root level incorrectly.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -58,3 +51,4 @@ export function updateStatus(order, status) {
 }
 
 export default createOrder;
+

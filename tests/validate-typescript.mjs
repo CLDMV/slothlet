@@ -1,3 +1,16 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/validate-typescript.mjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:43 -08:00 (1770266383)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import { execSync } from "child_process";
 import { writeFileSync, rmSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";

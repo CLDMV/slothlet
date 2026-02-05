@@ -1,7 +1,14 @@
 /**
- * Press/Remote control API module for Android TV Remote - Dummy implementation for testing.
- * Provides remote control key press functionality.
- * @module press
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/press.mjs
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:02 -08:00 (1770266402)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // Slothlet runtime imports for live bindings
@@ -33,10 +40,10 @@ const keycodes = {
 };
 
 /**
- * Presses a remote control key.
- * @param {string} keyName - Name of the key to press
- * @returns {Promise<void>}
- */
+	* Presses a remote control key.
+	*	@param {string} keyName - Name of the key to press
+	*	@returns {Promise<void>}
+	*/
 export async function key(keyName) {
 	const keyCode = remoteKeys[keyName.toUpperCase()];
 	return Promise.resolve({
@@ -46,58 +53,58 @@ export async function key(keyName) {
 }
 
 /**
- * Presses the power button.
- * @returns {Promise<void>}
- */
+	* Presses the power button.
+	*	@returns {Promise<void>}
+	*/
 export async function power() {
 	return key("POWER");
 }
 
 /**
- * Presses the home button.
- * @returns {Promise<void>}
- */
+	* Presses the home button.
+	*	@returns {Promise<void>}
+	*/
 export async function home() {
 	return key("HOME");
 }
 
 /**
- * Presses the back button.
- * @returns {Promise<void>}
- */
+	* Presses the back button.
+	*	@returns {Promise<void>}
+	*/
 export async function back() {
 	return key("BACK");
 }
 
 /**
- * Presses navigation keys.
- * @param {string} direction - Direction ("up", "down", "left", "right")
- * @returns {Promise<void>}
- */
+	* Presses navigation keys.
+	*	@param {string} direction - Direction ("up", "down", "left", "right")
+	*	@returns {Promise<void>}
+	*/
 export async function navigate(direction) {
 	return key(direction.toUpperCase());
 }
 
 /**
- * Presses the select/OK button.
- * @returns {Promise<void>}
- */
+	* Presses the select/OK button.
+	*	@returns {Promise<void>}
+	*/
 export async function select() {
 	return key("SELECT");
 }
 
 /**
- * Gets available remote keys.
- * @returns {Object} Remote keys mapping
- */
+	* Gets available remote keys.
+	*	@returns {Object} Remote keys mapping
+	*/
 export function getRemoteKeys() {
 	return remoteKeys;
 }
 
 /**
- * Gets keycodes mapping.
- * @returns {Object} Keycodes mapping
- */
+	* Gets keycodes mapping.
+	*	@returns {Object} Keycodes mapping
+	*/
 export function getKeycodes() {
 	return keycodes;
 }
@@ -115,3 +122,8 @@ const press = {
 };
 
 export default press;
+
+
+
+
+

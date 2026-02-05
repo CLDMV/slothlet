@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/ownership/ownership-replacement.test.vitest.mjs
+ *	@Date: 2026-01-15T14:07:12-08:00 (1768514832)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:58 -08:00 (1770266398)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Test cross-module ownership tracking with hot reload rollback support
  * @description Verifies that when module v2 overwrites module v1's function,
  *              ownership accumulates (both v1 and v2 tracked) to enable rollback.

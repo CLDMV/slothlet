@@ -1,20 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test/tcp/tcp.mjs
- *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
+ *	@Date: 2025-10-22T09:43:36-07:00 (1761151416)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-29 09:34:10 -08:00 (1769708050)
+ *	@Last modified time: 2026-02-04 20:40:09 -08:00 (1770266409)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * @fileoverview TCP server API module for testing automatic EventEmitter context propagation. Internal file (not exported in package.json).
- * @module api_test.tcp
- * @memberof module:api_test
  */
 
 import net from "node:net";
@@ -31,21 +25,21 @@ const isDebugEnabled = () => {
 };
 
 /**
- * TCP server API object for testing automatic EventEmitter context propagation.
- * This module tests slothlet's ability to preserve AsyncLocalStorage context
- * across EventEmitter callbacks without requiring consumer changes.
- * Accessed as `api.tcp` in the slothlet API.
- * @alias module:api_test.tcp
- * @public
- */
+	* TCP server API object for testing automatic EventEmitter context propagation.
+	* This module tests slothlet's ability to preserve AsyncLocalStorage context
+	* across EventEmitter callbacks without requiring consumer changes.
+	* Accessed as `api.tcp` in the slothlet API.
+	* @alias module:api_test.tcp
+	* @public
+	*/
 export const tcp =
 	/** @lends tcp */
 	{
 		/**
-		 * Test context availability in the tcp module.
-		 * @function testContext
-		 * @returns {object} Context test results
-		 */
+	* Test context availability in the tcp module.
+	* @function testContext
+	* @returns {object} Context test results
+	*/
 		testContext() {
 			// Try to enumerate self - let's see what breaks
 			const selfKeys = Object.keys(self);
@@ -66,11 +60,11 @@ export const tcp =
 		},
 
 		/**
-		 * Create a test TCP server that tests context propagation in EventEmitter callbacks.
-		 * @function createTestServer
-		 * @param {number} [port=0] - Port to listen on (0 for random)
-		 * @returns {Promise<{port: number, server: NetServer}>} Server instance and port
-		 */
+	* Create a test TCP server that tests context propagation in EventEmitter callbacks.
+	* @function createTestServer
+	* @param {number} [port=0] - Port to listen on (0 for random)
+	* @returns {Promise<{port: number, server: NetServer}>} Server instance and port
+	*/
 		async createTestServer(port = 0) {
 			const server = net.createServer();
 			const contextTests = []; // Array to collect context test results
@@ -226,5 +220,11 @@ export const tcp =
 	};
 
 /**
- * @typedef {import('node:net').Server} NetServer
- */
+	* @typedef {import('node:net').Server} NetServer
+	*/
+
+
+
+
+
+

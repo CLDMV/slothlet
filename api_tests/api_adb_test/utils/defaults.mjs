@@ -1,7 +1,20 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/utils/defaults.mjs
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:03 -08:00 (1770266403)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * Defaults utility for loading and managing system defaults from JSON files.
  * Used internally by data system modules.
- * @module utils/defaults
+ *	@module utils/defaults
  */
 
 import fs from "fs";
@@ -17,7 +30,7 @@ let defaultsCache = null;
 
 /**
  * Auto-scans and loads defaults from JSON files in data/defaults/ directory.
- * @returns {Object} Loaded defaults organized by data system
+ *	@returns {Object} Loaded defaults organized by data system
  */
 function loadDefaultsFromFiles() {
 	const defaultsDir = path.join(__dirname, "..", "..", "data", "defaults");
@@ -56,8 +69,8 @@ function loadDefaultsFromFiles() {
 
 /**
  * Gets defaults for a specific data system.
- * @param {string} dataSystemName - Name of the data system (config, device, etc.)
- * @returns {Object} Defaults for the data system
+ *	@param {string} dataSystemName - Name of the data system (config, device, etc.)
+ *	@returns {Object} Defaults for the data system
  */
 export function getDefaults(dataSystemName) {
 	// Load defaults if not cached
@@ -70,7 +83,7 @@ export function getDefaults(dataSystemName) {
 
 /**
  * Gets all defaults organized by data system.
- * @returns {Object} All defaults
+ *	@returns {Object} All defaults
  */
 export function getAllDefaults() {
 	// Load defaults if not cached
@@ -83,7 +96,7 @@ export function getAllDefaults() {
 
 /**
  * Reloads defaults from files (clears cache).
- * @returns {Object} Reloaded defaults
+ *	@returns {Object} Reloaded defaults
  */
 export function reloadDefaults() {
 	defaultsCache = null;
@@ -92,10 +105,10 @@ export function reloadDefaults() {
 
 /**
  * Creates a defaults API object for a specific data system.
- * @param {string} dataSystemName - Name of the data system
- * @param {Function} getCurrentValues - Function to get current values from the system
- * @param {Function} setValues - Function to set values in the system
- * @returns {Object} Defaults API for the data system
+ *	@param {string} dataSystemName - Name of the data system
+ *	@param {Function} getCurrentValues - Function to get current values from the system
+ *	@param {Function} setValues - Function to set values in the system
+ *	@returns {Object} Defaults API for the data system
  */
 export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 	const systemDefaults = getDefaults(dataSystemName);

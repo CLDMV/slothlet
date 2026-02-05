@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/core/core-reload-selective.test.vitest.mjs
+ *	@Date: 2026-01-30T17:01:40-08:00 (1769821300)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:52 -08:00 (1770266392)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Tests for selective component reload (api.slothlet.api.reload(pathOrModuleId))
  * Selective reload updates specific component implementations, preserves custom properties, and updates ownership stack.
  */

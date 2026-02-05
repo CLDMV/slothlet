@@ -1,13 +1,16 @@
 /**
- * @fileoverview Second file in overwrite test - loaded second alphabetically
- * @description This file attempts to overwrite conflictingName from overwrite-test-1.mjs
- * @module api_test.overwriteTest2
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_multiple_roots/overwrite-test-2.mjs
+ *	@Date: 2026-01-23T17:35:04-08:00 (1769218504)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:13 -08:00 (1770266413)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * Second version of conflict function - attempts to overwrite
- * @returns {string} Version identifier
- */
 export function overwriteTest() {
 	return "overwrite-test-2";
 }
@@ -19,3 +22,4 @@ export function overwriteTest() {
 export function conflictingName() {
 	return "from-file-2";
 }
+
