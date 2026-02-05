@@ -1,16 +1,24 @@
-import { context } from "@cldmv/slothlet/runtime";
-
 /**
- * Simple test class to verify context propagation
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/create-test-service.mjs
+ *	@Date: 2026-01-29T03:08:11-08:00 (1769684891)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:04 -08:00 (1770266404)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
+
 class TestService {
 	constructor(name) {
 		this.name = name;
 	}
 
 	/**
-	 * Method that accesses slothlet context
-	 */
+	* Method that accesses slothlet context
+	*/
 	getContextInfo() {
 		return {
 			userId: context.userId,
@@ -21,8 +29,15 @@ class TestService {
 }
 
 /**
- * Factory function that returns a class instance
- */
+	* Factory function that returns a class instance
+	*/
 export function createTestService(name) {
 	return new TestService(name);
 }
+
+
+
+
+
+
+

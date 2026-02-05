@@ -1,4 +1,15 @@
-#!/usr/bin/env node
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/ci-cleanup-src.mjs
+ *	@Date: 2025-12-08T01:23:27-08:00 (1765185807)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:39 -08:00 (1770266379)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
 
 /**
  * @fileoverview CI-only script to remove src folder after build to ensure dist usage

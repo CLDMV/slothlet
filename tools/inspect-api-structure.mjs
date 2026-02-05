@@ -1,21 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/inspect-api-structure.mjs
- *	@Date: 2025-10-23 11:11:42 -07:00 (1761243102)
+ *	@Date: 2025-10-23T12:08:52-07:00 (1761246532)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 17:04:22 -08:00 (1769907862)
+ *	@Last modified time: 2026-02-04 20:39:40 -08:00 (1770266380)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * @fileoverview API structure inspection utility for slothlet development.
- * This tool loads any api_tests folder and displays the complete API structure
- * to help verify behavior during development.
- * @module @cldmv/slothlet/tools/inspect-api-structure
  */
 
 import chalk from "chalk";

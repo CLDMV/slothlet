@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/core/core-reload-full.test.vitest.mjs
+ *	@Date: 2026-01-30T17:01:40-08:00 (1769821300)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:52 -08:00 (1770266392)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Tests for full instance reload (api.slothlet.reload())
  * Full reload rebuilds entire API from scratch and replays all add/remove operations in chronological order.
  */

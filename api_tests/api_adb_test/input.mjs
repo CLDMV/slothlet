@@ -1,7 +1,14 @@
 /**
- * Input management API module for Android TV Remote - Dummy implementation for testing.
- * Provides input handling and key mapping functionality.
- * @module input
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_adb_test/input.mjs
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:02 -08:00 (1770266402)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // Slothlet runtime imports for live bindings
@@ -23,42 +30,42 @@ const keycodes = {
 };
 
 /**
- * Sends text input to the device.
- * @param {string} text - Text to input
- * @returns {Promise<void>}
- */
+	* Sends text input to the device.
+	*	@param {string} text - Text to input
+	*	@returns {Promise<void>}
+	*/
 export async function text(text) {
 	return Promise.resolve({ inputText: text });
 }
 
 /**
- * Sends a key event.
- * @param {string|number} key - Key name or code
- * @returns {Promise<void>}
- */
+	* Sends a key event.
+	*	@param {string|number} key - Key name or code
+	*	@returns {Promise<void>}
+	*/
 export async function key(key) {
 	return Promise.resolve({ keyPressed: key });
 }
 
 /**
- * Sends a tap event at coordinates.
- * @param {number} x - X coordinate
- * @param {number} y - Y coordinate
- * @returns {Promise<void>}
- */
+	* Sends a tap event at coordinates.
+	*	@param {number} x - X coordinate
+	*	@param {number} y - Y coordinate
+	*	@returns {Promise<void>}
+	*/
 export async function tap(x, y) {
 	return Promise.resolve({ tapped: { x, y } });
 }
 
 /**
- * Sends a swipe gesture.
- * @param {number} startX - Start X coordinate
- * @param {number} startY - Start Y coordinate
- * @param {number} endX - End X coordinate
- * @param {number} endY - End Y coordinate
- * @param {number} [duration=300] - Swipe duration in ms
- * @returns {Promise<void>}
- */
+	* Sends a swipe gesture.
+	*	@param {number} startX - Start X coordinate
+	*	@param {number} startY - Start Y coordinate
+	*	@param {number} endX - End X coordinate
+	*	@param {number} endY - End Y coordinate
+	*	@param {number} [duration=300] - Swipe duration in ms
+	*	@returns {Promise<void>}
+	*/
 export async function swipe(startX, startY, endX, endY, duration = 300) {
 	return Promise.resolve({
 		swipe: { startX, startY, endX, endY, duration }
@@ -66,17 +73,17 @@ export async function swipe(startX, startY, endX, endY, duration = 300) {
 }
 
 /**
- * Gets available keyboard keys.
- * @returns {Object} Keyboard keys mapping
- */
+	* Gets available keyboard keys.
+	*	@returns {Object} Keyboard keys mapping
+	*/
 export function getKeyboardKeys() {
 	return keyboardKeys;
 }
 
 /**
- * Gets keycodes mapping.
- * @returns {Object} Keycodes mapping
- */
+	* Gets keycodes mapping.
+	*	@returns {Object} Keycodes mapping
+	*/
 export function getKeycodes() {
 	return keycodes;
 }
@@ -92,3 +99,8 @@ const input = {
 };
 
 export default input;
+
+
+
+
+

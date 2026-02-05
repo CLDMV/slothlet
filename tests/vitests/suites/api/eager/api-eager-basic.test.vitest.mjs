@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/api/eager/api-eager-basic.test.vitest.mjs
- *	@Date: 2026-01-12 18:04:38 -08:00 (1768269878)
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-28 12:15:14 -08:00 (1769631314)
+ *	@Last modified time: 2026-02-04 20:39:46 -08:00 (1770266386)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

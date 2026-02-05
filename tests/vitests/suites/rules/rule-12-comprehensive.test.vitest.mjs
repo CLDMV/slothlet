@@ -1,11 +1,14 @@
 /**
- * @Project: @cldmv/slothlet
- * @Filename: /tests/vitests/processed/rules/rule-12-comprehensive.test.vitest.mjs
- * @Date: 2025-01-11 (Migrated from node:test)
- * @Author: Nate Hyson <CLDMV>
- * @Email: <Shinrai@users.noreply.github.com>
- * -----
- * @Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/rules/rule-12-comprehensive.test.vitest.mjs
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:59 -08:00 (1770266399)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

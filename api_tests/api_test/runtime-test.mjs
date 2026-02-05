@@ -1,15 +1,23 @@
 /**
- * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Live Bindings runtime behavior.
- * This module provides comprehensive tests to verify runtime isolation, context management, and live bindings.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/runtime-test.mjs
+ *	@Date: 2025-11-10T09:52:57-08:00 (1762797177)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:08 -08:00 (1770266408)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { self, context } from "@cldmv/slothlet/runtime";
 
 /**
- * Comprehensive runtime verification that tests all aspects of the runtime system.
- * @function verifyRuntime
- * @returns {object} Complete runtime verification results
- */
+	* Comprehensive runtime verification that tests all aspects of the runtime system.
+	* @function verifyRuntime
+	* @returns {object} Complete runtime verification results
+	*/
 export function verifyRuntime() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -129,12 +137,12 @@ export function verifyRuntime() {
 }
 
 /**
- * Test self cross-calls using math operations.
- * @function testSelfCrossCall
- * @param {number} a - First number
- * @param {number} b - Second number
- * @returns {object} Cross-call test results
- */
+	* Test self cross-calls using math operations.
+	* @function testSelfCrossCall
+	* @param {number} a - First number
+	* @param {number} b - Second number
+	* @returns {object} Cross-call test results
+	*/
 export function testSelfCrossCall(a = 5, b = 3) {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -167,10 +175,10 @@ export function testSelfCrossCall(a = 5, b = 3) {
 }
 
 /**
- * Test context isolation by checking for unique context data.
- * @function testContextIsolation
- * @returns {object} Context isolation test results
- */
+	* Test context isolation by checking for unique context data.
+	* @function testContextIsolation
+	* @returns {object} Context isolation test results
+	*/
 export function testContextIsolation() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -203,10 +211,10 @@ export function testContextIsolation() {
 }
 
 /**
- * Performance test to help distinguish between runtime types.
- * @function testPerformance
- * @returns {object} Performance test results
- */
+	* Performance test to help distinguish between runtime types.
+	* @function testPerformance
+	* @returns {object} Performance test results
+	*/
 export function testPerformance() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -240,10 +248,10 @@ export function testPerformance() {
 }
 
 /**
- * Comprehensive runtime test that combines all verification methods.
- * @function comprehensiveRuntimeTest
- * @returns {object} Complete runtime test results
- */
+	* Comprehensive runtime test that combines all verification methods.
+	* @function comprehensiveRuntimeTest
+	* @returns {object} Complete runtime test results
+	*/
 export function comprehensiveRuntimeTest() {
 	return {
 		verification: verifyRuntime(),
@@ -254,10 +262,10 @@ export function comprehensiveRuntimeTest() {
 }
 
 /**
- * Test self and reference propagation through API function calls.
- * @function testSelfAndReference
- * @returns {object} Self and reference test results
- */
+	* Test self and reference propagation through API function calls.
+	* @function testSelfAndReference
+	* @returns {object} Self and reference test results
+	*/
 export function testSelfAndReference() {
 	const results = {
 		hasSelfAccess: false,
@@ -304,3 +312,10 @@ export function testSelfAndReference() {
 
 	return results;
 }
+
+
+
+
+
+
+

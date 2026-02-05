@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/analyze-errors.mjs
+ *	@Date: 2026-01-17T17:51:34-08:00 (1768701094)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:39 -08:00 (1770266379)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Analyze all SlothletError and SlothletWarning usage and translations
  * Checks:
  * - Proper error construction (originalError passed when needed)
@@ -12,6 +25,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootDir = join(__dirname, "..");
@@ -30,20 +44,6 @@ const translations = translationsData.translations || {};
 
 // Find all hint keys
 const hintKeys = Object.keys(translations).filter((k) => k.startsWith("HINT_"));
-
-/**
- * Configuration for file header check folders
- */
-const FILE_HEADER_CHECK_FOLDERS = [
-	{ path: ".", recursive: false }, // Root folder only (non-recursive)
-	{ path: "tools", recursive: true }, // tools/ folder (recursive)
-	{ path: "tests", recursive: true }, // tests/ folder (recursive)
-	{ path: "api_tests", recursive: true } // api_tests/ folder (recursive)
-];
-
-const FILE_HEADER_IGNORE_FOLDERS = [
-	"tests/vitests_v2" // Ignore tests/vitests_v2
-];
 
 /**
  * Check if a path should be ignored

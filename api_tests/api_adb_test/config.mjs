@@ -1,20 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_adb_test/config.mjs
- *	@Date: 2025-10-25 19:38:08 -07:00 (1761446288)
+ *	@Date: 2025-10-27T11:28:27-07:00 (1761589707)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-04 04:35:32 -08:00 (1767530132)
+ *	@Last modified time: 2026-02-04 20:40:01 -08:00 (1770266401)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * Configuration data system API module for Android TV Remote.
- * Provides configuration management with get, set, merge, and defaults operations.
- * @module config
  */
 
 // Slothlet runtime imports for live bindings
@@ -26,16 +20,16 @@ let activeConfig = {
 };
 
 /**
- * Gets configuration values.
- * @param {string} [key] - Specific config key to get, or undefined for entire config
- * @returns {any} Configuration value(s)
- * @example
- * // Get entire config
- * const config = api.config.get();
- *
- * // Get specific value
- * const host = api.config.get('host');
- */
+	* Gets configuration values.
+	*	@param {string} [key] - Specific config key to get, or undefined for entire config
+	*	@returns {any} Configuration value(s)
+	*	@example
+	* // Get entire config
+	* const config = api.config.get();
+	*
+	* // Get specific value
+	* const host = api.config.get('host');
+	*/
 export function get(key) {
 	if (key) {
 		return activeConfig[key] !== undefined ? activeConfig[key] : null;
@@ -46,20 +40,20 @@ export function get(key) {
 }
 
 /**
- * Sets a configuration value.
- * @param {string|Object} key - Config key to set, or object of key-value pairs
- * @param {any} [value] - Value to set (if key is string)
- * @returns {void}
- * @example
- * // Set single value
- * api.config.set('quiet', true);
- *
- * // Set multiple values
- * api.config.set({
- *   quiet: true,
- *   heartbeatInterval: 60000
- * });
- */
+	* Sets a configuration value.
+	*	@param {string|Object} key - Config key to set, or object of key-value pairs
+	*	@param {any} [value] - Value to set (if key is string)
+	*	@returns {void}
+	*	@example
+	* // Set single value
+	* api.config.set('quiet', true);
+	*
+	* // Set multiple values
+	* api.config.set({
+	*   quiet: true,
+	*   heartbeatInterval: 60000
+	* });
+	*/
 export function set(key, value) {
 	if (typeof key === "object") {
 		// Set multiple values
@@ -83,17 +77,17 @@ export function set(key, value) {
 }
 
 /**
- * Merges configuration values with existing config.
- * @param {Object} configObject - Configuration object to merge
- * @param {boolean} [deep=false] - Whether to perform deep merge
- * @returns {Object} Updated configuration
- * @example
- * // Shallow merge
- * api.config.merge({ quiet: true, port: 5556 });
- *
- * // Deep merge
- * api.config.merge({ advanced: { timeout: 10000 } }, true);
- */
+	* Merges configuration values with existing config.
+	*	@param {Object} configObject - Configuration object to merge
+	*	@param {boolean} [deep=false] - Whether to perform deep merge
+	*	@returns {Object} Updated configuration
+	*	@example
+	* // Shallow merge
+	* api.config.merge({ quiet: true, port: 5556 });
+	*
+	* // Deep merge
+	* api.config.merge({ advanced: { timeout: 10000 } }, true);
+	*/
 export function merge(configObject, deep = false) {
 	if (deep) {
 		// Deep merge implementation
@@ -126,17 +120,17 @@ export function merge(configObject, deep = false) {
 }
 
 /**
- * Resets configuration to defaults.
- * @param {string|string[]} [keys] - Specific keys to reset, or undefined to reset all
- * @returns {Object} Updated configuration
- * @example
- * // Reset all to defaults
- * api.config.reset();
- *
- * // Reset specific keys
- * api.config.reset(['quiet', 'port']);
- * api.config.reset('host');
- */
+	* Resets configuration to defaults.
+	*	@param {string|string[]} [keys] - Specific keys to reset, or undefined to reset all
+	*	@returns {Object} Updated configuration
+	*	@example
+	* // Reset all to defaults
+	* api.config.reset();
+	*
+	* // Reset specific keys
+	* api.config.reset(['quiet', 'port']);
+	* api.config.reset('host');
+	*/
 export function reset(keys) {
 	// For now, just clear the active config
 	// TODO: Use defaults system properly
@@ -154,15 +148,15 @@ export function reset(keys) {
 }
 
 /**
- * Validates configuration values.
- * @param {Object} [configToValidate] - Config to validate, or current config if not provided
- * @returns {Object} Validation result with isValid boolean and errors array
- * @example
- * const validation = api.config.validate();
- * if (!validation.isValid) {
- *   console.log('Config errors:', validation.errors);
- * }
- */
+	* Validates configuration values.
+	*	@param {Object} [configToValidate] - Config to validate, or current config if not provided
+	*	@returns {Object} Validation result with isValid boolean and errors array
+	*	@example
+	* const validation = api.config.validate();
+	* if (!validation.isValid) {
+	*   console.log('Config errors:', validation.errors);
+	* }
+	*/
 export function validate(configToValidate) {
 	const config = configToValidate || get();
 	const errors = [];
@@ -191,12 +185,12 @@ export function validate(configToValidate) {
 }
 
 /**
- * Gets a snapshot of the current configuration state.
- * @returns {Object} Configuration snapshot with metadata
- * @example
- * const snapshot = api.config.snapshot();
- * console.log('Config created:', snapshot.timestamp);
- */
+	* Gets a snapshot of the current configuration state.
+	*	@returns {Object} Configuration snapshot with metadata
+	*	@example
+	* const snapshot = api.config.snapshot();
+	* console.log('Config created:', snapshot.timestamp);
+	*/
 export function snapshot() {
 	return {
 		timestamp: new Date().toISOString(),
@@ -249,3 +243,7 @@ export const defaults = defaultsAPI;
 
 export default activeConfig;
 // export default config;
+
+
+
+

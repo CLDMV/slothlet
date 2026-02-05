@@ -1,37 +1,16 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/debug-slothlet.mjs
- *	@Date: 2025-10-21 14:29:00 -07:00 (1761082140)
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 17:02:01 -08:00 (1769907721)
+ *	@Last modified time: 2026-02-04 20:39:41 -08:00 (1770266381)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import chalk from "chalk";
-import { spawn } from "node:child_process";
-
-// import slothlet from "@cldmv/slothlet";
-import crypto from "crypto";
-
-let slothlet;
-const verbose =
-	process.argv.includes("--verbose") ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
-	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
-
-/**
- * Force dev-only resolution for this run by re-executing with required conditions.
- * Ensures src exports load even if the parent shell lacks flags; scope is limited to this process.
- * @param {boolean} [forceV2=false] - If true, forces v2 (slothlet-two-dev) condition regardless of current environment.
- * @returns {boolean} True if a child process was spawned and the current process should stop.
- * @example
- * if (ensureDevEnvFlags()) return;
- * if (ensureDevEnvFlags(true)) return; // Force v2
- */
 function ensureDevEnvFlags(forceV2 = false) {
 	/**
 	 * @param {string[]} args

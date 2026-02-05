@@ -1,42 +1,16 @@
 /**
- * @fileoverview ESM interoperability module for slothlet mixed API testing.
- * @module api_test_mixed.interop.interopEsm
- * @memberof module:api_test_mixed
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_mixed/interop/interop-esm.mjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:12 -08:00 (1770266412)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { self, context } from "@cldmv/slothlet/runtime";
-
-/**
- * ESM interoperability object for testing cross-module calls and live bindings.
- * Tests interoperability between ESM and CJS modules via live bindings.
- * Accessed as `api.interop.interopEsm` in the slothlet API.
- * @alias module:api_test_mixed.interop.interopEsm
- * @public
- * @example // ESM usage via slothlet API
- * import slothlet from "@cldmv/slothlet";
- * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
- * console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
- *
- * @example // ESM usage via slothlet API (inside async function)
- * async function example() {
- *   const { default: slothlet } = await import("@cldmv/slothlet");
- *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
- *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
- * }
- *
- * @example // CJS usage via slothlet API (top-level)
- * let slothlet;
- * (async () => {
- *   ({ slothlet } = await import("@cldmv/slothlet"));
- *   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
- *   console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
- * })();
- *
- * @example // CJS usage via slothlet API (inside async function)
- * const slothlet = require("@cldmv/slothlet");
- * const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
- * console.log(await api_test_mixed.interop.interopEsm.testCrossCall(2, 3)); // result
- */
 export const interopEsm =
 	/** @lends interopEsm */
 	{
@@ -95,3 +69,4 @@ export const interopEsm =
 			}
 		}
 	};
+

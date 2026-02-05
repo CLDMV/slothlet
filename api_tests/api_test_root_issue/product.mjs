@@ -1,21 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_root_issue/product.mjs
- *	@Date: 2025-10-23 12:24:49 -07:00 (1761247489)
+ *	@Date: 2025-10-23T13:13:39-07:00 (1761250419)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 12:30:40 -07:00 (1761247840)
+ *	@Last modified time: 2026-02-04 20:40:14 -08:00 (1770266414)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * @fileoverview Product management functions for root-level API testing.
- * Root-level default export should flatten but currently breaks with multi-default detection.
- * Expected: Only one root default, so api() creates product, api.calculateTax(), api.formatProduct()
- * Bug: With multiple root defaults, this doesn't flatten as expected.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -57,3 +50,4 @@ export function formatProduct(product) {
 }
 
 export default createProduct;
+

@@ -1,10 +1,16 @@
 /**
- * @fileoverview TV controllers in subfolder - testing proxy behavior in nested structure
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/controllers/tv-controllers.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:15 -08:00 (1770266415)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * Mock TV Controller class for testing proxy behavior in subfolder.
- */
 class SubfolderTVController {
 	constructor(tvId) {
 		this.tvId = tvId;
@@ -81,3 +87,4 @@ if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
  * @default
  */
 export default SubfolderControllers;
+

@@ -1,20 +1,14 @@
 /**
- *	@Project: @cldmv/node-android-tv-remote
- *	@Filename: /src/api/utils/defaults.mjs
- *	@Date: 2025-10-27 07:17:21 -07:00 (1761574641)
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/utils/defaults.mjs
+ *	@Date: 2025-10-30T11:42:43-07:00 (1761849763)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-27 13:44:25 -07:00 (1761597865)
+ *	@Last modified time: 2026-02-04 20:40:20 -08:00 (1770266420)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * Defaults utility for loading and managing system defaults from JSON files.
- * Used internally by data system modules.
- * @module utils/defaults
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // import fs from "fs"; // Commented out for dummy implementation
@@ -117,3 +111,4 @@ export async function createDefaultsAPI(_) {
 
 export default getDefaults;
 // export default getAllDefaults;
+

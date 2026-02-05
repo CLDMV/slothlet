@@ -1,20 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_root_issue/config.mjs
- *	@Date: 2025-10-10 10:04:15 -07:00 (1760115855)
+ *	@Date: 2025-10-24T13:48:15-07:00 (1761338895)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-24 11:26:00 -07:00 (1761330360)
+ *	@Last modified time: 2026-02-04 20:40:13 -08:00 (1770266413)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- * Shared Configuration API Endpoint
- * Provides common configuration and utilities for all TV manufacturers.
- * Accessible via api.config
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { context } from "@cldmv/slothlet/runtime";
@@ -246,3 +240,4 @@ export const config = {
 
 // Export config object as default
 export default config;
+

@@ -1,15 +1,16 @@
 /**
- * @fileoverview File-level collision test - collides with math/ folder.
- * This file exports at the same path as the math/ folder, creating a collision.
- * @module api_test/collision-math
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_impl/math.mjs
+ *	@Date: 2026-02-01T18:27:46-08:00 (1769999266)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:12 -08:00 (1770266412)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * Alternative math implementation that collides with math/ folder.
- * @param {number} a - First number.
- * @param {number} b - Second number.
- * @returns {number} Sum of the two numbers.
- */
 export function add(a, b) {
 	return a + b + 2000; // Different implementation to test collision
 }
@@ -19,3 +20,4 @@ export function add(a, b) {
  * @type {string}
  */
 export const collisionVersion = "collision-math-file";
+

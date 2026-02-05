@@ -1,12 +1,16 @@
 /**
- * @file api/devices/lg.mjs - LG TV control (stripped for testing)
- * @description Minimal device control module with proxy for testing slothlet proxy behavior
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/lg.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:40:15 -08:00 (1770266415)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-/**
- * TV Controller class for individual TV operations (mock)
- * Enables array-style access like lg[0].power.on()
- */
 class TVController {
 	constructor(tvId) {
 		this.tvId = tvId;
@@ -152,3 +156,4 @@ const LGTVControllers = new Proxy(
  * @default
  */
 export default LGTVControllers;
+

@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/rules/rule-coverage.test.vitest.mjs
+ *	@Date: 2026-01-20T19:55:31-08:00 (1768967731)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:59 -08:00 (1770266399)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Rule Coverage Test - Validates all C## conditions are documented in code
  * @description Ensures flatten.mjs implementation references Rule #, F##, and C## properly
  */

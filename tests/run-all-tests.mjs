@@ -1,4 +1,15 @@
-#!/usr/bin/env node
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/run-all-tests.mjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-04 20:39:43 -08:00 (1770266383)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
 
 /**
  * @fileoverview Comprehensive test runner for all slothlet test files.
