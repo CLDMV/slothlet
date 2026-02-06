@@ -1,5 +1,7 @@
 # Context.get() Cross-Instance Behavior - Needs Review
 
+**Last Evaluated:** 2026-02-06
+
 **Status:** 🟡 **NEEDS INVESTIGATION**  
 **Priority:** MEDIUM  
 **Date Created:** January 29, 2026

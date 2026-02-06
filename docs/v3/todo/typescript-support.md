@@ -1,5 +1,7 @@
 # TypeScript Support Implementation
 
+**Last Evaluated:** 2026-02-06
+
 ## Overview
 
 Add native TypeScript support to Slothlet, allowing users to write modules in TypeScript that are automatically transpiled and loaded.
