@@ -258,32 +258,37 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {Object} params - Reload parameters
-				 * @param {string} [params.apiPath] - The API path to reload
-				 * @param {string} [params.moduleID] - The module ID to reload
-				 * @returns {Promise<void>}
-				 * @public
-				 *
-				 * @description
-				 * Reloads API modules recorded through add operations, preserving references.
-				 * Requires `api.mutations.reload: true` in configuration.
-				 *
-				 * @example
-				 * await api.slothlet.api.reload({ apiPath: "plugins" });
-				 *
-				 * @example
-				 * await api.slothlet.api.reload({ moduleID: "myModule" });
-				 */
-				reload: async function slothlet_api_reload(params) {
-					// Check if reload mutation is allowed
-					if (!config.api?.mutations?.reload) {
-						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-							operation: "api.reload",
-							hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
-							validationError: true
-						});
-					}
-					return slothlet.handlers.apiManager.reloadApiComponent(params);
+			 * @param {Object|string} pathOrParams - API path string or parameters object
+			 * @param {string} [pathOrParams.apiPath] - The API path to reload (when using object form)
+			 * @param {string} [pathOrParams.moduleID] - The module ID to reload (when using object form)
+			 * @returns {Promise<void>}
+			 * @public
+			 *
+			 * @description
+			 * Reloads API modules recorded through add operations, preserving references.
+			 * Requires `api.mutations.reload: true` in configuration.
+			 * Accepts either a string (API path) or an object with apiPath/moduleID.
+			 *
+			 * @example
+			 * await api.slothlet.api.reload("plugins");
+			 *
+			 * @example
+			 * await api.slothlet.api.reload({ apiPath: "plugins" });
+			 *
+			 * @example
+			 * await api.slothlet.api.reload({ moduleID: "myModule" });
+			 */
+			reload: async function slothlet_api_reload(pathOrParams) {
+				// Check if reload mutation is allowed
+				if (!config.api?.mutations?.reload) {
+					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+						operation: "api.reload",
+						hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
+						validationError: true
+					});
+				}
+				// Normalize input: if string, convert to { apiPath: string }
+				const params = typeof pathOrParams === "string" ? { apiPath: pathOrParams } : pathOrParams;
 				}
 			},
 

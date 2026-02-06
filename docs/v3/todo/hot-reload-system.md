@@ -1,13 +1,14 @@
 # Hot Reload System Implementation
 
-**Last Evaluated:** 2026-02-06
+**Status:** ❌ NOT IMPLEMENTED (Selective Reload)  
+**Last Updated:** 2026-02-06
 
-## Status: Partially Complete ✅
+## Status: Mixed Results
 
-### Completed Features
+### ✅ Completed Features
 
 #### ✅ Full Instance Reload (`api.slothlet.reload()`)
-- **Status**: COMPLETE
+- **Status**: COMPLETE & WORKING
 - **Tests**: 56/56 passing (100%)
 - **Implementation**: `src/slothlet.mjs` - `async reload()` method
 - **Features**:
@@ -33,40 +34,75 @@ console.log(api.config); // Shows actual nested values, not {}
 ```
 
 **Key Mechanisms**:
-1. **Proxy Forwarding**: `boundApi` proxy forwards to `_currentApi` (updated on reload)
+1. **Proxy Forwarding**: `boundApi` proxy forwards to `this.api` (updated on reload)
 2. **Cache Busting**: Temporary instance IDs force ESM re-import
 3. **Operation Replay**: Chronological replay of `add()`/`remove()` calls
 4. **Context Preservation**: Instance ID maintained for AsyncLocalStorage continuity
 
-### Pending Features
+### ⚠️ Issues Found
 
-#### 🔄 Targeted Module Reload (`api.slothlet.reload("path")`)
-- **Status**: NOT STARTED
-- **Tests**: Not yet written
-- **Priority**: Medium
-- **Description**: Reload specific module or subtree without full instance reload
+#### ❌ Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
+- **Status**: NOT PROPERLY IMPLEMENTED
+- **Tests**: 48 failed / 56 total (14% pass rate) - 86% failure
+- **Implementation**: `src/lib/handlers/api-manager.mjs` - `reloadApiComponent()` method
+- **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` (may not be fully v3-compatible)
 
-**Planned API**:
+**Note**: Only baseline tests (2356 tests) are confirmed v3-compatible. This test file may need updates in addition to implementation fixes.
+
+**Intended API**:
 ```javascript
-// Reload single module
-await api.slothlet.reload("math.advanced");
+// Reload single module by API path
+await api.slothlet.api.reload("math.advanced");
+
+// Reload by moduleID
+await api.slothlet.api.reload(moduleID);
 
 // Reload subtree
-await api.slothlet.reload("plugins");
+await api.slothlet.api.reload("plugins");
 ```
 
-**Requirements**:
-- Selective cache invalidation (only target module + dependencies)
-- Preserve non-reloaded modules in memory
-- Update ownership tracking for replaced modules only
-- Maintain context for non-reloaded parts
-- Handle dependency graph updates
+**Current Issues** (from test failures):
 
-**Challenges**:
-- Dependency tracking (which modules depend on reloaded module?)
-- Partial ownership updates (don't clear entire history)
-- Lazy wrapper invalidation (materialized proxies must re-lazy)
-- Reference preservation for parent objects containing reloaded module
+1. **Custom properties lost**: Properties added to API paths (`api.custom.testFlag = true`) become `undefined` after selective reload
+2. **Hooks not reapplied**: `api.math.add(5, 5)` returns `10` instead of `1010` (hook should add 1000, not being reapplied)
+3. **Context lifecycle broken**: 4 unhandled `CONTEXT_NOT_FOUND` errors - instances shut down prematurely
+   ```
+   SlothletError: [CONTEXT_NOT_FOUND] Context not found for instance 'slothlet_xxx'.
+   Instance may have been shut down. Available instances: []
+   ```
+4. **Type handling broken in lazy mode**: `typeof api.custom` returns `"function"` instead of `"object"`
+5. **Error handling missing**: Reload of removed component returns `undefined` instead of throwing error
+6. **Sibling isolation broken**: Nested child reload (`api.parent.child1`) affects siblings when it shouldn't
+
+**Implementation Gaps** (what needs to be built):
+
+1. **Property preservation system**:
+   - Capture all custom properties before reload
+   - Restore custom properties after reload
+   - Test case: `api.custom.testFlag = true` → reload → should still be `true`
+
+2. **Hook reapplication**:
+   - Store registered hooks per module
+   - Replay hooks during selective reload
+   - Test case: math.add hook (adds 1000) must be reapplied
+
+3. **Context lifecycle management**:
+   - Fix premature instance shutdown
+   - Ensure UnifiedWrapper context lookup works during reload
+   - Prevent `Available instances: []` errors
+
+4. **Type handling for lazy mode**:
+   - Special handling for lazy proxy materialization during reload
+   - Ensure `typeof` checks return correct types after reload
+
+5. **Error handling**:
+   - Validate component exists before reload
+   - Throw error when reloading removed component (currently returns `undefined`)
+
+6. **Isolation guarantees**:
+   - Ensure selective reload scope is properly bounded
+   - Nested child reload must not affect siblings
+   - Only target module + explicit dependencies should change
 
 ---
 
@@ -78,17 +114,21 @@ await api.slothlet.reload("plugins");
 - ✅ Operation history tracking in api-manager
 - ✅ Console.log display fix for UnifiedWrapper proxies
 
-### Phase 2: Full Reload (January 2026)
+### Phase 2: Full Instance Reload (January 2026)
 - ✅ Complete instance reload with preserved instance ID
 - ✅ Chronological operation replay (add/remove)
 - ✅ Custom property cleanup during reload
-- ✅ All 56 reload tests passing
+- ✅ All 56 tests passing (100%)
 
-### Phase 3: Targeted Reload (Pending)
-- 🔄 Selective module invalidation
-- 🔄 Dependency graph tracking
-- 🔄 Partial ownership updates
-- 🔄 Reference preservation for non-reloaded modules
+### Phase 3: Selective Reload (February 2026)
+- 🟡 Partial implementation in `src/lib/handlers/api-manager.mjs` (incomplete)
+- ⚠️ Tests written but 86% failing (48/56 tests)
+- ❌ Custom property preservation not implemented
+- ❌ Hook reapplication system not implemented
+- ❌ Context lifecycle broken (premature shutdown)
+- ❌ Lazy mode type handling broken
+- ❌ Error handling not implemented
+- ❌ Sibling isolation not working
 
 ---
 
@@ -152,16 +192,38 @@ Reload should restore "clean" state (only module exports, no runtime mutations).
 
 ## Testing
 
-### Full Reload Tests (`tests/vitests/suites/core/core-reload-full.test.vitest.mjs`)
-- ✅ 56/56 tests passing (100%)
-- Covers: basic reload, operation replay, context preservation, multiple reloads, error handling
+### Full Instance Reload Tests
+- **File**: `tests/vitests/suites/core/core-reload-full.test.vitest.mjs`
+- **Status**: ✅ 56/56 tests passing (100%)
+- **Coverage**: basic reload, operation replay, context preservation, multiple reloads, error handling
 
-### Targeted Reload Tests
-- 🔄 Not yet implemented
+### Selective Module Reload Tests
+- **File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs`
+- **Status**: ❌ 8/56 tests passing (14% pass rate)
+- **Error**: `CONTEXT_NOT_FOUND` - Context not found for instance, instance may have been shut down
+- **Coverage**: API path reload, moduleID reload, nested path reload, removed component handling
+
+### Metadata Reload Tests
+- **File**: `tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs`
+- **Status**: Tests for `api.slothlet.api.reload()` partial reload
+- **Coverage**: Metadata preservation during selective reload operations
 
 ---
 
-## Future Enhancements
+## Action Items
+
+### High Priority - Fix Selective Reload
+- [ ] Debug `CONTEXT_NOT_FOUND` errors in selective reload tests
+- [ ] Fix context lifecycle management during `api.slothlet.api.reload()`
+- [ ] Prevent premature instance cleanup during selective reload
+- [ ] Ensure UnifiedWrapper context lookup works during reload
+- [ ] Get all 56 selective reload tests passing
+
+### Medium Priority - Documentation
+- [ ] User guide: how to use reload in production
+- [ ] Performance benchmarks: full vs selective reload
+- [ ] Best practices: when to use full vs selective reload
+- [ ] Migration guide: updating code for hot reload support
 
 ### Hot Module Replacement (HMR)
 - Watch file system for changes
@@ -187,10 +249,13 @@ api.slothlet.hooks.after("reload", async (modules) => {
 
 ---
 
-## Documentation
+## Documentation Status
 
-- ✅ Implementation complete in `src/slothlet.mjs`
-- ✅ JSDoc documentation complete
-- ✅ Test coverage 100% for full reload
+- ✅ Implementation complete in `src/slothlet.mjs` (full reload)
+- ✅ Implementation complete in `src/lib/handlers/api-manager.mjs` (selective reload)
+- ✅ JSDoc documentation complete for both reload methods
+- ✅ Test coverage written for full reload (100% passing)
+- ⚠️ Test coverage written for selective reload (86% failing)
+- ❌ Selective reload needs debugging before production use
 - 🔄 User guide pending (how to use reload in production)
 - 🔄 Performance benchmarks pending
