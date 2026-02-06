@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:48 -08:00 (1770266388)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -15,7 +15,7 @@
  * @fileoverview Hot reload error handling coverage.
  *
  * @description
- * Tests error conditions for hot reload operations: disabled hotReload rejections,
+ * Tests error conditions for hot reload operations: disabled reload rejections,
  * invalid arguments, concurrent operations, and non-existent paths.
  *
  * @module tests/vitests/processed/hot-reload/hot-reload-errors.test.vitest
@@ -41,9 +41,9 @@ const NON_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_T
 const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
 
 describe("Hot Reload Error Handling", () => {
-	it("rejects reload() when hotReload is disabled", async () => {
+	it("rejects reload() when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.slothlet.reload()).rejects.toThrow("hotReload must be enabled");
+		await expect(api.slothlet.reload()).rejects.toThrow("reload");
 		await api.shutdown();
 	});
 
@@ -57,9 +57,9 @@ describe("Hot Reload Error Handling", () => {
 		await api.shutdown();
 	});
 
-	it("rejects reloadApi when hotReload is disabled", async () => {
+	it("rejects reloadApi when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.slothlet.api.reload("test")).rejects.toThrow("hotReload must be enabled");
+		await expect(api.slothlet.api.reload("test")).rejects.toThrow("reload");
 		await api.shutdown();
 	});
 
@@ -72,8 +72,8 @@ describe("Hot Reload Error Handling", () => {
 	it("handles concurrent reloadApi operations", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
-		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
-		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, {}, { moduleId: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { moduleID: "module-2" });
 
 		await expect(Promise.all([api.slothlet.api.reload("extra1"), api.slothlet.api.reload("extra2")])).resolves.toBeDefined();
 

@@ -17,7 +17,7 @@
  * @description
  * Migrates tests/test-map-set-proxy-fix.mjs to vitest with matrix coverage.
  * Ensures Map and Set instances exposed through slothlet proxies behave correctly
- * (iteration, accessors, membership) in all modes/runtimes/hook/hotReload combinations.
+ * (iteration, accessors, membership) in all modes/runtimes/hook/reload combinations.
  *
  * @module tests/vitests/processed/map-set-proxy-fix/map-set-proxy-fix.test.vitest
  */

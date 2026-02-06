@@ -25,7 +25,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
+
+const execAsync = promisify(exec);
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootDir = join(__dirname, "..");
@@ -1014,9 +1018,9 @@ if (allConsoleWarns.length > 0) {
 	console.log(`✅ No console.warn calls found in src folder\n`);
 }
 
-// ===== CONSOLE.LOG DETECTION =====
+// ===== CONSOLE.LOG DETECTION (SRC FOLDER) =====
 console.log("\n" + "=".repeat(80));
-console.log("=== Console.log Detection (Outside SlothletDebug Class) ===");
+console.log("=== Console.log Detection (Outside SlothletDebug Class) - src folder ===");
 console.log("=".repeat(80) + "\n");
 
 const allConsoleLogs = [];
@@ -1040,6 +1044,37 @@ if (allConsoleLogs.length > 0) {
 	});
 } else {
 	console.log(`✅ All console.log calls are inside SlothletDebug class\n`);
+}
+
+// ===== CONSOLE.LOG DETECTION (VITEST FOLDER) =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Console.log Detection - tests/vitests folder ===");
+console.log("=".repeat(80) + "\n");
+
+const vitestDir = join(rootDir, "tests", "vitests");
+const vitestFiles = await findMjsFiles(vitestDir);
+
+const vitestConsoleLogs = [];
+for (const file of vitestFiles) {
+	const content = await readFile(file, "utf-8");
+	const logs = parseConsoleLogs(content, file);
+	vitestConsoleLogs.push(...logs);
+}
+
+if (vitestConsoleLogs.length > 0) {
+	console.log(`❌ Found ${vitestConsoleLogs.length} console.log calls in tests/vitests folder:\n`);
+	console.log(`   Test files should not contain console.log statements (causes test output pollution).\n`);
+
+	vitestConsoleLogs.forEach((log, idx) => {
+		const relPath = relative(rootDir, log.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${log.lineNumber}`);
+		console.log(`    Code: ${log.fullMatch.substring(0, 80)}${log.fullMatch.length > 80 ? "..." : ""}`);
+		console.log(`    First Arg: ${log.firstArg.substring(0, 60)}${log.firstArg.length > 60 ? "..." : ""}`);
+		console.log(`    ❌ Remove console.log or use proper test assertions`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No console.log calls found in tests/vitests folder\n`);
 }
 
 // ===== FILE HEADER DETECTION =====
@@ -1085,6 +1120,66 @@ if (filesWithoutHeaders.length > 0) {
 	console.log(`✅ All files have proper file headers\n`);
 }
 
+// ===== SYNTAX CHECK =====
+console.log("\n" + "=".repeat(80));
+console.log("=== JavaScript Syntax Check ===");
+console.log("=".repeat(80) + "\n");
+
+const syntaxErrors = [];
+console.log(`Checking ${headerCheckFiles.length} files for syntax errors...`);
+
+for (const file of headerCheckFiles) {
+	try {
+		// Use node --check to validate syntax
+		// This properly handles ES6 modules
+		await execAsync(`node --check "${file}"`);
+	} catch (err) {
+		// Extract useful error information
+		let errorMessage = err.stderr || err.message || "Unknown syntax error";
+
+		// Parse line and column from error message if available
+		const lineMatch = errorMessage.match(/(?:line |:)(\d+)/i);
+		const line = lineMatch ? lineMatch[1] : "unknown";
+
+		// Clean up the error message
+		errorMessage = errorMessage
+			.replace(/^.*?SyntaxError:\s*/i, "")
+			.split("\n")[0]
+			.trim();
+
+		syntaxErrors.push({
+			filePath: file,
+			error: errorMessage,
+			line: line,
+			fullError: err.stderr || err.message
+		});
+	}
+}
+
+if (syntaxErrors.length > 0) {
+	console.log(`\n❌ Found ${syntaxErrors.length} files with syntax errors:\n`);
+
+	for (const { filePath, error, line, fullError } of syntaxErrors) {
+		const relPath = relative(rootDir, filePath);
+		console.log(`📄 ${relPath}`);
+		if (line !== "unknown") {
+			console.log(`   Line: ${line}`);
+		}
+		console.log(`   Error: ${error}`);
+		if (VERBOSE && fullError) {
+			console.log(
+				`   Full Output:\n${fullError
+					.split("\n")
+					.map((l) => `      ${l}`)
+					.join("\n")}`
+			);
+		}
+		console.log();
+	}
+} else {
+	console.log(`\n✅ All files have valid JavaScript syntax\n`);
+}
+
 // ===== FINAL SUMMARY =====
 console.log("=".repeat(80));
 console.log("\n📊 Translation Statistics:");
@@ -1127,10 +1222,17 @@ if (allConsoleWarns.length > 0) {
 }
 
 if (allConsoleLogs.length > 0) {
-	console.log(`⚠️  Improper Console.log:        ${allConsoleLogs.length} - Should use slothlet.debug()`);
+	console.log(`⚠️  Improper Console.log (src):  ${allConsoleLogs.length} - Should use slothlet.debug()`);
 	hasIssues = true;
 } else {
-	console.log(`✅ Improper Console.log:        0`);
+	console.log(`✅ Improper Console.log (src):  0`);
+}
+
+if (vitestConsoleLogs.length > 0) {
+	console.log(`⚠️  Console.log (vitest):        ${vitestConsoleLogs.length} - Remove from tests`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Console.log (vitest):        0`);
 }
 
 if (errorsWithIssues.length > 0) {
@@ -1145,6 +1247,13 @@ if (filesWithoutHeaders.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Files without Headers:       0`);
+}
+
+if (syntaxErrors.length > 0) {
+	console.log(`❌ Files with Syntax Errors:    ${syntaxErrors.length} - Fix syntax issues`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Files with Syntax Errors:    0`);
 }
 
 console.log();

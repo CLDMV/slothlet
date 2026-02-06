@@ -135,11 +135,11 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		await expect(api.shutdown()).resolves.not.toThrow();
 	});
 
-	test("should support reload after shutdown when hotReload is enabled", async () => {
+	test("should support reload after shutdown when api.mutations.reload is enabled", async () => {
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hotReload: true,
+			api: { mutations: { reload: true } },
 			context: { test: "initial" },
 			diagnostics: true
 		});
@@ -168,7 +168,7 @@ describe.each(getMatrixConfigs({ runtime: "async" }))("ALS Cleanup > Config: '$n
 		const api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST,
-			hotReload: true,
+			api: { mutations: { reload: true } },
 			diagnostics: true
 		});
 

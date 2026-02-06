@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -28,14 +28,14 @@ export class OwnershipManager extends ComponentBase {
 
 	constructor(slothlet) {
 		super(slothlet);
-		this.moduleToPath = new Map(); // moduleId → Set<apiPath>
-		this.pathToModule = new Map(); // apiPath → Array<{moduleId, source, timestamp, value}>
+		this.moduleToPath = new Map(); // moduleID → Set<apiPath>
+		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
 	}
 
 	/**
 	 * Register module ownership of API path with its value
 	 * @param {Object} options - Registration options
-	 * @param {string} options.moduleId - Module identifier
+	 * @param {string} options.moduleID - Module identifier
 	 * @param {string} options.apiPath - API path being registered
 	 * @param {*} options.value - The actual function/object being registered
 	 * @param {string} [options.source="core"] - Source of registration
@@ -45,10 +45,10 @@ export class OwnershipManager extends ComponentBase {
 	 * @returns {Object|null} Registration entry or null if skipped
 	 * @public
 	 */
-	register({ moduleId, apiPath, value, source = "core", collisionMode = "error", config = null, filePath = null }) {
+	register({ moduleID, apiPath, value, source = "core", collisionMode = "error", config = null, filePath = null }) {
 		// Validate inputs
-		if (!moduleId || typeof moduleId !== "string") {
-			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleId }, null, { validationError: true });
+		if (!moduleID || typeof moduleID !== "string") {
+			throw new this.SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID }, null, { validationError: true });
 		}
 		// Allow empty string for root-level registrations
 		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
@@ -57,7 +57,7 @@ export class OwnershipManager extends ComponentBase {
 
 		// Check for conflicts
 		const currentOwner = this.getCurrentOwner(apiPath);
-		if (currentOwner && currentOwner.moduleId !== moduleId) {
+		if (currentOwner && currentOwner.moduleID !== moduleID) {
 			// Handle conflict based on collision mode
 			if (collisionMode === "merge" || collisionMode === "replace" || collisionMode === "merge-replace") {
 				// Allow registration - will merge or replace
@@ -69,8 +69,8 @@ export class OwnershipManager extends ComponentBase {
 				if (!config?.silent) {
 					new this.SlothletWarning("WARNING_OWNERSHIP_CONFLICT", {
 						apiPath,
-						existingModuleId: currentOwner.moduleId,
-						newModuleId: moduleId
+						existingModuleId: currentOwner.moduleID,
+						newModuleId: moduleID
 					});
 				}
 				return null;
@@ -78,27 +78,27 @@ export class OwnershipManager extends ComponentBase {
 				// error mode - throw
 				throw new this.SlothletError("OWNERSHIP_CONFLICT", {
 					apiPath,
-					existingModuleId: currentOwner.moduleId,
-					newModuleId: moduleId,
+					existingModuleId: currentOwner.moduleID,
+					newModuleId: moduleID,
 					validationError: true
 				});
 			}
 		}
 
 		// Add to moduleToPath
-		if (!this.moduleToPath.has(moduleId)) {
-			this.moduleToPath.set(moduleId, new Set());
+		if (!this.moduleToPath.has(moduleID)) {
+			this.moduleToPath.set(moduleID, new Set());
 		}
-		this.moduleToPath.get(moduleId).add(apiPath);
+		this.moduleToPath.get(moduleID).add(apiPath);
 
 		// Add to pathToModule stack
 		if (!this.pathToModule.has(apiPath)) {
 			this.pathToModule.set(apiPath, []);
 		}
 
-		// Check for duplicate registration - if this moduleId is already in the stack, don't add again
+		// Check for duplicate registration - if this moduleID is already in the stack, don't add again
 		const stack = this.pathToModule.get(apiPath);
-		const existingEntry = stack.find((entry) => entry.moduleId === moduleId);
+		const existingEntry = stack.find((entry) => entry.moduleID === moduleID);
 		if (existingEntry) {
 			// Update existing entry instead of creating duplicate
 			existingEntry.source = source;
@@ -111,7 +111,7 @@ export class OwnershipManager extends ComponentBase {
 		}
 
 		const entry = {
-			moduleId,
+			moduleID,
 			source,
 			timestamp: Date.now(),
 			value,
@@ -124,18 +124,18 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
-	 * @param {string} moduleId - Module to unregister.
+	 * @param {string} moduleID - Module to unregister.
 	 * @returns {{ removed: string[], rolledBack: Record<string, string>[] }} Removal summary.
 	 * @public
 	 *
 	 * @description
-	 * Removes all paths owned by the provided moduleId and reports removals and rollbacks.
+	 * Removes all paths owned by the provided moduleID and reports removals and rollbacks.
 	 *
 	 * @example
 	 * const result = ownership.unregister("module-a");
 	 */
-	unregister(moduleId) {
-		const paths = this.moduleToPath.get(moduleId);
+	unregister(moduleID) {
+		const paths = this.moduleToPath.get(moduleID);
 		if (!paths) {
 			return { removed: [], rolledBack: [] };
 		}
@@ -144,7 +144,7 @@ export class OwnershipManager extends ComponentBase {
 		const rolledBack = [];
 
 		for (const apiPath of paths) {
-			const result = this.removePath(apiPath, moduleId);
+			const result = this.removePath(apiPath, moduleID);
 
 			if (result.action === "delete") {
 				removed.push(apiPath);
@@ -156,14 +156,14 @@ export class OwnershipManager extends ComponentBase {
 			}
 		}
 
-		this.moduleToPath.delete(moduleId);
+		this.moduleToPath.delete(moduleID);
 
 		return { removed, rolledBack };
 	}
 
 	/**
 	 * @param {string} apiPath - API path to modify.
-	 * @param {string|null} [moduleId=null] - Module to remove (defaults to current owner).
+	 * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null,
 	 * restoreModuleId: string|null }} Action taken for the path.
 	 * @public
@@ -175,19 +175,19 @@ export class OwnershipManager extends ComponentBase {
 	 * @example
 	 * const result = ownership.removePath("plugins.tools", "module-a");
 	 */
-	removePath(apiPath, moduleId = null) {
+	removePath(apiPath, moduleID = null) {
 		const stack = this.pathToModule.get(apiPath);
 		if (!stack) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 
 		// Find and remove entry
-		const index = moduleId ? stack.findIndex((entry) => entry.moduleId === moduleId) : stack.length - 1;
+		const index = moduleID ? stack.findIndex((entry) => entry.moduleID === moduleID) : stack.length - 1;
 		if (index === -1) {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 		const [removed] = stack.splice(index, 1);
-		const removedModuleId = removed?.moduleId || null;
+		const removedModuleId = removed?.moduleID || null;
 		if (removedModuleId && this.moduleToPath.has(removedModuleId)) {
 			const pathSet = this.moduleToPath.get(removedModuleId);
 			pathSet.delete(apiPath);
@@ -207,7 +207,7 @@ export class OwnershipManager extends ComponentBase {
 		return {
 			action: "restore",
 			removedModuleId,
-			restoreModuleId: previous.moduleId
+			restoreModuleId: previous.moduleID
 		};
 	}
 
@@ -248,12 +248,12 @@ export class OwnershipManager extends ComponentBase {
 
 	/**
 	 * Get all paths owned by module
-	 * @param {string} moduleId - Module to query
+	 * @param {string} moduleID - Module to query
 	 * @returns {Array<string>} Array of API paths
 	 * @public
 	 */
-	getModulePaths(moduleId) {
-		return Array.from(this.moduleToPath.get(moduleId) || []);
+	getModulePaths(moduleID) {
+		return Array.from(this.moduleToPath.get(moduleID) || []);
 	}
 
 	/**
@@ -268,14 +268,14 @@ export class OwnershipManager extends ComponentBase {
 
 	/**
 	 * Check if module owns path
-	 * @param {string} moduleId - Module to check
+	 * @param {string} moduleID - Module to check
 	 * @param {string} apiPath - API path to check
 	 * @returns {boolean} True if module owns path
 	 * @public
 	 */
-	ownsPath(moduleId, apiPath) {
+	ownsPath(moduleID, apiPath) {
 		const owner = this.getCurrentOwner(apiPath);
-		return owner && owner.moduleId === moduleId;
+		return owner && owner.moduleID === moduleID;
 	}
 
 	/**
@@ -288,14 +288,14 @@ export class OwnershipManager extends ComponentBase {
 			totalModules: this.moduleToPath.size,
 			totalPaths: this.pathToModule.size,
 			modules: Array.from(this.moduleToPath.entries()).map(([id, paths]) => ({
-				moduleId: id,
+				moduleID: id,
 				pathCount: paths.size
 			})),
 			conflictedPaths: Array.from(this.pathToModule.entries())
 				.filter(([_, stack]) => stack.length > 1)
 				.map(([path, stack]) => ({
 					apiPath: path,
-					ownerStack: stack.map((e) => e.moduleId)
+					ownerStack: stack.map((e) => e.moduleID)
 				}))
 		};
 	}
@@ -303,7 +303,7 @@ export class OwnershipManager extends ComponentBase {
 	/**
 	 * Get ownership info for a specific API path
 	 * @param {string} apiPath - API path to check
-	 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+	 * @returns {Set<string>|null} Set of moduleIDs that own this path, or null if path not found
 	 * @public
 	 */
 	getPathOwnership(apiPath) {
@@ -311,7 +311,7 @@ export class OwnershipManager extends ComponentBase {
 		if (!stack || stack.length === 0) {
 			return null;
 		}
-		return new Set(stack.map((entry) => entry.moduleId));
+		return new Set(stack.map((entry) => entry.moduleID));
 	}
 
 	/**

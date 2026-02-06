@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 13:10:33 -08:00 (1769893833)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -54,7 +54,7 @@ export class ModesProcessor extends ComponentBase {
 		populateDirectly = false,
 		apiPathPrefix = "",
 		collisionContext = "initial",
-		moduleId = null,
+		moduleID = null,
 		sourceFolder = null,
 		userMetadata = {}
 	) {
@@ -65,10 +65,10 @@ export class ModesProcessor extends ComponentBase {
 		// Register user metadata for this moduleID (if provided)
 		// CRITICAL: Skip registration during addApi context - let api-manager handle it after collision resolution
 		// This ensures metadata is only registered when the API is actually added (not skipped/warned)
-		if (metadata && moduleId && Object.keys(userMetadata).length > 0 && collisionContext !== "addApi") {
+		if (metadata && moduleID && Object.keys(userMetadata).length > 0 && collisionContext !== "addApi") {
 			const apiPath = apiPathPrefix || "";
 			try {
-				metadata.registerUserMetadata(moduleId, apiPath, userMetadata);
+				metadata.registerUserMetadata(moduleID, apiPath, userMetadata);
 			} catch (error) {
 				console.error("[processFiles] Error registering user metadata:", error);
 			}
@@ -124,7 +124,7 @@ export class ModesProcessor extends ComponentBase {
 					apiPath: buildApiPath(categoryName),
 					initialImpl,
 					filePath: directory.path,
-					moduleId: moduleId || categoryName,
+					moduleID: moduleID || categoryName,
 					sourceFolder
 				});
 				api[categoryName] = wrapper.createProxy();
@@ -136,7 +136,7 @@ export class ModesProcessor extends ComponentBase {
 						{
 							filePath: directory.path,
 							apiPath: buildApiPath(categoryName),
-							moduleId: moduleId || "base",
+							moduleID: moduleID || "base",
 							sourceFolder: sourceFolder || directory.path
 						},
 						{ _fromLifecycle: true }
@@ -183,7 +183,7 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			try {
-				const mod = await loader.loadModule(file.path, instanceID, moduleId);
+				const mod = await loader.loadModule(file.path, instanceID, moduleID);
 				const exports = loader.extractExports(mod);
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
@@ -195,7 +195,7 @@ export class ModesProcessor extends ComponentBase {
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
 				if (error.name === "SlothletError") throw error;
-				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleId: moduleId || file.moduleId }, error);
+				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleID: moduleID || file.moduleID }, error);
 			}
 		}
 		// Calculate if there are multiple default exports in this directory
@@ -331,7 +331,7 @@ export class ModesProcessor extends ComponentBase {
 									initialImpl: exportedValue,
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: moduleId || file.moduleId,
+									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								// Assign wrapper to API
@@ -348,7 +348,7 @@ export class ModesProcessor extends ComponentBase {
 							for (const key of Object.keys(exportedValue)) {
 								if (ownership) {
 									ownership.register({
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -390,7 +390,7 @@ export class ModesProcessor extends ComponentBase {
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
-								moduleId: moduleId || file.moduleId,
+								moduleID: moduleID || file.moduleID,
 								sourceFolder
 							});
 							// Replace the empty object with the wrapped callable function
@@ -416,7 +416,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: mod[key],
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
@@ -433,7 +433,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -444,7 +444,7 @@ export class ModesProcessor extends ComponentBase {
 						}
 						if (ownership) {
 							ownership.register({
-								moduleId: moduleId || file.moduleId,
+								moduleID: moduleID || file.moduleID,
 								apiPath: categoryName,
 								source: "core",
 								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -474,7 +474,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
@@ -491,7 +491,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${propKey}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -509,7 +509,7 @@ export class ModesProcessor extends ComponentBase {
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 											materializeOnCreate: config.backgroundMaterialize,
 											filePath: file.path,
-											moduleId: moduleId || file.moduleId,
+											moduleID: moduleID || file.moduleID,
 											sourceFolder
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
@@ -526,7 +526,7 @@ export class ModesProcessor extends ComponentBase {
 									}
 									if (ownership) {
 										ownership.register({
-											moduleId: moduleId || file.moduleId,
+											moduleID: moduleID || file.moduleID,
 											apiPath: `${categoryName}.${key}`,
 											source: "core",
 											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -564,7 +564,7 @@ export class ModesProcessor extends ComponentBase {
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 										materializeOnCreate: config.backgroundMaterialize,
 										filePath: file.path,
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
@@ -593,7 +593,7 @@ export class ModesProcessor extends ComponentBase {
 								}
 								if (ownership) {
 									ownership.register({
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -629,7 +629,7 @@ export class ModesProcessor extends ComponentBase {
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: moduleId || file.moduleId,
+									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
@@ -646,7 +646,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 							if (ownership) {
 								ownership.register({
-									moduleId: moduleId || file.moduleId,
+									moduleID: moduleID || file.moduleID,
 									apiPath: `${categoryName}.${preferredName}`,
 									source: "core",
 									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -666,7 +666,7 @@ export class ModesProcessor extends ComponentBase {
 						initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
 						materializeOnCreate: config.backgroundMaterialize,
 						filePath: file.path,
-						moduleId: moduleId || file.moduleId,
+						moduleID: moduleID || file.moduleID,
 						sourceFolder
 					});
 					this.slothlet.debug("modes", {
@@ -700,7 +700,7 @@ export class ModesProcessor extends ComponentBase {
 				if (ownership) {
 					const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
 					ownership.register({
-						moduleId: moduleId || file.moduleId,
+						moduleID: moduleID || file.moduleID,
 						apiPath,
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -771,7 +771,7 @@ export class ModesProcessor extends ComponentBase {
 								isGeneric,
 								filenameMatches: filenameMatchesFolder
 							});
-							const mod = await loader.loadModule(file.path, instanceID, moduleId);
+							const mod = await loader.loadModule(file.path, instanceID, moduleID);
 							const exports = loader.extractExports(mod);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
@@ -838,7 +838,7 @@ export class ModesProcessor extends ComponentBase {
 									initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
 									materializeOnCreate: config.backgroundMaterialize,
 									filePath: file.path,
-									moduleId: moduleId || file.moduleId,
+									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
@@ -850,7 +850,7 @@ export class ModesProcessor extends ComponentBase {
 									const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
 									const collisionMode = config.collision?.[collisionContext] || "merge";
 									ownership.register({
-										moduleId: moduleId || file.moduleId,
+										moduleID: moduleID || file.moduleID,
 										apiPath,
 										source: "core",
 										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -874,7 +874,7 @@ export class ModesProcessor extends ComponentBase {
 						false, // populateDirectly - build on parent api
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
 						collisionContext,
-						moduleId, // Pass through moduleId to subdirectories
+						moduleID, // Pass through moduleID to subdirectories
 						sourceFolder
 					);
 				}
@@ -903,7 +903,7 @@ export class ModesProcessor extends ComponentBase {
 							loader,
 							flatten,
 							apiPathPrefix,
-							moduleId,
+							moduleID,
 							sourceFolder,
 							userMetadata // Pass userMetadata to lazy wrappers!
 						),
@@ -929,7 +929,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (ownership) {
 					ownership.register({
-						moduleId: moduleId || file.moduleId,
+						moduleID: moduleID || file.moduleID,
 						apiPath: moduleName,
 						source: "core",
 						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -951,7 +951,7 @@ export class ModesProcessor extends ComponentBase {
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
 							materializeOnCreate: config.backgroundMaterialize,
 							filePath: file.path,
-							moduleId: moduleId || file.moduleId,
+							moduleID: moduleID || file.moduleID,
 							sourceFolder
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
@@ -968,7 +968,7 @@ export class ModesProcessor extends ComponentBase {
 					}
 					if (ownership) {
 						ownership.register({
-							moduleId: moduleId || file.moduleId,
+							moduleID: moduleID || file.moduleID,
 							apiPath: moduleName,
 							source: "core",
 							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
@@ -1001,7 +1001,7 @@ export class ModesProcessor extends ComponentBase {
 		loader,
 		flatten,
 		parentApiPathPrefix = "",
-		moduleId = null,
+		moduleID = null,
 		sourceFolder = null,
 		userMetadata = {}
 	) {
@@ -1042,7 +1042,7 @@ export class ModesProcessor extends ComponentBase {
 				const isGeneric = genericFilenames.includes(moduleName.toLowerCase());
 				const filenameMatchesFolder = moduleName === categoryName;
 				if (isGeneric || filenameMatchesFolder) {
-					const mod = await loader.loadModule(file.path, instanceID, moduleId);
+					const mod = await loader.loadModule(file.path, instanceID, moduleID);
 					const exports = loader.extractExports(mod);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
@@ -1101,9 +1101,9 @@ export class ModesProcessor extends ComponentBase {
 						// OWNERSHIP NOTE: Do NOT register ownership here during lazy materialization
 						// Ownership is registered AFTER buildAPI completes via registerAPIWithOwnership()
 						// in slothlet.mjs. Registering here causes conflicts because:
-						// 1. Initial build registers entire API tree with moduleId="base"
-						// 2. Lazy materialization would try to re-register with file-specific moduleId
-						// 3. Different moduleIds trigger OWNERSHIP_CONFLICT unless allowConflict=true
+						// 1. Initial build registers entire API tree with moduleID="base"
+						// 2. Lazy materialization would try to re-register with file-specific moduleID
+						// 3. Different moduleIDs trigger OWNERSHIP_CONFLICT unless allowConflict=true
 						// The collision config should be respected via registerAPIWithOwnership, not here
 
 						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
@@ -1115,7 +1115,7 @@ export class ModesProcessor extends ComponentBase {
 										apiPath: `${apiPath}.${key}`,
 										impl: value,
 										source: "lazy-materialization",
-										moduleId: moduleId,
+										moduleID: moduleID,
 										filePath: file.path,
 										sourceFolder: sourceFolder || this.slothlet.config?.dir
 									});
@@ -1160,7 +1160,7 @@ export class ModesProcessor extends ComponentBase {
 				true, // Populate directly (don't nest under categoryName)
 				parentPrefix, // Use computed parent prefix so children get correct paths
 				"initial",
-				moduleId, // Pass parent moduleId to children
+				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
 				{} // Don't pass userMetadata during materialization - it was already registered during api.add()
 			);
@@ -1233,7 +1233,7 @@ export class ModesProcessor extends ComponentBase {
 			materializeFunc: lazy_materializeFunc,
 			materializeOnCreate: config.backgroundMaterialize,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
-			moduleId: moduleId, // Use parent moduleId
+			moduleID: moduleID, // Use parent moduleID
 			sourceFolder
 		});
 		return wrapper.createProxy();

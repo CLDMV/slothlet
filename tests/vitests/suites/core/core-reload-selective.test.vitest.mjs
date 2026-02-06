@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:52 -08:00 (1770266392)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -136,20 +136,20 @@ for (const { config, name } of configs) {
 			expect(api.nested.parentFlag).toBe("parent-level");
 		});
 
-		it("should reload specific moduleId and update ownership stack", async () => {
+		it("should reload specific moduleID and update ownership stack", async () => {
 			// Add first module to a path
-			const moduleId1 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
+			const moduleID1 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
 			const firstResult = api.stackTest.math.add(10, 10);
 			expect(firstResult).toBe(1020); // 10+10+1000
 
 			// Add second module to same path (with collision replace mode)
-			const moduleId2 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
+			const moduleID2 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
 
 			// Both modules should be in ownership stack
-			// Reload by specific moduleId (not path) to update buried implementation
-			await api.slothlet.api.reload(moduleId1);
+			// Reload by specific moduleID (not path) to update buried implementation
+			await api.slothlet.api.reload(moduleID1);
 
-			// After moduleId reload, implementation should still work
+			// After moduleID reload, implementation should still work
 			const reloadedResult = api.stackTest.math.add(10, 10);
 			expect(reloadedResult).toBe(1020);
 		});

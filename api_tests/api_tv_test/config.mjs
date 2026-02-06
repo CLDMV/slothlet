@@ -1,16 +1,35 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_tv_test/config.mjs
- *	@Date: 2025-10-27T09:42:13-07:00 (1761583333)
+ *	@Date: 2026-02-05 07:21:08 -08:00 (1770304868)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:40:15 -08:00 (1770266415)
+ *	@Last modified time: 2026-02-05 15:47:30 -08:00 (1770335250)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * TV Config API - Working config with state management for slothlet testing
+ */
+
+// Create a working config object with actual state management
+const config = {
+	// Internal state - starts with defaults
+	_state: {
+		manufacturer: "lg",
+		host: "192.168.1.100",
+		port: 3000,
+		instanceId: Math.random().toString(36).substr(2, 9) // Unique instance identifier
+	},
+
+	/**
+	 * Get configuration value(s)
+	 * @param {string} [key] - Specific key to get, or undefined to get all
+	 * @returns {*} The value or entire config object
+	 */
 	get(key) {
 		return key ? this._state[key] : { ...this._state };
 	},
@@ -105,4 +124,3 @@ export { config };
 
 // Export config object as default (IMPORTANT: This creates self-referential export)
 export default config;
-

@@ -72,8 +72,10 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	describe("Very Deep Nesting", () => {
 		it("should handle metadata at 5+ nesting levels", async () => {
 			await api.slothlet.api.add("veryDeep", TEST_DIRS.API_SMART_FLATTEN, {
-				depth: "extreme",
-				level: 5
+				metadata: {
+					depth: "extreme",
+					level: 5
+				}
 			});
 
 			// Navigate 5+ levels if structure exists
@@ -100,7 +102,9 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 				};
 			}
 
-			await api.slothlet.api.add("large", TEST_DIRS.API_SMART_FLATTEN, largeMetadata);
+			await api.slothlet.api.add("large", TEST_DIRS.API_SMART_FLATTEN, {
+				metadata: largeMetadata
+			});
 			await materialize(api, "large.config.settings.getPluginConfig");
 			const meta = api.large.config.settings.getPluginConfig.__metadata;
 
@@ -114,11 +118,13 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	describe("Special Characters in Metadata", () => {
 		it("should handle special characters in metadata keys", async () => {
 			await api.slothlet.api.add("special", TEST_DIRS.API_SMART_FLATTEN, {
-				"key-with-dashes": "value",
-				"key.with.dots": "value",
-				"key:with:colons": "value",
-				"key/with/slashes": "value",
-				"key with spaces": "value"
+				metadata: {
+					"key-with-dashes": "value",
+					"key.with.dots": "value",
+					"key:with:colons": "value",
+					"key/with/slashes": "value",
+					"key with spaces": "value"
+				}
 			});
 
 			await materialize(api, "special.config.settings.getPluginConfig");
@@ -133,10 +139,12 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 		it("should handle unicode in metadata values", async () => {
 			await api.slothlet.api.add("unicode", TEST_DIRS.API_SMART_FLATTEN, {
-				emoji: "🎉✨🚀",
-				chinese: "你好世界",
-				arabic: "مرحبا بالعالم",
-				symbols: "©®™€£¥"
+				metadata: {
+					emoji: "🎉✨🚀",
+					chinese: "你好世界",
+					arabic: "مرحبا بالعالم",
+					symbols: "©®™€£¥"
+				}
 			});
 
 			await materialize(api, "unicode.config.settings.getPluginConfig");
@@ -158,7 +166,9 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			circular.self = circular; // Circular reference
 
 			try {
-				await api.slothlet.api.add("circular", TEST_DIRS.API_SMART_FLATTEN, circular);
+				await api.slothlet.api.add("circular", TEST_DIRS.API_SMART_FLATTEN, {
+					metadata: circular
+				});
 				await materialize(api, "circular.config.settings.getPluginConfig");
 
 				const meta = api.circular.config.settings.getPluginConfig.__metadata;
@@ -175,9 +185,11 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	describe("Metadata with Functions", () => {
 		it("should handle metadata containing function values", async () => {
 			await api.slothlet.api.add("withFuncs", TEST_DIRS.API_SMART_FLATTEN, {
-				normalValue: "test",
-				functionValue: () => "I am a function",
-				arrowFunc: (x) => x * 2
+				metadata: {
+					normalValue: "test",
+					functionValue: () => "I am a function",
+					arrowFunc: (x) => x * 2
+				}
 			});
 
 			await materialize(api, "withFuncs.config.settings.getPluginConfig");
@@ -204,9 +216,11 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			const sym2 = Symbol("another");
 
 			await api.slothlet.api.add("symbols", TEST_DIRS.API_SMART_FLATTEN, {
-				normal: "value",
-				[sym1]: "symbol-value-1",
-				[sym2]: "symbol-value-2"
+				metadata: {
+					normal: "value",
+					[sym1]: "symbol-value-1",
+					[sym2]: "symbol-value-2"
+				}
 			});
 
 			await materialize(api, "symbols.config.settings.getPluginConfig");
@@ -218,7 +232,9 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 	describe("Metadata Access Performance", () => {
 		it("should access metadata efficiently for repeated calls", async () => {
 			await api.slothlet.api.add("perf", TEST_DIRS.API_SMART_FLATTEN, {
-				data: "test"
+				metadata: {
+					data: "test"
+				}
 			});
 
 			await materialize(api, "perf.config.settings.getPluginConfig");
@@ -271,7 +287,9 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 		it("should handle metadata on mixed exports", async () => {
 			await api.slothlet.api.add("mixed", TEST_DIRS.API_SMART_FLATTEN, {
-				type: "mixed"
+				metadata: {
+					type: "mixed"
+				}
 			});
 
 			if (api.mixed) {

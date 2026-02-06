@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:55 -08:00 (1770266395)
+ *	@Last modified time: 2026-02-05 16:11:01 -08:00 (1770336661)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -166,7 +166,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		api.slothlet.hook.on(
 			"before:**",
 			({ path }) => {
-				console.log(`[DEBUG] Hook triggered for path: ${path}`);
+				// console.log(`[DEBUG] Hook triggered for path: ${path}`);
 				hooksTriggeredPaths.push(path);
 			},
 			{ id: "path-tracker" }
@@ -177,14 +177,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		const ___unused2 = api.slothlet;
 		const ___unused3 = api.shutdown;
 
-		console.log(`[DEBUG] About to call api.math.add(2, 3)`);
-		console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
-		console.log(`[DEBUG] api.math type: ${typeof api.math}`);
+		// console.log(`[DEBUG] About to call api.math.add(2, 3)`);
+		// console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
+		// console.log(`[DEBUG] api.math type: ${typeof api.math}`);
 
 		// Now call an actual API function
 		await api.math.add(2, 3);
 
-		console.log(`[DEBUG] Hooks triggered:`, hooksTriggeredPaths);
+		// console.log(`[DEBUG] Hooks triggered:`, hooksTriggeredPaths);
 
 		// Only the actual function call should trigger hooks
 		expect(hooksTriggeredPaths).toHaveLength(1);
@@ -204,19 +204,19 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks Internal Pro
 		api.slothlet.hook.on(
 			"before:math.add",
 			({ path, args }) => {
-				console.log(`[DEBUG] Hook triggered for ${path} with args:`, args);
+				// console.log(`[DEBUG] Hook triggered for ${path} with args:`, args);
 				hookCalls.push({ path, args });
 			},
 			{ id: "track-add" }
 		);
 
-		console.log(`[DEBUG] About to call api.math.add(5, 7)`);
-		console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
+		// console.log(`[DEBUG] About to call api.math.add(5, 7)`);
+		// console.log(`[DEBUG] Hooks enabled: ${api.slothlet.diag?.hook?.enabled}`);
 
 		// Call API function
 		const result = await api.math.add(5, 7);
 
-		console.log(`[DEBUG] Result: ${result}, hookCalls:`, hookCalls);
+		// console.log(`[DEBUG] Result: ${result}, hookCalls:`, hookCalls);
 
 		expect(result).toBe(12);
 		expect(hookCalls).toHaveLength(1);

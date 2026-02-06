@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:46 -08:00 (1770266386)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -53,8 +53,8 @@ describe("Stack Trace Path Resolution", () => {
 
 		it("should resolve relative path from closure definition location, not execution location", async () => {
 			// Build api.slothlet.api.add options based on config capabilities
-			const addApiOptions = { moduleId: "testModule" };
-			if (config.hotReload) {
+			const addApiOptions = { moduleID: "testModule" };
+			if (config.api?.mutations?.reload) {
 				addApiOptions.forceOverwrite = true;
 			}
 

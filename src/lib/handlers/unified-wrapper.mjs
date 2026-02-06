@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-02 16:53:15 -08:00 (1770079995)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -122,7 +122,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
-	 * @param {string} [options.moduleId=null] - Module identifier
+	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
 	 * @param {Object} [options.userMetadata={}] - User metadata to apply
 	 *
@@ -148,7 +148,7 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable,
 			materializeOnCreate = false,
 			filePath = null,
-			moduleId = null,
+			moduleID = null,
 			sourceFolder = null,
 			userMetadata = {}
 		}
@@ -188,7 +188,7 @@ export class UnifiedWrapper extends ComponentBase {
 				impl: this,
 				wrapper: this,
 				source: "initial",
-				moduleId,
+				moduleID,
 				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
@@ -201,7 +201,7 @@ export class UnifiedWrapper extends ComponentBase {
 				impl: initialImpl,
 				wrapper: this,
 				source: "initial",
-				moduleId,
+				moduleID,
 				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
@@ -267,10 +267,10 @@ export class UnifiedWrapper extends ComponentBase {
 	/**
 	 * Set new implementation and adopt children
 	 * @param {*} newImpl - New implementation
-	 * @param {string} [moduleId] - Optional moduleId for lifecycle event (for replacements)
+	 * @param {string} [moduleID] - Optional moduleID for lifecycle event (for replacements)
 	 * @private
 	 */
-	__setImpl(newImpl, moduleId = null) {
+	__setImpl(newImpl, moduleID = null) {
 		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "__setImpl called",
@@ -287,15 +287,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			// Use provided moduleId (for replacements) or extract from metadata
-			const extractedModuleId = moduleId || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
+			// Use provided moduleID (for replacements) or extract from metadata
+			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.apiPath,
 				impl: newImpl,
 				wrapper: this,
 				source: "hot-reload",
-				moduleId: extractedModuleId,
+				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
 				sourceFolder: wrapperMetadata?.sourceFolder
 			});
@@ -744,7 +744,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
-		// Get parent wrapper's metadata to inherit filePath and moduleId
+		// Get parent wrapper's metadata to inherit filePath and moduleID
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
 
 		// Try to get child's actual filePath from its own metadata first (if already tagged during materialization)
@@ -794,13 +794,13 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 
-			// Extract SHORT moduleId from parent's FULL moduleID format "moduleId:apiPath"
+			// Extract SHORT moduleID from parent's FULL moduleID format "moduleID:apiPath"
 			if (parentMetadata?.moduleID) {
 				const colonIndex = parentMetadata.moduleID.indexOf(":");
 				childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
 			}
 		} else {
-			// Child already has metadata - extract moduleId from it
+			// Child already has metadata - extract moduleID from it
 			if (childExistingMetadata?.moduleID) {
 				const colonIndex = childExistingMetadata.moduleID.indexOf(":");
 				childModuleId = colonIndex > 0 ? childExistingMetadata.moduleID.substring(0, colonIndex) : childExistingMetadata.moduleID;
@@ -818,7 +818,7 @@ export class UnifiedWrapper extends ComponentBase {
 			initialImpl: childImpl,
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
-			moduleId: childModuleId,
+			moduleID: childModuleId,
 			sourceFolder: childSourceFolder,
 			userMetadata: childUserMetadata
 		});
@@ -925,7 +925,7 @@ export class UnifiedWrapper extends ComponentBase {
 					return waitingTarget;
 				}
 				if (prop === "__type") {
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-TYPE",
 						apiPath: wrapper.apiPath,
 						propChain: propChain.join(","),
@@ -944,7 +944,7 @@ export class UnifiedWrapper extends ComponentBase {
 								const currentWrapper = current.__wrapper;
 								if (currentWrapper._proxyTarget && chainProp in currentWrapper._proxyTarget) {
 									current = currentWrapper._proxyTarget[chainProp];
-									this.slothlet.debug("wrapper", {
+									wrapper.slothlet.debug("wrapper", {
 										message: "WAITING-TYPE-WALK: found in _proxyTarget",
 										chainProp: String(chainProp),
 										typeOf: typeof current
@@ -958,7 +958,7 @@ export class UnifiedWrapper extends ComponentBase {
 									chainProp in currentWrapper._impl
 								) {
 									current = currentWrapper._impl[chainProp];
-									this.slothlet.debug("wrapper", {
+									wrapper.slothlet.debug("wrapper", {
 										message: "WAITING-TYPE-WALK: found in _impl",
 										chainProp: String(chainProp),
 										typeOf: typeof current
@@ -966,7 +966,7 @@ export class UnifiedWrapper extends ComponentBase {
 									continue;
 								}
 							}
-							this.slothlet.debug("wrapper", {
+							wrapper.slothlet.debug("wrapper", {
 								message: "WAITING-TYPE-WALK: accessed directly",
 								chainProp: String(chainProp),
 								typeOf: typeof current
@@ -976,7 +976,7 @@ export class UnifiedWrapper extends ComponentBase {
 						// Return the actual type of the resolved value
 						const resolvedType =
 							typeof current === "function" ? "function" : typeof current === "object" && current !== null ? "object" : typeof current;
-						this.slothlet.debug("wrapper", {
+						wrapper.slothlet.debug("wrapper", {
 							message: "WAITING-TYPE-RESOLVED",
 							apiPath: wrapper.apiPath,
 							propChain: propChain.join(","),
@@ -985,7 +985,7 @@ export class UnifiedWrapper extends ComponentBase {
 						return resolvedType;
 					}
 					// Waiting proxies return IN_FLIGHT if wrapper not yet materialized
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-TYPE-INFLIGHT: returning IN_FLIGHT",
 						apiPath: wrapper.apiPath,
 						propChain: propChain.join(",")
@@ -1099,7 +1099,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// For lazy folders in merge mode, file properties are copied to _proxyTarget during collision handling
 				// These properties should be accessible immediately without waiting for full materialization
 				if (wrapper._proxyTarget && prop in wrapper._proxyTarget && prop !== "__wrapper") {
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-GET-PREMATURE: found in _proxyTarget before materialization",
 						apiPath: wrapper.apiPath,
 						prop
@@ -1111,14 +1111,14 @@ export class UnifiedWrapper extends ComponentBase {
 				// This ensures folder children are available in _proxyTarget before returning
 				// Without this, folder properties remain as waiting proxies instead of being accessible
 				if (wrapper.__needsImmediateChildAdoption && wrapper._materializeFunc && !wrapper._state.materialized && !wrapper._state.inFlight) {
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-GET-IMMEDIATE-MAT: triggering immediate materialization for collision-merged folder",
 						apiPath: wrapper.apiPath,
 						prop
 					});
 					// Trigger materialization NOW (async but we'll check after)
 					wrapper._materialize().catch((err) => {
-						this.slothlet.debug("wrapper", {
+						wrapper.slothlet.debug("wrapper", {
 							message: "WAITING-GET-IMMEDIATE-MAT-ERROR: materialization failed",
 							apiPath: wrapper.apiPath,
 							error: err.message
@@ -1127,7 +1127,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// Now check if prop is in _proxyTarget after materialization started
 					// _adoptImplChildren runs synchronously within _materialize before any awaits
 					if (prop in wrapper._proxyTarget) {
-						this.slothlet.debug("wrapper", {
+						wrapper.slothlet.debug("wrapper", {
 							message: "WAITING-GET-IMMEDIATE-MAT-SUCCESS: now available in _proxyTarget",
 							apiPath: wrapper.apiPath,
 							prop
@@ -1148,7 +1148,7 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 
 			async apply(___target, ___thisArg, args) {
-				this.slothlet.debug("wrapper", {
+				wrapper.slothlet.debug("wrapper", {
 					message: "WAITING-APPLY-ENTRY",
 					apiPath: wrapper.apiPath,
 					propChain: propChain.join(","),
@@ -1157,18 +1157,18 @@ export class UnifiedWrapper extends ComponentBase {
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 
 				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-APPLY-MATERIALIZE: Triggering materialization",
 						apiPath: wrapper.apiPath
 					});
 					await wrapper._materialize();
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-APPLY-MATERIALIZED: Materialization complete",
 						apiPath: wrapper.apiPath
 					});
 				}
 
-				this.slothlet.debug("wrapper", {
+				wrapper.slothlet.debug("wrapper", {
 					message: "WAITING-APPLY-START-WALK: Starting propChain walk",
 					apiPath: wrapper.apiPath,
 					propChain: propChain.join(",")
@@ -1177,7 +1177,7 @@ export class UnifiedWrapper extends ComponentBase {
 				let lastWrapper = wrapper;
 
 				for (const prop of propChain) {
-					this.slothlet.debug("wrapper", {
+					wrapper.slothlet.debug("wrapper", {
 						message: "WAITING-APPLY-WALK",
 						prop: String(prop),
 						typeOf: typeof current,
@@ -1248,7 +1248,7 @@ export class UnifiedWrapper extends ComponentBase {
 					current = current[prop];
 				}
 
-				this.slothlet.debug("wrapper", {
+				wrapper.slothlet.debug("wrapper", {
 					message: "WAITING-APPLY",
 					apiPath: wrapper.apiPath,
 					propChain: propChain.join(","),

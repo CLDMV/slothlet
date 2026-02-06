@@ -75,7 +75,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 		 * Test 2: Call through helper function in same file
 		 */
 		it("should resolve paths correctly through same-file helper", async () => {
-			await helperInSameFile(api, `../../../../${API_TEST_BASE}/api_test_collections`, {}, {});
+			await helperInSameFile(api, `../../../../${API_TEST_BASE}/api_test_collections`, {});
 			expect(api.helper).toBeDefined();
 			expect(api.helper.same).toBeDefined();
 		});
@@ -84,7 +84,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 		 * Test 3: Call through deeply nested helper
 		 */
 		it("should resolve paths correctly through deeply nested helper", async () => {
-			await deeplyNestedHelper(api, `../../../../${API_TEST_BASE}/api_test_mixed`, {}, {});
+			await deeplyNestedHelper(api, `../../../../${API_TEST_BASE}/api_test_mixed`, {});
 			expect(api.helper).toBeDefined();
 			expect(api.helper.nested).toBeDefined();
 		});
@@ -96,7 +96,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 			// Import dynamically to test resolution
 			const { runTestWithApi } = await import("../../setup/vitest-helper.mjs");
 			await runTestWithApi(api, async (api) => {
-				await api.slothlet.api.add("imported.helper", `../../../../${API_TEST_BASE}/api_test`, {}, {});
+				await api.slothlet.api.add("imported.helper", `../../../../${API_TEST_BASE}/api_test`, {});
 			});
 			expect(api.imported).toBeDefined();
 			expect(api.imported.helper).toBeDefined();
@@ -108,7 +108,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 		it("should resolve paths correctly through nested directory helper", async () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await executeWithApi(api, async (api) => {
-				await api.slothlet.api.add("nested.dir.helper", `../../../../${API_TEST_BASE}/api_test_collections`, {}, {});
+				await api.slothlet.api.add("nested.dir.helper", `../../../../${API_TEST_BASE}/api_test_collections`, {});
 			});
 			expect(api.nested).toBeDefined();
 			expect(api.nested.dir).toBeDefined();
@@ -124,7 +124,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 			const { addApiFromNested } = await import("../../../nested/helper-executor.mjs");
 			// Note: The nested helper should handle its own path resolution
 			// Use deeper relative path since this is called from nested helper
-			await addApiFromNested(api, "nested.direct", `../../${API_TEST_BASE}/api_test_mixed`, {}, {});
+			await addApiFromNested(api, "nested.direct", `../../${API_TEST_BASE}/api_test_mixed`, {});
 			expect(api.nested).toBeDefined();
 			expect(api.nested.direct).toBeDefined();
 		});
@@ -136,7 +136,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			// Call through nested helper, which calls helperInSameFile, which calls api.slothlet.api.add
 			await executeWithApi(api, async (api) => {
-				await helperInSameFile(api, `../../../../${API_TEST_BASE}/api_test`, {}, {});
+				await helperInSameFile(api, `../../../../${API_TEST_BASE}/api_test`, {});
 			});
 			expect(api.helper).toBeDefined();
 			expect(api.helper.same).toBeDefined();
@@ -148,7 +148,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 		it("should resolve paths correctly for nested helper with deep function nesting", async () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await executeWithApi(api, async (api) => {
-				await deeplyNestedHelper(api, `../../../../${API_TEST_BASE}/api_test_mixed`, {}, {});
+				await deeplyNestedHelper(api, `../../../../${API_TEST_BASE}/api_test_mixed`, {});
 			});
 			expect(api.helper).toBeDefined();
 			expect(api.helper.nested).toBeDefined();
@@ -162,7 +162,7 @@ describe("api.slothlet.api.add Path Resolution", () => {
 			const { executeWithApi } = await import("../../../nested/helper-executor.mjs");
 			await runTestWithApi(api, async (api) => {
 				await executeWithApi(api, async (api) => {
-					await api.slothlet.api.add("chain.test", `../../../../${API_TEST_BASE}/api_test_collections`, {}, {});
+					await api.slothlet.api.add("chain.test", `../../../../${API_TEST_BASE}/api_test_collections`, {});
 				});
 			});
 			expect(api.chain).toBeDefined();

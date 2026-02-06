@@ -66,8 +66,10 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 		it("should preserve user metadata across full reload", async () => {
 			await api.slothlet.api.add("persistent", TEST_DIRS.API_SMART_FLATTEN, {
-				shouldPersist: true,
-				version: "1.0.0"
+				metadata: {
+					shouldPersist: true,
+					version: "1.0.0"
+				}
 			});
 
 			await materialize(api, "persistent.config.settings.getPluginConfig");
@@ -112,7 +114,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("reloadable", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "1.0.0"
+				metadata: {
+					version: "1.0.0"
+				}
 			});
 
 			await materialize(api, "reloadable.config.settings.getPluginConfig");
@@ -136,11 +140,15 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("stable", TEST_DIRS.API_SMART_FLATTEN, {
-				stable: true
+				metadata: {
+					stable: true
+				}
 			});
 
 			await api.slothlet.api.add("reloadTarget", TEST_DIRS.API_SMART_FLATTEN, {
-				willReload: true
+				metadata: {
+					willReload: true
+				}
 			});
 
 			await materialize(api, "stable.config.settings.getPluginConfig");
@@ -165,7 +173,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("nested", TEST_DIRS.API_SMART_FLATTEN, {
-				nested: true
+				metadata: {
+					nested: true
+				}
 			});
 
 			await materialize(api, "nested.config.settings.getPluginConfig");
@@ -210,7 +220,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("multicycle", TEST_DIRS.API_SMART_FLATTEN, {
-				cycles: 0
+				metadata: {
+					cycles: 0
+				}
 			});
 
 			const cycles = 3;
@@ -236,7 +248,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("updateable", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "1.0.0"
+				metadata: {
+					version: "1.0.0"
+				}
 			});
 
 			// Reload with updated metadata
@@ -302,7 +316,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			await api.slothlet.api.add("lazyReload", TEST_DIRS.API_SMART_FLATTEN, {
-				lazy: true
+				metadata: {
+					lazy: true
+				}
 			});
 
 			// Materialize once
@@ -446,7 +462,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 		it("should access added API metadata via internal API after reload", async () => {
 			await api.slothlet.api.add("reloadInternal", TEST_DIRS.API_SMART_FLATTEN, {
-				persistValue: "should_persist"
+				metadata: {
+					persistValue: "should_persist"
+				}
 			});
 
 			await materialize(api, "reloadInternal.config.settings.getPluginConfig");
@@ -471,7 +489,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 
 		it("should handle partial reload with internal API access", async () => {
 			await api.slothlet.api.add("partialReload", TEST_DIRS.API_SMART_FLATTEN, {
-				partial: true
+				metadata: {
+					partial: true
+				}
 			});
 
 			await materialize(api, "partialReload.config.settings.getPluginConfig");

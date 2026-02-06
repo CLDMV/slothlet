@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:53 -08:00 (1770266393)
+ *	@Last modified time: 2026-02-05 16:09:37 -08:00 (1770336577)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -55,10 +55,10 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 
 	it("debug: check hook configuration", async () => {
 		api = await createApiInstance(config);
-		console.log("Config:", config);
-		console.log("Hooks API available:", !!api.slothlet.hook);
-		console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
-		console.log("math.add.__slothletPath:", api.math.add.__slothletPath);
+		// console.log("Config:", config);
+		// console.log("Hooks API available:", !!api.slothlet.hook);
+		// console.log("math.add has __slothletPath:", !!api.math.add.__slothletPath);
+		// console.log("math.add.__slothletPath:", api.math.add.__slothletPath);
 		expect(api.slothlet.hook).toBeDefined();
 	});
 

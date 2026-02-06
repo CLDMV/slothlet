@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -82,7 +82,7 @@ export class Lifecycle extends ComponentBase {
 	 * - apiPath: API path where impl exists
 	 * - impl: The implementation object
 	 * - source: Source of event (initial, hot-reload, materialization, etc)
-	 * - moduleId: Module identifier (if applicable)
+	 * - moduleID: Module identifier (if applicable)
 	 * - filePath: File path (if applicable)
 	 * - metadata: Additional metadata
 	 *
@@ -91,7 +91,7 @@ export class Lifecycle extends ComponentBase {
 	 *   apiPath: "math.add",
 	 *   impl: addFunction,
 	 *   source: "initial",
-	 *   moduleId: "base_abc123",
+	 *   moduleID: "base_abc123",
 	 *   filePath: "/path/to/math.mjs"
 	 * });
 	 */
@@ -113,7 +113,7 @@ export class Lifecycle extends ComponentBase {
 				message: `Event: ${event}`,
 				apiPath: data.apiPath,
 				source: data.source,
-				moduleId: data.moduleId
+				moduleID: data.moduleID
 			});
 		}
 

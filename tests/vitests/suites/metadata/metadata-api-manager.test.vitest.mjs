@@ -46,8 +46,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	describe("api.add() Metadata Behavior", () => {
 		it("should attach metadata to newly added API", async () => {
 			await api.slothlet.api.add("newApi", TEST_DIRS.API_SMART_FLATTEN, {
-				added: true,
-				timestamp: Date.now()
+				metadata: {
+					added: true,
+					timestamp: Date.now()
+				}
 			});
 
 			await materialize(api, "newApi.config.settings.getPluginConfig");
@@ -60,13 +62,17 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 		it("should support multiple add() calls with different metadata", async () => {
 			await api.slothlet.api.add("api1", TEST_DIRS.API_SMART_FLATTEN, {
-				name: "api1",
-				order: 1
+				metadata: {
+					name: "api1",
+					order: 1
+				}
 			});
 
 			await api.slothlet.api.add("api2", TEST_DIRS.API_SMART_FLATTEN, {
-				name: "api2",
-				order: 2
+				metadata: {
+					name: "api2",
+					order: 2
+				}
 			});
 
 			await materialize(api, "api1.config.settings.getPluginConfig");
@@ -85,7 +91,9 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	describe("api.remove() Metadata Cleanup", () => {
 		it("should clean up metadata when API is removed", async () => {
 			await api.slothlet.api.add("removable", TEST_DIRS.API_SMART_FLATTEN, {
-				temporary: true
+				metadata: {
+					temporary: true
+				}
 			});
 
 			await materialize(api, "removable.config.settings.getPluginConfig");
@@ -97,11 +105,15 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 		it("should not affect metadata of unrelated APIs", async () => {
 			await api.slothlet.api.add("keep", TEST_DIRS.API_SMART_FLATTEN, {
-				permanent: true
+				metadata: {
+					permanent: true
+				}
 			});
 
 			await api.slothlet.api.add("remove", TEST_DIRS.API_SMART_FLATTEN, {
-				temporary: true
+				metadata: {
+					temporary: true
+				}
 			});
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
@@ -117,8 +129,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	describe("Replace Behavior (remove + add)", () => {
 		it("should replace metadata when re-adding to same path", async () => {
 			await api.slothlet.api.add("replaceable", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "1.0.0",
-				iteration: 1
+				metadata: {
+					version: "1.0.0",
+					iteration: 1
+				}
 			});
 
 			await materialize(api, "replaceable.config.settings.getPluginConfig");
@@ -127,8 +141,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			await api.slothlet.api.remove("replaceable");
 			await api.slothlet.api.add("replaceable", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "2.0.0",
-				iteration: 2
+				metadata: {
+					version: "2.0.0",
+					iteration: 2
+				}
 			});
 
 			await materialize(api, "replaceable.config.settings.getPluginConfig");
@@ -146,8 +162,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 			for (let i = 1; i <= cycles; i++) {
 				await api.slothlet.api.add("cycled", TEST_DIRS.API_SMART_FLATTEN, {
-					cycle: i,
-					timestamp: Date.now()
+					metadata: {
+						cycle: i,
+						timestamp: Date.now()
+					}
 				});
 
 				await materialize(api, "cycled.config.settings.getPluginConfig");
@@ -169,7 +187,9 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	describe("Partial Path Removal", () => {
 		it("should remove metadata for partial paths", async () => {
 			await api.slothlet.api.add("partial", TEST_DIRS.API_SMART_FLATTEN, {
-				partial: true
+				metadata: {
+					partial: true
+				}
 			});
 
 			await materialize(api, "partial.config.settings.getPluginConfig");
@@ -186,8 +206,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 	describe("Internal API Access During api.add()/remove() (self.slothlet.metadata.*)", () => {
 		it("should access newly added API via internal metadata.get()", async () => {
 			await api.slothlet.api.add("internalAdd", TEST_DIRS.API_SMART_FLATTEN, {
-				addedViaInternal: true,
-				timestamp: Date.now()
+				metadata: {
+					addedViaInternal: true,
+					timestamp: Date.now()
+				}
 			});
 
 			await materialize(api, "internalAdd.config.settings.getPluginConfig");
@@ -215,7 +237,9 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 		it("should return undefined after api.remove() via internal API", async () => {
 			await api.slothlet.api.add("removableInternal", TEST_DIRS.API_SMART_FLATTEN, {
-				temporary: true
+				metadata: {
+					temporary: true
+				}
 			});
 
 			await materialize(api, "removableInternal.config.settings.getPluginConfig");
@@ -237,8 +261,10 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			for (let cycle = 1; cycle <= 3; cycle++) {
 				// Add with cycle metadata
 				await api.slothlet.api.add("cycleInternal", TEST_DIRS.API_SMART_FLATTEN, {
-					cycle,
-					iteration: `cycle_${cycle}`
+					metadata: {
+						cycle,
+						iteration: `cycle_${cycle}`
+					}
 				});
 
 				await materialize(api, "cycleInternal.config.settings.getPluginConfig");
@@ -259,7 +285,9 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 
 		it("should track partial removal via internal API", async () => {
 			await api.slothlet.api.add("partialInternal", TEST_DIRS.API_SMART_FLATTEN, {
-				hasConfig: true
+				metadata: {
+					hasConfig: true
+				}
 			});
 
 			await materialize(api, "partialInternal.config.settings.getPluginConfig");

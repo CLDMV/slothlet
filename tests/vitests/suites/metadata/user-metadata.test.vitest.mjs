@@ -46,9 +46,11 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should attach user metadata to added functions", async () => {
 			await api.slothlet.api.add("withMeta", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "1.0.0",
-				author: "test-user",
-				tags: ["math", "utility"]
+				metadata: {
+					version: "1.0.0",
+					author: "test-user",
+					tags: ["math", "utility"]
+				}
 			});
 
 			await materialize(api, "withMeta.config.settings.getPluginConfig");
@@ -61,8 +63,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should inherit user metadata to nested functions", async () => {
 			await api.slothlet.api.add("inherited", TEST_DIRS.API_SMART_FLATTEN, {
-				inherited: true,
-				level: "top"
+				metadata: {
+					inherited: true,
+					level: "top"
+				}
 			});
 
 			await materialize(api, "inherited.config.settings.getPluginConfig");
@@ -74,8 +78,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should support deep nesting (3+ levels) metadata inheritance", async () => {
 			await api.slothlet.api.add("deepNest", TEST_DIRS.API_SMART_FLATTEN, {
-				deep: "metadata",
-				level: 3
+				metadata: {
+					deep: "metadata",
+					level: 3
+				}
 			});
 
 			// Navigate 3 levels deep: deepNest.config.settings.getPluginConfig
@@ -91,8 +97,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should make user metadata immutable after retrieval", async () => {
 			await api.slothlet.api.add("immutable", TEST_DIRS.API_SMART_FLATTEN, {
-				config: { debug: true },
-				tags: ["test"]
+				metadata: {
+					config: { debug: true },
+					tags: ["test"]
+				}
 			});
 
 			await materialize(api, "immutable.config.settings.getPluginConfig");
@@ -148,8 +156,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await api.slothlet.api.add("merged", TEST_DIRS.API_SMART_FLATTEN, {
-				moduleVersion: "1.5.0",
-				local: true
+				metadata: {
+					moduleVersion: "1.5.0",
+					local: true
+				}
 			});
 
 			await materialize(api, "merged.config.settings.getPluginConfig");
@@ -175,8 +185,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 			});
 
 			await api.slothlet.api.add("override", TEST_DIRS.API_SMART_FLATTEN, {
-				version: "2.0.0", // Override
-				newKey: "newValue"
+				metadata: {
+					version: "2.0.0", // Override
+					newKey: "newValue"
+				}
 			});
 
 			await materialize(api, "override.config.settings.getPluginConfig");
@@ -200,9 +212,11 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should keep system metadata separate from user metadata", async () => {
 			await api.slothlet.api.add("separate", TEST_DIRS.API_SMART_FLATTEN, {
-				moduleID: "fake-id",
-				filePath: "/fake/path",
-				apiPath: "fake.path"
+				metadata: {
+					moduleID: "fake-id",
+					filePath: "/fake/path",
+					apiPath: "fake.path"
+				}
 			});
 
 			await materialize(api, "separate.config.settings.getPluginConfig");
@@ -235,9 +249,11 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should handle null/undefined metadata values", async () => {
 			await api.slothlet.api.add("nulls", TEST_DIRS.API_SMART_FLATTEN, {
-				nullValue: null,
-				undefinedValue: undefined,
-				validValue: "exists"
+				metadata: {
+					nullValue: null,
+					undefinedValue: undefined,
+					validValue: "exists"
+				}
 			});
 
 			await materialize(api, "nulls.config.settings.getPluginConfig");
@@ -259,8 +275,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should not modify metadata between function calls", async () => {
 			await api.slothlet.api.add("stable", TEST_DIRS.API_SMART_FLATTEN, {
-				callCount: 0,
-				timestamp: Date.now()
+				metadata: {
+					callCount: 0,
+					timestamp: Date.now()
+				}
 			});
 
 			await materialize(api, "stable.config.settings.getPluginConfig");
@@ -290,8 +308,10 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should support self.slothlet.metadata.get() from within API context", async () => {
 			await api.slothlet.api.add("lookup", TEST_DIRS.API_SMART_FLATTEN, {
-				fromGet: true,
-				version: "1.0.0"
+				metadata: {
+					fromGet: true,
+					version: "1.0.0"
+				}
 			});
 
 			// Use helper function that calls self.slothlet.metadata.get() internally
@@ -332,7 +352,9 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should verify metadata existence via helper", async () => {
 			await api.slothlet.api.add("verifiable", TEST_DIRS.API_SMART_FLATTEN, {
-				verified: true
+				metadata: {
+					verified: true
+				}
 			});
 
 			if (api.metadataTestHelper?.verifyMetadata) {
@@ -355,7 +377,9 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should handle deeply nested paths via internal API", async () => {
 			await api.slothlet.api.add("deep", TEST_DIRS.API_SMART_FLATTEN, {
-				depth: "very_deep"
+				metadata: {
+					depth: "very_deep"
+				}
 			});
 
 			await materialize(api, "deep.config.settings.getPluginConfig");
@@ -381,11 +405,15 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 		it("should distinguish between different paths with similar names", async () => {
 			await api.slothlet.api.add("similar1", TEST_DIRS.API_SMART_FLATTEN, {
-				id: "first"
+				metadata: {
+					id: "first"
+				}
 			});
 
 			await api.slothlet.api.add("similar2", TEST_DIRS.API_SMART_FLATTEN, {
-				id: "second"
+				metadata: {
+					id: "second"
+				}
 			});
 
 			await materialize(api, "similar1.config.settings.getPluginConfig");
@@ -416,7 +444,9 @@ describe.each(getMatrixConfigs())("User Metadata > Config: '$name'", ({ config }
 
 			// Added API function
 			await api.slothlet.api.add("verified", TEST_DIRS.API_SMART_FLATTEN, {
-				verified: true
+				metadata: {
+					verified: true
+				}
 			});
 			await materialize(api, "verified.config.settings.getPluginConfig");
 			const addedResult = await api.metadataTestHelper.verifyMetadata("verified.config.settings.getPluginConfig");

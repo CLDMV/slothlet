@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:49 -08:00 (1770266389)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -86,7 +86,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		expect(api.slothlet.reload).toBeTypeOf("function");
 
 		// But mutations should be blocked
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
 			"INVALID_CONFIG_MUTATIONS_DISABLED"
 		);
 
@@ -135,7 +135,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// All mutations should be blocked
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
 			"INVALID_CONFIG_MUTATIONS_DISABLED"
 		);
 
@@ -156,7 +156,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// Add should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		// Remove and reload should be blocked
@@ -176,7 +176,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// Add and reload should be blocked
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
 			"INVALID_CONFIG_MUTATIONS_DISABLED"
 		);
 		await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
@@ -198,13 +198,13 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// forceOverwrite should NOT bypass mutations.add restriction
-		await expect(
-			api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-forced", forceOverwrite: true })
-		).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-forced", forceOverwrite: true })).rejects.toThrow(
+			"INVALID_CONFIG_MUTATIONS_DISABLED"
+		);
 	});
 
 	// TODO: Add proper ownership conflict tests once ownership system is fixed
-	// Current issue: Adding same directory twice with different moduleIds doesn't trigger
+	// Current issue: Adding same directory twice with different moduleIDs doesn't trigger
 	// OWNERSHIP_CONFLICT as expected. Need to investigate ownership tracking.
 
 	it.skip("should allow only reload with granular mutations control", async () => {
@@ -220,7 +220,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// Add and remove should be blocked
-		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test" })).rejects.toThrow(
+		await expect(api.slothlet.api.add("test", TEST_DIRS.API_TEST_MIXED, { moduleID: "test" })).rejects.toThrow(
 			"INVALID_CONFIG_MUTATIONS_DISABLED"
 		);
 		await expect(api.slothlet.api.remove("math")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
@@ -234,7 +234,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		api = await createApiInstance(config);
 
 		// All mutations should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
@@ -254,7 +254,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		});
 
 		// All mutations should work
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-test" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-test" });
 		expect(api.extra).toBeDefined();
 
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
@@ -285,12 +285,12 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		// Mutations are still available (not disabled by collision config)
 		// Adding to unique path should work (no collision)
 		const uniquePath = `test_${Date.now()}`;
-		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "unique-test" });
+		await api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, { moduleID: "unique-test" });
 		expect(api[uniquePath]).toBeDefined();
 
 		// Trying to add again to same path should throw error due to collision mode = 'error'
 		// This tests that collision config affects API path collision handling, not mutation availability
-		await expect(api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "unique-test2" })).rejects.toThrow(
+		await expect(api.slothlet.api.add(uniquePath, TEST_DIRS.API_TEST_MIXED, { moduleID: "unique-test2" })).rejects.toThrow(
 			"path already exists and collision mode is 'error'"
 		);
 	});

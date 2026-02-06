@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -95,7 +95,7 @@ export class Loader extends ComponentBase {
 		}
 
 		const structure = {
-			files: [], // Array of { path, name, moduleId }
+			files: [], // Array of { path, name, moduleID }
 			directories: [] // Array of { path, name, children: structure }
 		};
 
@@ -127,7 +127,7 @@ export class Loader extends ComponentBase {
 						path: fullPath,
 						name: nameWithoutExt,
 						fullName: entry.name,
-						moduleId: this.slothlet.helpers.sanitize.getModuleId(fullPath, dir)
+						moduleID: this.slothlet.helpers.sanitize.getModuleId(fullPath, dir)
 					});
 				}
 			}

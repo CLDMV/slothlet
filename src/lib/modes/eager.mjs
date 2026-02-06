@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -34,7 +34,7 @@ export async function buildEagerAPI({
 	dir,
 	apiPathPrefix = "",
 	collisionContext = "initial",
-	moduleId,
+	moduleID,
 	userMetadata = {},
 	slothlet,
 	apiDepth = Infinity
@@ -69,7 +69,7 @@ export async function buildEagerAPI({
 		false, // populateDirectly - keep false
 		apiPathPrefix,
 		collisionContext,
-		moduleId,
+		moduleID,
 		dir, // sourceFolder for metadata
 		userMetadata
 	);

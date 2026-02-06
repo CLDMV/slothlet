@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:49 -08:00 (1770266389)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -52,7 +52,7 @@ describe.each(HOT_RELOAD_MATRIX)("Isolated: does not restore removed APIs - $nam
 
 	it("should not restore removed APIs after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.api.remove("test-module");

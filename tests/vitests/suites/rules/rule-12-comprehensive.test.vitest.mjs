@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:59 -08:00 (1770266399)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -53,7 +53,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			TEST_DIRS.API_TEST_MIXED,
 			{},
 			{
-				moduleId: "moduleA",
+				moduleID: "moduleA",
 				forceOverwrite: true
 			}
 		);
@@ -66,7 +66,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "moduleA",
+				moduleID: "moduleA",
 				forceOverwrite: true
 			}
 		);
@@ -80,7 +80,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			TEST_DIRS.API_TEST_COLLECTIONS,
 			{},
 			{
-				moduleId: "moduleB",
+				moduleID: "moduleB",
 				forceOverwrite: true
 			}
 		);
@@ -95,7 +95,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "moduleC",
+				moduleID: "moduleC",
 				forceOverwrite: true
 			}
 		);
@@ -108,7 +108,7 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 				TEST_DIRS.API_TEST_MIXED,
 				{},
 				{
-					moduleId: "moduleD" // Different module trying to overwrite
+					moduleID: "moduleD" // Different module trying to overwrite
 				}
 			)
 		).resolves.not.toThrow();
@@ -135,7 +135,7 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 		}
 	});
 
-	it("should require hotReload when using forceOverwrite", async () => {
+	it("should require api.mutations.reload when using forceOverwrite", async () => {
 		try {
 			await api.slothlet.api.add(
 				"test.path",
@@ -143,16 +143,16 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 				{},
 				{
 					forceOverwrite: true,
-					moduleId: "testModule"
+					moduleID: "testModule"
 				}
 			);
-			// If we reach here without hotReload, it should have thrown
-			if (!config.hotReload) {
-				throw new Error("Expected forceOverwrite to require hotReload");
+			// If we reach here without reload enabled, it should have thrown
+			if (!config.api?.mutations?.reload) {
+				throw new Error("Expected forceOverwrite to require reload mutation");
 			}
 		} catch (error) {
-			// Verify the error is about hotReload requirement
-			expect(error.message).toContain("forceOverwrite requires hotReload");
+			// Verify the error is about reload requirement
+			expect(error.message).toContain("reload");
 		}
 	});
 });
@@ -175,7 +175,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
@@ -197,18 +199,20 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
-		// Register with moduleId
+		// Register with moduleID
 		await api.slothlet.api.add(
 			"ownership.test",
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "testModule",
+				moduleID: "testModule",
 				forceOverwrite: true
 			}
 		);
@@ -219,7 +223,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			TEST_DIRS.API_TEST_MIXED,
 			{},
 			{
-				moduleId: "testModule",
+				moduleID: "testModule",
 				forceOverwrite: true
 			}
 		);
@@ -235,18 +239,20 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
 
-		// Register with moduleId
+		// Register with moduleID
 		await api.slothlet.api.add(
 			"ownership.cross",
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "testModule",
+				moduleID: "testModule",
 				forceOverwrite: true
 			}
 		);
@@ -258,7 +264,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 				TEST_DIRS.API_TEST_COLLECTIONS,
 				{},
 				{
-					moduleId: "differentModule"
+					moduleID: "differentModule"
 				}
 			);
 			throw new Error("Expected cross-module overwrite to be blocked");
@@ -274,7 +280,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
@@ -293,7 +301,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
@@ -303,7 +313,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "testModule2",
+				moduleID: "testModule2",
 				forceOverwrite: true
 			}
 		);
@@ -313,7 +323,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			TEST_DIRS.API_TEST_MIXED,
 			{},
 			{
-				moduleId: "testModule2",
+				moduleID: "testModule2",
 				forceOverwrite: true
 			}
 		);
@@ -328,7 +338,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
-			hotReload: true,
+			api: {
+				mutations: { reload: true }
+			},
 			allowAddApiOverwrite: false
 		});
 		apisToClean.push(api);
@@ -338,7 +350,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			TEST_DIRS.API_TEST,
 			{},
 			{
-				moduleId: "testModule2",
+				moduleID: "testModule2",
 				forceOverwrite: true
 			}
 		);
@@ -349,7 +361,7 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 				TEST_DIRS.API_TEST_COLLECTIONS,
 				{},
 				{
-					moduleId: "differentModule2"
+					moduleID: "differentModule2"
 				}
 			);
 			throw new Error("Expected cross-module overwrite to be blocked");
