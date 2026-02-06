@@ -311,14 +311,68 @@ Top Memory Users:
 
 ## Progress Tracking
 
-- [ ] Phase 1: Remove buildFinalAPI clone
-- [ ] Phase 2: Eliminate _currentApi reference  
-- [ ] Phase 3: Clean up deletion logic
-- [ ] Phase 4: Document root segment cleanup
-- [ ] Run metadata tests
-- [ ] Run full baseline (expect 2356/2356 passing)
-- [ ] Run precommit validation
+- [x] Phase 1: Remove buildFinalAPI clone ✅ COMPLETE
+- [x] Phase 2: Eliminate _currentApi reference ✅ COMPLETE
+- [x] Phase 3: Clean up deletion logic ✅ COMPLETE
+- [x] Phase 4: Document root segment cleanup ✅ COMPLETE
+- [x] Run metadata tests ✅ ALL PASSING
+- [x] Run full baseline ✅ **2356/2356 PASSING**
+- [ ] Run precommit validation (NEXT)
 - [ ] Update this doc with final results
+
+## Post-Refactor Results
+
+**Date:** 2026-02-06  
+**Status:** ✅ **REFACTOR COMPLETE - ALL TESTS PASSING**
+
+```
+Test Files  34 passed (34)
+Tests       2356 passed (2356)
+Duration    74.17s (tests 269.56s)
+Heap        max 524 MB | avg 206 MB
+```
+
+### Changes Made
+
+**1. api_builder.mjs** - Removed unnecessary Object.assign clone
+- Mutates userApi in place instead of cloning
+- Removed debug message about cloning
+- Updated all references from `clonedApi` to `userApi`
+
+**2. slothlet.mjs** - Eliminated _currentApi property
+- Removed `this._currentApi` placeholder from constructor
+- Removed early boundApi proxy creation from constructor
+- Changed boundApi proxy to forward directly to `this.api`
+- Added null checks in all proxy traps to handle failed loads gracefully
+
+**3. api-manager.mjs** - Simplified deletion logic
+- Removed 3rd deletion from `_currentApi` (no longer exists)
+- Updated comments to reflect 2-API architecture
+- Documented defensive root segment cleanup
+
+### Bugs Fixed During Refactor
+
+1. **Null API access during failed loads**: When slothlet() throws during initialization (e.g., collision error), boundApi was trying to access `this.api[prop]` when `this.api` was null. Fixed by adding null checks to all proxy traps.
+
+2. **No regressions**: All existing tests continue to pass, including the deletion test we fixed earlier.
+
+### Architecture Improvements
+
+**Before (3 APIs):**
+- `slothlet.api` - Raw API
+- `slothlet._currentApi` - Cloned API with builtins (REDUNDANT)
+- `slothlet.boundApi` - Proxy to `_currentApi`
+
+**After (2 APIs):**
+- `slothlet.api` - API with builtins (mutated in place)
+- `slothlet.boundApi` - Proxy to `this.api` (stable across reloads)
+
+**Benefits Achieved:**
+- ✅ Simpler architecture matching v2
+- ✅ No pointless clone allocation
+- ✅ No shallow reference sharing bugs
+- ✅ Cleaner deletion logic (2 places, not 3)
+- ✅ Better error handling for failed loads
 
 ---
 

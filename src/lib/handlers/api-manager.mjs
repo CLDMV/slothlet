@@ -1521,24 +1521,20 @@ export class ApiManager extends ComponentBase {
 			}
 
 			// After deleting all leaf paths, clean up empty parent containers
-			// Use first path (should be deep leaf) to get root segment - malformed paths may exist but shouldn't be processed
+			// DEFENSIVE: This is belt-and-suspenders cleanup for edge cases where root segment
+			// might not be in pathsToDelete but should still be removed (e.g., ownership edge cases)
+			// In normal flow, deletePath above already handles root deletion
 			if (pathsToDelete.length > 0) {
 				const rootSegment = pathsToDelete[0].split(".")[0];
 
-				// Delete root segment from API directly (API root is not wrapped, just a plain function/object)
-				// This ensures api.cycled returns undefined after deletion in both lazy and eager modes
-				// CRITICAL: Delete from ALL three API references:
-				// 1. slothlet.api (internal raw API)
-				// 2. slothlet.boundApi (reload-preserving proxy)
-				// 3. slothlet._currentApi (user-facing cloned API with builtins)
+				// Delete root segment from both API references
+				// Note: boundApi is a proxy forwarding to this.api, but deletion needs to happen on both
+				// to ensure proxy traps and direct access both reflect the removal
 				if (rootSegment in this.slothlet.api) {
 					delete this.slothlet.api[rootSegment];
 				}
 				if (rootSegment in this.slothlet.boundApi) {
 					delete this.slothlet.boundApi[rootSegment];
-				}
-				if (this.slothlet._currentApi && rootSegment in this.slothlet._currentApi) {
-					delete this.slothlet._currentApi[rootSegment];
 				}
 			}
 
