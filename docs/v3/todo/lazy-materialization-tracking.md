@@ -1,5 +1,7 @@
 # Lazy Mode Background Materialization Tracking
 
+**Last Evaluated:** 2026-02-06
+
 **Status:** 📋 Planning / Research  
 **Created:** January 29, 2026  
 **Priority:** Medium  

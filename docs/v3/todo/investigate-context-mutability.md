@@ -1,5 +1,7 @@
 # Investigation: Context Mutability in .run() and .scope()
 
+**Last Evaluated:** 2026-02-06
+
 ## Issue Description
 
 Context isolation in `.run()` and `.scope()` may have mutability issues when dealing with primitives vs objects.
