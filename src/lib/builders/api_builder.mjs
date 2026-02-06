@@ -69,35 +69,24 @@ export class ApiBuilder extends ComponentBase {
 			userApiKeys: Object.keys(userApi)
 		});
 
-		// CRITICAL: Clone the API object to prevent cross-instance pollution from module cache
-		// The API modules are cached by Node.js and shared across instances
-		// We must create a new object before mutating it with builtins
-		const clonedApi =
-			typeof userApi === "function"
-				? Object.assign(function (...args) {
-						return userApi(...args);
-					}, userApi)
-				: Object.assign({}, userApi);
-
-		this.slothlet.debug("api", {
-			message: "API cloned",
-			clonedApiKeys: Object.keys(clonedApi)
-		});
+		// No clone needed - all exports are already instance-specific UnifiedWrapper proxies
+		// Mode builders return wrapped APIs where each wrapper has its own _impl storage
+		// Mutating userApi in place to add builtins is safe and eliminates unnecessary object allocation
 
 		// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
 		// Store these on the instance so they can be updated during add/remove API operations
 		this.slothlet.userHooks = {
-			shutdown: typeof clonedApi.shutdown === "function" ? clonedApi.shutdown : null,
-			destroy: typeof clonedApi.destroy === "function" ? clonedApi.destroy : null
+			shutdown: typeof userApi.shutdown === "function" ? userApi.shutdown : null,
+			destroy: typeof userApi.destroy === "function" ? userApi.destroy : null
 		};
 
 		// Warn if user has 'slothlet' property (reserved namespace)
-		if (clonedApi.slothlet) {
+		if (userApi.slothlet) {
 			new this.SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT", { properties: "slothlet" });
 		}
 
 		// Create slothlet namespace with all built-in methods
-		const slothletNamespace = await this.createSlothletNamespace(clonedApi);
+		const slothletNamespace = await this.createSlothletNamespace(userApi);
 
 		this.slothlet.debug("api", {
 			message: "Slothlet namespace created",
@@ -108,8 +97,8 @@ export class ApiBuilder extends ComponentBase {
 		// Create root-level convenience methods (use getters for dynamic user hooks)
 		const shutdownFn = this.createShutdownFunction();
 
-		// Attach built-ins to cloned API (except destroy which needs api reference)
-		this.attachBuiltins(clonedApi, {
+		// Attach built-ins to API in place (except destroy which needs api reference)
+		this.attachBuiltins(userApi, {
 			slothlet: slothletNamespace,
 			shutdown: shutdownFn,
 			destroy: null
@@ -117,14 +106,14 @@ export class ApiBuilder extends ComponentBase {
 
 		this.slothlet.debug("api", {
 			message: "Built-ins attached",
-			clonedApiKeys: Object.keys(clonedApi),
-			hasSlothlet: !!clonedApi.slothlet,
-			hasDiag: !!clonedApi.slothlet?.diag
+			userApiKeys: Object.keys(userApi),
+			hasSlothlet: !!userApi.slothlet,
+			hasDiag: !!userApi.slothlet?.diag
 		});
 
 		// Now create destroy with dynamic user hooks
-		const destroyWithApi = this.createDestroyFunction(clonedApi);
-		Object.defineProperty(clonedApi, "destroy", {
+		const destroyWithApi = this.createDestroyFunction(userApi);
+		Object.defineProperty(userApi, "destroy", {
 			value: destroyWithApi,
 			enumerable: true,
 			writable: false,
@@ -132,14 +121,14 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		// Store instance reference (non-enumerable for internal use)
-		Object.defineProperty(clonedApi, "__slothletInstance", {
+		Object.defineProperty(userApi, "__slothletInstance", {
 			value: this.slothlet,
 			enumerable: false,
 			writable: false,
 			configurable: true
 		});
 
-		return clonedApi;
+		return userApi;
 	}
 
 	/**

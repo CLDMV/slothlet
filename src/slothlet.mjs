@@ -49,40 +49,11 @@ class Slothlet {
 		this.instanceID = null;
 		this.config = null;
 		this.api = null;
-		this._currentApi = {}; // Placeholder for proxy forwarding
+		this.boundApi = null; // Created in load(), forwards to this.api
 		this.contextManager = null;
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
-
-		// Create boundApi proxy that forwards to _currentApi
-		// This allows reload to update _currentApi while user keeps same reference
-		// Always use function target so typeof returns 'function' and proxy is callable
-		this.boundApi = new Proxy(function () {}, {
-			get: (target, prop) => this._currentApi[prop],
-			set: (target, prop, value) => {
-				this._currentApi[prop] = value;
-				return true;
-			},
-			has: (target, prop) => prop in this._currentApi,
-			ownKeys: (target) => Reflect.ownKeys(this._currentApi),
-			deleteProperty: (target, prop) => delete this._currentApi[prop],
-			apply: (target, thisArg, args) => Reflect.apply(this._currentApi, thisArg, args),
-			construct: (target, args) => Reflect.construct(this._currentApi, args),
-			getOwnPropertyDescriptor: (target, prop) => {
-				// Return actual descriptor for 'prototype' to satisfy proxy invariants on function targets
-				if (prop === "prototype") {
-					return Object.getOwnPropertyDescriptor(target, prop);
-				}
-				if (prop in this._currentApi) {
-					const desc = Object.getOwnPropertyDescriptor(this._currentApi, prop);
-					if (desc) {
-						return { ...desc, configurable: true };
-					}
-				}
-				return undefined;
-			}
-		});
 
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors"];
@@ -334,33 +305,35 @@ class Slothlet {
 			this.registerAPIWithOwnership(apiWithBuiltins, baseModuleId, "");
 		}
 
-		// UnifiedWrapper already handles context binding, so no additional wrapping needed
-		this._currentApi = apiWithBuiltins;
+		// Note: apiWithBuiltins IS this.api (buildFinalAPI now mutates in place, no clone)
+		// this.api already has builtins attached from buildFinalAPI
 
 		// Create boundApi proxy if first load (preserves reference across reloads)
 		if (!this.boundApi) {
-			// Determine proxy target type based on _currentApi (like UnifiedWrapper does)
-			const isCallable = typeof apiWithBuiltins === "function" || (apiWithBuiltins && typeof apiWithBuiltins.default === "function");
+			// Determine proxy target type based on this.api (like UnifiedWrapper does)
+			const isCallable = typeof this.api === "function" || (this.api && typeof this.api.default === "function");
 			const proxyTarget = isCallable ? function () {} : {};
 
 			this.boundApi = new Proxy(proxyTarget, {
-				get: (target, prop) => this._currentApi[prop],
+				get: (target, prop) => (this.api ? this.api[prop] : undefined),
 				set: (target, prop, value) => {
-					this._currentApi[prop] = value;
+					if (this.api) {
+						this.api[prop] = value;
+					}
 					return true;
 				},
-				has: (target, prop) => prop in this._currentApi,
-				ownKeys: (target) => Reflect.ownKeys(this._currentApi),
-				deleteProperty: (target, prop) => delete this._currentApi[prop],
-				apply: (target, thisArg, args) => Reflect.apply(this._currentApi, thisArg, args),
-				construct: (target, args) => Reflect.construct(this._currentApi, args),
+				has: (target, prop) => (this.api ? prop in this.api : false),
+				ownKeys: (target) => (this.api ? Reflect.ownKeys(this.api) : []),
+				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
+				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
+				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
 				getOwnPropertyDescriptor: (target, prop) => {
 					// Return actual descriptor for 'prototype' on function targets to satisfy proxy invariants
 					if (isCallable && prop === "prototype") {
 						return Object.getOwnPropertyDescriptor(target, prop);
 					}
-					if (prop in this._currentApi) {
-						const desc = Object.getOwnPropertyDescriptor(this._currentApi, prop);
+					if (this.api && prop in this.api) {
+						const desc = Object.getOwnPropertyDescriptor(this.api, prop);
 						if (desc) {
 							return { ...desc, configurable: true };
 						}
