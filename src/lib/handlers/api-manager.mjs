@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:58:44 -08:00 (1770335924)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,7 +19,7 @@
  *
  * @description
  * Provides runtime handlers that extend a loaded API with new modules, remove modules by path
- * or moduleId, and reapply additions to support hot reload workflows. This module manages
+ * or moduleID, and reapply additions to support hot reload workflows. This module manages
  * per-instance state as class properties and applies updates without requiring a full instance rebuild.
  *
  * @example
@@ -29,7 +29,7 @@
  * await manager.addApiComponent({
  * 	apiPath: "plugins",
  * 	folderPath: "./plugins",
- * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
+ * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  *
  * @example
@@ -39,7 +39,7 @@
  * await manager.addApiComponent({
  * 	apiPath: "plugins",
  * 	folderPath: "./plugins",
- * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
+ * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
  * });
  */
 import fs from "node:fs/promises";
@@ -239,21 +239,22 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Build a default moduleId when none is provided.
+	 * Build a default moduleID when none is provided.
 	 * @param {string} apiPath - API path for this module.
 	 * @param {string} resolvedFolderPath - Absolute folder path.
 	 * @returns {string} Stable module identifier.
 	 * @private
 	 *
 	 * @description
-	 * Generates a stable moduleId using the apiPath and resolved folder path.
+	 * Generates a stable moduleID using the apiPath and resolved folder path.
 	 *
 	 * @example
-	 * const moduleId = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
+	 * const moduleID = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
 	 */
 	buildDefaultModuleId(apiPath, resolvedFolderPath) {
 		const randomSuffix = Math.random().toString(36).substring(2, 8);
-		return `${apiPath}_${randomSuffix}`;
+		const prefix = apiPath || "auto";
+		return `${prefix}_${randomSuffix}`;
 	}
 
 	/**
@@ -295,7 +296,7 @@ export class ApiManager extends ComponentBase {
 	 * const parent = this.ensureParentPath(api, ["plugins", "tools"]);
 	 */
 	ensureParentPath(root, parts, options = {}) {
-		const { moduleId, sourceFolder } = options;
+		const { moduleID, sourceFolder } = options;
 		let current = root;
 		for (let i = 0; i < parts.length - 1; i += 1) {
 			const part = parts[i];
@@ -306,11 +307,11 @@ export class ApiManager extends ComponentBase {
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					mode: this.config.mode,
 					apiPath: containerPath,
-					moduleId: moduleId,
+					moduleID: moduleID,
 					sourceFolder: sourceFolder
 				});
 				// Set impl to empty object so it acts as a namespace container
-				containerWrapper.__setImpl({}, moduleId);
+				containerWrapper.__setImpl({}, moduleID);
 				current[part] = containerWrapper.createProxy();
 				current = current[part];
 				continue;
@@ -367,7 +368,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await this.syncWrapper(existingProxy, nextProxy, this.config);
 	 */
-	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleId = null) {
+	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - existingProxy",
@@ -429,10 +430,10 @@ export class ApiManager extends ComponentBase {
 		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 		if (collisionMode === "replace") {
 			// CRITICAL: Use __setImpl to trigger lifecycle events for ownership tracking
-			// This ensures impl:changed fires with the correct moduleId
+			// This ensures impl:changed fires with the correct moduleID
 			if (existingWrapper.__setImpl && nextWrapper._impl !== undefined) {
-				// Pass moduleId for correct ownership tracking in lifecycle events
-				existingWrapper.__setImpl(nextWrapper._impl, moduleId);
+				// Pass moduleID for correct ownership tracking in lifecycle events
+				existingWrapper.__setImpl(nextWrapper._impl, moduleID);
 			} else if (nextWrapper._impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
@@ -556,7 +557,7 @@ export class ApiManager extends ComponentBase {
 					message: "mutateApiValue - both are wrappers, calling syncWrapper"
 				});
 			}
-			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleId);
+			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleID);
 			return;
 		}
 
@@ -584,7 +585,7 @@ export class ApiManager extends ComponentBase {
 					allowOverwrite: true,
 					syncWrapper: this.syncWrapper.bind(this),
 					collisionMode: options.collisionMode,
-					moduleId: options.moduleId
+					moduleID: options.moduleID
 				});
 				return;
 			}
@@ -609,7 +610,7 @@ export class ApiManager extends ComponentBase {
 				allowOverwrite: true,
 				syncWrapper: this.syncWrapper.bind(this),
 				collisionMode: options.collisionMode,
-				moduleId: options.moduleId
+				moduleID: options.moduleID
 			});
 			return existingValue;
 		}
@@ -649,13 +650,13 @@ export class ApiManager extends ComponentBase {
 	 */
 	async setValueAtPath(root, parts, value, options) {
 		const parent = this.ensureParentPath(root, parts, {
-			moduleId: options.moduleId,
+			moduleID: options.moduleID,
 			sourceFolder: options.sourceFolder
 		});
 		const finalKey = parts[parts.length - 1];
 		const existing = parent ? parent[finalKey] : undefined;
 		const collisionMode = options.collisionMode || "merge";
-		const moduleId = options.moduleId; // Extract moduleId for lifecycle events
+		const moduleID = options.moduleID; // Extract moduleID for lifecycle events
 
 		this.slothlet.debug("api", {
 			message: "setValueAtPath",
@@ -710,7 +711,7 @@ export class ApiManager extends ComponentBase {
 					await this.mutateApiValue(
 						existing,
 						value,
-						{ removeMissing: false, allowOverwrite: true, collisionMode: "replace", moduleId },
+						{ removeMissing: false, allowOverwrite: true, collisionMode: "replace", moduleID },
 						this.config
 					);
 					return true;
@@ -796,7 +797,7 @@ export class ApiManager extends ComponentBase {
 				apiPath,
 				impl: removedImpl,
 				source: "removal",
-				moduleId: metadata?.moduleID,
+				moduleID: metadata?.moduleID,
 				filePath: metadata?.filePath,
 				sourceFolder: metadata?.sourceFolder
 			});
@@ -859,9 +860,9 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Register ownership for a subtree using a single moduleId.
+	 * Register ownership for a subtree using a single moduleID.
 	 * @param {object} ownership - Ownership manager.
-	 * @param {string} moduleId - Module identifier.
+	 * @param {string} moduleID - Module identifier.
 	 * @param {string} apiPath - Base API path.
 	 * @param {unknown} value - Value at the base path.
 	 * @returns {void}
@@ -874,8 +875,8 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * this.registerOwnership(ownership, "plugins-core", "plugins", api.plugins);
 	 */
-	registerOwnership(ownership, moduleId, apiPath, value) {
-		if (!ownership || !moduleId) {
+	registerOwnership(ownership, moduleID, apiPath, value) {
+		if (!ownership || !moduleID) {
 			return;
 		}
 
@@ -893,7 +894,7 @@ export class ApiManager extends ComponentBase {
 
 			const pathKey = pathParts.join(".");
 			ownership.register({
-				moduleId,
+				moduleID,
 				apiPath: pathKey,
 				value: currentValue,
 				source: "add",
@@ -929,7 +930,7 @@ export class ApiManager extends ComponentBase {
 	 * Remove a module ownership entry for a path.
 	 * @param {object} ownership - Ownership manager.
 	 * @param {string} apiPath - API path to modify.
-	 * @param {?string} moduleId - Specific moduleId to remove (or current owner if null).
+	 * @param {?string} moduleID - Specific moduleID to remove (or current owner if null).
 	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null, restoreModuleId: string|null }}
 	 * @private
 	 *
@@ -939,18 +940,18 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * const result = this.removeOwnershipEntry(ownership, "plugins.tools", null);
 	 */
-	removeOwnershipEntry(ownership, apiPath, moduleId) {
+	removeOwnershipEntry(ownership, apiPath, moduleID) {
 		if (!ownership || typeof ownership.removePath !== "function") {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 
-		return ownership.removePath(apiPath, moduleId ?? null);
+		return ownership.removePath(apiPath, moduleID ?? null);
 	}
 
 	/**
 	 * Restore a path from api.slothlet.api.add history or core load.
 	 * @param {string} apiPath - API path to restore.
-	 * @param {?string} moduleId - ModuleId to restore.
+	 * @param {?string} moduleID - ModuleId to restore.
 	 * @returns {Promise<void>}
 	 * @private
 	 *
@@ -960,12 +961,12 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * await this.restoreApiPath("plugins", "plugins-core");
 	 */
-	async restoreApiPath(apiPath, moduleId) {
-		const normalizedModuleId = moduleId || null;
+	async restoreApiPath(apiPath, moduleID) {
+		const normalizedModuleId = moduleID || null;
 		const historyEntry = this.state.addHistory
 			.slice()
 			.reverse()
-			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleId === normalizedModuleId : true));
+			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
 
 		if (historyEntry) {
 			await this.addApiComponent({
@@ -1080,7 +1081,7 @@ export class ApiManager extends ComponentBase {
 	 * await manager.addApiComponent({
 	 * 	apiPath: "plugins",
 	 * 	folderPath: "./plugins",
-	 * 	options: { moduleId: "plugins-core", metadata: { version: "1.0.0" } }
+	 * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
 	 * });
 	 */
 	async addApiComponent(params) {
@@ -1108,8 +1109,8 @@ export class ApiManager extends ComponentBase {
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
-		const moduleId = restOptions.moduleId ? String(restOptions.moduleId) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
-		if (restOptions.forceOverwrite && !moduleId) {
+		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
+		if (restOptions.forceOverwrite && !moduleID) {
 			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
 				apiPath: normalizedPath,
 				validationError: true
@@ -1124,7 +1125,7 @@ export class ApiManager extends ComponentBase {
 			// Empty string means root level (no prefix)
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
-			moduleId: moduleId,
+			moduleID: moduleID,
 			userMetadata: metadata,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
 			collisionMode: collisionMode
@@ -1173,14 +1174,14 @@ export class ApiManager extends ComponentBase {
 				const result1 = await this.setValueAtPath(this.slothlet.api, [key], newApi[key], {
 					mutateExisting,
 					collisionMode,
-					moduleId,
+					moduleID,
 					sourceFolder: resolvedFolderPath
 				});
 
 				const result2 = await this.setValueAtPath(this.slothlet.boundApi, [key], newApi[key], {
 					mutateExisting,
 					collisionMode,
-					moduleId,
+					moduleID,
 					sourceFolder: resolvedFolderPath
 				});
 
@@ -1197,12 +1198,12 @@ export class ApiManager extends ComponentBase {
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: normalizedPath,
 					mode: this.config.mode,
-					moduleId: moduleId,
+					moduleID: moduleID,
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
 				});
 				// Set the apiToMerge object as the impl
-				containerWrapper.__setImpl(apiToMerge, moduleId);
+				containerWrapper.__setImpl(apiToMerge, moduleID);
 				// Replace apiToMerge with the wrapped proxy
 				apiToMerge = containerWrapper.createProxy();
 			}
@@ -1210,14 +1211,14 @@ export class ApiManager extends ComponentBase {
 			const result1 = await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
-				moduleId, // Pass moduleId for lifecycle events
+				moduleID, // Pass moduleID for lifecycle events
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
 
 			const result2 = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
-				moduleId, // Pass moduleId for lifecycle events (boundApi container needs it too)
+				moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
 
@@ -1323,8 +1324,8 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		if (this.slothlet.handlers.ownership && moduleId) {
-			this.registerOwnership(this.slothlet.handlers.ownership, moduleId, normalizedPath, apiToMerge);
+		if (this.slothlet.handlers.ownership && moduleID) {
+			this.registerOwnership(this.slothlet.handlers.ownership, moduleID, normalizedPath, apiToMerge);
 		}
 
 		if (this.slothlet.handlers.ownership) {
@@ -1332,9 +1333,8 @@ export class ApiManager extends ComponentBase {
 				this.state.addHistory.push({
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
-					metadata,
-					options: { ...restOptions, metadata, moduleId },
-					moduleId
+					options: { ...restOptions, metadata, moduleID },
+					moduleID
 				});
 
 				// Track in operation history for reload replay
@@ -1342,13 +1342,13 @@ export class ApiManager extends ComponentBase {
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
-					options: { ...restOptions, metadata, moduleId },
-					moduleId
+					options: { ...restOptions, metadata, moduleID },
+					moduleID
 				});
 			}
 
-			if (moduleId) {
-				this.state.removedModuleIds.delete(moduleId);
+			if (moduleID) {
+				this.state.removedModuleIds.delete(moduleID);
 			}
 		}
 	}
@@ -1361,8 +1361,8 @@ export class ApiManager extends ComponentBase {
 	 * @package
 	 *
 	 * @description
-	 * Removes an API subtree by apiPath or removes all paths owned by a moduleId.
-	 * Automatically detects whether the parameter is a moduleId (contains underscore) or apiPath.
+	 * Removes an API subtree by apiPath or removes all paths owned by a moduleID.
+	 * Automatically detects whether the parameter is a moduleID (contains underscore) or apiPath.
 	 *
 	 * @example
 	 * await manager.removeApiComponent("plugins.tools"); // Remove by API path
@@ -1381,20 +1381,20 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// Detect if this is a moduleId or apiPath
-		// API paths contain dots (e.g., "plugins.tools"), moduleIds don't
+		// Detect if this is a moduleID or apiPath
+		// API paths contain dots (e.g., "plugins.tools"), moduleIDs don't
 		const isModuleId = !pathOrModuleId.includes(".");
 		const apiPath = isModuleId ? null : pathOrModuleId;
-		// Extract moduleId from full moduleID format "moduleId:path" if present
-		let moduleId = isModuleId ? pathOrModuleId.split(":")[0] : null;
+		// Extract moduleID from full moduleID format "moduleID:path" if present
+		let moduleID = isModuleId ? pathOrModuleId.split(":")[0] : null;
 
-		// If it's a moduleId, find the actual registered moduleId (with suffix)
+		// If it's a moduleID, find the actual registered moduleID (with suffix)
 		// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-		if (moduleId && this.slothlet.handlers.ownership) {
+		if (moduleID && this.slothlet.handlers.ownership) {
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
-			const matchingModule = registeredModules.find((m) => m === moduleId || m.startsWith(`${moduleId}_`));
+			const matchingModule = registeredModules.find((m) => m === moduleID || m.startsWith(`${moduleID}_`));
 			if (matchingModule) {
-				moduleId = matchingModule;
+				moduleID = matchingModule;
 			}
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
@@ -1404,11 +1404,11 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		if (apiPath && moduleId) {
+		if (apiPath && moduleID) {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
-			const moduleIdKey = String(moduleId);
+			const moduleIDKey = String(moduleID);
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
-			const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, moduleIdKey);
+			const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, moduleIDKey);
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
@@ -1427,19 +1427,19 @@ export class ApiManager extends ComponentBase {
 			}
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleId;
+				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
 				if (restoredValue !== undefined && restoredModuleId) {
 					await this.setValueAtPath(this.slothlet.api, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true,
 						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
+						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
 					});
 					await this.setValueAtPath(this.slothlet.boundApi, pathParts, restoredValue, {
 						mutateExisting: true,
 						allowOverwrite: true,
 						collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-						moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
+						moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
 					});
 					// Track in operation history for reload replay
 					this.state.operationHistory.push({
@@ -1464,9 +1464,9 @@ export class ApiManager extends ComponentBase {
 			return false;
 		}
 
-		if (moduleId) {
-			const moduleIdKey = String(moduleId);
-			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIdKey) || { removed: [], rolledBack: [] };
+		if (moduleID) {
+			const moduleIDKey = String(moduleID);
+			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
 
 			// Collect all paths that were owned by this module
 			const allPaths = [...result.removed, ...result.rolledBack.map((r) => r.apiPath)];
@@ -1486,13 +1486,13 @@ export class ApiManager extends ComponentBase {
 				const hasChildrenWithOtherOwners = uniquePaths.some((p) => {
 					if (p === path || !p.startsWith(path + ".")) return false;
 					const childOwner = this.slothlet.handlers.ownership?.getCurrentOwner?.(p);
-					return childOwner && childOwner.moduleId !== moduleIdKey;
+					return childOwner && childOwner.moduleID !== moduleIDKey;
 				});
 
 				// Only rollback if there's an owner AND it's not the module being removed
-				if (currentOwner && currentOwner.moduleId !== moduleIdKey) {
+				if (currentOwner && currentOwner.moduleID !== moduleIDKey) {
 					// Has different owner → rollback to current owner
-					pathsToRollback.push({ apiPath: path, restoredTo: currentOwner.moduleId });
+					pathsToRollback.push({ apiPath: path, restoredTo: currentOwner.moduleID });
 				} else if (!hasChildrenWithOtherOwners) {
 					// No owner (or self-ownership) and no children with other owners → safe to delete
 					pathsToDelete.push(path);
@@ -1545,7 +1545,7 @@ export class ApiManager extends ComponentBase {
 					// Get the existing wrapper and update its _impl
 					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
 					if (existingWrapper?.__setImpl) {
-						// Pass the restored moduleId for correct ownership tracking
+						// Pass the restored moduleID for correct ownership tracking
 						existingWrapper.__setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
@@ -1556,8 +1556,8 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			this.state.removedModuleIds.add(moduleIdKey);
-			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleId) !== moduleIdKey);
+			this.state.removedModuleIds.add(moduleIDKey);
+			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
 			// Track in operation history for reload replay - record each removed apiPath
 			if (recordHistory) {
@@ -1632,19 +1632,19 @@ export class ApiManager extends ComponentBase {
 		}
 		if (ownershipResult.action === "restore") {
 			const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
-			const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleId;
+			const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
 			if (restoredValue !== undefined && restoredModuleId) {
 				await this.setValueAtPath(this.slothlet.api, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true,
 					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
+					moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
 				});
 				await this.setValueAtPath(this.slothlet.boundApi, parts, restoredValue, {
 					mutateExisting: true,
 					allowOverwrite: true,
 					collisionMode: "replace", // CRITICAL: Must use replace mode for rollback
-					moduleId: restoredModuleId // Pass the restored moduleId for ownership tracking
+					moduleID: restoredModuleId // Pass the restored moduleID for ownership tracking
 				});
 				// Track in operation history for reload replay
 				if (recordHistory) {
@@ -1672,7 +1672,7 @@ export class ApiManager extends ComponentBase {
 	 * Reload API modules from api.slothlet.api.add history.
 	 * @param {object} params - Reload parameters.
 	 * @param {?string} params.apiPath - API path to reload.
-	 * @param {?string} params.moduleId - ModuleId to reload.
+	 * @param {?string} params.moduleID - ModuleId to reload.
 	 * @returns {Promise<void>}
 	 * @package
 	 *
@@ -1683,7 +1683,7 @@ export class ApiManager extends ComponentBase {
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });
 	 */
 	async reloadApiComponent(params) {
-		const { apiPath, moduleId } = params || {};
+		const { apiPath, moduleID } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reloadApi",
@@ -1695,8 +1695,8 @@ export class ApiManager extends ComponentBase {
 		if (apiPath) {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			entries = entries.filter((entry) => entry.apiPath === normalizedPath);
-		} else if (moduleId) {
-			entries = entries.filter((entry) => entry.moduleId === moduleId);
+		} else if (moduleID) {
+			entries = entries.filter((entry) => entry.moduleID === moduleID);
 		}
 
 		if (entries.length === 0 && apiPath) {
@@ -1705,7 +1705,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		for (const entry of entries) {
-			if (entry.moduleId && this.state.removedModuleIds.has(entry.moduleId)) {
+			if (entry.moduleID && this.state.removedModuleIds.has(entry.moduleID)) {
 				continue;
 			}
 			await this.addApiComponent({
@@ -1713,7 +1713,6 @@ export class ApiManager extends ComponentBase {
 				folderPath: entry.folderPath,
 				options: {
 					...entry.options,
-					metadata: entry.metadata,
 					mutateExisting: true,
 					forceOverwrite: true,
 					recordHistory: false

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-03 20:49:08 -08:00 (1770180548)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -166,7 +166,7 @@ class Slothlet {
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
-						moduleId: data.moduleId,
+						moduleID: data.moduleID,
 						sourceFolder: data.sourceFolder
 					},
 					{ _fromLifecycle: true }
@@ -179,7 +179,7 @@ class Slothlet {
 					{
 						filePath: data.filePath,
 						apiPath: data.apiPath,
-						moduleId: data.moduleId,
+						moduleID: data.moduleID,
 						sourceFolder: data.sourceFolder
 					},
 					{ _fromLifecycle: true }
@@ -205,7 +205,7 @@ class Slothlet {
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 				this.handlers.ownership.register({
-					moduleId: data.moduleId,
+					moduleID: data.moduleID,
 					apiPath: data.apiPath,
 					value: implValue,
 					source: data.source,
@@ -222,12 +222,12 @@ class Slothlet {
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 
-				// Only register if this moduleId doesn't already own this path
+				// Only register if this moduleID doesn't already own this path
 				// This prevents duplicate registrations from multiple impl:changed events
 				const currentOwner = this.handlers.ownership.getCurrentOwner(data.apiPath);
-				if (currentOwner?.moduleId !== data.moduleId) {
+				if (currentOwner?.moduleID !== data.moduleID) {
 					this.handlers.ownership.register({
-						moduleId: data.moduleId,
+						moduleID: data.moduleID,
 						apiPath: data.apiPath,
 						value: implValue,
 						source: data.source,
@@ -300,7 +300,7 @@ class Slothlet {
 
 		// Note: ownership manager and hook manager already initialized via auto-discovery
 
-		// Generate base moduleId for ownership tracking
+		// Generate base moduleID for ownership tracking
 		const baseModuleId = `base_${this.helpers.utilities.generateId().substring(0, 8)}`;
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
@@ -308,7 +308,7 @@ class Slothlet {
 		this.api = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode,
-			moduleId: baseModuleId
+			moduleID: baseModuleId
 		});
 
 		// Build final API with builtins attached
@@ -435,7 +435,7 @@ class Slothlet {
 					apiPath: operation.apiPath,
 					folderPath: operation.folderPath,
 					options: { ...(operation.options || {}), recordHistory: false },
-					moduleId: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleId for replay
+					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleID for replay
 				});
 			} else if (operation.type === "remove") {
 				// Call actual removeApiComponent to properly clean up ownership, metadata, etc.
@@ -597,13 +597,13 @@ class Slothlet {
 	/**
 	 * Recursively register API structure with ownership manager
 	 * @param {Object} api - API object or value
-	 * @param {string} moduleId - Module identifier (owner)
+	 * @param {string} moduleID - Module identifier (owner)
 	 * @param {string} path - Current API path
 	 * @param {WeakSet} [visited] - WeakSet to track visited objects (prevents circular refs)
 	 * @param {string[]} [pathStack] - Path stack to track current depth
 	 * @private
 	 */
-	registerAPIWithOwnership(api, moduleId, path, visited = new WeakSet(), pathStack = []) {
+	registerAPIWithOwnership(api, moduleID, path, visited = new WeakSet(), pathStack = []) {
 		if (!api || typeof api !== "object") return;
 
 		// Prevent infinite recursion on circular references
@@ -615,7 +615,7 @@ class Slothlet {
 		// Register this level
 		if (path) {
 			this.handlers.ownership.register({
-				moduleId,
+				moduleID,
 				apiPath: path,
 				value: api,
 				source: "core",
@@ -641,7 +641,7 @@ class Slothlet {
 			const childPath = path ? `${path}.${key}` : key;
 			if (typeof value === "function" || (value && typeof value === "object")) {
 				this.handlers.ownership.register({
-					moduleId,
+					moduleID,
 					apiPath: childPath,
 					value,
 					source: "core",
@@ -651,7 +651,7 @@ class Slothlet {
 
 				// Recurse for objects (but not functions with properties - handle separately if needed)
 				if (typeof value === "object" && !Array.isArray(value)) {
-					this.registerAPIWithOwnership(value, moduleId, childPath, visited, [...pathStack, key]);
+					this.registerAPIWithOwnership(value, moduleID, childPath, visited, [...pathStack, key]);
 				}
 			}
 		}

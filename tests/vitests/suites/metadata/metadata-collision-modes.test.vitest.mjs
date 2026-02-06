@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:57 -08:00 (1770266397)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -194,8 +194,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Try to add conflicting API with metadata (should be skipped)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-				conflictingMetadata: true,
-				version: "should-not-appear"
+				metadata: {
+					conflictingMetadata: true,
+					version: "should-not-appear"
+				}
 			});
 
 			// Original should still be there unchanged
@@ -224,8 +226,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Try to add conflicting API with metadata (should warn and skip)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-				conflictingMetadata: true,
-				version: "should-not-appear"
+				metadata: {
+					conflictingMetadata: true,
+					version: "should-not-appear"
+				}
 			});
 
 			// Original should still be there unchanged
@@ -253,8 +257,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Add conflicting API with metadata (should replace)
 			await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-				replacedMetadata: true,
-				version: "2.0.0"
+				metadata: {
+					replacedMetadata: true,
+					version: "2.0.0"
+				}
 			});
 
 			// Check if replacement happened
@@ -281,9 +287,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Add initial API with metadata
 			await api.slothlet.api.add("testMerge", TEST_DIRS.API_SMART_FLATTEN, {
-				initialLoad: true,
-				version: "1.0.0",
-				feature: "base"
+				metadata: {
+					initialLoad: true,
+					version: "1.0.0",
+					feature: "base"
+				}
 			});
 
 			await materialize(api, "testMerge.config.settings.getPluginConfig");
@@ -294,9 +302,11 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Merge additional metadata to nested path
 			await api.slothlet.api.add("testMerge.config", TEST_DIRS.API_SMART_FLATTEN, {
-				mergedLoad: true,
-				version: "1.5.0",
-				feature: "extended"
+				metadata: {
+					mergedLoad: true,
+					version: "1.5.0",
+					feature: "extended"
+				}
 			});
 
 			// Metadata should be merged (preserves old + adds new, overwrites conflicts)
@@ -326,8 +336,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			// Try to add conflicting API (should throw)
 			await expect(async () => {
 				await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-					conflictingMetadata: true,
-					version: "should-not-appear"
+					metadata: {
+						conflictingMetadata: true,
+						version: "should-not-appear"
+					}
 				});
 			}).rejects.toThrow();
 
@@ -343,7 +355,7 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 	});
 
 	describe("Metadata cleanup after module removal", () => {
-		it("should remove metadata when module removed by moduleId", async () => {
+		it("should remove metadata when module removed by moduleID", async () => {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
@@ -352,8 +364,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Add API with metadata
 			await api.slothlet.api.add("tempModule", TEST_DIRS.API_SMART_FLATTEN, {
-				temporary: true,
-				version: "temp"
+				metadata: {
+					temporary: true,
+					version: "temp"
+				}
 			});
 
 			await materialize(api, "tempModule.config.settings.getPluginConfig");
@@ -361,10 +375,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			expect(meta.temporary).toBe(true);
 			expect(meta.version).toBe("temp");
 
-			const moduleId = meta.moduleID;
+			const moduleID = meta.moduleID;
 
-			// Remove by moduleId
-			await api.slothlet.api.remove(moduleId);
+			// Remove by moduleID
+			await api.slothlet.api.remove(moduleID);
 
 			// Module and metadata should be gone
 			expect(api.tempModule).toBeUndefined();
@@ -379,8 +393,10 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 
 			// Add API with metadata
 			await api.slothlet.api.add("tempModule2", TEST_DIRS.API_SMART_FLATTEN, {
-				temporary: true,
-				version: "temp"
+				metadata: {
+					temporary: true,
+					version: "temp"
+				}
 			});
 
 			await materialize(api, "tempModule2.config.settings.getPluginConfig");

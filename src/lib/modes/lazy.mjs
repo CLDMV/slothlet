@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -52,7 +52,7 @@ export async function buildLazyAPI({
 	dir,
 	apiPathPrefix = "",
 	collisionContext = "initial",
-	moduleId,
+	moduleID,
 	userMetadata = {},
 	slothlet,
 	apiDepth = Infinity
@@ -90,7 +90,7 @@ export async function buildLazyAPI({
 		false, // populateDirectly=false for root level
 		apiPathPrefix,
 		collisionContext,
-		moduleId,
+		moduleID,
 		dir, // sourceFolder for metadata
 		userMetadata
 	);
@@ -106,12 +106,12 @@ export async function buildLazyAPI({
  * @param {Object} dir - Directory structure
  * @param {string} apiPath - Current API path
  * @param {Object} slothlet - Slothlet instance
- * @param {string} moduleIdOverride - Module ID from api.add() to use instead of file.moduleId
+ * @param {string} moduleIDOverride - Module ID from api.add() to use instead of file.moduleID
  * @param {Object} userMetadata - User metadata to inherit from parent
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadata = {}) {
+function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, userMetadata = {}) {
 	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
 		slothlet.debug("modes", {
@@ -131,8 +131,8 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 					fileName: file.name,
 					filePath: file.path
 				});
-				// Use moduleIdOverride from api.add() if provided, otherwise use file's auto-generated ID
-				const effectiveModuleId = moduleIdOverride || file.moduleId;
+				// Use moduleIDOverride from api.add() if provided, otherwise use file's auto-generated ID
+				const effectiveModuleId = moduleIDOverride || file.moduleID;
 				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID, effectiveModuleId);
 				slothlet.debug("modes", {
 					message: "File loaded, extracting exports",
@@ -149,7 +149,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 				// Register ownership
 				if (slothlet.handlers.ownership) {
 					slothlet.handlers.ownership.register({
-						moduleId: effectiveModuleId,
+						moduleID: effectiveModuleId,
 						apiPath: `${apiPath}.${moduleName}`,
 						source: "core",
 						collisionMode: slothlet.config.collision?.core || "error",
@@ -173,7 +173,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 						apiPath: `${apiPath}.${moduleName}`,
 						impl: materialized[moduleName],
 						source: "lazy-merge",
-						moduleId: effectiveModuleId,
+						moduleID: effectiveModuleId,
 						filePath: file.path,
 						sourceFolder: dir.path
 					});
@@ -187,7 +187,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 									apiPath: `${apiPath}.${moduleName}.${key}`,
 									impl: prop,
 									source: "lazy-merge-property",
-									moduleId: effectiveModuleId,
+									moduleID: effectiveModuleId,
 									filePath: file.path,
 									sourceFolder: dir.path
 								});
@@ -210,10 +210,10 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 			}
 		}
 
-		// Create lazy wrappers for subdirectories (inherit userMetadata and moduleIdOverride from parent)
+		// Create lazy wrappers for subdirectories (inherit userMetadata and moduleIDOverride from parent)
 		for (const subdir of dir.children.directories || []) {
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIdOverride, userMetadata);
+			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride, userMetadata);
 		}
 
 		// Store the file path mapping as non-enumerable property
@@ -254,7 +254,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIdOverride, userMetadat
 		materializeFunc,
 		materializeOnCreate: slothlet.config.backgroundMaterialize,
 		filePath: null, // Don't set filePath yet - will be set during materialization
-		moduleId: moduleIdOverride, // Use the override if provided, otherwise null
+		moduleID: moduleIDOverride, // Use the override if provided, otherwise null
 		sourceFolder: slothlet.config?.dir
 	});
 

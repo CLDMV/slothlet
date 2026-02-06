@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:45 -08:00 (1770266385)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -184,39 +184,35 @@ describe("api.slothlet.api.add Functionality", () => {
 		/**
 		 * Test 7: Rule 12 cross-module ownership
 		 * Tests allowAddApiOverwrite: false blocks cross-module, true allows
-		 * Requires hotReload for moduleId tracking
+		 * Requires api.mutations.reload for moduleID tracking
 		 */
 		it("should handle cross-module ownership based on config", async () => {
 			// Build addApi options based on config capabilities
-			const addApiOptions = { moduleId: "original-module" };
-			if (config.hotReload) {
-				// Can use moduleId tracking
-				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_MIXED, {}, addApiOptions);
+			const addApiOptions = { moduleID: "original-module" };
+			if (config.api?.mutations?.reload) {
+				// Can use moduleID tracking
+				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_MIXED, addApiOptions);
 				const originalKeys = Object.keys(api.funcTest);
 
 				// Different module tries to take over
-				const shouldBlock = config.hotReload && config.allowAddApiOverwrite === false;
+				const shouldBlock = config.api?.mutations?.reload && config.allowAddApiOverwrite === false;
 
 				if (shouldBlock) {
 					// Rule 12 should block cross-module overwrite
-					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, {}, { moduleId: "hostile-module" })).rejects.toThrow(
-						"Rule 12"
-					);
+					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "hostile-module" })).rejects.toThrow("Rule 12");
 
 					// Original preserved
 					expect(Object.keys(api.funcTest)).toEqual(originalKeys);
 				} else {
 					// Should allow (either no ownership or allowAddApiOverwrite: true)
-					await expect(
-						api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, {}, { moduleId: "new-owner-module" })
-					).resolves.not.toThrow();
+					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "new-owner-module" })).resolves.not.toThrow();
 				}
 			} else {
-				// Without hotReload, no ownership tracking - just test basic api.slothlet.api.add
+				// Without api.mutations.reload, no ownership tracking - just test basic api.slothlet.api.add
 				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_MIXED);
 				expect(api.funcTest).toBeDefined();
 
-				// Can add more without moduleId concerns
+				// Can add more without moduleID concerns
 				await api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS);
 				expect(Object.keys(api.funcTest).length).toBeGreaterThan(0);
 			}

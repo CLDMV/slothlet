@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:49 -08:00 (1770266389)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -78,7 +78,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves function references across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
 
 		// Get function references
 		const mathCjsRef = api.extra?.mathCjs;
@@ -97,7 +97,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves nested object and function references across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, {}, { moduleId: "deep-module" });
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-module" });
 
 		// In lazy mode, access properties to materialize them before getting references
 		if (config.mode === "lazy") {
@@ -124,7 +124,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves mixed export references (default + named) across reloadApi()", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "test-module" });
 
 		// Mixed exports: default function + named exports as properties
 		const mixedRef = api.extra?.mixed;
@@ -141,7 +141,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 
 	it("preserves all reference types across reloadApi() in comprehensive test", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, {}, { moduleId: "comp-module" });
+		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { moduleID: "comp-module" });
 
 		// Capture references for ALL entity types
 		const refs = {

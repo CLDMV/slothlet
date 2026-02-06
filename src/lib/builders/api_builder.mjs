@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 19:00:37 -08:00 (1770346837)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -215,7 +215,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @example
 				 * await api.slothlet.api.add("plugins", "./plugins");
 				 */
-				add: async function slothlet_api_add(apiPath, folderPath, metadata = {}, options = {}) {
+				add: async function slothlet_api_add(apiPath, folderPath, options = {}) {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -228,12 +228,12 @@ export class ApiBuilder extends ComponentBase {
 					// - recordHistory: internal tracking flag
 					// - collisionMode: must be set at initialization for security (prevents bypassing collision config)
 					// - mutateExisting: internal flag set automatically based on collision mode
-					// User-controllable options: moduleId, forceOverwrite
+					// User-controllable options: moduleID, forceOverwrite, metadata
 					const { recordHistory, collisionMode, mutateExisting, ...filteredOptions } = options;
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
-						options: { ...filteredOptions, metadata }
+						options: filteredOptions
 					});
 				},
 
@@ -243,7 +243,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @public
 				 *
 				 * @description
-				 * Removes API modules by apiPath or moduleId from the current instance.
+				 * Removes API modules by apiPath or moduleID from the current instance.
 				 *
 				 * @example
 				 * await api.slothlet.api.remove("plugins.tools");
@@ -269,18 +269,32 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {string} pathOrModuleId - API path or module ID to reload.
+				 * @param {Object} params - Reload parameters
+				 * @param {string} [params.apiPath] - The API path to reload
+				 * @param {string} [params.moduleID] - The module ID to reload
 				 * @returns {Promise<void>}
 				 * @public
 				 *
 				 * @description
 				 * Reloads API modules recorded through add operations, preserving references.
+				 * Requires `api.mutations.reload: true` in configuration.
 				 *
 				 * @example
-				 * await api.slothlet.api.reload("plugins");
+				 * await api.slothlet.api.reload({ apiPath: "plugins" });
+				 *
+				 * @example
+				 * await api.slothlet.api.reload({ moduleID: "myModule" });
 				 */
-				reload: async function slothlet_api_reload(pathOrModuleId) {
-					return slothlet.handlers.apiManager.reloadApiComponent({ pathOrModuleId });
+				reload: async function slothlet_api_reload(params) {
+					// Check if reload mutation is allowed
+					if (!config.api?.mutations?.reload) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.reload",
+							hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
+							validationError: true
+						});
+					}
+					return slothlet.handlers.apiManager.reloadApiComponent(params);
 				}
 			},
 
@@ -779,7 +793,7 @@ export class ApiBuilder extends ComponentBase {
 				/**
 				 * Get ownership info for a specific API path
 				 * @param {string} apiPath - API path to check
-				 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+				 * @returns {Set<string>|null} Set of moduleIDs that own this path, or null if path not found
 				 */
 				get: (apiPath) => {
 					if (slothlet.handlers?.ownership) {
@@ -841,7 +855,7 @@ export class ApiBuilder extends ComponentBase {
 					/**
 					 * Get ownership info for a specific API path
 					 * @param {string} apiPath - API path to check
-					 * @returns {Set<string>|null} Set of moduleIds that own this path, or null if path not found
+					 * @returns {Set<string>|null} Set of moduleIDs that own this path, or null if path not found
 					 */
 					get: (apiPath) => {
 						if (slothlet.handlers?.ownership) {

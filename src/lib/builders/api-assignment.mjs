@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -120,7 +120,7 @@ export class ApiAssignment extends ComponentBase {
 			collisionContext = "initial",
 			syncWrapper = null,
 			collisionMode = "merge", // Default to merge for hot reload
-			moduleId = null
+			moduleID = null
 		} = options;
 
 		// Get existing value
@@ -129,7 +129,7 @@ export class ApiAssignment extends ComponentBase {
 		// Case 1: Both are wrapper proxies - sync them if mutateExisting is true
 		if (existing !== undefined && this.isWrapperProxy(existing) && this.isWrapperProxy(value)) {
 			if (mutateExisting && syncWrapper) {
-				syncWrapper(existing, value, config, collisionMode, moduleId);
+				syncWrapper(existing, value, config, collisionMode, moduleID);
 				return true;
 			}
 			// If not mutating, fall through to collision detection
@@ -555,7 +555,7 @@ export class ApiAssignment extends ComponentBase {
 			return;
 		}
 
-		const { removeMissing = false, moduleId = null, ...assignOptions } = options;
+		const { removeMissing = false, moduleID = null, ...assignOptions } = options;
 
 		// Merge source keys into target
 		const sourceKeys = new Set(Object.keys(sourceApi));
@@ -596,7 +596,7 @@ export class ApiAssignment extends ComponentBase {
 						key
 					});
 				}
-				this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleId });
+				this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleID });
 			}
 		}
 

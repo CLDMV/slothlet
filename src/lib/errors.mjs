@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -103,7 +103,7 @@ export class SlothletError extends Error {
 		}
 
 		// Add only critical details
-		const criticalKeys = ["modulePath", "moduleId", "apiPath"];
+		const criticalKeys = ["modulePath", "moduleID", "apiPath"];
 		const detailKeys = Object.keys(this.context).filter((k) => criticalKeys.includes(k));
 
 		if (detailKeys.length > 0) {

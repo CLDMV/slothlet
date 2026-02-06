@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:58 -08:00 (1770266398)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -169,7 +169,7 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 			dir: TEST_DIRS.API_TEST
 		});
 
-		// Add API without moduleId
+		// Add API without moduleID
 		await api.slothlet.api.add("test.module", testDir + "/moduleA_v1");
 
 		// Remove by path (should work)
@@ -178,29 +178,29 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 		expect(api.test?.module).toBeUndefined();
 	});
 
-	it("should return false for moduleId removal without ownership tracking", async () => {
+	it("should return false for moduleID removal without ownership tracking", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
-		// Try to remove by moduleId without ownership tracking
+		// Try to remove by moduleID without ownership tracking
 		const removed = await api.slothlet.api.remove("someModule");
 		expect(removed).toBe(false);
 	});
 
-	it("should remove by moduleId when ownership is available", async () => {
+	it("should remove by moduleID when ownership is available", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
-		// Add API with moduleId (ownership tracking is ALWAYS available in v3)
-		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", {}, { moduleId: "testModule" });
+		// Add API with moduleID (ownership tracking is ALWAYS available in v3)
+		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", { moduleID: "testModule" });
 
 		expect(api.plugins?.test).toBeDefined();
 
-		// Remove by moduleId should work (ownership is available)
+		// Remove by moduleID should work (ownership is available)
 		const removedById = await api.slothlet.api.remove("testModule");
 		expect(removedById).toBe(true);
 		expect(api.plugins?.test).toBeUndefined();
@@ -224,15 +224,15 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		}
 	});
 
-	it("should remove API by moduleId", async () => {
+	it("should remove API by moduleID", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
 		// Add multiple APIs for the same module
-		await api.slothlet.api.add("plugins.feature1", testDir + "/moduleA_v1", {}, { moduleId: "moduleA" });
-		await api.slothlet.api.add("plugins.feature2", testDir + "/moduleA_v1", {}, { moduleId: "moduleA" });
+		await api.slothlet.api.add("plugins.feature1", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.feature2", testDir + "/moduleA_v1", { moduleID: "moduleA" });
 
 		// Remove all APIs owned by moduleA
 		const removed = await api.slothlet.api.remove("moduleA");
@@ -248,46 +248,46 @@ describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ confi
 		});
 
 		// Load version 1 (has function1 and function2)
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", {}, { moduleId: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
 
 		// Reload with version 2 (has function2 and function3, NO function1)
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", {}, { moduleId: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
 
 		// With auto-cleanup, function1 should be GONE (no errors should occur)
 		expect(api.plugins?.moduleA).toBeDefined();
 	});
 
-	it("should isolate auto-cleanup by moduleId", async () => {
+	it("should isolate auto-cleanup by moduleID", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
 		// Load moduleA
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", {}, { moduleId: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
 
 		// Load moduleB
-		await api.slothlet.api.add("plugins.moduleB", testDir + "/moduleB", {}, { moduleId: "moduleB" });
+		await api.slothlet.api.add("plugins.moduleB", testDir + "/moduleB", { moduleID: "moduleB" });
 
 		// Reload moduleA with version 2
-		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", {}, { moduleId: "moduleA" });
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
 
 		// moduleB should be untouched
 		expect(api.plugins?.moduleB).toBeDefined();
 	});
 
-	it("should remove nested API paths by moduleId", async () => {
+	it("should remove nested API paths by moduleID", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
 		});
 
 		// Add APIs at different nesting levels
-		await api.slothlet.api.add("level1", testDir + "/moduleA_v1", {}, { moduleId: "test" });
-		await api.slothlet.api.add("level1.level2", testDir + "/moduleB", {}, { moduleId: "test" });
-		await api.slothlet.api.add("level1.level2.level3", testDir + "/moduleA_v1", {}, { moduleId: "test" });
+		await api.slothlet.api.add("level1", testDir + "/moduleA_v1", { moduleID: "test" });
+		await api.slothlet.api.add("level1.level2", testDir + "/moduleB", { moduleID: "test" });
+		await api.slothlet.api.add("level1.level2.level3", testDir + "/moduleA_v1", { moduleID: "test" });
 
-		// Remove all by moduleId
+		// Remove all by moduleID
 		const removed = await api.slothlet.api.remove("test");
 		expect(removed).toBe(true);
 		expect(api.level1).toBeUndefined();

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -91,7 +91,7 @@ export class Builder extends ComponentBase {
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleId, userMetadata = {} } = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, userMetadata = {} } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -123,7 +123,7 @@ export class Builder extends ComponentBase {
 				dir,
 				apiPathPrefix,
 				collisionContext,
-				moduleId,
+				moduleID,
 				userMetadata,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth
@@ -133,7 +133,7 @@ export class Builder extends ComponentBase {
 				dir,
 				apiPathPrefix,
 				collisionContext,
-				moduleId,
+				moduleID,
 				userMetadata,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth

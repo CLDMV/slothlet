@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -198,7 +198,7 @@ export class Metadata extends ComponentBase {
 	 * Tag system metadata (SECURE, IMMUTABLE)
 	 * Called internally during wrapper/function creation
 	 * @param {Function|Object} target - Wrapper or function to tag
-	 * @param {Object} systemData - System metadata (filePath, apiPath, moduleId, sourceFolder)
+	 * @param {Object} systemData - System metadata (filePath, apiPath, moduleID, sourceFolder)
 	 * @param {Object} [options] - Options
 	 * @param {boolean} [options._fromLifecycle] - REQUIRED: Must be true, indicates call from lifecycle system
 	 * @private
@@ -225,11 +225,11 @@ export class Metadata extends ComponentBase {
 			return;
 		}
 
-		// Construct full moduleID as "moduleId:apiPath/with/slashes"
-		let fullModuleID = systemData.moduleId;
-		if (systemData.apiPath && systemData.moduleId) {
+		// Construct full moduleID as "moduleID:apiPath/with/slashes"
+		let fullModuleID = systemData.moduleID;
+		if (systemData.apiPath && systemData.moduleID) {
 			const apiPathSlashes = systemData.apiPath.replace(/\./g, "/");
-			fullModuleID = `${systemData.moduleId}:${apiPathSlashes}`;
+			fullModuleID = `${systemData.moduleID}:${apiPathSlashes}`;
 		}
 
 		// Derive sourceFolder from filePath if not provided
@@ -289,7 +289,7 @@ export class Metadata extends ComponentBase {
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
 		// - setUserMetadata() stores by moduleID (for external metadata.set())
-		const moduleID = systemData.moduleID || systemData.moduleId;
+		const moduleID = systemData.moduleID || systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
 		// Traverse UP the apiPath chain to collect inherited metadata
@@ -374,7 +374,7 @@ export class Metadata extends ComponentBase {
 
 		// Get system metadata to find moduleID
 		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
-		const moduleID = systemData.moduleID || systemData.moduleId;
+		const moduleID = systemData.moduleID || systemData.moduleID;
 
 		if (!moduleID) {
 			throw new this.SlothletError("METADATA_NO_MODULE_ID", {}, null, { validationError: true });
@@ -413,7 +413,7 @@ export class Metadata extends ComponentBase {
 
 		// Get system metadata to find moduleID
 		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
-		const moduleID = systemData.moduleID || systemData.moduleId;
+		const moduleID = systemData.moduleID || systemData.moduleID;
 
 		if (!moduleID) return;
 
@@ -476,36 +476,36 @@ export class Metadata extends ComponentBase {
 	 * Register user metadata for an API path
 	 *
 	 * @description
-	 * Stores user-provided metadata keyed by BOTH moduleId and apiPath.
+	 * Stores user-provided metadata keyed by BOTH moduleID and apiPath.
 	 * Each entry tracks its associated paths for cleanup purposes.
-	 * Supports both 2-param (apiPath, metadata) and 3-param (moduleId, apiPath, metadata) signatures.
+	 * Supports both 2-param (apiPath, metadata) and 3-param (moduleID, apiPath, metadata) signatures.
 	 *
-	 * @param {string} moduleIdOrApiPath - Module ID (3-param) or API path (2-param)
+	 * @param {string} moduleIDOrApiPath - Module ID (3-param) or API path (2-param)
 	 * @param {string|Object} apiPathOrMetadata - API path (3-param) or metadata (2-param)
 	 * @param {Object} [metadata] - User metadata object (3-param only)
 	 * @package
 	 */
-	registerUserMetadata(moduleIdOrApiPath, apiPathOrMetadata, metadata) {
+	registerUserMetadata(moduleIDOrApiPath, apiPathOrMetadata, metadata) {
 		// Handle both 2-param and 3-param signatures
-		let moduleId, apiPath, metadataObj;
+		let moduleID, apiPath, metadataObj;
 
 		if (arguments.length === 2) {
 			// 2-param signature: registerUserMetadata(apiPath, metadata)
-			apiPath = moduleIdOrApiPath;
+			apiPath = moduleIDOrApiPath;
 			metadataObj = apiPathOrMetadata;
-			moduleId = null;
+			moduleID = null;
 		} else {
-			// 3-param signature: registerUserMetadata(moduleId, apiPath, metadata)
-			moduleId = moduleIdOrApiPath;
+			// 3-param signature: registerUserMetadata(moduleID, apiPath, metadata)
+			moduleID = moduleIDOrApiPath;
 			apiPath = apiPathOrMetadata;
 			metadataObj = metadata || {};
 		}
 
-		if (!apiPath && !moduleId) {
+		if (!apiPath && !moduleID) {
 			throw new this.SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "apiPath or moduleId",
+					argument: "apiPath or moduleID",
 					expected: "non-empty string",
 					received: typeof apiPath
 				},
@@ -527,12 +527,12 @@ export class Metadata extends ComponentBase {
 			entry.apiPaths.add(apiPath);
 		}
 
-		// Register by moduleId if provided (for getMetadata() lookups)
-		if (moduleId && typeof moduleId === "string") {
-			let entry = this.#userMetadataStore.get(moduleId);
+		// Register by moduleID if provided (for getMetadata() lookups)
+		if (moduleID && typeof moduleID === "string") {
+			let entry = this.#userMetadataStore.get(moduleID);
 			if (!entry) {
 				entry = { metadata: {}, apiPaths: new Set() };
-				this.#userMetadataStore.set(moduleId, entry);
+				this.#userMetadataStore.set(moduleID, entry);
 			}
 			// Merge new metadata with existing
 			entry.metadata = { ...entry.metadata, ...metadataObj };

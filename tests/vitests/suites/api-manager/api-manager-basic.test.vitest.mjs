@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:48 -08:00 (1770266388)
+ *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -86,9 +86,9 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(await mathAddAfter(4, 5)).toBe(9);
 	});
 
-	it("preserves api.slothlet.api.add modules with moduleId across reloads", async () => {
+	it("preserves api.slothlet.api.add modules with moduleID across reloads", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "extra-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.reload();
@@ -97,7 +97,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 	});
 
-	it("preserves api.slothlet.api.add modules without moduleId across reloads", async () => {
+	it("preserves api.slothlet.api.add modules without moduleID across reloads", async () => {
 		api = await createApiInstance(config);
 		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED);
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
@@ -110,7 +110,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("does not restore removed APIs after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "test-module" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
 		expect(api.extra?.mathCjs).toBeTypeOf("object");
 
 		await api.slothlet.api.remove("test-module");
@@ -131,8 +131,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 	it("keeps multiple api.slothlet.api.add modules registered after reload", async () => {
 		api = await createApiInstance(config);
-		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-1" });
-		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-2" });
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-2" });
 
 		await api.slothlet.reload();
 
@@ -143,8 +143,8 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 	// TODO: allowAddApiOverwrite isn't in v3...
 	it("reloads using the latest api.slothlet.api.add overwrite", async () => {
 		api = await createApiInstance(config, { allowAddApiOverwrite: true });
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, {}, { moduleId: "module-x" });
-		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, {}, { moduleId: "module-x" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-x" });
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "module-x" });
 
 		await api.slothlet.reload();
 

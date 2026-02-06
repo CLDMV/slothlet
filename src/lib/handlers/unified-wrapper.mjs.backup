@@ -119,7 +119,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
 	 * @param {string} [options.filePath=null] - File path of the module source
-	 * @param {string} [options.moduleId=null] - Module identifier
+	 * @param {string} [options.moduleID=null] - Module identifier
 	 * @param {string} [options.sourceFolder=null] - Source folder for metadata
 	 * @param {Object} [options.userMetadata={}] - User metadata to apply
 	 *
@@ -145,7 +145,7 @@ export class UnifiedWrapper extends ComponentBase {
 			isCallable,
 			materializeOnCreate = false,
 			filePath = null,
-			moduleId = null,
+			moduleID = null,
 			sourceFolder = null,
 			userMetadata = {}
 		}
@@ -180,7 +180,7 @@ export class UnifiedWrapper extends ComponentBase {
 				impl: this,
 				wrapper: this,
 				source: "initial",
-				moduleId,
+				moduleID,
 				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
@@ -193,7 +193,7 @@ export class UnifiedWrapper extends ComponentBase {
 				impl: initialImpl,
 				wrapper: this,
 				source: "initial",
-				moduleId,
+				moduleID,
 				filePath,
 				sourceFolder: sourceFolder || slothlet.config?.dir
 			});
@@ -257,10 +257,10 @@ export class UnifiedWrapper extends ComponentBase {
 	/**
 	 * Set new implementation and adopt children
 	 * @param {*} newImpl - New implementation
-	 * @param {string} [moduleId] - Optional moduleId for lifecycle event (for replacements)
+	 * @param {string} [moduleID] - Optional moduleID for lifecycle event (for replacements)
 	 * @private
 	 */
-	__setImpl(newImpl, moduleId = null) {
+	__setImpl(newImpl, moduleID = null) {
 		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "__setImpl called",
@@ -277,15 +277,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
 			const wrapperMetadata = this.slothlet.handlers.metadata.getMetadata(this);
-			// Use provided moduleId (for replacements) or extract from metadata
-			const extractedModuleId = moduleId || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
+			// Use provided moduleID (for replacements) or extract from metadata
+			const extractedModuleId = moduleID || (wrapperMetadata?.moduleID ? wrapperMetadata.moduleID.split(":")[0] : null);
 
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.apiPath,
 				impl: newImpl,
 				wrapper: this,
 				source: "hot-reload",
-				moduleId: extractedModuleId,
+				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
 				sourceFolder: wrapperMetadata?.sourceFolder
 			});
@@ -587,7 +587,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 		}
 
-		// Get parent wrapper's metadata to inherit filePath and moduleId
+		// Get parent wrapper's metadata to inherit filePath and moduleID
 		const parentMetadata = this.slothlet.handlers?.metadata?.getMetadata(this);
 
 		// Try to get child's actual filePath from its own metadata first (if already tagged during materialization)
@@ -607,13 +607,13 @@ export class UnifiedWrapper extends ComponentBase {
 				childFilePath = parentMetadata?.filePath || null;
 			}
 
-			// Extract SHORT moduleId from parent's FULL moduleID format "moduleId:apiPath"
+			// Extract SHORT moduleID from parent's FULL moduleID format "moduleID:apiPath"
 			if (parentMetadata?.moduleID) {
 				const colonIndex = parentMetadata.moduleID.indexOf(":");
 				childModuleId = colonIndex > 0 ? parentMetadata.moduleID.substring(0, colonIndex) : parentMetadata.moduleID;
 			}
 		} else {
-			// Child already has metadata - extract moduleId from it
+			// Child already has metadata - extract moduleID from it
 			if (childExistingMetadata?.moduleID) {
 				const colonIndex = childExistingMetadata.moduleID.indexOf(":");
 				childModuleId = colonIndex > 0 ? childExistingMetadata.moduleID.substring(0, colonIndex) : childExistingMetadata.moduleID;
@@ -631,7 +631,7 @@ export class UnifiedWrapper extends ComponentBase {
 			initialImpl: childImpl,
 			isCallable: typeof childImpl === "function",
 			filePath: childFilePath,
-			moduleId: childModuleId,
+			moduleID: childModuleId,
 			sourceFolder: childSourceFolder,
 			userMetadata: childUserMetadata
 		});
