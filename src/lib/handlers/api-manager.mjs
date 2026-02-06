@@ -1527,11 +1527,18 @@ export class ApiManager extends ComponentBase {
 
 				// Delete root segment from API directly (API root is not wrapped, just a plain function/object)
 				// This ensures api.cycled returns undefined after deletion in both lazy and eager modes
+				// CRITICAL: Delete from ALL three API references:
+				// 1. slothlet.api (internal raw API)
+				// 2. slothlet.boundApi (reload-preserving proxy)
+				// 3. slothlet._currentApi (user-facing cloned API with builtins)
 				if (rootSegment in this.slothlet.api) {
 					delete this.slothlet.api[rootSegment];
 				}
 				if (rootSegment in this.slothlet.boundApi) {
 					delete this.slothlet.boundApi[rootSegment];
+				}
+				if (this.slothlet._currentApi && rootSegment in this.slothlet._currentApi) {
+					delete this.slothlet._currentApi[rootSegment];
 				}
 			}
 
