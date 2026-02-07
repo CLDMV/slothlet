@@ -74,49 +74,58 @@ apiCaches = Map<string, CacheEntry>
 - ApiManager reduced from 1775 → 1613 lines (~162 lines removed)
 - Cache is primary storage after builtins attached
 
-### 🚧 Step 4: Implement moduleID reload with cache rebuild
-**Status:** In Progress (50%)  
+### ✅ Step 4: Update removeApiComponent cache lifecycle (PRIORITY)
+**Status:** ✅ Complete  
+**Goal:** Make existing api.remove feature cache-aware before building new features
+
+**Why This Must Come First:**
+- api.remove is an **existing, working feature** that needs cache integration
+- Building reload (Steps 5-6) on incomplete foundation creates:
+  - Stale/orphaned cache entries after remove
+  - Reload encountering garbage data
+  - Undefined behavior when removing then reloading
+
+**Implementation Tasks:**
+- [x] Delete cache when removing by moduleID (complete cleanup)
+- [x] Preserve cache when removing by apiPath (partial removal, cache may have other paths)
+- [x] Add getCacheDiagnostics() method for debugging
+- [x] Expose diagnostics under api.slothlet.diag.caches when enabled
+- [x] Test cache persistence through partial removes
+- [x] Validate baseline tests remain 100% passing
+
+**Key Changes:**
+- Added cache deletion in removeApiComponent after moduleID cleanup (line ~1455)
+- Exposed cache diagnostics under api.slothlet.diag.caches with get(), getAllModuleIDs(), has()
+- Cache preserved during apiPath removal (only deleted for complete module removal)
+- Baseline tests: 2356/2356 passing ✅
+
+### ⚠️ Step 5: Implement moduleID reload with cache rebuild
+**Status:** **RE-VALIDATE NEEDED** - Previously implemented out of order  
 **Goal:** Rebuild cache from disk and restore all paths
 
-- [x] Get cache entry by moduleID
-- [x] Call buildAPI with cached parameters (via rebuildCache())
-- [x] Replace cache.api with fresh result
-- [x] Recursively traverse new API tree
-- [x] Reuse existing wrappers (call __setImpl) or create new ones
-- [x] Honor cached collision settings
-- [x] Register/update ownership
-- [ ] Fix nested path restoration (currentPath calculation issue)
-- [ ] Test moduleID reload restores removed paths
+**Previous Attempt (Out of Order):**
+- ⚠️ Implemented prematurely without cache cleanup (commit 215e285)
+- Achieved 28/56 selective reload tests (50%), up from 16/56 (28.6%)
+- Known issue: Nested path restoration incomplete
+- **Must re-validate after Step 4 completion** ✅ Step 4 now complete
 
-**Current Status:**
-- **Selective reload tests: 28/56 passing (50%)** - up from 16/56 (28.6%)
-- Baseline tests: 2356/2356 passing ✅
-- Created `_reloadByModuleID()` - rebuilds cache and restores tree
-- Created `_reloadByApiPath()` - rebuilds all contributing caches
-- Created `_restoreApiTree()` - recursive tree restoration with wrapper updates
-- Issue: Nested paths like "custom.math.add" not being restored properly
-- Context errors in test cleanup (timing issue, not core functionality)
+**Re-Validation Tasks:**
+- [ ] Run selective reload tests to confirm previous progress maintained
+- [ ] Verify cache deletion doesn't break reload behavior
+- [ ] Fix nested path restoration (currentPath calculation)
+- [ ] Test moduleID reload with removed-then-reloaded scenarios
+- [ ] Target: 56/56 selective reload tests passing (100%)
 
-### ⬜ Step 5: Implement path reload with multi-cache rebuild
-**Status:** Not Started  
+### ⬜ Step 6: Implement path reload with multi-cache rebuild
+**Status:** Not Started (Depends on Steps 4-5)  
 **Goal:** Rebuild all caches contributing to a path
 
 - [ ] Find all moduleIDs owning the target apiPath
 - [ ] Rebuild each moduleID's cache
 - [ ] Extract implementations at target path from each cache
 - [ ] Merge into existing wrapper using ownership stack order
-- [ ] Honor collision settings
+- [ ] Honor collision settings for each moduleID
 - [ ] Test path reload with multiple contributors
-
-### ⬜ Step 6: Update removeApiComponent cache lifecycle
-**Status:** Not Started  
-**Goal:** Proper cache cleanup and diagnostics
-
-- [ ] Delete cache only when removing by moduleID
-- [ ] Preserve cache when removing by apiPath
-- [ ] Add getCacheDiagnostics() method
-- [ ] Expose under api.slothlet.diag.caches when diagnostics enabled
-- [ ] Test cache persistence through partial removes
 
 ## Test Commands (Remember to Tail!)
 
@@ -158,10 +167,11 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-full.test.vitest.mjs | Select-Object -Last 100`
 
 ### Selective Reload Tests
-- **Status:** ⚠️ Partial (16/56 passing - 28.6%)
-- **Last Run:** Before implementation start
+- **Status:** ⚠️ Premature implementation (out of order)
+- **Last Run:** After Step 5 implementation (before Step 4)
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs | Select-Object -Last 100`
-- **Goal:** 100% passing after implementation
+- **Results:** 28/56 passing (50%) - improved from 16/56 (28.6%)
+- **Note:** Must re-validate after Step 4 completion - cache lifecycle changes may affect reload behavior
 
 ## Design Decisions
 
@@ -198,12 +208,17 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 - ✅ Completed Step 1: ownership audit
 - ✅ Completed Step 2: Created ApiCacheManager (294 lines)
 - ✅ Completed Step 3: Cache populated during load/add (2356/2356 baseline passing)
-- 🚧 Step 4: 50% complete - moduleID reload implemented, nested path issues remain
-  - Created `_reloadByModuleID()`, `_reloadByApiPath()`, `_restoreApiTree()`  
-  - Selective reload: 28/56 passing (50%), up from 16/56 (28.6%)
-  - Known issue: Nested paths like "custom.math.add" not restoring properly
-  - Path calculation fixed (relativePath vs fullPath separation)
-  - Next: Debug why nested containers aren't being created
+- ⚠️ **PRIORITIZATION ERROR IDENTIFIED**: Implemented Step 5 (reload) before Step 4 (remove cleanup)
+  - Commit 215e285: Implemented moduleID reload (28/56 tests passing, 50%)
+  - **Issue**: Built new feature before making existing api.remove cache-aware
+  - **Consequence**: Orphaned cache entries, undefined reload behavior after remove
+  - **Resolution**: Reordered steps - Step 4 (remove) must complete before Step 5 (reload)
+- ✅ **Completed Step 4**: api.remove cache lifecycle integration
+  - Added cache deletion when removing by moduleID
+  - Exposed cache diagnostics under api.slothlet.diag.caches
+  - Baseline: 2356/2356 passing ✅
+  - Foundation now solid for Step 5 re-validation
+- **Next**: Re-validate Step 5 (reload) on proper foundation, fix nested path issues
 
 ## Related Files
 

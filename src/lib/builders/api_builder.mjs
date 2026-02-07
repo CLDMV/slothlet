@@ -901,6 +901,55 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * Cache system diagnostics
+				 * @type {object}
+				 */
+				caches: {
+					/**
+					 * Get cache diagnostics information
+					 * @returns {Object} Cache diagnostic data with totalCaches and array of cache entries
+					 * @example
+					 * const diag = api.slothlet.diag.caches.get();
+					 * // {
+					 * //   totalCaches: 3,
+					 * //   caches: [
+					 * //     { moduleID: "base_abc", endpoint: ".", pathCount: 45, ... },
+					 * //     { moduleID: "plugins_xyz", endpoint: "plugins", pathCount: 12, ... }
+					 * //   ]
+					 * // }
+					 */
+					get: () => {
+						if (slothlet.handlers?.apiCacheManager) {
+							return slothlet.handlers.apiCacheManager.getCacheDiagnostics();
+						}
+						return { totalCaches: 0, caches: [] };
+					},
+
+					/**
+					 * Get all moduleIDs in cache
+					 * @returns {string[]} Array of moduleIDs
+					 */
+					getAllModuleIDs: () => {
+						if (slothlet.handlers?.apiCacheManager) {
+							return slothlet.handlers.apiCacheManager.getAllModuleIDs();
+						}
+						return [];
+					},
+
+					/**
+					 * Check if cache exists for moduleID
+					 * @param {string} moduleID - Module identifier
+					 * @returns {boolean} True if cache exists
+					 */
+					has: (moduleID) => {
+						if (slothlet.handlers?.apiCacheManager) {
+							return slothlet.handlers.apiCacheManager.has(moduleID);
+						}
+						return false;
+					}
+				},
+
+				/**
 				 * SlothletWarning class for accessing captured warnings in tests
 				 * @type {typeof SlothletWarning}
 				 * @example
