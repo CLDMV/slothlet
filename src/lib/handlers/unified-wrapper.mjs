@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-06 22:45:32 -08:00 (1770446732)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -579,14 +579,29 @@ export class UnifiedWrapper extends ComponentBase {
 				const isCollisionMerged = this.__collisionMergedKeys && this.__collisionMergedKeys.has(key);
 
 				if (isCollisionMerged) {
-					// This key was added during collision merge (file property)
-					// Keep existing entry (don't replace with folder child of same name)
-					if (typeof key !== "symbol") {
-						this.slothlet.debug("wrapper", {
-							message: "ADOPT-SKIP: is collision-merged, skipping",
-							apiPath: this.apiPath,
-							key
-						});
+					// IMPORTANT: Collision-merged means this key came from file exports that were merged
+					// But we still need to update child wrapper implementation if it exists!
+					// Check if there's an existing child wrapper to update
+					const existingMergedChild = this._proxyTarget?.[key];
+					if (existingMergedChild && typeof existingMergedChild.__setImpl === "function") {
+						// Update the existing child wrapper with new implementation
+						if (typeof key !== "symbol") {
+							this.slothlet.debug("wrapper", {
+								message: "ADOPT-COLLISION-UPDATE: updating existing child wrapper",
+								apiPath: this.apiPath,
+								key
+							});
+						}
+						existingMergedChild.__setImpl(value, this.slothlet, this.moduleID, this.filePath);
+					} else {
+						// No wrapper to update, just skip
+						if (typeof key !== "symbol") {
+							this.slothlet.debug("wrapper", {
+								message: "ADOPT-SKIP: is collision-merged, skipping",
+								apiPath: this.apiPath,
+								key
+							});
+						}
 					}
 					if (descriptor.configurable) {
 						delete this._impl[key];
@@ -605,17 +620,37 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			const wrapped = this._createChildWrapper(key, value);
-			if (typeof key !== "symbol") {
-				this.slothlet.debug("wrapper", {
-					message: "ADOPT-WRAP",
-					apiPath: this.apiPath,
-					key,
-					wrapped: wrapped ? "YES" : wrapped === null ? "NULL" : "NO"
-				});
+			// CRITICAL: Check if child wrapper already exists to maintain live binding
+			// If it exists, update its implementation instead of creating new wrapper
+			const existingChild = this._proxyTarget?.[key];
+			let wrapped;
+
+			if (existingChild && typeof existingChild.__setImpl === "function") {
+				// Reuse existing wrapper - update its implementation to maintain live binding
+				existingChild.__setImpl(value, this.slothlet, this.moduleID, this.filePath);
+				wrapped = existingChild;
+				if (typeof key !== "symbol") {
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-REUSE: Reused existing child wrapper",
+						apiPath: this.apiPath,
+						key
+					});
+				}
+			} else {
+				// No existing wrapper - create new one
+				wrapped = this._createChildWrapper(key, value);
+				if (typeof key !== "symbol") {
+					this.slothlet.debug("wrapper", {
+						message: "ADOPT-WRAP",
+						apiPath: this.apiPath,
+						key,
+						wrapped: wrapped ? "YES" : wrapped === null ? "NULL" : "NO"
+					});
+				}
 			}
+
 			if (wrapped) {
-				// Store wrapper as property using defineProperty
+				// Store wrapper as property on _proxyTarget (where proxy handlers can see it)
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
 						message: "ADOPT-DEFINE: defining on _proxyTarget",
@@ -631,7 +666,7 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
-						message: "ADOPT-DEFINED: defined successfully",
+						message: "ADOPT-DEFINED: defined successfully on _proxyTarget",
 						apiPath: this.apiPath,
 						key
 					});
@@ -641,6 +676,17 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			} else if (wrapped === null) {
 				// _createChildWrapper returned null, meaning this value should be stored unwrapped
+				Object.defineProperty(this._proxyTarget, key, {
+					value: value,
+					writable: false,
+					enumerable: true,
+					configurable: true
+				});
+				if (descriptor.configurable && !keepImplProperties) {
+					delete this._impl[key];
+				}
+			} else {
+				// wrapped is falsy but not null - shouldn't happen, but define value anyway
 				Object.defineProperty(this._proxyTarget, key, {
 					value: value,
 					writable: false,

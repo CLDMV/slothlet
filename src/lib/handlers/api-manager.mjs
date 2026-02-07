@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 19:49:06 -08:00 (1770436146)
+ *	@Last modified time: 2026-02-06 22:45:32 -08:00 (1770446732)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1660,8 +1660,24 @@ export class ApiManager extends ComponentBase {
 			timestamp: Date.now()
 		});
 
+		// DEBUG: Log freshApi keys before restore
+		this.slothlet.debug("reload", {
+			message: "Fresh API keys before restore",
+			moduleID,
+			endpoint: oldEntry.endpoint,
+			freshApiKeys: Object.keys(freshApi || {})
+		});
+
 		// Traverse fresh API and update/create wrappers
 		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode);
+
+		// DEBUG: Check if freshApi was mutated
+		this.slothlet.debug("reload", {
+			message: "Fresh API keys after restore",
+			moduleID,
+			endpoint: oldEntry.endpoint,
+			freshApiKeys: Object.keys(freshApi || {})
+		});
 
 		this.slothlet.debug("reload", {
 			message: "Module reload complete",
@@ -1686,7 +1702,7 @@ export class ApiManager extends ComponentBase {
 
 		// Get ownership history for this exact path
 		const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath);
-		
+
 		if (history && history.length > 0) {
 			// Direct contributors found - reload each module
 			const cacheManager = this.slothlet.handlers.apiCacheManager;
@@ -1795,15 +1811,47 @@ export class ApiManager extends ComponentBase {
 			// This preserves the wrapper structure while updating the contained API
 			const existing = this.getValueAtPath(this.slothlet.api, parts);
 
+			this.slothlet.debug("reload", {
+				message: "RESTORE: nested path",
+				endpoint,
+				moduleID,
+				partsPath: parts.join("."),
+				existingFound: !!existing,
+				hasSetImpl: existing ? typeof existing.__setImpl === "function" : false,
+				freshApiKeys: Object.keys(freshApi || {})
+			});
+
 			if (existing && typeof existing.__setImpl === "function") {
+				// CRITICAL: Force "replace" mode for reload to clear old keys
+				// During reload, we want to completely replace the implementation, not merge
+				// Store the original collision mode and restore it after
+				const wrapper = existing.__wrapper;
+				const originalCollisionMode = wrapper ? wrapper._state.collisionMode : null;
+
+				if (wrapper) {
+					wrapper._state.collisionMode = "replace";
+					this.slothlet.debug("reload", {
+						message: "RESTORE: forcing replace mode",
+						endpoint,
+						originalCollisionMode,
+						wrapperApiPath: wrapper.apiPath
+					});
+				}
+
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
 				existing.__setImpl(freshApi, moduleID);
 
+				// Restore original collision mode
+				if (wrapper && originalCollisionMode !== null) {
+					wrapper._state.collisionMode = originalCollisionMode;
+				}
+
 				this.slothlet.debug("reload", {
 					message: "Updated existing wrapper implementation",
 					endpoint,
-					moduleID
+					moduleID,
+					forcedReplaceMode: true
 				});
 			} else {
 				// No wrapper exists - should not happen in reload, but handle gracefully
