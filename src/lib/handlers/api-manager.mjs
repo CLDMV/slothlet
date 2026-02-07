@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 19:24:03 -08:00 (1770434643)
+ *	@Last modified time: 2026-02-06 19:49:06 -08:00 (1770436146)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -81,7 +81,6 @@ export class ApiManager extends ComponentBase {
 		super(slothlet);
 		this.state = {
 			addHistory: [],
-			removedModuleIds: new Set(),
 			initialConfig: slothlet?.config || null,
 			operationHistory: [] // Chronological log of all add/remove operations
 		};
@@ -1232,10 +1231,6 @@ export class ApiManager extends ComponentBase {
 					moduleID
 				});
 			}
-
-			if (moduleID) {
-				this.state.removedModuleIds.delete(moduleID);
-			}
 		}
 	}
 
@@ -1449,7 +1444,6 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			this.state.removedModuleIds.add(moduleIDKey);
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
 			// Delete cache entry for this moduleID (complete module removal)
@@ -1677,6 +1671,7 @@ export class ApiManager extends ComponentBase {
 
 	/**
 	 * Reload by apiPath - rebuild all contributing caches and merge
+	 * For parent paths with no direct ownership, finds and reloads all children
 	 * @param {string} apiPath - API path
 	 * @returns {Promise<void>}
 	 * @private
@@ -1689,164 +1684,167 @@ export class ApiManager extends ComponentBase {
 			apiPath: normalizedPath
 		});
 
-		// Get all moduleIDs contributing to this path
+		// Get ownership history for this exact path
 		const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath);
-		if (!history || history.length === 0) {
-			// Path has no contributors - try base module restore
-			await this.restoreApiPath(normalizedPath, "base");
+		
+		if (history && history.length > 0) {
+			// Direct contributors found - reload each module
+			const cacheManager = this.slothlet.handlers.apiCacheManager;
+			for (const { moduleID } of history) {
+				if (cacheManager?.has(moduleID)) {
+					await this._reloadByModuleID(moduleID);
+				}
+			}
+
+			this.slothlet.debug("reload", {
+				message: "API path reload complete (direct contributors)",
+				apiPath: normalizedPath,
+				contributingModules: history.length
+			});
 			return;
 		}
 
-		// Rebuild each contributing module's cache
+		// No direct history - check if this is a parent path with children
+		// Find all moduleIDs whose endpoints START with this path
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
-		for (const { moduleID } of history) {
-			if (cacheManager?.has(moduleID)) {
-				// Rebuild this module's cache
-				await this._reloadByModuleID(moduleID);
+		if (!cacheManager) {
+			return;
+		}
+
+		const childModuleIDs = [];
+		const allModuleIDs = cacheManager.getAllModuleIDs();
+		const pathPrefix = normalizedPath + ".";
+
+		for (const moduleID of allModuleIDs) {
+			const cacheEntry = cacheManager.get(moduleID);
+			if (cacheEntry && cacheEntry.endpoint) {
+				// Check if endpoint starts with normalizedPath (parent-child relationship)
+				if (cacheEntry.endpoint === normalizedPath || cacheEntry.endpoint.startsWith(pathPrefix)) {
+					childModuleIDs.push(moduleID);
+				}
 			}
 		}
 
-		this.slothlet.debug("reload", {
-			message: "API path reload complete",
-			apiPath: normalizedPath,
-			contributingModules: history.length
-		});
+		if (childModuleIDs.length > 0) {
+			// Found children - reload each
+			for (const moduleID of childModuleIDs) {
+				await this._reloadByModuleID(moduleID);
+			}
+
+			this.slothlet.debug("reload", {
+				message: "API path reload complete (child modules)",
+				apiPath: normalizedPath,
+				childModules: childModuleIDs.length
+			});
+		} else {
+			// No direct contributors and no children - try base module restore
+			await this.restoreApiPath(normalizedPath, "base");
+
+			this.slothlet.debug("reload", {
+				message: "API path reload complete (base restore)",
+				apiPath: normalizedPath
+			});
+		}
 	}
 
 	/**
-	 * Recursively restore API tree by updating wrappers
-	 * @param {object} freshApi - Fresh API tree from buildAPI
-	 * @param {string} endpoint - API endpoint (e.g., ".", "plugins")
+	 * Restore API from fresh rebuild by updating existing wrapper
+	 * For non-root endpoints, updates the wrapper's implementation without replacing structure
+	 * For root endpoints, merges keys directly as addApiComponent does
+	 * @param {object} freshApi - Fresh API from rebuild
+	 * @param {string} endpoint - Original endpoint path
 	 * @param {string} moduleID - Module identifier
 	 * @param {string} collisionMode - Collision handling mode
-	 * @param {string} [currentPath=""] - Current path during recursion (relative to endpoint root)
-	 * @param {WeakSet} [visited] - Visited objects (prevent circular refs)
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode, currentPath = "", visited = new WeakSet()) {
-		if (!freshApi || typeof freshApi !== "object" || visited.has(freshApi)) {
+	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode) {
+		if (!freshApi || typeof freshApi !== "object") {
 			return;
 		}
 
-		visited.add(freshApi);
+		// Parse endpoint into parts array
+		const parts = endpoint === "." ? [] : endpoint.split(".");
 
-		for (const [key, value] of Object.entries(freshApi)) {
-			// Skip internal properties
-			if (key.startsWith("__") || key.startsWith("_")) {
-				continue;
+		if (parts.length === 0) {
+			// Root level - merge each key directly (same pattern as addApiComponent)
+			// Get cache entry for source folder information
+			const cacheManager = this.slothlet.handlers.apiCacheManager;
+			const cacheEntry = cacheManager.get(moduleID);
+			const resolvedFolderPath = cacheEntry?.folderPath || "";
+
+			for (const key of Object.keys(freshApi)) {
+				await this.setValueAtPath(this.slothlet.api, [key], freshApi[key], {
+					mutateExisting: true,
+					collisionMode,
+					moduleID,
+					sourceFolder: resolvedFolderPath
+				});
+
+				if (this.slothlet.boundApi) {
+					await this.setValueAtPath(this.slothlet.boundApi, [key], freshApi[key], {
+						mutateExisting: true,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
+				}
 			}
-
-			// Calculate relative path within this tree
-			const relativePath = currentPath ? `${currentPath}.${key}` : key;
-
-			// Calculate full API path (includes endpoint prefix for non-base)
-			const fullPath = endpoint === "." ? relativePath : `${endpoint}.${relativePath}`;
-			const parts = fullPath.split(".");
-
-			// Get existing value at this path
+		} else {
+			// Nested path - get existing wrapper and update its implementation
+			// This preserves the wrapper structure while updating the contained API
 			const existing = this.getValueAtPath(this.slothlet.api, parts);
 
-			if (typeof value === "function") {
-				// Handle function: update wrapper or create new one
-				if (existing && typeof existing.__setImpl === "function") {
-					// Existing wrapper - update implementation
-					existing.__setImpl(value, moduleID);
-				} else {
-					// No wrapper exists - create new path using setValueAtPath
-					await this.setValueAtPath(this.slothlet.api, parts, value, {
-						moduleID,
-						collisionMode,
-						allowOverwrite: true,
-						mutateExisting: true
-					});
+			if (existing && typeof existing.__setImpl === "function") {
+				// Existing wrapper found - update implementation directly
+				// This is the key: we update the WRAPPER's implementation, not replace the path
+				existing.__setImpl(freshApi, moduleID);
 
-					// Also update boundApi
-					if (this.slothlet.boundApi) {
-						await this.setValueAtPath(this.slothlet.boundApi, parts, value, {
-							moduleID,
-							collisionMode,
-							allowOverwrite: true,
-							mutateExisting: true
-						});
-					}
-				}
-
-				// Register ownership
-				if (this.slothlet.handlers.ownership) {
-					this.slothlet.handlers.ownership.register({
-						moduleID,
-						apiPath: fullPath,
-						value,
-						source: endpoint === "." ? "core" : "addApi",
-						collisionMode,
-						filePath: null
-					});
-				}
-			} else if (value && typeof value === "object" && !Array.isArray(value)) {
-				// Handle object: ensure container exists and recurse
-				if (!existing || typeof existing !== "object") {
-					// Create container object using setValueAtPath (creates UnifiedWrapper containers)
-					await this.setValueAtPath(this.slothlet.api, parts, {}, {
-						moduleID,
-						collisionMode,
-						allowOverwrite: false
-					});
-
-					if (this.slothlet.boundApi) {
-						await this.setValueAtPath(this.slothlet.boundApi, parts, {}, {
-							moduleID,
-							collisionMode,
-							allowOverwrite: false
-						});
-					}
-				}
-
-				// Register ownership for container
-				if (this.slothlet.handlers.ownership) {
-					this.slothlet.handlers.ownership.register({
-						moduleID,
-						apiPath: fullPath,
-						value: this.getValueAtPath(this.slothlet.api, parts) || value,
-						source: endpoint === "." ? "core" : "addApi",
-						collisionMode,
-						filePath: null
-					});
-				}
-
-				// Recurse into nested objects (use relativePath for recursion)
-				await this._restoreApiTree(value, endpoint, moduleID, collisionMode, relativePath, visited);
+				this.slothlet.debug("reload", {
+					message: "Updated existing wrapper implementation",
+					endpoint,
+					moduleID
+				});
 			} else {
-				// Handle primitive values
-				if (existing && typeof existing.__setImpl === "function") {
-					existing.__setImpl(value, moduleID);
-				} else {
-					await this.setValueAtPath(this.slothlet.api, parts, value, {
-						moduleID,
-						collisionMode,
-						allowOverwrite: true
-					});
+				// No wrapper exists - should not happen in reload, but handle gracefully
+				// This fallback recreates the path as addApiComponent would
+				const cacheManager = this.slothlet.handlers.apiCacheManager;
+				const cacheEntry = cacheManager.get(moduleID);
+				const resolvedFolderPath = cacheEntry?.folderPath || "";
 
-					if (this.slothlet.boundApi) {
-						await this.setValueAtPath(this.slothlet.boundApi, parts, value, {
-							moduleID,
-							collisionMode,
-							allowOverwrite: true
-						});
-					}
+				// Wrap fresh API
+				const containerWrapper = new UnifiedWrapper(this.slothlet, {
+					apiPath: endpoint,
+					mode: this.config.mode,
+					moduleID: moduleID,
+					filePath: resolvedFolderPath,
+					sourceFolder: resolvedFolderPath
+				});
+				containerWrapper.__setImpl(freshApi, moduleID);
+				const apiToSet = containerWrapper.createProxy();
+
+				// Set at endpoint path
+				await this.setValueAtPath(this.slothlet.api, parts, apiToSet, {
+					mutateExisting: true,
+					collisionMode,
+					moduleID,
+					sourceFolder: resolvedFolderPath
+				});
+
+				if (this.slothlet.boundApi) {
+					await this.setValueAtPath(this.slothlet.boundApi, parts, apiToSet, {
+						mutateExisting: true,
+						collisionMode,
+						moduleID,
+						sourceFolder: resolvedFolderPath
+					});
 				}
 
-				// Register ownership
-				if (this.slothlet.handlers.ownership) {
-					this.slothlet.handlers.ownership.register({
-						moduleID,
-						apiPath: fullPath,
-						value,
-						source: endpoint === "." ? "core" : "addApi",
-						collisionMode,
-						filePath: null
-					});
-				}
+				this.slothlet.debug("reload", {
+					message: "Created new wrapper (unexpected in reload)",
+					endpoint,
+					moduleID
+				});
 			}
 		}
 	}
