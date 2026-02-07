@@ -276,18 +276,18 @@ class Slothlet {
 
 		// Build raw API (with context manager and instance ID for unified wrapper)
 		// UnifiedWrapper handles context binding internally - no separate wrapper needed!
-		this.api = await this.builders.builder.buildAPI({
+		const baseApi = await this.builders.builder.buildAPI({
 			dir: this.config.dir,
 			mode: this.config.mode,
 			moduleID: baseModuleId
 		});
 
-		// Store base API cache for hot reload
-		if (this.handlers.apiManager) {
-			this.handlers.apiManager.apiCaches.set(baseModuleId, {
+		// Store base API in cache (PRIMARY STORAGE - this.api will reference cache)
+		if (this.handlers.apiCacheManager) {
+			this.handlers.apiCacheManager.set(baseModuleId, {
 				endpoint: ".",
 				moduleID: baseModuleId,
-				api: this.api,
+				api: baseApi,
 				folderPath: this.config.dir,
 				mode: this.config.mode,
 				sanitizeOptions: this.config.sanitize || {},
@@ -295,6 +295,12 @@ class Slothlet {
 				config: { ...this.config },
 				timestamp: Date.now()
 			});
+
+			// this.api references the cached tree (no duplication)
+			this.api = this.handlers.apiCacheManager.get(baseModuleId).api;
+		} else {
+			// Fallback if cache manager not available
+			this.api = baseApi;
 		}
 
 		// Build final API with builtins attached
@@ -317,7 +323,7 @@ class Slothlet {
 		// Register all API paths with ownership manager AFTER building final API
 		// This ensures builtins (slothlet, shutdown, destroy) are also registered
 		if (this.handlers.ownership) {
-			this.registerAPIWithOwnership(apiWithBuiltins, baseModuleId, "");
+			this.handlers.ownership.registerSubtree(apiWithBuiltins, baseModuleId, "");
 		}
 
 		// Note: apiWithBuiltins IS this.api (buildFinalAPI now mutates in place, no clone)
@@ -579,69 +585,6 @@ class Slothlet {
 	debug(code, context = {}) {
 		if (this.debugLogger) {
 			this.debugLogger.log(code, context);
-		}
-	}
-
-	/**
-	 * Recursively register API structure with ownership manager
-	 * @param {Object} api - API object or value
-	 * @param {string} moduleID - Module identifier (owner)
-	 * @param {string} path - Current API path
-	 * @param {WeakSet} [visited] - WeakSet to track visited objects (prevents circular refs)
-	 * @param {string[]} [pathStack] - Path stack to track current depth
-	 * @private
-	 */
-	registerAPIWithOwnership(api, moduleID, path, visited = new WeakSet(), pathStack = []) {
-		if (!api || typeof api !== "object") return;
-
-		// Prevent infinite recursion on circular references
-		if (visited.has(api)) {
-			return;
-		}
-		visited.add(api);
-
-		// Register this level
-		if (path) {
-			this.handlers.ownership.register({
-				moduleID,
-				apiPath: path,
-				value: api,
-				source: "core",
-				collisionMode: "merge",
-				filePath: null
-			});
-		}
-
-		// Recursively register children
-		for (const [key, value] of Object.entries(api)) {
-			// Skip internal properties at any depth
-			if (Slothlet.SKIP_PROPS.includes(key)) {
-				continue;
-			}
-
-			// Skip reserved root-level keys ONLY at depth 0
-			const isRootLevel = pathStack.length === 0;
-			const isReservedKey = Slothlet.RESERVED_ROOT_KEYS.includes(key);
-			if (isRootLevel && isReservedKey) {
-				continue;
-			}
-
-			const childPath = path ? `${path}.${key}` : key;
-			if (typeof value === "function" || (value && typeof value === "object")) {
-				this.handlers.ownership.register({
-					moduleID,
-					apiPath: childPath,
-					value,
-					source: "core",
-					collisionMode: "merge",
-					filePath: null
-				});
-
-				// Recurse for objects (but not functions with properties - handle separately if needed)
-				if (typeof value === "object" && !Array.isArray(value)) {
-					this.registerAPIWithOwnership(value, moduleID, childPath, visited, [...pathStack, key]);
-				}
-			}
 		}
 	}
 
