@@ -100,37 +100,56 @@ apiCaches = Map<string, CacheEntry>
 - Baseline tests: 2356/2356 passing ✅
 
 ### ⚠️ Step 5: Implement moduleID reload with cache rebuild
-**Status:** **In Progress (50%)** - Re-validated after Step 4  
-**Goal:** Rebuild cache from disk and restore all paths
+**Status:** **Blocked at 50%** - Nested path restoration issue  
+**Goal:** Rebuild cache from disk and restore all paths  
+**Commits:** 958d064 (initial), 6d36059 (improved)
 
 **Current Status:**
-- Selective reload tests: **28/56 passing (50%)** - maintained after Step 4
+- Selective reload tests: **28/56 passing (50%)** - stuck at this level
 - Baseline tests: **2356/2356 passing (100%)** ✅
-- Fixed `setValueAtPath` calls to use proper await and options
-- Still encountering "cannot access math of undefined" for nested paths
+- Implemented `_reloadByModuleID()` - rebuilds cache, calls `_restoreApiTree()`
+- Implemented `_reloadByApiPath()` - finds child modules, reloads each
+- Simplified `_restoreApiTree()` - uses `__setImpl()` for nested paths
 
-**Known Issues:**
-- Nested path restoration incomplete: `nested.comp1.math.add` fails
-- Error suggests parent containers (`comp1.math`) not being created properly
-- `ensureParentPath` should create UnifiedWrapper containers, needs investigation
-- Context cleanup errors in tests (test timing, not core functionality)
+**Known Issues & Investigation Needed:**
+- **Core blocker:** Nested paths fail after reload - "cannot access math of undefined"
+- **Test case:** `api.nested.comp1.math.add` works after add, fails after reload
+- **Symptom:** `api.nested.comp1.math` returns `undefined` post-reload
+- **Root cause hypothesis:** `UnifiedWrapper.__setImpl()` may not properly reconstruct `_proxyTarget` during reload
+  - Initial add: Creates wrapper with `_impl = {math: {add: fn}}`, calls `_adoptImplChildren()` which populates `_proxyTarget` with `math` wrapper
+  - Reload: Calls `__setImpl({math: {add: fn}})` again, but `_proxyTarget.math` isn't recreated
+  - Possible issue: `_adoptImplChildren()` behavior differs between constructor and `__setImpl` call
+  - Possible issue: Collision mode handling during reload differs from add
+- **Context cleanup errors:** Tests show `CONTEXT_NOT_FOUND` after shutdown (timing issue, not core blocker)
 
-**Next Steps:**
-- Debug why UnifiedWrapper containers aren't being created for nested paths
-- Investigate if fresh API structure differs from expected paths
-- May need to log actual vs expected paths during restoration
-- Target: 56/56 selective reload tests passing (100%)
+**Implementation Details:**
+- `_restoreApiTree(freshApi, endpoint, moduleID, collisionMode)`:
+  - For root paths: Merges each key directly (same as addApiComponent)
+  - For nested paths: Gets existing wrapper at endpoint, calls `__setImpl(freshApi, moduleID)`
+  - Fallback: If no wrapper exists, creates new one (shouldn't happen in reload)
+- `_reloadByApiPath(apiPath)`:
+  - Checks for direct ownership history at path
+  - If not found, searches cache for child modules (endpoint starts with path prefix)
+  - Example: Reloading "nested" finds "nested.comp1" and "nested.comp2"
+  - Reloads each child module separately
+
+**Next Steps (Deep Investigation Required):**
+1. Debug `UnifiedWrapper.__setImpl()` and `_adoptImplChildren()` behavior
+2. Compare `_proxyTarget` state before/after reload
+3. Check if collision mode affects `_adoptImplChildren()` execution
+4. Verify `_adoptImplChildren()` clears/recreates children vs merges
+5. Consider if reload needs different approach than just calling `__setImpl`
+6. **Target:** 56/56 selective reload tests passing (100%)
 
 ### ⬜ Step 6: Implement path reload with multi-cache rebuild
-**Status:** Not Started (Depends on Steps 4-5)  
+**Status:** Not Started (Blocked on Step 5)  
 **Goal:** Rebuild all caches contributing to a path
 
-- [ ] Find all moduleIDs owning the target apiPath
-- [ ] Rebuild each moduleID's cache
-- [ ] Extract implementations at target path from each cache
-- [ ] Merge into existing wrapper using ownership stack order
-- [ ] Honor collision settings for each moduleID
+- [ ] Already partially implemented in `_reloadByApiPath()` (finds contributors)
+- [ ] Verify multi-cache rebuild and merge works correctly
 - [ ] Test path reload with multiple contributors
+- [ ] Honor ownership stack order during merge
+- [ ] Validate collision settings respected for each moduleID
 
 ## Test Commands (Remember to Tail!)
 
@@ -163,8 +182,9 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 
 ### Baseline Tests
 - **Status:** ✅ Passing (2356/2356)
-- **Last Run:** Before implementation start
+- **Last Run:** After Step 4 and Step 5 attempts
 - **Command:** `npm run baseline | Select-Object -Last 50`
+- **Commits:** Maintained 100% through 040c870, 958d064, 6d36059
 
 ### Full Reload Tests
 - **Status:** ✅ Passing (56/56)
@@ -172,11 +192,11 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-full.test.vitest.mjs | Select-Object -Last 100`
 
 ### Selective Reload Tests
-- **Status:** ⚠️ Premature implementation (out of order)
-- **Last Run:** After Step 5 implementation (before Step 4)
+- **Status:** ⚠️ Blocked at 50%
+- **Last Run:** After commit 6d36059
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs | Select-Object -Last 100`
-- **Results:** 28/56 passing (50%) - improved from 16/56 (28.6%)
-- **Note:** Must re-validate after Step 4 completion - cache lifecycle changes may affect reload behavior
+- **Results:** 28/56 passing (50%) - stuck since 958d064
+- **Note:** Requires deep dive into UnifiedWrapper reload behavior
 
 ## Design Decisions
 
