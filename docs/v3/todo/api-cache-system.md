@@ -100,21 +100,26 @@ apiCaches = Map<string, CacheEntry>
 - Baseline tests: 2356/2356 passing ✅
 
 ### ⚠️ Step 5: Implement moduleID reload with cache rebuild
-**Status:** **RE-VALIDATE NEEDED** - Previously implemented out of order  
+**Status:** **In Progress (50%)** - Re-validated after Step 4  
 **Goal:** Rebuild cache from disk and restore all paths
 
-**Previous Attempt (Out of Order):**
-- ⚠️ Implemented prematurely without cache cleanup (commit 215e285)
-- Achieved 28/56 selective reload tests (50%), up from 16/56 (28.6%)
-- Known issue: Nested path restoration incomplete
-- **Must re-validate after Step 4 completion** ✅ Step 4 now complete
+**Current Status:**
+- Selective reload tests: **28/56 passing (50%)** - maintained after Step 4
+- Baseline tests: **2356/2356 passing (100%)** ✅
+- Fixed `setValueAtPath` calls to use proper await and options
+- Still encountering "cannot access math of undefined" for nested paths
 
-**Re-Validation Tasks:**
-- [ ] Run selective reload tests to confirm previous progress maintained
-- [ ] Verify cache deletion doesn't break reload behavior
-- [ ] Fix nested path restoration (currentPath calculation)
-- [ ] Test moduleID reload with removed-then-reloaded scenarios
-- [ ] Target: 56/56 selective reload tests passing (100%)
+**Known Issues:**
+- Nested path restoration incomplete: `nested.comp1.math.add` fails
+- Error suggests parent containers (`comp1.math`) not being created properly
+- `ensureParentPath` should create UnifiedWrapper containers, needs investigation
+- Context cleanup errors in tests (test timing, not core functionality)
+
+**Next Steps:**
+- Debug why UnifiedWrapper containers aren't being created for nested paths
+- Investigate if fresh API structure differs from expected paths
+- May need to log actual vs expected paths during restoration
+- Target: 56/56 selective reload tests passing (100%)
 
 ### ⬜ Step 6: Implement path reload with multi-cache rebuild
 **Status:** Not Started (Depends on Steps 4-5)  

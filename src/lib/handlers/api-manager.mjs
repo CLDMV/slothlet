@@ -1753,12 +1753,22 @@ export class ApiManager extends ComponentBase {
 					// Existing wrapper - update implementation
 					existing.__setImpl(value, moduleID);
 				} else {
-					// No wrapper exists - create new path
-					this.setValueAtPath(this.slothlet.api, parts, value);
+					// No wrapper exists - create new path using setValueAtPath
+					await this.setValueAtPath(this.slothlet.api, parts, value, {
+						moduleID,
+						collisionMode,
+						allowOverwrite: true,
+						mutateExisting: true
+					});
 
 					// Also update boundApi
 					if (this.slothlet.boundApi) {
-						this.setValueAtPath(this.slothlet.boundApi, parts, value);
+						await this.setValueAtPath(this.slothlet.boundApi, parts, value, {
+							moduleID,
+							collisionMode,
+							allowOverwrite: true,
+							mutateExisting: true
+						});
 					}
 				}
 
@@ -1776,12 +1786,19 @@ export class ApiManager extends ComponentBase {
 			} else if (value && typeof value === "object" && !Array.isArray(value)) {
 				// Handle object: ensure container exists and recurse
 				if (!existing || typeof existing !== "object") {
-					// Create container object
-					const container = {};
-					this.setValueAtPath(this.slothlet.api, parts, container);
+					// Create container object using setValueAtPath (creates UnifiedWrapper containers)
+					await this.setValueAtPath(this.slothlet.api, parts, {}, {
+						moduleID,
+						collisionMode,
+						allowOverwrite: false
+					});
 
 					if (this.slothlet.boundApi) {
-						this.setValueAtPath(this.slothlet.boundApi, parts, container);
+						await this.setValueAtPath(this.slothlet.boundApi, parts, {}, {
+							moduleID,
+							collisionMode,
+							allowOverwrite: false
+						});
 					}
 				}
 
@@ -1790,7 +1807,7 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.ownership.register({
 						moduleID,
 						apiPath: fullPath,
-						value: existing || value,
+						value: this.getValueAtPath(this.slothlet.api, parts) || value,
 						source: endpoint === "." ? "core" : "addApi",
 						collisionMode,
 						filePath: null
@@ -1804,10 +1821,18 @@ export class ApiManager extends ComponentBase {
 				if (existing && typeof existing.__setImpl === "function") {
 					existing.__setImpl(value, moduleID);
 				} else {
-					this.setValueAtPath(this.slothlet.api, parts, value);
+					await this.setValueAtPath(this.slothlet.api, parts, value, {
+						moduleID,
+						collisionMode,
+						allowOverwrite: true
+					});
 
 					if (this.slothlet.boundApi) {
-						this.setValueAtPath(this.slothlet.boundApi, parts, value);
+						await this.setValueAtPath(this.slothlet.boundApi, parts, value, {
+							moduleID,
+							collisionMode,
+							allowOverwrite: true
+						});
 					}
 				}
 
