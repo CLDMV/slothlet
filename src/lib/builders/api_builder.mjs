@@ -258,37 +258,78 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-			 * @param {Object|string} pathOrParams - API path string or parameters object
-			 * @param {string} [pathOrParams.apiPath] - The API path to reload (when using object form)
-			 * @param {string} [pathOrParams.moduleID] - The module ID to reload (when using object form)
-			 * @returns {Promise<void>}
-			 * @public
-			 *
-			 * @description
-			 * Reloads API modules recorded through add operations, preserving references.
-			 * Requires `api.mutations.reload: true` in configuration.
-			 * Accepts either a string (API path) or an object with apiPath/moduleID.
-			 *
-			 * @example
-			 * await api.slothlet.api.reload("plugins");
-			 *
-			 * @example
-			 * await api.slothlet.api.reload({ apiPath: "plugins" });
-			 *
-			 * @example
-			 * await api.slothlet.api.reload({ moduleID: "myModule" });
-			 */
-			reload: async function slothlet_api_reload(pathOrParams) {
-				// Check if reload mutation is allowed
-				if (!config.api?.mutations?.reload) {
-					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
-						operation: "api.reload",
-						hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
-						validationError: true
-					});
-				}
-				// Normalize input: if string, convert to { apiPath: string }
-				const params = typeof pathOrParams === "string" ? { apiPath: pathOrParams } : pathOrParams;
+				 * @param {Object|string} pathOrParams - API path string or parameters object
+				 * @param {string} [pathOrParams.apiPath] - The API path to reload (when using object form)
+				 * @param {string} [pathOrParams.moduleID] - The module ID to reload (when using object form)
+				 * @returns {Promise<void>}
+				 * @public
+				 *
+				 * @description
+				 * Reloads API modules recorded through add operations, preserving references.
+				 * Requires `api.mutations.reload: true` in configuration.
+				 * Accepts either a string (API path) or an object with apiPath/moduleID.
+				 *
+				 * @example
+				 * await api.slothlet.api.reload("plugins");
+				 *
+				 * @example
+				 * await api.slothlet.api.reload({ apiPath: "plugins" });
+				 *
+				 * @example
+				 * await api.slothlet.api.reload({ moduleID: "myModule" });
+				 */
+				reload: async function slothlet_api_reload(pathOrModuleId) {
+					// Check if reload mutation is allowed
+					if (!config.api?.mutations?.reload) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.reload",
+							hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
+							validationError: true
+						});
+					}
+
+					if (typeof pathOrModuleId !== "string") {
+						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
+							argument: "pathOrModuleId",
+							expected: "string",
+							received: typeof pathOrModuleId,
+							validationError: true
+						});
+					}
+
+					// Check if string matches a loaded moduleID
+					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
+
+					if (isModuleId) {
+						// Reload by moduleID
+						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId });
+					}
+
+					// Treat as API path - validate it exists
+					const normalizedPath = slothlet.handlers.apiManager.normalizeApiPath(pathOrModuleId).apiPath;
+					const pathParts = normalizedPath.split(".");
+					let current = slothlet.api;
+					for (const part of pathParts) {
+						if (!current || (typeof current !== "object" && typeof current !== "function")) {
+							throw new slothlet.SlothletError("INVALID_API_PATH", {
+								apiPath: pathOrModuleId,
+								hint: `API path '${pathOrModuleId}' does not exist`,
+								validationError: true
+							});
+						}
+						current = current[part];
+					}
+
+					if (current === undefined) {
+						throw new slothlet.SlothletError("INVALID_API_PATH", {
+							apiPath: pathOrModuleId,
+							hint: `API path '${pathOrModuleId}' does not exist`,
+							validationError: true
+						});
+					}
+
+					// Reload by API path
+					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath });
 				}
 			},
 

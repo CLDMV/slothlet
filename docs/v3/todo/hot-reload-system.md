@@ -1,9 +1,55 @@
 # Hot Reload System Implementation
 
-**Status:** ❌ NOT IMPLEMENTED (Selective Reload)  
+**Status:** ⚠️ INVESTIGATION NEEDED  
 **Last Updated:** 2026-02-06
 
+## Investigation Summary (2026-02-06)
+
+**Selective Reload Specification**:
+
+1. **Reload by apiPath**: Reloads entire path (base + all modules contributing to it)
+   ```javascript
+   await api.slothlet.api.reload("math");
+   // Reloads: base math + any modules that added to math path
+   ```
+
+2. **Reload by moduleID**: Reloads ONLY that module's contributions (uses ownership system)
+   ```javascript
+   await api.slothlet.api.reload(moduleID1);
+   // Updates module1's impl WITHOUT replacing currently active impl if buried
+   ```
+
+**Ownership Stack Behavior**:
+- When module1 provides `api.x.fn` then module2 provides `api.x.fn`:
+  - module2's impl is active (last loaded wins)
+  - module1's impl is buried in ownership stack
+- When `reload(module1)`:
+  - Update module1's buried impl with fresh code
+  - DO NOT replace module2's active impl
+  - So when module2 is removed, module1's UPDATED impl becomes active
+
+**What Happened**:
+- Attempted to implement without understanding ownership stack system
+- Modified global reload code which broke full instance reload
+- Changes reverted
+
+**Key Learnings**:
+1. Selective reload works with ownership stack, not simple replacement
+2. Path reload affects all contributors; moduleID reload affects only that module
+3. Must preserve ownership order when reloading buried implementations
+4. Full reload (`api.slothlet.reload()`) is working and in baseline (✅ all tests passing)
+
+**Implementation Requirements**:
+1. Track ownership per module (already exists in ownership system)
+2. When reloading by moduleID, update that module's impl in ownership stack
+3. Only update active impl if that module currently owns it (is top of stack)
+4. Preserve all other modules' implementations unchanged
+
+---
+
 ## Status: Mixed Results
+
+**CRITICAL**: The selective reload test file `core-reload-selective.test.vitest.mjs` is NOT in the baseline tests (2356 tests). This test may not be v3-compatible or may be testing features that aren't fully implemented yet. Investigation needed to determine if the test or implementation needs updating.
 
 ### ✅ Completed Features
 
@@ -41,13 +87,46 @@ console.log(api.config); // Shows actual nested values, not {}
 
 ### ⚠️ Issues Found
 
-#### ❌ Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
-- **Status**: NOT PROPERLY IMPLEMENTED
-- **Tests**: 48 failed / 56 total (14% pass rate) - 86% failure
+#### 🟡 Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
+- **Status**: IMPLEMENTATION IN PROGRESS
 - **Implementation**: `src/lib/handlers/api-manager.mjs` - `reloadApiComponent()` method
-- **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` (may not be fully v3-compatible)
+- **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` (NOT in baseline)
 
-**Note**: Only baseline tests (2356 tests) are confirmed v3-compatible. This test file may need updates in addition to implementation fixes.
+**Feature Description**:
+Selective reload updates specific module implementations while preserving the ownership stack. Two modes:
+
+1. **By apiPath**: Reloads all contributors to that path
+   ```javascript
+   await api.slothlet.api.reload("math");
+   // Reloads base module + all added modules contributing to math
+   ```
+
+2. **By moduleID**: Reloads only that module's contributions
+   ```javascript
+   await api.slothlet.api.reload(moduleID);
+   // Updates module's impl in ownership stack without affecting active impl if buried
+   ```
+
+**Current Implementation Status**:
+- ✅ Path-based reload triggers `restoreApiPath` for base modules
+- ✅ Replays `addHistory` entries with `mutateExisting: true`
+- ❓ Ownership stack preservation unclear
+- ❓ Buried impl updates not verified
+- ❌ Not in baseline tests - needs test validation/updates
+
+**Questions to Answer**:
+
+1. **Does ownership system track per-module implementations?**
+   - When module2 replaces module1's impl, is module1's impl preserved?
+   - Can we retrieve and update module1's buried impl without affecting module2?
+
+2. **Does current `addApiComponent` with `mutateExisting` preserve stacks?**
+   - Or does it replace the entire value, destroying ownership stack?
+
+3. **Is the test file v3-compatible?**
+   - Test calls `api.slothlet.api.reload("math")` with string parameter
+   - API signature expects object: `{ apiPath, moduleID }`
+   - Needs API update or test update?
 
 **Intended API**:
 ```javascript
@@ -61,48 +140,29 @@ await api.slothlet.api.reload(moduleID);
 await api.slothlet.api.reload("plugins");
 ```
 
-**Current Issues** (from test failures):
+**Questions to Answer**:
 
-1. **Custom properties lost**: Properties added to API paths (`api.custom.testFlag = true`) become `undefined` after selective reload
-2. **Hooks not reapplied**: `api.math.add(5, 5)` returns `10` instead of `1010` (hook should add 1000, not being reapplied)
-3. **Context lifecycle broken**: 4 unhandled `CONTEXT_NOT_FOUND` errors - instances shut down prematurely
-   ```
-   SlothletError: [CONTEXT_NOT_FOUND] Context not found for instance 'slothlet_xxx'.
-   Instance may have been shut down. Available instances: []
-   ```
-4. **Type handling broken in lazy mode**: `typeof api.custom` returns `"function"` instead of `"object"`
-5. **Error handling missing**: Reload of removed component returns `undefined` instead of throwing error
-6. **Sibling isolation broken**: Nested child reload (`api.parent.child1`) affects siblings when it shouldn't
+1. **Is selective reload meant to work at all in v3?**
+   - Test file last modified 2026-02-05 (recent)
+   - But not included in baseline tests (2356 tests all passing)
+   - May be work-in-progress feature
 
-**Implementation Gaps** (what needs to be built):
+2. **What should selective reload do?**
+   - Documentation says: "Replays recorded api.slothlet.api.add calls"
+   - But implementation has fallback for base modules via `restoreApiPath`
+   - Is base module reload intended, or should it throw an error?
 
-1. **Property preservation system**:
-   - Capture all custom properties before reload
-   - Restore custom properties after reload
-   - Test case: `api.custom.testFlag = true` → reload → should still be `true`
+3. **Is the test file correct?**
+   - Calls `api.slothlet.api.reload("math")` - string parameter
+   - API signature in code accepts object: `{ apiPath, moduleID }`
+   - Should API accept string, or should test use object?
 
-2. **Hook reapplication**:
-   - Store registered hooks per module
-   - Replay hooks during selective reload
-   - Test case: math.add hook (adds 1000) must be reapplied
+4. **Does the commit d2cbcb7 API change make sense?**
+   - Added string parameter support
+   - Improved pass rate from 8/56 to 36/56
+   - But may have been masking actual issues
 
-3. **Context lifecycle management**:
-   - Fix premature instance shutdown
-   - Ensure UnifiedWrapper context lookup works during reload
-   - Prevent `Available instances: []` errors
-
-4. **Type handling for lazy mode**:
-   - Special handling for lazy proxy materialization during reload
-   - Ensure `typeof` checks return correct types after reload
-
-5. **Error handling**:
-   - Validate component exists before reload
-   - Throw error when reloading removed component (currently returns `undefined`)
-
-6. **Isolation guarantees**:
-   - Ensure selective reload scope is properly bounded
-   - Nested child reload must not affect siblings
-   - Only target module + explicit dependencies should change
+**Recommendation**: Review with project owner before implementing selective reload features.
 
 ---
 
@@ -121,14 +181,12 @@ await api.slothlet.api.reload("plugins");
 - ✅ All 56 tests passing (100%)
 
 ### Phase 3: Selective Reload (February 2026)
-- 🟡 Partial implementation in `src/lib/handlers/api-manager.mjs` (incomplete)
-- ⚠️ Tests written but 86% failing (48/56 tests)
-- ❌ Custom property preservation not implemented
-- ❌ Hook reapplication system not implemented
-- ❌ Context lifecycle broken (premature shutdown)
-- ❌ Lazy mode type handling broken
-- ❌ Error handling not implemented
-- ❌ Sibling isolation not working
+- 🟡 **Implementation in progress** - Test file not yet in baseline
+- ✅ Basic structure exists in `src/lib/handlers/api-manager.mjs`
+- ❓ Ownership stack preservation needs investigation
+- ❓ Buried impl updates need verification
+- ❓ API signature needs clarification (string vs object parameter)
+- **Next**: Investigate ownership system integration before proceeding
 
 ---
 
