@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 07:00:28 -08:00 (1770390028)
+ *	@Last modified time: 2026-02-06 19:24:03 -08:00 (1770434643)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1294,7 +1294,11 @@ export class ApiManager extends ComponentBase {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIDKey = String(moduleID);
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
-			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || { action: "none", removedModuleId: null, restoreModuleId: null };
+			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || {
+				action: "none",
+				removedModuleId: null,
+				restoreModuleId: null
+			};
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
@@ -1448,6 +1452,17 @@ export class ApiManager extends ComponentBase {
 			this.state.removedModuleIds.add(moduleIDKey);
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
+			// Delete cache entry for this moduleID (complete module removal)
+			if (this.slothlet.handlers.apiCacheManager) {
+				const deleted = this.slothlet.handlers.apiCacheManager.delete(moduleIDKey);
+				if (deleted) {
+					this.slothlet.debug("cache", {
+						message: "Cache deleted for removed module",
+						moduleID: moduleIDKey
+					});
+				}
+			}
+
 			// Track in operation history for reload replay - record each removed apiPath
 			if (recordHistory) {
 				for (const removedPath of pathsToDelete) {
@@ -1478,7 +1493,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, null) || { action: "none", removedModuleId: null, restoreModuleId: null };
+		const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, null) || {
+			action: "none",
+			removedModuleId: null,
+			restoreModuleId: null
+		};
 
 		// Check if path actually exists before attempting deletion
 		const pathExists = this.getValueAtPath(this.slothlet.api, parts) !== undefined;
@@ -1720,7 +1739,7 @@ export class ApiManager extends ComponentBase {
 
 			// Calculate relative path within this tree
 			const relativePath = currentPath ? `${currentPath}.${key}` : key;
-			
+
 			// Calculate full API path (includes endpoint prefix for non-base)
 			const fullPath = endpoint === "." ? relativePath : `${endpoint}.${relativePath}`;
 			const parts = fullPath.split(".");

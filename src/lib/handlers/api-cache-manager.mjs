@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 17:30:00 -08:00 (1770450600)
+ *	@Last modified time: 2026-02-06 19:24:00 -08:00 (1770434640)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -58,7 +58,7 @@ export class ApiCacheManager extends ComponentBase {
 	 */
 	constructor(slothlet) {
 		super(slothlet);
-		
+
 		/**
 		 * Cache storage - moduleID → CacheEntry
 		 * @type {Map<string, CacheEntry>}

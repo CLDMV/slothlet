@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-06 19:24:51 -08:00 (1770434691)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -700,4 +700,5 @@ export class Metadata extends ComponentBase {
 				this.applyToSubtree(value, pathMetadata, visited);
 			}
 		}
-	}}
+	}
+}
