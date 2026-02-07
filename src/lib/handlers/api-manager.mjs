@@ -1558,7 +1558,7 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Reload API modules from api.slothlet.api.add history.
+	 * Reload API modules using cache system.
 	 * @param {object} params - Reload parameters.
 	 * @param {?string} params.apiPath - API path to reload.
 	 * @param {?string} params.moduleID - ModuleId to reload.
@@ -1566,9 +1566,12 @@ export class ApiManager extends ComponentBase {
 	 * @package
 	 *
 	 * @description
-	 * Replays recorded api.slothlet.api.add calls using mutateExisting to preserve references.
+	 * Reloads modules from disk using cached parameters. For moduleID reload, rebuilds
+	 * entire cache and restores all paths. For apiPath reload, rebuilds all contributing
+	 * moduleID caches and merges implementations.
 	 *
 	 * @example
+	 * await manager.reloadApiComponent({ moduleID: "plugins_abc123" });
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });
 	 */
 	async reloadApiComponent(params) {
@@ -1580,34 +1583,227 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		let entries = this.state.addHistory;
-		if (apiPath) {
-			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
-			entries = entries.filter((entry) => entry.apiPath === normalizedPath);
-		} else if (moduleID) {
-			entries = entries.filter((entry) => entry.moduleID === moduleID);
-		}
-
-		if (entries.length === 0 && apiPath) {
-			await this.restoreApiPath(this.normalizeApiPath(apiPath).apiPath, "base");
+		// ModuleID-based reload: rebuild single cache and restore all paths
+		if (moduleID) {
+			await this._reloadByModuleID(moduleID);
 			return;
 		}
 
-		for (const entry of entries) {
-			if (entry.moduleID && this.state.removedModuleIds.has(entry.moduleID)) {
+		// ApiPath-based reload: rebuild all contributing caches
+		if (apiPath) {
+			await this._reloadByApiPath(apiPath);
+			return;
+		}
+
+		throw new this.SlothletError("INVALID_ARGUMENT", {
+			argument: "params",
+			expected: "{ moduleID } or { apiPath }",
+			received: params,
+			validationError: true
+		});
+	}
+
+	/**
+	 * Reload by moduleID - rebuild cache and restore all paths
+	 * @param {string} moduleID - Module identifier
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _reloadByModuleID(moduleID) {
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		if (!cacheManager) {
+			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
+				operation: "reload",
+				validationError: true
+			});
+		}
+
+		// Check if cache exists
+		if (!cacheManager.has(moduleID)) {
+			throw new this.SlothletError("CACHE_NOT_FOUND", {
+				moduleID,
+				operation: "reload",
+				validationError: true
+			});
+		}
+
+		// Get existing cache entry for metadata
+		const oldEntry = cacheManager.get(moduleID);
+
+		this.slothlet.debug("reload", {
+			message: "Reloading module by ID",
+			moduleID,
+			endpoint: oldEntry.endpoint,
+			folderPath: oldEntry.folderPath
+		});
+
+		// Rebuild API from disk
+		const freshApi = await cacheManager.rebuildCache(moduleID);
+
+		// Update cache with fresh API
+		cacheManager.set(moduleID, {
+			...oldEntry,
+			api: freshApi,
+			timestamp: Date.now()
+		});
+
+		// Traverse fresh API and update/create wrappers
+		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode);
+
+		this.slothlet.debug("reload", {
+			message: "Module reload complete",
+			moduleID
+		});
+	}
+
+	/**
+	 * Reload by apiPath - rebuild all contributing caches and merge
+	 * @param {string} apiPath - API path
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _reloadByApiPath(apiPath) {
+		const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
+
+		this.slothlet.debug("reload", {
+			message: "Reloading by API path",
+			apiPath: normalizedPath
+		});
+
+		// Get all moduleIDs contributing to this path
+		const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath);
+		if (!history || history.length === 0) {
+			// Path has no contributors - try base module restore
+			await this.restoreApiPath(normalizedPath, "base");
+			return;
+		}
+
+		// Rebuild each contributing module's cache
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		for (const { moduleID } of history) {
+			if (cacheManager?.has(moduleID)) {
+				// Rebuild this module's cache
+				await this._reloadByModuleID(moduleID);
+			}
+		}
+
+		this.slothlet.debug("reload", {
+			message: "API path reload complete",
+			apiPath: normalizedPath,
+			contributingModules: history.length
+		});
+	}
+
+	/**
+	 * Recursively restore API tree by updating wrappers
+	 * @param {object} freshApi - Fresh API tree from buildAPI
+	 * @param {string} endpoint - API endpoint (e.g., ".", "plugins")
+	 * @param {string} moduleID - Module identifier
+	 * @param {string} collisionMode - Collision handling mode
+	 * @param {string} [currentPath=""] - Current path during recursion (relative to endpoint root)
+	 * @param {WeakSet} [visited] - Visited objects (prevent circular refs)
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode, currentPath = "", visited = new WeakSet()) {
+		if (!freshApi || typeof freshApi !== "object" || visited.has(freshApi)) {
+			return;
+		}
+
+		visited.add(freshApi);
+
+		for (const [key, value] of Object.entries(freshApi)) {
+			// Skip internal properties
+			if (key.startsWith("__") || key.startsWith("_")) {
 				continue;
 			}
-			await this.addApiComponent({
-				apiPath: entry.apiPath,
-				folderPath: entry.folderPath,
-				options: {
-					...entry.options,
-					moduleID: entry.moduleID, // Ensure moduleID is passed
-					mutateExisting: true,
-					forceOverwrite: true,
-					recordHistory: false
+
+			// Calculate relative path within this tree
+			const relativePath = currentPath ? `${currentPath}.${key}` : key;
+			
+			// Calculate full API path (includes endpoint prefix for non-base)
+			const fullPath = endpoint === "." ? relativePath : `${endpoint}.${relativePath}`;
+			const parts = fullPath.split(".");
+
+			// Get existing value at this path
+			const existing = this.getValueAtPath(this.slothlet.api, parts);
+
+			if (typeof value === "function") {
+				// Handle function: update wrapper or create new one
+				if (existing && typeof existing.__setImpl === "function") {
+					// Existing wrapper - update implementation
+					existing.__setImpl(value, moduleID);
+				} else {
+					// No wrapper exists - create new path
+					this.setValueAtPath(this.slothlet.api, parts, value);
+
+					// Also update boundApi
+					if (this.slothlet.boundApi) {
+						this.setValueAtPath(this.slothlet.boundApi, parts, value);
+					}
 				}
-			});
+
+				// Register ownership
+				if (this.slothlet.handlers.ownership) {
+					this.slothlet.handlers.ownership.register({
+						moduleID,
+						apiPath: fullPath,
+						value,
+						source: endpoint === "." ? "core" : "addApi",
+						collisionMode,
+						filePath: null
+					});
+				}
+			} else if (value && typeof value === "object" && !Array.isArray(value)) {
+				// Handle object: ensure container exists and recurse
+				if (!existing || typeof existing !== "object") {
+					// Create container object
+					const container = {};
+					this.setValueAtPath(this.slothlet.api, parts, container);
+
+					if (this.slothlet.boundApi) {
+						this.setValueAtPath(this.slothlet.boundApi, parts, container);
+					}
+				}
+
+				// Register ownership for container
+				if (this.slothlet.handlers.ownership) {
+					this.slothlet.handlers.ownership.register({
+						moduleID,
+						apiPath: fullPath,
+						value: existing || value,
+						source: endpoint === "." ? "core" : "addApi",
+						collisionMode,
+						filePath: null
+					});
+				}
+
+				// Recurse into nested objects (use relativePath for recursion)
+				await this._restoreApiTree(value, endpoint, moduleID, collisionMode, relativePath, visited);
+			} else {
+				// Handle primitive values
+				if (existing && typeof existing.__setImpl === "function") {
+					existing.__setImpl(value, moduleID);
+				} else {
+					this.setValueAtPath(this.slothlet.api, parts, value);
+
+					if (this.slothlet.boundApi) {
+						this.setValueAtPath(this.slothlet.boundApi, parts, value);
+					}
+				}
+
+				// Register ownership
+				if (this.slothlet.handlers.ownership) {
+					this.slothlet.handlers.ownership.register({
+						moduleID,
+						apiPath: fullPath,
+						value,
+						source: endpoint === "." ? "core" : "addApi",
+						collisionMode,
+						filePath: null
+					});
+				}
+			}
 		}
 	}
 }
