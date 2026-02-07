@@ -11,6 +11,15 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+import chalk from "chalk";
+import { spawn } from "node:child_process";
+
+let slothlet;
+const verbose =
+	process.argv.includes("--verbose") ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+
 function ensureDevEnvFlags(forceV2 = false) {
 	/**
 	 * @param {string[]} args

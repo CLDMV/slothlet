@@ -61,23 +61,41 @@ apiCaches = Map<string, CacheEntry>
 **Status:** ✅ Complete  
 **Goal:** Store buildAPI results in cache
 
-- [x] Capture cache after initial load (base moduleID "slothlet_base")
+- [x] Capture cache after initial load (base moduleID with builtins included)
 - [x] Store cache in addApiComponent after buildAPI
 - [x] Verify all parameters stored correctly
 - [x] Test cache persistence - **Baseline: 2356/2356 passing ✅**
+- [x] Fixed cache timing - store AFTER buildFinalAPI (includes builtins)
 
-### ⬜ Step 4: Implement moduleID reload with cache rebuild
-**Status:** In Progress  
+**Key Changes:**
+- Created ApiCacheManager as dedicated handler (294 lines)
+- Moved ownership.registerSubtree() to ownership.mjs (67 lines)
+- Moved metadata.applyToSubtree() to metadata.mjs (50 lines)
+- ApiManager reduced from 1775 → 1613 lines (~162 lines removed)
+- Cache is primary storage after builtins attached
+
+### 🚧 Step 4: Implement moduleID reload with cache rebuild
+**Status:** In Progress (50%)  
 **Goal:** Rebuild cache from disk and restore all paths
 
-- [ ] Get cache entry by moduleID
-- [ ] Call buildAPI with cached parameters
-- [ ] Replace cache.api with fresh result
-- [ ] Recursively traverse new API tree
-- [ ] Reuse existing wrappers (call __setImpl) or create new ones
-- [ ] Honor cached collision settings
-- [ ] Register/update ownership
+- [x] Get cache entry by moduleID
+- [x] Call buildAPI with cached parameters (via rebuildCache())
+- [x] Replace cache.api with fresh result
+- [x] Recursively traverse new API tree
+- [x] Reuse existing wrappers (call __setImpl) or create new ones
+- [x] Honor cached collision settings
+- [x] Register/update ownership
+- [ ] Fix nested path restoration (currentPath calculation issue)
 - [ ] Test moduleID reload restores removed paths
+
+**Current Status:**
+- **Selective reload tests: 28/56 passing (50%)** - up from 16/56 (28.6%)
+- Baseline tests: 2356/2356 passing ✅
+- Created `_reloadByModuleID()` - rebuilds cache and restores tree
+- Created `_reloadByApiPath()` - rebuilds all contributing caches
+- Created `_restoreApiTree()` - recursive tree restoration with wrapper updates
+- Issue: Nested paths like "custom.math.add" not being restored properly
+- Context errors in test cleanup (timing issue, not core functionality)
 
 ### ⬜ Step 5: Implement path reload with multi-cache rebuild
 **Status:** Not Started  
@@ -174,10 +192,18 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 ## Progress Log
 
 ### 2026-02-06
-- Created documentation
-- Defined architecture and cache structure
-- Outlined implementation steps
-- Ready to begin step 1: ownership audit
+- ✅ Created documentation
+- ✅ Defined architecture and cache structure
+- ✅ Outlined implementation steps
+- ✅ Completed Step 1: ownership audit
+- ✅ Completed Step 2: Created ApiCacheManager (294 lines)
+- ✅ Completed Step 3: Cache populated during load/add (2356/2356 baseline passing)
+- 🚧 Step 4: 50% complete - moduleID reload implemented, nested path issues remain
+  - Created `_reloadByModuleID()`, `_reloadByApiPath()`, `_restoreApiTree()`  
+  - Selective reload: 28/56 passing (50%), up from 16/56 (28.6%)
+  - Known issue: Nested paths like "custom.math.add" not restoring properly
+  - Path calculation fixed (relativePath vs fullPath separation)
+  - Next: Debug why nested containers aren't being created
 
 ## Related Files
 

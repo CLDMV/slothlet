@@ -282,12 +282,20 @@ class Slothlet {
 			moduleID: baseModuleId
 		});
 
-		// Store base API in cache (PRIMARY STORAGE - this.api will reference cache)
+		// Temporarily assign baseApi to this.api for buildFinalAPI
+		// (buildFinalAPI mutates this.api in place by adding builtins)
+		this.api = baseApi;
+
+		// Build final API with builtins attached (mutates this.api in place)
+		const apiWithBuiltins = await this.buildFinalAPI(this.api);
+
+		// NOW store in cache AFTER builtins are attached
+		// Cache stores the complete API tree with builtins
 		if (this.handlers.apiCacheManager) {
 			this.handlers.apiCacheManager.set(baseModuleId, {
 				endpoint: ".",
 				moduleID: baseModuleId,
-				api: baseApi,
+				api: this.api, // Store complete API with builtins
 				folderPath: this.config.dir,
 				mode: this.config.mode,
 				sanitizeOptions: this.config.sanitize || {},
@@ -295,16 +303,7 @@ class Slothlet {
 				config: { ...this.config },
 				timestamp: Date.now()
 			});
-
-			// this.api references the cached tree (no duplication)
-			this.api = this.handlers.apiCacheManager.get(baseModuleId).api;
-		} else {
-			// Fallback if cache manager not available
-			this.api = baseApi;
 		}
-
-		// Build final API with builtins attached
-		const apiWithBuiltins = await this.buildFinalAPI(this.api);
 
 		// Inject runtime-aware metadata functions that have proper context access
 		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
