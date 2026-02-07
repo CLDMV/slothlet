@@ -85,6 +85,29 @@ export class ApiManager extends ComponentBase {
 			initialConfig: slothlet?.config || null,
 			operationHistory: [] // Chronological log of all add/remove operations
 		};
+		/**
+		 * API caches - Complete buildAPI results per moduleID
+		 * @type {Map<string, CacheEntry>}
+		 * @private
+		 *
+		 * @description
+		 * Stores complete API trees for each moduleID to enable hot reload without
+		 * rebuilding the entire instance. Each cache entry contains the full buildAPI
+		 * result and all parameters needed for rebuild.
+		 *
+		 * Structure: moduleID → {
+		 *   endpoint: string,         // API path endpoint (e.g., ".", "plugins")
+		 *   moduleID: string,          // Module identifier
+		 *   api: Object,               // Complete buildAPI result tree
+		 *   folderPath: string,        // Source folder path
+		 *   mode: string,              // lazy/eager
+		 *   sanitizeOptions: Object,   // Sanitization config
+		 *   collisionMode: string,     // Collision handling mode
+		 *   config: Object,            // Config snapshot at add time
+		 *   timestamp: number          // Cache creation time
+		 * }
+		 */
+		this.apiCaches = new Map();
 	}
 
 	/**
@@ -988,7 +1011,7 @@ export class ApiManager extends ComponentBase {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.config.dir,
 				mode: this.config.mode,
-				ownership: null
+				moduleID: "base" // Use "base" as moduleID for temporary API
 			});
 
 			const { parts } = this.normalizeApiPath(apiPath);
@@ -999,9 +1022,10 @@ export class ApiManager extends ComponentBase {
 				return;
 			}
 
-			// Extract raw implementation from temporary wrapper (if wrapped)
-			// The temporary buildAPI creates wrappers with ownership:null which can't be used
-			// We need the raw impl so our instance can wrap it with proper ownership
+			// Extract raw implementation from temporary wrapper IF it's materialized
+			// The temporary buildAPI creates wrappers which we need to unwrap
+			// For eager mode: __impl is the actual implementation (object/function) - extract it
+			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
 			if (baseValue && baseValue.__impl !== undefined) {
 				baseValue = baseValue.__impl;
 			}
@@ -1139,6 +1163,19 @@ export class ApiManager extends ComponentBase {
 			userMetadata: metadata,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
 			collisionMode: collisionMode
+		});
+
+		// Store API cache for hot reload
+		this.apiCaches.set(moduleID, {
+			endpoint: normalizedPath,
+			moduleID: moduleID,
+			api: newApi,
+			folderPath: resolvedFolderPath,
+			mode: this.config.mode,
+			sanitizeOptions: this.config.sanitize || {},
+			collisionMode: collisionMode,
+			config: { ...this.config },
+			timestamp: Date.now()
 		});
 
 		this.slothlet.debug("api", {
