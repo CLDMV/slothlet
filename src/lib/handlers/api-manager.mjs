@@ -85,29 +85,6 @@ export class ApiManager extends ComponentBase {
 			initialConfig: slothlet?.config || null,
 			operationHistory: [] // Chronological log of all add/remove operations
 		};
-		/**
-		 * API caches - Complete buildAPI results per moduleID
-		 * @type {Map<string, CacheEntry>}
-		 * @private
-		 *
-		 * @description
-		 * Stores complete API trees for each moduleID to enable hot reload without
-		 * rebuilding the entire instance. Each cache entry contains the full buildAPI
-		 * result and all parameters needed for rebuild.
-		 *
-		 * Structure: moduleID → {
-		 *   endpoint: string,         // API path endpoint (e.g., ".", "plugins")
-		 *   moduleID: string,          // Module identifier
-		 *   api: Object,               // Complete buildAPI result tree
-		 *   folderPath: string,        // Source folder path
-		 *   mode: string,              // lazy/eager
-		 *   sanitizeOptions: Object,   // Sanitization config
-		 *   collisionMode: string,     // Collision handling mode
-		 *   config: Object,            // Config snapshot at add time
-		 *   timestamp: number          // Cache creation time
-		 * }
-		 */
-		this.apiCaches = new Map();
 	}
 
 	/**
@@ -883,95 +860,6 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Register ownership for a subtree using a single moduleID.
-	 * @param {object} ownership - Ownership manager.
-	 * @param {string} moduleID - Module identifier.
-	 * @param {string} apiPath - Base API path.
-	 * @param {unknown} value - Value at the base path.
-	 * @returns {void}
-	 * @private
-	 *
-	 * @description
-	 * Registers the base path and child paths with the ownership manager, allowing
-	 * overwrite conflicts so hot reload can stack modules.
-	 *
-	 * @example
-	 * this.registerOwnership(ownership, "plugins-core", "plugins", api.plugins);
-	 */
-	registerOwnership(ownership, moduleID, apiPath, value) {
-		if (!ownership || !moduleID) {
-			return;
-		}
-
-		const visited = new WeakSet();
-		const maxDepth = 10; // Prevent excessive recursion
-
-		// Get collision mode from config (defaults to "merge")
-		const collisionMode = this.config.collision?.api || "merge";
-
-		const registerRecursive = (currentValue, pathParts, depth = 0) => {
-			// Depth limit check
-			if (depth > maxDepth) {
-				return;
-			}
-
-			const pathKey = pathParts.join(".");
-			ownership.register({
-				moduleID,
-				apiPath: pathKey,
-				value: currentValue,
-				source: "add",
-				collisionMode: collisionMode,
-				filePath: null
-			});
-
-			// Only recurse into objects/functions, not primitives or arrays
-			if (currentValue && (typeof currentValue === "object" || typeof currentValue === "function") && !Array.isArray(currentValue)) {
-				// Circular reference check
-				if (visited.has(currentValue)) {
-					return;
-				}
-				visited.add(currentValue);
-
-				// Skip special properties that shouldn't be recursively registered
-				const skipProps = new Set(["__wrapper", "__metadata", "__materialize", "__type", "_impl"]);
-
-				for (const [key, child] of Object.entries(currentValue)) {
-					if (!skipProps.has(key)) {
-						registerRecursive(child, [...pathParts, key], depth + 1);
-					}
-				}
-			}
-		};
-
-		// Handle empty string properly - split would give [""], we want []
-		const initialParts = apiPath === "" ? [] : apiPath.split(".");
-		registerRecursive(value, initialParts);
-	}
-
-	/**
-	 * Remove a module ownership entry for a path.
-	 * @param {object} ownership - Ownership manager.
-	 * @param {string} apiPath - API path to modify.
-	 * @param {?string} moduleID - Specific moduleID to remove (or current owner if null).
-	 * @returns {{ action: "delete"|"none"|"restore", removedModuleId: string|null, restoreModuleId: string|null }}
-	 * @private
-	 *
-	 * @description
-	 * Updates ownership maps for a single path without removing other paths owned by the module.
-	 *
-	 * @example
-	 * const result = this.removeOwnershipEntry(ownership, "plugins.tools", null);
-	 */
-	removeOwnershipEntry(ownership, apiPath, moduleID) {
-		if (!ownership || typeof ownership.removePath !== "function") {
-			return { action: "none", removedModuleId: null, restoreModuleId: null };
-		}
-
-		return ownership.removePath(apiPath, moduleID ?? null);
-	}
-
-	/**
 	 * Restore a path from api.slothlet.api.add history or core load.
 	 * @param {string} apiPath - API path to restore.
 	 * @param {?string} moduleID - ModuleId to restore.
@@ -1046,58 +934,6 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Recursively apply metadata to all functions in an API object.
-	 * @param {unknown} target - API object or function to tag with metadata.
-	 * @param {object} metadata - Metadata key/value pairs to apply.
-	 * @param {WeakSet} [visited] - WeakSet to track visited objects (prevents circular refs)
-	 * @param {string[]} [pathStack] - Path stack to track current depth (e.g., ["api", "math", "add"])
-	 * @returns {void}
-	 * @private
-	 *
-	 * @description
-	 * Traverses the API structure and applies metadata to every function encountered.
-	 * Skips reserved root-level keys (from Slothlet.RESERVED_ROOT_KEYS) at depth 0 only.
-	 *
-	 * @example
-	 * this.applyMetadataRecursively(api.nested, { level: "nested", depth: 1 });
-	 */
-	applyMetadataRecursively(target, metadata, visited = new WeakSet(), pathStack = []) {
-		if (!target || !this.slothlet.handlers.metadata) {
-			return;
-		}
-
-		// Prevent infinite recursion on circular references
-		if (visited.has(target)) {
-			return;
-		}
-		visited.add(target);
-
-		// Apply metadata to functions (including wrapper proxies)
-		if (typeof target === "function") {
-			for (const [key, value] of Object.entries(metadata)) {
-				this.slothlet.handlers.metadata.setUserMetadata(target, key, value);
-			}
-		}
-
-		// Recursively apply to children (for objects and function properties)
-		if (typeof target === "object" || typeof target === "function") {
-			for (const key of Object.keys(target)) {
-				// Skip reserved root-level keys ONLY at depth 0
-				const isRootLevel = pathStack.length === 0;
-				const isReservedKey = this.slothlet.constructor.RESERVED_ROOT_KEYS.includes(key);
-				if (isRootLevel && isReservedKey) {
-					continue;
-				}
-
-				const child = target[key];
-				if (child && (typeof child === "object" || typeof child === "function")) {
-					this.applyMetadataRecursively(child, metadata, visited, [...pathStack, key]);
-				}
-			}
-		}
-	}
-
-	/**
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
@@ -1165,18 +1001,20 @@ export class ApiManager extends ComponentBase {
 			collisionMode: collisionMode
 		});
 
-		// Store API cache for hot reload
-		this.apiCaches.set(moduleID, {
-			endpoint: normalizedPath,
-			moduleID: moduleID,
-			api: newApi,
-			folderPath: resolvedFolderPath,
-			mode: this.config.mode,
-			sanitizeOptions: this.config.sanitize || {},
-			collisionMode: collisionMode,
-			config: { ...this.config },
-			timestamp: Date.now()
-		});
+		// Store API in cache (PRIMARY STORAGE)
+		if (this.slothlet.handlers.apiCacheManager) {
+			this.slothlet.handlers.apiCacheManager.set(moduleID, {
+				endpoint: normalizedPath,
+				moduleID: moduleID,
+				api: newApi,
+				folderPath: resolvedFolderPath,
+				mode: this.config.mode,
+				sanitizeOptions: this.config.sanitize || {},
+				collisionMode: collisionMode,
+				config: { ...this.config },
+				timestamp: Date.now()
+			});
+		}
 
 		this.slothlet.debug("api", {
 			message: "addApiComponent buildAPI return structure",
@@ -1371,8 +1209,9 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
+		// Register ownership for added API
 		if (this.slothlet.handlers.ownership && moduleID) {
-			this.registerOwnership(this.slothlet.handlers.ownership, moduleID, normalizedPath, apiToMerge);
+			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, normalizedPath);
 		}
 
 		if (this.slothlet.handlers.ownership) {
@@ -1455,7 +1294,7 @@ export class ApiManager extends ComponentBase {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIDKey = String(moduleID);
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
-			const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, moduleIDKey);
+			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || { action: "none", removedModuleId: null, restoreModuleId: null };
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
 				this.deletePath(this.slothlet.api, pathParts);
@@ -1639,7 +1478,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		const ownershipResult = this.removeOwnershipEntry(this.slothlet.handlers.ownership, normalizedPath, null);
+		const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, null) || { action: "none", removedModuleId: null, restoreModuleId: null };
 
 		// Check if path actually exists before attempting deletion
 		const pathExists = this.getValueAtPath(this.slothlet.api, parts) !== undefined;

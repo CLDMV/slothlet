@@ -646,4 +646,58 @@ export class Metadata extends ComponentBase {
 
 		return func.__metadata || null;
 	}
-}
+
+	/**
+	 * Recursively apply metadata to API subtree
+	 * @param {object} api - API object or subtree
+	 * @param {object} metadata - Metadata object to apply
+	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Traverses API tree and applies metadata to all functions.
+	 * Used during load and api.add to tag functions with system metadata.
+	 *
+	 * @example
+	 * metadata.applyToSubtree(api, { moduleID: "base_abc123", apiPath: "math" });
+	 */
+	applyToSubtree(api, metadata, visited = new WeakSet()) {
+		if (!api || typeof api !== "object") return;
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
+
+		// Apply to current level if it's a function
+		if (typeof api === "function") {
+			this.tagSystemMetadata(api, metadata, { _fromSubtreeApply: true });
+		}
+
+		// Recurse through all properties
+		for (const [key, value] of Object.entries(api)) {
+			// Skip internal properties
+			const skipProps = ["__wrapper", "__metadata", "__type", "__materialize", "_impl"];
+			if (skipProps.includes(key)) {
+				continue;
+			}
+
+			if (typeof value === "function") {
+				// Apply metadata to function
+				const pathMetadata = { ...metadata };
+				if (metadata.apiPath) {
+					pathMetadata.apiPath = metadata.apiPath ? `${metadata.apiPath}.${key}` : key;
+				}
+				this.tagSystemMetadata(value, pathMetadata, { _fromSubtreeApply: true });
+			} else if (value && typeof value === "object") {
+				// Recurse for objects
+				const pathMetadata = { ...metadata };
+				if (metadata.apiPath !== undefined) {
+					pathMetadata.apiPath = metadata.apiPath ? `${metadata.apiPath}.${key}` : key;
+				}
+				this.applyToSubtree(value, pathMetadata, visited);
+			}
+		}
+	}}

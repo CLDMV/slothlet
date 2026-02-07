@@ -315,6 +315,70 @@ export class OwnershipManager extends ComponentBase {
 	}
 
 	/**
+	 * Recursively register API subtree with ownership
+	 * @param {object} api - API object or subtree
+	 * @param {string} moduleID - Module identifier (owner)
+	 * @param {string} path - Current API path
+	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
+	 * @returns {void}
+	 * @public
+	 *
+	 * @description
+	 * Registers entire API subtree structure with ownership manager.
+	 * Used during load, reload, and api.add to establish ownership relationships.
+	 *
+	 * @example
+	 * ownership.registerSubtree(api, "base_abc123", "");
+	 */
+	registerSubtree(api, moduleID, path, visited = new WeakSet()) {
+		if (!api || typeof api !== "object") return;
+
+		// Prevent infinite recursion on circular references
+		if (visited.has(api)) {
+			return;
+		}
+		visited.add(api);
+
+		// Register this level if path exists
+		if (path) {
+			this.register({
+				moduleID,
+				apiPath: path,
+				value: api,
+				source: "core",
+				collisionMode: "merge",
+				filePath: null
+			});
+		}
+
+		// Recursively register children
+		for (const [key, value] of Object.entries(api)) {
+			// Skip internal properties
+			const skipProps = ["__wrapper", "__metadata", "__type", "__materialize", "_impl"];
+			if (skipProps.includes(key)) {
+				continue;
+			}
+
+			const childPath = path ? `${path}.${key}` : key;
+			if (typeof value === "function" || (value && typeof value === "object")) {
+				this.register({
+					moduleID,
+					apiPath: childPath,
+					value,
+					source: "core",
+					collisionMode: "merge",
+					filePath: null
+				});
+
+				// Recurse for objects (not functions with properties)
+				if (typeof value === "object" && !Array.isArray(value)) {
+					this.registerSubtree(value, moduleID, childPath, visited);
+				}
+			}
+		}
+	}
+
+	/**
 	 * Clear all ownership data
 	 * @public
 	 */
