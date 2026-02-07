@@ -992,21 +992,31 @@ export class ApiManager extends ComponentBase {
 			});
 
 			const { parts } = this.normalizeApiPath(apiPath);
-			const baseValue = this.getValueAtPath(baseApi, parts);
+			let baseValue = this.getValueAtPath(baseApi, parts);
 			if (baseValue === undefined) {
 				this.deletePath(this.slothlet.api, parts);
 				this.deletePath(this.slothlet.boundApi, parts);
 				return;
 			}
+
+			// Extract raw implementation from temporary wrapper (if wrapped)
+			// The temporary buildAPI creates wrappers with ownership:null which can't be used
+			// We need the raw impl so our instance can wrap it with proper ownership
+			if (baseValue && baseValue.__impl !== undefined) {
+				baseValue = baseValue.__impl;
+			}
+
 			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
 				mutateExisting: true,
 				allowOverwrite: true,
-				collisionMode: "replace" // CRITICAL: Must use replace mode for restoration
+				collisionMode: "replace", // CRITICAL: Must use replace mode for restoration
+				moduleID: normalizedModuleId
 			});
 			await this.setValueAtPath(this.slothlet.boundApi, parts, baseValue, {
 				mutateExisting: true,
 				allowOverwrite: true,
-				collisionMode: "replace" // CRITICAL: Must use replace mode for restoration
+				collisionMode: "replace", // CRITICAL: Must use replace mode for restoration
+				moduleID: normalizedModuleId
 			});
 		}
 	}
@@ -1716,6 +1726,7 @@ export class ApiManager extends ComponentBase {
 				folderPath: entry.folderPath,
 				options: {
 					...entry.options,
+					moduleID: entry.moduleID, // Ensure moduleID is passed
 					mutateExisting: true,
 					forceOverwrite: true,
 					recordHistory: false
