@@ -282,6 +282,21 @@ class Slothlet {
 			moduleID: baseModuleId
 		});
 
+		// Store base API cache for hot reload
+		if (this.handlers.apiManager) {
+			this.handlers.apiManager.apiCaches.set(baseModuleId, {
+				endpoint: ".",
+				moduleID: baseModuleId,
+				api: this.api,
+				folderPath: this.config.dir,
+				mode: this.config.mode,
+				sanitizeOptions: this.config.sanitize || {},
+				collisionMode: this.config.collision?.api || "merge",
+				config: { ...this.config },
+				timestamp: Date.now()
+			});
+		}
+
 		// Build final API with builtins attached
 		const apiWithBuiltins = await this.buildFinalAPI(this.api);
 
