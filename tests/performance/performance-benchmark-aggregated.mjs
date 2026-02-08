@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:41 -08:00 (1770266381)
+ *	@Last modified time: 2026-02-07 15:32:46 -08:00 (1770507166)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -64,7 +64,7 @@ async function callMathAdd(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const mathMaterialize = api?.math?.__materialize;
+	const mathMaterialize = api?.math?._materialize;
 	if (typeof mathMaterialize === "function") {
 		await mathMaterialize();
 	}
@@ -78,7 +78,7 @@ async function callMathAdd(api, a, b) {
 	}
 	let rootFn = api?.rootMath?.add;
 	if (typeof rootFn !== "function") {
-		const rootMaterialize = api?.rootMath?.__materialize;
+		const rootMaterialize = api?.rootMath?._materialize;
 		if (typeof rootMaterialize === "function") {
 			await rootMaterialize();
 		}
@@ -114,11 +114,11 @@ async function callNestedDateToday(api) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const nestedMaterialize = api?.nested?.__materialize;
+	const nestedMaterialize = api?.nested?._materialize;
 	if (typeof nestedMaterialize === "function") {
 		await nestedMaterialize();
 	}
-	const dateMaterialize = api?.nested?.date?.__materialize;
+	const dateMaterialize = api?.nested?.date?._materialize;
 	if (typeof dateMaterialize === "function") {
 		await dateMaterialize();
 	}
@@ -150,7 +150,7 @@ async function callStringUpper(api, value) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const stringMaterialize = api?.string?.__materialize;
+	const stringMaterialize = api?.string?._materialize;
 	if (typeof stringMaterialize === "function") {
 		await stringMaterialize();
 	}
@@ -183,7 +183,7 @@ async function callFuncmod(api, a, b) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
-	const funcmodMaterialize = api?.funcmod?.__materialize;
+	const funcmodMaterialize = api?.funcmod?._materialize;
 	if (typeof funcmodMaterialize === "function") {
 		await funcmodMaterialize();
 	}

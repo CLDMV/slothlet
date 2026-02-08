@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:45 -08:00 (1770266385)
+ *	@Last modified time: 2026-02-07 15:33:01 -08:00 (1770507181)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -124,14 +124,16 @@ export async function materialize(api, path, ...args) {
 		target = target[parts[i]];
 	}
 	const value = target[parts[parts.length - 1]];
-	
-	console.log(`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`);
 
-	// Trigger materialization if __materialize exists (for lazy mode)
-	if (typeof value?.__materialize === "function") {
-		console.log(`[MATERIALIZE] Calling value.__materialize()`);
-		await value.__materialize();
-		console.log(`[MATERIALIZE] __materialize() completed`);
+	console.log(
+		`[MATERIALIZE] path="${path}" typeof value="${typeof value}" value.name="${value?.name}" value.constructor.name="${value?.constructor?.name}"`
+	);
+
+	// Trigger materialization if _materialize exists (for lazy mode)
+	if (typeof value?._materialize === "function") {
+		console.log(`[MATERIALIZE] Calling value._materialize()`);
+		await value._materialize();
+		console.log(`[MATERIALIZE] _materialize() completed`);
 	}
 
 	// Check actual type using __type property (for lazy mode compatibility)

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 22:45:32 -08:00 (1770446732)
+ *	@Last modified time: 2026-02-07 17:19:59 -08:00 (1770513599)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -310,7 +310,7 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: sourceFolder
 				});
 				// Set impl to empty object so it acts as a namespace container
-				containerWrapper.__setImpl({}, moduleID);
+				containerWrapper.___setImpl({}, moduleID);
 				current[part] = containerWrapper.createProxy();
 				current = current[part];
 				continue;
@@ -348,7 +348,7 @@ export class ApiManager extends ComponentBase {
 		return !!(
 			value &&
 			(typeof value === "object" || typeof value === "function") &&
-			(value.__wrapper || value.__setImpl || value.__getState)
+			(value.__wrapper || value.___setImpl || value.__getState)
 		);
 	}
 
@@ -405,9 +405,9 @@ export class ApiManager extends ComponentBase {
 		// THE ACTUAL FIX: Transfer _childCache entries directly
 		// nextProxy.__impl is empty because buildAPI already moved everything to _childCache
 		// We need to transfer the child wrappers from nextWrapper to existingWrapper
-		// Transfer children from _proxyTarget properties
-		const existingChildKeys = Object.keys(existingWrapper._proxyTarget).filter((k) => k !== "__wrapper");
-		const nextChildKeys = Object.keys(nextWrapper._proxyTarget).filter((k) => k !== "__wrapper");
+		// Transfer children from wrapper properties
+		const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		const nextChildKeys = Object.keys(nextWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
@@ -428,11 +428,11 @@ export class ApiManager extends ComponentBase {
 		// Merge child wrappers from next to existing based on collision mode
 		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
 		if (collisionMode === "replace") {
-			// CRITICAL: Use __setImpl to trigger lifecycle events for ownership tracking
+			// CRITICAL: Use ___setImpl to trigger lifecycle events for ownership tracking
 			// This ensures impl:changed fires with the correct moduleID
-			if (existingWrapper.__setImpl && nextWrapper._impl !== undefined) {
+			if (existingWrapper.___setImpl && nextWrapper._impl !== undefined) {
 				// Pass moduleID for correct ownership tracking in lifecycle events
-				existingWrapper.__setImpl(nextWrapper._impl, moduleID);
+				existingWrapper.___setImpl(nextWrapper._impl, moduleID);
 			} else if (nextWrapper._impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
@@ -450,15 +450,15 @@ export class ApiManager extends ComponentBase {
 
 			// Clear existing children by deleting properties
 			for (const key of existingChildKeys) {
-				delete existingWrapper._proxyTarget[key];
+				delete existingWrapper[key];
 			}
 			existingWrapper._adoptImplChildren();
 
 			// Also copy any child wrappers that nextWrapper already has
 			// (this handles cases where nextWrapper was built with pre-existing children)
 			for (const key of nextChildKeys) {
-				const childValue = nextWrapper._proxyTarget[key];
-				Object.defineProperty(existingWrapper._proxyTarget, key, {
+				const childValue = nextWrapper[key];
+				Object.defineProperty(existingWrapper, key, {
 					value: childValue,
 					writable: false,
 					enumerable: true,
@@ -467,10 +467,13 @@ export class ApiManager extends ComponentBase {
 			}
 		} else if (collisionMode === "merge") {
 			// Keep existing, only add new keys
+			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
+			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
-				if (!(key in existingWrapper._proxyTarget)) {
-					const childValue = nextWrapper._proxyTarget[key];
-					Object.defineProperty(existingWrapper._proxyTarget, key, {
+				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
+				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+					const childValue = nextWrapper[key];
+					Object.defineProperty(existingWrapper, key, {
 						value: childValue,
 						writable: false,
 						enumerable: true,
@@ -481,12 +484,14 @@ export class ApiManager extends ComponentBase {
 		} else if (collisionMode === "merge-replace") {
 			// Add new keys and replace existing
 			for (const key of nextChildKeys) {
-				const childValue = nextWrapper._proxyTarget[key];
+				const childValue = nextWrapper[key];
+				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
 				// Delete existing first if present
-				if (key in existingWrapper._proxyTarget) {
-					delete existingWrapper._proxyTarget[key];
+				// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
+				if (!isInternal && Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
+					delete existingWrapper[key];
 				}
-				Object.defineProperty(existingWrapper._proxyTarget, key, {
+				Object.defineProperty(existingWrapper, key, {
 					value: childValue,
 					writable: false,
 					enumerable: true,
@@ -496,11 +501,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Mark as materialized only if _impl is actually materialized (not a function)
-		if (existingWrapper._state) {
+		if (existingWrapper.__state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
 			const isActuallyMaterialized = existingWrapper._impl && typeof existingWrapper._impl !== "function";
-			existingWrapper._state.materialized = isActuallyMaterialized;
-			existingWrapper._state.inFlight = false;
+			existingWrapper.__state.materialized = isActuallyMaterialized;
+			existingWrapper.__state.inFlight = false;
 		}
 
 		return true;
@@ -589,14 +594,14 @@ export class ApiManager extends ComponentBase {
 				return;
 			}
 
-			// Fallback: if nextValue has no properties, try __setImpl
-			if (existingValue.__setImpl) {
+			// Fallback: if nextValue has no properties, try ___setImpl
+			if (existingValue.___setImpl) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
-						message: "mutateApiValue - using __setImpl fallback"
+						message: "mutateApiValue - using ___setImpl fallback"
 					});
 				}
-				existingValue.__setImpl(nextValue?.__impl ?? nextValue);
+				existingValue.___setImpl(nextValue?.__impl ?? nextValue);
 				return;
 			}
 		}
@@ -802,13 +807,14 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
-		// CRITICAL: Delete from wrapper's childCache AND _impl if current is a proxy
-		// Properties are stored in childCache and _impl, not on the proxy itself
+		// CRITICAL: Delete from wrapper's child properties AND _impl if current is a proxy
+		// Properties are stored in wrapper and _impl, not on the proxy itself
 		if (current.__wrapper) {
 			const wrapper = current.__wrapper;
-			// Delete from _proxyTarget (cached proxy instances)
-			if (finalKey in wrapper._proxyTarget) {
-				delete wrapper._proxyTarget[finalKey];
+			// Delete from wrapper (child properties)
+			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
+			if (!isInternal && finalKey in wrapper) {
+				delete wrapper[finalKey];
 			}
 			// Delete from _impl (the actual implementation object)
 			if (wrapper._impl && typeof wrapper._impl === "object") {
@@ -820,7 +826,7 @@ export class ApiManager extends ComponentBase {
 		delete current[finalKey];
 
 		// AFTER deletion, clean up wrapper state for removed proxy
-		if (removedImpl && typeof removedImpl === "object") {
+		if (removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
 			if (removedImpl.__wrapper) {
 				const wrapper = removedImpl.__wrapper;
@@ -828,15 +834,15 @@ export class ApiManager extends ComponentBase {
 				if (wrapper._impl !== undefined) {
 					wrapper._impl = null;
 				}
-				// Clear children from _proxyTarget to release references
-				const childKeys = Object.keys(wrapper._proxyTarget).filter((k) => k !== "__wrapper");
+				// Clear children from wrapper to release references
+				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 				for (const key of childKeys) {
-					delete wrapper._proxyTarget[key];
+					delete wrapper[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
-				if (wrapper._state) {
-					wrapper._state.materialized = false;
-					wrapper._state.inFlight = false;
+				if (wrapper.__state) {
+					wrapper.__state.materialized = false;
+					wrapper.__state.inFlight = false;
 				}
 			}
 		}
@@ -850,7 +856,7 @@ export class ApiManager extends ComponentBase {
 		for (let i = stack.length - 1; i >= 0; i -= 1) {
 			const { parent, key } = stack[i];
 			const value = parent[key];
-			if (value && typeof value === "object" && Object.keys(value).length === 0) {
+			if (value && (typeof value === "object" || typeof value === "function") && Object.keys(value).length === 0) {
 				delete parent[key];
 			}
 		}
@@ -1025,8 +1031,8 @@ export class ApiManager extends ComponentBase {
 					key: k,
 					apiPath: newApi[k].__wrapper.apiPath,
 					implKeys: Object.keys(newApi[k].__wrapper._impl || {}),
-					childCacheSize: Object.keys(newApi[k].__wrapper._proxyTarget).filter((k) => k !== "__wrapper").length,
-					childCacheKeys: Object.keys(newApi[k].__wrapper._proxyTarget).filter((k) => k !== "__wrapper")
+					childCacheSize: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
+					childCacheKeys: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
 				})),
 			nonWrappers: Object.keys(newApi)
 				.filter((k) => !newApi[k]?.__wrapper)
@@ -1087,7 +1093,7 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: resolvedFolderPath
 				});
 				// Set the apiToMerge object as the impl
-				containerWrapper.__setImpl(apiToMerge, moduleID);
+				containerWrapper.___setImpl(apiToMerge, moduleID);
 				// Replace apiToMerge with the wrapped proxy
 				apiToMerge = containerWrapper.createProxy();
 			}
@@ -1137,13 +1143,10 @@ export class ApiManager extends ComponentBase {
 						pendingMaterializations.push(wrapper._materializationPromise);
 					}
 
-					// Check child cache (_proxyTarget) for nested wrappers that might be materializing
-					if (wrapper._proxyTarget && typeof wrapper._proxyTarget === "object") {
-						for (const key of Object.keys(wrapper._proxyTarget)) {
-							if (key !== "__wrapper") {
-								collectPendingMaterializations(wrapper._proxyTarget[key], depth + 1);
-							}
-						}
+					// Check wrapper child properties for nested wrappers that might be materializing
+					const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+					for (const key of childKeys) {
+						collectPendingMaterializations(wrapper[key], depth + 1);
 					}
 				}
 
@@ -1432,14 +1435,14 @@ export class ApiManager extends ComponentBase {
 				if (previousImpl !== undefined) {
 					// Get the existing wrapper and update its _impl
 					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
-					if (existingWrapper?.__setImpl) {
+					if (existingWrapper?.___setImpl) {
 						// Pass the restored moduleID for correct ownership tracking
-						existingWrapper.__setImpl(previousImpl, rollback.restoredTo);
+						existingWrapper.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
 					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
-					if (existingBoundWrapper?.__setImpl) {
-						existingBoundWrapper.__setImpl(previousImpl, rollback.restoredTo);
+					if (existingBoundWrapper?.___setImpl) {
+						existingBoundWrapper.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
 			}
@@ -1817,19 +1820,19 @@ export class ApiManager extends ComponentBase {
 				moduleID,
 				partsPath: parts.join("."),
 				existingFound: !!existing,
-				hasSetImpl: existing ? typeof existing.__setImpl === "function" : false,
+				hasSetImpl: existing ? typeof existing.___setImpl === "function" : false,
 				freshApiKeys: Object.keys(freshApi || {})
 			});
 
-			if (existing && typeof existing.__setImpl === "function") {
+			if (existing && typeof existing.___setImpl === "function") {
 				// CRITICAL: Force "replace" mode for reload to clear old keys
 				// During reload, we want to completely replace the implementation, not merge
 				// Store the original collision mode and restore it after
 				const wrapper = existing.__wrapper;
-				const originalCollisionMode = wrapper ? wrapper._state.collisionMode : null;
+				const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
 
 				if (wrapper) {
-					wrapper._state.collisionMode = "replace";
+					wrapper.__state.collisionMode = "replace";
 					this.slothlet.debug("reload", {
 						message: "RESTORE: forcing replace mode",
 						endpoint,
@@ -1840,11 +1843,11 @@ export class ApiManager extends ComponentBase {
 
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
-				existing.__setImpl(freshApi, moduleID);
+				existing.___setImpl(freshApi, moduleID);
 
 				// Restore original collision mode
 				if (wrapper && originalCollisionMode !== null) {
-					wrapper._state.collisionMode = originalCollisionMode;
+					wrapper.__state.collisionMode = originalCollisionMode;
 				}
 
 				this.slothlet.debug("reload", {
@@ -1868,7 +1871,7 @@ export class ApiManager extends ComponentBase {
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
 				});
-				containerWrapper.__setImpl(freshApi, moduleID);
+				containerWrapper.___setImpl(freshApi, moduleID);
 				const apiToSet = containerWrapper.createProxy();
 
 				// Set at endpoint path

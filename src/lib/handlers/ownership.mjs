@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-07 15:31:00 -08:00 (1770507060)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -354,7 +354,7 @@ export class OwnershipManager extends ComponentBase {
 		// Recursively register children
 		for (const [key, value] of Object.entries(api)) {
 			// Skip internal properties
-			const skipProps = ["__wrapper", "__metadata", "__type", "__materialize", "_impl"];
+			const skipProps = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
 			if (skipProps.includes(key)) {
 				continue;
 			}

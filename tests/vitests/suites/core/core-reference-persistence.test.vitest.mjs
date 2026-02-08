@@ -1,6 +1,6 @@
 /**
  * @fileoverview Tests for reference persistence and live binding throughout API lifecycle
- * Ensures captured references stay valid through __setImpl, cache updates, and reloads
+ * Ensures captured references stay valid through ___setImpl, cache updates, and reloads
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -115,30 +115,30 @@ for (const { config, name } of configs) {
 			});
 		});
 
-		describe("__setImpl Reference Persistence", () => {
-			it("should maintain top-level reference after __setImpl", async () => {
+		describe("___setImpl Reference Persistence", () => {
+			it("should maintain top-level reference after ___setImpl", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
-				// Capture reference before __setImpl
+				// Capture reference before ___setImpl
 				const capturedTestComp = api.testComp;
 				const topLevelInitial = config.mode === "lazy" ? await capturedTestComp.math.add(1, 1) : capturedTestComp.math.add(1, 1);
 				expect(topLevelInitial).toBe(1002);
 
-				// Call __setImpl with new implementation
+				// Call ___setImpl with new implementation
 				const wrapper = api.testComp.__wrapper;
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
 					}
 				};
-				wrapper.__setImpl(newImpl, "test-module");
+				wrapper.___setImpl(newImpl, "test-module");
 
 				// Captured reference should use new implementation
 				const topLevelUpdated = config.mode === "lazy" ? await capturedTestComp.math.add(1, 1) : capturedTestComp.math.add(1, 1);
 				expect(topLevelUpdated).toBe(5002);
 			});
 
-			it("should maintain nested reference after __setImpl", async () => {
+			it("should maintain nested reference after ___setImpl", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				// Pre-materialize by calling through api first
@@ -150,21 +150,21 @@ for (const { config, name } of configs) {
 				const nestedInitial = config.mode === "lazy" ? await capturedMath.add(1, 1) : capturedMath.add(1, 1);
 				expect(nestedInitial).toBe(1002);
 
-				// Call __setImpl with new implementation
+				// Call ___setImpl with new implementation
 				const wrapper = api.testComp.__wrapper;
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
 					}
 				};
-				wrapper.__setImpl(newImpl, "test-module");
+				wrapper.___setImpl(newImpl, "test-module");
 
 				// Captured nested reference should use new implementation (live binding)
 				const nestedUpdated = config.mode === "lazy" ? await capturedMath.add(1, 1) : capturedMath.add(1, 1);
 				expect(nestedUpdated).toBe(5002);
 			});
 
-			it("should maintain function reference after __setImpl", async () => {
+			it("should maintain function reference after ___setImpl", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				// Pre-materialize by calling through api first
@@ -176,21 +176,21 @@ for (const { config, name } of configs) {
 				const funcInitial = config.mode === "lazy" ? await capturedAdd(1, 1) : capturedAdd(1, 1);
 				expect(funcInitial).toBe(1002);
 
-				// Call __setImpl with new implementation
+				// Call ___setImpl with new implementation
 				const wrapper = api.testComp.__wrapper;
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
 					}
 				};
-				wrapper.__setImpl(newImpl, "test-module");
+				wrapper.___setImpl(newImpl, "test-module");
 
 				// Captured function reference should use new implementation (live binding)
 				const funcUpdated = config.mode === "lazy" ? await capturedAdd(1, 1) : capturedAdd(1, 1);
 				expect(funcUpdated).toBe(5002);
 			});
 
-			it("should maintain references at all nesting levels after __setImpl", async () => {
+			it("should maintain references at all nesting levels after ___setImpl", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				// Capture at various nesting levels (use actual 4-level deep path)
@@ -199,11 +199,11 @@ for (const { config, name } of configs) {
 				const level3 = api.testComp.advanced.nest2;
 				const level4 = api.testComp.advanced.nest2.alpha;
 
-				// Test before __setImpl
+				// Test before ___setImpl
 				const resultBefore = config.mode === "lazy" ? await level4.hello() : level4.hello();
 				expect(resultBefore).toBe("alpha hello");
 
-				// Call __setImpl with new implementation
+				// Call ___setImpl with new implementation
 				const wrapper = api.testComp.__wrapper;
 				const newImpl = {
 					advanced: {
@@ -214,7 +214,7 @@ for (const { config, name } of configs) {
 						}
 					}
 				};
-				wrapper.__setImpl(newImpl, "test-module");
+				wrapper.___setImpl(newImpl, "test-module");
 
 				// All levels should use new implementation
 				const result1 = config.mode === "lazy" ? await level1.advanced.nest2.alpha.hello() : level1.advanced.nest2.alpha.hello();
@@ -229,8 +229,8 @@ for (const { config, name } of configs) {
 			});
 		});
 
-		describe("Multiple __setImpl Calls", () => {
-			it("should maintain references through multiple __setImpl updates", async () => {
+		describe("Multiple ___setImpl Calls", () => {
+			it("should maintain references through multiple ___setImpl updates", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				// Pre-materialize by calling through api first
@@ -246,7 +246,7 @@ for (const { config, name } of configs) {
 				expect(multiInitial).toBe(1002);
 
 				// First update
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 2000
@@ -258,7 +258,7 @@ for (const { config, name } of configs) {
 				expect(multiUpdate1).toBe(2002);
 
 				// Second update
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 3000
@@ -270,7 +270,7 @@ for (const { config, name } of configs) {
 				expect(multiUpdate2).toBe(3002);
 
 				// Third update
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 4000
@@ -282,14 +282,14 @@ for (const { config, name } of configs) {
 				expect(multiUpdate3).toBe(4002);
 			});
 
-			it("should handle __setImpl with changing structure", async () => {
+			it("should handle ___setImpl with changing structure", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				const captured = api.testComp;
 				const wrapper = api.testComp.__wrapper;
 
 				// Start with math only
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 1000
@@ -301,7 +301,7 @@ for (const { config, name } of configs) {
 				expect(structResult1).toBe(1002);
 
 				// Add config property
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 2000
@@ -317,7 +317,7 @@ for (const { config, name } of configs) {
 				expect(captured.config.version).toBe("2.0.0");
 
 				// Remove math, keep config
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						config: {
 							version: "3.0.0"
@@ -342,7 +342,7 @@ for (const { config, name } of configs) {
 				const wrapper = api.testComp.__wrapper;
 
 				// Add new property alongside existing
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 7000,
@@ -373,7 +373,7 @@ for (const { config, name } of configs) {
 				const wrapper = api.testComp.__wrapper;
 
 				// Remove most properties, keep only math
-				wrapper.__setImpl(
+				wrapper.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 8000
@@ -411,7 +411,7 @@ for (const { config, name } of configs) {
 
 				// Update comp1 only
 				const wrapper1 = api.comp1.__wrapper;
-				wrapper1.__setImpl(
+				wrapper1.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 5000

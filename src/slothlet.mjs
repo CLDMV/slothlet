@@ -1,6 +1,19 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/slothlet.mjs
+ *	@Date: 2026-02-06 10:12:46 -08:00 (1770401566)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-07 15:30:55 -08:00 (1770507055)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/slothlet.mjs
  *	@Date: 2026-02-03 19:50:15 -08:00 (1770177015)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -36,7 +49,7 @@ class Slothlet {
 	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
 
 	// Properties to skip during recursive operations (at any depth)
-	static SKIP_PROPS = ["__wrapper", "__metadata", "__type", "__materialize", "_impl"];
+	static SKIP_PROPS = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
 
 	constructor() {
 		// Expose error classes to components (no imports needed)
@@ -172,7 +185,7 @@ class Slothlet {
 			// This prevents duplicate registrations during replacement operations
 			this.handlers.lifecycle.subscribe("impl:created", (data) => {
 				// Get collision mode from config or use default
-				const collisionMode = this.config.collision?.api || "merge";
+				const collisionMode = this.config?.collision?.api || "merge";
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 				this.handlers.ownership.register({
@@ -189,7 +202,7 @@ class Slothlet {
 			// This handles the case where a module replaces another module's impl
 			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
 				// Get collision mode from config or use default
-				const collisionMode = this.config.collision?.api || "merge";
+				const collisionMode = this.config?.collision?.api || "merge";
 				// Store the actual _impl, not the wrapper, so it doesn't get corrupted by mutations
 				const implValue = data.wrapper?.__impl ?? data.impl;
 
@@ -506,9 +519,9 @@ class Slothlet {
 				target = target[part];
 			}
 
-			// If target is a lazy proxy (has __materialize), materialize it first
-			if (target && typeof target.__materialize === "function") {
-				await target.__materialize();
+			// If target is a lazy proxy (has _materialize), materialize it first
+			if (target && typeof target._materialize === "function") {
+				await target._materialize();
 			}
 
 			// Get metadata for the resolved function

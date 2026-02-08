@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:41 -08:00 (1770266381)
+ *	@Last modified time: 2026-02-07 15:32:28 -08:00 (1770507148)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -431,10 +431,10 @@ async function materializeLazyWrappers(root) {
 		}
 		visited.add(current);
 
-		if (typeof current.__getState === "function" && typeof current.__materialize === "function") {
+		if (typeof current.__getState === "function" && typeof current._materialize === "function") {
 			const state = current.__getState();
 			if (state && !state.materialized && !state.inFlight) {
-				await current.__materialize();
+				await current._materialize();
 			}
 		}
 
