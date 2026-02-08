@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-07 15:33:06 -08:00 (1770507186)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -144,8 +144,8 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			expect(api.math).toBeDefined();
 
 			// Trigger materialization for lazy mode
-			if (api.math.__materialize) {
-				await api.math.__materialize();
+			if (api.math._materialize) {
+				await api.math._materialize();
 			}
 
 			// Either file OR folder won, not both (last one replaces first)

@@ -131,19 +131,12 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 	});
 
 	it("should have identical array access results", async () => {
-		// Trigger access to start materialization
 		const lazyLg = lazyApi.devices.lg;
 		const eagerLg = eagerApi.devices.lg;
 
-		// V3 note: lazy mode's materialization is async - _impl is set via callback
-		// during async execution. Small delay allows lazy_setImpl to execute and populate _childCache.
-		// This matches v2's behavior where state.materialized was set synchronously during async function execution.
-		await new Promise((resolve) => setTimeout(resolve, 10));
-		// const lazyLg = lazyApi.devices.lg;
-		// const eagerLg = eagerApi.devices.lg;
-
-		// NOW access the properties after materialization completes
-		const lazyController0 = lazyLg[0];
+		// await resolves the waiting proxy through materialization and delegates
+		// [0] to the consumer's custom proxy get trap
+		const lazyController0 = await lazyLg[0];
 		const eagerController0 = eagerLg[0];
 
 		expect(lazyController0).toBeDefined();
@@ -172,16 +165,12 @@ describe("Proxy Behavior Comparison: Lazy vs Eager", () => {
 	});
 
 	it("should have overall identical proxy behavior", async () => {
-		// Trigger access to start materialization
 		const lazyLg = lazyApi.devices.lg;
 		const eagerLg = eagerApi.devices.lg;
 
-		// V3 note: lazy mode's materialization is async - _impl is set via callback
-		// during async execution. Small delay allows lazy_setImpl to execute and populate _childCache.
-		await new Promise((resolve) => setTimeout(resolve, 20));
-
-		// NOW access the properties after materialization completes
-		const lazyController0 = lazyLg[0];
+		// await resolves the waiting proxy through materialization and delegates
+		// [0] to the consumer's custom proxy get trap
+		const lazyController0 = await lazyLg[0];
 		const eagerController0 = eagerLg[0];
 
 		const arrayAccessMatch = lazyController0.tvId === eagerController0.tvId;

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 19:24:51 -08:00 (1770434691)
+ *	@Last modified time: 2026-02-07 15:30:59 -08:00 (1770507059)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -172,7 +172,7 @@ export class Metadata extends ComponentBase {
 			if (value && typeof value === "object" && value.__wrapper) {
 				const wrapper = value.__wrapper;
 				// Only traverse if materialized, otherwise skip to avoid creating waiting proxies
-				if (wrapper._state && !wrapper._state.materialized) {
+				if (wrapper.__state && !wrapper.__state.materialized) {
 					continue;
 				}
 			}
@@ -679,7 +679,7 @@ export class Metadata extends ComponentBase {
 		// Recurse through all properties
 		for (const [key, value] of Object.entries(api)) {
 			// Skip internal properties
-			const skipProps = ["__wrapper", "__metadata", "__type", "__materialize", "_impl"];
+			const skipProps = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
 			if (skipProps.includes(key)) {
 				continue;
 			}

@@ -85,7 +85,8 @@ export class ComponentBase {
 	 * super(slothlet);
 	 */
 	constructor(slothlet) {
-		this.slothlet = slothlet;
+		// Make slothlet non-enumerable so it doesn't interfere with child enumeration
+		Object.defineProperty(this, "slothlet", { value: slothlet, writable: false, enumerable: false, configurable: false });
 	}
 
 	/**

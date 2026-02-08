@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:47:30 -08:00 (1770335250)
+ *	@Last modified time: 2026-02-07 15:21:29 -08:00 (1770506489)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -18,7 +18,7 @@
 // Create a working config object with actual state management
 const config = {
 	// Internal state - starts with defaults
-	_state: {
+	state: {
 		manufacturer: "lg",
 		host: "192.168.1.100",
 		port: 3000,
@@ -31,7 +31,7 @@ const config = {
 	 * @returns {*} The value or entire config object
 	 */
 	get(key) {
-		return key ? this._state[key] : { ...this._state };
+		return key ? this.state[key] : { ...this.state };
 	},
 
 	/**
@@ -43,12 +43,12 @@ const config = {
 	update(keyOrConfig, value) {
 		if (typeof keyOrConfig === "object") {
 			// Update multiple values from object
-			Object.assign(this._state, keyOrConfig);
-			return { success: true, updated: keyOrConfig, instanceId: this._state.instanceId };
+			Object.assign(this.state, keyOrConfig);
+			return { success: true, updated: keyOrConfig, instanceId: this.state.instanceId };
 		} else {
 			// Update single key-value pair
-			this._state[keyOrConfig] = value;
-			return { success: true, key: keyOrConfig, value, instanceId: this._state.instanceId };
+			this.state[keyOrConfig] = value;
+			return { success: true, key: keyOrConfig, value, instanceId: this.state.instanceId };
 		}
 	},
 
@@ -67,7 +67,7 @@ const config = {
 	 * @returns {number} Port number
 	 */
 	getDefaultPort() {
-		return this._state.port || 3000;
+		return this.state.port || 3000;
 	},
 
 	/**
@@ -82,7 +82,7 @@ const config = {
 			isValid: missing.length === 0,
 			missing,
 			config: configToValidate,
-			instanceId: this._state.instanceId
+			instanceId: this.state.instanceId
 		};
 	},
 
@@ -93,7 +93,7 @@ const config = {
 	 * @returns {object} Merged configuration
 	 */
 	merge(userConfig = {}, _ = "") {
-		return { ...this._state, ...userConfig };
+		return { ...this.state, ...userConfig };
 	},
 
 	/**
@@ -103,7 +103,7 @@ const config = {
 	 * @returns {object} Manufacturer config
 	 */
 	createManufacturerConfig(manufacturer, options = {}) {
-		return { manufacturer, ...this._state, ...options };
+		return { manufacturer, ...this.state, ...options };
 	},
 
 	/**
@@ -112,8 +112,8 @@ const config = {
 	 */
 	getInstanceInfo() {
 		return {
-			instanceId: this._state.instanceId,
-			currentState: { ...this._state },
+			instanceId: this.state.instanceId,
+			currentState: { ...this.state },
 			created: new Date().toISOString()
 		};
 	}

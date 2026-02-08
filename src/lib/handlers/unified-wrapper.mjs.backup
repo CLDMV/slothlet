@@ -162,11 +162,11 @@ export class UnifiedWrapper extends ComponentBase {
 		this._waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
 		this._proxy = null;
 		this._proxyTarget = null;
-		this._invalid = false;
+		this.__invalid = false;
 		this._impl = initialImpl;
 		this._userMetadata = userMetadata || {}; // Store user metadata for inheritance
 
-		this._state = {
+		this.__state = {
 			materialized: initialImpl !== null,
 			inFlight: false
 		};
@@ -239,7 +239,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// For callables or leaf nodes - return actual _impl value if materialized
 		// For unmaterialized lazy wrappers, return the proxy to show it's a function
-		if (this.mode === "lazy" && !this._state.materialized && this._proxy) {
+		if (this.mode === "lazy" && !this.__state.materialized && this._proxy) {
 			return this._proxy;
 		}
 		return this._impl;
@@ -272,7 +272,7 @@ export class UnifiedWrapper extends ComponentBase {
 		if (typeof newImpl === "function" || (newImpl && typeof newImpl.default === "function")) {
 			this.isCallable = true;
 		}
-		this._invalid = false;
+		this.__invalid = false;
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
@@ -292,8 +292,8 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		this._adoptImplChildren();
-		this._state.materialized = true;
-		this._state.inFlight = false;
+		this.__state.materialized = true;
+		this.__state.inFlight = false;
 	}
 
 	/**
@@ -302,7 +302,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @public
 	 */
 	__getState() {
-		return this._state;
+		return this.__state;
 	}
 
 	/**
@@ -311,7 +311,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	async _materialize() {
-		if (this._state.inFlight || this._state.materialized) {
+		if (this.__state.inFlight || this.__state.materialized) {
 			return;
 		}
 
@@ -322,7 +322,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		this._state.inFlight = true;
+		this.__state.inFlight = true;
 
 		try {
 			if (this._materializeFunc) {
@@ -336,7 +336,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// This matches v2 behavior where 'materialized' variable is set immediately
 				const lazy_setImpl = (value) => {
 					this._impl = value;
-					this._invalid = false;
+					this.__invalid = false;
 					this._adoptImplChildren();
 				};
 				const result = await this._materializeFunc(lazy_setImpl);
@@ -344,12 +344,12 @@ export class UnifiedWrapper extends ComponentBase {
 				// If materializeFunc didn't call setter, set _impl from return value
 				if (!this._impl) {
 					this._impl = result;
-					this._invalid = false;
+					this.__invalid = false;
 					this._adoptImplChildren();
 				}
 
-				this._state.materialized = true;
-				this._state.inFlight = false;
+				this.__state.materialized = true;
+				this.__state.inFlight = false;
 
 				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
 					this.slothlet.debug("wrapper", {
@@ -368,7 +368,7 @@ export class UnifiedWrapper extends ComponentBase {
 					error: error.message
 				});
 			}
-			this._state.inFlight = false;
+			this.__state.inFlight = false;
 			throw error;
 		}
 	}
@@ -398,7 +398,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * wrapper.__invalidate();
 	 */
 	__invalidate() {
-		this._invalid = true;
+		this.__invalid = true;
 		this._impl = null;
 		this._childCache.clear();
 		if (this._proxyTarget && (typeof this._proxyTarget === "object" || typeof this._proxyTarget === "function")) {
@@ -708,18 +708,18 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// Trigger materialization if needed (fire-and-forget)
 				// This ensures lazy wrappers start loading when accessed
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 					wrapper._materialize();
 				}
 
 				if (prop === util.inspect.custom) {
 					// Custom inspect for console.log
 					// If in flight, return waiting proxy target
-					if (wrapper._state.inFlight) {
+					if (wrapper.__state.inFlight) {
 						return waitingTarget;
 					}
 					// If unmaterialized, return waiting proxy target
-					if (!wrapper._state.materialized) {
+					if (!wrapper.__state.materialized) {
 						return waitingTarget;
 					}
 					// Check if property exists after materialization
@@ -847,7 +847,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// If materialization is in flight but not complete, return waiting proxy
-				if (wrapper._state.inFlight) {
+				if (wrapper.__state.inFlight) {
 					// Materialization started but not complete yet
 					// Return waiting proxy to allow chaining, but __type will return IN_FLIGHT symbol
 					return wrapper._createWaitingProxy([...propChain, prop]);
@@ -860,11 +860,11 @@ export class UnifiedWrapper extends ComponentBase {
 			async apply(___target, ___thisArg, args) {
 				const chainLabel = propChain.map((prop) => String(prop)).join(".");
 
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 					await wrapper._materialize();
 				}
 
-				while (wrapper._state.inFlight) {
+				while (wrapper.__state.inFlight) {
 					await new Promise((resolve) => setImmediate(resolve));
 				}
 
@@ -881,7 +881,7 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 						// PRIORITY 2: Check if root wrapper or last tracked wrapper was invalidated/deleted during async materialization
 						// This happens when api.remove() is called while lazy wrappers are still materializing
-						if (wrapper._invalid || wrapper._impl === null || (lastWrapper && (lastWrapper._invalid || lastWrapper._impl === null))) {
+						if (wrapper.__invalid || wrapper._impl === null || (lastWrapper && (lastWrapper.__invalid || lastWrapper._impl === null))) {
 							return undefined;
 						}
 						// PRIORITY 3: If we're trying to access hasAttribute (or other inspect properties) on undefined,
@@ -979,7 +979,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
 		// This triggers background loading - typeof will still return "function" but first access is faster
-		if (wrapper.materializeOnCreate && wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper._materializeFunc) {
+		if (wrapper.materializeOnCreate && wrapper.mode === "lazy" && !wrapper.__state.materialized && wrapper._materializeFunc) {
 			wrapper._materialize(); // Fire-and-forget background materialization
 		}
 
@@ -990,10 +990,10 @@ export class UnifiedWrapper extends ComponentBase {
 			wrapper.isCallable ||
 			typeof wrapper._impl === "function" ||
 			(wrapper._impl && typeof wrapper._impl.default === "function") ||
-			(wrapper.mode === "lazy" && !wrapper._state.materialized);
+			(wrapper.mode === "lazy" && !wrapper.__state.materialized);
 
 		const nameHint =
-			wrapper.mode === "lazy" && !wrapper._state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
+			wrapper.mode === "lazy" && !wrapper.__state.materialized && wrapper.apiPath ? `${wrapper.apiPath}__lazy` : wrapper.apiPath;
 		const proxyTarget = isCallable ? createNamedProxyTarget(nameHint, "unifiedWrapperProxy") : {};
 		Object.defineProperty(proxyTarget, "__wrapper", {
 			value: wrapper,
@@ -1014,7 +1014,7 @@ export class UnifiedWrapper extends ComponentBase {
 					return obj;
 				}
 				// For lazy unmaterialized wrappers with null _impl, return the proxy target
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
 					return proxyTarget;
 				}
 				// Otherwise return _impl (functions, primitives, etc)
@@ -1043,15 +1043,15 @@ export class UnifiedWrapper extends ComponentBase {
 			if (prop === "__impl") return wrapper._impl;
 			if (prop === "__type") {
 				// Trigger materialization if needed
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 					wrapper._materialize();
 				}
 
 				// Return state symbols for lazy mode if not ready
-				if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && wrapper.__state.inFlight) {
 					return TYPE_STATES.IN_FLIGHT;
 				}
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized) {
 					return TYPE_STATES.UNMATERIALIZED;
 				}
 
@@ -1099,8 +1099,8 @@ export class UnifiedWrapper extends ComponentBase {
 				return {};
 			}
 			if (prop === "_impl") return wrapper._impl;
-			if (prop === "_state") return wrapper._state;
-			if (prop === "_invalid") return wrapper._invalid;
+			if (prop === "_state") return wrapper.__state;
+			if (prop === "_invalid") return wrapper.__invalid;
 			if (prop === "then") return undefined;
 			if (prop === "constructor") return Object.prototype.constructor;
 			if (prop === util.inspect.custom) {
@@ -1115,7 +1115,7 @@ export class UnifiedWrapper extends ComponentBase {
 						return obj;
 					}
 					// For lazy wrappers with null _impl, return the proxy target or proxy itself
-					if (wrapper.mode === "lazy" && !wrapper._state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+					if (wrapper.mode === "lazy" && !wrapper.__state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
 						console.log(
 							`[util.inspect.custom] Lazy unmaterialized: apiPath=${wrapper.apiPath}, _proxyTarget=${wrapper._proxyTarget}, _proxy=${wrapper._proxy}`
 						);
@@ -1183,11 +1183,11 @@ export class UnifiedWrapper extends ComponentBase {
 				return Function.prototype.valueOf.bind(target);
 			}
 
-			if (wrapper._invalid) {
+			if (wrapper.__invalid) {
 				return undefined;
 			}
 
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 				wrapper._materialize();
 			}
 
@@ -1216,7 +1216,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// If cached is a wrapper in lazy mode that needs materialization, trigger it
 				if (cached && cached.__wrapper) {
 					const cachedWrapper = cached.__wrapper;
-					if (cachedWrapper.mode === "lazy" && !cachedWrapper._state.materialized && !cachedWrapper._state.inFlight) {
+					if (cachedWrapper.mode === "lazy" && !cachedWrapper.__state.materialized && !cachedWrapper.__state.inFlight) {
 						cachedWrapper._materialize();
 					}
 				}
@@ -1241,7 +1241,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// If cached is a wrapper in lazy mode that needs materialization, trigger it
 					if (cached && cached.__wrapper) {
 						const cachedWrapper = cached.__wrapper;
-						if (cachedWrapper.mode === "lazy" && !cachedWrapper._state.materialized && !cachedWrapper._state.inFlight) {
+						if (cachedWrapper.mode === "lazy" && !cachedWrapper.__state.materialized && !cachedWrapper.__state.inFlight) {
 							cachedWrapper._materialize();
 						}
 					}
@@ -1253,7 +1253,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// This prevents creating waiting proxies for properties that were deleted
 			if (
 				wrapper.mode === "lazy" &&
-				wrapper._state.materialized &&
+				wrapper.__state.materialized &&
 				!wrapper._childCache.has(prop) &&
 				wrapper._impl &&
 				!(prop in wrapper._impl)
@@ -1261,10 +1261,10 @@ export class UnifiedWrapper extends ComponentBase {
 				return undefined;
 			}
 
-			if (wrapper.mode === "lazy" && (wrapper._state.inFlight || !wrapper._impl)) {
+			if (wrapper.mode === "lazy" && (wrapper.__state.inFlight || !wrapper._impl)) {
 				// Trigger materialization if not started yet
 				// This ensures lazy wrappers start loading when their properties are accessed
-				if (!wrapper._state.materialized && !wrapper._state.inFlight) {
+				if (!wrapper.__state.materialized && !wrapper.__state.inFlight) {
 					wrapper._materialize();
 				}
 
@@ -1371,7 +1371,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Follows V2 pattern: hooks execute synchronously, async handling via Promise.then().
 		 */
 		const applyTrap = (target, thisArg, args) => {
-			if (wrapper._invalid) {
+			if (wrapper.__invalid) {
 				throw new TypeError(`${wrapper.apiPath || "api"} is invalidated`);
 			}
 
@@ -1404,15 +1404,15 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// Materialize if needed (lazy mode)
-				if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 					wrapper._materialize();
 				}
 
 				// Wait for materialization if in flight (returns Promise)
-				if (wrapper.mode === "lazy" && wrapper._state.inFlight) {
+				if (wrapper.mode === "lazy" && wrapper.__state.inFlight) {
 					return new Promise((resolve, reject) => {
 						const checkMaterialized = () => {
-							if (wrapper._state.materialized) {
+							if (wrapper.__state.materialized) {
 								const impl = wrapper._impl;
 								if (typeof impl === "function") {
 									if (wrapper.slothlet.contextManager) {
@@ -1441,7 +1441,7 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 								return;
 							}
-							if (!wrapper._state.inFlight) {
+							if (!wrapper.__state.inFlight) {
 								reject(
 									new wrapper.slothlet.SlothletError("INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED", { apiPath: wrapper.apiPath }, null, {
 										validationError: true
@@ -1615,7 +1615,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 				wrapper._materialize();
 			}
 
@@ -1640,7 +1640,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Provides descriptors for target, impl, and cached wrapper properties.
 		 */
 		const getOwnPropertyDescriptorTrap = (target, prop) => {
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 				wrapper._materialize();
 			}
 
@@ -1686,7 +1686,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Returns property keys from target, impl, and cached wrappers.
 		 */
 		const ownKeysTrap = (target) => {
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 				wrapper._materialize();
 			}
 
@@ -1715,7 +1715,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Allows attaching properties directly to callable proxies.
 		 */
 		const setTrap = (target, prop, value) => {
-			if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 				wrapper._materialize();
 			}
 			const internalKeys = new Set(["__impl", "__setImpl", "__getState", "__materialize", "__invalidate", "_impl", "_state", "_invalid"]);
@@ -1738,7 +1738,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const deletePropertyTrap = (target, prop) => {
 			// Don't materialize when deleting - just delete directly
 			// If lazy wrapper hasn't materialized yet, that's fine - we're deleting it anyway
-			// if (wrapper.mode === "lazy" && !wrapper._state.materialized && !wrapper._state.inFlight) {
+			// if (wrapper.mode === "lazy" && !wrapper.__state.materialized && !wrapper.__state.inFlight) {
 			// 	wrapper._materialize();
 			// }
 
