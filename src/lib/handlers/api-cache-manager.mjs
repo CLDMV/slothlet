@@ -336,14 +336,27 @@ export class ApiCacheManager extends ComponentBase {
 		});
 
 		// Build fresh API with stored parameters
+		// CRITICAL: Always use "eager" mode for rebuilds to ensure all implementations
+		// are fully materialized. The fresh API values will be set on existing wrappers
+		// (which may be lazy), so we need actual impl values, not lazy proxies.
+		// CRITICAL: collisionContext must match the initial load context.
+		// For base modules (endpoint "."), use "initial" — the same context used during load().
+		// For addApi modules, use "addApi". Using "core" would cause config.collision["core"]
+		// to be undefined, falling back to "merge" and producing different collision outcomes.
+		// CRITICAL: Pass a cacheBust timestamp so dynamic import() returns fresh module objects.
+		// Without cache-busting, the Node.js module cache returns the SAME function reference
+		// used by the live API, and applyRootContributor's Object.assign overwrites the live
+		// API's properties with fresh wrappers (destroying custom properties and proxy identity).
+		// The moduleID itself must remain unchanged for ownership/metadata consistency.
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
 			dir: entry.folderPath,
-			mode: entry.mode,
+			mode: "eager",
 			sanitize: entry.sanitizeOptions,
 			moduleID: moduleID,
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
 			collisionMode: entry.collisionMode,
-			collisionContext: entry.endpoint === "." ? "core" : "addApi"
+			collisionContext: entry.endpoint === "." ? "initial" : "addApi",
+			cacheBust: Date.now()
 		});
 
 		this.slothlet.debug("cache", {

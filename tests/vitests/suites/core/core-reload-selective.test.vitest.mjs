@@ -36,11 +36,11 @@ for (const { config, name } of configs) {
 			api = await slothlet({
 				...config,
 				dir: TEST_DIRS.API_TEST,
-				collision: {
-					initial: "replace",
-					api: "replace"
-				},
 				api: {
+					collision: {
+						initial: "replace",
+						api: "replace"
+					},
 					mutations: {
 						add: true,
 						remove: true,
@@ -156,8 +156,11 @@ for (const { config, name } of configs) {
 
 		it("should reload base API module (from initial load)", async () => {
 			// The base API modules (like api.math, api.config) can also be reloaded
-			const initialResult = api.math.add(5, 5);
-			expect(initialResult).toBe(1010); // 5+5+1000
+			// With collision: { initial: "replace", api: "replace" }, the folder math/math.mjs
+			// wins over the root math.mjs in both initial load AND reload.
+			// Reload must produce the same collision outcome as the initial load.
+			const initialResult = await api.math.add(5, 5);
+			expect(initialResult).toBe(10); // folder math/math.mjs: a+b (folder wins in replace mode)
 
 			// Add custom property to base module
 			api.math.customBaseFlag = "base-data";
@@ -168,9 +171,9 @@ for (const { config, name } of configs) {
 			// Custom property should persist
 			expect(api.math.customBaseFlag).toBe("base-data");
 
-			// Implementation should still work
-			const reloadedResult = api.math.add(5, 5);
-			expect(reloadedResult).toBe(1010);
+			// Implementation should be the SAME as initial - same collision rules, same outcome
+			const reloadedResult = await api.math.add(5, 5);
+			expect(reloadedResult).toBe(10); // folder math/math.mjs still wins: a+b
 		});
 
 		it("should handle reload of removed component gracefully", async () => {

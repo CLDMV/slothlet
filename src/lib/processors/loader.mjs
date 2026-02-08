@@ -44,10 +44,11 @@ export class Loader extends ComponentBase {
 	 * @param {string} filePath - Path to module file
 	 * @param {string} [instanceID] - Slothlet instance ID for cache busting
 	 * @param {string} [moduleID] - Module ID for additional cache busting (used in api.slothlet.api.add)
+	 * @param {number|null} [cacheBust=null] - Timestamp for reload cache busting (forces fresh import)
 	 * @returns {Promise<Object>} Loaded module
 	 * @public
 	 */
-	async loadModule(filePath, instanceID, moduleID) {
+	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
 			const fileUrl = pathToFileURL(filePath).href;
 			// Cache bust using instanceID to prevent cross-instance pollution
@@ -55,6 +56,13 @@ export class Loader extends ComponentBase {
 			let cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
 			if (moduleID) {
 				cacheBustedUrl += `&module=${moduleID}`;
+			}
+			// Append reload timestamp to force fresh imports during rebuildCache.
+			// This prevents the Node.js module cache from returning the same function
+			// reference used by the live API (which would cause applyRootContributor's
+			// Object.assign to overwrite the live API's properties).
+			if (cacheBust) {
+				cacheBustedUrl += `&_reload=${cacheBust}`;
 			}
 			const module = await import(cacheBustedUrl);
 			return module;

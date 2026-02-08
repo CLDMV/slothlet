@@ -1,6 +1,6 @@
 # API Cache System for Hot Reload
 
-**Status:** 🚧 In Progress  
+**Status:** 🚧 In Progress (Steps 1-5 Complete, Step 6 Remaining)  
 **Started:** 2026-02-06  
 **Branch:** refactor/unified-wrapper-poc
 
@@ -99,47 +99,50 @@ apiCaches = Map<string, CacheEntry>
 - Cache preserved during apiPath removal (only deleted for complete module removal)
 - Baseline tests: 2356/2356 passing ✅
 
-### ⚠️ Step 5: Implement moduleID reload with cache rebuild
-**Status:** **Blocked at 50%** - Nested path restoration issue  
+### ✅ Step 5: Implement moduleID reload with cache rebuild
+**Status:** ✅ Complete  
 **Goal:** Rebuild cache from disk and restore all paths  
-**Commits:** 958d064 (initial), 6d36059 (improved)
+**Tests:** 56/56 selective reload passing, 2412/2412 baseline passing
 
-**Current Status:**
-- Selective reload tests: **28/56 passing (50%)** - stuck at this level
-- Baseline tests: **2356/2356 passing (100%)** ✅
-- Implemented `_reloadByModuleID()` - rebuilds cache, calls `_restoreApiTree()`
-- Implemented `_reloadByApiPath()` - finds child modules, reloads each
-- Simplified `_restoreApiTree()` - uses `__setImpl()` for nested paths
+**Implementation Summary:**
 
-**Known Issues & Investigation Needed:**
-- **Core blocker:** Nested paths fail after reload - "cannot access math of undefined"
-- **Test case:** `api.nested.comp1.math.add` works after add, fails after reload
-- **Symptom:** `api.nested.comp1.math` returns `undefined` post-reload
-- **Root cause hypothesis:** `UnifiedWrapper.__setImpl()` may not properly reconstruct `_proxyTarget` during reload
-  - Initial add: Creates wrapper with `_impl = {math: {add: fn}}`, calls `_adoptImplChildren()` which populates `_proxyTarget` with `math` wrapper
-  - Reload: Calls `__setImpl({math: {add: fn}})` again, but `_proxyTarget.math` isn't recreated
-  - Possible issue: `_adoptImplChildren()` behavior differs between constructor and `__setImpl` call
-  - Possible issue: Collision mode handling during reload differs from add
-- **Context cleanup errors:** Tests show `CONTEXT_NOT_FOUND` after shutdown (timing issue, not core blocker)
+1. **Cache-bust parameter threading** — Passed `cacheBust` timestamp through the entire call chain:
+   `rebuildCache` → `buildAPI` → `buildEagerAPI`/`buildLazyAPI` → `processFiles` → `loadModule`
+   This forces `import()` to return fresh module objects, preventing Node.js module cache from
+   returning the same function reference used by the live API (which would cause `applyRootContributor`'s
+   `Object.assign` to overwrite live API properties).
 
-**Implementation Details:**
-- `_restoreApiTree(freshApi, endpoint, moduleID, collisionMode)`:
-  - For root paths: Merges each key directly (same as addApiComponent)
-  - For nested paths: Gets existing wrapper at endpoint, calls `__setImpl(freshApi, moduleID)`
-  - Fallback: If no wrapper exists, creates new one (shouldn't happen in reload)
-- `_reloadByApiPath(apiPath)`:
-  - Checks for direct ownership history at path
-  - If not found, searches cache for child modules (endpoint starts with path prefix)
-  - Example: Reloading "nested" finds "nested.comp1" and "nested.comp2"
-  - Reloads each child module separately
+2. **CollisionContext fix** — Changed `rebuildCache` to use `"initial"` for base modules and
+   `"addApi"` for added modules (was incorrectly using `"core"` which doesn't exist in config,
+   causing fallback to merge instead of the configured collision mode).
 
-**Next Steps (Deep Investigation Required):**
-1. Debug `UnifiedWrapper.__setImpl()` and `_adoptImplChildren()` behavior
-2. Compare `_proxyTarget` state before/after reload
-3. Check if collision mode affects `_adoptImplChildren()` execution
-4. Verify `_adoptImplChildren()` clears/recreates children vs merges
-5. Consider if reload needs different approach than just calling `__setImpl`
-6. **Target:** 56/56 selective reload tests passing (100%)
+3. **Always-eager rebuilds** — `rebuildCache` forces `mode: "eager"` regardless of original mode.
+   This ensures fresh API is fully materialized before `_restoreApiTree` applies it.
+
+4. **Root-level ___setImpl preservation** — `_restoreApiTree` uses `___setImpl` directly on existing
+   wrappers for root-level keys, preserving proxy identity and custom properties. Custom properties
+   are collected before and restored after `___setImpl`.
+
+5. **Defensive _waitingProxyCache guard** — Added initialization guard in `_createWaitingProxy`
+   for edge cases where `_waitingProxyCache` can become undefined during reload/adoption cycles.
+
+6. **Lazy materialization closure fix** — Added `cacheBust` parameter to `createLazySubdirectoryWrapper`
+   so lazy materialization closures have access to the cache-bust timestamp.
+
+**Key Design Decisions:**
+- moduleID is NEVER changed during reload — it is the identity for ownership, cache lookup, and metadata
+- Cache-busting happens at the import URL level only (appends `&_reload=<timestamp>`)
+- cacheBust is passed as a parameter through the chain, NOT stored as shared mutable state
+
+**Files Modified:**
+- `src/lib/handlers/api-cache-manager.mjs` — `rebuildCache`: collisionContext fix, eager mode, cacheBust param
+- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`: root ___setImpl, custom prop collect/restore
+- `src/lib/builders/builder.mjs` — `buildAPI`: pass cacheBust to mode builders
+- `src/lib/modes/eager.mjs` — `buildEagerAPI`: accept and pass cacheBust
+- `src/lib/modes/lazy.mjs` — `buildLazyAPI`: accept and pass cacheBust
+- `src/lib/builders/modes-processor.mjs` — `processFiles`: accept cacheBust, pass to loadModule (3 sites) and recursive calls (2 sites); `createLazySubdirectoryWrapper`: accept cacheBust
+- `src/lib/processors/loader.mjs` — `loadModule`: accept cacheBust param, append to import URL
+- `src/lib/handlers/unified-wrapper.mjs` — `_createWaitingProxy`: defensive _waitingProxyCache guard
 
 ### ⬜ Step 6: Implement path reload with multi-cache rebuild
 **Status:** Not Started (Blocked on Step 5)  
@@ -181,22 +184,20 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 ## Test Status
 
 ### Baseline Tests
-- **Status:** ✅ Passing (2356/2356)
-- **Last Run:** After Step 4 and Step 5 attempts
+- **Status:** ✅ Passing (2412/2412)
+- **Last Run:** After Step 5 completion
 - **Command:** `npm run baseline | Select-Object -Last 50`
-- **Commits:** Maintained 100% through 040c870, 958d064, 6d36059
 
 ### Full Reload Tests
 - **Status:** ✅ Passing (56/56)
-- **Last Run:** Before implementation start
+- **Last Run:** After Step 5 completion
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-full.test.vitest.mjs | Select-Object -Last 100`
 
 ### Selective Reload Tests
-- **Status:** ⚠️ Blocked at 50%
-- **Last Run:** After commit 6d36059
+- **Status:** ✅ Passing (56/56)
+- **Last Run:** After Step 5 completion
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs | Select-Object -Last 100`
-- **Results:** 28/56 passing (50%) - stuck since 958d064
-- **Note:** Requires deep dive into UnifiedWrapper reload behavior
+- **Results:** 56/56 passing (100%) across all 8 configurations (4 eager + 4 lazy)
 
 ## Design Decisions
 
@@ -245,9 +246,24 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
   - Foundation now solid for Step 5 re-validation
 - **Next**: Re-validate Step 5 (reload) on proper foundation, fix nested path issues
 
+### 2026-02-07
+- ✅ **Completed Step 5**: moduleID reload with cache rebuild (56/56 selective + 2412/2412 baseline)
+  - Fixed collisionContext: "initial" for base, "addApi" for added (was "core" causing merge fallback)
+  - Forced eager mode for all rebuilds
+  - Threaded cacheBust timestamp as parameter through entire call chain (7 files)
+  - Root-level ___setImpl preserves proxy identity and custom properties
+  - Defensive _waitingProxyCache guard for reload/adoption edge cases
+  - **Next**: Step 6 (path reload with multi-cache rebuild)
+
 ## Related Files
 
-- `src/lib/handlers/api-manager.mjs` - Main implementation location
-- `src/lib/handlers/ownership.mjs` - Ownership tracking integration
-- `src/lib/builders/api_builder.mjs` - buildAPI interface
-- `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` - Primary test suite
+- `src/lib/handlers/api-cache-manager.mjs` — Cache storage and `rebuildCache` logic
+- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`, `removeApiComponent`, `deletePath`
+- `src/lib/handlers/unified-wrapper.mjs` — `___setImpl`, `_adoptImplChildren`, `_createWaitingProxy`
+- `src/lib/builders/builder.mjs` — `buildAPI` options forwarding
+- `src/lib/modes/eager.mjs` — `buildEagerAPI` with cacheBust
+- `src/lib/modes/lazy.mjs` — `buildLazyAPI` with cacheBust
+- `src/lib/builders/modes-processor.mjs` — `processFiles`, `createLazySubdirectoryWrapper`
+- `src/lib/processors/loader.mjs` — `loadModule` with cacheBust URL parameter
+- `src/lib/builders/api_builder.mjs` — buildAPI interface
+- `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` — Primary test suite (56 tests)

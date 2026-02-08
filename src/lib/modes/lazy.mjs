@@ -55,7 +55,8 @@ export async function buildLazyAPI({
 	moduleID,
 	userMetadata = {},
 	slothlet,
-	apiDepth = Infinity
+	apiDepth = Infinity,
+	cacheBust = null
 }) {
 	const api = {};
 
@@ -92,7 +93,8 @@ export async function buildLazyAPI({
 		collisionContext,
 		moduleID,
 		dir, // sourceFolder for metadata
-		userMetadata
+		userMetadata,
+		cacheBust
 	);
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
