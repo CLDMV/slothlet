@@ -217,18 +217,21 @@ export class UnifiedWrapper extends ComponentBase {
 			configurable: false
 		});
 
-		const isCallableValue =
-			typeof isCallable === "boolean"
-				? isCallable
-				: typeof initialImpl === "function" || (initialImpl && typeof initialImpl.default === "function");
-		// CRITICAL: When isCallable is false (e.g. lazy mode with null initialImpl), keep configurable:true
-		// so ___setImpl can upgrade it to true when the real implementation arrives.
-		// When isCallable is true, lock it down with configurable:false (callable never goes back to non-callable).
+		const isCallableExplicit = typeof isCallable === "boolean";
+		const isCallableValue = isCallableExplicit
+			? isCallable
+			: typeof initialImpl === "function" || (initialImpl && typeof initialImpl.default === "function");
+		// CRITICAL: configurable controls whether ___setImpl can upgrade callable status later.
+		// - When isCallable is EXPLICITLY passed (boolean): lock it (configurable:false) — caller knows the answer.
+		// - When isCallable is INFERRED from null initialImpl (lazy mode): keep configurable:true
+		//   so ___setImpl can upgrade to true when the real implementation arrives.
+		// - When isCallable is true: always lock (callable never goes back to non-callable).
+		const isCallableConfigurable = !isCallableValue && !isCallableExplicit;
 		Object.defineProperty(this, "__isCallable", {
 			value: isCallableValue,
 			writable: false,
 			enumerable: false,
-			configurable: !isCallableValue
+			configurable: isCallableConfigurable
 		});
 
 		// Store moduleID, filePath, and sourceFolder as non-enumerable properties
@@ -719,8 +722,28 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (existingChild && typeof existingChild.___setImpl === "function") {
 				// Reuse existing wrapper - update its implementation to maintain live binding
-				existingChild.___setImpl(value, this.slothlet, this.__moduleID, this.__filePath);
-				wrapped = existingChild;
+				// CRITICAL: If value is one of our wrapper proxies (detected by __getState),
+				// extract its raw _impl instead of passing the proxy to ___setImpl.
+				// Passing a proxy as _impl causes infinite recursion in getTrap's isProxy delegation.
+				if (value && typeof value.__getState === "function") {
+					// Extract the raw impl from the new wrapper proxy
+					const newWrapper = value.__wrapper;
+					const rawImpl = newWrapper ? newWrapper._impl : null;
+					if (rawImpl !== null && rawImpl !== undefined) {
+						existingChild.___setImpl(rawImpl, this.slothlet, this.__moduleID, this.__filePath);
+					} else if (newWrapper && newWrapper._materializeFunc) {
+						// Lazy wrapper not yet materialized - transfer the materialize function
+						const existingChildWrapper = existingChild.__wrapper;
+						if (existingChildWrapper) {
+							existingChildWrapper._materializeFunc = newWrapper._materializeFunc;
+							existingChildWrapper.__state.materialized = false;
+						}
+					}
+					wrapped = existingChild;
+				} else {
+					existingChild.___setImpl(value, this.slothlet, this.__moduleID, this.__filePath);
+					wrapped = existingChild;
+				}
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
 						message: "ADOPT-REUSE: Reused existing child wrapper",
@@ -1005,6 +1028,17 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Create cache key from propChain
 		const cacheKey = propChain.join(".");
+
+		// Defensive: ensure _waitingProxyCache exists (should be initialized in constructor,
+		// but can be lost in edge cases during reload/adoption cycles)
+		if (!wrapper._waitingProxyCache) {
+			Object.defineProperty(wrapper, "_waitingProxyCache", {
+				value: new Map(),
+				writable: true,
+				enumerable: false,
+				configurable: true
+			});
+		}
 
 		// Return cached waiting proxy if it exists
 		if (wrapper._waitingProxyCache.has(cacheKey)) {

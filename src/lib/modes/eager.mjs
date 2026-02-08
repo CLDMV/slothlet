@@ -37,7 +37,8 @@ export async function buildEagerAPI({
 	moduleID,
 	userMetadata = {},
 	slothlet,
-	apiDepth = Infinity
+	apiDepth = Infinity,
+	cacheBust = null
 }) {
 	const api = {};
 
@@ -71,7 +72,8 @@ export async function buildEagerAPI({
 		collisionContext,
 		moduleID,
 		dir, // sourceFolder for metadata
-		userMetadata
+		userMetadata,
+		cacheBust
 	);
 
 	// Directory processing is now handled by processFiles when recursive=true

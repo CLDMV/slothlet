@@ -56,7 +56,8 @@ export class ModesProcessor extends ComponentBase {
 		collisionContext = "initial",
 		moduleID = null,
 		sourceFolder = null,
-		userMetadata = {}
+		userMetadata = {},
+		cacheBust = null
 	) {
 		// Access components and data via slothlet instance
 		const { ownership, metadata } = this.slothlet.handlers;
@@ -183,7 +184,7 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			try {
-				const mod = await loader.loadModule(file.path, instanceID, moduleID);
+				const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
 				const exports = loader.extractExports(mod);
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
@@ -771,7 +772,7 @@ export class ModesProcessor extends ComponentBase {
 								isGeneric,
 								filenameMatches: filenameMatchesFolder
 							});
-							const mod = await loader.loadModule(file.path, instanceID, moduleID);
+							const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
 							const exports = loader.extractExports(mod);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
@@ -875,7 +876,9 @@ export class ModesProcessor extends ComponentBase {
 						apiPathPrefix, // Pass through apiPathPrefix to subdirectories
 						collisionContext,
 						moduleID, // Pass through moduleID to subdirectories
-						sourceFolder
+						sourceFolder,
+						{}, // userMetadata - not passed to subdirectories
+						cacheBust
 					);
 				}
 			} else {
@@ -905,7 +908,8 @@ export class ModesProcessor extends ComponentBase {
 							apiPathPrefix,
 							moduleID,
 							sourceFolder,
-							userMetadata // Pass userMetadata to lazy wrappers!
+							userMetadata, // Pass userMetadata to lazy wrappers!
+							cacheBust
 						),
 						{
 							useCollisionDetection: true,
@@ -1003,7 +1007,8 @@ export class ModesProcessor extends ComponentBase {
 		parentApiPathPrefix = "",
 		moduleID = null,
 		sourceFolder = null,
-		userMetadata = {}
+		userMetadata = {},
+		cacheBust = null
 	) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
@@ -1042,7 +1047,7 @@ export class ModesProcessor extends ComponentBase {
 				const isGeneric = genericFilenames.includes(moduleName.toLowerCase());
 				const filenameMatchesFolder = moduleName === categoryName;
 				if (isGeneric || filenameMatchesFolder) {
-					const mod = await loader.loadModule(file.path, instanceID, moduleID);
+					const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
 					const exports = loader.extractExports(mod);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
@@ -1162,7 +1167,8 @@ export class ModesProcessor extends ComponentBase {
 				"initial",
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
-				{} // Don't pass userMetadata during materialization - it was already registered during api.add()
+				{}, // Don't pass userMetadata during materialization - it was already registered during api.add()
+				cacheBust
 			);
 			if (config.debug?.modes) {
 				this.slothlet.debug("modes", {

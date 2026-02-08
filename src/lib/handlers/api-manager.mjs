@@ -1085,15 +1085,27 @@ export class ApiManager extends ComponentBase {
 			// This ensures api.lookup.__metadata exists and works properly
 			// The wrapper acts as a namespace container for the loaded API modules
 			if (!apiToMerge.__wrapper) {
+				// CRITICAL: If buildAPI returned a function (root contributor pattern),
+				// extract properties into a plain object for the container wrapper.
+				// The container is a namespace, not a callable — root contributor behavior
+				// only applies at the root level, not when loaded under a nested path.
+				let implForContainer = apiToMerge;
+				if (typeof apiToMerge === "function") {
+					implForContainer = {};
+					for (const key of Object.keys(apiToMerge)) {
+						implForContainer[key] = apiToMerge[key];
+					}
+				}
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: normalizedPath,
 					mode: this.config.mode,
+					isCallable: false, // Container is a namespace, not callable
 					moduleID: moduleID,
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
 				});
 				// Set the apiToMerge object as the impl
-				containerWrapper.___setImpl(apiToMerge, moduleID);
+				containerWrapper.___setImpl(implForContainer, moduleID);
 				// Replace apiToMerge with the wrapped proxy
 				apiToMerge = containerWrapper.createProxy();
 			}
@@ -1235,6 +1247,8 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 		}
+
+		return moduleID;
 	}
 
 	/**
@@ -1767,6 +1781,71 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Collect user-set custom properties from a proxy/wrapper that are NOT in the fresh API.
+	 * Custom properties are those set by the user at runtime (e.g., api.custom.testFlag = true)
+	 * that should survive a selective reload.
+	 * @param {Object} existingProxy - The existing proxy/wrapper to collect from
+	 * @param {Object} freshApi - The fresh API from rebuild (keys to exclude)
+	 * @returns {Object} Map of custom property names to their values
+	 * @private
+	 */
+	_collectCustomProperties(existingProxy, freshApi) {
+		const customProps = {};
+		if (!existingProxy || typeof existingProxy !== "object") {
+			return customProps;
+		}
+
+		const wrapper = existingProxy.__wrapper;
+		if (!wrapper) {
+			return customProps;
+		}
+
+		// Get keys from fresh API to know which are "API" keys vs "custom" keys
+		const freshKeys = new Set(freshApi ? Object.keys(freshApi) : []);
+
+		// Get all enumerable own properties on the wrapper that are user-accessible
+		const ownKeys = Object.keys(wrapper).filter((k) => {
+			// Skip internal properties
+			if (k.startsWith("_") || k.startsWith("__")) return false;
+			// Skip properties that exist in the fresh API (these are API-built)
+			if (freshKeys.has(k)) return false;
+			// Skip known built-in properties
+			if (k === "slothlet" || k === "shutdown" || k === "destroy") return false;
+			return true;
+		});
+
+		for (const key of ownKeys) {
+			try {
+				customProps[key] = existingProxy[key];
+			} catch {
+				// Skip properties that throw on access
+			}
+		}
+
+		return customProps;
+	}
+
+	/**
+	 * Restore previously collected custom properties onto a proxy/wrapper after reload.
+	 * @param {Object} proxy - The proxy to restore properties onto
+	 * @param {Object} customProps - Map of property names to values from _collectCustomProperties
+	 * @private
+	 */
+	_restoreCustomProperties(proxy, customProps) {
+		if (!proxy || !customProps || typeof customProps !== "object") {
+			return;
+		}
+
+		for (const [key, value] of Object.entries(customProps)) {
+			try {
+				proxy[key] = value;
+			} catch {
+				// Skip properties that can't be set
+			}
+		}
+	}
+
+	/**
 	 * Restore API from fresh rebuild by updating existing wrapper
 	 * For non-root endpoints, updates the wrapper's implementation without replacing structure
 	 * For root endpoints, merges keys directly as addApiComponent does
@@ -1786,28 +1865,85 @@ export class ApiManager extends ComponentBase {
 		const parts = endpoint === "." ? [] : endpoint.split(".");
 
 		if (parts.length === 0) {
-			// Root level - merge each key directly (same pattern as addApiComponent)
-			// Get cache entry for source folder information
-			const cacheManager = this.slothlet.handlers.apiCacheManager;
-			const cacheEntry = cacheManager.get(moduleID);
-			const resolvedFolderPath = cacheEntry?.folderPath || "";
-
+			// Root level - update each existing wrapper's implementation directly
+			// Using ___setImpl preserves the wrapper proxy reference and custom properties
+			// (setValueAtPath/syncWrapper can replace the proxy reference, losing custom props)
 			for (const key of Object.keys(freshApi)) {
-				await this.setValueAtPath(this.slothlet.api, [key], freshApi[key], {
-					mutateExisting: true,
-					collisionMode,
-					moduleID,
-					sourceFolder: resolvedFolderPath
-				});
+				// Skip internal keys from the fresh API proxy's ownKeys trap
+				if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) continue;
+				// Skip built-in slothlet namespace
+				if (key === "slothlet" || key === "shutdown" || key === "destroy") continue;
 
-				if (this.slothlet.boundApi) {
-					await this.setValueAtPath(this.slothlet.boundApi, [key], freshApi[key], {
+				const existingAtKey = this.slothlet.api[key];
+				const freshValue = freshApi[key];
+
+				if (existingAtKey && typeof existingAtKey.___setImpl === "function") {
+					// Existing wrapper found — collect custom props, update impl, restore props
+					const customProps = this._collectCustomProperties(existingAtKey, freshValue);
+
+					// Extract raw impl from fresh value (which is a wrapper proxy from buildAPI)
+					let implForReload;
+					if (freshValue && typeof freshValue.__getState === "function") {
+						const freshWrapper = freshValue.__wrapper;
+						implForReload = freshWrapper ? freshWrapper._impl : freshValue;
+					} else {
+						implForReload = freshValue;
+					}
+
+					// Extract properties from function to avoid making container callable
+					if (typeof implForReload === "function") {
+						const extracted = {};
+						for (const k of Object.keys(implForReload)) {
+							extracted[k] = implForReload[k];
+						}
+						implForReload = extracted;
+					}
+
+					// Force replace mode for reload
+					const wrapper = existingAtKey.__wrapper;
+					const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
+					if (wrapper) {
+						wrapper.__state.collisionMode = "replace";
+					}
+
+					existingAtKey.___setImpl(implForReload, moduleID);
+
+					// Restore collision mode
+					if (wrapper && originalCollisionMode !== null) {
+						wrapper.__state.collisionMode = originalCollisionMode;
+					}
+
+					// Restore custom properties
+					this._restoreCustomProperties(existingAtKey, customProps);
+
+					this.slothlet.debug("reload", {
+						message: "Root key updated via ___setImpl",
+						key,
+						restoredCustomProps: Object.keys(customProps)
+					});
+				} else if (existingAtKey === undefined) {
+					// New key from reload — use setValueAtPath to create it
+					const cacheManager = this.slothlet.handlers.apiCacheManager;
+					const cacheEntry = cacheManager.get(moduleID);
+					const resolvedFolderPath = cacheEntry?.folderPath || "";
+
+					await this.setValueAtPath(this.slothlet.api, [key], freshValue, {
 						mutateExisting: true,
 						collisionMode,
 						moduleID,
 						sourceFolder: resolvedFolderPath
 					});
+
+					if (this.slothlet.boundApi) {
+						await this.setValueAtPath(this.slothlet.boundApi, [key], freshValue, {
+							mutateExisting: true,
+							collisionMode,
+							moduleID,
+							sourceFolder: resolvedFolderPath
+						});
+					}
 				}
+				// else: existing non-wrapper value — skip (shouldn't happen in normal flow)
 			}
 		} else {
 			// Nested path - get existing wrapper and update its implementation
@@ -1825,6 +1961,9 @@ export class ApiManager extends ComponentBase {
 			});
 
 			if (existing && typeof existing.___setImpl === "function") {
+				// Collect custom properties from existing wrapper before reload
+				const customProps = this._collectCustomProperties(existing, freshApi);
+
 				// CRITICAL: Force "replace" mode for reload to clear old keys
 				// During reload, we want to completely replace the implementation, not merge
 				// Store the original collision mode and restore it after
@@ -1837,24 +1976,37 @@ export class ApiManager extends ComponentBase {
 						message: "RESTORE: forcing replace mode",
 						endpoint,
 						originalCollisionMode,
-						wrapperApiPath: wrapper.apiPath
+						wrapperApiPath: wrapper.__apiPath
 					});
 				}
 
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
-				existing.___setImpl(freshApi, moduleID);
+				// CRITICAL: If freshApi is a function (root contributor from buildAPI),
+				// extract properties into a plain object to avoid setting callable on the container
+				let implForReload = freshApi;
+				if (typeof freshApi === "function") {
+					implForReload = {};
+					for (const key of Object.keys(freshApi)) {
+						implForReload[key] = freshApi[key];
+					}
+				}
+				existing.___setImpl(implForReload, moduleID);
 
 				// Restore original collision mode
 				if (wrapper && originalCollisionMode !== null) {
 					wrapper.__state.collisionMode = originalCollisionMode;
 				}
 
+				// Restore custom properties after reload
+				this._restoreCustomProperties(existing, customProps);
+
 				this.slothlet.debug("reload", {
 					message: "Updated existing wrapper implementation",
 					endpoint,
 					moduleID,
-					forcedReplaceMode: true
+					forcedReplaceMode: true,
+					restoredCustomProps: Object.keys(customProps)
 				});
 			} else {
 				// No wrapper exists - should not happen in reload, but handle gracefully
@@ -1863,7 +2015,14 @@ export class ApiManager extends ComponentBase {
 				const cacheEntry = cacheManager.get(moduleID);
 				const resolvedFolderPath = cacheEntry?.folderPath || "";
 
-				// Wrap fresh API
+				// Wrap fresh API — extract properties if buildAPI returned a function
+				let implForContainer = freshApi;
+				if (typeof freshApi === "function") {
+					implForContainer = {};
+					for (const key of Object.keys(freshApi)) {
+						implForContainer[key] = freshApi[key];
+					}
+				}
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: endpoint,
 					mode: this.config.mode,
@@ -1871,7 +2030,7 @@ export class ApiManager extends ComponentBase {
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
 				});
-				containerWrapper.___setImpl(freshApi, moduleID);
+				containerWrapper.___setImpl(implForContainer, moduleID);
 				const apiToSet = containerWrapper.createProxy();
 
 				// Set at endpoint path
