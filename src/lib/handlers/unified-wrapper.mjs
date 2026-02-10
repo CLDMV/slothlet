@@ -1,64 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/handlers/unified-wrapper.mjs
- *	@Date: 2026-02-06 23:46:31 -08:00 (1770450391)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-09 06:35:12 -08:00 (1770647712)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/unified-wrapper.mjs
- *	@Date: 2026-02-06 23:46:31 -08:00 (1770450391)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 14:49:46 -08:00 (1770504586)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/unified-wrapper.mjs
- *	@Date: 2026-02-06 23:46:31 -08:00 (1770450391)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 14:48:59 -08:00 (1770504539)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/unified-wrapper.mjs
  *	@Date: 2026-01-30 16:47:31 -08:00 (1769820451)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 14:47:17 -08:00 (1770504437)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/lib/handlers/unified-wrapper.mjs
- *	@Date: 2026-01-30 16:47:31 -08:00 (1769820451)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-31 11:09:55 -08:00 (1769886595)
+ *	@Last modified time: 2026-02-10 06:40:51 -08:00 (1770734451)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -246,27 +194,9 @@ export class UnifiedWrapper extends ComponentBase {
 		this._proxy = null;
 		this.__invalid = false;
 
-		// CRITICAL: Shallow-clone non-Proxy object impls to prevent _adoptImplChildren
-		// from mutating shared module export references. When concurrent materializations
-		// (e.g., old + new wrapper during reload) both load the same cached module,
-		// the first _adoptImplChildren deletes keys from _impl, destroying the shared
-		// export and causing subsequent wrappers to receive empty objects.
-		// Same pattern as lazy_setImpl clone.
-		// IMPORTANT: Skip Proxy objects — cloning destroys their trap behavior (e.g.,
-		// LG TV controllers using numeric index access through custom get traps).
-		// util.types.isProxy() is already used in getTrap to detect custom Proxies.
-		if (
-			initialImpl &&
-			typeof initialImpl === "object" &&
-			!Array.isArray(initialImpl) &&
-			typeof initialImpl !== "function" &&
-			!util.types.isProxy(initialImpl)
-		) {
-			const uw_constructorDescriptors = Object.getOwnPropertyDescriptors(initialImpl);
-			this._impl = Object.create(Object.getPrototypeOf(initialImpl), uw_constructorDescriptors);
-		} else {
-			this._impl = initialImpl;
-		}
+		// Clone to protect API cache from _adoptImplChildren's delete operations.
+		// See static _cloneImpl() for full rationale.
+		this._impl = UnifiedWrapper._cloneImpl(initialImpl);
 
 		this.__state = {
 			materialized: initialImpl !== null,
@@ -363,6 +293,37 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Shallow-clone a non-Proxy object implementation to prevent _adoptImplChildren
+	 * from mutating shared module export references via its `delete this._impl[key]`
+	 * operations. When concurrent materializations (e.g., old + new wrapper during reload)
+	 * both load the same cached module, the first _adoptImplChildren would destroy the
+	 * shared export, causing subsequent wrappers to receive empty objects.
+	 *
+	 * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
+	 * (cloning a Proxy destroys its trap behavior — e.g., LG TV controllers using
+	 * numeric-index access through custom get traps).
+	 *
+	 * @param {*} value - The implementation value to (maybe) clone.
+	 * @returns {*} A shallow clone of `value` when it is a non-Proxy plain object,
+	 *              otherwise the original `value`.
+	 * @static
+	 * @private
+	 */
+	static _cloneImpl(value) {
+		if (
+			value &&
+			typeof value === "object" &&
+			!Array.isArray(value) &&
+			typeof value !== "function" &&
+			!util.types.isProxy(value)
+		) {
+			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
+			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
+		}
+		return value;
+	}
+
+	/**
 	 * Set new implementation and adopt children
 	 * @param {*} newImpl - New implementation
 	 * @param {string} [moduleID] - Optional moduleID for lifecycle event (for replacements)
@@ -376,21 +337,9 @@ export class UnifiedWrapper extends ComponentBase {
 				newImplKeys: Object.keys(newImpl || {})
 			});
 		}
-		// CRITICAL: Shallow-clone non-Proxy object impls to prevent _adoptImplChildren
-		// from mutating shared module export references (same as constructor clone).
-		// Skip Proxy objects to preserve their trap behavior.
-		if (
-			newImpl &&
-			typeof newImpl === "object" &&
-			!Array.isArray(newImpl) &&
-			typeof newImpl !== "function" &&
-			!util.types.isProxy(newImpl)
-		) {
-			const uw_setImplDescriptors = Object.getOwnPropertyDescriptors(newImpl);
-			this._impl = Object.create(Object.getPrototypeOf(newImpl), uw_setImplDescriptors);
-		} else {
-			this._impl = newImpl;
-		}
+		// Clone to protect API cache from _adoptImplChildren's delete operations.
+		// See static _cloneImpl() for full rationale.
+		this._impl = UnifiedWrapper._cloneImpl(newImpl);
 		// Update __isCallable if it's currently false (configurable) and the new impl is callable.
 		// In lazy mode, __isCallable starts as false/configurable because initialImpl is null.
 		// When the real impl arrives and is a function, upgrade to true/non-configurable.
@@ -541,18 +490,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// POC pattern: materializeFunc can set implementation synchronously via setter
 					// This matches v2 behavior where 'materialized' variable is set immediately
 					const lazy_setImpl = (value) => {
-						// CRITICAL: Shallow-clone object impls to prevent _adoptImplChildren from
-						// mutating shared module export references. When the same materializeFunc
-						// closure runs on multiple wrappers (fresh + existing after reload), the
-						// cached module returns the SAME export object. Without cloning,
-						// _adoptImplChildren deletes keys from _impl which destroys the shared
-						// export, causing subsequent materializations to receive empty objects.
-						if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
-							const descriptors = Object.getOwnPropertyDescriptors(value);
-							this._impl = Object.create(Object.getPrototypeOf(value), descriptors);
-						} else {
-							this._impl = value;
-						}
+						// Clone to protect API cache from _adoptImplChildren's delete operations.
+						// See static _cloneImpl() for full rationale.
+						this._impl = UnifiedWrapper._cloneImpl(value);
 						this.__invalid = false;
 
 						// CRITICAL: Update wrapper's filePath BEFORE adopting children
@@ -578,14 +518,9 @@ export class UnifiedWrapper extends ComponentBase {
 
 					// If materializeFunc didn't call setter, set _impl from return value
 					if (!this._impl) {
-						// CRITICAL: Clone object impls to avoid mutating shared module exports
-						// (same reason as lazy_setImpl clone above)
-						if (result && typeof result === "object" && !Array.isArray(result) && typeof result !== "function") {
-							const descriptors = Object.getOwnPropertyDescriptors(result);
-							this._impl = Object.create(Object.getPrototypeOf(result), descriptors);
-						} else {
-							this._impl = result;
-						}
+						// Clone to protect API cache from _adoptImplChildren's delete operations.
+						// See static _cloneImpl() for full rationale.
+						this._impl = UnifiedWrapper._cloneImpl(result);
 						this.__invalid = false;
 						this._adoptImplChildren();
 					}
