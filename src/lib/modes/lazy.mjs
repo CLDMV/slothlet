@@ -44,7 +44,6 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @param {Object} options.contextManager - Context manager for binding
  * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} [options.config={}] - Configuration
- * @param {Object} [options.userMetadata={}] - User metadata to apply to all wrappers
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
@@ -53,7 +52,6 @@ export async function buildLazyAPI({
 	apiPathPrefix = "",
 	collisionContext = "initial",
 	moduleID,
-	userMetadata = {},
 	slothlet,
 	apiDepth = Infinity,
 	cacheBust = null
@@ -93,7 +91,6 @@ export async function buildLazyAPI({
 		collisionContext,
 		moduleID,
 		dir, // sourceFolder for metadata
-		userMetadata,
 		cacheBust
 	);
 
@@ -109,11 +106,10 @@ export async function buildLazyAPI({
  * @param {string} apiPath - Current API path
  * @param {Object} slothlet - Slothlet instance
  * @param {string} moduleIDOverride - Module ID from api.add() to use instead of file.moduleID
- * @param {Object} userMetadata - User metadata to inherit from parent
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, userMetadata = {}) {
+function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride) {
 	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
 		slothlet.debug("modes", {
@@ -212,10 +208,10 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, userMetadat
 			}
 		}
 
-		// Create lazy wrappers for subdirectories (inherit userMetadata and moduleIDOverride from parent)
+		// Create lazy wrappers for subdirectories (inherit moduleIDOverride from parent)
 		for (const subdir of dir.children.directories || []) {
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride, userMetadata);
+			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride);
 		}
 
 		// Store the file path mapping as non-enumerable property

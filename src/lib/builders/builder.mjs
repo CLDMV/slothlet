@@ -80,7 +80,6 @@ export class Builder extends ComponentBase {
 	 * @param {Object} [options.config] - Configuration (uses slothlet's if not provided)
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
 	 * @param {string} [options.collisionContext="initial"] - Collision context
-	 * @param {Object} [options.userMetadata={}] - User metadata to apply to all wrappers
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
@@ -91,7 +90,7 @@ export class Builder extends ComponentBase {
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, userMetadata = {}, cacheBust = null } = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -124,7 +123,6 @@ export class Builder extends ComponentBase {
 				apiPathPrefix,
 				collisionContext,
 				moduleID,
-				userMetadata,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust
@@ -135,7 +133,6 @@ export class Builder extends ComponentBase {
 				apiPathPrefix,
 				collisionContext,
 				moduleID,
-				userMetadata,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust

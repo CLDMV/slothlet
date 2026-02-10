@@ -441,6 +441,9 @@ export class ApiAssignment extends ComponentBase {
 					// Merge value's child properties into existing's child properties
 					// CRITICAL: In merge mode, only ADD new keys, don't OVERWRITE existing ones
 					// In merge-replace mode, ADD new keys AND OVERWRITE existing ones
+					// When both existing and new child at a key are wrappers, recursively merge
+					// their children (e.g., math wrapper from API_TEST merges with math wrapper
+					// from API_TEST_COLLISIONS → power, sqrt, modulo get added to existing math)
 					const valueChildKeys2 = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 					for (const key of valueChildKeys2) {
 						const child = valueWrapper[key];
@@ -466,6 +469,33 @@ export class ApiAssignment extends ComponentBase {
 								enumerable: true,
 								configurable: true
 							});
+						} else {
+							// Merge mode, key exists — recursive merge for nested wrappers
+							// Example: existing math has {add, multiply, divide}, new math has {power, sqrt, modulo}
+							// → merge adds power, sqrt, modulo into existing math wrapper
+							const existingChild = existingWrapper[key];
+							const existingChildWrapper = existingChild?.__wrapper;
+							const newChildWrapper = child?.__wrapper;
+							if (existingChildWrapper && newChildWrapper) {
+								// Ensure new child has adopted its impl children before merge
+								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
+								if (newChildWrapper._impl && newChildChildCount === 0) {
+									newChildWrapper._adoptImplChildren();
+								}
+								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+								const existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+								for (const childKey of newChildKeys) {
+									const childKeyExists = Object.prototype.hasOwnProperty.call(existingChildWrapper, childKey);
+									if (!childKeyExists) {
+										Object.defineProperty(existingChildWrapper, childKey, {
+											value: newChildWrapper[childKey],
+											writable: false,
+											enumerable: true,
+											configurable: true
+										});
+									}
+								}
+							}
 						}
 					}
 					// The value wrapper has the materializeFunc that will load folder's exports

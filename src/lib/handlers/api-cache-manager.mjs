@@ -335,10 +335,12 @@ export class ApiCacheManager extends ComponentBase {
 			mode: entry.mode
 		});
 
-		// Build fresh API with stored parameters
-		// CRITICAL: Always use "eager" mode for rebuilds to ensure all implementations
-		// are fully materialized. The fresh API values will be set on existing wrappers
-		// (which may be lazy), so we need actual impl values, not lazy proxies.
+		// Build fresh API with stored parameters using the ORIGINAL mode.
+		// Lazy mode rebuilds produce lazy wrapper shells for subdirectories — _restoreApiTree
+		// uses ___resetLazy to swap the fresh materializeFunc onto existing wrappers, resetting
+		// them to un-materialized state. This respects lazy mode's contract: only load what's
+		// actually accessed. Root-level files are always eager in both modes.
+		// Eager mode rebuilds produce fully materialized implementations as before.
 		// CRITICAL: collisionContext must match the initial load context.
 		// For base modules (endpoint "."), use "initial" — the same context used during load().
 		// For addApi modules, use "addApi". Using "core" would cause config.collision["core"]
@@ -350,7 +352,7 @@ export class ApiCacheManager extends ComponentBase {
 		// The moduleID itself must remain unchanged for ownership/metadata consistency.
 		const freshApi = await this.slothlet.builders.builder.buildAPI({
 			dir: entry.folderPath,
-			mode: "eager",
+			mode: entry.mode,
 			sanitize: entry.sanitizeOptions,
 			moduleID: moduleID,
 			apiPathPrefix: entry.endpoint === "." ? "" : entry.endpoint,
