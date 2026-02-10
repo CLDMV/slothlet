@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 17:19:59 -08:00 (1770513599)
+ *	@Last modified time: 2026-02-09 22:31:44 -08:00 (1770705104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -398,7 +398,8 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Copy materialize function if present (lazy mode support)
-		if (nextWrapper._materializeFunc) {
+		// In merge mode, preserve existing materializer to avoid replacing existing module behavior
+		if (nextWrapper._materializeFunc && collisionMode !== "merge") {
 			existingWrapper._materializeFunc = nextWrapper._materializeFunc;
 		}
 
@@ -479,6 +480,20 @@ export class ApiManager extends ComponentBase {
 						enumerable: true,
 						configurable: true
 					});
+				} else if (!isInternal) {
+					// Both existing and next have this key - recursively merge if both are wrappers
+					// Only recurse if the next child has children to merge (skip leaf wrappers)
+					const existingChild = existingWrapper[key];
+					const nextChild = nextWrapper[key];
+					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(nextChild)) {
+						const syncWrapper_nextChildWrapper = nextChild.__wrapper || nextChild;
+						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
+							(k) => !k.startsWith("_") && !k.startsWith("__")
+						);
+						if (syncWrapper_hasGrandChildren) {
+							await this.syncWrapper(existingChild, nextChild, config, collisionMode, moduleID);
+						}
+					}
 				}
 			}
 		} else if (collisionMode === "merge-replace") {
@@ -486,17 +501,31 @@ export class ApiManager extends ComponentBase {
 			for (const key of nextChildKeys) {
 				const childValue = nextWrapper[key];
 				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
-				// Delete existing first if present
 				// CRITICAL: Use hasOwnProperty to avoid matching ComponentBase prototype getters
 				if (!isInternal && Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
-					delete existingWrapper[key];
+					// Both exist - recursively sync if both are wrappers (preserves wrapper identity)
+					const existingChild = existingWrapper[key];
+					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(childValue)) {
+						await this.syncWrapper(existingChild, childValue, config, collisionMode, moduleID);
+					} else {
+						// Non-wrapper: delete and replace
+						delete existingWrapper[key];
+						Object.defineProperty(existingWrapper, key, {
+							value: childValue,
+							writable: false,
+							enumerable: true,
+							configurable: true
+						});
+					}
+				} else if (!isInternal) {
+					// New key - add it
+					Object.defineProperty(existingWrapper, key, {
+						value: childValue,
+						writable: false,
+						enumerable: true,
+						configurable: true
+					});
 				}
-				Object.defineProperty(existingWrapper, key, {
-					value: childValue,
-					writable: false,
-					enumerable: true,
-					configurable: true
-				});
 			}
 		}
 
@@ -1001,7 +1030,6 @@ export class ApiManager extends ComponentBase {
 			apiPathPrefix: normalizedPath,
 			collisionContext: "addApi",
 			moduleID: moduleID,
-			userMetadata: metadata,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
 			collisionMode: collisionMode
 		});
@@ -1474,20 +1502,15 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
-			// Track in operation history for reload replay - record each removed apiPath
-			if (recordHistory) {
-				for (const removedPath of pathsToDelete) {
-					this.state.operationHistory.push({
-						type: "remove",
-						apiPath: removedPath
-					});
-				}
-				for (const rollback of pathsToRollback) {
-					this.state.operationHistory.push({
-						type: "remove",
-						apiPath: rollback.apiPath
-					});
-				}
+			// Track in operation history for reload replay
+			// Record a single root-level remove (not individual leaf paths)
+			// During replay, deletePath on the root removes the entire subtree
+			if (recordHistory && pathsToDelete.length > 0) {
+				const rootSegment = pathsToDelete[0].split(".")[0];
+				this.state.operationHistory.push({
+					type: "remove",
+					apiPath: rootSegment
+				});
 			}
 			// Return true if we actually removed something
 			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
@@ -1636,10 +1659,15 @@ export class ApiManager extends ComponentBase {
 	/**
 	 * Reload by moduleID - rebuild cache and restore all paths
 	 * @param {string} moduleID - Module identifier
+	 * @param {Object} [options] - Reload options
+	 * @param {boolean} [options.forceReplace=true] - Force replace mode on existing wrappers.
+	 *   When true, temporarily overrides collision mode to "replace" so the fresh impl
+	 *   fully replaces the old one. When false, the wrapper's original collision mode is
+	 *   preserved, allowing merge behavior for multi-cache rebuilds.
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _reloadByModuleID(moduleID) {
+	async _reloadByModuleID(moduleID, { forceReplace = true } = {}) {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
 		if (!cacheManager) {
 			throw new this.SlothletError("CACHE_MANAGER_NOT_AVAILABLE", {
@@ -1686,7 +1714,7 @@ export class ApiManager extends ComponentBase {
 		});
 
 		// Traverse fresh API and update/create wrappers
-		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode);
+		await this._restoreApiTree(freshApi, oldEntry.endpoint, moduleID, oldEntry.collisionMode, forceReplace);
 
 		// DEBUG: Check if freshApi was mutated
 		this.slothlet.debug("reload", {
@@ -1703,81 +1731,171 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Reload by apiPath - rebuild all contributing caches and merge
-	 * For parent paths with no direct ownership, finds and reloads all children
-	 * @param {string} apiPath - API path
+	 * Reload by API path — find affected caches, rebuild them, update impls.
+	 *
+	 * Accepts "." for base module. For other paths, the resolution order is:
+	 * 1. Exact cache endpoint match
+	 * 2. Child caches (endpoints under the path)
+	 * 3. Ownership history (modules that registered the exact path)
+	 * 4. Parent cache (most specific cache whose scope covers the path)
+	 *
+	 * @param {string} apiPath - API path or "." for base module
 	 * @returns {Promise<void>}
 	 * @private
 	 */
 	async _reloadByApiPath(apiPath) {
-		const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
-
 		this.slothlet.debug("reload", {
 			message: "Reloading by API path",
-			apiPath: normalizedPath
+			apiPath
 		});
 
-		// Get ownership history for this exact path
-		const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath);
+		// Find all caches that need to be rebuilt for this path
+		const moduleIDsToReload = this._findAffectedCaches(apiPath);
 
-		if (history && history.length > 0) {
-			// Direct contributors found - reload each module
-			const cacheManager = this.slothlet.handlers.apiCacheManager;
-			for (const { moduleID } of history) {
-				if (cacheManager?.has(moduleID)) {
-					await this._reloadByModuleID(moduleID);
-				}
-			}
-
+		if (moduleIDsToReload.length === 0) {
 			this.slothlet.debug("reload", {
-				message: "API path reload complete (direct contributors)",
-				apiPath: normalizedPath,
-				contributingModules: history.length
+				message: "No caches found for path, attempting base restore",
+				apiPath
 			});
+			// Fallback: try restoring from existing data for non-base paths
+			if (apiPath !== "." && apiPath !== "") {
+				await this.restoreApiPath(apiPath, "base");
+			}
 			return;
 		}
 
-		// No direct history - check if this is a parent path with children
-		// Find all moduleIDs whose endpoints START with this path
+		// Sort: base module first, then by add-history order (chronological)
+		// This ensures the first contributor lays a clean slate (replace mode)
+		// and subsequent contributors merge onto it with their original collision mode.
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
-		if (!cacheManager) {
-			return;
+		moduleIDsToReload.sort((a, b) => {
+			const entryA = cacheManager.get(a);
+			const entryB = cacheManager.get(b);
+
+			// Base module (endpoint ".") always first
+			if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
+			if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
+
+			// Then by addHistory order (chronological)
+			const indexA = this.state.addHistory.findIndex((h) => h.moduleID === a);
+			const indexB = this.state.addHistory.findIndex((h) => h.moduleID === b);
+			return indexA - indexB;
+		});
+
+		// Group modules by endpoint so each endpoint gets its own clean slate.
+		// Within each endpoint group: first module gets forceReplace=true (clean slate),
+		// subsequent modules use their original collision mode (e.g., merge) to layer on top.
+		// This ensures child caches at different endpoints each start fresh.
+		const endpointOrder = new Map();
+		for (const moduleID of moduleIDsToReload) {
+			const entry = cacheManager.get(moduleID);
+			const ep = entry?.endpoint ?? ".";
+			if (!endpointOrder.has(ep)) endpointOrder.set(ep, []);
+			endpointOrder.get(ep).push(moduleID);
 		}
 
-		const childModuleIDs = [];
-		const allModuleIDs = cacheManager.getAllModuleIDs();
-		const pathPrefix = normalizedPath + ".";
+		for (const [, moduleIDs] of endpointOrder) {
+			for (let i = 0; i < moduleIDs.length; i++) {
+				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0 });
+			}
+		}
 
+		this.slothlet.debug("reload", {
+			message: "API path reload complete",
+			apiPath,
+			reloadedModules: moduleIDsToReload.length,
+			loadOrder: moduleIDsToReload
+		});
+	}
+
+	/**
+	 * Find all cache entries that need to be rebuilt for a given API path.
+	 *
+	 * Resolution order:
+	 * 1. "." or "" or null → base module cache(s) (endpoint ".")
+	 * 2. Exact endpoint match → that specific cache
+	 * 3. Child caches → caches whose endpoint is under the given path
+	 * 4. Ownership history → modules that registered the exact path
+	 * 5. Parent cache → most specific cache whose scope covers the path
+	 *
+	 * @param {string} apiPath - The API path to find caches for
+	 * @returns {string[]} Array of moduleIDs to reload
+	 * @private
+	 */
+	_findAffectedCaches(apiPath) {
+		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		if (!cacheManager) return [];
+
+		const allModuleIDs = cacheManager.getAllModuleIDs();
+
+		// Base module reload: ".", "", or nullish
+		if (apiPath === "." || apiPath === "" || apiPath == null) {
+			const baseModules = [];
+			for (const moduleID of allModuleIDs) {
+				const entry = cacheManager.get(moduleID);
+				if (entry && entry.endpoint === ".") {
+					baseModules.push(moduleID);
+				}
+			}
+			return baseModules;
+		}
+
+		// 1. Exact endpoint match
+		const exactMatches = [];
 		for (const moduleID of allModuleIDs) {
-			const cacheEntry = cacheManager.get(moduleID);
-			if (cacheEntry && cacheEntry.endpoint) {
-				// Check if endpoint starts with normalizedPath (parent-child relationship)
-				if (cacheEntry.endpoint === normalizedPath || cacheEntry.endpoint.startsWith(pathPrefix)) {
-					childModuleIDs.push(moduleID);
+			const entry = cacheManager.get(moduleID);
+			if (entry && entry.endpoint === apiPath) {
+				exactMatches.push(moduleID);
+			}
+		}
+		if (exactMatches.length > 0) return exactMatches;
+
+		// 2. Child caches (caches mounted under this path)
+		const children = [];
+		const pathPrefix = apiPath + ".";
+		for (const moduleID of allModuleIDs) {
+			const entry = cacheManager.get(moduleID);
+			if (entry?.endpoint?.startsWith(pathPrefix)) {
+				children.push(moduleID);
+			}
+		}
+		if (children.length > 0) return children;
+
+		// 3. Ownership history (modules that registered this exact path)
+		const ownership = this.slothlet.handlers.ownership;
+		const history = ownership?.getPathHistory?.(apiPath);
+		if (history && history.length > 0) {
+			const owned = [];
+			for (const { moduleID } of history) {
+				if (cacheManager.has(moduleID)) {
+					owned.push(moduleID);
+				}
+			}
+			if (owned.length > 0) return owned;
+		}
+
+		// 4. Parent cache — most specific cache whose scope covers this path
+		//    e.g., reload("math") finds the base module because math lives under ".";
+		//    reload("custom.math") finds the "custom" cache because custom.math lives under "custom"
+		let bestMatch = null;
+		let bestLength = -1;
+		for (const moduleID of allModuleIDs) {
+			const entry = cacheManager.get(moduleID);
+			if (!entry?.endpoint) continue;
+
+			const ep = entry.endpoint;
+			// Base module (endpoint ".") covers everything
+			// Or the path starts with the cache endpoint prefix
+			if (ep === "." || apiPath.startsWith(ep + ".")) {
+				if (ep.length > bestLength) {
+					bestLength = ep.length;
+					bestMatch = moduleID;
 				}
 			}
 		}
+		if (bestMatch) return [bestMatch];
 
-		if (childModuleIDs.length > 0) {
-			// Found children - reload each
-			for (const moduleID of childModuleIDs) {
-				await this._reloadByModuleID(moduleID);
-			}
-
-			this.slothlet.debug("reload", {
-				message: "API path reload complete (child modules)",
-				apiPath: normalizedPath,
-				childModules: childModuleIDs.length
-			});
-		} else {
-			// No direct contributors and no children - try base module restore
-			await this.restoreApiPath(normalizedPath, "base");
-
-			this.slothlet.debug("reload", {
-				message: "API path reload complete (base restore)",
-				apiPath: normalizedPath
-			});
-		}
+		return [];
 	}
 
 	/**
@@ -1791,7 +1909,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	_collectCustomProperties(existingProxy, freshApi) {
 		const customProps = {};
-		if (!existingProxy || typeof existingProxy !== "object") {
+		// Accept both object and function wrappers (eager vs lazy mode)
+		if (!existingProxy || (typeof existingProxy !== "object" && typeof existingProxy !== "function")) {
 			return customProps;
 		}
 
@@ -1807,8 +1926,6 @@ export class ApiManager extends ComponentBase {
 		const ownKeys = Object.keys(wrapper).filter((k) => {
 			// Skip internal properties
 			if (k.startsWith("_") || k.startsWith("__")) return false;
-			// Skip properties that exist in the fresh API (these are API-built)
-			if (freshKeys.has(k)) return false;
 			// Skip known built-in properties
 			if (k === "slothlet" || k === "shutdown" || k === "destroy") return false;
 			return true;
@@ -1816,7 +1933,28 @@ export class ApiManager extends ComponentBase {
 
 		for (const key of ownKeys) {
 			try {
-				customProps[key] = existingProxy[key];
+				// Read value from wrapper
+				const val = wrapper[key];
+
+				// Skip all wrapper-type values (API-built, not user-set custom props)
+				// This includes both valid and invalidated wrappers
+				if (val && typeof val === "object" && val.__wrapper) {
+					continue;
+				}
+				if (typeof val === "function" && val.__wrapper) {
+					continue;
+				}
+
+				// At this point, val is NOT a wrapper — it's either a user-set custom property
+				// or a user-overridden API key with a plain value
+				if (!freshKeys.has(key)) {
+					// Key is NOT in fresh API — purely custom property
+					customProps[key] = val;
+				} else {
+					// Key IS in fresh API but value is plain (no __wrapper)
+					// User explicitly overwrote it with a plain value — preserve it.
+					customProps[key] = val;
+				}
 			} catch {
 				// Skip properties that throw on access
 			}
@@ -1846,18 +1984,83 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Restore API from fresh rebuild by updating existing wrapper
-	 * For non-root endpoints, updates the wrapper's implementation without replacing structure
-	 * For root endpoints, merges keys directly as addApiComponent does
+	 * Extract the full (non-depleted) implementation from a wrapper whose constructor
+	 * already ran _adoptImplChildren(). During construction, child values (like host,
+	 * port for a config object) are moved from _impl onto the wrapper as own properties
+	 * and deleted from _impl. This helper reconstructs the original impl by merging
+	 * the remaining _impl keys with the adopted children extracted from the wrapper.
+	 *
+	 * @description
+	 * Recursively walks the wrapper tree so nested objects whose _impl was also
+	 * depleted are properly reconstructed. For callable (function) impls, returns
+	 * the function directly since keepImplProperties prevents depletion.
+	 *
+	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+	 * @returns {*} The reconstructed implementation mirroring original module exports
+	 * @private
+	 */
+	_extractFullImpl(wrapper) {
+		if (!wrapper) return null;
+
+		const impl = wrapper._impl;
+
+		// Primitives and null/undefined: return directly (no depletion possible)
+		if (impl === null || impl === undefined) return impl;
+		if (typeof impl !== "object" && typeof impl !== "function") return impl;
+
+		// For functions, keepImplProperties=true means _impl is intact — return as-is
+		if (typeof impl === "function") return impl;
+
+		// For objects, reconstruct by merging remaining _impl keys with adopted children
+		const result = {};
+
+		// Copy remaining _impl keys (not adopted or metadata-protected)
+		for (const key of Object.keys(impl)) {
+			if (key.startsWith("__")) continue; // Skip metadata like __childFilePaths
+			result[key] = impl[key];
+		}
+
+		// Preserve metadata keys needed by _createChildWrapper for file path resolution
+		if (impl.__childFilePaths) {
+			result.__childFilePaths = impl.__childFilePaths;
+		}
+		if (impl.__childFilePathsPreMaterialize) {
+			result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
+		}
+
+		// Add adopted children from wrapper's own enumerable keys
+		for (const key of Object.keys(wrapper)) {
+			if (key.startsWith("_") || key.startsWith("__")) continue;
+			if (key in result) continue; // Already from _impl (not depleted for this key)
+
+			const child = wrapper[key];
+			if (child && typeof child.__wrapper === "object") {
+				// Recursively extract from child wrapper (handles nested depletion)
+				result[key] = this._extractFullImpl(child.__wrapper);
+			} else {
+				result[key] = child;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Restore API from fresh rebuild by updating existing wrapper.
+	 * For non-root endpoints, updates the wrapper's implementation without replacing structure.
+	 * For root endpoints, merges keys directly as addApiComponent does.
 	 * @param {object} freshApi - Fresh API from rebuild
 	 * @param {string} endpoint - Original endpoint path
 	 * @param {string} moduleID - Module identifier
 	 * @param {string} collisionMode - Collision handling mode
+	 * @param {boolean} [forceReplace=true] - When true, temporarily overrides wrapper collision
+	 *   mode to "replace" so fresh impl fully replaces old. When false, preserves original
+	 *   collision mode for proper merge behavior in multi-cache rebuilds.
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode) {
-		if (!freshApi || typeof freshApi !== "object") {
+	async _restoreApiTree(freshApi, endpoint, moduleID, collisionMode, forceReplace = true) {
+		if (!freshApi || (typeof freshApi !== "object" && typeof freshApi !== "function")) {
 			return;
 		}
 
@@ -1878,49 +2081,95 @@ export class ApiManager extends ComponentBase {
 				const freshValue = freshApi[key];
 
 				if (existingAtKey && typeof existingAtKey.___setImpl === "function") {
-					// Existing wrapper found — collect custom props, update impl, restore props
+					// Existing wrapper found — collect custom props before any modification
 					const customProps = this._collectCustomProperties(existingAtKey, freshValue);
 
-					// Extract raw impl from fresh value (which is a wrapper proxy from buildAPI)
-					let implForReload;
-					if (freshValue && typeof freshValue.__getState === "function") {
-						const freshWrapper = freshValue.__wrapper;
-						implForReload = freshWrapper ? freshWrapper._impl : freshValue;
-					} else {
-						implForReload = freshValue;
-					}
+					// Check if the fresh value is an un-materialized lazy wrapper
+					// (subdirectory from buildLazyAPI that hasn't been accessed yet)
+					const freshWrapper = freshValue?.__wrapper;
+					const isLazyFresh =
+						freshWrapper &&
+						freshWrapper.__mode === "lazy" &&
+						!freshWrapper.__state.materialized &&
+						typeof freshWrapper._materializeFunc === "function";
 
-					// Extract properties from function to avoid making container callable
-					if (typeof implForReload === "function") {
-						const extracted = {};
-						for (const k of Object.keys(implForReload)) {
-							extracted[k] = implForReload[k];
-						}
-						implForReload = extracted;
-					}
-
-					// Force replace mode for reload
-					const wrapper = existingAtKey.__wrapper;
-					const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
-					if (wrapper) {
-						wrapper.__state.collisionMode = "replace";
-					}
-
-					existingAtKey.___setImpl(implForReload, moduleID);
-
-					// Restore collision mode
-					if (wrapper && originalCollisionMode !== null) {
-						wrapper.__state.collisionMode = originalCollisionMode;
-					}
-
-					// Restore custom properties
-					this._restoreCustomProperties(existingAtKey, customProps);
-
+					// DEBUG: Trace lazy detection for every root key
 					this.slothlet.debug("reload", {
-						message: "Root key updated via ___setImpl",
+						message: "RESTORE-ROOT-KEY-INSPECT",
 						key,
-						restoredCustomProps: Object.keys(customProps)
+						hasFreshWrapper: !!freshWrapper,
+						freshMode: freshWrapper?.__mode,
+						freshMaterialized: freshWrapper?.__state?.materialized,
+						hasMaterializeFunc: typeof freshWrapper?._materializeFunc === "function",
+						isLazyFresh,
+						existingMaterialized: existingAtKey?.__getState?.()?.materialized
 					});
+
+					if (isLazyFresh) {
+						// LAZY RESET PATH: Fresh value is a lazy shell — reset existing wrapper
+						// to un-materialized state with the fresh materializeFunc.
+						// This frees memory from any previously-materialized children and
+						// ensures the next access triggers materialization from updated source.
+						existingAtKey.___resetLazy(freshWrapper._materializeFunc);
+
+						// Restore custom properties after lazy reset
+						this._restoreCustomProperties(existingAtKey, customProps);
+
+						this.slothlet.debug("reload", {
+							message: "Root key reset to lazy via ___resetLazy",
+							key,
+							restoredCustomProps: Object.keys(customProps)
+						});
+					} else {
+						// EAGER PATH: Fresh value is concrete (eager mode, or root-level file
+						// which is always eager even in lazy mode) — extract impl and update.
+
+						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
+						// CRITICAL: freshWrapper._impl may be depleted — the constructor's
+						// _adoptImplChildren() moved children (like host, port for config) out of
+						// _impl and onto the wrapper as own properties, deleting them from _impl.
+						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
+						let implForReload;
+						if (freshValue && typeof freshValue.__getState === "function") {
+							implForReload = freshWrapper ? this._extractFullImpl(freshWrapper) : freshValue;
+						} else {
+							implForReload = freshValue;
+						}
+
+						// Extract properties from function to avoid making container callable
+						if (typeof implForReload === "function") {
+							const extracted = {};
+							for (const k of Object.keys(implForReload)) {
+								extracted[k] = implForReload[k];
+							}
+							implForReload = extracted;
+						}
+
+						// Conditionally force replace mode for reload
+						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
+						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
+						const wrapper = existingAtKey.__wrapper;
+						const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
+						if (forceReplace && wrapper) {
+							wrapper.__state.collisionMode = "replace";
+						}
+
+						existingAtKey.___setImpl(implForReload, moduleID);
+
+						// Restore collision mode
+						if (wrapper && originalCollisionMode !== null) {
+							wrapper.__state.collisionMode = originalCollisionMode;
+						}
+
+						// Restore custom properties
+						this._restoreCustomProperties(existingAtKey, customProps);
+
+						this.slothlet.debug("reload", {
+							message: "Root key updated via ___setImpl",
+							key,
+							restoredCustomProps: Object.keys(customProps)
+						});
+					}
 				} else if (existingAtKey === undefined) {
 					// New key from reload — use setValueAtPath to create it
 					const cacheManager = this.slothlet.handlers.apiCacheManager;
@@ -1964,13 +2213,13 @@ export class ApiManager extends ComponentBase {
 				// Collect custom properties from existing wrapper before reload
 				const customProps = this._collectCustomProperties(existing, freshApi);
 
-				// CRITICAL: Force "replace" mode for reload to clear old keys
-				// During reload, we want to completely replace the implementation, not merge
-				// Store the original collision mode and restore it after
+				// Conditionally force "replace" mode for reload
+				// forceReplace=true (single-module or first in multi-cache): clear old keys
+				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
 				const wrapper = existing.__wrapper;
 				const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
 
-				if (wrapper) {
+				if (forceReplace && wrapper) {
 					wrapper.__state.collisionMode = "replace";
 					this.slothlet.debug("reload", {
 						message: "RESTORE: forcing replace mode",
@@ -1982,15 +2231,40 @@ export class ApiManager extends ComponentBase {
 
 				// Existing wrapper found - update implementation directly
 				// This is the key: we update the WRAPPER's implementation, not replace the path
-				// CRITICAL: If freshApi is a function (root contributor from buildAPI),
-				// extract properties into a plain object to avoid setting callable on the container
-				let implForReload = freshApi;
-				if (typeof freshApi === "function") {
+				// CRITICAL: After eager rebuild, wrapper proxies have depleted _impl (children
+				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
+				// so ___setImpl → _adoptImplChildren receives the full key set.
+				let implForReload;
+				if (freshApi && typeof freshApi.__getState === "function") {
+					const freshWrapper = freshApi.__wrapper;
+					implForReload = freshWrapper ? this._extractFullImpl(freshWrapper) : freshApi;
+				} else if (typeof freshApi === "function") {
 					implForReload = {};
 					for (const key of Object.keys(freshApi)) {
 						implForReload[key] = freshApi[key];
 					}
+				} else {
+					implForReload = freshApi;
 				}
+
+				// Recursively extract full impls from any child wrapper proxies with depleted _impl.
+				// This handles the common case where freshApi is a function (no __getState) but
+				// its enumerable properties are wrapper proxies from eager rebuild.
+				// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
+				// lazy wrappers should be preserved as-is so _adoptImplChildren can call
+				// ___resetLazy with the fresh materializeFunc.
+				if (implForReload && typeof implForReload === "object") {
+					for (const key of Object.keys(implForReload)) {
+						const val = implForReload[key];
+						if (val && typeof val.__getState === "function" && val.__wrapper) {
+							const childWrapper = val.__wrapper;
+							if (childWrapper.__state.materialized) {
+								implForReload[key] = this._extractFullImpl(childWrapper);
+							}
+						}
+					}
+				}
+
 				existing.___setImpl(implForReload, moduleID);
 
 				// Restore original collision mode

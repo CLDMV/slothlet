@@ -26,7 +26,6 @@
  * @param {Object} options.config - Configuration
  * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
  * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
- * @param {Object} [options.userMetadata={}] - User metadata to apply to all wrappers
  * @returns {Promise<Object>} Built API object
  * @public
  */
@@ -35,7 +34,6 @@ export async function buildEagerAPI({
 	apiPathPrefix = "",
 	collisionContext = "initial",
 	moduleID,
-	userMetadata = {},
 	slothlet,
 	apiDepth = Infinity,
 	cacheBust = null
@@ -72,7 +70,6 @@ export async function buildEagerAPI({
 		collisionContext,
 		moduleID,
 		dir, // sourceFolder for metadata
-		userMetadata,
 		cacheBust
 	);
 

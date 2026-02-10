@@ -258,25 +258,35 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {Object|string} pathOrParams - API path string or parameters object
-				 * @param {string} [pathOrParams.apiPath] - The API path to reload (when using object form)
-				 * @param {string} [pathOrParams.moduleID] - The module ID to reload (when using object form)
+				 * @param {string|null} [pathOrModuleId] - API path, module ID, or base module identifier.
+				 *   Pass null, undefined, "", or "." to reload the base module.
+				 *   Pass a string matching a loaded moduleID to reload that specific module.
+				 *   Pass an API path string to reload the module(s) that contribute to that path.
 				 * @returns {Promise<void>}
 				 * @public
 				 *
 				 * @description
-				 * Reloads API modules recorded through add operations, preserving references.
+				 * Reloads API modules from disk, preserving wrapper references and custom properties.
 				 * Requires `api.mutations.reload: true` in configuration.
-				 * Accepts either a string (API path) or an object with apiPath/moduleID.
+				 *
+				 * For base module reload, pass null, undefined, empty string, or ".".
+				 * For specific module reload, pass the moduleID from an add operation.
+				 * For path-based reload, pass a dot-separated API path — the system
+				 * finds the owning cache(s) automatically (exact match, children,
+				 * ownership history, or parent scope).
 				 *
 				 * @example
+				 * // Reload the base module
+				 * await api.slothlet.api.reload(".");
+				 * await api.slothlet.api.reload();
+				 *
+				 * @example
+				 * // Reload a specific API path
 				 * await api.slothlet.api.reload("plugins");
 				 *
 				 * @example
-				 * await api.slothlet.api.reload({ apiPath: "plugins" });
-				 *
-				 * @example
-				 * await api.slothlet.api.reload({ moduleID: "myModule" });
+				 * // Reload by module ID
+				 * await api.slothlet.api.reload("myModule_abc123");
 				 */
 				reload: async function slothlet_api_reload(pathOrModuleId) {
 					// Check if reload mutation is allowed
@@ -288,10 +298,15 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
+					// Normalize base module identifiers: null, undefined, "", "." all mean base module
+					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
+						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: "." });
+					}
+
 					if (typeof pathOrModuleId !== "string") {
 						throw new slothlet.SlothletError("INVALID_ARGUMENT", {
 							argument: "pathOrModuleId",
-							expected: "string",
+							expected: "string, null, undefined, or '.'",
 							received: typeof pathOrModuleId,
 							validationError: true
 						});
@@ -301,11 +316,10 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
-						// Reload by moduleID
 						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId });
 					}
 
-					// Treat as API path - validate it exists
+					// Treat as API path - validate it exists in the user-facing API
 					const normalizedPath = slothlet.handlers.apiManager.normalizeApiPath(pathOrModuleId).apiPath;
 					const pathParts = normalizedPath.split(".");
 					let current = slothlet.api;
@@ -328,7 +342,7 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
-					// Reload by API path
+					// Reload by API path — _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath });
 				}
 			},

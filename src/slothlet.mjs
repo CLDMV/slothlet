@@ -444,8 +444,15 @@ class Slothlet {
 					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleID for replay
 				});
 			} else if (operation.type === "remove") {
-				// Call actual removeApiComponent to properly clean up ownership, metadata, etc.
-				await this.handlers.apiManager.removeApiComponent(operation.apiPath, { recordHistory: false });
+				// During replay, operation.apiPath is the root path (e.g., "path1").
+				// Use deletePath directly to remove the entire subtree.
+				const { parts } = this.handlers.apiManager.normalizeApiPath(operation.apiPath);
+				this.handlers.apiManager.deletePath(this.api, parts);
+				// Clean up metadata
+				if (this.handlers.metadata) {
+					const rootSegment = operation.apiPath.split(".")[0];
+					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+				}
 			}
 		}
 

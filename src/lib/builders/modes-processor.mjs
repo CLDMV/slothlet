@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-09 22:31:44 -08:00 (1770705104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -56,24 +56,12 @@ export class ModesProcessor extends ComponentBase {
 		collisionContext = "initial",
 		moduleID = null,
 		sourceFolder = null,
-		userMetadata = {},
 		cacheBust = null
 	) {
 		// Access components and data via slothlet instance
 		const { ownership, metadata } = this.slothlet.handlers;
 		const { loader, flatten } = this.slothlet.processors;
 		const { contextManager, instanceID, config } = this.slothlet;
-		// Register user metadata for this moduleID (if provided)
-		// CRITICAL: Skip registration during addApi context - let api-manager handle it after collision resolution
-		// This ensures metadata is only registered when the API is actually added (not skipped/warned)
-		if (metadata && moduleID && Object.keys(userMetadata).length > 0 && collisionContext !== "addApi") {
-			const apiPath = apiPathPrefix || "";
-			try {
-				metadata.registerUserMetadata(moduleID, apiPath, userMetadata);
-			} catch (error) {
-				console.error("[processFiles] Error registering user metadata:", error);
-			}
-		}
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
 			if (!apiPathPrefix) return path;
@@ -791,8 +779,10 @@ export class ModesProcessor extends ComponentBase {
 								currentDepth: currentDepth + 1,
 								moduleFiles: subDir.children.files
 							});
-							// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
-							if (categoryDecision.shouldFlatten && !apiPathPrefix) {
+							// Flattening is about module internal structure (math/math.mjs → math),
+							// not about the target path prefix. Must flatten regardless of apiPathPrefix
+							// so api.add() produces the same flattened structure as standalone loading.
+							if (categoryDecision.shouldFlatten) {
 								this.slothlet.debug("modes", {
 									message: "Folder-level flatten - skipping recursion",
 									subDir: subDirName
@@ -830,6 +820,68 @@ export class ModesProcessor extends ComponentBase {
 								} else {
 									// Fallback - use the whole module
 									implToWrap = modContent;
+								}
+
+								// CRITICAL: File-vs-folder collision within same module directory.
+								// When a file and folder share the same name (e.g., math.mjs + math/),
+								// the file's exports need to be merged into the folder wrapper's impl.
+								// The file was processed first (files before directories), so its value
+								// may already exist at targetApi[subDirName].
+								// IMPORTANT: Respect collision mode:
+								// - replace: Do NOT merge. The folder completely replaces the file.
+								// - skip: Do NOT merge. The file (first) stays, folder is ignored.
+								// - error: Should have thrown earlier during assignToApiPath.
+								// - merge/warn: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
+								// - merge-replace: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
+								const modes_eagerCollisionConfig = config.api?.collision || config.collision;
+								const modes_eagerCollisionMode =
+									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) || "merge";
+								const modes_existingAtKey = targetApi[subDirName];
+								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
+									const modes_existingWrapper = modes_existingAtKey?.__wrapper;
+									if (modes_existingWrapper) {
+										// In lazy mode, the file wrapper hasn't materialized yet.
+										// Force materialization so we can access its exports.
+										if (modes_existingWrapper._materializeFunc && !modes_existingWrapper.__state?.materialized) {
+											await modes_existingWrapper._materialize();
+										}
+										// Ensure children are adopted from impl
+										if (modes_existingWrapper._impl && !modes_existingWrapper.__state?.childrenAdopted) {
+											modes_existingWrapper._adoptImplChildren();
+										}
+										const modes_existingImpl = modes_existingWrapper.__impl;
+										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
+											if (typeof implToWrap === "object" && implToWrap !== null) {
+												for (const [k, v] of Object.entries(modes_existingImpl)) {
+													if (!(k in implToWrap)) {
+														implToWrap[k] = v;
+													}
+												}
+											} else if (typeof implToWrap === "function") {
+												for (const [k, v] of Object.entries(modes_existingImpl)) {
+													if (implToWrap[k] === undefined) {
+														implToWrap[k] = v;
+													}
+												}
+											}
+										}
+										// Also absorb any child properties from existing wrapper
+										const modes_existingChildKeys = Object.keys(modes_existingWrapper).filter(
+											(k) => !k.startsWith("_") && !k.startsWith("__")
+										);
+										for (const ck of modes_existingChildKeys) {
+											if (typeof implToWrap === "object" && implToWrap !== null && !(ck in implToWrap)) {
+												implToWrap[ck] = modes_existingWrapper[ck];
+											} else if (typeof implToWrap === "function" && implToWrap[ck] === undefined) {
+												implToWrap[ck] = modes_existingWrapper[ck];
+											}
+										}
+										this.slothlet.debug("modes", {
+											message: "File-folder collision: merged file exports into folder impl",
+											subDir: subDirName,
+											mergedKeys: Object.keys(implToWrap)
+										});
+									}
 								}
 
 								// Flatten: put the module content directly at targetApi[subDirName]
@@ -877,7 +929,6 @@ export class ModesProcessor extends ComponentBase {
 						collisionContext,
 						moduleID, // Pass through moduleID to subdirectories
 						sourceFolder,
-						{}, // userMetadata - not passed to subdirectories
 						cacheBust
 					);
 				}
@@ -893,6 +944,36 @@ export class ModesProcessor extends ComponentBase {
 							fileCount: subDir.children.files.length
 						});
 					}
+
+					// CRITICAL: File-folder collision within same module directory.
+					// If a file (e.g., math.mjs) already created a wrapper at this key,
+					// its exports must be preserved and merged into the lazy folder wrapper
+					// during materialization. Extract the file's exports BEFORE replacement.
+					// IMPORTANT: Only extract for merge/merge-replace modes. In replace mode,
+					// the folder completely replaces the file — no file exports should persist.
+					// The replace mode collision in api-assignment.mjs handles materialization.
+					const collisionConfig = config.api?.collision;
+					const modes_initialCollisionMode =
+						(collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
+					let modes_fileFolderImpl = null;
+					const modes_lazyExisting = targetApi[subDirName];
+					if (modes_initialCollisionMode !== "replace" && modes_lazyExisting?.__wrapper) {
+						const modes_lazyExistingW = modes_lazyExisting.__wrapper;
+						// Root files are processed eagerly even in lazy mode, so impl should exist
+						const existImpl = modes_lazyExistingW.__impl;
+						if (existImpl && typeof existImpl === "object" && !Array.isArray(existImpl)) {
+							modes_fileFolderImpl = { ...existImpl };
+						}
+						// Also capture child properties from the existing wrapper
+						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+						for (const ck of existChildKeys) {
+							if (!modes_fileFolderImpl) modes_fileFolderImpl = {};
+							if (!(ck in modes_fileFolderImpl)) {
+								modes_fileFolderImpl[ck] = modes_lazyExistingW[ck];
+							}
+						}
+					}
+
 					this.slothlet.builders.apiAssignment.assignToApiPath(
 						targetApi,
 						subDirName,
@@ -908,8 +989,9 @@ export class ModesProcessor extends ComponentBase {
 							apiPathPrefix,
 							moduleID,
 							sourceFolder,
-							userMetadata, // Pass userMetadata to lazy wrappers!
-							cacheBust
+							cacheBust,
+							modes_fileFolderImpl,
+							modes_initialCollisionMode
 						),
 						{
 							useCollisionDetection: true,
@@ -1007,8 +1089,9 @@ export class ModesProcessor extends ComponentBase {
 		parentApiPathPrefix = "",
 		moduleID = null,
 		sourceFolder = null,
-		userMetadata = {},
-		cacheBust = null
+		cacheBust = null,
+		fileFolderCollisionImpl = null,
+		collisionMode = "merge"
 	) {
 		// Create materialization function (POC pattern: returns implementation, doesn't take wrapper param)
 		/**
@@ -1147,6 +1230,21 @@ export class ModesProcessor extends ComponentBase {
 							implToWrap.__childFilePaths = childPaths;
 						}
 
+						// Merge file-folder collision exports (from same-name file, e.g., math.mjs + math/)
+						if (fileFolderCollisionImpl && typeof implToWrap === "object" && implToWrap !== null) {
+							for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+								if (!(k in implToWrap)) {
+									implToWrap[k] = v;
+								}
+							}
+						} else if (fileFolderCollisionImpl && typeof implToWrap === "function") {
+							for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+								if (implToWrap[k] === undefined) {
+									implToWrap[k] = v;
+								}
+							}
+						}
+
 						return implToWrap;
 					}
 				}
@@ -1167,7 +1265,6 @@ export class ModesProcessor extends ComponentBase {
 				"initial",
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
-				{}, // Don't pass userMetadata during materialization - it was already registered during api.add()
 				cacheBust
 			);
 			if (config.debug?.modes) {
@@ -1180,6 +1277,16 @@ export class ModesProcessor extends ComponentBase {
 
 			// Debug for math folder
 			if (dir.name === "math") {
+			}
+
+			// Merge file-folder collision exports into materialized result
+			// Applies when the processFiles path is used (non-flatten)
+			if (fileFolderCollisionImpl) {
+				for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+					if (!(k in materialized)) {
+						materialized[k] = v;
+					}
+				}
 			}
 
 			const materializedKeys = Object.keys(materialized);
@@ -1242,6 +1349,30 @@ export class ModesProcessor extends ComponentBase {
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder
 		});
+
+		// CRITICAL: Add file-folder collision exports as immediate children on the wrapper.
+		// These come from a same-name file (e.g., math.mjs) that collides with this folder (math/).
+		// Without this, the exports are trapped in the materialization closure and invisible
+		// to merge operations in api-assignment.mjs until materialization completes.
+		// IMPORTANT: Only pre-populate for merge/warn modes where the FILE (first) wins conflicts.
+		// For merge-replace mode, the FOLDER (second) should win — pre-populating file exports
+		// causes the get trap to return them before materialization can replace them with folder versions.
+		// For merge-replace, the _mergeAfterMaterialize mechanism in api-assignment handles
+		// adding non-conflicting file keys after materialization completes.
+		const shouldPrePopulate = collisionMode === "merge" || collisionMode === "warn";
+		if (fileFolderCollisionImpl && shouldPrePopulate) {
+			for (const [k, v] of Object.entries(fileFolderCollisionImpl)) {
+				if (typeof k === "string" && !k.startsWith("_") && !k.startsWith("__")) {
+					Object.defineProperty(wrapper, k, {
+						value: v,
+						writable: false,
+						enumerable: true,
+						configurable: true
+					});
+				}
+			}
+		}
+
 		return wrapper.createProxy();
 	}
 	/**
