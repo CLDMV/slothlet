@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-10 06:40:51 -08:00 (1770734451)
+ *	@Last modified time: 2026-02-10 15:43:28 -08:00 (1770767008)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -310,13 +310,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	static _cloneImpl(value) {
-		if (
-			value &&
-			typeof value === "object" &&
-			!Array.isArray(value) &&
-			typeof value !== "function" &&
-			!util.types.isProxy(value)
-		) {
+		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function" && !util.types.isProxy(value)) {
 			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
 			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
 		}
@@ -324,7 +318,59 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Set new implementation and adopt children
+	 * Core implementation-application logic shared by ___setImpl and lazy materialization.
+	 * Clones the implementation (protecting the API cache from _adoptImplChildren's
+	 * delete operations), clears the invalid flag, upgrades __isCallable when a
+	 * callable impl arrives on a configurable wrapper, updates __filePath for lazy
+	 * folder wrappers, and adopts children.
+	 *
+	 * @param {*} newImpl - The new implementation value.
+	 * @private
+	 */
+	_applyNewImpl(newImpl) {
+		// Clone to protect API cache from _adoptImplChildren's delete operations.
+		// See static _cloneImpl() for full rationale.
+		this._impl = UnifiedWrapper._cloneImpl(newImpl);
+		this.__invalid = false;
+
+		// Update __isCallable if it's currently false (configurable) and the new impl is callable.
+		// In lazy mode, __isCallable starts as false/configurable because initialImpl is null.
+		// When the real impl arrives and is a function, upgrade to true/non-configurable.
+		const applyNewImpl_isCallableDesc = Object.getOwnPropertyDescriptor(this, "__isCallable");
+		if (
+			applyNewImpl_isCallableDesc &&
+			applyNewImpl_isCallableDesc.configurable &&
+			!applyNewImpl_isCallableDesc.value &&
+			(typeof newImpl === "function" || (newImpl && typeof newImpl.default === "function"))
+		) {
+			Object.defineProperty(this, "__isCallable", { value: true, writable: false, enumerable: false, configurable: false });
+		}
+
+		// Update wrapper's filePath if not yet set.
+		// This handles lazy folder wrappers that import a file — the file path is
+		// stored on the impl by modes-processor and needs to be promoted to the wrapper.
+		if (!this.__filePath && this._impl && this._impl.__filePath) {
+			Object.defineProperty(this, "__filePath", {
+				value: this._impl.__filePath,
+				writable: false,
+				enumerable: false,
+				configurable: true
+			});
+			this.slothlet.debug("wrapper", {
+				message: "APPLY-IMPL-UPDATE-PATH: updated filePath from null",
+				apiPath: this.__apiPath,
+				filePath: this.__filePath
+			});
+		}
+
+		this._adoptImplChildren();
+	}
+
+	/**
+	 * Set new implementation and adopt children.
+	 * Delegates core impl work to _applyNewImpl, then emits lifecycle events
+	 * and updates materialization state.
+	 *
 	 * @param {*} newImpl - New implementation
 	 * @param {string} [moduleID] - Optional moduleID for lifecycle event (for replacements)
 	 * @private
@@ -337,22 +383,8 @@ export class UnifiedWrapper extends ComponentBase {
 				newImplKeys: Object.keys(newImpl || {})
 			});
 		}
-		// Clone to protect API cache from _adoptImplChildren's delete operations.
-		// See static _cloneImpl() for full rationale.
-		this._impl = UnifiedWrapper._cloneImpl(newImpl);
-		// Update __isCallable if it's currently false (configurable) and the new impl is callable.
-		// In lazy mode, __isCallable starts as false/configurable because initialImpl is null.
-		// When the real impl arrives and is a function, upgrade to true/non-configurable.
-		const isCallableDesc = Object.getOwnPropertyDescriptor(this, "__isCallable");
-		if (
-			isCallableDesc &&
-			isCallableDesc.configurable &&
-			!isCallableDesc.value &&
-			(typeof newImpl === "function" || (newImpl && typeof newImpl.default === "function"))
-		) {
-			Object.defineProperty(this, "__isCallable", { value: true, writable: false, enumerable: false, configurable: false });
-		}
-		this.__invalid = false;
+
+		this._applyNewImpl(newImpl);
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
@@ -377,7 +409,6 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		this._adoptImplChildren();
 		this.__state.materialized = true;
 		this.__state.inFlight = false;
 	}
@@ -490,39 +521,13 @@ export class UnifiedWrapper extends ComponentBase {
 					// POC pattern: materializeFunc can set implementation synchronously via setter
 					// This matches v2 behavior where 'materialized' variable is set immediately
 					const lazy_setImpl = (value) => {
-						// Clone to protect API cache from _adoptImplChildren's delete operations.
-						// See static _cloneImpl() for full rationale.
-						this._impl = UnifiedWrapper._cloneImpl(value);
-						this.__invalid = false;
-
-						// CRITICAL: Update wrapper's filePath BEFORE adopting children
-						// This happens for lazy folder wrappers that import a file
-						// Use the file path stored on the impl by modes-processor
-						if (!this.__filePath && this._impl && this._impl.__filePath) {
-							Object.defineProperty(this, "__filePath", {
-								value: this._impl.__filePath,
-								writable: false,
-								enumerable: false,
-								configurable: true
-							});
-							this.slothlet.debug("wrapper", {
-								message: "MATERIALIZE-UPDATE-PATH: updated filePath from null",
-								apiPath: this.__apiPath,
-								filePath: this.__filePath
-							});
-						}
-
-						this._adoptImplChildren();
+						this._applyNewImpl(value);
 					};
 					const result = await this._materializeFunc(lazy_setImpl);
 
 					// If materializeFunc didn't call setter, set _impl from return value
 					if (!this._impl) {
-						// Clone to protect API cache from _adoptImplChildren's delete operations.
-						// See static _cloneImpl() for full rationale.
-						this._impl = UnifiedWrapper._cloneImpl(result);
-						this.__invalid = false;
-						this._adoptImplChildren();
+						this._applyNewImpl(result);
 					}
 
 					this.__state.materialized = true;
