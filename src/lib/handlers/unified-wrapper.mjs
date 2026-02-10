@@ -318,6 +318,71 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
+	 * Reconstruct a full implementation object from a wrapper whose _impl may have
+	 * been depleted by _adoptImplChildren.
+	 *
+	 * @description
+	 * After _adoptImplChildren runs, children are moved from _impl onto the wrapper as
+	 * own properties and deleted from _impl. This helper reconstructs the original
+	 * impl by merging the remaining _impl keys with the adopted children extracted
+	 * from the wrapper.
+	 *
+	 * Recursively walks the wrapper tree so nested objects whose _impl was also
+	 * depleted are properly reconstructed. For callable (function) impls, returns
+	 * the function directly since keepImplProperties prevents depletion.
+	 *
+	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
+	 * @returns {*} The reconstructed implementation mirroring original module exports
+	 * @static
+	 * @private
+	 */
+	static _extractFullImpl(wrapper) {
+		if (!wrapper) return null;
+
+		const impl = wrapper._impl;
+
+		// Primitives and null/undefined: return directly (no depletion possible)
+		if (impl === null || impl === undefined) return impl;
+		if (typeof impl !== "object" && typeof impl !== "function") return impl;
+
+		// For functions, keepImplProperties=true means _impl is intact — return as-is
+		if (typeof impl === "function") return impl;
+
+		// For objects, reconstruct by merging remaining _impl keys with adopted children
+		const extractFullImpl_result = {};
+
+		// Copy remaining _impl keys (not adopted or metadata-protected)
+		for (const key of Object.keys(impl)) {
+			if (key.startsWith("__")) continue; // Skip metadata like __childFilePaths
+			extractFullImpl_result[key] = impl[key];
+		}
+
+		// Preserve metadata keys needed by _createChildWrapper for file path resolution
+		if (impl.__childFilePaths) {
+			extractFullImpl_result.__childFilePaths = impl.__childFilePaths;
+		}
+		if (impl.__childFilePathsPreMaterialize) {
+			extractFullImpl_result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
+		}
+
+		// Add adopted children from wrapper's own enumerable keys
+		for (const key of Object.keys(wrapper)) {
+			if (key.startsWith("_") || key.startsWith("__")) continue;
+			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
+
+			const extractFullImpl_child = wrapper[key];
+			if (extractFullImpl_child && typeof extractFullImpl_child.__wrapper === "object") {
+				// Recursively extract from child wrapper (handles nested depletion)
+				extractFullImpl_result[key] = UnifiedWrapper._extractFullImpl(extractFullImpl_child.__wrapper);
+			} else {
+				extractFullImpl_result[key] = extractFullImpl_child;
+			}
+		}
+
+		return extractFullImpl_result;
+	}
+
+	/**
 	 * Core implementation-application logic shared by ___setImpl and lazy materialization.
 	 * Clones the implementation (protecting the API cache from _adoptImplChildren's
 	 * delete operations), clears the invalid flag, upgrades __isCallable when a
@@ -782,7 +847,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// CRITICAL: _impl may be depleted — _adoptImplChildren moves children from
 					// _impl onto the wrapper as own properties and deletes them from _impl.
 					// When _impl is an empty object but the wrapper has own enumerable keys,
-					// reconstruct the full impl from the wrapper's own properties.
+					// use _extractFullImpl to reconstruct the complete impl from the wrapper tree.
 					if (
 						rawImpl &&
 						typeof rawImpl === "object" &&
@@ -792,19 +857,7 @@ export class UnifiedWrapper extends ComponentBase {
 					) {
 						const wrapperOwnKeys = Object.keys(newWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						if (wrapperOwnKeys.length > 0) {
-							// Reconstruct impl from wrapper's own properties (children adopted from impl)
-							const reconstructed = {};
-							for (const wk of wrapperOwnKeys) {
-								const child = newWrapper[wk];
-								// Recursively extract from child wrappers that may also be depleted
-								if (child && typeof child.__getState === "function") {
-									const childW = child.__wrapper || child;
-									reconstructed[wk] = childW._impl || child;
-								} else {
-									reconstructed[wk] = child;
-								}
-							}
-							rawImpl = reconstructed;
+							rawImpl = UnifiedWrapper._extractFullImpl(newWrapper);
 						}
 					}
 
