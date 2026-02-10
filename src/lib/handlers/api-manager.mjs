@@ -1984,68 +1984,6 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Extract the full (non-depleted) implementation from a wrapper whose constructor
-	 * already ran _adoptImplChildren(). During construction, child values (like host,
-	 * port for a config object) are moved from _impl onto the wrapper as own properties
-	 * and deleted from _impl. This helper reconstructs the original impl by merging
-	 * the remaining _impl keys with the adopted children extracted from the wrapper.
-	 *
-	 * @description
-	 * Recursively walks the wrapper tree so nested objects whose _impl was also
-	 * depleted are properly reconstructed. For callable (function) impls, returns
-	 * the function directly since keepImplProperties prevents depletion.
-	 *
-	 * @param {Object} wrapper - The UnifiedWrapper instance to extract from
-	 * @returns {*} The reconstructed implementation mirroring original module exports
-	 * @private
-	 */
-	_extractFullImpl(wrapper) {
-		if (!wrapper) return null;
-
-		const impl = wrapper._impl;
-
-		// Primitives and null/undefined: return directly (no depletion possible)
-		if (impl === null || impl === undefined) return impl;
-		if (typeof impl !== "object" && typeof impl !== "function") return impl;
-
-		// For functions, keepImplProperties=true means _impl is intact — return as-is
-		if (typeof impl === "function") return impl;
-
-		// For objects, reconstruct by merging remaining _impl keys with adopted children
-		const result = {};
-
-		// Copy remaining _impl keys (not adopted or metadata-protected)
-		for (const key of Object.keys(impl)) {
-			if (key.startsWith("__")) continue; // Skip metadata like __childFilePaths
-			result[key] = impl[key];
-		}
-
-		// Preserve metadata keys needed by _createChildWrapper for file path resolution
-		if (impl.__childFilePaths) {
-			result.__childFilePaths = impl.__childFilePaths;
-		}
-		if (impl.__childFilePathsPreMaterialize) {
-			result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
-		}
-
-		// Add adopted children from wrapper's own enumerable keys
-		for (const key of Object.keys(wrapper)) {
-			if (key.startsWith("_") || key.startsWith("__")) continue;
-			if (key in result) continue; // Already from _impl (not depleted for this key)
-
-			const child = wrapper[key];
-			if (child && typeof child.__wrapper === "object") {
-				// Recursively extract from child wrapper (handles nested depletion)
-				result[key] = this._extractFullImpl(child.__wrapper);
-			} else {
-				result[key] = child;
-			}
-		}
-
-		return result;
-	}
-
-	/**
 	 * Restore API from fresh rebuild by updating existing wrapper.
 	 * For non-root endpoints, updates the wrapper's implementation without replacing structure.
 	 * For root endpoints, merges keys directly as addApiComponent does.
@@ -2131,7 +2069,7 @@ export class ApiManager extends ComponentBase {
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
 						if (freshValue && typeof freshValue.__getState === "function") {
-							implForReload = freshWrapper ? this._extractFullImpl(freshWrapper) : freshValue;
+							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
 							implForReload = freshValue;
 						}
@@ -2237,7 +2175,7 @@ export class ApiManager extends ComponentBase {
 				let implForReload;
 				if (freshApi && typeof freshApi.__getState === "function") {
 					const freshWrapper = freshApi.__wrapper;
-					implForReload = freshWrapper ? this._extractFullImpl(freshWrapper) : freshApi;
+					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
 					implForReload = {};
 					for (const key of Object.keys(freshApi)) {
@@ -2259,7 +2197,7 @@ export class ApiManager extends ComponentBase {
 						if (val && typeof val.__getState === "function" && val.__wrapper) {
 							const childWrapper = val.__wrapper;
 							if (childWrapper.__state.materialized) {
-								implForReload[key] = this._extractFullImpl(childWrapper);
+								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
 							}
 						}
 					}
