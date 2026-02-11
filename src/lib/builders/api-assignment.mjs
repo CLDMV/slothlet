@@ -344,7 +344,7 @@ export class ApiAssignment extends ComponentBase {
 							});
 						} else if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
-							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
+							// When folder materializes, _adoptImplChildren will preserve these (merge scenario)
 
 							// Get file wrapper's metadata to extract filePath for child mappings
 							const existingMetadata = this.slothlet.handlers?.metadata?.getMetadata(existing);
@@ -428,14 +428,14 @@ export class ApiAssignment extends ComponentBase {
 					}
 
 					// CRITICAL: For materialized lazy wrappers, we need child caches populated
-					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
+					// In lazy mode, _impl is already set but _adoptImplChildren hasn't run yet
 					const existingChildCount = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
 					const valueChildCount = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
 					if (existingWrapper._impl && existingChildCount === 0) {
-						existingWrapper.___adoptImplChildren();
+						existingWrapper._adoptImplChildren();
 					}
 					if (valueWrapper._impl && valueChildCount === 0) {
-						valueWrapper.___adoptImplChildren();
+						valueWrapper._adoptImplChildren();
 					}
 
 					// Merge value's child properties into existing's child properties
@@ -480,7 +480,7 @@ export class ApiAssignment extends ComponentBase {
 								// Ensure new child has adopted its impl children before merge
 								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
 								if (newChildWrapper._impl && newChildChildCount === 0) {
-									newChildWrapper.___adoptImplChildren();
+									newChildWrapper._adoptImplChildren();
 								}
 								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 								const existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));

@@ -273,90 +273,75 @@ export class Metadata extends ComponentBase {
 	 * Get metadata for a target (combines system + user)
 	 * For wrappers: checks current impl to ensure metadata is current
 	 * @param {Function|Object} target - Wrapper or function
-	 * @param {Object} [options] - Options
-	 * @param {boolean} [options.waitForLifecycle=false] - Wait for pending lifecycle events before retrieval
-	 * @returns {Object|Promise<Object>} Combined metadata (deeply frozen)
+	 * @returns {Object} Combined metadata (deeply frozen)
 	 * @public
 	 */
-	getMetadata(target, options = {}) {
-		const { waitForLifecycle = false } = options;
+	getMetadata(target) {
+		if (!target) return {};
 
-		// Helper to do the actual retrieval
-		const retrieve = () => {
-			if (!target) return {};
+		// Normalize target: if it's a proxy, get the underlying wrapper
+		const actualTarget = target.__wrapper || target;
 
-			// Normalize target: if it's a proxy, get the underlying wrapper
-			const actualTarget = target.__wrapper || target;
+		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
+		// then fall back to _impl (for cases where wrapper wasn't tagged)
+		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
 
-			// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
-			// then fall back to _impl (for cases where wrapper wasn't tagged)
-			const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
+		// Lookup user metadata by BOTH moduleID AND rootApiPath
+		// - registerUserMetadata() stores by root apiPath (for api.add())
+		// - setUserMetadata() stores by moduleID (for external metadata.set())
+		const moduleID = systemData.moduleID || systemData.moduleID;
+		const apiPath = systemData.apiPath;
 
-			// Lookup user metadata by BOTH moduleID AND rootApiPath
-			// - registerUserMetadata() stores by root apiPath (for api.add())
-			// - setUserMetadata() stores by moduleID (for external metadata.set())
-			const moduleID = systemData.moduleID || systemData.moduleID;
-			const apiPath = systemData.apiPath;
+		// Traverse UP the apiPath chain to collect inherited metadata
+		// Example: "mixed.config.settings.getPluginConfig" checks:
+		//   - "mixed.config.settings.getPluginConfig"
+		//   - "mixed.config.settings"
+		//   - "mixed.config"
+		//   - "mixed"
+		const collectMetadataFromParents = (path) => {
+			if (!path) return {};
 
-			// Traverse UP the apiPath chain to collect inherited metadata
-			// Example: "mixed.config.settings.getPluginConfig" checks:
-			//   - "mixed.config.settings.getPluginConfig"
-			//   - "mixed.config.settings"
-			//   - "mixed.config"
-			//   - "mixed"
-			const collectMetadataFromParents = (path) => {
-				if (!path) return {};
+			const parts = path.split(".");
+			const collected = {};
 
-				const parts = path.split(".");
-				const collected = {};
-
-				// Start from root and work down (parent metadata merged first, child overrides)
-				for (let i = 1; i <= parts.length; i++) {
-					const parentPath = parts.slice(0, i).join(".");
-					const parentMeta = this.#userMetadataStore.get(parentPath);
-					if (parentMeta?.metadata) {
-						Object.assign(collected, parentMeta.metadata);
-					}
+			// Start from root and work down (parent metadata merged first, child overrides)
+			for (let i = 1; i <= parts.length; i++) {
+				const parentPath = parts.slice(0, i).join(".");
+				const parentMeta = this.#userMetadataStore.get(parentPath);
+				if (parentMeta?.metadata) {
+					Object.assign(collected, parentMeta.metadata);
 				}
-
-				return collected;
-			};
-
-			const userMetadataByModule = moduleID ? this.#userMetadataStore.get(moduleID) : null;
-			const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
-
-			// Merge both user metadata sources (path < moduleID priority)
-			const userData = {
-				...userMetadataByPath,
-				...(userMetadataByModule?.metadata || {})
-			};
-
-			// Merge order: global < user (by path) < user (by moduleID) < SYSTEM (system always wins)
-			const combined = {
-				...this.#globalUserMetadata,
-				...userData,
-				...systemData // System metadata LAST = highest priority (immutable)
-			};
-
-			// If there's a nested 'metadata' key, spread it to root level and remove the nested key
-			if (combined.metadata && typeof combined.metadata === "object") {
-				const { metadata, ...rest } = combined;
-				return this.#deepFreeze({
-					...rest,
-					...metadata
-				});
 			}
 
-			return this.#deepFreeze(combined);
+			return collected;
 		};
 
-		// If waitForLifecycle is requested and lifecycle system exists, wait for pending events
-		if (waitForLifecycle && this.slothlet.handlers?.lifecycle) {
-			return this.slothlet.handlers.lifecycle.waitForPending().then(retrieve);
+		const userMetadataByModule = moduleID ? this.#userMetadataStore.get(moduleID) : null;
+		const userMetadataByPath = apiPath ? collectMetadataFromParents(apiPath) : {};
+
+		// Merge both user metadata sources (path < moduleID priority)
+		const userData = {
+			...userMetadataByPath,
+			...(userMetadataByModule?.metadata || {})
+		};
+
+		// Merge order: global < user (by path) < user (by moduleID) < SYSTEM (system always wins)
+		const combined = {
+			...this.#globalUserMetadata,
+			...userData,
+			...systemData // System metadata LAST = highest priority (immutable)
+		};
+
+		// If there's a nested 'metadata' key, spread it to root level and remove the nested key
+		if (combined.metadata && typeof combined.metadata === "object") {
+			const { metadata, ...rest } = combined;
+			return this.#deepFreeze({
+				...rest,
+				...metadata
+			});
 		}
 
-		// Otherwise return synchronously
-		return retrieve();
+		return this.#deepFreeze(combined);
 	}
 
 	/**
@@ -593,8 +578,8 @@ export class Metadata extends ComponentBase {
 		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
 		if (!func) return null;
 
-		// Get metadata using new secure system - wait for lifecycle
-		const metadata = await this.getMetadata(func, { waitForLifecycle: true });
+		// Get metadata using new secure system
+		const metadata = this.getMetadata(func);
 
 		// SECURITY CHECK: Verify stack trace matches metadata
 		const stackFilePath = this.slothlet.helpers.resolver.toFsPath(parsed.file);
@@ -638,8 +623,8 @@ export class Metadata extends ComponentBase {
 		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
 		if (!func) return null;
 
-		// Get metadata using new secure system - wait for lifecycle
-		return await this.getMetadata(func, { waitForLifecycle: true }) || null;
+		// Get metadata using new secure system
+		return this.getMetadata(func) || null;
 	}
 
 	/**
@@ -658,11 +643,6 @@ export class Metadata extends ComponentBase {
 
 		const func = this.#findFunctionByPath(root, path);
 		if (!func) return null;
-
-		// Wait for lifecycle events before accessing metadata to avoid race conditions
-		if (this.slothlet.handlers?.lifecycle) {
-			await this.slothlet.handlers.lifecycle.waitForPending();
-		}
 
 		return func.__metadata || null;
 	}
