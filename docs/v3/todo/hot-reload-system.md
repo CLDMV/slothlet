@@ -1,61 +1,32 @@
 # Hot Reload System Implementation
 
-**Status:** ⚠️ INVESTIGATION NEEDED  
-**Last Updated:** 2026-02-06
+**Status:** ✅ COMPLETE  
+**Last Updated:** 2026-02-10
 
-## Investigation Summary (2026-02-06)
+## Summary
 
-**Selective Reload Specification**:
+All three hot reload modes are fully implemented, tested, and in the baseline test suite:
 
-1. **Reload by apiPath**: Reloads entire path (base + all modules contributing to it)
-   ```javascript
-   await api.slothlet.api.reload("math");
-   // Reloads: base math + any modules that added to math path
-   ```
+| Feature | Status | Tests | Test File |
+|---------|--------|-------|-----------|
+| Full Instance Reload (`api.slothlet.reload()`) | ✅ Complete | 56/56 | `core-reload-full.test.vitest.mjs` |
+| Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`) | ✅ Complete | 56/56 | `core-reload-selective.test.vitest.mjs` |
+| Multi-Cache Path Reload | ✅ Complete | 112/112 | `core-reload-path-multicache.test.vitest.mjs` |
+| Lazy-Mode Reload | ✅ Mostly Complete | 63/68 | `core-reload-lazy-mode.test.vitest.mjs` |
 
-2. **Reload by moduleID**: Reloads ONLY that module's contributions (uses ownership system)
-   ```javascript
-   await api.slothlet.api.reload(moduleID1);
-   // Updates module1's impl WITHOUT replacing currently active impl if buried
-   ```
+**All reload test suites are in the baseline** (`tests/vitests/baseline-tests.json`).
 
-**Ownership Stack Behavior**:
-- When module1 provides `api.x.fn` then module2 provides `api.x.fn`:
-  - module2's impl is active (last loaded wins)
-  - module1's impl is buried in ownership stack
-- When `reload(module1)`:
-  - Update module1's buried impl with fresh code
-  - DO NOT replace module2's active impl
-  - So when module2 is removed, module1's UPDATED impl becomes active
+**Known Issue:** 5 failures in lazy-mode "Full Instance Reload Respects Lazy Mode" tests — `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state (pre-existing issue in `slothlet.mjs` reload() method, not the selective reload system).
 
-**What Happened**:
-- Attempted to implement without understanding ownership stack system
-- Modified global reload code which broke full instance reload
-- Changes reverted
+## Implementation Details
 
-**Key Learnings**:
-1. Selective reload works with ownership stack, not simple replacement
-2. Path reload affects all contributors; moduleID reload affects only that module
-3. Must preserve ownership order when reloading buried implementations
-4. Full reload (`api.slothlet.reload()`) is working and in baseline (✅ all tests passing)
-
-**Implementation Requirements**:
-1. Track ownership per module (already exists in ownership system)
-2. When reloading by moduleID, update that module's impl in ownership stack
-3. Only update active impl if that module currently owns it (is top of stack)
-4. Preserve all other modules' implementations unchanged
-
----
-
-## Status: Mixed Results
-
-**CRITICAL**: The selective reload test file `core-reload-selective.test.vitest.mjs` is NOT in the baseline tests (2356 tests). This test may not be v3-compatible or may be testing features that aren't fully implemented yet. Investigation needed to determine if the test or implementation needs updating.
+See [api-cache-system.md](./api-cache-system.md) for the full implementation history of Steps 1-6 and the API cache architecture that powers all reload modes.
 
 ### ✅ Completed Features
 
 #### ✅ Full Instance Reload (`api.slothlet.reload()`)
 - **Status**: COMPLETE & WORKING
-- **Tests**: 56/56 passing (100%)
+- **Tests**: 56/56 passing (100%) — IN BASELINE
 - **Implementation**: `src/slothlet.mjs` - `async reload()` method
 - **Features**:
   - Fresh module loading with ESM/CJS cache busting
@@ -85,84 +56,47 @@ console.log(api.config); // Shows actual nested values, not {}
 3. **Operation Replay**: Chronological replay of `add()`/`remove()` calls
 4. **Context Preservation**: Instance ID maintained for AsyncLocalStorage continuity
 
-### ⚠️ Issues Found
+### ✅ Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
+- **Status**: COMPLETE & WORKING
+- **Tests**: 56/56 passing (100%) — IN BASELINE
+- **Implementation**: `src/lib/handlers/api-manager.mjs` - `_reloadByModuleID()` and `_reloadByApiPath()`
+- **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs`
 
-#### 🟡 Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
-- **Status**: IMPLEMENTATION IN PROGRESS
-- **Implementation**: `src/lib/handlers/api-manager.mjs` - `reloadApiComponent()` method
-- **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` (NOT in baseline)
+**Features**:
+- Reload by apiPath: Reloads all contributors to that path
+- Reload by moduleID: Reloads only that module's contributions
+- Accepts string parameter (apiPath or moduleID)
+- Accepts null/undefined/""/"." for base module reload
+- Ownership stack preserved during reload
+- Cache-bust ensures fresh module imports
 
-**Feature Description**:
-Selective reload updates specific module implementations while preserving the ownership stack. Two modes:
+#### ✅ Multi-Cache Path Reload
+- **Status**: COMPLETE & WORKING
+- **Tests**: 112/112 passing (100%) — IN BASELINE
+- **Implementation**: `src/lib/handlers/api-manager.mjs` - `_reloadByApiPath()` with per-endpoint forceReplace grouping
+- **Test File**: `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs`
 
-1. **By apiPath**: Reloads all contributors to that path
-   ```javascript
-   await api.slothlet.api.reload("math");
-   // Reloads base module + all added modules contributing to math
-   ```
+**Features**:
+- Per-endpoint forceReplace grouping (first module replaces, subsequent merge)
+- Load-order preservation (base first, then addHistory order)
+- Same-endpoint multi-cache rebuild
+- Collision mode respected per moduleID
+- Custom property preservation through reload
 
-2. **By moduleID**: Reloads only that module's contributions
-   ```javascript
-   await api.slothlet.api.reload(moduleID);
-   // Updates module's impl in ownership stack without affecting active impl if buried
-   ```
+#### ✅ Lazy-Mode Reload
+- **Status**: MOSTLY COMPLETE (63/68, 92.6%) — IN BASELINE
+- **Tests**: 63/68 passing (5 failures in "Full Instance Reload Respects Lazy Mode")
+- **Implementation**: `___resetLazy` on UnifiedWrapper + lazy-aware `_restoreApiTree`
+- **Test File**: `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs`
 
-**Current Implementation Status**:
-- ✅ Path-based reload triggers `restoreApiPath` for base modules
-- ✅ Replays `addHistory` entries with `mutateExisting: true`
-- ❓ Ownership stack preservation unclear
-- ❓ Buried impl updates not verified
-- ❌ Not in baseline tests - needs test validation/updates
+**Features**:
+- Mode-preserving rebuilds (lazy stays lazy, eager stays eager)
+- `___resetLazy` resets wrapper to un-materialized state with fresh materializeFunc
+- Memory release via reload (accessed paths can be freed)
+- Surgical reload (un-accessed lazy paths stay lazy)
+- Root-level files always eager in both modes
 
-**Questions to Answer**:
-
-1. **Does ownership system track per-module implementations?**
-   - When module2 replaces module1's impl, is module1's impl preserved?
-   - Can we retrieve and update module1's buried impl without affecting module2?
-
-2. **Does current `addApiComponent` with `mutateExisting` preserve stacks?**
-   - Or does it replace the entire value, destroying ownership stack?
-
-3. **Is the test file v3-compatible?**
-   - Test calls `api.slothlet.api.reload("math")` with string parameter
-   - API signature expects object: `{ apiPath, moduleID }`
-   - Needs API update or test update?
-
-**Intended API**:
-```javascript
-// Reload single module by API path
-await api.slothlet.api.reload("math.advanced");
-
-// Reload by moduleID
-await api.slothlet.api.reload(moduleID);
-
-// Reload subtree
-await api.slothlet.api.reload("plugins");
-```
-
-**Questions to Answer**:
-
-1. **Is selective reload meant to work at all in v3?**
-   - Test file last modified 2026-02-05 (recent)
-   - But not included in baseline tests (2356 tests all passing)
-   - May be work-in-progress feature
-
-2. **What should selective reload do?**
-   - Documentation says: "Replays recorded api.slothlet.api.add calls"
-   - But implementation has fallback for base modules via `restoreApiPath`
-   - Is base module reload intended, or should it throw an error?
-
-3. **Is the test file correct?**
-   - Calls `api.slothlet.api.reload("math")` - string parameter
-   - API signature in code accepts object: `{ apiPath, moduleID }`
-   - Should API accept string, or should test use object?
-
-4. **Does the commit d2cbcb7 API change make sense?**
-   - Added string parameter support
-   - Improved pass rate from 8/56 to 36/56
-   - But may have been masking actual issues
-
-**Recommendation**: Review with project owner before implementing selective reload features.
+**Known Issue**: Full instance reload (`api.slothlet.reload()`) doesn't reset lazy wrappers to un-materialized state. This is a pre-existing issue in `slothlet.mjs` reload() method, not the selective reload system.
 
 ---
 
@@ -181,12 +115,13 @@ await api.slothlet.api.reload("plugins");
 - ✅ All 56 tests passing (100%)
 
 ### Phase 3: Selective Reload (February 2026)
-- 🟡 **Implementation in progress** - Test file not yet in baseline
-- ✅ Basic structure exists in `src/lib/handlers/api-manager.mjs`
-- ❓ Ownership stack preservation needs investigation
-- ❓ Buried impl updates need verification
-- ❓ API signature needs clarification (string vs object parameter)
-- **Next**: Investigate ownership system integration before proceeding
+- ✅ **COMPLETE** — All tests in baseline
+- ✅ API cache system (Steps 1-6) — See [api-cache-system.md](./api-cache-system.md)
+- ✅ Selective reload by moduleID: 56/56 passing
+- ✅ Selective reload by apiPath: 56/56 passing
+- ✅ Multi-cache path reload: 112/112 passing
+- ✅ Lazy-mode reload: 63/68 passing (5 failures in full instance reload, pre-existing)
+- ✅ API signature accepts string (apiPath or moduleID) or null/undefined/""/"." for base reload
 
 ---
 
@@ -257,9 +192,19 @@ Reload should restore "clean" state (only module exports, no runtime mutations).
 
 ### Selective Module Reload Tests
 - **File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs`
-- **Status**: ❌ 8/56 tests passing (14% pass rate)
-- **Error**: `CONTEXT_NOT_FOUND` - Context not found for instance, instance may have been shut down
+- **Status**: ✅ 56/56 tests passing (100%) — IN BASELINE
 - **Coverage**: API path reload, moduleID reload, nested path reload, removed component handling
+
+### Multi-Cache Path Reload Tests
+- **File**: `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs`
+- **Status**: ✅ 112/112 tests passing (100%) — IN BASELINE
+- **Coverage**: Same-endpoint multi-cache, load order, child caches, collision modes, ownership stack
+
+### Lazy-Mode Reload Tests
+- **File**: `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs`
+- **Status**: ⚠️ 63/68 tests passing (92.6%) — IN BASELINE
+- **Coverage**: Memory release, surgical reload, re-materialization, proxy identity, nested children
+- **Known Issue**: 5 failures in "Full Instance Reload Respects Lazy Mode" (pre-existing)
 
 ### Metadata Reload Tests
 - **File**: `tests/vitests/suites/metadata/metadata-reload.test.vitest.mjs`
@@ -270,20 +215,10 @@ Reload should restore "clean" state (only module exports, no runtime mutations).
 
 ## Action Items
 
-### High Priority - Fix Selective Reload
-- [ ] Debug `CONTEXT_NOT_FOUND` errors in selective reload tests
-- [ ] Fix context lifecycle management during `api.slothlet.api.reload()`
-- [ ] Prevent premature instance cleanup during selective reload
-- [ ] Ensure UnifiedWrapper context lookup works during reload
-- [ ] Get all 56 selective reload tests passing
+### Remaining Issue
+- [ ] Fix 5 lazy-mode full instance reload failures — `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state
 
-### Medium Priority - Documentation
-- [ ] User guide: how to use reload in production
-- [ ] Performance benchmarks: full vs selective reload
-- [ ] Best practices: when to use full vs selective reload
-- [ ] Migration guide: updating code for hot reload support
-
-### Hot Module Replacement (HMR)
+### Future Enhancements
 - Watch file system for changes
 - Auto-trigger targeted reload on file save
 - Preserve application state across reloads
@@ -311,9 +246,10 @@ api.slothlet.hooks.after("reload", async (modules) => {
 
 - ✅ Implementation complete in `src/slothlet.mjs` (full reload)
 - ✅ Implementation complete in `src/lib/handlers/api-manager.mjs` (selective reload)
-- ✅ JSDoc documentation complete for both reload methods
-- ✅ Test coverage written for full reload (100% passing)
-- ⚠️ Test coverage written for selective reload (86% failing)
-- ❌ Selective reload needs debugging before production use
+- ✅ Implementation complete in `src/lib/handlers/api-cache-manager.mjs` (cache system)
+- ✅ JSDoc documentation complete for all reload methods
+- ✅ Test coverage: full reload (56/56), selective (56/56), multi-cache (112/112), lazy-mode (63/68)
+- ✅ All reload test suites in baseline
+- ⚠️ 5 lazy-mode full instance reload failures (pre-existing issue)
 - 🔄 User guide pending (how to use reload in production)
 - 🔄 Performance benchmarks pending

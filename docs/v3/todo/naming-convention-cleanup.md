@@ -1,8 +1,9 @@
 # Naming Convention Cleanup — UnifiedWrapper & Internal Properties
 
 **Priority:** High (consistency/maintainability)
-**Status:** TODO
+**Status:** In Progress (Phase 1 complete, Phase 2 partial)
 **Created:** 2026-02-07
+**Last Updated:** 2026-02-10
 
 ## The Problem
 
@@ -19,20 +20,17 @@ The current codebase has inconsistent underscore prefix usage across internal/ex
 
 ## Known Violations
 
-### No prefix at all (should be `__` external variables)
+### ~~No prefix at all (should be `__` external variables)~~ ✅ RESOLVED
 
-These properties are stored on `UnifiedWrapper` instances WITHOUT any prefix, yet they are internal wrapper properties that should NOT be confused with user-defined API children:
+> **Completed in commit `2b87ceb` (Phase 1)**
 
-- **`moduleID`** — stored at `unified-wrapper.mjs` line ~229
-- **`filePath`** — stored at `unified-wrapper.mjs` line ~230
-- **`sourceFolder`** — stored at `unified-wrapper.mjs` line ~231
+These properties were renamed to use `__` prefix:
 
-These are defined as non-enumerable via `Object.defineProperty`, but the lack of prefix means:
-1. They can collide with user-exported properties named `moduleID`, `filePath`, or `sourceFolder`
-2. They are inconsistent with `__mode`, `__apiPath`, `__isCallable` which ARE prefixed
-3. Code reading `wrapper.moduleID` looks like a user-facing property, not an internal one
+- ~~`moduleID`~~ → `__moduleID`
+- ~~`filePath`~~ → `__filePath`
+- ~~`sourceFolder`~~ → `__sourceFolder`
 
-**Fix:** Rename to `__moduleID`, `__filePath`, `__sourceFolder` and update all references.
+All references across `unified-wrapper.mjs`, `api-manager.mjs`, `api-assignment.mjs`, `modes-processor.mjs`, lifecycle handlers, ownership, metadata, and proxy traps were updated.
 
 ### Mixed `_` and `__` on what should be the same category
 
@@ -60,21 +58,26 @@ Current state of prefix usage in `UnifiedWrapper`:
 - `_createProxy()` — called externally → `_` is correct
 - `_createWaitingProxy()` — internal → `___createWaitingProxy()`
 
-#### Functions using `__` that should be `_`:
-- `__setImpl()` — external function, accessible via proxy → should be `_setImpl()`
-- `__getState()` — external function, accessible via proxy → should be `_getState()`
-- `__invalidate()` — external function, accessible via proxy → should be `_invalidate()`
+#### Functions using `__` — partially reclassified:
+- ~~`__setImpl()`~~ → `___setImpl()` ✅ RENAMED (went to `___` internal, not `_` external — correct since it's an internal mutation method not exposed to users)
+- `__getState()` — still `__` prefix, used via proxy for wrapper detection → **needs review**
+- `__invalidate()` — still `__` prefix, used via proxy during ownership/removal → **needs review**
+
+> **Note:** The original plan called for `_` (external function) prefix, but during implementation `___setImpl` was classified as an internal function (triple underscore) since it's only called by the framework, not by user code. `___resetLazy` was also added as a `___`-prefixed internal function.
 
 ## Migration Plan
 
-1. **Phase 1:** Rename `moduleID` → `__moduleID`, `filePath` → `__filePath`, `sourceFolder` → `__sourceFolder`
-   - Update all references in `unified-wrapper.mjs`, `api-manager.mjs`, `api-assignment.mjs`, `modes-processor.mjs`, lifecycle handlers, ownership, metadata
-   - Update `allowedInternals` set in getTrap
-   - Update proxy getOwnPropertyDescriptor, ownKeys traps
-   - Run full test suite
+1. **Phase 1:** ✅ COMPLETE (commit `2b87ceb`) — Rename `moduleID` → `__moduleID`, `filePath` → `__filePath`, `sourceFolder` → `__sourceFolder`
+   - All references updated across unified-wrapper, api-manager, api-assignment, modes-processor, lifecycle handlers, ownership, metadata
+   - `allowedInternals` set, proxy traps all updated
+   - Full test suite passing
 
-2. **Phase 2:** Reclassify `__setImpl` → `_setImpl`, `__getState` → `_getState`, `__invalidate` → `_invalidate`
-   - These are functions, not variables — convention says `_` for external functions, `__` for external variables
+2. **Phase 2:** ⚠️ PARTIALLY COMPLETE — Reclassify `__setImpl`/`__getState`/`__invalidate`
+   - ✅ `__setImpl` → `___setImpl` (reclassified as internal function with `___` prefix)
+   - ✅ `___resetLazy` added as new internal function with `___` prefix
+   - ⬜ `__getState` — still `__` prefix, needs review
+   - ⬜ `__invalidate` — still `__` prefix, needs review
+   - **Convention deviation:** Original plan said `_` (external function), actual implementation used `___` (internal function) for setImpl/resetLazy — this is arguably more correct since these are framework-internal methods
 
 3. **Phase 3:** Rename truly internal variables to `____` prefix
    - `_callableImpl` → `____callableImpl`
@@ -93,6 +96,18 @@ Current state of prefix usage in `UnifiedWrapper`:
    - `ownership.mjs`
    - `metadata.mjs`
    - `lifecycle.mjs`
+
+## New Methods from Refactoring (2026-02-10)
+
+Three refactoring commits (f8f3139, 7ccfb07, ac0b7ca) introduced new methods that follow existing conventions:
+
+| Method | Type | Prefix | Classification |
+|--------|------|--------|----------------|
+| `static _cloneImpl(value)` | Static function | `_` | External — called by constructor and `_applyNewImpl` |
+| `_applyNewImpl(newImpl)` | Instance function | `_` | External — core impl application logic shared by `___setImpl` and lazy materialization |
+| `static _extractFullImpl(wrapper)` | Static function | `_` | External — reconstructs complete impl tree from wrapper hierarchy |
+
+These follow the `_` prefix = external function convention correctly.
 
 ## Impact
 

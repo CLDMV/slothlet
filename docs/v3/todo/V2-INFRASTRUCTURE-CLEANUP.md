@@ -1,8 +1,9 @@
 # V2/V3 Dual-Version Infrastructure Cleanup
 
 **Created:** 2026-02-06  
-**Status:** Pending Cleanup  
-**Priority:** Medium - Post V3 Stabilization
+**Status:** Partially Complete  
+**Priority:** Medium - Post V3 Stabilization  
+**Last Updated:** 2026-02-10
 
 ---
 
@@ -21,11 +22,13 @@ The codebase still contains v2/v3 switching logic that needs cleanup.
 
 ---
 
-## Moved to reference/v2/ (gitignored)
+## ✅ Deleted / Moved to reference/v2/ (gitignored)
 
-- `reference/v2/src2/` - V2 source code
-- `reference/v2/api_tests_v2/` - V2 API test modules
-- `reference/v2/tests/vitests_v2/` - V2 vitest suite (contains allowAddApiOverwrite references)
+- `src2/` — ✅ Deleted
+- `api_tests_v2/` — ✅ Deleted  
+- `tests/vitests_v2/` — ✅ Deleted
+- `index2.mjs` — ✅ Deleted
+- `index2.cjs` — ✅ Deleted
 
 ---
 
@@ -62,7 +65,7 @@ The codebase still contains v2/v3 switching logic that needs cleanup.
 ```
 
 **Action Items:**
-- [ ] Remove all `slothlet-two-dev` conditional exports from package.json
+- [ ] Remove all `slothlet-two-dev` conditional exports from package.json (⚠️ **14 entries still present**)
 - [ ] Remove dual-version exports for all submodules (runtime, modes, etc.)
 - [ ] Update devcheck.mjs to remove V2 detection logic
 
@@ -70,47 +73,47 @@ The codebase still contains v2/v3 switching logic that needs cleanup.
 
 **Current:**
 - `src/` - V3 source (keep)
-- `src2/` - V2 source (moved to reference/v2/)
-- `src copy/` - Unknown purpose (investigate and remove)
+- ~~`src2/`~~ - ✅ Deleted
+- `src copy/` - ⚠️ **Still exists** — Unknown purpose, needs investigation and removal
 
 **Target:**
 - `src/` - V3 source only
 
 **Action Items:**
-- [ ] Delete `src2/` folder (if not already moved)
+- [x] Delete `src2/` folder
 - [ ] Investigate and remove `src copy/` folder
-- [ ] Update any build scripts referencing src2/
+- [x] Update any build scripts referencing src2/
 
 ### 3. Test Infrastructure
 
 **Current:**
 - `tests/vitests/` - V3 tests (keep)
-- `tests/vitests_v2/` - V2 tests (moved to reference/v2/)
+- ~~`tests/vitests_v2/`~~ - ✅ Deleted
 - `api_tests/` - V3 API test modules (keep)
-- `api_tests_v2/` - V2 API test modules (moved to reference/v2/)
+- ~~`api_tests_v2/`~~ - ✅ Deleted
 
 **Target:**
 - `tests/vitests/` - V3 tests only
 - `api_tests/` - V3 API test modules only
 
 **Action Items:**
-- [ ] Delete `tests/vitests_v2/` folder (if not already moved)
-- [ ] Delete `api_tests_v2/` folder (if not already moved)
-- [ ] Remove references to vitests_v2 from package.json scripts
+- [x] Delete `tests/vitests_v2/` folder
+- [x] Delete `api_tests_v2/` folder
+- [ ] Remove references to vitests_v2 from package.json scripts (⚠️ `test:unit` and `vitest:all` still point to `tests/vitests_v2/`)
 - [ ] Update test runners that check for both versions
 
 ### 4. Entry Points
 
 **Current:**
 - `index.mjs` / `index.cjs` - V3 entry points (keep)
-- `index2.mjs` / `index2.cjs` - V2 entry points (moved to reference/v2/)
+- ~~`index2.mjs` / `index2.cjs`~~ - ✅ Deleted
 
 **Target:**
 - `index.mjs` / `index.cjs` - V3 entry points only
 
 **Action Items:**
-- [ ] Delete `index2.mjs` and `index2.cjs` (if not already moved)
-- [ ] Remove index2 references from package.json exports
+- [x] Delete `index2.mjs` and `index2.cjs`
+- [ ] Remove index2 references from package.json exports (⚠️ 3 references still present: types, import, require)
 - [ ] Update type definitions to remove index2.d.mts
 
 ### 5. Environment Detection Logic
@@ -130,14 +133,14 @@ The codebase still contains v2/v3 switching logic that needs cleanup.
 
 ### 6. Package.json Scripts
 
-**Scripts to update/remove:**
+**Scripts still pointing to V2 paths:**
 ```json
-"vitest:all": "node tests/vitests_v2/run-all-vitest.mjs", // REMOVE - points to v2
-"test:unit": "node tests/vitests_v2/run-all-vitest.mjs",  // FIX - should use vitests/
+"test:unit": "node tests/vitests_v2/run-all-vitest.mjs",  // ⚠️ BROKEN - folder deleted
+"vitest:all": "node tests/vitests_v2/run-all-vitest.mjs",  // ⚠️ BROKEN - folder deleted
 ```
 
 **Action Items:**
-- [ ] Remove or redirect scripts pointing to vitests_v2/
+- [ ] Fix `test:unit` and `vitest:all` to point to `tests/vitests/` (or remove if redundant)
 - [ ] Remove scripts pointing to api_tests_v2/
 - [ ] Verify all npm scripts work with v3-only structure
 
