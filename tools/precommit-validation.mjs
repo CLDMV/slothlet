@@ -34,7 +34,7 @@ async function main() {
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
 		{ name: "Build Distribution", command: "npm", args: ["run", "build:dist"] },
-		{ name: "Node ViTest Suite", command: "npm", args: ["run", "test:unit"] },
+		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] },
 		{ name: "Build TypeScript Types", command: "npm", args: ["run", "build:types"] },
 		{ name: "Validate TypeScript", command: "npm", args: ["run", "test:types"] }
 	];
@@ -90,7 +90,7 @@ async function main() {
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Distribution": "npm run build:dist",
-					"Node ViTest Suite": "npm run test:unit",
+				"Vitest Suite": "npm run vitest",
 					"Build TypeScript Types": "npm run build:types",
 					"Validate TypeScript": "npm run test:types"
 				};

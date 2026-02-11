@@ -21,7 +21,7 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 | fix-headers.mjs | ✅ Yes | ✅ Yes | Automated file header maintenance (611 lines) - **KEEP: Permanent maintenance tool** |
 | inspect-api-structure.mjs | ✅ Yes | ✅ Yes | Debug tool for lazy/eager API structure - **KEEP: Essential for development** |
 | list-vitest-tests.mjs | ❌ Broken | ❌ Delete | Lists tests but searches wrong directories - **DELETE: Broken & unnecessary** |
-| precommit-validation.mjs | ⚠️ Broken | ⚠️ Fix | Pre-commit checks (not hooked up) - **FIX: Update test:unit → vitest reference** |
+| precommit-validation.mjs | ✅ Yes | ✅ Yes | Pre-commit validation (run via `npm run precommit`) - **KEEP: Comprehensive validation sequence** |
 | prepend-license.mjs | ✅ Yes | ✅ Yes | Adds Apache license to dist/ files (424 lines) - **KEEP: Required for publishing** |
 | prepublish-check.mjs | ⚠️ Broken | ⚠️ Fix | Pre-publish validation with path bugs - **FIX: Replace pathname manipulation with fileURLToPath** |
 | run-vitest-shards.mjs | ❌ Deprecated | ❌ Delete | Superseded by run-all-vitest.mjs - **DELETE: Deprecated** |
@@ -33,13 +33,13 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 **Deep Dive Complete:** All 12 tools analyzed for purpose, V3 compatibility, and actual necessity.
 
 **Status Breakdown:**
-- ✅ Keep & Working (6): analyze-errors, build-exports, ci-cleanup-src, fix-headers, inspect-api-structure, prepend-license, lib/header-config
-- ⚠️ Keep but Fix (2): precommit-validation, prepublish-check
+- ✅ Keep & Working (7): analyze-errors, build-exports, ci-cleanup-src, fix-headers, inspect-api-structure, prepend-license, precommit-validation, lib/header-config
+- ⚠️ Keep but Fix (1): prepublish-check
 - ❌ Delete (3): build-with-tests, list-vitest-tests, run-vitest-shards
 
 ### High Priority  
 - [x] Deep dive into each tool's actual purpose and necessity
-- [ ] Fix precommit-validation.mjs - Change test:unit → vitest
+- [x] Fix precommit-validation.mjs - Change test:unit → vitest
 - [ ] Fix prepublish-check.mjs - Replace pathname manipulation with fileURLToPath
 - [ ] Delete obsolete tools: build-with-tests.mjs, list-vitest-tests.mjs, run-vitest-shards.mjs
 
@@ -88,15 +88,15 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 2. API Structure Debug (`debug`)
 3. Node Test Suite (`test:node`)
 4. Build Distribution (`build:dist`)
-5. Node ViTest Suite (`test:unit`) ⚠️ **BROKEN - references deleted script**
+5. Vitest Suite (`vitest`)
 6. Build TypeScript Types (`build:types`)
 7. Validate TypeScript (`test:types`)
 
-**V3 Compatibility**: ⚠️ Broken - References deleted `test:unit` script (removed in V2 cleanup)  
-**Still Needed?**: ⚠️ Questionable - Not actually hooked up as git pre-commit hook  
-**Working?**: ❌ NO - Step 5 fails because `test:unit` script doesn't exist  
-**Git Hook Status**: ❌ NOT INSTALLED - No pre-commit hook file in `.git/hooks/`  
-**Notes**: Can be run manually with `npm run precommit` but isn't automatically triggered by git. Needs `test:unit` → `vitest` script name fix.
+**V3 Compatibility**: ✅ Yes - Fixed to use correct script names  
+**Still Needed?**: ✅ YES - Run via `npm run precommit` for comprehensive validation  
+**Working?**: ✅ YES - All steps reference valid npm scripts  
+**Usage**: Run manually with `npm run precommit` before committing changes  
+**Notes**: Not a git hook itself, but can be added as pre-commit hook if desired. Provides comprehensive validation sequence.
 
 ### prepend-license.mjs  
 **Purpose**: Adds Apache License 2.0 headers to all files in dist/ before publishing (424 lines)
@@ -131,6 +131,6 @@ Results in `undefined` in path on some systems.
 ### Summary of Findings
 
 **Tools Status:**
-- ✅ **Keep & Working** (5): ci-cleanup-src, fix-headers, prepend-license, analyze-errors, inspect-api-structure
-- ⚠️ **Keep but Fix** (2): precommit-validation (fix test:unit reference), prepublish-check (fix path resolution)
+- ✅ **Keep & Working** (7): ci-cleanup-src, fix-headers, prepend-license, analyze-errors, inspect-api-structure, build-exports, precommit-validation
+- ⚠️ **Keep but Fix** (1): prepublish-check (fix path resolution)
 - ❌ **Delete** (3): list-vitest-tests (broken & unnecessary), run-vitest-shards (deprecated), build-with-tests (obsolete)
