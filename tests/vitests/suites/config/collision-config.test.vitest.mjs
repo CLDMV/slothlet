@@ -1,25 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/config/collision-config.test.vitest.mjs
- *	@Date: 2026-01-31 15:33:57 -08:00 (1769902437)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /tests/vitests/suites/config/collision-config.test.vitest.mjs
  *	@Date: 2026-01-22T21:11:18-08:00 (1769145078)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:50 -08:00 (1770266390)
+ *	@Last modified time: 2026-02-10 18:01:59 -08:00 (1770775319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

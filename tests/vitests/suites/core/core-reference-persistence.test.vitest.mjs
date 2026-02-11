@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/core/core-reference-persistence.test.vitest.mjs
+ *	@Date: 2026-02-06T23:45:39-08:00 (1770450339)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-10 18:01:59 -08:00 (1770775319)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Tests for reference persistence and live binding throughout API lifecycle
  * Ensures captured references stay valid through ___setImpl, cache updates, and reloads
  */
