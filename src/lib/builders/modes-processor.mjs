@@ -847,7 +847,7 @@ export class ModesProcessor extends ComponentBase {
 										}
 										// Ensure children are adopted from impl
 										if (modes_existingWrapper._impl && !modes_existingWrapper.__state?.childrenAdopted) {
-											modes_existingWrapper.___adoptImplChildren();
+											modes_existingWrapper._adoptImplChildren();
 										}
 										const modes_existingImpl = modes_existingWrapper.__impl;
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
@@ -1194,7 +1194,7 @@ export class ModesProcessor extends ComponentBase {
 						// 3. Different moduleIDs trigger OWNERSHIP_CONFLICT unless allowConflict=true
 						// The collision config should be respected via registerAPIWithOwnership, not here
 
-						// Tag implToWrap's functions with metadata so ___adoptImplChildren can inherit it
+						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
 						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.lifecycle) {
 							for (const key of Object.keys(implToWrap)) {
 								const value = implToWrap[key];
@@ -1327,7 +1327,7 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
 				const nestedValue = materialized[categoryName];
-				if (nestedValue && (nestedValue.__wrapper || nestedValue.___getState)) {
+				if (nestedValue && (nestedValue.__wrapper || nestedValue.__getState)) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "__wrapper");
 					if (attachedKeys.length > 0) {
 						return nestedValue;

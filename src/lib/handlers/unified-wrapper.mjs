@@ -194,7 +194,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this._proxy = null;
 		this.__invalid = false;
 
-		// Clone to protect API cache from ___adoptImplChildren's delete operations.
+		// Clone to protect API cache from _adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this._impl = UnifiedWrapper._cloneImpl(initialImpl);
 
@@ -246,7 +246,7 @@ export class UnifiedWrapper extends ComponentBase {
 					keySample: implKeys.slice(0, 5)
 				});
 			}
-			this.___adoptImplChildren();
+			this._adoptImplChildren();
 			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				const childKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 				this.slothlet.debug("wrapper", {
@@ -293,10 +293,10 @@ export class UnifiedWrapper extends ComponentBase {
 	}
 
 	/**
-	 * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
+	 * Shallow-clone a non-Proxy object implementation to prevent _adoptImplChildren
 	 * from mutating shared module export references via its `delete this._impl[key]`
 	 * operations. When concurrent materializations (e.g., old + new wrapper during reload)
-	 * both load the same cached module, the first ___adoptImplChildren would destroy the
+	 * both load the same cached module, the first _adoptImplChildren would destroy the
 	 * shared export, causing subsequent wrappers to receive empty objects.
 	 *
 	 * Returns the value unchanged if it is not a plain object, or if it IS a Proxy
@@ -319,10 +319,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Reconstruct a full implementation object from a wrapper whose _impl may have
-	 * been depleted by ___adoptImplChildren.
+	 * been depleted by _adoptImplChildren.
 	 *
 	 * @description
-	 * After ___adoptImplChildren runs, children are moved from _impl onto the wrapper as
+	 * After _adoptImplChildren runs, children are moved from _impl onto the wrapper as
 	 * own properties and deleted from _impl. This helper reconstructs the original
 	 * impl by merging the remaining _impl keys with the adopted children extracted
 	 * from the wrapper.
@@ -384,7 +384,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Core implementation-application logic shared by ___setImpl and lazy materialization.
-	 * Clones the implementation (protecting the API cache from ___adoptImplChildren's
+	 * Clones the implementation (protecting the API cache from _adoptImplChildren's
 	 * delete operations), clears the invalid flag, upgrades __isCallable when a
 	 * callable impl arrives on a configurable wrapper, updates __filePath for lazy
 	 * folder wrappers, and adopts children.
@@ -393,7 +393,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	_applyNewImpl(newImpl) {
-		// Clone to protect API cache from ___adoptImplChildren's delete operations.
+		// Clone to protect API cache from _adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this._impl = UnifiedWrapper._cloneImpl(newImpl);
 		this.__invalid = false;
@@ -428,7 +428,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		this.___adoptImplChildren();
+		this._adoptImplChildren();
 	}
 
 	/**
@@ -539,7 +539,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @returns {Object} State object with {materialized, inFlight}
 	 * @public
 	 */
-	___getState() {
+	__getState() {
 		return this.__state;
 	}
 
@@ -674,9 +674,9 @@ export class UnifiedWrapper extends ComponentBase {
 	 * so this wrapper only represents the current API path.
 	 *
 	 * @example
-	 * wrapper.___adoptImplChildren();
+	 * wrapper._adoptImplChildren();
 	 */
-	___adoptImplChildren() {
+	_adoptImplChildren() {
 		const preExistingKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 		this.slothlet.debug("wrapper", {
 			message: "ADOPT-START",
@@ -692,7 +692,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const ownKeys = Reflect.ownKeys(this._impl);
 
-		const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "___getState", "_materialize", "_impl", "_state", "_invalid"]);
+		const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "__getState", "_materialize", "_impl", "_state", "_invalid"]);
 		const keepImplProperties =
 			typeof this._impl === "function" || (this._impl && typeof this._impl === "object" && typeof this._impl.default === "function");
 		if (keepImplProperties && this._impl && typeof this._impl === "object" && typeof this._impl.default === "function") {
@@ -833,10 +833,10 @@ export class UnifiedWrapper extends ComponentBase {
 
 			if (existingChild && typeof existingChild.___setImpl === "function") {
 				// Reuse existing wrapper - update its implementation to maintain live binding
-				// CRITICAL: If value is one of our wrapper proxies (detected by ___getState),
+				// CRITICAL: If value is one of our wrapper proxies (detected by __getState),
 				// extract its raw _impl instead of passing the proxy to ___setImpl.
 				// Passing a proxy as _impl causes infinite recursion in getTrap's isProxy delegation.
-				if (value && typeof value.___getState === "function") {
+				if (value && typeof value.__getState === "function") {
 					// Extract the raw impl from the new wrapper proxy or raw wrapper instance.
 					// value.__wrapper exists on proxy objects (from getTrap), but NOT on raw
 					// UnifiedWrapper instances returned by lazy materialization.
@@ -844,7 +844,7 @@ export class UnifiedWrapper extends ComponentBase {
 					const newWrapper = value.__wrapper || value;
 					let rawImpl = newWrapper ? newWrapper._impl : null;
 
-					// CRITICAL: _impl may be depleted — ___adoptImplChildren moves children from
+					// CRITICAL: _impl may be depleted — _adoptImplChildren moves children from
 					// _impl onto the wrapper as own properties and deletes them from _impl.
 					// When _impl is an empty object but the wrapper has own enumerable keys,
 					// use _extractFullImpl to reconstruct the complete impl from the wrapper tree.
@@ -1024,7 +1024,7 @@ export class UnifiedWrapper extends ComponentBase {
 			return undefined;
 		}
 
-		if (value && typeof value.___getState === "function") {
+		if (value && typeof value.__getState === "function") {
 			return value;
 		}
 
@@ -1516,7 +1516,7 @@ export class UnifiedWrapper extends ComponentBase {
 						});
 					});
 					// Now check if prop is in wrapper after materialization started
-					// ___adoptImplChildren runs synchronously within _materialize before any awaits
+					// _adoptImplChildren runs synchronously within _materialize before any awaits
 					const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
 					if (!isInternal && hasOwn(wrapper, prop)) {
 						wrapper.slothlet.debug("wrapper", {
@@ -1611,14 +1611,14 @@ export class UnifiedWrapper extends ComponentBase {
 						throw new Error(`${wrapper.__apiPath}.${chainLabel} - cannot access ${String(prop)} of undefined`);
 					}
 
-					if (current && current.__wrapper && current.___getState) {
-						const state = current.___getState();
+					if (current && current.__wrapper && current.__getState) {
+						const state = current.__getState();
 						if (!state.materialized) {
 							if (!state.inFlight && typeof current._materialize === "function") {
 								await current._materialize();
 							}
-							while (!current.___getState().materialized) {
-								const nextState = current.___getState();
+							while (!current.__getState().materialized) {
+								const nextState = current.__getState();
 								if (!nextState.inFlight && !nextState.materialized) {
 									throw new Error(`${wrapper.__apiPath}.${chainLabel} failed to materialize ${String(prop)}`);
 								}
@@ -1795,7 +1795,7 @@ export class UnifiedWrapper extends ComponentBase {
 				"__impl",
 				"___setImpl",
 				"___resetLazy",
-				"___getState",
+				"__getState",
 				"_materialize",
 				"__invalidate",
 				"__wrapper",
@@ -1882,7 +1882,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return "undefined";
 			}
-			if (prop === "___getState") return wrapper.___getState.bind(wrapper);
+			if (prop === "__getState") return wrapper.__getState.bind(wrapper);
 			if (prop === "___setImpl") return wrapper.___setImpl.bind(wrapper);
 			if (prop === "___resetLazy") return wrapper.___resetLazy.bind(wrapper);
 			if (prop === "_materialize") return wrapper._materialize.bind(wrapper);
@@ -2197,7 +2197,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return value;
 			}
 
-			if (value && (typeof value === "object" || typeof value === "function") && (value.__wrapper || value.___getState)) {
+			if (value && (typeof value === "object" || typeof value === "function") && (value.__wrapper || value.__getState)) {
 				return value;
 			}
 
@@ -2465,7 +2465,7 @@ export class UnifiedWrapper extends ComponentBase {
 				prop === "__impl" ||
 				prop === "___setImpl" ||
 				prop === "___resetLazy" ||
-				prop === "___getState" ||
+				prop === "__getState" ||
 				prop === "_materialize" ||
 				prop === "__invalidate" ||
 				prop === "__wrapper"
@@ -2618,7 +2618,7 @@ export class UnifiedWrapper extends ComponentBase {
 				"__impl",
 				"___setImpl",
 				"___resetLazy",
-				"___getState",
+				"__getState",
 				"_materialize",
 				"__invalidate",
 				"_impl",
@@ -2664,7 +2664,7 @@ export class UnifiedWrapper extends ComponentBase {
 				"__impl",
 				"___setImpl",
 				"___resetLazy",
-				"___getState",
+				"__getState",
 				"_materialize",
 				"__invalidate",
 				"__wrapper",

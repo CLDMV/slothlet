@@ -348,7 +348,7 @@ export class ApiManager extends ComponentBase {
 		return !!(
 			value &&
 			(typeof value === "object" || typeof value === "function") &&
-			(value.__wrapper || value.___setImpl || value.___getState)
+			(value.__wrapper || value.___setImpl || value.__getState)
 		);
 	}
 
@@ -453,7 +453,7 @@ export class ApiManager extends ComponentBase {
 			for (const key of existingChildKeys) {
 				delete existingWrapper[key];
 			}
-			existingWrapper.___adoptImplChildren();
+			existingWrapper._adoptImplChildren();
 
 			// Also copy any child wrappers that nextWrapper already has
 			// (this handles cases where nextWrapper was built with pre-existing children)
@@ -2040,7 +2040,7 @@ export class ApiManager extends ComponentBase {
 						freshMaterialized: freshWrapper?.__state?.materialized,
 						hasMaterializeFunc: typeof freshWrapper?._materializeFunc === "function",
 						isLazyFresh,
-						existingMaterialized: existingAtKey?.___getState?.()?.materialized
+						existingMaterialized: existingAtKey?.__getState?.()?.materialized
 					});
 
 					if (isLazyFresh) {
@@ -2064,11 +2064,11 @@ export class ApiManager extends ComponentBase {
 
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
 						// CRITICAL: freshWrapper._impl may be depleted — the constructor's
-						// ___adoptImplChildren() moved children (like host, port for config) out of
+						// _adoptImplChildren() moved children (like host, port for config) out of
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
-						if (freshValue && typeof freshValue.___getState === "function") {
+						if (freshValue && typeof freshValue.__getState === "function") {
 							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
 							implForReload = freshValue;
@@ -2171,9 +2171,9 @@ export class ApiManager extends ComponentBase {
 				// This is the key: we update the WRAPPER's implementation, not replace the path
 				// CRITICAL: After eager rebuild, wrapper proxies have depleted _impl (children
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
-				// so ___setImpl → ___adoptImplChildren receives the full key set.
+				// so ___setImpl → _adoptImplChildren receives the full key set.
 				let implForReload;
-				if (freshApi && typeof freshApi.___getState === "function") {
+				if (freshApi && typeof freshApi.__getState === "function") {
 					const freshWrapper = freshApi.__wrapper;
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
@@ -2186,15 +2186,15 @@ export class ApiManager extends ComponentBase {
 				}
 
 				// Recursively extract full impls from any child wrapper proxies with depleted _impl.
-				// This handles the common case where freshApi is a function (no ___getState) but
+				// This handles the common case where freshApi is a function (no __getState) but
 				// its enumerable properties are wrapper proxies from eager rebuild.
 				// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
-				// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
+				// lazy wrappers should be preserved as-is so _adoptImplChildren can call
 				// ___resetLazy with the fresh materializeFunc.
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
-						if (val && typeof val.___getState === "function" && val.__wrapper) {
+						if (val && typeof val.__getState === "function" && val.__wrapper) {
 							const childWrapper = val.__wrapper;
 							if (childWrapper.__state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);

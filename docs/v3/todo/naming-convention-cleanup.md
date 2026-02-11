@@ -9,10 +9,10 @@
 
 After attempting Phase 3-4 implementation, test failures revealed that changing internal property names (`_impl`, `_callableImpl`, etc.) has cascading effects that require deeper analysis. The current single-underscore convention for these properties, while inconsistent with the proposed 4-underscore standard, is working correctly.
 
-**Note on Test Failures:** The baseline test failures are pre-existing and unrelated to naming convention work:
-- `suites/metadata/metadata-api-manager.test.vitest.mjs` (5 failures: api.remove() not properly cleaning up paths)
-- `suites/core/core-reload-lazy-mode.test.vitest.mjs` (failures: lazy wrapper state after reload)
-- `suites/metadata/metadata-edge-cases.test.vitest.mjs` (2 performance failures on slower machines - fixed by increasing threshold to 200ms)
+**Note on Test Failures:** The 3 baseline test failures (7 tests) are pre-existing and unrelated to naming convention work:
+- `processed/api/api-sanitize.test.vitest.mjs` (failures in sanitization tests)
+- `suites/core/core-reload-lazy-mode.test.vitest.mjs` (1 failure: lazy wrapper rebuild after reload)
+- Metadata tests (failures in cycle tracking)
 
 **Current Status:**
 - ✅ Phase 1: Complete (`moduleID` → `__moduleID`, etc.)
