@@ -39,6 +39,7 @@ export class Lifecycle extends ComponentBase {
 		this.subscribers = new Map();
 		this.eventLog = [];
 		this.maxLogSize = 1000;
+		this.pendingHandlers = new Set();
 	}
 
 	/**
@@ -122,7 +123,19 @@ export class Lifecycle extends ComponentBase {
 		if (handlers) {
 			for (const handler of handlers) {
 				try {
-					handler(data);
+					const result = handler(data);
+					// Track async handlers
+					if (result && typeof result.then === "function") {
+						this.pendingHandlers.add(result);
+						result
+							.then(() => this.pendingHandlers.delete(result))
+							.catch((error) => {
+								this.pendingHandlers.delete(result);
+								if (!this.config?.silent) {
+									console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
+								}
+							});
+					}
 				} catch (error) {
 					// Log error but don't stop other handlers
 					if (!this.config?.silent) {
@@ -131,6 +144,17 @@ export class Lifecycle extends ComponentBase {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Wait for all pending async event handlers to complete
+	 * @returns {Promise<void>}
+	 * @public
+	 */
+	async waitForPending() {
+		if (this.pendingHandlers.size === 0) return;
+		const handlers = Array.from(this.pendingHandlers);
+		await Promise.allSettled(handlers);
 	}
 
 	/**

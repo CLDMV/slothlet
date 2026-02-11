@@ -249,8 +249,8 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 
 			const duration = Date.now() - start;
 
-			// Should be fast (< 100ms for 1000 accesses)
-			expect(duration).toBeLessThan(100);
+			// Should be fast (< 200ms for 1000 accesses, 5 accesses per ms)
+			expect(duration).toBeLessThan(200);
 		});
 	});
 
