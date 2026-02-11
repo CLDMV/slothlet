@@ -36,24 +36,14 @@ const configContent = await fs.readFile(configPath, "utf8");
 export const testConfig = parse(configContent);
 
 /**
- * Determine which API test directory to use based on NODE_OPTIONS conditions
- * - slothlet-two-dev (--conditions=slothlet-two-dev) → use api_tests_v2
- * - slothlet-dev (--conditions=slothlet-dev or development) → use api_tests (v3/src)
- * - default (production/dist) → use api_tests (v3/dist)
+ * Determine which API test directory to use - always use api_tests (V3)
  * @type {string}
  */
-export const API_TEST_BASE = (() => {
-	const nodeOptions = process.env.NODE_OPTIONS || "";
-	if (nodeOptions.includes("slothlet-two-dev")) {
-		return "api_tests_v2";
-	}
-	// Default to v3 (api_tests) for both slothlet-dev and production
-	return "api_tests";
-})();
+export const API_TEST_BASE = "api_tests";
 
 /**
  * Common test API directories with resolved absolute paths
- * Automatically switches between api_tests (v3) and api_tests_v2 based on NODE_OPTIONS conditions
+ * Uses api_tests (V3) for all tests
  * @type {object}
  */
 export const TEST_DIRS = {

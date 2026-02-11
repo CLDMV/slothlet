@@ -32,10 +32,8 @@ if (!process.env.NODE_OPTIONS || !process.env.NODE_OPTIONS.includes("slothlet-")
 	process.env.NODE_OPTIONS = current ? `${current} ${devFlag}` : devFlag;
 }
 
-// Determine which slothlet version to use based on NODE_OPTIONS
-const nodeOptions = process.env.NODE_OPTIONS || "";
-const useV2 = nodeOptions.includes("slothlet-two-dev");
-const slothletCondition = useV2 ? "slothlet-two-dev" : "slothlet-dev";
+// Use V3 slothlet-dev condition
+const slothletCondition = "slothlet-dev";
 
 export default defineConfig({
 	pool: "forks",
@@ -43,7 +41,7 @@ export default defineConfig({
 	resolve: {
 		// IMPORTANT: this *replaces* the defaults, so keep the usual ones too
 		conditions: [
-			slothletCondition, // V3 (slothlet-dev) by default, V2 (slothlet-two-dev) if NODE_OPTIONS set
+			slothletCondition, // V3 (slothlet-dev)
 			"module",
 			"browser",
 			"development|production" // keep the special one for other deps
@@ -58,7 +56,7 @@ export default defineConfig({
 	test: {
 		// maxWorkers: 4,
 		include: ["tests/vitests/**/*.vest.{js,mjs}", "tests/vitests/**/*.test.vitest.{js,mjs}"],
-		exclude: ["node_modules", "tests/vitests_v2/**"],
+		exclude: ["node_modules"],
 		environment: "node",
 		globals: true,
 		// globalSetup: "./tests/vitests/setup/global-setup.mjs",

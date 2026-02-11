@@ -231,10 +231,7 @@ function ensureDevEnvFlags() {
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
 	const allConditions = [...allExecArgv, ...envOptions];
 
-	let slothletCondition = "slothlet-dev";
-	if (hasCondition(allConditions, "slothlet-two-dev")) {
-		slothletCondition = "slothlet-two-dev";
-	}
+	const slothletCondition = "slothlet-dev";
 
 	const requiredConditions = [slothletCondition, "development"];
 	const nextExecArgv = [...process.execArgv];
@@ -288,11 +285,9 @@ function ensureDevEnvFlags() {
  * const { apiDir, apiConfigPath } = resolveApiPaths();
  */
 function resolveApiPaths() {
-	const nodeOptions = process.env.NODE_OPTIONS || "";
-	const isV2 = nodeOptions.includes("slothlet-two-dev");
 	return {
-		apiDir: join(__dirname, isV2 ? "../../api_tests_v2/api_test" : "../../api_tests/api_test"),
-		apiConfigPath: join(__dirname, isV2 ? "../vitests_v2/setup/api-test-config.jsonc" : "../vitests/setup/api-test-config.jsonc")
+		apiDir: join(__dirname, "../../api_tests/api_test"),
+		apiConfigPath: join(__dirname, "../vitests/setup/api-test-config.jsonc")
 	};
 }
 

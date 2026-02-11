@@ -20,7 +20,7 @@ const verbose =
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
 
-function ensureDevEnvFlags(forceV2 = false) {
+function ensureDevEnvFlags() {
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition
@@ -31,17 +31,12 @@ function ensureDevEnvFlags(forceV2 = false) {
 
 	process.env.NODE_ENV = "development";
 
-	// Detect which slothlet version condition is already set, or default to v2
+	// Use V3 slothlet-dev condition
 	const allExecArgv = [...process.execArgv];
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
 	const allConditions = [...allExecArgv, ...envOptions];
 
-	let slothletCondition = "slothlet-dev"; // default to v3
-	if (forceV2) {
-		slothletCondition = "slothlet-two-dev";
-	} else if (hasCondition(allConditions, "slothlet-two-dev")) {
-		slothletCondition = "slothlet-two-dev";
-	}
+	const slothletCondition = "slothlet-dev";
 
 	const requiredConditions = [slothletCondition, "development"];
 	const nextExecArgv = [...process.execArgv];
@@ -475,11 +470,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	let bound;
 	// if (awaitCalls) {
 
-	// Detect which version we're testing based on NODE_OPTIONS conditions
-	const nodeOptions = process.env.NODE_OPTIONS || "";
-	// FORCE V2 TO TEST RESOLVER
-	// const apiTestDir = "../api_tests/api_test";
-	const apiTestDir = nodeOptions.includes("slothlet-two-dev") ? "../api_tests_v2/api_test" : "../api_tests/api_test";
+	// Use V3 API test directory
+	const apiTestDir = "../api_tests/api_test";
 
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
@@ -967,16 +959,8 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 }
 
 (async () => {
-	// Check for --v2 flag to force v2 environment
-	const useV2 = process.argv.includes("--v2");
-
-	if (ensureDevEnvFlags(useV2)) {
+	if (ensureDevEnvFlags()) {
 		return;
-	}
-
-	const nodeOptions = process.env.NODE_OPTIONS || "";
-	if (useV2 || nodeOptions.includes("slothlet-two-dev")) {
-		console.log(chalk.magentaBright("\n🔧 Running with V2 environment (slothlet-two-dev)\n"));
 	}
 
 	const module = await import("@cldmv/slothlet");
