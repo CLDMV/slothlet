@@ -14,89 +14,123 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 
 | File | Updated to V3 | Working | Notes |
 |------|---------------|---------|-------|
-| analyze-errors.mjs | ✅ Yes | ✅ Yes | Analyzes SlothletError/Warning usage, validates translations, checks file headers - Updated for v3 |
-| build-exports.mjs | ✅ Yes | ✅ Yes | Generates package.json exports based on source structure - Tested 2026-02-10 |
-| build-with-tests.mjs | ⚠️ Partial | ⚠️ Issues | Build and test orchestration - Runs but fails due to missing test:unit script (fixed in V2 cleanup) |
-| ci-cleanup-src.mjs | ✅ Yes | ✅ Yes | CI cleanup operations for source files - Works correctly (skips cleanup when not in CI) |
-| fix-headers.mjs | ✅ Yes | ✅ Yes | Automated file header fixing with git integration - Created for v3 |
-| inspect-api-structure.mjs | ✅ Yes | ✅ Yes | API structure inspection utility - **Updated 2026-02-10**: Removed V2 support, V3-only, tested with lazy/eager modes |
-| list-vitest-tests.mjs | ⚠️ Partial | ⚠️ Issues | Lists vitest test files - Returns "No Vitest files found" (needs investigation) |
-| precommit-validation.mjs | ✅ Yes | ⚠️ Issues | Pre-commit validation checks - Works but test:node currently failing (unrelated to tool) |
-| prepend-license.mjs | ✅ Yes | ⚠️ Issues | Prepends license headers to files - Requires dist/ folder, used in build pipeline |
-| prepublish-check.mjs | ⚠️ Partial | ⚠️ Issues | Pre-publish validation checks - Has path resolution issues, needs fixing |
-| run-vitest-shards.mjs | ⚠️ Deprecated | ⚠️ Deprecated | Runs vitest tests in sharded mode - Superseded by tests/vitests/run-all-vitest.mjs |
-| lib/header-config.mjs | ✅ Yes | ✅ Yes | Shared configuration for file header validation - Created for v3 |
+| analyze-errors.mjs | ✅ Yes | ✅ Yes | Validates SlothletError/Warning usage and translations - **KEEP: Critical for code quality** |
+| build-exports.mjs | ✅ Yes | ✅ Yes | Generates types/index.d.mts from src/slothlet.mjs - **KEEP: Required for TypeScript** |
+| build-with-tests.mjs | ⚠️ Broken | ❌ Delete | Orchestrates build + tests but references deleted test:unit - **DELETE: Obsolete, users can run `npm run build && npm test`** |
+| ci-cleanup-src.mjs | ✅ Yes | ✅ Yes | Removes src/ in CI to force dist/ testing - **KEEP: Critical for CI validation** |
+| fix-headers.mjs | ✅ Yes | ✅ Yes | Automated file header maintenance (611 lines) - **KEEP: Permanent maintenance tool** |
+| inspect-api-structure.mjs | ✅ Yes | ✅ Yes | Debug tool for lazy/eager API structure - **KEEP: Essential for development** |
+| list-vitest-tests.mjs | ❌ Broken | ❌ Delete | Lists tests but searches wrong directories - **DELETE: Broken & unnecessary** |
+| precommit-validation.mjs | ⚠️ Broken | ⚠️ Fix | Pre-commit checks (not hooked up) - **FIX: Update test:unit → vitest reference** |
+| prepend-license.mjs | ✅ Yes | ✅ Yes | Adds Apache license to dist/ files (424 lines) - **KEEP: Required for publishing** |
+| prepublish-check.mjs | ⚠️ Broken | ⚠️ Fix | Pre-publish validation with path bugs - **FIX: Replace pathname manipulation with fileURLToPath** |
+| run-vitest-shards.mjs | ❌ Deprecated | ❌ Delete | Superseded by run-all-vitest.mjs - **DELETE: Deprecated** |
+| lib/header-config.mjs | ✅ Yes | ✅ Yes | Shared config for header validation - **KEEP: Used by multiple tools** |
 
 ## Action Items
 
 ### Summary (Updated 2026-02-10)
-**Testing Complete:** All 12 tools have been evaluated for V3 compatibility.
+**Deep Dive Complete:** All 12 tools analyzed for purpose, V3 compatibility, and actual necessity.
 
 **Status Breakdown:**
-- ✅ Fully Working: 5 tools (analyze-errors, fix-headers, inspect-api-structure, build-exports, ci-cleanup-src, lib/header-config)
-- ⚠️ Working with Issues: 4 tools (precommit-validation, build-with-tests, prepend-license, prepublish-check, list-vitest-tests)
-- ❌ Deprecated: 1 tool (run-vitest-shards)
+- ✅ Keep & Working (6): analyze-errors, build-exports, ci-cleanup-src, fix-headers, inspect-api-structure, prepend-license, lib/header-config
+- ⚠️ Keep but Fix (2): precommit-validation, prepublish-check
+- ❌ Delete (3): build-with-tests, list-vitest-tests, run-vitest-shards
 
-### High Priority
-- [x] Test all tools marked as "🔍 Not Tested" to verify working status
-- [ ] Fix prepublish-check.mjs path resolution issues
-- [ ] Fix list-vitest-tests.mjs to properly detect test files
-- [ ] Update build-with-tests.mjs to use correct test script name
-- [ ] Consider removing or archiving run-vitest-shards.mjs (deprecated)
+### High Priority  
+- [x] Deep dive into each tool's actual purpose and necessity
+- [ ] Fix precommit-validation.mjs - Change test:unit → vitest
+- [ ] Fix prepublish-check.mjs - Replace pathname manipulation with fileURLToPath
+- [ ] Delete obsolete tools: build-with-tests.mjs, list-vitest-tests.mjs, run-vitest-shards.mjs
 
 ### Medium Priority
-- [ ] Add error handling improvements to tools that may fail silently
-- [ ] Standardize CLI argument parsing across all tools
-- [ ] Add `--help` flags to all tools
-- [ ] Consider adding shared configuration file for common tool settings
+- [ ] Consider setting up actual git pre-commit hook for precommit-validation.mjs
+- [ ] Add --help flags to remaining tools without them
+- [ ] Document tool usage in main README or CONTRIBUTING.md
 
-### Low Priority
-- [ ] Add progress indicators to long-running tools
-- [ ] Create tool usage documentation
-- [ ] Add dry-run mode to destructive operations
-- [ ] Consider creating a unified tool runner
+## Deep Dive Analysis (2026-02-10)
 
-## Testing Checklist
+### ci-cleanup-src.mjs
+**Purpose**: Removes `src/` folder in CI environments after build to force testing against `dist/` folder  
+**V3 Compatibility**: ✅ Yes - no V2-specific code  
+**Still Needed?**: ✅ YES - Critical for ensuring published package works correctly  
+**Working?**: ✅ Yes - Properly detects CI environment and safely removes src/  
+**Notes**: Safety mechanism prevents accidental deletion in dev environments. This ensures CI tests run against the actual distribution code that will be published.
 
-For each tool, verify:
-- [ ] Runs without errors on current codebase
-- [ ] Handles v3 API structure correctly (if applicable)
-- [ ] Works with both lazy and eager loading modes (if applicable)
-- [ ] Properly handles AsyncLocalStorage contexts (if applicable)
-- [ ] File paths and imports are correct for v3 structure
-- [ ] Output is accurate and useful
-- [ ] Error messages are clear and actionable
-- [ ] CLI flags work as documented
+### fix-headers.mjs  
+**Purpose**: Automated file header maintenance tool (611 lines)
+- Validates header format against expected standard
+- Extracts actual git creation dates
+- Fixes date format issues (timezone format)
+- Adds missing Unix timestamps
+- Removes duplicate headers
+- Fixes broken JSDoc comments
+- Normalizes excessive whitespace
+- Supports dry-run mode for testing
 
-## Notes
+**V3 Compatibility**: ✅ Yes - Created during V3 development (2026-02-04)  
+**Still Needed?**: ✅ YES - Permanent tool, not temporary  
+**Working?**: ✅ Yes - Fully functional with git integration  
+**Notes**: Uses shared config from `lib/header-config.mjs`. This is a maintenance tool that should be kept.
 
-### V3-Native Tools (Created During V3 Development)
-- **fix-headers.mjs**: Created 2026-02-04, fully functional with git integration, auto copyright year updates
-- **lib/header-config.mjs**: Created 2026-02-04, shared config between analyze-errors.mjs and fix-headers.mjs
+### list-vitest-tests.mjs
+**Purpose**: Lists Vitest test files and extracts test titles for quick inspection  
+**V3 Compatibility**: ⚠️ Broken - Hardcoded wrong directories  
+**Still Needed?**: ❌ NO - Can just use `find` or file explorer  
+**Working?**: ❌ NO - Only searches `tests/vitests/` and `tests/vitests/process/` but tests are in `tests/vitests/suites/` and `tests/vitests/processed/`  
+**Issue**: Line 73 hardcodes: `const dirs = [vitestRoot, path.join(vitestRoot, "process")];`  
+**Actual locations**: Tests are in `tests/vitests/suites/` and `tests/vitests/processed/`  
+**Recommendation**: DELETE - Tool provides no value over basic file listing
 
-### Confirmed Updated for V3
-- **analyze-errors.mjs**: Updated to use header-config.mjs shared configuration, v3 compatible
-- **inspect-api-structure.mjs**: Updated 2026-02-10, removed all V2 support (--v2 flag, useV2 parameter, slothlet-two-dev detection), now V3-only - ✅ **TESTED & WORKING** (lazy and eager modes verified)
+### precommit-validation.mjs
+**Purpose**: Pre-commit validation sequence that runs 7 steps:
+1. Clean Build Artifacts (`build:cleanup`)
+2. API Structure Debug (`debug`)
+3. Node Test Suite (`test:node`)
+4. Build Distribution (`build:dist`)
+5. Node ViTest Suite (`test:unit`) ⚠️ **BROKEN - references deleted script**
+6. Build TypeScript Types (`build:types`)
+7. Validate TypeScript (`test:types`)
 
-### Recent Updates (2026-02-10)
-- **inspect-api-structure.mjs**: 
-  - Removed `--v2` CLI flag
-  - Removed `useV2` parameter from all functions
-  - Removed slothlet-two-dev condition detection
-  - Updated to use V3 api_tests paths exclusively
-  - Simplified forceMaterializeLazyFolders to V3-only logic
-- **All tools tested**: Completed comprehensive testing of all 12 tools in tools/ directory
-- **Identified issues**: 
-  - build-with-tests.mjs references old test:unit script
-  - prepublish-check.mjs has path resolution bugs
-  - list-vitest-tests.mjs not finding test files
-  - run-vitest-shards.mjs deprecated in favor of run-all-vitest.mjs
+**V3 Compatibility**: ⚠️ Broken - References deleted `test:unit` script (removed in V2 cleanup)  
+**Still Needed?**: ⚠️ Questionable - Not actually hooked up as git pre-commit hook  
+**Working?**: ❌ NO - Step 5 fails because `test:unit` script doesn't exist  
+**Git Hook Status**: ❌ NOT INSTALLED - No pre-commit hook file in `.git/hooks/`  
+**Notes**: Can be run manually with `npm run precommit` but isn't automatically triggered by git. Needs `test:unit` → `vitest` script name fix.
 
-### Known Issues
-- **prepublish-check.mjs**: Path resolution bug (shows undefined in path)
-- **list-vitest-tests.mjs**: Returns "No Vitest files found" despite tests existing
-- **build-with-tests.mjs**: References old test:unit script removed in V2 cleanup
-- **precommit-validation.mjs**: test:node currently failing (unrelated to tool itself)
+### prepend-license.mjs  
+**Purpose**: Adds Apache License 2.0 headers to all files in dist/ before publishing (424 lines)
+- Auto-detects owner from package.json
+- Supports multiple file types with appropriate comment syntax
+- Preserves shebang lines
+- Skips files that already have license headers
+- Used in build pipeline
 
-### Deprecation Candidates
-- **run-vitest-shards.mjs**: Superseded by tests/vitests/run-all-vitest.mjs
+**V3 Compatibility**: ✅ Yes - no V2-specific code  
+**Still Needed?**: ✅ YES - Required for publishing  
+**Working?**: ✅ YES - Successfully prepended licenses to 33 files in dist/  
+**Notes**: Part of CI build pipeline (`build:ci` and `build:unsafe` scripts). Critical for legal compliance.
+
+### prepublish-check.mjs
+**Purpose**: Pre-publish validation that:
+1. Creates temp directory
+2. Installs the packed .tgz file
+3. Tests require/import in production mode
+4. Cleans up temp files
+
+**V3 Compatibility**: ⚠️ Has bugs - Path resolution issues  
+**Still Needed?**: ✅ YES - Validates package before publishing  
+**Working?**: ⚠️ Partially - Has path resolution bugs with `pathname.replace()` pattern  
+**Issue**: Line 20-22 uses complex pathname manipulation that fails: 
+```javascript
+const tmpDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\\?\/[A-Za-z]:/, "")), "..", "tmp-npm-test");
+```
+Results in `undefined` in path on some systems.  
+**Recommendation**: FIX - Simplify to use `fileURLToPath(import.meta.url)` pattern like other tools
+
+### Summary of Findings
+
+**Tools Status:**
+- ✅ **Keep & Working** (5): ci-cleanup-src, fix-headers, prepend-license, analyze-errors, inspect-api-structure
+- ⚠️ **Keep but Fix** (2): precommit-validation (fix test:unit reference), prepublish-check (fix path resolution)
+- ❌ **Delete** (3): list-vitest-tests (broken & unnecessary), run-vitest-shards (deprecated), build-with-tests (obsolete)
