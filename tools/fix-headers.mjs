@@ -38,6 +38,8 @@ const rootDir = join(__dirname, "..");
 // CLI args
 const DRY_RUN = process.argv.includes("--dry-run");
 const VERBOSE = process.argv.includes("--verbose");
+const SHOW_DIFF = process.argv.includes("--diff") || DRY_RUN; // Always show diff in dry-run
+const MAX_DIFF_FILES = 5; // Only show diff for first N files
 
 // Statistics tracking
 const stats = {
@@ -184,6 +186,57 @@ function getCurrentDateTime() {
 }
 
 /**
+ * Generate a simple diff between old and new content
+ * @param {string} oldContent - Original content
+ * @param {string} newContent - New content
+ * @param {number} contextLines - Number of context lines to show
+ * @returns {string} Diff string
+ */
+function generateDiff(oldContent, newContent, contextLines = 3) {
+	const oldLines = oldContent.split("\n");
+	const newLines = newContent.split("\n");
+	const diff = [];
+
+	// Find first difference
+	let firstDiff = 0;
+	while (firstDiff < Math.min(oldLines.length, newLines.length) && oldLines[firstDiff] === newLines[firstDiff]) {
+		firstDiff++;
+	}
+
+	// Find last difference
+	let lastDiffOld = oldLines.length - 1;
+	let lastDiffNew = newLines.length - 1;
+	while (lastDiffOld > firstDiff && lastDiffNew > firstDiff && oldLines[lastDiffOld] === newLines[lastDiffNew]) {
+		lastDiffOld--;
+		lastDiffNew--;
+	}
+
+	// Show context before
+	const startLine = Math.max(0, firstDiff - contextLines);
+	for (let i = startLine; i < firstDiff; i++) {
+		diff.push(`  ${oldLines[i]}`);
+	}
+
+	// Show removed lines
+	for (let i = firstDiff; i <= lastDiffOld && i < oldLines.length; i++) {
+		diff.push(`- ${oldLines[i]}`);
+	}
+
+	// Show added lines
+	for (let i = firstDiff; i <= lastDiffNew && i < newLines.length; i++) {
+		diff.push(`+ ${newLines[i]}`);
+	}
+
+	// Show context after
+	const endLine = Math.min(newLines.length, lastDiffNew + contextLines + 1);
+	for (let i = lastDiffNew + 1; i < endLine; i++) {
+		diff.push(`  ${newLines[i]}`);
+	}
+
+	return diff.join("\n");
+}
+
+/**
  * Find all header blocks in content
  * @param {string} content - File content
  * @returns {Array<{start: number, end: number, text: string}>} Array of header matches
@@ -273,7 +326,8 @@ function parseHeaderFields(headerText) {
 function isValidDateFormat(date) {
 	// Should match: 2026-02-04 16:49:44 -08:00 or 2026-01-31T15:33:57-08:00
 	// Should NOT match: 2026-01-15 22:14:31 -0800 (missing colon in timezone)
-	const pattern = /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+	// Allow optional space before timezone: 2026-02-04 20:39:38 -08:00
+	const pattern = /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}\s*[+-]\d{2}:\d{2}$/;
 	return pattern.test(date);
 }
 
@@ -465,6 +519,10 @@ async function checkAndFixHeader(filePath) {
 			issues.push(`Bad last modified time format: ${existingHeader.lastModifiedTime}`);
 			stats.filesWithBadTimezones++;
 			needsFixing = true;
+		} else if (existingHeader.lastModifiedTime && isValidDateFormat(existingHeader.lastModifiedTime)) {
+			// IMPORTANT: Do NOT count valid last modified times as needing fixing
+			// The tool should only fix actual issues, not update timestamps on every run
+			// Last modified time gets updated when OTHER issues are fixed
 		}
 
 		// Check last modified time has timestamp
@@ -509,6 +567,14 @@ async function checkAndFixHeader(filePath) {
 
 			const newContent = shebangPart + header + "\n\n" + contentPart;
 
+			// Show diff if requested
+			if (SHOW_DIFF && stats.filesFixed < MAX_DIFF_FILES) {
+				console.log(`\n📝 Diff for ${relative(rootDir, filePath)}:`);
+				console.log("─".repeat(80));
+				console.log(generateDiff(content, newContent, 3));
+				console.log("─".repeat(80));
+			}
+
 			if (!DRY_RUN) {
 				await writeFile(filePath, newContent, "utf-8");
 			}
@@ -531,7 +597,8 @@ async function main() {
 	console.log("\n=== File Header Fixer ===\n");
 
 	if (DRY_RUN) {
-		console.log("🔍 DRY RUN MODE - No files will be modified\n");
+		console.log("🔍 DRY RUN MODE - No files will be modified");
+		console.log("📊 Showing diffs for first", MAX_DIFF_FILES, "files with issues\n");
 	}
 
 	console.log("✅ Always verifying creation dates against git history\n");
