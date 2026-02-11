@@ -18,11 +18,10 @@ import util from "node:util";
 import slothlet from "@cldmv/slothlet";
 
 /**
- * Ensure slothlet dev conditions are set for the requested version.
- * @param {boolean} useV2 - Whether to force v2 dev condition.
+ * Ensure slothlet dev conditions are set for V3.
  * @returns {boolean} True if a child process was spawned.
  */
-function ensureDevEnvFlags(useV2) {
+function ensureDevEnvFlags() {
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition
@@ -33,20 +32,18 @@ function ensureDevEnvFlags(useV2) {
 
 	process.env.NODE_ENV = "development";
 
-	const desiredCondition = useV2 ? "slothlet-two-dev" : "slothlet-dev";
-	const conflictingCondition = useV2 ? "slothlet-dev" : "slothlet-two-dev";
+	const desiredCondition = "slothlet-dev";
 	const requiredConditions = [desiredCondition, "development"];
 
 	const allExecArgv = [...process.execArgv];
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
 	const allConditions = [...allExecArgv, ...envOptions];
 
-	const nextExecArgv = [...process.execArgv].filter((arg) => !arg.includes(`--conditions=${conflictingCondition}`));
+	const nextExecArgv = [...process.execArgv];
 	const envConditions = (process.env.NODE_OPTIONS ?? "")
 		.split(/\s+/u)
 		.filter(Boolean)
-		.filter((token) => token !== "--conditions=development|production")
-		.filter((token) => token !== `--conditions=${conflictingCondition}`);
+		.filter((token) => token !== "--conditions=development|production");
 
 	let needsRespawn = process.env.NODE_ENV !== "development";
 
@@ -205,11 +202,9 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
  * @param {boolean} useV2 - Whether v2 behavior should be used
  * @returns {Promise<void>}
  */
-async function forceMaterializeLazyFolders(api, useV2) {
+async function forceMaterializeLazyFolders(api) {
 	if (!api) return;
-	if (useV2) {
-		if (typeof api !== "object" && typeof api !== "function") return;
-	} else if (typeof api !== "object") {
+	if (typeof api !== "object") {
 		return;
 	}
 
@@ -224,22 +219,13 @@ async function forceMaterializeLazyFolders(api, useV2) {
 		}
 
 		try {
-			if (useV2) {
-				const value = api[key];
-				if (value && typeof value.__getState === "function" && typeof value.__materialize === "function") {
-					const state = value.__getState();
-					if (!state.materialized) {
-						await value.__materialize();
-					}
-				}
-			}
 			// Check if property descriptor indicates a lazy folder
 			const descriptor = Object.getOwnPropertyDescriptor(api, key);
 			if (
 				descriptor &&
 				"value" in descriptor &&
 				typeof descriptor.value === "function" &&
-				(descriptor.value.name?.includes("lazy") || (useV2 && typeof descriptor.value.__materialize === "function"))
+				descriptor.value.name?.includes("lazy")
 			) {
 				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
 
@@ -276,10 +262,7 @@ async function forceMaterializeLazyFolders(api, useV2) {
 
 					// Check if it's now materialized
 					const newValue = api[key];
-					const v2State = useV2 && typeof newValue?.__getState === "function" ? newValue.__getState() : null;
-					if (useV2 && v2State?.materialized) {
-						console.log(chalk.green(`  ✅ Successfully materialized ${key} (v2 wrapper)`));
-					} else if (typeof newValue === "object" && newValue !== null) {
+					if (typeof newValue === "object" && newValue !== null) {
 						console.log(chalk.green(`  ✅ Successfully materialized ${key} to object with keys: ${Object.keys(newValue).join(", ")}`));
 					} else {
 						console.log(chalk.yellow(`  ⚠️ ${key} still appears to be a function after access attempts`));
@@ -306,23 +289,22 @@ async function forceMaterializeLazyFolders(api, useV2) {
  * @returns {Promise<void>}
  */
 async function inspectApi(apiName, options = {}) {
-	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {}, useV2 = false } = options;
+	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {} } = options;
 
 	// Ensure correct environment is set (will respawn if needed)
-	if (ensureDevEnvFlags(useV2)) {
+	if (ensureDevEnvFlags()) {
 		return;
 	}
 
 	const mode = lazy ? "lazy" : "eager";
 	if (!raw) {
-		const version = useV2 ? "v2 (src2/)" : "v3 (src/)";
-		console.log(chalk.cyan(`Using ${version}`));
+		console.log(chalk.cyan("Using v3 (src/)"));
 	}
 	console.log(chalk.bold.blue(`\n=== Inspecting API: ${apiName} (${mode} mode) ===\n`));
 
 	try {
-		// Use different base paths for v2 vs v3
-		const basePath = useV2 ? "./api_tests_v2" : "./api_tests";
+		// Use V3 api_tests base path
+		const basePath = "./api_tests";
 		const apiPath = `${basePath}/${apiName}`;
 		console.log(chalk.gray(`Loading from: ${apiPath}`));
 
@@ -343,7 +325,7 @@ async function inspectApi(apiName, options = {}) {
 
 		// Force materialization of lazy folders if in lazy mode
 		if (lazy) {
-			await forceMaterializeLazyFolders(api, useV2);
+			await forceMaterializeLazyFolders(api);
 			console.log(chalk.green("✅ Lazy folders materialized\n"));
 		} else {
 			console.log(chalk.green("✅ Eager mode - all modules pre-loaded\n"));
@@ -532,23 +514,18 @@ async function main() {
 		console.log("  node tools/inspect-api-structure.mjs api_test");
 		console.log("  node tools/inspect-api-structure.mjs api_test --eager");
 		console.log("  node tools/inspect-api-structure.mjs api_test --eager --allowMutation --runtime live");
-		console.log("  node tools/inspect-api-structure.mjs api_test --eager --v2 --runtime live --allowApiOverwrite");
 		console.log("\nOptions:");
 		console.log("  --depth <n>           Maximum depth to traverse (default: 3)");
 		console.log("  --show-methods        Show available methods for functions");
 		console.log("  --lazy                Use lazy loading mode (default)");
 		console.log("  --eager               Use eager loading mode");
 		console.log("  --raw                 Output raw API via console.log only");
-		console.log("  --v2                  Use v2 (src2/) instead of v3 (src/)");
 		console.log("  --runtime <type>      Runtime type: 'async' or 'live' (default: async)");
 		console.log("  --apiDepth <n>        Set API depth limit (default: no limit)");
 		console.log("  --debug               Enable debug mode");
-		console.log("\nV3 Options (src/):");
+		console.log("\nV3 Options:");
 		console.log("  --allowMutation       Allow runtime mutation of API properties");
 		console.log("  --hooks               Enable lifecycle hooks");
-		console.log("\nV2 Options (src2/):");
-		console.log("  --allowApiOverwrite   Allow API property overwriting");
-		console.log("  --hotReload           Enable hot reload and ownership tracking");
 		return;
 	}
 
@@ -575,8 +552,6 @@ async function main() {
 			options.lazy = false;
 		} else if (args[i] === "--raw") {
 			options.raw = true;
-		} else if (args[i] === "--v2") {
-			options.useV2 = true;
 		} else if (args[i] === "--allowApiOverwrite") {
 			slothletConfig.allowApiOverwrite = true;
 		} else if (args[i] === "--hotReload") {

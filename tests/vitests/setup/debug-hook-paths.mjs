@@ -16,13 +16,6 @@
  * @description
  * Creates slothlet instances and logs actual paths captured by hooks
  * to help debug pattern matching tests
- *
- * ⚠️ WARNING: Hooks are not yet implemented in v3 (slothlet-three-dev)
- * This debug script will not work with v3 until hooks are implemented.
- * api.hooks.on() throws FEATURE_NOT_IMPLEMENTED in v3.
- * ⚠️ WARNING: To test v2 hooks, use slothlet-two-dev condition
- * V3 (default) hooks implementation may differ from v2.
- * Use appropriate condition based on which version you want to test.
  */
 
 import { getMatrixConfigs, TEST_DIRS } from "./vitest-helper.mjs";

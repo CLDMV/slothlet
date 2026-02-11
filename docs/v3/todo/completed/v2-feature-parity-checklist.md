@@ -196,29 +196,29 @@
 
 ---
 
-## ❌ Major Features - NOT IMPLEMENTED
+## ✅ Major Features - IMPLEMENTED
 
 ### 1. Hooks System
 
-- [ ] **Hooks API Surface** ❌ NOT IMPLEMENTED
-  - Status: **STUBBED** - Methods exist but throw `NOT_IMPLEMENTED`
-  - Location: Stubs in `src/lib/builders/api_builder.mjs`
-  - TODO File: `docs/v3/todo/hooks-system.md` (376 lines)
-  - Missing Methods:
-    - `api.slothlet.hooks.on(tag, type, handler, options)` - Register hook
-    - `api.slothlet.hooks.off(nameOrPattern)` - Remove hook
-    - `api.slothlet.hooks.enable(pattern)` - Enable hooks
-    - `api.slothlet.hooks.disable(pattern)` - Disable hooks
-    - `api.slothlet.hooks.clear(type)` - Clear hooks
-    - `api.slothlet.hooks.list(type)` - List registered hooks
+- [x] **Hooks API Surface** ✅ IMPLEMENTED
+  - Status: **PRODUCTION READY** - Full HookManager implementation
+  - Location: `src/lib/handlers/hook-manager.mjs` (927 lines)
+  - API Methods:
+    - `api.slothlet.hooks.on(typePattern, handler, options)` - Register hook
+    - `api.slothlet.hooks.off(idOrFilter)` - Remove hook by ID or filter
+    - `api.slothlet.hooks.remove(filter)` - Remove hooks by filter
+    - `api.slothlet.hooks.enable(filter)` - Enable hooks by filter
+    - `api.slothlet.hooks.disable(filter)` - Disable hooks by filter
+    - `api.slothlet.hooks.clear(filter)` - Clear hooks by filter
+    - `api.slothlet.hooks.list(filter)` - List registered hooks
 
-- [ ] **Hook Types** ❌ NOT IMPLEMENTED
+- [x] **Hook Types** ✅ IMPLEMENTED
   - `before` - Modify arguments or cancel execution
   - `after` - Transform return values
   - `always` - Observe final results (read-only)
   - `error` - Monitor errors with source tracking
 
-- [ ] **Hook Features** ❌ NOT IMPLEMENTED
+- [x] **Hook Features** ✅ IMPLEMENTED
   - Pattern matching (glob patterns: `*`, `**`, `{a,b}`, `!pattern`)
   - Priority ordering (higher priority first)
   - Subset phases (before → primary → after)
@@ -226,12 +226,37 @@
   - Error suppression (suppressErrors option)
   - Runtime enable/disable by pattern
   - Hook cleanup on shutdown
+  - Auto-discovery via ComponentBase (slothletProperty)
 
-**Impact:** HIGH - Major V2 feature completely missing from V3
+- [x] **Hook Tests** ✅ COMPREHENSIVE
+  - Tests: 13 test suites covering all hook functionality
+  - Location: `tests/vitests/suites/hooks/`
+  - Coverage:
+    - hooks-comprehensive.test.vitest.mjs
+    - hooks-execution.test.vitest.mjs
+    - hooks-before-chaining.test.vitest.mjs
+    - hooks-after-chaining.test.vitest.mjs
+    - hooks-short-circuit.test.vitest.mjs
+    - hooks-error-source.test.vitest.mjs
+    - hooks-suppress-errors.test.vitest.mjs
+    - hooks-patterns.test.vitest.mjs
+    - hooks-async-timing.test.vitest.mjs
+    - hooks-always-error-context.test.vitest.mjs
+    - hooks-mixed-scenarios.test.vitest.mjs
+    - hooks-internal-properties.test.vitest.mjs
+    - hooks-debug.test.vitest.mjs
+
+**Impact:** COMPLETE - Full V2 parity achieved for hooks system
 
 **V2 Documentation:** [docs/HOOKS.md](../../HOOKS.md) (788 lines)
 
-### 2. Context Propagation Systems
+## ✅ All Major Features Complete
+
+All V2 major features have been successfully implemented in V3 with full test coverage and production-ready status.
+
+---
+
+## Previously Tracked - Context Propagation Systems
 
 - [x] **EventEmitter Context Propagation** ✅ IMPLEMENTED (2026-01-29)
   - Status: **PRODUCTION READY** - AsyncResource-based wrapping
