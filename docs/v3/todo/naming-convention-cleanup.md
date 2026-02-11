@@ -9,6 +9,11 @@
 
 After attempting Phase 3-4 implementation, test failures revealed that changing internal property names (`_impl`, `_callableImpl`, etc.) has cascading effects that require deeper analysis. The current single-underscore convention for these properties, while inconsistent with the proposed 4-underscore standard, is working correctly.
 
+**Note on Test Failures:** The 3 baseline test failures (7 tests) are pre-existing and unrelated to naming convention work:
+- `processed/api/api-sanitize.test.vitest.mjs` (failures in sanitization tests)
+- `suites/core/core-reload-lazy-mode.test.vitest.mjs` (1 failure: lazy wrapper rebuild after reload)
+- Metadata tests (failures in cycle tracking)
+
 **Current Status:**
 - ✅ Phase 1: Complete (`moduleID` → `__moduleID`, etc.)
 - ✅ Phase 2: Partially complete (`___setImpl`, `___resetLazy` added)
@@ -62,19 +67,16 @@ Current state of prefix usage in `UnifiedWrapper`:
 - `_materializeFunc` — materialization function → internal → `____materializeFunc`
 - `_materializationPromise` — in-flight promise → internal → `____materializationPromise`
 
-#### Functions using `_` that may need reclassification:
-- `_materialize()` — called from proxy, external → `_` is correct
-- `_adoptImplChildren()` — called from proxy and internally → needs classification
-- `_createChildWrapper()` — internal only → `___createChildWrapper()`
-- `_createProxy()` — called externally → `_` is correct
-- `_createWaitingProxy()` — internal → `___createWaitingProxy()`
+#### Functions using `_` that need reclassification:
+- `_materialize()` — ✅ CORRECT: External function, called from slothlet.mjs and proxy-accessible
+- `_adoptImplChildren()` — ❌ WRONG: Internal only (called by framework: modes-processor, api-assignment, api-manager) → should be `___adoptImplChildren()`
+- `_createChildWrapper()` — ❌ WRONG: Internal only → should be `___createChildWrapper()`
+- `_createWaitingProxy()` — ❌ WRONG: Internal only → should be `___createWaitingProxy()`
 
-#### Functions using `__` — partially reclassified:
-- ~~`__setImpl()`~~ → `___setImpl()` ✅ RENAMED (went to `___` internal, not `_` external — correct since it's an internal mutation method not exposed to users)
-- `__getState()` — still `__` prefix, used via proxy for wrapper detection → **needs review**
-- `__invalidate()` — still `__` prefix, used via proxy during ownership/removal → **needs review**
-
-> **Note:** The original plan called for `_` (external function) prefix, but during implementation `___setImpl` was classified as an internal function (triple underscore) since it's only called by the framework, not by user code. `___resetLazy` was also added as a `___`-prefixed internal function.
+#### Functions using `__` that need reclassification:
+- ~~`__setImpl()`~~ → `___setImpl()` ✅ RENAMED (correctly reclassified as internal)
+- `__getState()` — ❌ WRONG PREFIX: Exposed via proxy but only called internally → should be `___getState()` (internal, not external)
+- `__invalidate()` — ❌ WRONG PREFIX: Exposed via proxy but only called internally → should be `___invalidate()` (internal, not external)
 
 ## Migration Plan
 
@@ -83,11 +85,12 @@ Current state of prefix usage in `UnifiedWrapper`:
    - `allowedInternals` set, proxy traps all updated
    - Full test suite passing
 
-2. **Phase 2:** ✅ COMPLETE — Reclassify `___setImpl` and `___resetLazy`
-   - ✅ `__setImpl` → `___setImpl` (reclassified as internal function with `___` prefix)
-   - ✅ `___resetLazy` added as new internal function with `___` prefix
-   - ⏸️ `__getState` and `__invalidate` — **DEFERRED** (still use `__` prefix, would need to be `_` as external functions)
-   - **Rationale:** `___setImpl` and `___resetLazy` use `___` (internal) because they're only called by framework internals. `__getState` and `__invalidate` are accessed through the proxy by external code but changing them requires extensive testing.
+2. **Phase 2:** ✅ COMPLETE — Reclassify internal framework functions
+   - ✅ `__setImpl` → `___setImpl` (internal framework function)
+   - ✅ `___resetLazy` added as internal function
+   - ⏸️ `__getState` and `__invalidate` — **DEFERRED** (should be `___` as internal functions, not `__`)
+   - ⏸️ `_adoptImplChildren`, `_createChildWrapper`, `_createWaitingProxy` — **DEFERRED** (should all be `___` as internal)
+   - **Rationale:** All these functions are only called by framework internals (modes-processor, api-manager, api-assignment, unified-wrapper itself), never by user code. They're exposed via proxy getTrap but that's for internal framework access, not external API.
 
 3. **Phase 3:** ⏸️ **DEFERRED** — Rename truly internal variables to `____` prefix
    - Current state: `_callableImpl`, `_waitingProxyCache`, `_proxy`, `_userMetadata`, `_materializeFunc`, `_materializationPromise`, `_id`

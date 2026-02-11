@@ -36,5 +36,5 @@
 	"suites/proxies/proxy-baseline.test.vitest.mjs",
 	"suites/ref/reference-readonly-properties.test.vitest.mjs",
 	"suites/rules/rule-coverage.test.vitest.mjs",
-	"processed/api/api-sanitize.test.vitest.mjs"
+	"suites/api/api-sanitize.test.vitest.mjs"
 ]
