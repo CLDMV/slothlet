@@ -395,22 +395,23 @@ for (const { config, name } of lazyConfigs) {
 
 		describe("Full Instance Reload Respects Lazy Mode", () => {
 			it("should rebuild with lazy wrappers for subdirectories after full reload", async () => {
-				// Materialize some paths
-				await api.math.add(2, 3);
-				expect(getWrapperState(api.math).materialized).toBe(true);
+				// Materialize subdirectory path (not root-level)
+				await api.advanced.selfObject.addViaSelf(2, 3);
+				expect(getWrapperState(api.advanced).materialized).toBe(true);
 
 				// Full reload rebuilds everything from scratch
 				await api.slothlet.reload();
 
 				// Subdirectories should be lazy (un-materialized)
-				const mathState = getWrapperState(api.math);
-				expect(mathState).not.toBeNull();
-				expect(mathState.materialized).toBe(false);
+				// Note: root-level paths like api.math are always eager, even in lazy mode
+				const advancedState = getWrapperState(api.advanced);
+				expect(advancedState).not.toBeNull();
+				expect(advancedState.materialized).toBe(false);
 
 				// But they should work when accessed
-				const result = await api.math.add(2, 3);
+				const result = await api.advanced.selfObject.addViaSelf(2, 3);
 				expect(result).toBe(5);
-				expect(getWrapperState(api.math).materialized).toBe(true);
+				expect(getWrapperState(api.advanced).materialized).toBe(true);
 			});
 
 			it("should not eagerly load all subdirectories during full reload", async () => {
