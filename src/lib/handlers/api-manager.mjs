@@ -791,16 +791,16 @@ export class ApiManager extends ComponentBase {
 	 * Delete a value at a path and prune empty parents.
 	 * @param {function|object} root - API root object.
 	 * @param {string[]} parts - Path segments.
-	 * @returns {boolean} True when a value was deleted.
+	 * @returns {Promise<boolean>} True when a value was deleted.
 	 * @private
 	 *
 	 * @description
 	 * Removes the property at the provided path and cleans up any empty parent objects.
 	 *
 	 * @example
-	 * const deleted = this.deletePath(api, ["plugins", "tools"]);
+	 * const deleted = await await this.deletePath(api, ["plugins", "tools"]);
 	 */
-	deletePath(root, parts) {
+	async deletePath(root, parts) {
 		let current = root;
 		const stack = [];
 		for (const part of parts.slice(0, -1)) {
@@ -826,7 +826,7 @@ export class ApiManager extends ComponentBase {
 		// Emit lifecycle event for removal BEFORE deletion
 		if (removedImpl && this.slothlet.handlers?.lifecycle) {
 			const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
-			this.slothlet.handlers.lifecycle.emit("impl:removed", {
+			await this.slothlet.handlers.lifecycle.emit("impl:removed", {
 				apiPath,
 				impl: removedImpl,
 				source: "removal",
@@ -890,9 +890,9 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		return true;
-	}
 
+return true;
+}
 	/**
 	 * Restore a path from api.slothlet.api.add history or core load.
 	 * @param {string} apiPath - API path to restore.
@@ -939,8 +939,8 @@ export class ApiManager extends ComponentBase {
 			const { parts } = this.normalizeApiPath(apiPath);
 			let baseValue = this.getValueAtPath(baseApi, parts);
 			if (baseValue === undefined) {
-				this.deletePath(this.slothlet.api, parts);
-				this.deletePath(this.slothlet.boundApi, parts);
+				await this.deletePath(this.slothlet.api, parts);
+				await this.deletePath(this.slothlet.boundApi, parts);
 				return;
 			}
 
@@ -1341,8 +1341,8 @@ export class ApiManager extends ComponentBase {
 			};
 			const pathParts = this.normalizeApiPath(apiPath).parts;
 			if (ownershipResult.action === "delete") {
-				this.deletePath(this.slothlet.api, pathParts);
-				this.deletePath(this.slothlet.boundApi, pathParts);
+				await this.deletePath(this.slothlet.api, pathParts);
+				await this.deletePath(this.slothlet.boundApi, pathParts);
 				// Clean up user metadata (use root segment only)
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = normalizedPath.split(".")[0];
@@ -1387,8 +1387,8 @@ export class ApiManager extends ComponentBase {
 				return true;
 			}
 			if (ownershipResult.action === "none" && history.length === 0) {
-				this.deletePath(this.slothlet.api, pathParts);
-				this.deletePath(this.slothlet.boundApi, pathParts);
+				await this.deletePath(this.slothlet.api, pathParts);
+				await this.deletePath(this.slothlet.boundApi, pathParts);
 				return true;
 			}
 			return false;
@@ -1441,8 +1441,8 @@ export class ApiManager extends ComponentBase {
 			// Delete paths with no owners
 			for (const removedPath of pathsToDelete) {
 				const { parts } = this.normalizeApiPath(removedPath);
-				this.deletePath(this.slothlet.api, parts);
-				this.deletePath(this.slothlet.boundApi, parts);
+				await this.deletePath(this.slothlet.api, parts);
+				await this.deletePath(this.slothlet.boundApi, parts);
 				// Clean up user metadata for removed path (use root segment only)
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = removedPath.split(".")[0];
@@ -1538,8 +1538,8 @@ export class ApiManager extends ComponentBase {
 
 		if (ownershipResult.action === "none") {
 			if (pathExists) {
-				this.deletePath(this.slothlet.api, parts);
-				this.deletePath(this.slothlet.boundApi, parts);
+				await this.deletePath(this.slothlet.api, parts);
+				await this.deletePath(this.slothlet.boundApi, parts);
 				// Clean up user metadata
 				if (this.slothlet.handlers.metadata) {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
@@ -1557,8 +1557,8 @@ export class ApiManager extends ComponentBase {
 			return false;
 		}
 		if (ownershipResult.action === "delete") {
-			this.deletePath(this.slothlet.api, parts);
-			this.deletePath(this.slothlet.boundApi, parts);
+			await this.deletePath(this.slothlet.api, parts);
+			await this.deletePath(this.slothlet.boundApi, parts);
 			// Clean up user metadata
 			if (this.slothlet.handlers.metadata) {
 				this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);

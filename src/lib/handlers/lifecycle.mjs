@@ -95,7 +95,7 @@ export class Lifecycle extends ComponentBase {
 	 *   filePath: "/path/to/math.mjs"
 	 * });
 	 */
-	emit(event, data) {
+	async emit(event, data) {
 		// Log event if debugging enabled
 		if (this.config?.debug?.lifecycle) {
 			this.eventLog.push({
@@ -117,18 +117,37 @@ export class Lifecycle extends ComponentBase {
 			});
 		}
 
-		// Notify all subscribers
+		// Notify all subscribers and await async handlers
 		const handlers = this.subscribers.get(event);
 		if (handlers) {
+			// Collect all handler promises (both sync and async)
+			const handlerPromises = [];
+
 			for (const handler of handlers) {
 				try {
-					handler(data);
+					const result = handler(data);
+					// If handler returns a promise, track it
+					if (result && typeof result.then === "function") {
+						handlerPromises.push(
+							result.catch((error) => {
+								// Log error but don't stop other handlers
+								if (!this.config?.silent) {
+									console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
+								}
+							})
+						);
+					}
 				} catch (error) {
-					// Log error but don't stop other handlers
+					// Log synchronous errors but don't stop other handlers
 					if (!this.config?.silent) {
 						console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
 					}
 				}
+			}
+
+			// Wait for all async handlers to complete
+			if (handlerPromises.length > 0) {
+				await Promise.all(handlerPromises);
 			}
 		}
 	}
