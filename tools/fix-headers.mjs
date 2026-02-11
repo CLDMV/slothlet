@@ -28,6 +28,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import chalk from "chalk";
 import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
 
 const execAsync = promisify(exec);
@@ -190,7 +191,7 @@ function getCurrentDateTime() {
  * @param {string} oldContent - Original content
  * @param {string} newContent - New content
  * @param {number} contextLines - Number of context lines to show
- * @returns {string} Diff string
+ * @returns {string} Diff string with chalk colors
  */
 function generateDiff(oldContent, newContent, contextLines = 3) {
 	const oldLines = oldContent.split("\n");
@@ -214,23 +215,23 @@ function generateDiff(oldContent, newContent, contextLines = 3) {
 	// Show context before
 	const startLine = Math.max(0, firstDiff - contextLines);
 	for (let i = startLine; i < firstDiff; i++) {
-		diff.push(`  ${oldLines[i]}`);
+		diff.push(chalk.dim(`  ${oldLines[i]}`));
 	}
 
-	// Show removed lines
+	// Show removed lines (red)
 	for (let i = firstDiff; i <= lastDiffOld && i < oldLines.length; i++) {
-		diff.push(`- ${oldLines[i]}`);
+		diff.push(chalk.red(`- ${oldLines[i]}`));
 	}
 
-	// Show added lines
+	// Show added lines (green)
 	for (let i = firstDiff; i <= lastDiffNew && i < newLines.length; i++) {
-		diff.push(`+ ${newLines[i]}`);
+		diff.push(chalk.green(`+ ${newLines[i]}`));
 	}
 
 	// Show context after
 	const endLine = Math.min(newLines.length, lastDiffNew + contextLines + 1);
 	for (let i = lastDiffNew + 1; i < endLine; i++) {
-		diff.push(`  ${newLines[i]}`);
+		diff.push(chalk.dim(`  ${newLines[i]}`));
 	}
 
 	return diff.join("\n");
@@ -569,10 +570,10 @@ async function checkAndFixHeader(filePath) {
 
 			// Show diff if requested
 			if (SHOW_DIFF && stats.filesFixed < MAX_DIFF_FILES) {
-				console.log(`\n📝 Diff for ${relative(rootDir, filePath)}:`);
-				console.log("─".repeat(80));
+				console.log(`\n${chalk.cyan("📝 Diff for")} ${chalk.bold(relative(rootDir, filePath))}:`);
+				console.log(chalk.gray("─".repeat(80)));
 				console.log(generateDiff(content, newContent, 3));
-				console.log("─".repeat(80));
+				console.log(chalk.gray("─".repeat(80)));
 			}
 
 			if (!DRY_RUN) {
