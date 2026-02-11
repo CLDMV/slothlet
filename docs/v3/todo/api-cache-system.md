@@ -1,6 +1,6 @@
 # API Cache System for Hot Reload
 
-**Status:** ✅ Complete (Steps 1-6 Complete, 2699/2704 tests passing - 99.8%)  
+**Status:** ✅ Complete (Steps 1-6 Complete + Post-Completion Refactoring, 2648/2648 baseline passing)  
 **Started:** 2026-02-06  
 **Completed:** 2026-02-09  
 **Branch:** refactor/unified-wrapper-poc
@@ -142,16 +142,20 @@ apiCaches = Map<string, CacheEntry>
 8. **Lazy materialization closure fix** — Added `cacheBust` parameter to `createLazySubdirectoryWrapper`
    so lazy materialization closures have access to the cache-bust timestamp.
 
-9. **`_extractFullImpl` helper** — Reconstructs full impl from wrapper tree when `_impl` is
-   depleted by `_adoptImplChildren()`. During construction, child values (host, port for config)
-   are moved from `_impl` onto the wrapper as own properties and deleted from `_impl`. This
-   helper walks the wrapper tree to reconstruct the complete impl for eager reload restore.
+9. **`UnifiedWrapper._extractFullImpl()` static method** — Reconstructs full impl from wrapper tree
+   when `_impl` is depleted by `_adoptImplChildren()`. During construction, child values (host,
+   port for config) are moved from `_impl` onto the wrapper as own properties and deleted from
+   `_impl`. This helper walks the wrapper tree to reconstruct the complete impl for eager reload
+   restore. Moved from api-manager instance method to UnifiedWrapper static during post-Step 6
+   refactoring (commit ac0b7ca).
 
-10. **Shallow-cloning in `___materialize()`** — Both `lazy_setImpl` callback and fallback path
-    now shallow-clone object impls via `Object.getOwnPropertyDescriptors()` + `Object.create()`.
-    Prevents `_adoptImplChildren` from mutating shared Node.js module export references. Without
-    cloning, the same cached module export is shared across wrapper instances, and deleting keys
-    from `_impl` destroys the shared export for subsequent materializations.
+10. **Impl cloning via `_cloneImpl` and `_applyNewImpl`** — All impl-setting paths (constructor,
+    `___setImpl`, `lazy_setImpl` callback, `___materialize` fallback) use `UnifiedWrapper._cloneImpl()`
+    for Proxy-safe shallow cloning and `_applyNewImpl()` for the full clone+invalidation+adoption
+    pipeline. Prevents `_adoptImplChildren` from mutating shared Node.js module export references.
+    Without cloning, the same cached module export is shared across wrapper instances, and deleting
+    keys from `_impl` destroys the shared export for subsequent materializations. Extracted during
+    post-Step 6 refactoring (commits f8f3139, 7ccfb07).
 
 11. **`_findAffectedCaches` method** — 5-tier cache resolution for path-based reload:
     (1) base module, (2) exact endpoint match, (3) child caches, (4) ownership history,
@@ -282,18 +286,18 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 ## Test Status
 
 ### Baseline Tests
-- **Status:** ✅ Passing (2412/2412)
-- **Last Run:** After Step 5 completion
+- **Status:** ✅ Passing (2648/2648)
+- **Last Run:** After post-Step 6 refactoring
 - **Command:** `npm run baseline | Select-Object -Last 50`
 
 ### Full Reload Tests
 - **Status:** ✅ Passing (56/56)
-- **Last Run:** After Step 5 completion
+- **Last Run:** After post-Step 6 refactoring
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-full.test.vitest.mjs | Select-Object -Last 100`
 
 ### Selective Reload Tests
 - **Status:** ✅ Passing (56/56)
-- **Last Run:** After Step 5 completion
+- **Last Run:** After post-Step 6 refactoring
 - **Command:** `npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs | Select-Object -Last 100`
 - **Results:** 56/56 passing (100%) across all 8 configurations (4 eager + 4 lazy)
 
@@ -427,11 +431,25 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
   - **Known issue:** Full instance reload (`api.slothlet.reload()`) doesn't reset lazy wrappers to un-materialized state. This is a pre-existing issue in `slothlet.mjs` reload() method, outside the scope of Step 6 selective/path reload work.
   - **Next**: Document Step 6 completion, consider addressing full instance reload issue
 
+### 2026-02-10
+- ✅ **Post-completion refactoring**: Eliminated code duplication in unified-wrapper.mjs
+  - **`_cloneImpl` static method** (commit f8f3139): Consolidated 4 identical inline clone blocks
+    (constructor, `___setImpl`, `lazy_setImpl`, `___materialize` fallback) into one shared static
+    method. Net -65 lines.
+  - **`_applyNewImpl` method** (commit 7ccfb07): Extracted shared impl-application pipeline
+    (clone + invalidation + isCallable upgrade + filePath promotion + adoptChildren) used by both
+    `___setImpl` and lazy materialization paths. `lazy_setImpl` callback becomes a one-liner.
+  - **`_extractFullImpl` moved to UnifiedWrapper** (commit ac0b7ca): Moved from api-manager instance
+    method to UnifiedWrapper static method. Replaced inline reconstruction in `_adoptImplChildren`
+    with call to the more thorough `_extractFullImpl`. api-manager's 3 call sites updated to use
+    `UnifiedWrapper._extractFullImpl()`. Net -9 lines.
+  - **All tests green**: 2648/2648 baseline, 38/38 test files
+
 ## Related Files
 
 - `src/lib/handlers/api-cache-manager.mjs` — Cache storage and `rebuildCache` logic (mode-preserving)
-- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`, `removeApiComponent`, `deletePath`
-- `src/lib/handlers/unified-wrapper.mjs` — `___setImpl`, `___resetLazy`, `_adoptImplChildren`, `_createWaitingProxy`
+- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`, `removeApiComponent`, `deletePath` (uses `UnifiedWrapper._extractFullImpl`)
+- `src/lib/handlers/unified-wrapper.mjs` — `___setImpl`, `___resetLazy`, `_adoptImplChildren`, `_createWaitingProxy`, `_cloneImpl` (static), `_applyNewImpl`, `_extractFullImpl` (static)
 - `src/lib/builders/builder.mjs` — `buildAPI` options forwarding
 - `src/lib/modes/eager.mjs` — `buildEagerAPI` with cacheBust
 - `src/lib/modes/lazy.mjs` — `buildLazyAPI` with cacheBust

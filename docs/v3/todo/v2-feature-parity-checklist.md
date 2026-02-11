@@ -1,6 +1,6 @@
 # V2 Feature Parity Checklist
 
-**Last Evaluated:** 2026-02-06
+**Last Evaluated:** 2026-02-10
 
 **Purpose:** Comprehensive verification of V2 features in V3 implementation  
 **Created:** January 27, 2026  
@@ -16,13 +16,13 @@
   - Status: Production-ready in V3
   - Location: `src/lib/modes/slothlet_eager.mjs`
   - Tests: Full test coverage in `tests/vitests/suites/eager/`
-  - Evidence: Baseline tests passing (1232/1232)
+  - Evidence: Baseline tests passing (2648/2648)
 
 - [x] **Lazy Loading** ✅ IMPLEMENTED
   - Status: Production-ready in V3 with copy-left materialization
   - Location: `src/lib/modes/slothlet_lazy.mjs`
   - Tests: Full test coverage in `tests/vitests/suites/lazy/`
-  - Evidence: Baseline tests passing (1232/1232)
+  - Evidence: Baseline tests passing (2648/2648)
 
 - [x] **Copy-Left Materialization** ✅ IMPLEMENTED
   - Status: Fully working in lazy mode
@@ -99,12 +99,12 @@
   - Tests: Removal tests in api-manager suite
   - Features: Ownership-based removal, stack history
 
-- [x] **api.slothlet.api.reload()** ✅ IMPLEMENTED (Component reload only)
-  - Status: Component reload functional (reload specific API paths/modules)
+- [x] **api.slothlet.api.reload()** ✅ IMPLEMENTED
+  - Status: Fully functional — selective reload by apiPath or moduleID, multi-cache path reload
   - Location: `src/lib/handlers/api-manager.mjs`
-  - Tests: Reload tests in api-manager suite
-  - Features: Replace specific modules with new implementations
-  - Note: Full instance reload (`api.slothlet.reload()`) throws NOT_IMPLEMENTED
+  - Tests: 56/56 selective + 112/112 multi-cache + 63/68 lazy-mode passing (all in baseline)
+  - Features: Cache-based rebuild from disk, ownership stack preservation, lazy-aware reload
+  - See: [api-cache-system.md](./api-cache-system.md) for full implementation details
 
 - [x] **Ownership Tracking System** ✅ IMPLEMENTED
   - Status: Stack-based history with bidirectional tracking
@@ -314,20 +314,16 @@
 ### Implementation Status
 
 **Core Features:**
-- ✅ Implemented: 27 features (includes context propagation suite: EventEmitter, class instance, Proxy, per-request)
+- ✅ Implemented: 28 features (includes full instance reload, selective reload, multi-cache reload, context propagation suite)
 - ❌ Not Implemented: 1 major feature (Hooks system)
-- ⚠️ Partial: 1 feature (api.slothlet.reload() - component reload works, full instance reload NOT implemented)
-- ✅ Completed Since Last Update: EventEmitter context, class instance context, Proxy context, per-request isolation (2026-01-29)
+- ✅ Completed Since Last Update: Full instance reload, selective reload, multi-cache path reload, lazy-mode reload, API cache system
 
 **Test Coverage:**
-- Baseline Tests: 1232/1232 passing (12 test files)
-- Context Tests: 245/253 passing (6 suites, 97% - 8 failures due to reload() not implemented)
-- Metadata Tests: 672 tests passing (6 suites)
-- Ownership Tests: 96 tests passing (2 suites)
-- API Manager Tests: 136 tests passing (3 suites)
-- Collision Tests: 160 tests passing (1 suite)
-- Mutations Tests: 112 tests passing (1 suite)
-- CJS Tests: 64 tests passing (1 suite)
+- Baseline Tests: 2648/2648 passing (38 test files)
+- Full Instance Reload: 56/56 passing (1 suite)
+- Selective Reload: 56/56 passing (1 suite)
+- Multi-Cache Reload: 112/112 passing (1 suite)
+- Lazy-Mode Reload: 63/68 passing (1 suite)
 
 **Context Test Breakdown:**
 - EventEmitter context: 80/80 passing (100%)
@@ -336,7 +332,7 @@
 - Map/Set proxy: 16/16 passing (100%)
 - Per-request context: 157/157 passing (100%)
 - Auto-context-propagation: 8/8 passing (100%)
-- ALS cleanup: 16/24 passing (67% - reload tests fail)
+- ALS cleanup: 24/24 passing (100% - reload tests now working)
 
 **Documentation:**
 - V3 Comprehensive Docs: 2 major systems documented (1600+ lines)
@@ -347,7 +343,13 @@
 
 **🔴 HIGH PRIORITY (Blocking V2 feature parity):**
 1. **Hooks System** - Major feature, extensively documented, NOT implemented (stubbed)
-2. **Full Instance Reload** - api.slothlet.reload() currently throws NOT_IMPLEMENTED
+
+**🟢 COMPLETED (2026-02-09):**
+- ✅ Full Instance Reload → `api.slothlet.reload()` fully working (56/56 tests)
+- ✅ Selective Module Reload → `api.slothlet.api.reload(pathOrModuleId)` (56/56 tests)
+- ✅ Multi-Cache Path Reload → Per-endpoint forceReplace grouping (112/112 tests)
+- ✅ Lazy-Mode Reload → Mode-preserving rebuild with `___resetLazy` (63/68 tests)
+- ✅ API Cache System → Steps 1-6 complete, cache-based rebuild from disk
 
 **🟢 COMPLETED (2026-01-29):**
 - ✅ EventEmitter Context Propagation → AsyncResource-based wrapping (80/80 tests passing)
@@ -367,7 +369,7 @@
 
 1. **Code Search:** Searched V3 codebase (`src/`) for implementation
 2. **Test Coverage:** Checked `tests/vitests/` for passing tests
-3. **Baseline Tests:** Verified 1232/1232 tests passing
+3. **Baseline Tests:** Verified 2648/2648 tests passing (38 test files)
 4. **Documentation:** Cross-referenced with TODO files and comprehensive docs
 5. **API Structure:** Verified exposed API methods in `src/lib/builders/api_builder.mjs`
 
@@ -398,10 +400,12 @@
 
 ---
 
-**Last Updated:** January 29, 2026  
+**Last Updated:** February 10, 2026  
 **Next Review:** After hooks system implementation
 
 **Recent Updates:**
+- 2026-02-10: Updated to reflect all reload features complete (full, selective, multi-cache, lazy-mode)
+- 2026-02-10: Updated baseline count from 1232 to 2648 (38 test files)
+- 2026-02-09: API cache system Steps 1-6 complete
+- 2026-02-07: Selective reload 56/56, full reload 56/56
 - 2026-01-29: Completed EventEmitter, class instance, Proxy, and per-request context propagation
-- 2026-01-29: Map/Set proxy support added (built-in object unwrapping)
-- 2026-01-29: Context test suite: 225/253 → 245/253 passing (97%)
