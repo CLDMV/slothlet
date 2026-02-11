@@ -16,32 +16,31 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 |------|---------------|---------|-------|
 | analyze-errors.mjs | ✅ Yes | ✅ Yes | Validates SlothletError/Warning usage and translations - **KEEP: Critical for code quality** |
 | build-exports.mjs | ✅ Yes | ✅ Yes | Generates types/index.d.mts from src/slothlet.mjs - **KEEP: Required for TypeScript** |
-| build-with-tests.mjs | ⚠️ Broken | ❌ Delete | Orchestrates build + tests but references deleted test:unit - **DELETE: Obsolete, users can run `npm run build && npm test`** |
 | ci-cleanup-src.mjs | ✅ Yes | ✅ Yes | Removes src/ in CI to force dist/ testing - **KEEP: Critical for CI validation** |
 | fix-headers.mjs | ✅ Yes | ✅ Yes | Automated file header maintenance (611 lines) - **KEEP: Permanent maintenance tool** |
 | inspect-api-structure.mjs | ✅ Yes | ✅ Yes | Debug tool for lazy/eager API structure - **KEEP: Essential for development** |
-| list-vitest-tests.mjs | ❌ Broken | ❌ Delete | Lists tests but searches wrong directories - **DELETE: Broken & unnecessary** |
 | precommit-validation.mjs | ✅ Yes | ✅ Yes | Pre-commit validation (run via `npm run precommit`) - **KEEP: Comprehensive validation sequence** |
 | prepend-license.mjs | ✅ Yes | ✅ Yes | Adds Apache license to dist/ files (424 lines) - **KEEP: Required for publishing** |
-| prepublish-check.mjs | ⚠️ Broken | ⚠️ Fix | Pre-publish validation with path bugs - **FIX: Replace pathname manipulation with fileURLToPath** |
-| run-vitest-shards.mjs | ❌ Deprecated | ❌ Delete | Superseded by run-all-vitest.mjs - **DELETE: Deprecated** |
+| prepublish-check.mjs | ✅ Yes | ✅ Yes | Pre-publish validation - **KEEP: Validates package before publishing** |
 | lib/header-config.mjs | ✅ Yes | ✅ Yes | Shared config for header validation - **KEEP: Used by multiple tools** |
+| ~~build-with-tests.mjs~~ | ❌ | ❌ | **DELETED: Obsolete - users can run `npm run build && npm test` directly** |
+| ~~list-vitest-tests.mjs~~ | ❌ | ❌ | **DELETED: Broken (wrong directories) & unnecessary** |
+| ~~run-vitest-shards.mjs~~ | ❌ | ❌ | **DELETED: Superseded by tests/vitests/run-all-vitest.mjs** |
 
 ## Action Items
 
 ### Summary (Updated 2026-02-10)
 **Deep Dive Complete:** All 12 tools analyzed for purpose, V3 compatibility, and actual necessity.
 
-**Status Breakdown:**
-- ✅ Keep & Working (7): analyze-errors, build-exports, ci-cleanup-src, fix-headers, inspect-api-structure, prepend-license, precommit-validation, lib/header-config
-- ⚠️ Keep but Fix (1): prepublish-check
-- ❌ Delete (3): build-with-tests, list-vitest-tests, run-vitest-shards
+**Final Status:**
+- ✅ Keep & Working (8): analyze-errors, build-exports, ci-cleanup-src, fix-headers, inspect-api-structure, precommit-validation, prepend-license, prepublish-check, lib/header-config
+- ❌ Deleted (3): build-with-tests, list-vitest-tests, run-vitest-shards
 
 ### High Priority  
 - [x] Deep dive into each tool's actual purpose and necessity
 - [x] Fix precommit-validation.mjs - Change test:unit → vitest
-- [ ] Fix prepublish-check.mjs - Replace pathname manipulation with fileURLToPath
-- [ ] Delete obsolete tools: build-with-tests.mjs, list-vitest-tests.mjs, run-vitest-shards.mjs
+- [x] Fix prepublish-check.mjs - Replace pathname manipulation with fileURLToPath
+- [x] Delete obsolete tools: build-with-tests.mjs, list-vitest-tests.mjs, run-vitest-shards.mjs
 
 ### Medium Priority
 - [ ] Consider setting up actual git pre-commit hook for precommit-validation.mjs
@@ -118,19 +117,14 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 3. Tests require/import in production mode
 4. Cleans up temp files
 
-**V3 Compatibility**: ⚠️ Has bugs - Path resolution issues  
+**V3 Compatibility**: ✅ Yes - Fixed path resolution  
 **Still Needed?**: ✅ YES - Validates package before publishing  
-**Working?**: ⚠️ Partially - Has path resolution bugs with `pathname.replace()` pattern  
-**Issue**: Line 20-22 uses complex pathname manipulation that fails: 
-```javascript
-const tmpDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\\?\/[A-Za-z]:/, "")), "..", "tmp-npm-test");
-```
-Results in `undefined` in path on some systems.  
-**Recommendation**: FIX - Simplify to use `fileURLToPath(import.meta.url)` pattern like other tools
+**Working?**: ✅ YES - Fixed to use fileURLToPath pattern  
+**Fix Applied**: Replaced complex `pathname.replace()` pattern with standard `fileURLToPath(import.meta.url)` pattern used by all other tools  
+**Usage**: Run via `npm run prepublish-check` to validate packed package
 
 ### Summary of Findings
 
 **Tools Status:**
-- ✅ **Keep & Working** (7): ci-cleanup-src, fix-headers, prepend-license, analyze-errors, inspect-api-structure, build-exports, precommit-validation
-- ⚠️ **Keep but Fix** (1): prepublish-check (fix path resolution)
-- ❌ **Delete** (3): list-vitest-tests (broken & unnecessary), run-vitest-shards (deprecated), build-with-tests (obsolete)
+- ✅ **Keep & Working** (8): ci-cleanup-src, fix-headers, prepend-license, analyze-errors, inspect-api-structure, build-exports, precommit-validation, prepublish-check
+- ❌ **Deleted** (3): list-vitest-tests (broken & unnecessary), run-vitest-shards (deprecated), build-with-tests (obsolete)

@@ -14,17 +14,18 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-const pkg = JSON.parse(
-	fs.readFileSync(
-		path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\\?\/[A-Za-z]:/, "")), "..", "package.json"),
-		"utf8"
-	)
-);
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.dirname(__dirname);
+
+const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 
 const pkgName = pkg.name;
-const pkgFile = fs.readdirSync(".").find((f) => f.endsWith(".tgz"));
-const tmpDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\\?\/[A-Za-z]:/, "")), "..", "tmp-npm-test");
-const distDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\\?\/[A-Za-z]:/, "")), "..", "dist");
+const pkgFile = fs.readdirSync(projectRoot).find((f) => f.endsWith(".tgz"));
+const tmpDir = path.join(projectRoot, "tmp-npm-test");
+const distDir = path.join(projectRoot, "dist");
 
 try {
 	// Create temp directory
