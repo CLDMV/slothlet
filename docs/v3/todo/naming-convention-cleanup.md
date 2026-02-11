@@ -1,9 +1,20 @@
 # Naming Convention Cleanup — UnifiedWrapper & Internal Properties
 
-**Priority:** High (consistency/maintainability)
-**Status:** In Progress (Phase 1 complete, Phase 2 partial)
+**Priority:** Medium (consistency/maintainability, not critical for functionality)
+**Status:** On Hold - Phases 3-5 deferred pending further analysis
 **Created:** 2026-02-07
 **Last Updated:** 2026-02-10
+
+## Decision: Defer Complex Refactoring
+
+After attempting Phase 3-4 implementation, test failures revealed that changing internal property names (`_impl`, `_callableImpl`, etc.) has cascading effects that require deeper analysis. The current single-underscore convention for these properties, while inconsistent with the proposed 4-underscore standard, is working correctly.
+
+**Current Status:**
+- ✅ Phase 1: Complete (`moduleID` → `__moduleID`, etc.)
+- ✅ Phase 2: Partially complete (`___setImpl`, `___resetLazy` added)
+- ⏸️ Phase 3-5: **DEFERRED** - Not critical for V3 functionality
+
+This naming convention cleanup is a nice-to-have for consistency but does not affect functionality or user-facing behavior. It can be revisited in a future maintenance cycle when there's bandwidth for comprehensive refactoring with full regression testing.
 
 ## The Problem
 
@@ -72,30 +83,25 @@ Current state of prefix usage in `UnifiedWrapper`:
    - `allowedInternals` set, proxy traps all updated
    - Full test suite passing
 
-2. **Phase 2:** ⚠️ PARTIALLY COMPLETE — Reclassify `__setImpl`/`__getState`/`__invalidate`
+2. **Phase 2:** ✅ COMPLETE — Reclassify `___setImpl` and `___resetLazy`
    - ✅ `__setImpl` → `___setImpl` (reclassified as internal function with `___` prefix)
    - ✅ `___resetLazy` added as new internal function with `___` prefix
-   - ⬜ `__getState` — still `__` prefix, needs review
-   - ⬜ `__invalidate` — still `__` prefix, needs review
-   - **Convention deviation:** Original plan said `_` (external function), actual implementation used `___` (internal function) for setImpl/resetLazy — this is arguably more correct since these are framework-internal methods
+   - ⏸️ `__getState` and `__invalidate` — **DEFERRED** (still use `__` prefix, would need to be `_` as external functions)
+   - **Rationale:** `___setImpl` and `___resetLazy` use `___` (internal) because they're only called by framework internals. `__getState` and `__invalidate` are accessed through the proxy by external code but changing them requires extensive testing.
 
-3. **Phase 3:** Rename truly internal variables to `____` prefix
-   - `_callableImpl` → `____callableImpl`
-   - `_waitingProxyCache` → `____waitingProxyCache`
-   - `_proxy` → `____proxy`
-   - `_userMetadata` → `____userMetadata`
-   - `_materializeFunc` → `____materializeFunc`
+3. **Phase 3:** ⏸️ **DEFERRED** — Rename truly internal variables to `____` prefix
+   - Current state: `_callableImpl`, `_waitingProxyCache`, `_proxy`, `_userMetadata`, `_materializeFunc`, `_materializationPromise`, `_id`
+   - Target state: `____callableImpl`, `____waitingProxyCache`, `____proxy`, `____userMetadata`, `____materializeFunc`, `____materializationPromise`, `____id`
+   - **Blocker:** Test failures indicate cascading dependencies that need deeper analysis
 
-4. **Phase 4:** Rename truly internal functions to `___` prefix
-   - `_createChildWrapper` → `___createChildWrapper`
-   - `_createWaitingProxy` → `___createWaitingProxy`
+4. **Phase 4:** ⏸️ **DEFERRED** — Rename truly internal functions to `___` prefix
+   - Current state: `_createChildWrapper`, `_createWaitingProxy`
+   - Target state: `___createChildWrapper`, `___createWaitingProxy`
+   - **Blocker:** Dependent on Phase 3 completion
 
-5. **Phase 5:** Audit all other source files for consistency
-   - `component-base.mjs`
-   - `api-manager.mjs`
-   - `ownership.mjs`
-   - `metadata.mjs`
-   - `lifecycle.mjs`
+5. **Phase 5:** ⏸️ **DEFERRED** — Audit all other source files for consistency
+   - Files to audit: `component-base.mjs`, `api-manager.mjs`, `ownership.mjs`, `metadata.mjs`, `lifecycle.mjs`
+   - **Blocker:** Dependent on Phases 3-4 completion
 
 ## New Methods from Refactoring (2026-02-10)
 
