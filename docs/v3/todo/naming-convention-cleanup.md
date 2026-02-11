@@ -145,29 +145,35 @@ this.__state = { materialized: false, inFlight: false };
 // ... 15+ underscore-prefixed properties competing for names
 
 // FUTURE: single internal container, zero collision risk
-this.__internal = Object.create(null);
-this.__internal.moduleID = "...";
-this.__internal.filePath = "...";
-this.__internal.sourceFolder = "...";
-this.__internal.mode = "lazy";
-this.__internal.apiPath = "math";
-this.__internal.state = { materialized: false, inFlight: false };
+this.__slothletInternal = Object.create(null);
+this.__slothletInternal.moduleID = "...";
+this.__slothletInternal.filePath = "...";
+this.__slothletInternal.sourceFolder = "...";
+this.__slothletInternal.mode = "lazy";
+this.__slothletInternal.apiPath = "math";
+this.__slothletInternal.state = { materialized: false, inFlight: false };
 ```
 
 ### Why This Matters
 
-1. **One collision point instead of many** — Only `__internal` (or whatever the container is named) needs to be unique. All child properties inside it are isolated from user exports entirely.
+1. **One collision point instead of many** — Only `__slothletInternal` needs to be unique. All child properties inside it are isolated from user exports entirely.
 2. **Proxy trap simplification** — The `allowedInternals` Set currently has 20+ entries and grows with every new property. With nesting, the getTrap only needs to intercept ONE property name.
 3. **Cleaner `ownKeys` / `getOwnPropertyDescriptor`** — No need to filter out dozens of internal properties when enumerating. Just filter the single container.
 4. **Follows the established pattern** — Slothlet already nests builtin functions under `slothlet.*` (e.g., `api.slothlet.shutdown()`, `api.slothlet.reload()`). Internal variables should follow the same containment principle.
 5. **Future-proof** — Adding new internal state never risks colliding with user exports, no matter what users name their modules.
+6. **Preserves user internals** — Users can still have their own `_` prefixed properties without collision. The proxy getTrap looks for `__slothletInternal` specifically, not blocking all underscored properties.
+
+### What Stays Exposed
+
+- `_materialize()` — Must remain on the surface so users can force materialization if needed
 
 ### Migration Approach
 
 This would be a Phase 6 after the prefix standardization is complete:
 
-1. Create `this.__internal = Object.create(null)` in constructor
-2. Move all `__` prefixed variables into `this.__internal.*` (dropping the prefix)
-3. Update proxy traps to route `__internal` access
-4. Update all internal code to read from `this.__internal.X` instead of `this.__X`
-5. The proxy `getTrap` can be radically simplified — any prop starting with `_` returns `undefined` except `__internal`
+1. Create `this.__slothletInternal = Object.create(null)` in constructor
+2. Move all `__` prefixed variables into `this.__slothletInternal.*` (dropping the prefix)
+3. Update proxy traps to route `__slothletInternal` access
+4. Update all internal code to read from `this.__slothletInternal.X` instead of `this.__X`
+5. Keep `_materialize()` exposed on the surface
+6. The proxy `getTrap` checks for `__slothletInternal` specifically - user `_` prefixed properties pass through normally
