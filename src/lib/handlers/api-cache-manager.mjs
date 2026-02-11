@@ -324,6 +324,7 @@ export class ApiCacheManager extends ComponentBase {
 		if (!entry) {
 			throw new this.SlothletError("CACHE_NOT_FOUND", {
 				moduleID,
+				operation: "rebuild",
 				validationError: true
 			});
 		}
