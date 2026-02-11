@@ -1,6 +1,7 @@
 # Tools V3 Compatibility Status
 
-**Last Evaluated:** 2026-02-06
+**Last Evaluated:** 2026-02-10  
+**Last Updated:** 2026-02-10
 
 This document tracks the status of all tools in the `tools/` folder for v3 compatibility and working status.
 
@@ -14,25 +15,34 @@ This document tracks the status of all tools in the `tools/` folder for v3 compa
 | File | Updated to V3 | Working | Notes |
 |------|---------------|---------|-------|
 | analyze-errors.mjs | ✅ Yes | ✅ Yes | Analyzes SlothletError/Warning usage, validates translations, checks file headers - Updated for v3 |
-| build-exports.mjs | 🔍 Unknown | 🔍 Not Tested | Generates package.json exports based on source structure |
-| build-with-tests.mjs | 🔍 Unknown | 🔍 Not Tested | Build and test orchestration |
-| ci-cleanup-src.mjs | 🔍 Unknown | 🔍 Not Tested | CI cleanup operations for source files |
+| build-exports.mjs | ✅ Yes | ✅ Yes | Generates package.json exports based on source structure - Tested 2026-02-10 |
+| build-with-tests.mjs | ⚠️ Partial | ⚠️ Issues | Build and test orchestration - Runs but fails due to missing test:unit script (fixed in V2 cleanup) |
+| ci-cleanup-src.mjs | ✅ Yes | ✅ Yes | CI cleanup operations for source files - Works correctly (skips cleanup when not in CI) |
 | fix-headers.mjs | ✅ Yes | ✅ Yes | Automated file header fixing with git integration - Created for v3 |
-| inspect-api-structure.mjs | 🔍 Unknown | 🔍 Not Tested | API structure inspection utility |
-| list-vitest-tests.mjs | 🔍 Unknown | 🔍 Not Tested | Lists vitest test files |
-| precommit-validation.mjs | 🔍 Unknown | 🔍 Not Tested | Pre-commit validation checks |
-| prepend-license.mjs | 🔍 Unknown | 🔍 Not Tested | Prepends license headers to files |
-| prepublish-check.mjs | 🔍 Unknown | 🔍 Not Tested | Pre-publish validation checks |
-| run-vitest-shards.mjs | 🔍 Unknown | 🔍 Not Tested | Runs vitest tests in sharded mode |
+| inspect-api-structure.mjs | ✅ Yes | ✅ Yes | API structure inspection utility - **Updated 2026-02-10**: Removed V2 support, V3-only, tested with lazy/eager modes |
+| list-vitest-tests.mjs | ⚠️ Partial | ⚠️ Issues | Lists vitest test files - Returns "No Vitest files found" (needs investigation) |
+| precommit-validation.mjs | ✅ Yes | ⚠️ Issues | Pre-commit validation checks - Works but test:node currently failing (unrelated to tool) |
+| prepend-license.mjs | ✅ Yes | ⚠️ Issues | Prepends license headers to files - Requires dist/ folder, used in build pipeline |
+| prepublish-check.mjs | ⚠️ Partial | ⚠️ Issues | Pre-publish validation checks - Has path resolution issues, needs fixing |
+| run-vitest-shards.mjs | ⚠️ Deprecated | ⚠️ Deprecated | Runs vitest tests in sharded mode - Superseded by tests/vitests/run-all-vitest.mjs |
 | lib/header-config.mjs | ✅ Yes | ✅ Yes | Shared configuration for file header validation - Created for v3 |
 
 ## Action Items
 
+### Summary (Updated 2026-02-10)
+**Testing Complete:** All 12 tools have been evaluated for V3 compatibility.
+
+**Status Breakdown:**
+- ✅ Fully Working: 5 tools (analyze-errors, fix-headers, inspect-api-structure, build-exports, ci-cleanup-src, lib/header-config)
+- ⚠️ Working with Issues: 4 tools (precommit-validation, build-with-tests, prepend-license, prepublish-check, list-vitest-tests)
+- ❌ Deprecated: 1 tool (run-vitest-shards)
+
 ### High Priority
-- [ ] Test all tools marked as "🔍 Not Tested" to verify working status
-- [ ] Review each tool for v3 compatibility (AsyncLocalStorage, dual loading modes, etc.)
-- [ ] Update tools that interact with slothlet API to handle v3 changes
-- [ ] Document any tools that are deprecated or should be removed
+- [x] Test all tools marked as "🔍 Not Tested" to verify working status
+- [ ] Fix prepublish-check.mjs path resolution issues
+- [ ] Fix list-vitest-tests.mjs to properly detect test files
+- [ ] Update build-with-tests.mjs to use correct test script name
+- [ ] Consider removing or archiving run-vitest-shards.mjs (deprecated)
 
 ### Medium Priority
 - [ ] Add error handling improvements to tools that may fail silently
@@ -66,9 +76,27 @@ For each tool, verify:
 
 ### Confirmed Updated for V3
 - **analyze-errors.mjs**: Updated to use header-config.mjs shared configuration, v3 compatible
+- **inspect-api-structure.mjs**: Updated 2026-02-10, removed all V2 support (--v2 flag, useV2 parameter, slothlet-two-dev detection), now V3-only - ✅ **TESTED & WORKING** (lazy and eager modes verified)
+
+### Recent Updates (2026-02-10)
+- **inspect-api-structure.mjs**: 
+  - Removed `--v2` CLI flag
+  - Removed `useV2` parameter from all functions
+  - Removed slothlet-two-dev condition detection
+  - Updated to use V3 api_tests paths exclusively
+  - Simplified forceMaterializeLazyFolders to V3-only logic
+- **All tools tested**: Completed comprehensive testing of all 12 tools in tools/ directory
+- **Identified issues**: 
+  - build-with-tests.mjs references old test:unit script
+  - prepublish-check.mjs has path resolution bugs
+  - list-vitest-tests.mjs not finding test files
+  - run-vitest-shards.mjs deprecated in favor of run-all-vitest.mjs
 
 ### Known Issues
-- None documented yet
+- **prepublish-check.mjs**: Path resolution bug (shows undefined in path)
+- **list-vitest-tests.mjs**: Returns "No Vitest files found" despite tests existing
+- **build-with-tests.mjs**: References old test:unit script removed in V2 cleanup
+- **precommit-validation.mjs**: test:node currently failing (unrelated to tool itself)
 
 ### Deprecation Candidates
-- TBD after compatibility review
+- **run-vitest-shards.mjs**: Superseded by tests/vitests/run-all-vitest.mjs
