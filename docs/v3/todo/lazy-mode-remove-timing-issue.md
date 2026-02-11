@@ -130,11 +130,28 @@ On **slower machines:**
 - ✅ Confirmed failures only in LAZY modes, not EAGER modes
 - ✅ Identified lifecycle.emit() as fire-and-forget
 - ✅ Confirmed deletePath() is synchronous but emits async events
+- ✅ Discovered NO lifecycle handlers are registered in tests (key finding!)
 
-### Attempted Fixes (Reverted)
-- ❌ Added `_cleanupWrapperRecursive()` - made failures worse (5→8 failures)
-  - **Reason:** Cleared too much, broke other functionality
-  - **Learning:** Cleanup is fine, timing is the issue
+### Attempted Fixes
+1. ❌ **Made lifecycle.emit() async** - Increased failures from 5 to 7
+   - **Reason:** Introduced async boundaries that didn't solve the real problem
+   - **Learning:** Issue is not about lifecycle handlers (none exist in tests)
+   
+2. ❌ **Added `_cleanupWrapperRecursive()`** - Made failures worse (5→8 failures)
+   - **Reason:** Cleared too much, broke other functionality  
+   - **Status:** Reverted
+   
+3. ❌ **Added `setTimeout(resolve, 0)` yield** - Made failures worse (7→8 failures)
+   - **Reason:** Introduced timing delays that broke other tests
+   - **Status:** Reverted
+
+### Current State (Commit: c86f7ae)
+- **Failures:** 7 (up from 5 baseline)
+- **Changes:**  
+  - lifecycle.emit() is now async (breaks other tests)
+  - deletePath() is now async  
+  - All call sites await deletePath()
+- **Status:** ⚠️ WORSE than baseline - need to revert lifecycle changes
 
 ---
 
@@ -209,9 +226,10 @@ Solution: Before completing `removeApiComponent()`, wait for any pending materia
 
 ## Next Actions
 
-- [ ] Implement async lifecycle.emit() with handler tracking
-- [ ] Make deletePath() async and await lifecycle events
-- [ ] Update all call sites to properly await
-- [ ] Add timing/synchronization test
-- [ ] Verify all tests pass on slower machines
-- [ ] Document lifecycle handler best practices
+- [ ] **CRITICAL:** Revert lifecycle.emit() async changes (making things worse)
+- [ ] Investigate why accessing removed paths still triggers materialization
+- [ ] Check if Proxy get trap is returning cached wrappers after deletion
+- [ ] Consider marking wrappers as `__invalid` to prevent access after removal
+- [ ] Add defensive check in Proxy get trap: if parent doesn't exist, return undefined
+- [ ] Test with explicit `api.cycleInternal === undefined` check before accessing nested paths
+- [ ] Document that tests should verify removal at root level before checking nested metadata
