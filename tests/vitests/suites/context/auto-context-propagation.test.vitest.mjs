@@ -69,7 +69,7 @@ describe("Auto Context Propagation", () => {
 
 			// Skip test if TCP module not available (e.g., in MIXED configurations with limited depth)
 			if (!api.tcp) {
-				console.log(`Skipping ${name}: TCP module not available`);
+				// console.log(`Skipping ${name}: TCP module not available`);
 				return;
 			}
 

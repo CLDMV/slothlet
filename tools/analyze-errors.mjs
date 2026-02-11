@@ -1054,8 +1054,21 @@ console.log("=".repeat(80) + "\n");
 const vitestDir = join(rootDir, "tests", "vitests");
 const vitestFiles = await findMjsFiles(vitestDir);
 
+// Exclude test runners and helper utilities that legitimately need console output
+const vitestExcludePatterns = [
+	"tests/vitests/run-all-vitest.mjs", // Test runner - needs console output
+	"tests/vitests/setup/debug-hook-paths.mjs" // Debug utility - intentional console output
+];
+
 const vitestConsoleLogs = [];
 for (const file of vitestFiles) {
+	const relPath = relative(rootDir, file);
+	
+	// Skip files that match exclusion patterns
+	if (vitestExcludePatterns.some((pattern) => relPath === pattern)) {
+		continue;
+	}
+	
 	const content = await readFile(file, "utf-8");
 	const logs = parseConsoleLogs(content, file);
 	vitestConsoleLogs.push(...logs);

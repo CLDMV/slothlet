@@ -25,7 +25,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-console.log("API TEST DIR: ", TEST_DIRS.API_TEST);
+// console.log("API TEST DIR: ", TEST_DIRS.API_TEST);
 
 describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ config }) => {
 	let slothlet;
@@ -66,10 +66,10 @@ describe.each(getMatrixConfigs())("Runtime Verification > Config: '$name'", ({ c
 		const isLazy = config.mode === "lazy";
 		const results = isLazy ? await api.runtimeTest.verifyRuntime() : api.runtimeTest.verifyRuntime();
 
-		console.log("TEST: api.slothlet exists?", !!api.slothlet);
-		console.log("TEST: api.slothlet.diag exists?", !!api.slothlet?.diag);
-		console.log("TEST: api.slothlet keys:", Object.keys(api.slothlet || {}));
-		console.log("TEST: api keys:", Object.keys(api));
+		// console.log("TEST: api.slothlet exists?", !!api.slothlet);
+		// console.log("TEST: api.slothlet.diag exists?", !!api.slothlet?.diag);
+		// console.log("TEST: api.slothlet keys:", Object.keys(api.slothlet || {}));
+		// console.log("TEST: api keys:", Object.keys(api));
 
 		// Verify runtime type detection
 		expect(results.runtimeType).toBe(expectedRuntime);
