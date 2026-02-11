@@ -90,7 +90,7 @@ async function main() {
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Distribution": "npm run build:dist",
-				"Vitest Suite": "npm run vitest",
+					"Vitest Suite": "npm run vitest",
 					"Build TypeScript Types": "npm run build:types",
 					"Validate TypeScript": "npm run test:types"
 				};
