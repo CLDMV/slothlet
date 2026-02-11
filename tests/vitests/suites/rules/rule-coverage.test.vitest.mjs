@@ -261,12 +261,12 @@ describe("Rule Coverage Validation", () => {
 		const expectedCount = allConditions.size;
 		const documentedCount = implementedConditions.length;
 
-		console.log(`\n📊 Rule Coverage Summary:`);
-		console.log(`   Rules mapped: ${mappings.length}`);
-		console.log(`   F## patterns: ${allFPatterns.size} (${[...allFPatterns].sort().join(", ")})`);
-		console.log(`   Expected C## conditions: ${expectedCount}`);
-		console.log(`   Documented C## conditions: ${documentedCount}`);
-		console.log(`   Unique C## conditions: ${[...allConditions].sort().join(", ")}`);
+		// console.log(`\n📊 Rule Coverage Summary:`);
+		// console.log(`   Rules mapped: ${mappings.length}`);
+		// console.log(`   F## patterns: ${allFPatterns.size} (${[...allFPatterns].sort().join(", ")})`);
+		// console.log(`   Expected C## conditions: ${expectedCount}`);
+		// console.log(`   Documented C## conditions: ${documentedCount}`);
+		// console.log(`   Unique C## conditions: ${[...allConditions].sort().join(", ")}`);
 
 		expect(documentedCount).toBeGreaterThanOrEqual(expectedCount);
 	});

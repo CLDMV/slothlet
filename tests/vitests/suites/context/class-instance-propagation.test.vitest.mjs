@@ -51,7 +51,7 @@ describe("Class Instance Context Propagation", () => {
 
 			// Skip if module not available in this config
 			if (!api.createTestService) {
-				console.log(`Skipping ${name}: createTestService not available`);
+				// console.log(`Skipping ${name}: createTestService not available`);
 				return;
 			}
 
