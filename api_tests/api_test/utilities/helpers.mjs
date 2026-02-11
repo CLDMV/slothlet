@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:40:10 -08:00 (1770266410)
+ *	@Last modified time: 2026-02-10 18:02:02 -08:00 (1770775322)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -91,9 +91,4 @@ export function stringify(obj) {
 export function validate(obj, requiredProps) {
 	return requiredProps.every(prop => Object.prototype.hasOwnProperty.call(obj, prop));
 }
-
-
-
-
-
 

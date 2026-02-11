@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:40:03 -08:00 (1770266403)
+ *	@Last modified time: 2026-02-10 18:02:01 -08:00 (1770775321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -342,8 +342,4 @@ export async function createSnapshot(options = {}) {
 
 	return compact ? context.compactObject(snapshot) : snapshot;
 }
-
-
-
-
 
