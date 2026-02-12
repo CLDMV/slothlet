@@ -30,6 +30,7 @@ export class OwnershipManager extends ComponentBase {
 		super(slothlet);
 		this.moduleToPath = new Map(); // moduleID → Set<apiPath>
 		this.pathToModule = new Map(); // apiPath → Array<{moduleID, source, timestamp, value}>
+		this._unregisteredModules = new Set(); // moduleIDs that have been explicitly unregistered
 	}
 
 	/**
@@ -53,6 +54,13 @@ export class OwnershipManager extends ComponentBase {
 		// Allow empty string for root-level registrations
 		if (apiPath !== "" && (!apiPath || typeof apiPath !== "string")) {
 			throw new this.SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath }, null, { validationError: true });
+		}
+
+		// Guard: reject registration for modules that have been explicitly unregistered.
+		// This prevents stale ownership entries from being re-created when async lazy
+		// materialization completes after a module has already been removed via api.remove().
+		if (this._unregisteredModules.has(moduleID)) {
+			return null;
 		}
 
 		// Check for conflicts
@@ -139,6 +147,10 @@ export class OwnershipManager extends ComponentBase {
 		if (!paths) {
 			return { removed: [], rolledBack: [] };
 		}
+
+		// Mark this module as unregistered so that late-arriving async registrations
+		// (e.g., from in-flight lazy materialization) are silently rejected.
+		this._unregisteredModules.add(moduleID);
 
 		const removed = [];
 		const rolledBack = [];
@@ -385,6 +397,7 @@ export class OwnershipManager extends ComponentBase {
 	clear() {
 		this.moduleToPath.clear();
 		this.pathToModule.clear();
+		this._unregisteredModules.clear();
 	}
 
 	/**

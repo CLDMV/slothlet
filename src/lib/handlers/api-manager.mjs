@@ -1316,9 +1316,11 @@ return true;
 
 		// If it's a moduleID, find the actual registered moduleID (with suffix)
 		// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
+		// Use findLast to prefer the most recently registered module when multiple match,
+		// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 		if (moduleID && this.slothlet.handlers.ownership) {
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
-			const matchingModule = registeredModules.find((m) => m === moduleID || m.startsWith(`${moduleID}_`));
+			const matchingModule = registeredModules.findLast((m) => m === moduleID || m.startsWith(`${moduleID}_`));
 			if (matchingModule) {
 				moduleID = matchingModule;
 			}

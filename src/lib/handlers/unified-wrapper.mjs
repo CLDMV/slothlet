@@ -554,6 +554,12 @@ export class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 
+		// If wrapper has been invalidated (e.g., parent module removed via api.remove()),
+		// skip materialization to avoid registering stale ownership entries.
+		if (this.__invalid) {
+			return;
+		}
+
 		// If materialization is already in progress, return the existing promise
 		// This allows multiple callers to await the same materialization without polling
 		if (this._materializationPromise) {
