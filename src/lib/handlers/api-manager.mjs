@@ -348,7 +348,7 @@ export class ApiManager extends ComponentBase {
 		return !!(
 			value &&
 			(typeof value === "object" || typeof value === "function") &&
-			(value.__wrapper || value.___setImpl || value.__getState)
+			(value.__wrapper || value.___setImpl || value.___getState)
 		);
 	}
 
@@ -399,8 +399,8 @@ export class ApiManager extends ComponentBase {
 
 		// Copy materialize function if present (lazy mode support)
 		// In merge mode, preserve existing materializer to avoid replacing existing module behavior
-		if (nextWrapper._materializeFunc && collisionMode !== "merge") {
-			existingWrapper._materializeFunc = nextWrapper._materializeFunc;
+		if (nextWrapper.____materializeFunc && collisionMode !== "merge") {
+			existingWrapper.____materializeFunc = nextWrapper.____materializeFunc;
 		}
 
 		// THE ACTUAL FIX: Transfer _childCache entries directly
@@ -453,7 +453,7 @@ export class ApiManager extends ComponentBase {
 			for (const key of existingChildKeys) {
 				delete existingWrapper[key];
 			}
-			existingWrapper._adoptImplChildren();
+			existingWrapper.___adoptImplChildren();
 
 			// Also copy any child wrappers that nextWrapper already has
 			// (this handles cases where nextWrapper was built with pre-existing children)
@@ -1179,8 +1179,8 @@ return true;
 					seenWrappers.add(wrapper);
 
 					// Check if materialization is in-flight
-					if (wrapper._materializationPromise) {
-						pendingMaterializations.push(wrapper._materializationPromise);
+					if (wrapper.____materializationPromise) {
+						pendingMaterializations.push(wrapper.____materializationPromise);
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing
@@ -2031,7 +2031,7 @@ return true;
 						freshWrapper &&
 						freshWrapper.__slothletInternal.mode === "lazy" &&
 						!freshWrapper.__slothletInternal.state.materialized &&
-						typeof freshWrapper._materializeFunc === "function";
+						typeof freshWrapper.____materializeFunc === "function";
 
 					// DEBUG: Trace lazy detection for every root key
 					this.slothlet.debug("reload", {
@@ -2040,9 +2040,9 @@ return true;
 						hasFreshWrapper: !!freshWrapper,
 						freshMode: freshWrapper?.__slothletInternal.mode,
 						freshMaterialized: freshWrapper?.__slothletInternal.state?.materialized,
-						hasMaterializeFunc: typeof freshWrapper?._materializeFunc === "function",
+						hasMaterializeFunc: typeof freshWrapper?.____materializeFunc === "function",
 						isLazyFresh,
-						existingMaterialized: existingAtKey?.__getState?.()?.materialized
+						existingMaterialized: existingAtKey?.___getState?.()?.materialized
 					});
 
 					if (isLazyFresh) {
@@ -2050,7 +2050,7 @@ return true;
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						existingAtKey.___resetLazy(freshWrapper._materializeFunc);
+						existingAtKey.___resetLazy(freshWrapper.____materializeFunc);
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);
@@ -2066,11 +2066,11 @@ return true;
 
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
 						// CRITICAL: freshWrapper._impl may be depleted — the constructor's
-						// _adoptImplChildren() moved children (like host, port for config) out of
+						// ___adoptImplChildren() moved children (like host, port for config) out of
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
-						if (freshValue && typeof freshValue.__getState === "function") {
+						if (freshValue && typeof freshValue.___getState === "function") {
 							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
 							implForReload = freshValue;
@@ -2173,9 +2173,9 @@ return true;
 				// This is the key: we update the WRAPPER's implementation, not replace the path
 				// CRITICAL: After eager rebuild, wrapper proxies have depleted _impl (children
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
-				// so ___setImpl → _adoptImplChildren receives the full key set.
+				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
-				if (freshApi && typeof freshApi.__getState === "function") {
+				if (freshApi && typeof freshApi.___getState === "function") {
 					const freshWrapper = freshApi.__wrapper;
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
@@ -2188,15 +2188,15 @@ return true;
 				}
 
 				// Recursively extract full impls from any child wrapper proxies with depleted _impl.
-				// This handles the common case where freshApi is a function (no __getState) but
+				// This handles the common case where freshApi is a function (no ___getState) but
 				// its enumerable properties are wrapper proxies from eager rebuild.
 				// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
-				// lazy wrappers should be preserved as-is so _adoptImplChildren can call
+				// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
 				// ___resetLazy with the fresh materializeFunc.
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
-						if (val && typeof val.__getState === "function" && val.__wrapper) {
+						if (val && typeof val.___getState === "function" && val.__wrapper) {
 							const childWrapper = val.__wrapper;
 							if (childWrapper.__slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);

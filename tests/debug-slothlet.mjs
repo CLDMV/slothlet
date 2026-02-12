@@ -426,8 +426,8 @@ async function materializeLazyWrappers(root) {
 		}
 		visited.add(current);
 
-		if (typeof current.__getState === "function" && typeof current._materialize === "function") {
-			const state = current.__getState();
+		if (typeof current.___getState === "function" && typeof current._materialize === "function") {
+			const state = current.___getState();
 			if (state && !state.materialized && !state.inFlight) {
 				await current._materialize();
 			}
