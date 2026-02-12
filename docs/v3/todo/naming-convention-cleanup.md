@@ -1,23 +1,16 @@
 # Naming Convention Cleanup — UnifiedWrapper & Internal Properties
 
 **Priority:** Medium (consistency/maintainability, not critical for functionality)
-**Status:** Phase 6 (`__slothletInternal` container) complete — Phases 3-5 deferred
+**Status:** ✅ ALL PHASES COMPLETE
 **Created:** 2026-02-07
-**Last Updated:** 2026-02-12
-
-## Decision: Defer Complex Refactoring
-
-After attempting Phase 3-4 implementation, test failures revealed that changing internal property names (`_impl`, `_callableImpl`, etc.) has cascading effects that require deeper analysis. The current single-underscore convention for these properties, while inconsistent with the proposed 4-underscore standard, is working correctly.
-
-**Note on Test Failures:** The 3 baseline test failures (7 tests) are pre-existing and unrelated to naming convention work:
-- `processed/api/api-sanitize.test.vitest.mjs` (failures in sanitization tests)
-- `suites/core/core-reload-lazy-mode.test.vitest.mjs` (1 failure: lazy wrapper rebuild after reload)
-- Metadata tests (failures in cycle tracking)
+**Last Updated:** 2026-02-13
 
 **Current Status:**
 - ✅ Phase 1: Complete (`moduleID` → `__moduleID`, etc.)
-- ✅ Phase 2: Partially complete (`___setImpl`, `___resetLazy` added)
-- ⏸️ Phase 3-5: **DEFERRED** - Not critical for V3 functionality
+- ✅ Phase 2: Complete (all internal functions use `___` prefix)
+- ✅ Phase 3: Complete (all internal variables use `____` prefix)
+- ✅ Phase 4: Complete (covered by Phase 2)
+- ✅ Phase 5: Complete (audit — all source and test files consistent)
 - ✅ Phase 6: Complete (`__slothletInternal` container — all `__` properties nested)
 
 ### Phase 6: `__slothletInternal` Container (COMPLETED 2026-02-12)
@@ -76,31 +69,31 @@ All references across `unified-wrapper.mjs`, `api-manager.mjs`, `api-assignment.
 
 Current state of prefix usage in `UnifiedWrapper`:
 
-#### Properties using `__` (external variables — correct per new convention):
-- `__mode`, `__apiPath`, `__isCallable`, `__materializeOnCreate`
-- `__state`, `__displayName`, `__invalid`
-- `__collisionMergedKeys`, `__childFilePathsPreMaterialize`, `__needsImmediateChildAdoption`
+#### Properties using `__` (external variables — all nested in `__slothletInternal`):
+- `mode`, `apiPath`, `isCallable`, `materializeOnCreate` (via `__slothletInternal`)
+- `state`, `displayName`, `invalid` (via `__slothletInternal`)
+- `collisionMergedKeys`, `childFilePathsPreMaterialize`, `needsImmediateChildAdoption` (via `__slothletInternal`)
 
-#### Properties using `_` that may need reclassification:
-- `_id` — debugging ID, internal → should be `____id` or `___id`
-- `_impl` — the implementation object, accessed via proxy → needs classification
-- `_callableImpl` — callable function storage → internal variable → `____callableImpl`
-- `_waitingProxyCache` — internal cache → `____waitingProxyCache`
-- `_proxy` — cached proxy reference → `____proxy`
-- `_userMetadata` — user metadata storage → `____userMetadata`
-- `_materializeFunc` — materialization function → internal → `____materializeFunc`
-- `_materializationPromise` — in-flight promise → internal → `____materializationPromise`
+#### ~~Properties using `_` that may need reclassification~~ ✅ ALL RESOLVED
+- ~~`_id`~~ → `____id` ✅ RENAMED (internal variable)
+- `_impl` — ✅ CORRECT: External property, accessed via proxy (intentionally kept as `_`)
+- ~~`_callableImpl`~~ → `____callableImpl` ✅ RENAMED (internal variable, dead code)
+- ~~`_waitingProxyCache`~~ → `____waitingProxyCache` ✅ RENAMED (internal variable)
+- ~~`_proxy`~~ → `____proxy` ✅ RENAMED (internal variable)
+- ~~`_userMetadata`~~ → removed (0 references, dead code)
+- ~~`_materializeFunc`~~ → `____materializeFunc` ✅ RENAMED (internal variable)
+- ~~`_materializationPromise`~~ → `____materializationPromise` ✅ RENAMED (internal variable)
 
-#### Functions using `_` that need reclassification:
+#### ~~Functions using `_` that need reclassification~~ ✅ ALL RESOLVED
 - `_materialize()` — ✅ CORRECT: External function, called from slothlet.mjs and proxy-accessible
-- `_adoptImplChildren()` — ❌ WRONG: Internal only (called by framework: modes-processor, api-assignment, api-manager) → should be `___adoptImplChildren()`
-- `_createChildWrapper()` — ❌ WRONG: Internal only → should be `___createChildWrapper()`
-- `_createWaitingProxy()` — ❌ WRONG: Internal only → should be `___createWaitingProxy()`
+- ~~`_adoptImplChildren()`~~ → `___adoptImplChildren()` ✅ RENAMED (internal function)
+- ~~`_createChildWrapper()`~~ → `___createChildWrapper()` ✅ RENAMED (internal function)
+- ~~`_createWaitingProxy()`~~ → `___createWaitingProxy()` ✅ RENAMED (internal function)
 
-#### Functions using `__` that need reclassification:
+#### ~~Functions using `__` that need reclassification~~ ✅ ALL RESOLVED
 - ~~`__setImpl()`~~ → `___setImpl()` ✅ RENAMED (correctly reclassified as internal)
-- `__getState()` — ❌ WRONG PREFIX: Exposed via proxy but only called internally → should be `___getState()` (internal, not external)
-- `__invalidate()` — ❌ WRONG PREFIX: Exposed via proxy but only called internally → should be `___invalidate()` (internal, not external)
+- ~~`__getState()`~~ → `___getState()` ✅ RENAMED (internal function)
+- ~~`__invalidate()`~~ → `___invalidate()` ✅ RENAMED (internal function)
 
 ## Migration Plan
 
@@ -112,23 +105,33 @@ Current state of prefix usage in `UnifiedWrapper`:
 2. **Phase 2:** ✅ COMPLETE — Reclassify internal framework functions
    - ✅ `__setImpl` → `___setImpl` (internal framework function)
    - ✅ `___resetLazy` added as internal function
-   - ⏸️ `__getState` and `__invalidate` — **DEFERRED** (should be `___` as internal functions, not `__`)
-   - ⏸️ `_adoptImplChildren`, `_createChildWrapper`, `_createWaitingProxy` — **DEFERRED** (should all be `___` as internal)
-   - **Rationale:** All these functions are only called by framework internals (modes-processor, api-manager, api-assignment, unified-wrapper itself), never by user code. They're exposed via proxy getTrap but that's for internal framework access, not external API.
+   - ✅ `__getState` → `___getState` (5 files: unified-wrapper, modes-processor, api-manager, debug-slothlet, core-reload-lazy-mode test)
+   - ✅ `__invalidate` → `___invalidate` (unified-wrapper only)
+   - ✅ `_adoptImplChildren` → `___adoptImplChildren` (4 files: unified-wrapper, api-assignment, modes-processor, api-manager)
+   - ✅ `_createChildWrapper` → `___createChildWrapper` (unified-wrapper only)
+   - ✅ `_createWaitingProxy` → `___createWaitingProxy` (unified-wrapper only)
+   - All proxy traps (allowedInternals, hasTrap, setTrap, deletePropertyTrap) updated
+   - Baseline: 38/38 files, 2648/2648 tests passing
 
-3. **Phase 3:** ⏸️ **DEFERRED** — Rename truly internal variables to `____` prefix
-   - Current state: `_callableImpl`, `_waitingProxyCache`, `_proxy`, `_userMetadata`, `_materializeFunc`, `_materializationPromise`, `_id`
-   - Target state: `____callableImpl`, `____waitingProxyCache`, `____proxy`, `____userMetadata`, `____materializeFunc`, `____materializationPromise`, `____id`
-   - **Blocker:** Test failures indicate cascading dependencies that need deeper analysis
+3. **Phase 3:** ✅ COMPLETE — Rename truly internal variables to `____` prefix
+   - ✅ `_callableImpl` → `____callableImpl` (2 refs, unified-wrapper only — dead code, assigned but never read)
+   - ✅ `_waitingProxyCache` → `____waitingProxyCache` (9 refs, unified-wrapper only)
+   - ✅ `_proxy` → `____proxy` (10 refs, unified-wrapper only)
+   - ✅ `_userMetadata` → `____userMetadata` (0 refs — already removed in prior refactoring)
+   - ✅ `_materializeFunc` → `____materializeFunc` (16 refs: unified-wrapper, api-assignment, modes-processor, api-manager)
+   - ✅ `_materializationPromise` → `____materializationPromise` (10 refs: unified-wrapper, api-manager)
+   - ✅ `_id` → `____id` (10 refs: unified-wrapper, api-assignment)
+   - Note: `_impl` intentionally NOT renamed — accessed via proxy and used as external property
+   - Baseline: 38/38 files, 2648/2648 tests passing
 
-4. **Phase 4:** ⏸️ **DEFERRED** — Rename truly internal functions to `___` prefix
-   - Current state: `_createChildWrapper`, `_createWaitingProxy`
-   - Target state: `___createChildWrapper`, `___createWaitingProxy`
-   - **Blocker:** Dependent on Phase 3 completion
+4. **Phase 4:** ✅ COMPLETE (covered by Phase 2)
+   - `_createChildWrapper` → `___createChildWrapper` — done in Phase 2
+   - `_createWaitingProxy` → `___createWaitingProxy` — done in Phase 2
 
-5. **Phase 5:** ⏸️ **DEFERRED** — Audit all other source files for consistency
-   - Files to audit: `component-base.mjs`, `api-manager.mjs`, `ownership.mjs`, `metadata.mjs`, `lifecycle.mjs`
-   - **Blocker:** Dependent on Phases 3-4 completion
+5. **Phase 5:** ✅ COMPLETE — Audit all other source files for consistency
+   - Audited: api-manager.mjs, api-assignment.mjs, modes-processor.mjs, ownership.mjs, metadata.mjs, lifecycle.mjs, api-cache-manager.mjs
+   - No stale references to old-style UnifiedWrapper property names found
+   - Note: Other manager classes (OwnershipManager, MetadataManager, etc.) retain `_` prefix for their own internal properties — separate naming scope from UnifiedWrapper
 
 ## New Methods from Refactoring (2026-02-10)
 

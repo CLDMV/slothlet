@@ -70,8 +70,8 @@ for (const { config, name } of lazyConfigs) {
 		 * @returns {{ materialized: boolean, inFlight: boolean }|null}
 		 */
 		function getWrapperState(proxyValue) {
-			if (proxyValue && typeof proxyValue.__getState === "function") {
-				return proxyValue.__getState();
+			if (proxyValue && typeof proxyValue.___getState === "function") {
+				return proxyValue.___getState();
 			}
 			return null;
 		}

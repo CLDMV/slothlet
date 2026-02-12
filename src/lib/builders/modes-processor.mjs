@@ -842,12 +842,12 @@ export class ModesProcessor extends ComponentBase {
 									if (modes_existingWrapper) {
 										// In lazy mode, the file wrapper hasn't materialized yet.
 										// Force materialization so we can access its exports.
-										if (modes_existingWrapper._materializeFunc && !modes_existingWrapper.__slothletInternal.state?.materialized) {
+										if (modes_existingWrapper.____materializeFunc && !modes_existingWrapper.__slothletInternal.state?.materialized) {
 											await modes_existingWrapper._materialize();
 										}
 										// Ensure children are adopted from impl
 										if (modes_existingWrapper._impl && !modes_existingWrapper.__slothletInternal.state?.childrenAdopted) {
-											modes_existingWrapper._adoptImplChildren();
+											modes_existingWrapper.___adoptImplChildren();
 										}
 										const modes_existingImpl = modes_existingWrapper.__impl;
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
@@ -1194,7 +1194,7 @@ export class ModesProcessor extends ComponentBase {
 						// 3. Different moduleIDs trigger OWNERSHIP_CONFLICT unless allowConflict=true
 						// The collision config should be respected via registerAPIWithOwnership, not here
 
-						// Tag implToWrap's functions with metadata so _adoptImplChildren can inherit it
+						// Tag implToWrap's functions with metadata so ___adoptImplChildren can inherit it
 						if (implToWrap && typeof implToWrap === "object" && this.slothlet.handlers?.lifecycle) {
 							for (const key of Object.keys(implToWrap)) {
 								const value = implToWrap[key];
@@ -1327,7 +1327,7 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
 				const nestedValue = materialized[categoryName];
-				if (nestedValue && (nestedValue.__wrapper || nestedValue.__getState)) {
+				if (nestedValue && (nestedValue.__wrapper || nestedValue.___getState)) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "__wrapper");
 					if (attachedKeys.length > 0) {
 						return nestedValue;
