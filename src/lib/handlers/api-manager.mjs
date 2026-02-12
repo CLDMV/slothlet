@@ -530,11 +530,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Mark as materialized only if _impl is actually materialized (not a function)
-		if (existingWrapper.__state) {
+		if (existingWrapper.__slothletInternal.state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
 			const isActuallyMaterialized = existingWrapper._impl && typeof existingWrapper._impl !== "function";
-			existingWrapper.__state.materialized = isActuallyMaterialized;
-			existingWrapper.__state.inFlight = false;
+			existingWrapper.__slothletInternal.state.materialized = isActuallyMaterialized;
+			existingWrapper.__slothletInternal.state.inFlight = false;
 		}
 
 		return true;
@@ -869,9 +869,9 @@ export class ApiManager extends ComponentBase {
 					delete wrapper[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
-				if (wrapper.__state) {
-					wrapper.__state.materialized = false;
-					wrapper.__state.inFlight = false;
+				if (wrapper.__slothletInternal.state) {
+					wrapper.__slothletInternal.state.materialized = false;
+					wrapper.__slothletInternal.state.inFlight = false;
 				}
 			}
 		}
@@ -2029,8 +2029,8 @@ return true;
 					const freshWrapper = freshValue?.__wrapper;
 					const isLazyFresh =
 						freshWrapper &&
-						freshWrapper.__mode === "lazy" &&
-						!freshWrapper.__state.materialized &&
+						freshWrapper.__slothletInternal.mode === "lazy" &&
+						!freshWrapper.__slothletInternal.state.materialized &&
 						typeof freshWrapper._materializeFunc === "function";
 
 					// DEBUG: Trace lazy detection for every root key
@@ -2038,8 +2038,8 @@ return true;
 						message: "RESTORE-ROOT-KEY-INSPECT",
 						key,
 						hasFreshWrapper: !!freshWrapper,
-						freshMode: freshWrapper?.__mode,
-						freshMaterialized: freshWrapper?.__state?.materialized,
+						freshMode: freshWrapper?.__slothletInternal.mode,
+						freshMaterialized: freshWrapper?.__slothletInternal.state?.materialized,
 						hasMaterializeFunc: typeof freshWrapper?._materializeFunc === "function",
 						isLazyFresh,
 						existingMaterialized: existingAtKey?.__getState?.()?.materialized
@@ -2089,16 +2089,16 @@ return true;
 						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
 						const wrapper = existingAtKey.__wrapper;
-						const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
+						const originalCollisionMode = wrapper ? wrapper.__slothletInternal.state.collisionMode : null;
 						if (forceReplace && wrapper) {
-							wrapper.__state.collisionMode = "replace";
+							wrapper.__slothletInternal.state.collisionMode = "replace";
 						}
 
 						existingAtKey.___setImpl(implForReload, moduleID);
 
 						// Restore collision mode
 						if (wrapper && originalCollisionMode !== null) {
-							wrapper.__state.collisionMode = originalCollisionMode;
+							wrapper.__slothletInternal.state.collisionMode = originalCollisionMode;
 						}
 
 						// Restore custom properties
@@ -2157,15 +2157,15 @@ return true;
 				// forceReplace=true (single-module or first in multi-cache): clear old keys
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
 				const wrapper = existing.__wrapper;
-				const originalCollisionMode = wrapper ? wrapper.__state.collisionMode : null;
+				const originalCollisionMode = wrapper ? wrapper.__slothletInternal.state.collisionMode : null;
 
 				if (forceReplace && wrapper) {
-					wrapper.__state.collisionMode = "replace";
+					wrapper.__slothletInternal.state.collisionMode = "replace";
 					this.slothlet.debug("reload", {
 						message: "RESTORE: forcing replace mode",
 						endpoint,
 						originalCollisionMode,
-						wrapperApiPath: wrapper.__apiPath
+						wrapperApiPath: wrapper.__slothletInternal.apiPath
 					});
 				}
 
@@ -2198,7 +2198,7 @@ return true;
 						const val = implForReload[key];
 						if (val && typeof val.__getState === "function" && val.__wrapper) {
 							const childWrapper = val.__wrapper;
-							if (childWrapper.__state.materialized) {
+							if (childWrapper.__slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
 							}
 						}
@@ -2209,7 +2209,7 @@ return true;
 
 				// Restore original collision mode
 				if (wrapper && originalCollisionMode !== null) {
-					wrapper.__state.collisionMode = originalCollisionMode;
+					wrapper.__slothletInternal.state.collisionMode = originalCollisionMode;
 				}
 
 				// Restore custom properties after reload
