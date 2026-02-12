@@ -1,235 +1,187 @@
 # Lazy Mode api.remove() Timing Issue
 
-**Status:** 🔴 IN PROGRESS  
+**Status:** ✅ RESOLVED  
 **Priority:** HIGH  
 **Impact:** Test failures on slower machines (CI/CD reliability)  
 **Created:** 2026-02-11  
-**Last Updated:** 2026-02-11
+**Resolved:** 2026-02-11
 
 ---
 
 ## Problem Summary
 
-Tests fail intermittently on slower machines when using `api.remove()` in LAZY mode. After removal, metadata and wrapper objects are still accessible when they should be `undefined`. This is a **race condition** caused by fire-and-forget lifecycle event handlers.
+Tests fail intermittently on slower machines when using `api.remove()` in LAZY mode. After removal, the `cycled` property persists on the API when it should be `undefined`. This is a **race condition** caused by async lazy materialization re-registering stale ownership entries after a module has been unregistered.
 
 ### Failing Tests
 
 **File:** `tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs`  
-**Total Failures:** 5-8 (varies by timing)  
+**Total Failures:** 7 (consistent across runs)  
 **Configurations Affected:** LAZY, LAZY_HOOKS, LAZY_LIVE, LAZY_LIVE_HOOKS (all lazy modes)  
 **Configurations Passing:** EAGER, EAGER_HOOKS, EAGER_LIVE, EAGER_LIVE_HOOKS (all eager modes)
 
 #### Specific Test Failures:
 
-1. **"should handle multiple add/remove/add cycles"** (LAZY_HOOKS, LAZY_LIVE_HOOKS)
+1. **"should handle multiple add/remove/add cycles"** (LAZY_HOOKS, LAZY, LAZY_LIVE_HOOKS, LAZY_LIVE)
    - **Expected:** `api.cycled` is `undefined` after `api.remove("cycled")`
-   - **Actual:** Empty `UnifiedWrapper` with `_impl: {}` still exists
-   - **Lines:** 160-182
+   - **Actual:** Empty `UnifiedWrapper` with `_impl: {}` still exists on cycle 2
 
 2. **"should handle multiple add/remove cycles via internal API"** (LAZY, LAZY_LIVE_HOOKS, LAZY_LIVE)
    - **Expected:** Metadata is `undefined` after `api.remove("cycleInternal")`
-   - **Actual:** Metadata from cycle 2 still present (e.g., `{ cycle: 2, iteration: "cycle_2" }`)
-   - **Lines:** 260-284
+   - **Actual:** Metadata from previous cycle still present
 
 ### Test Pattern:
 ```javascript
 for (let cycle = 1; cycle <= 3; cycle++) {
-    await api.slothlet.api.add("cycleInternal", TEST_DIRS.API_SMART_FLATTEN, { metadata: { cycle } });
-    await materialize(api, "cycleInternal.config.settings.getPluginConfig");
-    
-    // Verify metadata
-    const metadata = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
-    expect(metadata.cycle).toBe(cycle); // ✅ PASSES
+    await api.slothlet.api.add("cycled", TEST_DIRS.API_SMART_FLATTEN, { metadata: { cycle } });
+    await materialize(api, "cycled.config.settings.getPluginConfig");
     
     // Remove
-    await api.slothlet.api.remove("cycleInternal");
+    await api.slothlet.api.remove("cycled");
+    expect(api.cycled).toBeUndefined(); // ❌ FAILS on cycle 2 in LAZY mode
     
-    // Verify removed
-    const afterRemove = await api.metadataTestHelper.getMetadata("cycleInternal.config.settings.getPluginConfig");
-    expect(afterRemove).toBeUndefined(); // ❌ FAILS - still has cycle 2 metadata
+    // Re-add for next cycle
 }
 ```
 
 ---
 
-## Root Cause Analysis
+## Root Cause
 
-### Primary Issue: Fire-and-Forget Lifecycle Events
+### Stale Ownership Re-Registration from Async Lazy Materialization
 
-**Location:** `src/lib/handlers/api-manager.mjs:828`
+The bug is a race condition between lazy wrapper materialization and module ownership cleanup:
+
+1. **Cycle 1 `api.add("cycled")`** — creates lazy wrapper, registers `cycled_hakmbb` in `ownership.moduleToPath`
+2. **Cycle 1 `api.remove("cycled")`** — calls `ownership.unregister("cycled_hakmbb")`, deletes the map entry
+3. **🐛 Lazy materialization from cycle 1 completes asynchronously** — `lazy.mjs:149` calls `ownership.register()` with the captured `cycled_hakmbb` moduleID from the closure, **re-creating the deleted entry** in `moduleToPath`
+4. **Cycle 2 `api.add("cycled")`** — registers a new `cycled_vg7xg1`
+5. **Cycle 2 `api.remove("cycled")`** — prefix lookup with `find()` finds `cycled_hakmbb` (stale, first match) instead of `cycled_vg7xg1` (current) → **wrong module gets unregistered** → only 2 paths deleted instead of 28 → `"cycled"` property remains on the API
+
+### Why LAZY Mode Only
+
+In **EAGER** mode, all modules are loaded synchronously during `buildAPI()`. By the time `api.remove()` is called, everything is fully registered and `unregister()` cleans up all paths completely.
+
+In **LAZY** mode, `registerSubtree()` uses `Object.entries()` on lazy proxy wrappers. The `ownKeysTrap` calls `_materialize()` **fire-and-forget** (no `await`). So materialization continues in the background, and when it eventually completes, it calls `ownership.register()` with the old moduleID — after that moduleID was already unregistered.
+
+### Why Timing-Dependent
+
+On **fast machines:** lazy materialization completes quickly, `registerSubtree` captures all paths during the initial registration phase, and `unregister()` cleanly removes everything.
+
+On **slower machines:** materialization is delayed, fewer paths are registered initially, and when the stale materialization completes after `unregister()`, it re-creates the ownership entry.
+
+### Code Path (lazy.mjs:149)
 
 ```javascript
-// Emit lifecycle event for removal BEFORE deletion
-if (removedImpl && this.slothlet.handlers?.lifecycle) {
-    const metadata = this.slothlet.handlers.metadata?.getMetadata?.(removedImpl);
-    this.slothlet.handlers.lifecycle.emit("impl:removed", {
-        apiPath,
-        impl: removedImpl,
-        source: "removal",
-        moduleID: metadata?.moduleID,
-        filePath: metadata?.filePath,
-        sourceFolder: metadata?.sourceFolder
+// Inside createLazyWrapper() → materializeFunc closure:
+const effectiveModuleId = moduleIDOverride || file.moduleID; // captured from add() call
+// ...async work loading files...
+if (slothlet.handlers.ownership) {
+    slothlet.handlers.ownership.register({
+        moduleID: effectiveModuleId, // 🐛 stale moduleID from already-removed module
+        apiPath: `${apiPath}.${moduleName}`,
+        source: "core",
+        // ...
     });
 }
 ```
 
-**Problem:** `lifecycle.emit()` calls handlers synchronously but doesn't await async handlers:
+### Debug Evidence
 
-**Location:** `src/lib/handlers/lifecycle.mjs:124`
+```
+[REMOVE-LOOKUP] moduleID=cycled, matchingModules=cycled_hakmbb,cycled_vg7xg1
+```
+Two moduleIDs match the prefix `cycled_`. `find()` returns the first (stale) instead of the second (current). When the stale module is unregistered, only 2 paths are removed (those from the late async registration) instead of 28.
+
+---
+
+## Solution
+
+### Three-Layer Fix (22 lines added, 1 changed)
+
+#### 1. Primary Fix: `_unregisteredModules` Guard (ownership.mjs)
+
+Added a `_unregisteredModules` Set to `OwnershipManager`. When `unregister()` is called, the moduleID is added to this Set. In `register()`, if the moduleID is in `_unregisteredModules`, the registration is **silently rejected**. This prevents stale lazy materialization from re-creating ownership entries.
 
 ```javascript
-for (const handler of handlers) {
-    try {
-        handler(data); // 🔴 FIRE-AND-FORGET - no await!
-    } catch (error) {
-        // Log error but don't stop other handlers
-        if (!this.config?.silent) {
-            console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
-        }
-    }
+// ownership.mjs - constructor
+this._unregisteredModules = new Set();
+
+// ownership.mjs - register()
+if (this._unregisteredModules.has(moduleID)) {
+    return null; // Reject stale registrations
 }
+
+// ownership.mjs - unregister()
+this._unregisteredModules.add(moduleID); // Mark before cleanup
+
+// ownership.mjs - clear()
+this._unregisteredModules.clear(); // Clean up on full reset
 ```
 
-### Secondary Issues in LAZY Mode
+#### 2. Defense-in-Depth: `findLast()` Lookup (api-manager.mjs)
 
-1. **Shallow Cleanup:** `deletePath()` only cleans immediate wrapper properties, not nested child wrappers
-2. **Metadata Persistence:** Function references in nested child wrappers keep metadata alive in WeakMap
-3. **Lazy Materialization After Removal:** Accessing removed paths can trigger re-materialization if `_materializeFunc` isn't cleared
+Changed `find()` to `findLast()` in the moduleID prefix lookup in `removeApiComponent()`. This ensures that when multiple moduleIDs match a prefix (due to stale entries), the **most recently registered** one is selected.
 
----
+```javascript
+// Before:
+const matchingModule = registeredModules.find((m) => m === moduleID || m.startsWith(`${moduleID}_`));
 
-## Why It Affects Slower Machines
+// After:
+const matchingModule = registeredModules.findLast((m) => m === moduleID || m.startsWith(`${moduleID}_`));
+```
 
-On **fast machines:**
-- Lifecycle handlers complete before test checks metadata
-- Race window is ~0-5ms (imperceptible)
+#### 3. Early Termination: `__invalid` Check (unified-wrapper.mjs)
 
-On **slower machines:**
-- Lifecycle handlers take longer to complete
-- Race window is ~10-100ms (visible in tests)
-- Test checks metadata BEFORE async cleanup completes
+Added `__invalid` check at the start of `___materialize()` to skip materialization entirely for wrappers whose parent module has been removed. Prevents unnecessary async work and registration attempts.
 
-**Key Point:** This is NOT a bug in logic, it's a **missing synchronization point**. The code assumes synchronous cleanup but allows async handlers.
-
----
-
-## Solution Requirements
-
-1. ✅ **Make lifecycle.emit() await async handlers** (primary fix)
-2. ✅ **Make deletePath() async and await lifecycle events** (secondary fix)
-3. ✅ **Ensure all callers of deletePath() await it properly**
-4. ⚠️ **Consider recursive cleanup for nested lazy wrappers** (defensive - may not be needed after primary fix)
-5. ✅ **Add tests to verify timing/synchronization works on slow machines**
+```javascript
+// unified-wrapper.mjs - ___materialize()
+if (this.__invalid) {
+    return; // Don't materialize removed wrappers
+}
+```
 
 ---
 
 ## Changes Made
 
-### Investigation Phase
-- ✅ Git bisected to find when failures started (~commit a3bd85b, pre-existing issue)
-- ✅ Confirmed failures only in LAZY modes, not EAGER modes
-- ✅ Identified lifecycle.emit() as fire-and-forget
-- ✅ Confirmed deletePath() is synchronous but emits async events
-- ✅ Discovered NO lifecycle handlers are registered in tests (key finding!)
+### Files Modified
 
-### Attempted Fixes
-1. ❌ **Made lifecycle.emit() async** - Increased failures from 5 to 7
-   - **Reason:** Introduced async boundaries that didn't solve the real problem
-   - **Learning:** Issue is not about lifecycle handlers (none exist in tests)
-   
-2. ❌ **Added `_cleanupWrapperRecursive()`** - Made failures worse (5→8 failures)
-   - **Reason:** Cleared too much, broke other functionality  
-   - **Status:** Reverted
-   
-3. ❌ **Added `setTimeout(resolve, 0)` yield** - Made failures worse (7→8 failures)
-   - **Reason:** Introduced timing delays that broke other tests
-   - **Status:** Reverted
+| File | Change | Lines |
+|------|--------|-------|
+| `src/lib/handlers/ownership.mjs` | Added `_unregisteredModules` Set, guard in `register()`, tracking in `unregister()`, cleanup in `clear()` | +13 |
+| `src/lib/handlers/api-manager.mjs` | Changed `find()` → `findLast()` for moduleID prefix lookup | +3/-1 |
+| `src/lib/handlers/unified-wrapper.mjs` | Added `__invalid` check at start of `___materialize()` | +6 |
 
-### Current State (Commit: c86f7ae)
-- **Failures:** 7 (up from 5 baseline)
-- **Changes:**  
-  - lifecycle.emit() is now async (breaks other tests)
-  - deletePath() is now async  
-  - All call sites await deletePath()
-- **Status:** ⚠️ WORSE than baseline - need to revert lifecycle changes
+### Total: 22 insertions, 1 deletion across 3 files
 
 ---
 
-## Implementation Plan
+## Test Results
 
-### Phase 1: Fix Lifecycle Event Timing ✅ COMPLETED
-1. ✅ Made `lifecycle.emit()` async and await async handlers
-2. ✅ Made `deletePath()` async  
-3. ✅ Awaited lifecycle.emit() before deletion
-4. ✅ Updated all call sites to await deletePath()
+### Before Fix
+- **metadata-api-manager.test.vitest.mjs:** 89/96 passing (7 failures, all LAZY modes)
+- **Full suite baseline:** 32 files failed, 595 tests failed
 
-**Result:** No regression, but didn't fix the issue (no lifecycle handlers registered in tests)
-
-### Phase 2: Wait for Pending Materializations 📋 IN PROGRESS
-**Root Cause Update:** Tests have NO lifecycle handlers. The real issue is that in LAZY mode, when tests access properties to check metadata, they might trigger NEW materializations of child wrappers that weren't fully cleaned up.
-
-Solution: Before completing `removeApiComponent()`, wait for any pending materializations to complete, similar to the fix in commit 9825104 for `addApiComponent()`.
-
-1. Collect pending `_materializationPromise` from wrappers before deletion
-2. Wait for all materializations to complete
-3. Then proceed with deletion
-4. Add defensive check to prevent re-materialization after removal
-
-### Phase 3: Add Recursive Cleanup (Defensive) 📋
-1. Add `_cleanupWrapperRecursive()` method
-2. Clear `_materializeFunc` to prevent re-materialization  
-3. Clear all child wrapper references
-4. Mark wrappers as invalid
-
-### Phase 4: Add Timing Tests 📋
-1. Add explicit timing test that simulates slow machine
-2. Test with artificial delay in lifecycle handlers (even though none exist)
-3. Verify metadata is properly cleaned up
-
----
-
-## Testing Strategy
-
-### Verification Steps:
-1. Run failing test file: `npm run vitest tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs`
-2. Run full baseline: `npm run baseline`
-3. Test on slower machine or with simulated delay
-4. Verify LAZY mode tests pass consistently
-
-### Success Criteria:
-- ✅ All 96 tests in metadata-api-manager pass
-- ✅ No failures in LAZY mode configurations
-- ✅ Tests pass reliably on slower machines
-- ✅ No performance regression in EAGER mode
+### After Fix
+- **metadata-api-manager.test.vitest.mjs:** 96/96 passing ✅ (verified 3 consecutive runs)
+- **Full suite baseline:** 31 files failed, 587 tests failed (8 fewer failures — all the LAZY timing failures fixed, no regressions)
 
 ---
 
 ## Related Files
 
-- `src/lib/handlers/api-manager.mjs` - removeApiComponent(), deletePath()
-- `src/lib/handlers/lifecycle.mjs` - emit() method (fire-and-forget)
-- `src/lib/handlers/metadata.mjs` - metadata cleanup
-- `src/lib/handlers/unified-wrapper.mjs` - lazy wrapper materialization
-- `tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs` - failing tests
+- `src/lib/handlers/ownership.mjs` — Primary fix: `_unregisteredModules` guard
+- `src/lib/handlers/api-manager.mjs` — Defense-in-depth: `findLast()` lookup
+- `src/lib/handlers/unified-wrapper.mjs` — Early termination: `__invalid` materialization check
+- `src/lib/modes/lazy.mjs` — Source of stale registrations (closure captures moduleIDOverride)
+- `tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs` — Previously failing tests
 
 ---
 
-## Notes
+## Key Learnings
 
-- This is a **pre-existing issue**, not caused by recent work
-- Only affects LAZY mode because of async materialization
-- EAGER mode not affected because everything is synchronous
-- Fix will improve reliability on CI/CD systems with varying performance
-- Consider adding configurable timeout for lifecycle handlers
-
----
-
-## Next Actions
-
-- [ ] **CRITICAL:** Revert lifecycle.emit() async changes (making things worse)
-- [ ] Investigate why accessing removed paths still triggers materialization
-- [ ] Check if Proxy get trap is returning cached wrappers after deletion
-- [ ] Consider marking wrappers as `__invalid` to prevent access after removal
-- [ ] Add defensive check in Proxy get trap: if parent doesn't exist, return undefined
-- [ ] Test with explicit `api.cycleInternal === undefined` check before accessing nested paths
-- [ ] Document that tests should verify removal at root level before checking nested metadata
+1. **Async closures capturing state** — Lazy materialization closures capture the moduleID at creation time. If the module is removed before materialization completes, the closure operates on a stale moduleID.
+2. **`find()` ordering matters** — Map insertion order determines `find()` results. Stale entries that get re-registered end up before newer entries. `findLast()` is the correct approach for "most recent match" semantics.
+3. **Defense-in-depth** — Three layers of protection ensure no single failure mode causes the bug to resurface: prevent stale registration, prefer newest match, skip materialization for invalid wrappers.
+4. **Previous failed approaches** — Making `lifecycle.emit()` async, adding recursive cleanup, and adding timeouts all failed because they addressed symptoms (lifecycle timing, wrapper cleanup) rather than the root cause (stale ownership re-registration).
