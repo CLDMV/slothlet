@@ -1,9 +1,9 @@
 # Naming Convention Cleanup — UnifiedWrapper & Internal Properties
 
 **Priority:** Medium (consistency/maintainability, not critical for functionality)
-**Status:** On Hold - Phases 3-5 deferred pending further analysis
+**Status:** Phase 6 (`__slothletInternal` container) complete — Phases 3-5 deferred
 **Created:** 2026-02-07
-**Last Updated:** 2026-02-10
+**Last Updated:** 2026-02-12
 
 ## Decision: Defer Complex Refactoring
 
@@ -18,6 +18,30 @@ After attempting Phase 3-4 implementation, test failures revealed that changing 
 - ✅ Phase 1: Complete (`moduleID` → `__moduleID`, etc.)
 - ✅ Phase 2: Partially complete (`___setImpl`, `___resetLazy` added)
 - ⏸️ Phase 3-5: **DEFERRED** - Not critical for V3 functionality
+- ✅ Phase 6: Complete (`__slothletInternal` container — all `__` properties nested)
+
+### Phase 6: `__slothletInternal` Container (COMPLETED 2026-02-12)
+
+All 13+ internal `__` prefixed properties on UnifiedWrapper instances are now nested inside
+a single `Object.create(null)` container (`__slothletInternal`), reducing collision risk to
+one property name. Baseline: 38/38 files, 2648/2648 tests passing.
+
+**Files modified:**
+- `src/lib/handlers/unified-wrapper.mjs` — Constructor rewrite, all internal references updated, proxy traps updated with backward compat handlers for old property names
+- `src/lib/builders/api-assignment.mjs` — Wrapper property access updated (31 references)
+- `src/lib/builders/modes-processor.mjs` — Wrapper property access updated (2 references)
+- `src/lib/handlers/api-manager.mjs` — Wrapper property access updated (18 references)
+- `src/lib/handlers/metadata.mjs` — Wrapper property access updated (1 reference)
+
+**Properties moved into container:** `mode`, `apiPath`, `isCallable`, `isCallableLocked` (new),
+`state`, `moduleID`, `filePath`, `sourceFolder`, `materializeOnCreate`, `displayName`, `invalid`,
+`collisionMergedKeys`, `childFilePathsPreMaterialize`, `needsImmediateChildAdoption`
+
+**Key design changes:**
+- `__isCallable` configurability (previously `Object.defineProperty configurable: true/false`) replaced with `isCallableLocked` boolean flag
+- `__filePath` updates now use direct assignment instead of `Object.defineProperty`
+- Proxy getTrap has backward compat handlers: `proxy.__mode` → `wrapper.__slothletInternal.mode`
+- `allowedInternals` Set and `hasTrap`/`setTrap`/`deletePropertyTrap` internal key lists all include `"__slothletInternal"`
 
 This naming convention cleanup is a nice-to-have for consistency but does not affect functionality or user-facing behavior. It can be revisited in a future maintenance cycle when there's bandwidth for comprehensive refactoring with full regression testing.
 
@@ -124,15 +148,33 @@ These follow the `_` prefix = external function convention correctly.
 - **Tests:** All tests referencing internal properties will need updating
 - **Proxy traps:** `allowedInternals` set, getTrap, hasTrap, ownKeysTrap all need updating per phase
 
+## Test Scripts
+
+Run after every change pass to verify no regressions:
+
+```bash
+# Quick targeted test (failing test file for metadata/api-manager issues)
+NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run vitest -- metadata-api-manager.test.vitest.mjs
+
+# Debug suite (runs eager + lazy mode structural validation, NaN checks, API parity)
+NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run debug
+
+# Full baseline (38 test files, 2648+ tests — the gold standard)
+NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run baseline
+```
+
+**Validation order:** vitest (fast, targeted) → debug (structural) → baseline (comprehensive)
+
 ## Notes
 
 - Each phase should be a separate commit with full `npm run precommit` passing
 - The `allowedInternals` Set in `getTrap` must be updated to match whatever prefix is used
 - Non-enumerable + non-prefix properties (`moduleID`, `filePath`, `sourceFolder`) are the highest priority fix since they can shadow user exports
 
-## Future Direction: Nesting Internal Variables
+## Implemented: Nested Internal Variables (`__slothletInternal`)
 
-Beyond prefix conventions, the long-term goal should be to **nest all internal wrapper variables inside a single private container object** — similar to how builtin functions are already nested under `slothlet`:
+The internal variable nesting described below has been **implemented** as of Phase 6.
+All internal wrapper variables now live inside a single `Object.create(null)` container:
 
 ```js
 // CURRENT: flat properties scattered across the wrapper instance
@@ -169,11 +211,11 @@ this.__slothletInternal.state = { materialized: false, inFlight: false };
 
 ### Migration Approach
 
-This would be a Phase 6 after the prefix standardization is complete:
+This was implemented in Phase 6:
 
-1. Create `this.__slothletInternal = Object.create(null)` in constructor
-2. Move all `__` prefixed variables into `this.__slothletInternal.*` (dropping the prefix)
-3. Update proxy traps to route `__slothletInternal` access
-4. Update all internal code to read from `this.__slothletInternal.X` instead of `this.__X`
-5. Keep `_materialize()` exposed on the surface
-6. The proxy `getTrap` checks for `__slothletInternal` specifically - user `_` prefixed properties pass through normally
+1. ✅ Created `this.__slothletInternal = Object.create(null)` in constructor
+2. ✅ Moved all `__` prefixed variables into `this.__slothletInternal.*` (dropping the prefix)
+3. ✅ Updated proxy traps to route `__slothletInternal` access
+4. ✅ Updated all internal code to read from `this.__slothletInternal.X` instead of `this.__X`
+5. ✅ Kept `_materialize()` exposed on the surface
+6. ✅ Proxy getTrap backward compat: old `__mode`, `__apiPath` etc. still work through proxy
