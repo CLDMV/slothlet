@@ -139,28 +139,28 @@ export function compareApiShapes(
 		const wrapper = value.____slothletInternal?.wrapper;
 		if (wrapper && typeof wrapper === "object") {
 			const impl = wrapper.____slothletInternal.impl;
-			const childCache = wrapper.____slothletInternal.childCache;
+			// Children are stored directly on the wrapper, not in a separate childCache
+			const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 			if (impl && typeof impl === "object") {
 				const descriptors = Object.getOwnPropertyDescriptors(impl);
 				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
-				if (childCache && childCache.size > 0) {
-					for (const [key, childValue] of childCache.entries()) {
-						if (!Object.prototype.hasOwnProperty.call(view, key)) {
-							Object.defineProperty(view, key, {
-								value: childValue,
-								writable: false,
-								enumerable: true,
-								configurable: true
-							});
-						}
+				// Add children from wrapper
+				for (const key of childKeys) {
+					if (!Object.prototype.hasOwnProperty.call(view, key)) {
+						Object.defineProperty(view, key, {
+							value: wrapper[key],
+							writable: false,
+							enumerable: true,
+							configurable: true
+						});
 					}
 				}
 				return view;
 			}
-			if ((impl === null || impl === undefined) && childCache && childCache.size > 0) {
+			if ((impl === null || impl === undefined) && childKeys.length > 0) {
 				const view = {};
-				for (const [key, childValue] of childCache.entries()) {
-					view[key] = childValue;
+				for (const key of childKeys) {
+					view[key] = wrapper[key];
 				}
 				return view;
 			}
@@ -272,6 +272,10 @@ export function compareApiShapes(
 		}
 		// Skip ____slothlet property (inherited from ComponentBase, not part of user API)
 		if (key === "____slothlet") {
+			return true;
+		}
+		// Skip __slothletInstance - internal Slothlet instance, not part of user API
+		if (key === "__slothletInstance") {
 			return true;
 		}
 		return false;
