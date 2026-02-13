@@ -85,8 +85,24 @@ export class ComponentBase {
 	 * super(slothlet);
 	 */
 	constructor(slothlet) {
-		// Make slothlet non-enumerable so it doesn't interfere with child enumeration
-		Object.defineProperty(this, "slothlet", { value: slothlet, writable: false, enumerable: false, configurable: false });
+		// Make ____slothlet non-enumerable so it doesn't interfere with child enumeration
+		Object.defineProperty(this, "____slothlet", { value: slothlet, writable: false, enumerable: false, configurable: false });
+	}
+
+	/**
+	 * Get Slothlet instance (internal access).
+	 * @returns {object} Slothlet instance.
+	 * @package
+	 *
+	 * @description
+	 * Provides direct access to the Slothlet instance for legacy code compatibility.
+	 * Prefer using specific getters (config, helpers, handlers) when possible.
+	 *
+	 * @example
+	 * this.slothlet.debug("api", { action: "assigned" });
+	 */
+	get slothlet() {
+		return this.____slothlet;
 	}
 
 	/**
@@ -101,7 +117,7 @@ export class ComponentBase {
 	 * const collisionMode = this.config.collision.api;
 	 */
 	get config() {
-		return this.slothlet.config;
+		return this.____slothlet.config;
 	}
 
 	/**
@@ -113,10 +129,25 @@ export class ComponentBase {
 	 * Shorthand for accessing debug settings from the Slothlet configuration.
 	 *
 	 * @example
-	 * if (this.debug?.api) { console.log("API debug enabled"); }
+	 * if (this.debugConfig?.api) { console.log("API debug enabled"); }
 	 */
-	get debug() {
-		return this.slothlet.config?.debug;
+	get debugConfig() {
+		return this.____slothlet.config?.debug;
+	}
+
+	/**
+	 * Get Slothlet debug function.
+	 * @returns {function} Slothlet debug function.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to the debug logging function.
+	 *
+	 * @example
+	 * this.slothletDebug("api", { action: "assigned", path: "math.add" });
+	 */
+	get slothletDebug() {
+		return this.____slothlet.debug.bind(this.____slothlet);
 	}
 
 	/**
@@ -131,7 +162,7 @@ export class ComponentBase {
 	 * console.log(`Component for Slothlet: ${this.instanceID}`);
 	 */
 	get instanceID() {
-		return this.slothlet.instanceID;
+		return this.____slothlet.instanceID;
 	}
 
 	/**
@@ -146,7 +177,7 @@ export class ComponentBase {
 	 * const currentValue = this.api.plugins;
 	 */
 	get api() {
-		return this.slothlet.api;
+		return this.____slothlet.api;
 	}
 
 	/**
@@ -161,7 +192,52 @@ export class ComponentBase {
 	 * const boundValue = this.boundApi.plugins;
 	 */
 	get boundApi() {
-		return this.slothlet.boundApi;
+		return this.____slothlet.boundApi;
+	}
+
+	/**
+	 * Get Slothlet helpers object.
+	 * @returns {object} Slothlet helpers.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to internal helpers (resolver, sanitize, utilities, etc.).
+	 *
+	 * @example
+	 * const path = this.helpers.resolver.resolvePathFromCaller('./config');
+	 */
+	get helpers() {
+		return this.____slothlet.helpers;
+	}
+
+	/**
+	 * Get Slothlet handlers object.
+	 * @returns {object} Slothlet handlers.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to internal handlers (metadata, lifecycle, apiManager, etc.).
+	 *
+	 * @example
+	 * const meta = this.handlers.metadata.getMetadata(target);
+	 */
+	get handlers() {
+		return this.____slothlet.handlers;
+	}
+
+	/**
+	 * Get Slothlet debug function.
+	 * @returns {function} Slothlet debug function.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to the debug logging function.
+	 *
+	 * @example
+	 * this.debug("api", { action: "assigned", path: "math.add" });
+	 */
+	get debug() {
+		return this.____slothlet.debug.bind(this.____slothlet);
 	}
 
 	/**
@@ -177,7 +253,7 @@ export class ComponentBase {
 	 * throw new this.SlothletError("INVALID_CONFIG", { reason: "missing dir" });
 	 */
 	get SlothletError() {
-		return this.slothlet.SlothletError;
+		return this.____slothlet.SlothletError;
 	}
 
 	/**
@@ -193,6 +269,6 @@ export class ComponentBase {
 	 * new this.SlothletWarning("WARNING_DEPRECATED", { feature: "oldApi" });
 	 */
 	get SlothletWarning() {
-		return this.slothlet.SlothletWarning;
+		return this.____slothlet.SlothletWarning;
 	}
 }
