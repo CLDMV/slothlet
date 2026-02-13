@@ -49,7 +49,7 @@ class Slothlet {
 	static RESERVED_ROOT_KEYS = ["slothlet", "shutdown", "destroy"];
 
 	// Properties to skip during recursive operations (at any depth)
-	static SKIP_PROPS = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
+	static SKIP_PROPS = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 
 	constructor() {
 		// Expose error classes to components (no imports needed)

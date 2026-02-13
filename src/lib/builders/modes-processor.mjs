@@ -87,12 +87,12 @@ export class ModesProcessor extends ComponentBase {
 
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
-			if (existingTarget && existingTarget.__wrapper) {
+			if (existingTarget && existingTarget.____slothletInternal?.wrapper) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Category reuse - using existing wrapper",
 						categoryName,
-						apiPath: existingTarget.__wrapper.apiPath
+						apiPath: existingTarget.____slothletInternal?.wrapper.apiPath
 					});
 				}
 				targetApi = existingTarget;
@@ -100,7 +100,7 @@ export class ModesProcessor extends ComponentBase {
 				// If existingTarget is a wrapper proxy, don't try to clone it - use empty object
 				// The wrapper will be populated with new children during file processing
 				const initialImpl =
-					existingTarget && existingTarget.__wrapper ? {} : this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
+					existingTarget && existingTarget.____slothletInternal?.wrapper ? {} : this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Category wrapper created",
@@ -147,7 +147,7 @@ export class ModesProcessor extends ComponentBase {
 					});
 					this.slothlet.debug("modes", {
 						message: "Category targetApi status",
-						isWrapper: !!targetApi.__wrapper,
+						isWrapper: !!targetApi.____slothletInternal.wrapper,
 						targetApiKeys: Object.keys(targetApi)
 					});
 				}
@@ -535,7 +535,7 @@ export class ModesProcessor extends ComponentBase {
 								});
 								this.slothlet.debug("modes", {
 									message: "Flatten multi-export targetApi status",
-									isWrapper: !!targetApi.__wrapper,
+									isWrapper: !!targetApi.____slothletInternal.wrapper,
 									keysBefore: Object.keys(targetApi)
 								});
 							}
@@ -662,7 +662,7 @@ export class ModesProcessor extends ComponentBase {
 						message: "File wrapper assignment",
 						propertyName,
 						apiPath: buildApiPath(localPath),
-						overwriting: propertyName in targetApi ? (targetApi[propertyName]?.__wrapper ? "wrapper" : "value") : "nothing"
+						overwriting: propertyName in targetApi ? (targetApi[propertyName]?.____slothletInternal.wrapper ? "wrapper" : "value") : "nothing"
 					});
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
@@ -682,8 +682,8 @@ export class ModesProcessor extends ComponentBase {
 						targetApiType: typeof targetApi,
 						propertyName,
 						hasProperty: propertyName in targetApi,
-						implType: typeof targetApi.__wrapper?.____slothletInternal.impl,
-						implHasProperty: !!targetApi.__wrapper?.____slothletInternal.impl?.utils
+						implType: typeof targetApi.____slothletInternal.wrapper?.____slothletInternal.impl,
+						implHasProperty: !!targetApi.____slothletInternal.wrapper?.____slothletInternal.impl?.utils
 					});
 				}
 				if (ownership) {
@@ -838,7 +838,7 @@ export class ModesProcessor extends ComponentBase {
 									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) || "merge";
 								const modes_existingAtKey = targetApi[subDirName];
 								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
-									const modes_existingWrapper = modes_existingAtKey?.__wrapper;
+									const modes_existingWrapper = modes_existingAtKey?.____slothletInternal.wrapper;
 									if (modes_existingWrapper) {
 										// In lazy mode, the file wrapper hasn't materialized yet.
 										// Force materialization so we can access its exports.
@@ -957,8 +957,8 @@ export class ModesProcessor extends ComponentBase {
 						(collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
 					let modes_fileFolderImpl = null;
 					const modes_lazyExisting = targetApi[subDirName];
-					if (modes_initialCollisionMode !== "replace" && modes_lazyExisting?.__wrapper) {
-						const modes_lazyExistingW = modes_lazyExisting.__wrapper;
+					if (modes_initialCollisionMode !== "replace" && modes_lazyExisting?.____slothletInternal.wrapper) {
+						const modes_lazyExistingW = modes_lazyExisting.____slothletInternal.wrapper;
 						// Root files are processed eagerly even in lazy mode, so impl should exist
 						const existImpl = modes_lazyExistingW.__impl;
 						if (existImpl && typeof existImpl === "object" && !Array.isArray(existImpl)) {
@@ -1327,8 +1327,8 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
 				const nestedValue = materialized[categoryName];
-				if (nestedValue && (nestedValue.__wrapper || nestedValue.___getState)) {
-					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "__wrapper");
+				if (nestedValue && (nestedValue.____slothletInternal?.wrapper || nestedValue.___getState)) {
+					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
 					if (attachedKeys.length > 0) {
 						return nestedValue;
 					}

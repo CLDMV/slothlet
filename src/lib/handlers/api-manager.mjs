@@ -348,7 +348,7 @@ export class ApiManager extends ComponentBase {
 		return !!(
 			value &&
 			(typeof value === "object" || typeof value === "function") &&
-			(value.__wrapper || value.___setImpl || value.___getState)
+			(value.____slothletInternal?.wrapper || value.___setImpl || value.___getState)
 		);
 	}
 
@@ -371,11 +371,11 @@ export class ApiManager extends ComponentBase {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - existingProxy",
-				apiPath: existingProxy?.__wrapper?.apiPath
+				apiPath: existingProxy?.____slothletInternal.wrapper?.apiPath
 			});
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - nextProxy",
-				apiPath: nextProxy?.__wrapper?.apiPath
+				apiPath: nextProxy?.____slothletInternal.wrapper?.apiPath
 			});
 		}
 
@@ -383,8 +383,8 @@ export class ApiManager extends ComponentBase {
 			return false;
 		}
 
-		const existingWrapper = existingProxy.__wrapper || existingProxy;
-		const nextWrapper = nextProxy.__wrapper || nextProxy;
+		const existingWrapper = existingProxy.____slothletInternal?.wrapper || existingProxy;
+		const nextWrapper = nextProxy.____slothletInternal?.wrapper || nextProxy;
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
@@ -486,7 +486,7 @@ export class ApiManager extends ComponentBase {
 					const existingChild = existingWrapper[key];
 					const nextChild = nextWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(nextChild)) {
-						const syncWrapper_nextChildWrapper = nextChild.__wrapper || nextChild;
+						const syncWrapper_nextChildWrapper = nextChild.____slothletInternal.wrapper || nextChild;
 						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
 							(k) => !k.startsWith("_") && !k.startsWith("__")
 						);
@@ -838,8 +838,8 @@ export class ApiManager extends ComponentBase {
 
 		// CRITICAL: Delete from wrapper's child properties AND _impl if current is a proxy
 		// Properties are stored in wrapper and _impl, not on the proxy itself
-		if (current.__wrapper) {
-			const wrapper = current.__wrapper;
+		if (current.____slothletInternal?.wrapper) {
+			const wrapper = current.____slothletInternal?.wrapper;
 			// Delete from wrapper (child properties)
 			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
 			if (!isInternal && finalKey in wrapper) {
@@ -857,8 +857,8 @@ export class ApiManager extends ComponentBase {
 		// AFTER deletion, clean up wrapper state for removed proxy
 		if (removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
-			if (removedImpl.__wrapper) {
-				const wrapper = removedImpl.__wrapper;
+			if (removedImpl.____slothletInternal?.wrapper) {
+				const wrapper = removedImpl.____slothletInternal?.wrapper;
 				// Set impl to null to prevent stale access
 				if (wrapper.____slothletInternal.impl !== undefined) {
 					wrapper.____slothletInternal.impl = null;
@@ -1054,16 +1054,16 @@ return true;
 			topLevelKeys: Object.keys(newApi),
 			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
 			wrappers: Object.keys(newApi)
-				.filter((k) => newApi[k]?.__wrapper)
+				.filter((k) => newApi[k]?.____slothletInternal?.wrapper)
 				.map((k) => ({
 					key: k,
-					apiPath: newApi[k].__wrapper.apiPath,
-					implKeys: Object.keys(newApi[k].__wrapper.____slothletInternal.impl || {}),
-					childCacheSize: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
-					childCacheKeys: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+					apiPath: newApi[k].____slothletInternal.wrapper.apiPath,
+					implKeys: Object.keys(newApi[k].____slothletInternal.wrapper.____slothletInternal.impl || {}),
+					childCacheSize: Object.keys(newApi[k].____slothletInternal.wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
+					childCacheKeys: Object.keys(newApi[k].____slothletInternal.wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
 				})),
 			nonWrappers: Object.keys(newApi)
-				.filter((k) => !newApi[k]?.__wrapper)
+				.filter((k) => !newApi[k]?.____slothletInternal?.wrapper)
 				.map((k) => ({ key: k, type: typeof newApi[k] }))
 		});
 
@@ -1112,7 +1112,7 @@ return true;
 			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
 			// This ensures api.lookup.__metadata exists and works properly
 			// The wrapper acts as a namespace container for the loaded API modules
-			if (!apiToMerge.__wrapper) {
+			if (!apiToMerge.____slothletInternal?.wrapper) {
 				// CRITICAL: If buildAPI returned a function (root contributor pattern),
 				// extract properties into a plain object for the container wrapper.
 				// The container is a namespace, not a callable — root contributor behavior
@@ -1172,8 +1172,8 @@ return true;
 			const collectPendingMaterializations = (obj, depth = 0) => {
 				if (!obj || typeof obj !== "object" || depth > 10) return;
 
-				if (obj.__wrapper) {
-					const wrapper = obj.__wrapper;
+				if (obj.____slothletInternal?.wrapper) {
+					const wrapper = obj.____slothletInternal?.wrapper;
 					// Skip if we've already processed this wrapper (avoid infinite recursion)
 					if (seenWrappers.has(wrapper)) return;
 					seenWrappers.add(wrapper);
@@ -1192,7 +1192,7 @@ return true;
 
 				// Recurse into child properties
 				for (const key of Object.keys(obj)) {
-					if (key !== "__wrapper") {
+					if (key !== "____slothletInternal") {
 						collectPendingMaterializations(obj[key], depth + 1);
 					}
 				}
@@ -1916,7 +1916,7 @@ return true;
 			return customProps;
 		}
 
-		const wrapper = existingProxy.__wrapper;
+		const wrapper = existingProxy.____slothletInternal?.wrapper;
 		if (!wrapper) {
 			return customProps;
 		}
@@ -1940,10 +1940,10 @@ return true;
 
 				// Skip all wrapper-type values (API-built, not user-set custom props)
 				// This includes both valid and invalidated wrappers
-				if (val && typeof val === "object" && val.__wrapper) {
+				if (val && typeof val === "object" && val.____slothletInternal?.wrapper) {
 					continue;
 				}
-				if (typeof val === "function" && val.__wrapper) {
+				if (typeof val === "function" && val.____slothletInternal?.wrapper) {
 					continue;
 				}
 
@@ -2026,7 +2026,7 @@ return true;
 
 					// Check if the fresh value is an un-materialized lazy wrapper
 					// (subdirectory from buildLazyAPI that hasn't been accessed yet)
-					const freshWrapper = freshValue?.__wrapper;
+					const freshWrapper = freshValue?.____slothletInternal.wrapper;
 					const isLazyFresh =
 						freshWrapper &&
 						freshWrapper.____slothletInternal.mode === "lazy" &&
@@ -2088,7 +2088,7 @@ return true;
 						// Conditionally force replace mode for reload
 						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
-						const wrapper = existingAtKey.__wrapper;
+						const wrapper = existingAtKey.____slothletInternal?.wrapper;
 						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 						if (forceReplace && wrapper) {
 							wrapper.____slothletInternal.state.collisionMode = "replace";
@@ -2156,7 +2156,7 @@ return true;
 				// Conditionally force "replace" mode for reload
 				// forceReplace=true (single-module or first in multi-cache): clear old keys
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
-				const wrapper = existing.__wrapper;
+				const wrapper = existing.____slothletInternal.wrapper;
 				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 
 				if (forceReplace && wrapper) {
@@ -2176,7 +2176,7 @@ return true;
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
 				if (freshApi && typeof freshApi.___getState === "function") {
-					const freshWrapper = freshApi.__wrapper;
+					const freshWrapper = freshApi.____slothletInternal.wrapper;
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
 					implForReload = {};
@@ -2196,8 +2196,8 @@ return true;
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
-						if (val && typeof val.___getState === "function" && val.__wrapper) {
-							const childWrapper = val.__wrapper;
+						if (val && typeof val.___getState === "function" && val.____slothletInternal?.wrapper) {
+							const childWrapper = val.____slothletInternal?.wrapper;
 							if (childWrapper.____slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
 							}
