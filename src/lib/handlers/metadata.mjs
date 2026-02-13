@@ -264,8 +264,8 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = target.__wrapper || target;
 
-		// Try _impl first (for wrapped functions), then target itself
-		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget);
+		// Try impl first (for wrapped functions), then target itself
+		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget);
 		return systemData || null;
 	}
 
@@ -283,8 +283,8 @@ export class Metadata extends ComponentBase {
 		const actualTarget = target.__wrapper || target;
 
 		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
-		// then fall back to _impl (for cases where wrapper wasn't tagged)
-		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget._impl) || {};
+		// then fall back to impl (for cases where wrapper wasn't tagged)
+		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
 
 		// Lookup user metadata by BOTH moduleID AND rootApiPath
 		// - registerUserMetadata() stores by root apiPath (for api.add())
@@ -373,7 +373,7 @@ export class Metadata extends ComponentBase {
 		const actualTarget = target.__wrapper || target;
 
 		// Get system metadata to find moduleID
-		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
+		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
 		const moduleID = systemData.moduleID || systemData.moduleID;
 
 		if (!moduleID) {
@@ -412,7 +412,7 @@ export class Metadata extends ComponentBase {
 		const actualTarget = target.__wrapper || target;
 
 		// Get system metadata to find moduleID
-		const systemData = this.#secureMetadata.get(actualTarget._impl || actualTarget) || {};
+		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
 		const moduleID = systemData.moduleID || systemData.moduleID;
 
 		if (!moduleID) return;

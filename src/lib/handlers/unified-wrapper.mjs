@@ -200,7 +200,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
-		this._impl = UnifiedWrapper._cloneImpl(initialImpl);
+		internal.impl = UnifiedWrapper._cloneImpl(initialImpl);
 
 		this.____materializeFunc = materializeFunc;
 
@@ -274,7 +274,7 @@ export class UnifiedWrapper extends ComponentBase {
 		if (this.____slothletInternal.mode === "lazy" && this.____slothletInternal.state && !this.____slothletInternal.state.materialized && this.____slothletInternal.proxy) {
 			return this.____slothletInternal.proxy;
 		}
-		return this._impl;
+		return this.____slothletInternal.impl;
 	}
 
 	/**
@@ -283,12 +283,12 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @public
 	 */
 	get __impl() {
-		return this._impl;
+		return this.____slothletInternal.impl;
 	}
 
 	/**
 	 * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
-	 * from mutating shared module export references via its `delete this._impl[key]`
+	 * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
 	 * operations. When concurrent materializations (e.g., old + new wrapper during reload)
 	 * both load the same cached module, the first ___adoptImplChildren would destroy the
 	 * shared export, causing subsequent wrappers to receive empty objects.
@@ -333,7 +333,7 @@ export class UnifiedWrapper extends ComponentBase {
 	static _extractFullImpl(wrapper) {
 		if (!wrapper) return null;
 
-		const impl = wrapper._impl;
+		const impl = wrapper.____slothletInternal.impl;
 
 		// Primitives and null/undefined: return directly (no depletion possible)
 		if (impl === null || impl === undefined) return impl;
@@ -389,7 +389,7 @@ export class UnifiedWrapper extends ComponentBase {
 	_applyNewImpl(newImpl) {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
-		this._impl = UnifiedWrapper._cloneImpl(newImpl);
+		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(newImpl);
 		this.____slothletInternal.invalid = false;
 
 		// Update isCallable if it's currently unlocked (false) and the new impl is callable.
@@ -407,8 +407,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// Update wrapper's filePath if not yet set.
 		// This handles lazy folder wrappers that import a file — the file path is
 		// stored on the impl by modes-processor and needs to be promoted to the wrapper.
-		if (!this.____slothletInternal.filePath && this._impl && this._impl.__filePath) {
-			this.____slothletInternal.filePath = this._impl.__filePath;
+		if (!this.____slothletInternal.filePath && this.____slothletInternal.impl && this.____slothletInternal.impl.__filePath) {
+			this.____slothletInternal.filePath = this.____slothletInternal.impl.__filePath;
 			this.slothlet.debug("wrapper", {
 				message: "APPLY-IMPL-UPDATE-PATH: updated filePath from null",
 				apiPath: this.____slothletInternal.apiPath,
@@ -480,7 +480,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this.slothlet.debug("wrapper", {
 			message: "___resetLazy called",
 			apiPath: this.____slothletInternal.apiPath,
-			hadImpl: this._impl !== null,
+			hadImpl: this.____slothletInternal.impl !== null,
 			hadChildren: Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length
 		});
 
@@ -500,7 +500,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Clear implementation and reset state
-		this._impl = null;
+		this.____slothletInternal.impl = null;
 		this.____slothletInternal.invalid = false;
 		this.____slothletInternal.state.materialized = false;
 		this.____slothletInternal.state.inFlight = false;
@@ -585,7 +585,7 @@ export class UnifiedWrapper extends ComponentBase {
 					const result = await this.____materializeFunc(lazy_setImpl);
 
 					// If materializeFunc didn't call setter, set _impl from return value
-					if (!this._impl) {
+					if (!this.____slothletInternal.impl) {
 						this._applyNewImpl(result);
 					}
 
@@ -646,7 +646,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	___invalidate() {
 		this.____slothletInternal.invalid = true;
-		this._impl = null;
+		this.____slothletInternal.impl = null;
 		// Clear all child properties from wrapper (filter internals)
 		for (const key of Reflect.ownKeys(this)) {
 			if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) {
@@ -680,16 +680,16 @@ export class UnifiedWrapper extends ComponentBase {
 			collisionMode: this.____slothletInternal.state.collisionMode
 		});
 
-		if (!this._impl || (typeof this._impl !== "object" && typeof this._impl !== "function")) {
+		if (!this.____slothletInternal.impl || (typeof this.____slothletInternal.impl !== "object" && typeof this.____slothletInternal.impl !== "function")) {
 			return;
 		}
 
-		const ownKeys = Reflect.ownKeys(this._impl);
+		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
 		const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "___getState", "_materialize", "_impl", "_state", "_invalid"]);
 		const keepImplProperties =
-			typeof this._impl === "function" || (this._impl && typeof this._impl === "object" && typeof this._impl.default === "function");
-		if (keepImplProperties && this._impl && typeof this._impl === "object" && typeof this._impl.default === "function") {
+			typeof this.____slothletInternal.impl === "function" || (this.____slothletInternal.impl && typeof this.____slothletInternal.impl === "object" && typeof this.____slothletInternal.impl.default === "function");
+		if (keepImplProperties && this.____slothletInternal.impl && typeof this.____slothletInternal.impl === "object" && typeof this.____slothletInternal.impl.default === "function") {
 			internalKeys.add("default");
 		}
 		const observedKeys = new Set();
@@ -733,7 +733,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Define metadata/helper keys that should never be adopted as children
 		const metadataKeys = new Set(["__childFilePaths", "__filePath", "__childFilePathsPreMaterialize"]);
-		const skipKeys = typeof this._impl === "function" ? new Set(["length", "name", "prototype"]) : null;
+		const skipKeys = typeof this.____slothletInternal.impl === "function" ? new Set(["length", "name", "prototype"]) : null;
 		// Skip builtin properties that are added by buildFinalAPI (should not be wrapped as children)
 		const builtinKeys = new Set(["slothlet", "shutdown", "destroy"]);
 
@@ -753,15 +753,15 @@ export class UnifiedWrapper extends ComponentBase {
 				continue;
 			}
 			// DEFENSIVE: _impl might have changed during iteration (shouldn't happen, but safety first)
-			if (!this._impl || (typeof this._impl !== "object" && typeof this._impl !== "function")) {
+			if (!this.____slothletInternal.impl || (typeof this.____slothletInternal.impl !== "object" && typeof this.____slothletInternal.impl !== "function")) {
 				break;
 			}
-			const descriptor = Object.getOwnPropertyDescriptor(this._impl, key);
+			const descriptor = Object.getOwnPropertyDescriptor(this.____slothletInternal.impl, key);
 			if (!descriptor) {
 				continue;
 			}
-			const value = this._impl[key];
-			if (value === this._impl) {
+			const value = this.____slothletInternal.impl[key];
+			if (value === this.____slothletInternal.impl) {
 				continue;
 			}
 			// Skip logging if key is a symbol (can't convert to string)
@@ -804,7 +804,7 @@ export class UnifiedWrapper extends ComponentBase {
 						});
 					}
 					if (descriptor.configurable) {
-						delete this._impl[key];
+						delete this.____slothletInternal.impl[key];
 					}
 					continue;
 				}
@@ -836,7 +836,7 @@ export class UnifiedWrapper extends ComponentBase {
 					// UnifiedWrapper instances returned by lazy materialization.
 					// When __wrapper is undefined, value IS the wrapper — read _impl directly.
 					const newWrapper = value.__wrapper || value;
-					let rawImpl = newWrapper ? newWrapper._impl : null;
+					let rawImpl = newWrapper ? newWrapper.____slothletInternal.impl : null;
 
 					// CRITICAL: _impl may be depleted — ___adoptImplChildren moves children from
 					// _impl onto the wrapper as own properties and deletes them from _impl.
@@ -931,8 +931,8 @@ export class UnifiedWrapper extends ComponentBase {
 						});
 					}
 				}
-				if (descriptor.configurable && !keepImplProperties && this._impl) {
-					delete this._impl[key];
+				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
+					delete this.____slothletInternal.impl[key];
 				}
 			} else if (wrapped === null) {
 				// ___createChildWrapper returned null, meaning this value should be stored unwrapped
@@ -942,8 +942,8 @@ export class UnifiedWrapper extends ComponentBase {
 					enumerable: true,
 					configurable: true
 				});
-				if (descriptor.configurable && !keepImplProperties && this._impl) {
-					delete this._impl[key];
+				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
+					delete this.____slothletInternal.impl[key];
 				}
 			} else {
 				// wrapped is falsy but not null - shouldn't happen, but define value anyway
@@ -953,8 +953,8 @@ export class UnifiedWrapper extends ComponentBase {
 					enumerable: true,
 					configurable: true
 				});
-				if (descriptor.configurable && !keepImplProperties && this._impl) {
-					delete this._impl[key];
+				if (descriptor.configurable && !keepImplProperties && this.____slothletInternal.impl) {
+					delete this.____slothletInternal.impl[key];
 				}
 			}
 		}
@@ -1065,21 +1065,21 @@ export class UnifiedWrapper extends ComponentBase {
 				message: "WRAP-CHILD-PATH: checking for child file path",
 				apiPath: this.apiPath,
 				key: keyStr,
-				has_impl: !!this._impl,
-				has__childFilePaths: !!(this._impl && this._impl.__childFilePaths),
+				has_impl: !!this.____slothletInternal.impl,
+				has__childFilePaths: !!(this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths),
 				has__childFilePathsPreMaterialize: !!this.____slothletInternal.childFilePathsPreMaterialize,
 				parentFilePath: parentMetadata?.filePath
 			});
-			if (this._impl && this._impl.__childFilePaths) {
+			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
 				this.slothlet.debug("wrapper", {
 					message: "WRAP-CHILD-PATH: __childFilePaths available",
-					keys: Object.keys(this._impl.__childFilePaths).join(","),
+					keys: Object.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
 					key: keyStr,
-					found: !!this._impl.__childFilePaths[key]
+					found: !!this.____slothletInternal.impl.__childFilePaths[key]
 				});
 			}
-			if (this._impl && this._impl.__childFilePaths && this._impl.__childFilePaths[key]) {
-				childFilePath = this._impl.__childFilePaths[key];
+			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths && this.____slothletInternal.impl.__childFilePaths[key]) {
+				childFilePath = this.____slothletInternal.impl.__childFilePaths[key];
 				this.slothlet.debug("wrapper", {
 					message: "WRAP-CHILD-PATH: Using __childFilePaths",
 					childFilePath
@@ -1189,8 +1189,8 @@ export class UnifiedWrapper extends ComponentBase {
 								if (!current) return undefined;
 
 								// If current wrapper's _impl is a custom proxy, delegate remaining chain
-								if (current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
-									let result = current._impl;
+								if (current.____slothletInternal.impl && typeof current.____slothletInternal.impl === "object" && util.types.isProxy(current.____slothletInternal.impl)) {
+									let result = current.____slothletInternal.impl;
 									// Delegate this chainProp and all remaining to custom proxy
 									const idx = propChain.indexOf(chainProp);
 									for (let i = idx; i < propChain.length; i++) {
@@ -1215,18 +1215,18 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 
 								// Check _impl properties
-								if (current._impl && current._impl[chainProp] !== undefined) {
-									return current._impl[chainProp];
+								if (current.____slothletInternal.impl && current.____slothletInternal.impl[chainProp] !== undefined) {
+									return current.____slothletInternal.impl[chainProp];
 								}
 
 								return undefined;
 							}
 
 							// If we get here with no propChain consumed, return the impl itself
-							if (current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
-								return current._impl;
+							if (current.____slothletInternal.impl && typeof current.____slothletInternal.impl === "object" && util.types.isProxy(current.____slothletInternal.impl)) {
+								return current.____slothletInternal.impl;
 							}
-							return current._impl;
+							return current.____slothletInternal.impl;
 						};
 
 						waitingProxy_thenResolve().then(onFulfilled, onRejected);
@@ -1237,7 +1237,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (prop === "__impl") {
 					// For waiting proxies, return the impl after resolving through wrapper properties
 					// This allows waiting proxies to behave like regular wrappers for inspection
-					if (wrapper._impl !== null && wrapper._impl !== undefined) {
+					if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 						// Resolve through propChain to get the actual child wrapper
 						let current = wrapper;
 						for (const chainProp of propChain) {
@@ -1250,15 +1250,15 @@ export class UnifiedWrapper extends ComponentBase {
 									// Not a wrapper, return undefined
 									return undefined;
 								}
-							} else if (current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
+							} else if (current.____slothletInternal.impl && typeof current.____slothletInternal.impl === "object" && util.types.isProxy(current.____slothletInternal.impl)) {
 								// Custom proxy - can't traverse further
-								return current._impl;
+								return current.____slothletInternal.impl;
 							} else {
 								return undefined;
 							}
 						}
 						// Return the resolved wrapper's impl
-						return current._impl;
+						return current.____slothletInternal.impl;
 					}
 					// Not yet materialized
 					return null;
@@ -1281,8 +1281,8 @@ export class UnifiedWrapper extends ComponentBase {
 						return waitingTarget;
 					}
 					// Check if property exists after materialization
-					if (wrapper._impl) {
-						let current = wrapper._impl;
+					if (wrapper.____slothletInternal.impl) {
+						let current = wrapper.____slothletInternal.impl;
 						for (const chainProp of propChain) {
 							if (!current || current === null) {
 								return undefined;
@@ -1300,12 +1300,12 @@ export class UnifiedWrapper extends ComponentBase {
 						apiPath: wrapper.apiPath,
 						propChain: propChain.join(","),
 						materialized: wrapper.____slothletInternal.state.materialized,
-						hasImpl: wrapper._impl !== null
+						hasImpl: wrapper.____slothletInternal.impl !== null
 					});
 					// CRITICAL: After wrapper materialization, resolve the propChain and return actual type
 					// This fixes collision merge scenarios where waiting proxies are created before materialization
 					// After materialization, these proxies should report the correct type, not IN_FLIGHT
-					if (wrapper.____slothletInternal.state.materialized || (wrapper._impl !== null && wrapper._impl !== undefined)) {
+					if (wrapper.____slothletInternal.state.materialized || (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined)) {
 						// Wrapper has materialized - walk propChain to determine actual type
 						let current = wrapper.createProxy();
 						for (const chainProp of propChain) {
@@ -1323,12 +1323,12 @@ export class UnifiedWrapper extends ComponentBase {
 									continue;
 								}
 								if (
-									currentWrapper._impl &&
-									typeof currentWrapper._impl === "object" &&
-									currentWrapper._impl !== null &&
-									chainProp in currentWrapper._impl
+									currentWrapper.____slothletInternal.impl &&
+									typeof currentWrapper.____slothletInternal.impl === "object" &&
+									currentWrapper.____slothletInternal.impl !== null &&
+									chainProp in currentWrapper.____slothletInternal.impl
 								) {
-									current = currentWrapper._impl[chainProp];
+									current = currentWrapper.____slothletInternal.impl[chainProp];
 									wrapper.slothlet.debug("wrapper", {
 										message: "WAITING-TYPE-WALK: found in _impl",
 										chainProp: String(chainProp),
@@ -1387,20 +1387,20 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "__slothletPath") return wrapper.____slothletInternal.apiPath;
 
-				// CRITICAL: Check if wrapper._impl is already set
+				// CRITICAL: Check if wrapper.____slothletInternal.impl is already set
 				// This allows property access once _impl is populated (matches v2 behavior)
 				// Lifecycle events, metadata, and ownership may still be in progress
 				// This handles custom proxy behavior like array access on devices proxy
 				// Custom proxies return plain objects/values that should NOT be wrapped
 				if (
-					wrapper._impl !== null &&
-					wrapper._impl !== undefined &&
-					typeof wrapper._impl === "object" &&
-					util.types.isProxy(wrapper._impl)
+					wrapper.____slothletInternal.impl !== null &&
+					wrapper.____slothletInternal.impl !== undefined &&
+					typeof wrapper.____slothletInternal.impl === "object" &&
+					util.types.isProxy(wrapper.____slothletInternal.impl)
 				) {
 					// Direct delegation to custom proxy
 					// Traverse propChain through the custom proxy first
-					let result = wrapper._impl;
+					let result = wrapper.____slothletInternal.impl;
 					for (const chainProp of propChain) {
 						result = result[chainProp];
 					}
@@ -1413,7 +1413,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// once state.materialized variable was set, values were returned synchronously
 				// This allows waiting proxies to resolve immediately once _impl is available,
 				// even if _state.inFlight is still true (materialization finishing up)
-				if (wrapper._impl !== null && wrapper._impl !== undefined) {
+				if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 					// Start from the parent wrapper and traverse using wrapper properties
 					let current = wrapper;
 					let remainingChain = [...propChain];
@@ -1423,9 +1423,9 @@ export class UnifiedWrapper extends ComponentBase {
 						const chainProp = propChain[i];
 
 						// If current wrapper has a custom proxy, delegate remaining chain to it
-						if (current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
+						if (current.____slothletInternal.impl && typeof current.____slothletInternal.impl === "object" && util.types.isProxy(current.____slothletInternal.impl)) {
 							// Traverse remaining propChain through the custom proxy
-							let proxyResult = current._impl;
+							let proxyResult = current.____slothletInternal.impl;
 							for (const remainingProp of remainingChain) {
 								proxyResult = proxyResult[remainingProp];
 							}
@@ -1454,8 +1454,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 					// CRITICAL: If current wrapper's _impl is a custom proxy, delegate property access to it
 					// Custom proxies handle their own property access (array indices, computed properties, etc.)
-					if (current && current._impl && typeof current._impl === "object" && util.types.isProxy(current._impl)) {
-						return current._impl[prop];
+					if (current && current.____slothletInternal.impl && typeof current.____slothletInternal.impl === "object" && util.types.isProxy(current.____slothletInternal.impl)) {
+						return current.____slothletInternal.impl[prop];
 					}
 
 					// Now check if the final prop exists in the resolved wrapper
@@ -1582,7 +1582,7 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 						// PRIORITY 2: Check if root wrapper or last tracked wrapper was invalidated/deleted during async materialization
 						// This happens when api.remove() is called while lazy wrappers are still materializing
-						if (wrapper.____slothletInternal.invalid || wrapper._impl === null || (lastWrapper && (lastWrapper.__invalid || lastWrapper._impl === null))) {
+						if (wrapper.____slothletInternal.invalid || wrapper.____slothletInternal.impl === null || (lastWrapper && (lastWrapper.__invalid || lastWrapper._impl === null))) {
 							return undefined;
 						}
 						// PRIORITY 3: If we're trying to access hasAttribute (or other inspect properties) on undefined,
@@ -1626,12 +1626,12 @@ export class UnifiedWrapper extends ComponentBase {
 						}
 						// Check if _impl is an object before using 'in' operator
 						if (
-							currentWrapper._impl &&
-							typeof currentWrapper._impl === "object" &&
-							currentWrapper._impl !== null &&
-							prop in currentWrapper._impl
+							currentWrapper.____slothletInternal.impl &&
+							typeof currentWrapper.____slothletInternal.impl === "object" &&
+							currentWrapper.____slothletInternal.impl !== null &&
+							prop in currentWrapper.____slothletInternal.impl
 						) {
-							current = currentWrapper._impl[prop];
+							current = currentWrapper.____slothletInternal.impl[prop];
 							continue;
 						}
 					}
@@ -1734,11 +1734,11 @@ export class UnifiedWrapper extends ComponentBase {
 						return obj;
 					}
 					// For lazy unmaterialized wrappers with null _impl, return the proxy itself
-					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && (wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)) {
 						return wrapper.____slothletInternal.proxy || wrapper;
 					}
 					// Otherwise return _impl (functions, primitives, etc)
-					return wrapper._impl;
+					return wrapper.____slothletInternal.impl;
 				},
 				writable: false,
 				enumerable: false,
@@ -1817,13 +1817,13 @@ export class UnifiedWrapper extends ComponentBase {
 					mode: wrapper.____slothletInternal.mode,
 					collisionMode: wrapper.____slothletInternal.state.collisionMode || "none",
 					materialized: wrapper.____slothletInternal.state.materialized,
-					hasImpl: wrapper._impl !== null,
+					hasImpl: wrapper.____slothletInternal.impl !== null,
 					inWrapper: !isInternalProp && hasOwn(wrapper, prop)
 				});
 			}
 
 			if (prop === "____slothletInternal") return wrapper.____slothletInternal;
-			if (prop === "__impl") return wrapper._impl;
+			if (prop === "__impl") return wrapper.____slothletInternal.impl;
 			if (prop === "__mode") return wrapper.____slothletInternal.mode;
 			if (prop === "__apiPath") return wrapper.____slothletInternal.apiPath;
 			if (prop === "__isCallable") return wrapper.____slothletInternal.isCallable;
@@ -1844,7 +1844,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// Return typeof the actual impl (not the proxy target)
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
 					return "function";
 				}
@@ -1886,7 +1886,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				return {};
 			}
-			if (prop === "_impl") return wrapper._impl;
+			if (prop === "_impl") return wrapper.____slothletInternal.impl;
 			if (prop === "__state") return wrapper.____slothletInternal.state;
 			if (prop === "__invalid") return wrapper.____slothletInternal.invalid;
 			if (prop === "__moduleID") return wrapper.____slothletInternal.moduleID;
@@ -1912,7 +1912,7 @@ export class UnifiedWrapper extends ComponentBase {
 						return obj;
 					}
 					// For lazy wrappers with null _impl, return the wrapper or proxy itself
-					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
+					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && (wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)) {
 						this.slothlet.debug("wrapper", {
 							message: "util.inspect.custom: Lazy unmaterialized",
 							apiPath: wrapper.apiPath,
@@ -1922,12 +1922,12 @@ export class UnifiedWrapper extends ComponentBase {
 						return wrapper || wrapper.____slothletInternal.proxy;
 					}
 					// Otherwise return _impl
-					return wrapper._impl;
+					return wrapper.____slothletInternal.impl;
 				};
 			}
 			if (prop === Symbol.toStringTag) {
 				// Return "Object" for object exports, "Function" for function exports
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
 					return "Function";
 				}
@@ -1939,7 +1939,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (typeof prop === "symbol") return undefined;
 			if (prop === "length") {
 				// Return actual function length from impl
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
 					return impl.length;
 				}
@@ -1962,7 +1962,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			if (prop === "toString") {
 				// Return toString bound to the actual impl, not the proxy target
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
 					return impl.toString.bind(impl);
 				}
@@ -1973,7 +1973,7 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 			if (prop === "valueOf") {
 				// Return valueOf bound to the actual impl, not the proxy target
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 				if (typeof impl === "function") {
 					return impl.valueOf.bind(impl);
 				}
@@ -2014,13 +2014,13 @@ export class UnifiedWrapper extends ComponentBase {
 					apiPath: wrapper.____slothletInternal.apiPath,
 					prop: String(prop),
 					materialized: wrapper.____slothletInternal.state.materialized,
-					hasImpl: wrapper._impl !== null
+					hasImpl: wrapper.____slothletInternal.impl !== null
 				});
 				const cached = wrapper[prop];
 				// If it's a wrapper (proxy) with a primitive impl, return the unwrapped value
 				// This ensures live runtime gets the actual value, not the wrapper object
-				if (cached && cached.__wrapper && cached.__wrapper._impl !== null && cached.__wrapper._impl !== undefined) {
-					const cachedImpl = cached.__wrapper._impl;
+				if (cached && cached.__wrapper && cached.__wrapper.____slothletInternal.impl !== null && cached.__wrapper.____slothletInternal.impl !== undefined) {
+					const cachedImpl = cached.__wrapper.____slothletInternal.impl;
 					// For primitives, return the unwrapped value
 					const cachedType = typeof cachedImpl;
 					if (
@@ -2048,11 +2048,11 @@ export class UnifiedWrapper extends ComponentBase {
 			// This allows synchronous property access even during materialization
 			// Must check BEFORE inFlight to handle synchronous setter pattern
 			// Note: _impl is initialized to null, so check for non-null explicitly
-			if (wrapper._impl !== null && wrapper._impl !== undefined) {
+			if (wrapper.____slothletInternal.impl !== null && wrapper.____slothletInternal.impl !== undefined) {
 				// If _impl is a custom Proxy, delegate property access directly to it
 				// Custom proxies handle their own property access logic (array indices, computed properties, etc.)
-				if (typeof wrapper._impl === "object" && util.types.isProxy(wrapper._impl)) {
-					return wrapper._impl[prop];
+				if (typeof wrapper.____slothletInternal.impl === "object" && util.types.isProxy(wrapper.____slothletInternal.impl)) {
+					return wrapper.____slothletInternal.impl[prop];
 				}
 
 				// For regular objects/functions, check wrapper children or _impl properties
@@ -2093,13 +2093,13 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapper.____slothletInternal.state.materialized &&
 				!isInternalProp2 &&
 				!hasOwn(wrapper, prop) &&
-				wrapper._impl &&
-				!(prop in wrapper._impl)
+				wrapper.____slothletInternal.impl &&
+				!(prop in wrapper.____slothletInternal.impl)
 			) {
 				return undefined;
 			}
 
-			if (wrapper.____slothletInternal.mode === "lazy" && (wrapper.____slothletInternal.state.inFlight || !wrapper._impl)) {
+			if (wrapper.____slothletInternal.mode === "lazy" && (wrapper.____slothletInternal.state.inFlight || !wrapper.____slothletInternal.impl)) {
 				// Trigger materialization if not started yet
 				// This ensures lazy wrappers start loading when their properties are accessed
 				if (!wrapper.____slothletInternal.state.materialized && !wrapper.____slothletInternal.state.inFlight) {
@@ -2115,8 +2115,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// If _impl is already set and is a custom proxy, delegate even during inFlight
 				// This allows custom proxies to work immediately after being loaded
-				if (wrapper._impl && typeof wrapper._impl === "object" && util.types.isProxy(wrapper._impl)) {
-					const value = wrapper._impl[prop];
+				if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object" && util.types.isProxy(wrapper.____slothletInternal.impl)) {
+					const value = wrapper.____slothletInternal.impl[prop];
 					return value;
 				}
 				return wrapper.___createWaitingProxy([prop]);
@@ -2125,8 +2125,8 @@ export class UnifiedWrapper extends ComponentBase {
 			// If _impl is a custom Proxy, delegate property access directly to it
 			// Custom proxies handle their own property access logic (array indices, computed properties, etc.)
 			// Wrapping their results breaks their intended behavior
-			if (wrapper._impl && typeof wrapper._impl === "object" && util.types.isProxy(wrapper._impl)) {
-				const value = wrapper._impl[prop];
+			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object" && util.types.isProxy(wrapper.____slothletInternal.impl)) {
+				const value = wrapper.____slothletInternal.impl[prop];
 				// Return the value directly - don't wrap it
 				// This preserves custom proxy behavior for array access, computed properties, etc.
 				return value;
@@ -2134,14 +2134,14 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Check if the property exists on impl before caching
 			// This handles property descriptors (getters) correctly
-			let value = wrapper._impl ? wrapper._impl[prop] : undefined;
+			let value = wrapper.____slothletInternal.impl ? wrapper.____slothletInternal.impl[prop] : undefined;
 
 			// If value is undefined, check if it's a getter on the impl
-			if (value === undefined && wrapper._impl) {
-				const descriptor = Object.getOwnPropertyDescriptor(wrapper._impl, prop);
+			if (value === undefined && wrapper.____slothletInternal.impl) {
+				const descriptor = Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop);
 				if (descriptor && descriptor.get) {
 					// It's a getter - call it to get the actual value
-					value = descriptor.get.call(wrapper._impl);
+					value = descriptor.get.call(wrapper.____slothletInternal.impl);
 				}
 			}
 			if (value === undefined && Object.prototype.hasOwnProperty.call(target, prop)) {
@@ -2263,7 +2263,7 @@ export class UnifiedWrapper extends ComponentBase {
 					return new Promise((resolve, reject) => {
 						const checkMaterialized = () => {
 							if (wrapper.____slothletInternal.state.materialized) {
-								const impl = wrapper._impl;
+								const impl = wrapper.____slothletInternal.impl;
 								if (typeof impl === "function") {
 									if (wrapper.slothlet.contextManager) {
 										resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
@@ -2306,7 +2306,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				// Execute the actual function
-				const impl = wrapper._impl;
+				const impl = wrapper.____slothletInternal.impl;
 
 				if (typeof impl === "function") {
 					if (wrapper.slothlet.contextManager) {
@@ -2477,7 +2477,7 @@ export class UnifiedWrapper extends ComponentBase {
 				return true;
 			}
 
-			if (wrapper._impl && (typeof wrapper._impl === "object" || typeof wrapper._impl === "function") && prop in wrapper._impl) {
+			if (wrapper.____slothletInternal.impl && (typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") && prop in wrapper.____slothletInternal.impl) {
 				return true;
 			}
 
@@ -2529,8 +2529,8 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			if (wrapper._impl && (typeof wrapper._impl === "object" || typeof wrapper._impl === "function") && prop in wrapper._impl) {
-				return Object.getOwnPropertyDescriptor(wrapper._impl, prop);
+			if (wrapper.____slothletInternal.impl && (typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") && prop in wrapper.____slothletInternal.impl) {
+				return Object.getOwnPropertyDescriptor(wrapper.____slothletInternal.impl, prop);
 			}
 
 			return undefined;
@@ -2583,7 +2583,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// Add impl keys
 			const implKeys =
-				wrapper._impl && (typeof wrapper._impl === "object" || typeof wrapper._impl === "function") ? Reflect.ownKeys(wrapper._impl) : [];
+				wrapper.____slothletInternal.impl && (typeof wrapper.____slothletInternal.impl === "object" || typeof wrapper.____slothletInternal.impl === "function") ? Reflect.ownKeys(wrapper.____slothletInternal.impl) : [];
 			for (const key of implKeys) {
 				// Skip 'prototype' from impl - it causes descriptor invariant violations
 				if (key !== "prototype") {
@@ -2687,8 +2687,8 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// Remove from _impl if it's an object
-			if (wrapper._impl && typeof wrapper._impl === "object" && prop in wrapper._impl) {
-				delete wrapper._impl[prop];
+			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object" && prop in wrapper.____slothletInternal.impl) {
+				delete wrapper.____slothletInternal.impl[prop];
 			}
 
 			// Remove from proxy target

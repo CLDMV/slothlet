@@ -682,8 +682,8 @@ export class ModesProcessor extends ComponentBase {
 						targetApiType: typeof targetApi,
 						propertyName,
 						hasProperty: propertyName in targetApi,
-						implType: typeof targetApi.__wrapper?._impl,
-						implHasProperty: !!targetApi.__wrapper?._impl?.utils
+						implType: typeof targetApi.__wrapper?.____slothletInternal.impl,
+						implHasProperty: !!targetApi.__wrapper?.____slothletInternal.impl?.utils
 					});
 				}
 				if (ownership) {
@@ -846,7 +846,7 @@ export class ModesProcessor extends ComponentBase {
 											await modes_existingWrapper._materialize();
 										}
 										// Ensure children are adopted from impl
-										if (modes_existingWrapper._impl && !modes_existingWrapper.____slothletInternal.state?.childrenAdopted) {
+										if (modes_existingWrapper.____slothletInternal.impl && !modes_existingWrapper.____slothletInternal.state?.childrenAdopted) {
 											modes_existingWrapper.___adoptImplChildren();
 										}
 										const modes_existingImpl = modes_existingWrapper.__impl;

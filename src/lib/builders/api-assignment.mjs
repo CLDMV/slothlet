@@ -431,10 +431,10 @@ export class ApiAssignment extends ComponentBase {
 					// In lazy mode, _impl is already set but ___adoptImplChildren hasn't run yet
 					const existingChildCount = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
 					const valueChildCount = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
-					if (existingWrapper._impl && existingChildCount === 0) {
+					if (existingWrapper.____slothletInternal.impl && existingChildCount === 0) {
 						existingWrapper.___adoptImplChildren();
 					}
-					if (valueWrapper._impl && valueChildCount === 0) {
+					if (valueWrapper.____slothletInternal.impl && valueChildCount === 0) {
 						valueWrapper.___adoptImplChildren();
 					}
 
@@ -479,7 +479,7 @@ export class ApiAssignment extends ComponentBase {
 							if (existingChildWrapper && newChildWrapper) {
 								// Ensure new child has adopted its impl children before merge
 								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
-								if (newChildWrapper._impl && newChildChildCount === 0) {
+								if (newChildWrapper.____slothletInternal.impl && newChildChildCount === 0) {
 									newChildWrapper.___adoptImplChildren();
 								}
 								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
