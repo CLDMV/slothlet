@@ -264,10 +264,14 @@ export function compareApiShapes(
 	const shouldSkipKey = (key, obj) => {
 		// Always skip internal path properties - these may differ between modes
 		// but don't affect user-facing API behavior
-		if (key === "__slothletPath") {
+		if (key === "____slothletInternal") {
 			return true;
 		}
 		if (key === "instanceID") {
+			return true;
+		}
+		// Skip ____slothlet property (inherited from ComponentBase, not part of user API)
+		if (key === "____slothlet") {
 			return true;
 		}
 		return false;
