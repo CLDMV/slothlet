@@ -138,8 +138,8 @@ export function compareApiShapes(
 		}
 		const wrapper = value.____slothletInternal?.wrapper;
 		if (wrapper && typeof wrapper === "object") {
-			const impl = wrapper._impl;
-			const childCache = wrapper._childCache;
+			const impl = wrapper.____slothletInternal.impl;
+			const childCache = wrapper.____slothletInternal.childCache;
 			if (impl && typeof impl === "object") {
 				const descriptors = Object.getOwnPropertyDescriptors(impl);
 				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
