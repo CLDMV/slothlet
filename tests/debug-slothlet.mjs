@@ -136,7 +136,7 @@ export function compareApiShapes(
 		if (valueType !== "object" && valueType !== "function") {
 			return value;
 		}
-		const wrapper = value.__wrapper;
+		const wrapper = value.____slothletInternal?.wrapper;
 		if (wrapper && typeof wrapper === "object") {
 			const impl = wrapper._impl;
 			const childCache = wrapper._childCache;
