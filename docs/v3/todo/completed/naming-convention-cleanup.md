@@ -119,23 +119,129 @@ Object.keys(api.math) = [
 
 ### Migration Steps (ONE AT A TIME)
 
-For each property below:
-1. Move property definition to `internal.X` in constructor
-2. Update ALL references in unified-wrapper.mjs to use `this.__slothletInternal.X`
-3. Update references in other files (grep for the property name)
-4. Run tests: `npm run debug && npm run baseline && node test-keys-current.mjs`
-5. **If pass:** `git commit -m "refactor: move ____id into __slothletInternal.id"`
-6. **If fail:** `git reset --hard HEAD` and investigate
+**CRITICAL: Follow these steps EXACTLY for each property. Do NOT skip steps.**
 
-**Properties to migrate:**
+#### For Each Property:
 
-1. [ ] `____id` → `internal.id`
-2. [ ] `____callableImpl` → `internal.callableImpl`
-3. [ ] `____waitingProxyCache` → `internal.waitingProxyCache`
-4. [ ] `____proxy` → `internal.proxy`
-5. [ ] `_impl` → `internal.impl`
-6. [ ] `____materializeFunc` → `internal.materializeFunc`
-7. [ ] `____materializationPromise` → `internal.materializationPromise` (added dynamically)
+**1. Identify all references:**
+```bash
+# Find where the property is used
+grep -rn "this\.____id" src/
+grep -rn "wrapper\.____id" src/
+grep -rn "\.____id" src/
+```
+
+**2. Move property definition in constructor:**
+Edit `src/lib/handlers/unified-wrapper.mjs` constructor:
+```javascript
+// BEFORE:
+this.____id = Math.random().toString(36).substr(2, 9);
+
+// AFTER:
+internal.id = Math.random().toString(36).substr(2, 9);
+```
+
+**3. Update ALL references in unified-wrapper.mjs:**
+```javascript
+// Change: this.____id → this.__slothletInternal.id
+// Change: wrapper.____id → wrapper.__slothletInternal.id
+```
+
+**4. Update references in other files:**
+```bash
+# Search each file for the property
+grep -l "____id" src/lib/builders/*.mjs
+grep -l "____id" src/lib/handlers/*.mjs
+
+# Update found files to use __slothletInternal.id instead
+```
+
+**5. Run tests (ALL must pass):**
+```bash
+export NODE_ENV=development
+export NODE_OPTIONS=--conditions=slothlet-dev
+
+# Test 1: Debug suite (structural validation)
+npm run debug
+# ✅ Must show: "All debug tests passed!"
+
+# Test 2: Baseline (full test suite)
+npm run baseline
+# ✅ Must show: "38/38 files passing"
+
+# Test 3: Verify property hidden from Object.keys()
+node test-keys-current.mjs
+# ✅ Property should NOT appear in Object.keys() output
+```
+
+**6a. If ALL tests pass:**
+```bash
+git add -A
+git commit -m "refactor: move ____id into __slothletInternal.id
+
+- Property no longer appears in Object.keys()
+- All references updated in unified-wrapper.mjs
+- All references updated in [list other files]
+- Tests: npm run debug ✅ | npm run baseline ✅"
+```
+
+**6b. If ANY test fails:**
+```bash
+# Revert ALL changes immediately
+git reset --hard HEAD
+
+# Investigate why it failed:
+# - Check error message
+# - Did you miss a reference?
+# - Is there a special case for this property?
+# - Document findings before trying again
+```
+
+**7. Move to next property and repeat steps 1-6**
+
+---
+
+### Properties to Migrate (In Order)
+
+**✅ Complete each before moving to next. Check box after successful commit.**
+
+- [ ] **Property 1:** `____id` → `internal.id`
+  - Used for: Debugging/tracking wrapper instances
+  - Files: unified-wrapper.mjs, api-assignment.mjs (likely)
+  
+- [ ] **Property 2:** `____callableImpl` → `internal.callableImpl`
+  - Used for: Storing function implementation for callable endpoints
+  - Files: unified-wrapper.mjs (likely only here)
+  
+- [ ] **Property 3:** `____waitingProxyCache` → `internal.waitingProxyCache`
+  - Used for: Caching waiting proxies by propChain
+  - Files: unified-wrapper.mjs (likely only here)
+  
+- [ ] **Property 4:** `____proxy` → `internal.proxy`
+  - Used for: Cached proxy instance
+  - Files: unified-wrapper.mjs (likely only here)
+  
+- [ ] **Property 5:** `_impl` → `internal.impl`
+  - Used for: Actual implementation/export from module
+  - Files: unified-wrapper.mjs, api-assignment.mjs, api-manager.mjs, modes-processor.mjs, metadata.mjs
+  - **IMPORTANT:** This is heavily used - expect many references
+  
+- [ ] **Property 6:** `____materializeFunc` → `internal.materializeFunc`
+  - Used for: Async function to materialize lazy modules
+  - Files: unified-wrapper.mjs, api-assignment.mjs, modes-processor.mjs, api-manager.mjs
+  
+- [ ] **Property 7:** `____materializationPromise` → `internal.materializationPromise`
+  - Used for: Tracking in-flight materialization
+  - Files: unified-wrapper.mjs, api-manager.mjs
+  - **NOTE:** This property is added dynamically (not in constructor)
+
+---
+
+### Expected Timeline
+
+- **Per property:** 10-20 minutes (find references, update, test, commit)
+- **Total:** 1-2 hours for all 7 properties
+- **Key:** Don't rush - verify each one individually
 
 ### What Went Wrong Previously (2026-02-12)
 
