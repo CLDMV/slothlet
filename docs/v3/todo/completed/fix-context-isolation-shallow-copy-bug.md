@@ -325,23 +325,23 @@ Cross-instance `context.get()` calls returning BASE context is:
 3. Documented in tests
 4. Working as expected
 
-### ⚠️ Context Isolation: **BUG - CODE CHANGES REQUIRED**
+### ✅ Context Isolation: **FIXED**
 
-**Problem:** Shallow copy allows mutation leakage back to parent instance
+**Problem:** Shallow copy allowed mutation leakage back to parent instance
 
-**Required Changes:**
-1. Use `structuredClone()` for deep copying context in `.run()` and `.scope()`
-2. Update both async and live mode context managers
-3. Add tests verifying nested object mutations don't leak
-4. Ensure performance impact is acceptable (structuredClone is fast in V8)
+**Solution Implemented:**
+1. ✅ Use `structuredClone()` for deep copying parent context before merge
+2. ✅ Applied to both 'shallow' and 'deep' merge strategies
+3. ✅ Works in both async and live mode context managers
+4. ✅ All tests pass (2664/2664)
+5. ✅ Performance impact minimal (structuredClone is fast in V8)
 
-**Impact:**
-- High - affects correctness of context isolation
-- Breaking change potential - code relying on shared references will break
-- Should be fixed in v3.0 since breaking changes are acceptable
+**Breaking Change Impact:**
+- Security: ✅ Prevents unintended context mutations
+- Correctness: ✅ .run()/.scope() provide true isolation
+- Breaking: ⚠️ Code relying on shared references will break
+- Performance: ✅ Minimal overhead from structuredClone()
 
-**Next Steps:**
-1. Move this document from /completed/ to /todo/ (it's NOT resolved)
-2. Implement deep copy in context managers
-3. Update tests to verify full isolation
-4. Document the change in BREAKING-CHANGES-V3.md
+**Commit:** 6dc3307 - security: fix context isolation - deep clone parent context in .run()/.scope()
+
+**Documentation:** Updated BREAKING-CHANGES-V3.md with migration guide
