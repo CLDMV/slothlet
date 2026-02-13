@@ -9,7 +9,16 @@
 **⚠️ IMPORTANT: Always tail test output (last 40 lines):**
 ```powershell
 npm run debug 2>&1 | Select-Object -Last 40
-npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
+npm run baseline 2>&1 | Select-Object -Last 40
+```
+
+**🧪 Run a single test file:**
+```bash
+npm run vitest <file>
+```
+Example:
+```bash
+npm run vitest tests/vitests/suites/context/per-request-context.test.vitest.mjs
 ```
 
 **Why tail?**
@@ -18,7 +27,7 @@ npm run testv3 -- --baseline 2>&1 | Select-Object -Last 40
 
 **📋 When file-based api.add() tests pass 100%:**
 - Add related test files to `tests/vitests/baseline-tests.json`
-- But ONLY if `npm run debug` AND `npm run testv3 -- --baseline` both pass
+- But ONLY if `npm run debug` AND `npm run baseline` both pass
 - This ensures we catch regressions in working tests immediately
 
 ---

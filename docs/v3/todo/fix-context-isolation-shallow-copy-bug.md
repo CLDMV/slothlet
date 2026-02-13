@@ -9,6 +9,34 @@
 
 ---
 
+### How to Run Tests Properly
+
+**⚠️ IMPORTANT: Always tail test output (last 40 lines):**
+```powershell
+npm run debug 2>&1 | Select-Object -Last 40
+npm run baseline 2>&1 | Select-Object -Last 40
+```
+
+**🧪 Run a single test file:**
+```bash
+npm run vitest <file>
+```
+Example:
+```bash
+npm run vitest tests/vitests/suites/context/per-request-context.test.vitest.mjs
+```
+
+**Why tail?**
+- ❌ **WRONG:** Running without tailing shows the START of output, not results
+- ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
+
+**📋 When file-based api.add() tests pass 100%:**
+- Add related test files to `tests/vitests/baseline-tests.json`
+- But ONLY if `npm run debug` AND `npm run baseline` both pass
+- This ensures we catch regressions in working tests immediately
+
+---
+
 ## Executive Summary
 
 Both `investigate-context-mutability.md` and `context-get-cross-instance-behavior.md` describe issues with context isolation in `.run()` and `.scope()`.

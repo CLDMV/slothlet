@@ -2,6 +2,54 @@
 
 This document tracks breaking changes between v2.x and v3.0.0.
 
+## Security Fixes
+
+### 1. Context Isolation - Deep Clone for .run() and .scope()
+
+**Issue (v2.x):**
+Context merging used shallow copy (`{ ...parent, ...new }`), causing parent context properties to be shared by reference. Mutations inside `.run()` or `.scope()` could leak back to the parent context.
+
+**Example of Bug:**
+```javascript
+const api = await slothlet({ 
+    context: { data: { count: 0 } } 
+});
+
+await api.slothlet.context.run({ userId: 123 }, async () => {
+    const ctx = await api.slothlet.context.get();
+    // ctx.data is inherited from parent (shared reference!)
+    ctx.data.count = 999;  // ❌ Mutates parent context!
+});
+
+const parent = await api.slothlet.context.get();
+console.log(parent.data.count);  // 999 (leaked!)
+```
+
+**Fix (v3.0.0):**
+Context merging now uses `structuredClone()` to deep clone the parent context before merging. Nested objects are no longer shared by reference.
+
+**After Fix:**
+```javascript
+await api.slothlet.context.run({ userId: 123 }, async () => {
+    const ctx = await api.slothlet.context.get();
+    ctx.data.count = 999;  // ✅ Only affects child context
+});
+
+const parent = await api.slothlet.context.get();
+console.log(parent.data.count);  // 0 (isolated!)
+```
+
+**Impact:**
+- ✅ **Security:** Prevents unintended context mutations
+- ✅ **Correctness:** `.run()` and `.scope()` now provide true isolation
+- ⚠️ **Breaking:** Code that relied on shared references will break
+- ⚠️ **Performance:** `structuredClone()` has overhead (minimal in practice)
+
+**Migration:**
+If you need shared mutable state between parent and child contexts, use `self` instead of `context`, or explicitly pass mutable references as function arguments.
+
+---
+
 ## Architecture Changes
 
 ### 1. Built-in API Structure - `api.slothlet.*`
