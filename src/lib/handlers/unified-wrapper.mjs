@@ -370,8 +370,11 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Add adopted children from wrapper's own enumerable keys
+		// Skip builtin keys that should not be extracted as part of impl
+		const builtinKeys = new Set(["slothlet", "shutdown", "destroy"]);
 		for (const key of Object.keys(wrapper)) {
 			if (key.startsWith("_") || key.startsWith("__")) continue;
+			if (builtinKeys.has(key)) continue;
 			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
 
 			const extractFullImpl_child = wrapper[key];
