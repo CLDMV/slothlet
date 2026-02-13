@@ -1179,8 +1179,8 @@ return true;
 					seenWrappers.add(wrapper);
 
 					// Check if materialization is in-flight
-					if (wrapper.____materializationPromise) {
-						pendingMaterializations.push(wrapper.____materializationPromise);
+					if (wrapper.____slothletInternal.materializationPromise) {
+						pendingMaterializations.push(wrapper.____slothletInternal.materializationPromise);
 					}
 
 					// Check wrapper child properties for nested wrappers that might be materializing

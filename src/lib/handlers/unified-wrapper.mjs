@@ -506,7 +506,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____slothletInternal.state.inFlight = false;
 
 		// Clear materialization promise so next access starts fresh
-		this.____materializationPromise = null;
+		this.____slothletInternal.materializationPromise = null;
 
 		// Swap in the fresh materialization function
 		this.____slothletInternal.materializeFunc = newMaterializeFunc;
@@ -550,12 +550,12 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// If materialization is already in progress, return the existing promise
 		// This allows multiple callers to await the same materialization without polling
-		if (this.____materializationPromise) {
+		if (this.____slothletInternal.materializationPromise) {
 			this.slothlet.debug("wrapper", {
 				message: "MATERIALIZE-AWAIT: awaiting existing materialization promise",
 				apiPath: this.____slothletInternal.apiPath
 			});
-			return this.____materializationPromise;
+			return this.____slothletInternal.materializationPromise;
 		}
 
 		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
@@ -566,7 +566,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Create and store the materialization promise
-		this.____materializationPromise = (async () => {
+		this.____slothletInternal.materializationPromise = (async () => {
 			this.____slothletInternal.state.inFlight = true;
 
 			try {
@@ -612,12 +612,12 @@ export class UnifiedWrapper extends ComponentBase {
 			} finally {
 				// CRITICAL: Always clear inFlight flag and promise reference
 				this.____slothletInternal.state.inFlight = false;
-				this.____materializationPromise = null;
+				this.____slothletInternal.materializationPromise = null;
 			}
 		})();
 
 		// Return the promise so the caller can await it
-		return this.____materializationPromise;
+		return this.____slothletInternal.materializationPromise;
 	}
 
 	/**
@@ -1550,8 +1550,8 @@ export class UnifiedWrapper extends ComponentBase {
 				} else if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && wrapper.____slothletInternal.state.inFlight) {
 					// Materialization already in-flight (triggered by the get trap).
 					// We MUST await the existing materialization promise before walking the chain.
-					if (wrapper.____materializationPromise) {
-						await wrapper.____materializationPromise;
+					if (wrapper.____slothletInternal.materializationPromise) {
+						await wrapper.____slothletInternal.materializationPromise;
 					} else {
 						// No promise but inFlight — spin until materialized or error
 						await wrapper._materialize();
