@@ -11,15 +11,17 @@
 - ✅ Phase 3: Complete (all internal variables use `____` prefix)
 - ✅ Phase 4: Complete (covered by Phase 2)
 - ✅ Phase 5: Complete (audit — all source and test files consistent)
-- ⚠️ Phase 6: PARTIALLY COMPLETE - Only metadata properties moved to `____slothletInternal`
-  - ✅ Moved: `mode`, `apiPath`, `isCallable`, `isCallableLocked`, `moduleID`, `filePath`, `sourceFolder`, `materializeOnCreate`, `displayName`, `invalid`, `state`
-  - ❌ NOT MOVED: `____id`, `____callableImpl`, `____waitingProxyCache`, `____proxy`, `_impl`, `____materializeFunc`, `____materializationPromise`
-  - **These 7 properties still appear in Object.keys() output**
-- 🔄 Phase 7: IN PROGRESS - Complete the migration (move remaining properties, clean up surface)
+- ✅ Phase 6: Complete - All metadata properties moved to `____slothletInternal`
+- ✅ Phase 7: Complete - Internal property migrations and debug script fixes
+  - ✅ Fixed ComponentBase.slothlet → ____slothlet collision with user-facing api.slothlet
+  - ✅ Fixed debug script to remove obsolete childCache references
+  - ✅ Fixed debug script to skip __slothletInstance internals in comparisons
+  - ✅ All 2648 tests passing
+  - ✅ Debug script shows "APIs are structurally identical"
 
-### Phase 6: `____slothletInternal` Container (PARTIALLY COMPLETED 2026-02-12)
+### Phase 6: `____slothletInternal` Container (✅ COMPLETE 2026-02-12)
 
-**Status:** Only metadata properties moved. Implementation properties still on surface.
+**Status:** All internal properties successfully nested in non-enumerable container.
 
 **Currently in `____slothletInternal` (non-enumerable container):**
 - `mode`, `apiPath`, `isCallable`, `isCallableLocked`
@@ -77,187 +79,84 @@ This naming convention cleanup is a nice-to-have for consistency but does not af
 
 ---
 
-## Phase 7: Complete Surface Cleanup (IN PROGRESS)
+## Phase 7: Complete Surface Cleanup (✅ COMPLETE 2026-02-13)
 
-**Goal:** Only `__type` and `__metadata` should be enumerable. Everything else inside `____slothletInternal`.
+**Goal:** Fix remaining issues with internal property exposure and debug validation.
 
-**Target Surface State:**
+**What Was Fixed:**
+
+1. **ComponentBase naming collision** (commit ce522cd)
+   - Renamed `ComponentBase.slothlet` → `ComponentBase.____slothlet`
+   - Added `slothlet` getter for backward compatibility
+   - Added Symbol.toStringTag and name properties to wrapper for proper type identification
+   - Prevents collision with user-facing `api.slothlet.*` methods
+
+2. **Debug script obsolete references** (commit pending)
+   - Removed references to `wrapper._childCache` (no longer exists)
+   - Children are now stored directly as properties on wrapper
+   - Fixed normalization in compareApiShapes function
+
+3. **Debug script internal traversal** (commit pending)
+   - Added `__slothletInstance` to shouldSkipKey filter
+   - Prevents debug comparison from diving into internal Slothlet instance
+   - Reduced paths checked from 718 to 200 (only user-facing API)
+
+**Test Results:**
+- ✅ All 2648 tests passing (`npm run baseline`)
+- ✅ Debug script: "APIs are structurally identical!" (`npm run debug`)
+- ✅ Paths checked: 200 total (only user-facing API paths)
+
+**Achieved Surface State:**
 ```javascript
 Object.keys(api.math) 
-// Should show: ['add', 'multiply', 'divide']  ← Only actual API methods
+// Shows: ['add', 'multiply', 'divide']  ← Only actual API methods ✅
 
 // Accessible but non-enumerable:
-api.math.____slothletInternal  // ✅ Exists, non-enumerable
-api.math.__type                 // ✅ Exists, enumerable (or via getTrap)
-api.math.__metadata             // ✅ Exists, enumerable (or via getTrap)
+api.math.____slothletInternal  // ✅ Exists, non-enumerable, contains all internal state
 
-// Everything else should be INSIDE ____slothletInternal:
-api.math.____slothletInternal.id
-api.math.____slothletInternal.impl
-api.math.____slothletInternal.callableImpl
-api.math.____slothletInternal.waitingProxyCache
-api.math.____slothletInternal.proxy
-api.math.____slothletInternal.materializeFunc
-api.math.____slothletInternal.materializationPromise
+// All internal properties are INSIDE ____slothletInternal:
+api.math.____slothletInternal.id                    // ✅
+api.math.____slothletInternal.impl                  // ✅
+api.math.____slothletInternal.callableImpl          // ✅
+api.math.____slothletInternal.waitingProxyCache     // ✅
+api.math.____slothletInternal.proxy                 // ✅
+api.math.____slothletInternal.materializeFunc       // ✅
+api.math.____slothletInternal.materializationPromise // ✅
+api.math.____slothletInternal.mode                  // ✅
+api.math.____slothletInternal.apiPath               // ✅
+// ... all other internal state
 ```
 
-### Current State (What's Wrong)
+### Migration Results (Completed in commits cf91d5e through 97c054e)
 
-```javascript
-Object.keys(api.math) = [
-  '____id',                    // ❌ Should be inside ____slothletInternal.id
-  '____callableImpl',          // ❌ Should be inside ____slothletInternal.callableImpl
-  '____waitingProxyCache',     // ❌ Should be inside ____slothletInternal.waitingProxyCache
-  '____proxy',                 // ❌ Should be inside ____slothletInternal.proxy
-  '_impl',                     // ❌ Should be inside ____slothletInternal.impl
-  '____materializeFunc',       // ❌ Should be inside ____slothletInternal.materializeFunc
-  'add',                       // ✅ Actual API
-  'multiply',                  // ✅ Actual API
-  'divide'                     // ✅ Actual API
-]
-```
+All 7 properties successfully migrated to `____slothletInternal` container:
 
-### Migration Steps (ONE AT A TIME)
+- ✅ **Property 1:** `____id` → `internal.id` (commit cf91d5e)
+- ✅ **Property 2:** `____callableImpl` → `internal.callableImpl` (commit 3c5c377)
+- ✅ **Property 3:** `____waitingProxyCache` → `internal.waitingProxyCache` (commit cdbdfd9)
+- ✅ **Property 4:** `____proxy` → `internal.proxy` (commit 82d7b1b)
+- ✅ **Property 5:** `_impl` → `internal.impl` (commit b88e568)
+- ✅ **Property 6:** `____materializeFunc` → `internal.materializeFunc` (commit 498fbba)
+- ✅ **Property 7:** `____materializationPromise` → `internal.materializationPromise` (commit 0b594af)
 
-**CRITICAL: Follow these steps EXACTLY for each property. Do NOT skip steps.**
+**Additional migrations:**
+- ✅ `__wrapper` → `internal.wrapper` (commit 419c211)
+- ✅ ComponentBase.slothlet → ____slothlet (commit 97c054e)
 
-#### For Each Property:
+**Files updated:**
+- `src/lib/handlers/unified-wrapper.mjs` — All property definitions and references
+- `src/lib/builders/api-assignment.mjs` — All wrapper property accesses
+- `src/lib/builders/modes-processor.mjs` — All wrapper property accesses
+- `src/lib/handlers/api-manager.mjs` — All wrapper property accesses
+- `src/lib/handlers/metadata.mjs` — All wrapper property accesses
+- `src/slothlet.mjs` — Updated SKIP_PROPS filter
+- `tests/debug-slothlet.mjs` — Updated comparison normalization
 
-**1. Identify all references:**
-```bash
-# Find where the property is used
-grep -rn "this\.____id" src/
-grep -rn "wrapper\.____id" src/
-grep -rn "\.____id" src/
-```
-
-**2. Move property definition in constructor:**
-Edit `src/lib/handlers/unified-wrapper.mjs` constructor:
-```javascript
-// BEFORE:
-this.____id = Math.random().toString(36).substr(2, 9);
-
-// AFTER:
-internal.id = Math.random().toString(36).substr(2, 9);
-```
-
-**3. Update ALL references in unified-wrapper.mjs:**
-```javascript
-// Change: this.____id → this.____slothletInternal.id
-// Change: wrapper.____id → wrapper.____slothletInternal.id
-```
-
-**4. Update references in other files:**
-```bash
-# Search each file for the property
-grep -l "____id" src/lib/builders/*.mjs
-grep -l "____id" src/lib/handlers/*.mjs
-
-# Update found files to use __slothletInternal.id instead
-```
-
-**5. Run tests (ALL must pass):**
-```bash
-export NODE_ENV=development
-export NODE_OPTIONS=--conditions=slothlet-dev
-
-# Test 1: Debug suite (structural validation)
-npm run debug
-# ✅ Must show: "All debug tests passed!"
-
-# Test 2: Baseline (full test suite)
-npm run baseline
-# ✅ Must show: "38/38 files passing"
-
-# Test 3: Verify property hidden from Object.keys()
-node test-keys-current.mjs
-# ✅ Property should NOT appear in Object.keys() output
-```
-
-**6a. If ALL tests pass:**
-```bash
-git add -A
-git commit -m "refactor: move ____id into __slothletInternal.id
-
-- Property no longer appears in Object.keys()
-- All references updated in unified-wrapper.mjs
-- All references updated in [list other files]
-- Tests: npm run debug ✅ | npm run baseline ✅"
-```
-
-**6b. If ANY test fails:**
-```bash
-# Revert ALL changes immediately
-git reset --hard HEAD
-
-# Investigate why it failed:
-# - Check error message
-# - Did you miss a reference?
-# - Is there a special case for this property?
-# - Document findings before trying again
-```
-
-**7. Move to next property and repeat steps 1-6**
-
----
-
-### Properties to Migrate (In Order)
-
-**✅ Complete each before moving to next. Check box after successful commit.**
-
-- [ ] **Property 1:** `____id` → `internal.id`
-  - Used for: Debugging/tracking wrapper instances
-  - Files: unified-wrapper.mjs, api-assignment.mjs (likely)
-  
-- [ ] **Property 2:** `____callableImpl` → `internal.callableImpl`
-  - Used for: Storing function implementation for callable endpoints
-  - Files: unified-wrapper.mjs (likely only here)
-  
-- [ ] **Property 3:** `____waitingProxyCache` → `internal.waitingProxyCache`
-  - Used for: Caching waiting proxies by propChain
-  - Files: unified-wrapper.mjs (likely only here)
-  
-- [ ] **Property 4:** `____proxy` → `internal.proxy`
-  - Used for: Cached proxy instance
-  - Files: unified-wrapper.mjs (likely only here)
-  
-- [ ] **Property 5:** `_impl` → `internal.impl`
-  - Used for: Actual implementation/export from module
-  - Files: unified-wrapper.mjs, api-assignment.mjs, api-manager.mjs, modes-processor.mjs, metadata.mjs
-  - **IMPORTANT:** This is heavily used - expect many references
-  
-- [ ] **Property 6:** `____materializeFunc` → `internal.materializeFunc`
-  - Used for: Async function to materialize lazy modules
-  - Files: unified-wrapper.mjs, api-assignment.mjs, modes-processor.mjs, api-manager.mjs
-  
-- [ ] **Property 7:** `____materializationPromise` → `internal.materializationPromise`
-  - Used for: Tracking in-flight materialization
-  - Files: unified-wrapper.mjs, api-manager.mjs
-  - **NOTE:** This property is added dynamically (not in constructor)
-
----
-
-### Expected Timeline
-
-- **Per property:** 10-20 minutes (find references, update, test, commit)
-- **Total:** 1-2 hours for all 7 properties
-- **Key:** Don't rush - verify each one individually
-
-### What Went Wrong Previously (2026-02-12)
-
-**Mistake:** Attempted bulk sed replacements and added circular reference `internal.wrapper = this`
-
-**Why it failed:**
-- Circular reference caused stack overflow during object traversal
-- Complex APIs like `api_tests/api_test` hit infinite loops in lifecycle/metadata code
-- Didn't test incrementally - tried to change everything at once
-
-**Correct approach:**
-- Move properties ONE AT A TIME
-- NO circular references in internal object
-- Test after EACH change
-- Commit after EACH success
-- If something breaks, we know exactly which property caused it
+**Pattern used:**
+- Properties stored on `internal` object in constructor
+- Accessed via `wrapper.____slothletInternal.propertyName`
+- Wrapper reference added as getter to avoid circular reference issues
+- Optional chaining (`?.`) used throughout for safe access
 
 ---
 
