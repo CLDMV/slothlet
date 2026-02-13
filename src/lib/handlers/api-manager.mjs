@@ -530,11 +530,11 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Mark as materialized only if _impl is actually materialized (not a function)
-		if (existingWrapper.__slothletInternal.state) {
+		if (existingWrapper.____slothletInternal.state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
 			const isActuallyMaterialized = existingWrapper._impl && typeof existingWrapper._impl !== "function";
-			existingWrapper.__slothletInternal.state.materialized = isActuallyMaterialized;
-			existingWrapper.__slothletInternal.state.inFlight = false;
+			existingWrapper.____slothletInternal.state.materialized = isActuallyMaterialized;
+			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
 
 		return true;
@@ -869,9 +869,9 @@ export class ApiManager extends ComponentBase {
 					delete wrapper[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
-				if (wrapper.__slothletInternal.state) {
-					wrapper.__slothletInternal.state.materialized = false;
-					wrapper.__slothletInternal.state.inFlight = false;
+				if (wrapper.____slothletInternal.state) {
+					wrapper.____slothletInternal.state.materialized = false;
+					wrapper.____slothletInternal.state.inFlight = false;
 				}
 			}
 		}
@@ -2029,8 +2029,8 @@ return true;
 					const freshWrapper = freshValue?.__wrapper;
 					const isLazyFresh =
 						freshWrapper &&
-						freshWrapper.__slothletInternal.mode === "lazy" &&
-						!freshWrapper.__slothletInternal.state.materialized &&
+						freshWrapper.____slothletInternal.mode === "lazy" &&
+						!freshWrapper.____slothletInternal.state.materialized &&
 						typeof freshWrapper.____materializeFunc === "function";
 
 					// DEBUG: Trace lazy detection for every root key
@@ -2038,8 +2038,8 @@ return true;
 						message: "RESTORE-ROOT-KEY-INSPECT",
 						key,
 						hasFreshWrapper: !!freshWrapper,
-						freshMode: freshWrapper?.__slothletInternal.mode,
-						freshMaterialized: freshWrapper?.__slothletInternal.state?.materialized,
+						freshMode: freshWrapper?.____slothletInternal.mode,
+						freshMaterialized: freshWrapper?.____slothletInternal.state?.materialized,
 						hasMaterializeFunc: typeof freshWrapper?.____materializeFunc === "function",
 						isLazyFresh,
 						existingMaterialized: existingAtKey?.___getState?.()?.materialized
@@ -2089,16 +2089,16 @@ return true;
 						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
 						const wrapper = existingAtKey.__wrapper;
-						const originalCollisionMode = wrapper ? wrapper.__slothletInternal.state.collisionMode : null;
+						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 						if (forceReplace && wrapper) {
-							wrapper.__slothletInternal.state.collisionMode = "replace";
+							wrapper.____slothletInternal.state.collisionMode = "replace";
 						}
 
 						existingAtKey.___setImpl(implForReload, moduleID);
 
 						// Restore collision mode
 						if (wrapper && originalCollisionMode !== null) {
-							wrapper.__slothletInternal.state.collisionMode = originalCollisionMode;
+							wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
 						}
 
 						// Restore custom properties
@@ -2157,15 +2157,15 @@ return true;
 				// forceReplace=true (single-module or first in multi-cache): clear old keys
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
 				const wrapper = existing.__wrapper;
-				const originalCollisionMode = wrapper ? wrapper.__slothletInternal.state.collisionMode : null;
+				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 
 				if (forceReplace && wrapper) {
-					wrapper.__slothletInternal.state.collisionMode = "replace";
+					wrapper.____slothletInternal.state.collisionMode = "replace";
 					this.slothlet.debug("reload", {
 						message: "RESTORE: forcing replace mode",
 						endpoint,
 						originalCollisionMode,
-						wrapperApiPath: wrapper.__slothletInternal.apiPath
+						wrapperApiPath: wrapper.____slothletInternal.apiPath
 					});
 				}
 
@@ -2198,7 +2198,7 @@ return true;
 						const val = implForReload[key];
 						if (val && typeof val.___getState === "function" && val.__wrapper) {
 							const childWrapper = val.__wrapper;
-							if (childWrapper.__slothletInternal.state.materialized) {
+							if (childWrapper.____slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
 							}
 						}
@@ -2209,7 +2209,7 @@ return true;
 
 				// Restore original collision mode
 				if (wrapper && originalCollisionMode !== null) {
-					wrapper.__slothletInternal.state.collisionMode = originalCollisionMode;
+					wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
 
 				// Restore custom properties after reload
