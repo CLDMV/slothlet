@@ -366,7 +366,7 @@ export class OwnershipManager extends ComponentBase {
 		// Recursively register children
 		for (const [key, value] of Object.entries(api)) {
 			// Skip internal properties
-			const skipProps = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {
 				continue;
 			}

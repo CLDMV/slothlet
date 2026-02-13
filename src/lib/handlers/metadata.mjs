@@ -169,8 +169,8 @@ export class Metadata extends ComponentBase {
 
 			// Skip unmaterialized wrappers/proxies - accessing their properties creates waiting proxies
 			// that can cause "fn is not a function" errors
-			if (value && typeof value === "object" && value.__wrapper) {
-				const wrapper = value.__wrapper;
+			if (value && typeof value === "object" && value.____slothletInternal?.wrapper) {
+				const wrapper = value.____slothletInternal?.wrapper;
 				// Only traverse if materialized, otherwise skip to avoid creating waiting proxies
 				if (wrapper.____slothletInternal.state && !wrapper.____slothletInternal.state.materialized) {
 					continue;
@@ -262,7 +262,7 @@ export class Metadata extends ComponentBase {
 		if (!target) return null;
 
 		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = target.__wrapper || target;
+		const actualTarget = target.____slothletInternal?.wrapper || target;
 
 		// Try impl first (for wrapped functions), then target itself
 		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget);
@@ -280,7 +280,7 @@ export class Metadata extends ComponentBase {
 		if (!target) return {};
 
 		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = target.__wrapper || target;
+		const actualTarget = target.____slothletInternal?.wrapper || target;
 
 		// Get system metadata - try WRAPPER first (each wrapper has unique metadata),
 		// then fall back to impl (for cases where wrapper wasn't tagged)
@@ -370,7 +370,7 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = target.__wrapper || target;
+		const actualTarget = target.____slothletInternal?.wrapper || target;
 
 		// Get system metadata to find moduleID
 		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
@@ -409,7 +409,7 @@ export class Metadata extends ComponentBase {
 		}
 
 		// Normalize target: if it's a proxy, get the underlying wrapper
-		const actualTarget = target.__wrapper || target;
+		const actualTarget = target.____slothletInternal?.wrapper || target;
 
 		// Get system metadata to find moduleID
 		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
@@ -679,7 +679,7 @@ export class Metadata extends ComponentBase {
 		// Recurse through all properties
 		for (const [key, value] of Object.entries(api)) {
 			// Skip internal properties
-			const skipProps = ["__wrapper", "__metadata", "__type", "_materialize", "_impl"];
+			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
 			if (skipProps.includes(key)) {
 				continue;
 			}
