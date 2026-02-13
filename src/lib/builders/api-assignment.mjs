@@ -401,7 +401,7 @@ export class ApiAssignment extends ComponentBase {
 								apiPath: valueWrapper.____slothletInternal.apiPath
 							});
 							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
-							if (valueWrapper.____materializeFunc && !valueWrapper.____slothletInternal.state?.materialized && !valueWrapper.____slothletInternal.state?.inFlight) {
+							if (valueWrapper.____slothletInternal.materializeFunc && !valueWrapper.____slothletInternal.state?.materialized && !valueWrapper.____slothletInternal.state?.inFlight) {
 								valueWrapper._materialize().catch((err) => {
 									console.error(`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.____slothletInternal.apiPath}":`, err);
 								});
@@ -499,7 +499,7 @@ export class ApiAssignment extends ComponentBase {
 						}
 					}
 					// The value wrapper has the materializeFunc that will load folder's exports
-					if (valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized && valueWrapper.____materializeFunc) {
+					if (valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized && valueWrapper.____slothletInternal.materializeFunc) {
 						// Don't copy impl - the lazy folder needs to materialize on its own
 						// The childCache already has the file's exports from the copy above
 						return false; // Assign value, not existing
