@@ -191,41 +191,6 @@ export class UnifiedWrapper extends ComponentBase {
 			configurable: false
 		});
 
-		// Add Symbol.toStringTag to wrapper for proper type identification
-		// When wrapper is used as proxy target (non-callable objects), this ensures
-		// proper display like "[Object: math]" instead of "[UnifiedWrapper: math]"
-		Object.defineProperty(this, Symbol.toStringTag, {
-			get() {
-				const impl = wrapper.____slothletInternal.impl;
-				if (typeof impl === "function") {
-					return "Function";
-				}
-				if (impl && typeof impl === "object" && typeof impl.default === "function") {
-					return "Function";
-				}
-				return "Object";
-			},
-			enumerable: false,
-			configurable: true
-		});
-
-		// Add 'name' property to wrapper for proper naming
-		// When wrapper is used as proxy target, this provides the API path name
-		Object.defineProperty(this, "name", {
-			get() {
-				if (wrapper.____slothletInternal.apiPath) {
-					const pathParts = wrapper.____slothletInternal.apiPath.split(".");
-					const lastPart = pathParts[pathParts.length - 1];
-					if (lastPart) {
-						return lastPart;
-					}
-				}
-				return "unifiedWrapper";
-			},
-			enumerable: false,
-			configurable: true
-		});
-
 		// Add wrapper self-reference as getter AFTER ____slothletInternal is set (avoid circular reference in traversal)
 		const wrapper = this;
 		Object.defineProperty(internal, "wrapper", {
