@@ -172,7 +172,7 @@ export class Metadata extends ComponentBase {
 			if (value && typeof value === "object" && value.__wrapper) {
 				const wrapper = value.__wrapper;
 				// Only traverse if materialized, otherwise skip to avoid creating waiting proxies
-				if (wrapper.__slothletInternal.state && !wrapper.__slothletInternal.state.materialized) {
+				if (wrapper.____slothletInternal.state && !wrapper.____slothletInternal.state.materialized) {
 					continue;
 				}
 			}

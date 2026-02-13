@@ -11,17 +11,17 @@
 - ✅ Phase 3: Complete (all internal variables use `____` prefix)
 - ✅ Phase 4: Complete (covered by Phase 2)
 - ✅ Phase 5: Complete (audit — all source and test files consistent)
-- ⚠️ Phase 6: PARTIALLY COMPLETE - Only metadata properties moved to `__slothletInternal`
+- ⚠️ Phase 6: PARTIALLY COMPLETE - Only metadata properties moved to `____slothletInternal`
   - ✅ Moved: `mode`, `apiPath`, `isCallable`, `isCallableLocked`, `moduleID`, `filePath`, `sourceFolder`, `materializeOnCreate`, `displayName`, `invalid`, `state`
   - ❌ NOT MOVED: `____id`, `____callableImpl`, `____waitingProxyCache`, `____proxy`, `_impl`, `____materializeFunc`, `____materializationPromise`
   - **These 7 properties still appear in Object.keys() output**
 - 🔄 Phase 7: IN PROGRESS - Complete the migration (move remaining properties, clean up surface)
 
-### Phase 6: `__slothletInternal` Container (PARTIALLY COMPLETED 2026-02-12)
+### Phase 6: `____slothletInternal` Container (PARTIALLY COMPLETED 2026-02-12)
 
 **Status:** Only metadata properties moved. Implementation properties still on surface.
 
-**Currently in `__slothletInternal` (non-enumerable container):**
+**Currently in `____slothletInternal` (non-enumerable container):**
 - `mode`, `apiPath`, `isCallable`, `isCallableLocked`
 - `state`, `displayName`, `invalid`
 - `moduleID`, `filePath`, `sourceFolder`, `materializeOnCreate`
@@ -55,7 +55,7 @@ Object.keys(api.math) = [
 
 **Why Phase 6 Was Marked Complete (Incorrectly):**
 
-Only the metadata/config properties were moved into `__slothletInternal`. The implementation
+Only the metadata/config properties were moved into `____slothletInternal`. The implementation
 state properties (`____id`, `____callableImpl`, etc.) were renamed with `____` prefix (Phase 3)
 but never actually moved into the container. The documentation claimed they were moved but
 the code still has them as direct properties on `this`.
@@ -70,8 +70,8 @@ the code still has them as direct properties on `this`.
 **Key design changes:**
 - `__isCallable` configurability (previously `Object.defineProperty configurable: true/false`) replaced with `isCallableLocked` boolean flag
 - `__filePath` updates now use direct assignment instead of `Object.defineProperty`
-- Proxy getTrap has backward compat handlers: `proxy.__mode` → `wrapper.__slothletInternal.mode`
-- `allowedInternals` Set and `hasTrap`/`setTrap`/`deletePropertyTrap` internal key lists all include `"__slothletInternal"`
+- Proxy getTrap has backward compat handlers: `proxy.__mode` → `wrapper.____slothletInternal.mode`
+- `allowedInternals` Set and `hasTrap`/`setTrap`/`deletePropertyTrap` internal key lists all include `"____slothletInternal"`
 
 This naming convention cleanup is a nice-to-have for consistency but does not affect functionality or user-facing behavior. It can be revisited in a future maintenance cycle when there's bandwidth for comprehensive refactoring with full regression testing.
 
@@ -143,8 +143,8 @@ internal.id = Math.random().toString(36).substr(2, 9);
 
 **3. Update ALL references in unified-wrapper.mjs:**
 ```javascript
-// Change: this.____id → this.__slothletInternal.id
-// Change: wrapper.____id → wrapper.__slothletInternal.id
+// Change: this.____id → this.____slothletInternal.id
+// Change: wrapper.____id → wrapper.____slothletInternal.id
 ```
 
 **4. Update references in other files:**
@@ -292,10 +292,10 @@ All references across `unified-wrapper.mjs`, `api-manager.mjs`, `api-assignment.
 
 Current state of prefix usage in `UnifiedWrapper`:
 
-#### Properties using `__` (external variables — all nested in `__slothletInternal`):
-- `mode`, `apiPath`, `isCallable`, `materializeOnCreate` (via `__slothletInternal`)
-- `state`, `displayName`, `invalid` (via `__slothletInternal`)
-- `collisionMergedKeys`, `childFilePathsPreMaterialize`, `needsImmediateChildAdoption` (via `__slothletInternal`)
+#### Properties using `__` (external variables — all nested in `____slothletInternal`):
+- `mode`, `apiPath`, `isCallable`, `materializeOnCreate` (via `____slothletInternal`)
+- `state`, `displayName`, `invalid` (via `____slothletInternal`)
+- `collisionMergedKeys`, `childFilePathsPreMaterialize`, `needsImmediateChildAdoption` (via `____slothletInternal`)
 
 #### ~~Properties using `_` that may need reclassification~~ ✅ ALL RESOLVED
 - ~~`_id`~~ → `____id` ✅ RENAMED (internal variable)
@@ -397,7 +397,7 @@ NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run baseline
 - The `allowedInternals` Set in `getTrap` must be updated to match whatever prefix is used
 - Non-enumerable + non-prefix properties (`moduleID`, `filePath`, `sourceFolder`) are the highest priority fix since they can shadow user exports
 
-## Implemented: Nested Internal Variables (`__slothletInternal`)
+## Implemented: Nested Internal Variables (`____slothletInternal`)
 
 The internal variable nesting described below has been **implemented** as of Phase 6.
 All internal wrapper variables now live inside a single `Object.create(null)` container:
@@ -413,23 +413,23 @@ this.__state = { materialized: false, inFlight: false };
 // ... 15+ underscore-prefixed properties competing for names
 
 // FUTURE: single internal container, zero collision risk
-this.__slothletInternal = Object.create(null);
-this.__slothletInternal.moduleID = "...";
-this.__slothletInternal.filePath = "...";
-this.__slothletInternal.sourceFolder = "...";
-this.__slothletInternal.mode = "lazy";
-this.__slothletInternal.apiPath = "math";
-this.__slothletInternal.state = { materialized: false, inFlight: false };
+this.____slothletInternal = Object.create(null);
+this.____slothletInternal.moduleID = "...";
+this.____slothletInternal.filePath = "...";
+this.____slothletInternal.sourceFolder = "...";
+this.____slothletInternal.mode = "lazy";
+this.____slothletInternal.apiPath = "math";
+this.____slothletInternal.state = { materialized: false, inFlight: false };
 ```
 
 ### Why This Matters
 
-1. **One collision point instead of many** — Only `__slothletInternal` needs to be unique. All child properties inside it are isolated from user exports entirely.
+1. **One collision point instead of many** — Only `____slothletInternal` needs to be unique. All child properties inside it are isolated from user exports entirely.
 2. **Proxy trap simplification** — The `allowedInternals` Set currently has 20+ entries and grows with every new property. With nesting, the getTrap only needs to intercept ONE property name.
 3. **Cleaner `ownKeys` / `getOwnPropertyDescriptor`** — No need to filter out dozens of internal properties when enumerating. Just filter the single container.
 4. **Follows the established pattern** — Slothlet already nests builtin functions under `slothlet.*` (e.g., `api.slothlet.shutdown()`, `api.slothlet.reload()`). Internal variables should follow the same containment principle.
 5. **Future-proof** — Adding new internal state never risks colliding with user exports, no matter what users name their modules.
-6. **Preserves user internals** — Users can still have their own `_` prefixed properties without collision. The proxy getTrap looks for `__slothletInternal` specifically, not blocking all underscored properties.
+6. **Preserves user internals** — Users can still have their own `_` prefixed properties without collision. The proxy getTrap looks for `____slothletInternal` specifically, not blocking all underscored properties.
 
 ### What Stays Exposed
 
@@ -439,9 +439,9 @@ this.__slothletInternal.state = { materialized: false, inFlight: false };
 
 This was implemented in Phase 6:
 
-1. ✅ Created `this.__slothletInternal = Object.create(null)` in constructor
-2. ✅ Moved all `__` prefixed variables into `this.__slothletInternal.*` (dropping the prefix)
-3. ✅ Updated proxy traps to route `__slothletInternal` access
-4. ✅ Updated all internal code to read from `this.__slothletInternal.X` instead of `this.__X`
+1. ✅ Created `this.____slothletInternal = Object.create(null)` in constructor
+2. ✅ Moved all `__` prefixed variables into `this.____slothletInternal.*` (dropping the prefix)
+3. ✅ Updated proxy traps to route `____slothletInternal` access
+4. ✅ Updated all internal code to read from `this.____slothletInternal.X` instead of `this.__X`
 5. ✅ Kept `_materialize()` exposed on the surface
 6. ✅ Proxy getTrap backward compat: old `__mode`, `__apiPath` etc. still work through proxy

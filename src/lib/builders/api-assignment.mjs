@@ -104,7 +104,7 @@ export class ApiAssignment extends ComponentBase {
 	 */
 	assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
-		const valueId = valueIsWrapper ? value.__wrapper?.____id : "not-wrapper";
+		const valueId = valueIsWrapper ? value.__wrapper?.____slothletInternal.id : "not-wrapper";
 		this.slothlet.debug("api", {
 			message: "ASSIGN-TO-API",
 			key,
@@ -196,8 +196,8 @@ export class ApiAssignment extends ComponentBase {
 			if (existingIsWrapper && valueIsWrapper) {
 				const existingWrapper = existing.__wrapper;
 				const valueWrapper = value.__wrapper;
-				const existingIsLazyUnmaterialized = existingWrapper.__slothletInternal.mode === "lazy" && !existingWrapper.__slothletInternal.state.materialized;
-				const valueIsLazyUnmaterialized = valueWrapper.__slothletInternal.mode === "lazy" && !valueWrapper.__slothletInternal.state.materialized;
+				const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+				const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 				this.slothlet.debug("api", {
 					message: "COLLISION: lazy detection",
@@ -214,24 +214,24 @@ export class ApiAssignment extends ComponentBase {
 					this.slothlet.debug("api", {
 						message: "COLLISION: Setting collision mode on EXISTING wrapper",
 						effectiveMode,
-						apiPath: existingWrapper.__slothletInternal.apiPath
+						apiPath: existingWrapper.____slothletInternal.apiPath
 					});
-					existingWrapper.__slothletInternal.state.collisionMode = effectiveMode;
+					existingWrapper.____slothletInternal.state.collisionMode = effectiveMode;
 					this.slothlet.debug("api", {
 						message: "COLLISION: Verified existing wrapper collision mode",
-						collisionMode: existingWrapper.__slothletInternal.state.collisionMode
+						collisionMode: existingWrapper.____slothletInternal.state.collisionMode
 					});
 				}
 				if (valueIsLazyUnmaterialized) {
 					this.slothlet.debug("api", {
 						message: "COLLISION: Setting collision mode on VALUE wrapper",
 						effectiveMode,
-						apiPath: valueWrapper.__slothletInternal.apiPath
+						apiPath: valueWrapper.____slothletInternal.apiPath
 					});
-					valueWrapper.__slothletInternal.state.collisionMode = effectiveMode;
+					valueWrapper.____slothletInternal.state.collisionMode = effectiveMode;
 					this.slothlet.debug("api", {
 						message: "COLLISION: Verified value wrapper collision mode",
-						collisionMode: valueWrapper.__slothletInternal.state.collisionMode
+						collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 					});
 
 					// CRITICAL: In replace mode, trigger immediate materialization
@@ -239,7 +239,7 @@ export class ApiAssignment extends ComponentBase {
 					if (effectiveMode === "replace") {
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE-MATERIALIZE: Triggering immediate materialization",
-							apiPath: valueWrapper.__slothletInternal.apiPath
+							apiPath: valueWrapper.____slothletInternal.apiPath
 						});
 						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
 					}
@@ -252,8 +252,8 @@ export class ApiAssignment extends ComponentBase {
 					const existingWrapper = existing.__wrapper;
 					const valueWrapper = value.__wrapper;
 
-					const existingIsLazyUnmaterialized = existingWrapper.__slothletInternal.mode === "lazy" && !existingWrapper.__slothletInternal.state.materialized;
-					const valueIsLazyUnmaterialized = valueWrapper.__slothletInternal.mode === "lazy" && !valueWrapper.__slothletInternal.state.materialized;
+					const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+					const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 					// For lazy folder replacing eager file: Just assign the lazy folder, don't copy anything
 					if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
@@ -263,23 +263,23 @@ export class ApiAssignment extends ComponentBase {
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: BEFORE assignment",
 							key,
-							currentWrapperId: existing.__wrapper.____id
+						currentWrapperId: existing.__wrapper.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
 							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
 							key,
-							collisionMode: valueWrapper.__slothletInternal.state.collisionMode
+							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
 						targetApi[key] = value;
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: AFTER assignment",
 							key,
-							newWrapperId: targetApi[key].__wrapper.____id
+						newWrapperId: targetApi[key].__wrapper.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: Verification",
-							expectedId: valueWrapper.____id,
-							actualId: targetApi[key].__wrapper.____id
+						expectedId: valueWrapper.____slothletInternal.id,
+						actualId: targetApi[key].__wrapper.____slothletInternal.id
 						});
 						return true; // Assignment completed
 					}
@@ -301,8 +301,8 @@ export class ApiAssignment extends ComponentBase {
 
 					// Strategy: Keep the lazy wrapper and copy the other wrapper's childCache into it
 					// When the lazy wrapper materializes, it will merge with the copied childCache
-					const existingIsLazyUnmaterialized = existingWrapper.__slothletInternal.mode === "lazy" && !existingWrapper.__slothletInternal.state.materialized;
-					const valueIsLazyUnmaterialized = valueWrapper.__slothletInternal.mode === "lazy" && !valueWrapper.__slothletInternal.state.materialized;
+					const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+					const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
@@ -314,8 +314,8 @@ export class ApiAssignment extends ComponentBase {
 
 						// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
 						// When lazy materializes, it will merge with this or we can store it on the wrapper directly
-						if (!existingWrapper.__slothletInternal.childFilePathsPreMaterialize) {
-							existingWrapper.__slothletInternal.childFilePathsPreMaterialize = {};
+						if (!existingWrapper.____slothletInternal.childFilePathsPreMaterialize) {
+							existingWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 						}
 
 						const valueChildKeys = Object.keys(valueWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
@@ -326,7 +326,7 @@ export class ApiAssignment extends ComponentBase {
 							});
 							// Store filePath mapping so child wrappers can inherit correct filePath
 							if (valueFilePath) {
-								existingWrapper.__slothletInternal.childFilePathsPreMaterialize[key] = valueFilePath;
+								existingWrapper.____slothletInternal.childFilePathsPreMaterialize[key] = valueFilePath;
 							}
 						}
 
@@ -351,22 +351,22 @@ export class ApiAssignment extends ComponentBase {
 							const existingFilePath = existingMetadata?.filePath;
 
 							// Create temporary object to hold __childFilePaths if _impl doesn't exist yet
-							if (!valueWrapper.__slothletInternal.childFilePathsPreMaterialize) {
-								valueWrapper.__slothletInternal.childFilePathsPreMaterialize = {};
+							if (!valueWrapper.____slothletInternal.childFilePathsPreMaterialize) {
+								valueWrapper.____slothletInternal.childFilePathsPreMaterialize = {};
 							}
 
 							const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 							this.slothlet.debug("api", {
 								message: "COLLISION-COPY: Copying existing child keys",
 								existingChildKeys: existingChildKeys.join(","),
-								fromApiPath: existingWrapper.__slothletInternal.apiPath,
-								toApiPath: valueWrapper.__slothletInternal.apiPath,
-								valueWrapperId: valueWrapper.____id || "no-id"
+								fromApiPath: existingWrapper.____slothletInternal.apiPath,
+								toApiPath: valueWrapper.____slothletInternal.apiPath,
+							valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 							});
 
 							// Track collision-merged properties so materialization knows these are from file, not folder children
-							if (!valueWrapper.__slothletInternal.collisionMergedKeys) {
-								valueWrapper.__slothletInternal.collisionMergedKeys = new Set();
+							if (!valueWrapper.____slothletInternal.collisionMergedKeys) {
+								valueWrapper.____slothletInternal.collisionMergedKeys = new Set();
 							}
 
 							for (const key of existingChildKeys) {
@@ -376,7 +376,7 @@ export class ApiAssignment extends ComponentBase {
 									key,
 									childName: child?.name,
 									typeOf: typeof child,
-									valueWrapperId: valueWrapper.____id || "no-id"
+								valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 								});
 								Object.defineProperty(valueWrapper, key, {
 									value: child,
@@ -385,10 +385,10 @@ export class ApiAssignment extends ComponentBase {
 									configurable: true
 								});
 								// Mark this key as collision-merged
-								valueWrapper.__slothletInternal.collisionMergedKeys.add(key);
+								valueWrapper.____slothletInternal.collisionMergedKeys.add(key);
 								// Store filePath mapping so child wrappers can inherit correct filePath
 								if (existingFilePath) {
-									valueWrapper.__slothletInternal.childFilePathsPreMaterialize[key] = existingFilePath;
+									valueWrapper.____slothletInternal.childFilePathsPreMaterialize[key] = existingFilePath;
 								}
 							}
 
@@ -398,12 +398,12 @@ export class ApiAssignment extends ComponentBase {
 							// The folder children will be added to wrapper during materialization
 							this.slothlet.debug("api", {
 								message: "COLLISION-TRIGGER-MAT: Triggering early materialization (fire-and-forget)",
-								apiPath: valueWrapper.__slothletInternal.apiPath
+								apiPath: valueWrapper.____slothletInternal.apiPath
 							});
-							valueWrapper.__slothletInternal.needsImmediateChildAdoption = true;
-							if (valueWrapper.____materializeFunc && !valueWrapper.__slothletInternal.state?.materialized && !valueWrapper.__slothletInternal.state?.inFlight) {
+							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
+							if (valueWrapper.____materializeFunc && !valueWrapper.____slothletInternal.state?.materialized && !valueWrapper.____slothletInternal.state?.inFlight) {
 								valueWrapper._materialize().catch((err) => {
-									console.error(`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.__slothletInternal.apiPath}":`, err);
+									console.error(`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.____slothletInternal.apiPath}":`, err);
 								});
 							}
 						} else {
@@ -421,7 +421,7 @@ export class ApiAssignment extends ComponentBase {
 						this.slothlet.debug("api", {
 							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
 							key,
-							collisionMode: valueWrapper.__slothletInternal.state.collisionMode
+							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
 						targetApi[key] = value;
 						return true; // Assignment completed
@@ -499,7 +499,7 @@ export class ApiAssignment extends ComponentBase {
 						}
 					}
 					// The value wrapper has the materializeFunc that will load folder's exports
-					if (valueWrapper.__slothletInternal.mode === "lazy" && !valueWrapper.__slothletInternal.state.materialized && valueWrapper.____materializeFunc) {
+					if (valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized && valueWrapper.____materializeFunc) {
 						// Don't copy impl - the lazy folder needs to materialize on its own
 						// The childCache already has the file's exports from the copy above
 						return false; // Assign value, not existing
