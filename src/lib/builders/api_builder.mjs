@@ -1186,9 +1186,18 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
 					}
 
-					// Create merged context
-					const mergedContext =
-						merge === "deep" ? deepMerge(currentStore.context, contextData) : { ...currentStore.context, ...contextData };
+					// Create merged context with deep clone to prevent mutation leakage
+					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					let mergedContext;
+					if (merge === "deep") {
+						mergedContext = deepMerge(currentStore.context, contextData);
+						// Deep merge still needs cloning to prevent shared references
+						mergedContext = structuredClone(mergedContext);
+					} else {
+						// Shallow merge: clone parent context first, then merge new data
+						const clonedParent = structuredClone(currentStore.context);
+						mergedContext = { ...clonedParent, ...contextData };
+					}
 
 					// Create temporary child instance
 					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -1246,9 +1255,18 @@ export class ApiBuilder extends ComponentBase {
 						currentStore = baseStore;
 					}
 
-					// Create new store with merged context
-					const mergedContext =
-						merge === "deep" ? deepMerge(currentStore.context, contextData) : { ...currentStore.context, ...contextData };
+					// Create new store with merged context (deep cloned for isolation)
+					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
+					let mergedContext;
+					if (merge === "deep") {
+						mergedContext = deepMerge(currentStore.context, contextData);
+						// Deep merge still needs cloning to prevent shared references
+						mergedContext = structuredClone(mergedContext);
+					} else {
+						// Shallow merge: clone parent context first, then merge new data
+						const clonedParent = structuredClone(currentStore.context);
+						mergedContext = { ...clonedParent, ...contextData };
+					}
 
 					// Create temporary child instance
 					const childInstanceID = `${slothlet.instanceID}__run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;

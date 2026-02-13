@@ -667,6 +667,82 @@ describe.each(ALL_CONFIGS)("Per-Request Context Multi-Instance > Config: '$name'
 		expect(finalDiag.instancesMapKeys).not.toContain(innerChildID);
 		expect(finalDiag.instancesMapSize).toBe(initialCount);
 	});
+
+	it("should prevent nested object mutations from leaking to parent context", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: {
+				user: { id: 1, role: "admin", permissions: ["read", "write"] },
+				settings: { theme: "dark", notifications: { email: true, sms: false } }
+			}
+		});
+
+		// Get baseline context before .run()
+		const baseBeforeRun = await api1.slothlet.context.get();
+		expect(baseBeforeRun.user.role).toBe("admin");
+		expect(baseBeforeRun.settings.notifications.email).toBe(true);
+
+		// Run with modified nested objects
+		await api1.slothlet.context.run(
+			{
+				user: { id: 2, role: "user", permissions: ["read"] },
+				settings: { theme: "light", notifications: { email: false, sms: true } }
+			},
+			async () => {
+				const ctxInside = await api1.slothlet.context.get();
+
+				// Mutate nested objects directly
+				ctxInside.user.role = "hacker";
+				ctxInside.user.permissions.push("delete");
+				ctxInside.settings.notifications.email = true;
+				ctxInside.settings.notifications.sms = false;
+
+				// Verify mutations are visible inside .run()
+				expect(ctxInside.user.role).toBe("hacker");
+				expect(ctxInside.user.permissions).toContain("delete");
+			}
+		);
+
+		// CRITICAL TEST: Mutations inside .run() should NOT affect base context
+		const baseAfterRun = await api1.slothlet.context.get();
+		expect(baseAfterRun.user.role).toBe("admin"); // Should NOT be "hacker"
+		expect(baseAfterRun.user.permissions).toEqual(["read", "write"]); // Should NOT contain "delete"
+		expect(baseAfterRun.settings.notifications.email).toBe(true); // Should NOT be false
+	});
+
+	it("should prevent mutations to parent context objects during .run()", async () => {
+		api1 = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST,
+			context: {
+				data: { count: 0, items: [] }
+			}
+		});
+
+		// Baseline
+		const baseBefore = await api1.slothlet.context.get();
+		expect(baseBefore.data.count).toBe(0);
+		expect(baseBefore.data.items).toHaveLength(0);
+
+		// Run with same context data structure
+		await api1.slothlet.context.run({ data: { count: 10, items: ["a", "b"] } }, async () => {
+			const ctxInside = await api1.slothlet.context.get();
+
+			// Mutate the context object
+			ctxInside.data.count = 999;
+			ctxInside.data.items.push("c");
+
+			// Mutations visible inside
+			expect(ctxInside.data.count).toBe(999);
+			expect(ctxInside.data.items).toContain("c");
+		});
+
+		// CRITICAL TEST: Parent context should be unaffected
+		const baseAfter = await api1.slothlet.context.get();
+		expect(baseAfter.data.count).toBe(0); // Should NOT be 999
+		expect(baseAfter.data.items).toHaveLength(0); // Should NOT contain "c"
+	});
 });
 
 // Error handling tests - only need basic config
