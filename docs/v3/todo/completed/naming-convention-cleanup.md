@@ -15,7 +15,7 @@
   - ✅ Moved: `mode`, `apiPath`, `isCallable`, `isCallableLocked`, `moduleID`, `filePath`, `sourceFolder`, `materializeOnCreate`, `displayName`, `invalid`, `state`
   - ❌ NOT MOVED: `____id`, `____callableImpl`, `____waitingProxyCache`, `____proxy`, `_impl`, `____materializeFunc`, `____materializationPromise`
   - **These 7 properties still appear in Object.keys() output**
-- ❌ Phase 7: NOT STARTED - Hide remaining internal keys from Object.keys() output
+- 🔄 Phase 7: IN PROGRESS - Complete the migration (move remaining properties, clean up surface)
 
 ### Phase 6: `__slothletInternal` Container (PARTIALLY COMPLETED 2026-02-12)
 
@@ -77,68 +77,81 @@ This naming convention cleanup is a nice-to-have for consistency but does not af
 
 ---
 
-## Phase 7: Hide Internal Keys from Object.keys() (NOT STARTED)
+## Phase 7: Complete Surface Cleanup (IN PROGRESS)
 
-**Status:** ❌ Ready to begin - Previous attempt failed due to incorrect approach  
-**Prerequisite:** Must complete Phase 6 first (move remaining properties into `__slothletInternal`)  
-**Target Commit:** `0ec448b` (current working baseline)  
-**Baseline Status:** 38/38 tests passing, npm run debug passing
+**Goal:** Only `__type` and `__metadata` should be enumerable. Everything else inside `____slothletInternal`.
 
-### Remaining Work
-
-**Step 1: Complete Phase 6 (move properties into `__slothletInternal`)**
-
-Move these 7 properties from wrapper surface into `__slothletInternal`:
-
-1. `____id` → `internal.id`
-2. `____callableImpl` → `internal.callableImpl`  
-3. `____waitingProxyCache` → `internal.waitingProxyCache`
-4. `____proxy` → `internal.proxy`
-5. `_impl` → `internal.impl`
-6. `____materializeFunc` → `internal.materializeFunc`
-7. `____materializationPromise` → `internal.materializationPromise`
-
-**CRITICAL: ONE PROPERTY AT A TIME**
-
-For each property:
-1. Move property to `internal.X` in constructor
-2. Update ALL references in unified-wrapper.mjs
-3. Update references in other files (api-assignment, api-manager, modes-processor, metadata)
-4. Run tests:
-   ```bash
-   export NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev
-   npm run debug     # Must pass
-   npm run baseline  # Must pass (38/38 files)
-   node test-keys-current.mjs  # Verify property no longer in Object.keys()
-   ```
-5. **If tests pass:** `git add -A && git commit -m "refactor: move ____id into __slothletInternal"`
-6. **If tests fail:** `git reset --hard HEAD` and investigate why
-
-**Step 2: Verify Object.keys() is clean**
-
-After all 7 properties moved:
+**Target Surface State:**
 ```javascript
-Object.keys(api.math) // Should only show: ['add', 'multiply', 'divide']
+Object.keys(api.math) 
+// Should show: ['add', 'multiply', 'divide']  ← Only actual API methods
+
+// Accessible but non-enumerable:
+api.math.____slothletInternal  // ✅ Exists, non-enumerable
+api.math.__type                 // ✅ Exists, enumerable (or via getTrap)
+api.math.__metadata             // ✅ Exists, enumerable (or via getTrap)
+
+// Everything else should be INSIDE ____slothletInternal:
+api.math.____slothletInternal.id
+api.math.____slothletInternal.impl
+api.math.____slothletInternal.callableImpl
+api.math.____slothletInternal.waitingProxyCache
+api.math.____slothletInternal.proxy
+api.math.____slothletInternal.materializeFunc
+api.math.____slothletInternal.materializationPromise
 ```
 
-### What Was Attempted Previously (2026-02-12) - FAILED
+### Current State (What's Wrong)
 
-Attempted a bulk migration approach:
-1. Renamed `__slothletInternal` → `____slothletInternal` (4 underscores)
-2. Added `internal.wrapper = this` to enable `proxy.____slothletInternal.wrapper` access
-3. Removed `__wrapper` getTrap handler, replaced with `____getWrapper()` method
-4. Bulk sed replacement of all property accesses
+```javascript
+Object.keys(api.math) = [
+  '____id',                    // ❌ Should be inside ____slothletInternal.id
+  '____callableImpl',          // ❌ Should be inside ____slothletInternal.callableImpl
+  '____waitingProxyCache',     // ❌ Should be inside ____slothletInternal.waitingProxyCache
+  '____proxy',                 // ❌ Should be inside ____slothletInternal.proxy
+  '_impl',                     // ❌ Should be inside ____slothletInternal.impl
+  '____materializeFunc',       // ❌ Should be inside ____slothletInternal.materializeFunc
+  'add',                       // ✅ Actual API
+  'multiply',                  // ✅ Actual API
+  'divide'                     // ✅ Actual API
+]
+```
+
+### Migration Steps (ONE AT A TIME)
+
+For each property below:
+1. Move property definition to `internal.X` in constructor
+2. Update ALL references in unified-wrapper.mjs to use `this.__slothletInternal.X`
+3. Update references in other files (grep for the property name)
+4. Run tests: `npm run debug && npm run baseline && node test-keys-current.mjs`
+5. **If pass:** `git commit -m "refactor: move ____id into __slothletInternal.id"`
+6. **If fail:** `git reset --hard HEAD` and investigate
+
+**Properties to migrate:**
+
+1. [ ] `____id` → `internal.id`
+2. [ ] `____callableImpl` → `internal.callableImpl`
+3. [ ] `____waitingProxyCache` → `internal.waitingProxyCache`
+4. [ ] `____proxy` → `internal.proxy`
+5. [ ] `_impl` → `internal.impl`
+6. [ ] `____materializeFunc` → `internal.materializeFunc`
+7. [ ] `____materializationPromise` → `internal.materializationPromise` (added dynamically)
+
+### What Went Wrong Previously (2026-02-12)
+
+**Mistake:** Attempted bulk sed replacements and added circular reference `internal.wrapper = this`
 
 **Why it failed:**
-- `internal.wrapper = this` creates circular reference
-- When lifecycle events or metadata code traverses objects, hits infinite loop
-- Simple APIs worked (`api_tests/api_test/math`) but complex APIs failed (`api_tests/api_test`)
-- Stack overflow in `Metadata.getMetadata` → `___createChildWrapper` → `___adoptImplChildren` loop
+- Circular reference caused stack overflow during object traversal
+- Complex APIs like `api_tests/api_test` hit infinite loops in lifecycle/metadata code
+- Didn't test incrementally - tried to change everything at once
 
-**Lessons learned:**
-- No circular references in internal object
-- Test with complex APIs, not just simple ones
-- One change at a time with commits between each
+**Correct approach:**
+- Move properties ONE AT A TIME
+- NO circular references in internal object
+- Test after EACH change
+- Commit after EACH success
+- If something breaks, we know exactly which property caused it
 
 ---
 
