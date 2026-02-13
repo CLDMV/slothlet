@@ -1980,7 +1980,11 @@ export class UnifiedWrapper extends ComponentBase {
 				if (impl && typeof impl === "object" && typeof impl.default === "function") {
 					return impl.default.toString.bind(impl.default);
 				}
-				return Function.prototype.toString.bind(target);
+				// For non-callable wrappers, return a descriptive string
+				if (typeof target === "function") {
+					return Function.prototype.toString.bind(target);
+				}
+				return () => `[UnifiedWrapper: ${wrapper.____slothletInternal.apiPath}]`;
 			}
 			if (prop === "valueOf") {
 				// Return valueOf bound to the actual impl, not the proxy target
