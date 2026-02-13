@@ -418,7 +418,7 @@ export class ApiManager extends ComponentBase {
 			});
 			this.slothlet.debug("api", {
 				message: "syncWrapper next wrapper impl keys",
-				implKeys: Object.keys(nextWrapper._impl || {})
+				implKeys: Object.keys(nextWrapper.____slothletInternal.impl || {})
 			});
 			this.slothlet.debug("api", {
 				message: "syncWrapper next wrapper childCache keys",
@@ -431,19 +431,19 @@ export class ApiManager extends ComponentBase {
 		if (collisionMode === "replace") {
 			// CRITICAL: Use ___setImpl to trigger lifecycle events for ownership tracking
 			// This ensures impl:changed fires with the correct moduleID
-			if (existingWrapper.___setImpl && nextWrapper._impl !== undefined) {
+			if (existingWrapper.___setImpl && nextWrapper.____slothletInternal.impl !== undefined) {
 				// Pass moduleID for correct ownership tracking in lifecycle events
-				existingWrapper.___setImpl(nextWrapper._impl, moduleID);
-			} else if (nextWrapper._impl === undefined) {
+				existingWrapper.___setImpl(nextWrapper.____slothletInternal.impl, moduleID);
+			} else if (nextWrapper.____slothletInternal.impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
-				existingWrapper._impl = null;
+				existingWrapper.____slothletInternal.impl = null;
 			} else {
 				// Fallback for non-unified wrappers
-				if (nextWrapper._impl !== undefined) {
-					existingWrapper._impl = nextWrapper._impl;
+				if (nextWrapper.____slothletInternal.impl !== undefined) {
+					existingWrapper.____slothletInternal.impl = nextWrapper.____slothletInternal.impl;
 					// Update callable status
-					if (typeof nextWrapper._impl === "function" || (nextWrapper._impl && typeof nextWrapper._impl.default === "function")) {
+					if (typeof nextWrapper.____slothletInternal.impl === "function" || (nextWrapper.____slothletInternal.impl && typeof nextWrapper.____slothletInternal.impl.default === "function")) {
 						existingWrapper.isCallable = true;
 					}
 				}
@@ -532,7 +532,7 @@ export class ApiManager extends ComponentBase {
 		// Mark as materialized only if _impl is actually materialized (not a function)
 		if (existingWrapper.____slothletInternal.state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
-			const isActuallyMaterialized = existingWrapper._impl && typeof existingWrapper._impl !== "function";
+			const isActuallyMaterialized = existingWrapper.____slothletInternal.impl && typeof existingWrapper.____slothletInternal.impl !== "function";
 			existingWrapper.____slothletInternal.state.materialized = isActuallyMaterialized;
 			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
@@ -846,8 +846,8 @@ export class ApiManager extends ComponentBase {
 				delete wrapper[finalKey];
 			}
 			// Delete from _impl (the actual implementation object)
-			if (wrapper._impl && typeof wrapper._impl === "object") {
-				delete wrapper._impl[finalKey];
+			if (wrapper.____slothletInternal.impl && typeof wrapper.____slothletInternal.impl === "object") {
+				delete wrapper.____slothletInternal.impl[finalKey];
 			}
 		}
 
@@ -860,8 +860,8 @@ export class ApiManager extends ComponentBase {
 			if (removedImpl.__wrapper) {
 				const wrapper = removedImpl.__wrapper;
 				// Set impl to null to prevent stale access
-				if (wrapper._impl !== undefined) {
-					wrapper._impl = null;
+				if (wrapper.____slothletInternal.impl !== undefined) {
+					wrapper.____slothletInternal.impl = null;
 				}
 				// Clear children from wrapper to release references
 				const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
@@ -1058,7 +1058,7 @@ return true;
 				.map((k) => ({
 					key: k,
 					apiPath: newApi[k].__wrapper.apiPath,
-					implKeys: Object.keys(newApi[k].__wrapper._impl || {}),
+					implKeys: Object.keys(newApi[k].__wrapper.____slothletInternal.impl || {}),
 					childCacheSize: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
 					childCacheKeys: Object.keys(newApi[k].__wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
 				})),
@@ -2065,7 +2065,7 @@ return true;
 						// which is always eager even in lazy mode) — extract impl and update.
 
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
-						// CRITICAL: freshWrapper._impl may be depleted — the constructor's
+						// CRITICAL: freshWrapper.____slothletInternal.impl may be depleted — the constructor's
 						// ___adoptImplChildren() moved children (like host, port for config) out of
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.

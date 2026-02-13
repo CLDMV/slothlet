@@ -532,7 +532,7 @@ class Slothlet {
 			}
 
 			// Get metadata for the resolved function
-			if (typeof target === "function" || (target && target._impl)) {
+			if (typeof target === "function" || (target && target.____slothletInternal.impl)) {
 				return metadataHandler.getMetadata(target);
 			}
 
