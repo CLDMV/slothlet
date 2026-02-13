@@ -195,7 +195,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// Children attach directly to wrapper as properties
 		internal.callableImpl = null;
 
-		this.____waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
+		internal.waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
 		this.____proxy = null;
 
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
@@ -512,8 +512,8 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____materializeFunc = newMaterializeFunc;
 
 		// Clear waiting proxy cache — stale references from previous materialization
-		if (this.____waitingProxyCache) {
-			this.____waitingProxyCache.clear();
+		if (this.____slothletInternal.waitingProxyCache) {
+			this.____slothletInternal.waitingProxyCache.clear();
 		}
 
 		this.slothlet.debug("wrapper", {
@@ -1152,20 +1152,15 @@ export class UnifiedWrapper extends ComponentBase {
 		// Create cache key from propChain
 		const cacheKey = propChain.join(".");
 
-		// Defensive: ensure ____waitingProxyCache exists (should be initialized in constructor,
+		// Defensive: ensure waitingProxyCache exists (should be initialized in constructor,
 		// but can be lost in edge cases during reload/adoption cycles)
-		if (!wrapper.____waitingProxyCache) {
-			Object.defineProperty(wrapper, "____waitingProxyCache", {
-				value: new Map(),
-				writable: true,
-				enumerable: false,
-				configurable: true
-			});
+		if (!wrapper.____slothletInternal.waitingProxyCache) {
+			wrapper.____slothletInternal.waitingProxyCache = new Map();
 		}
 
 		// Return cached waiting proxy if it exists
-		if (wrapper.____waitingProxyCache.has(cacheKey)) {
-			return wrapper.____waitingProxyCache.get(cacheKey);
+		if (wrapper.____slothletInternal.waitingProxyCache.has(cacheKey)) {
+			return wrapper.____slothletInternal.waitingProxyCache.get(cacheKey);
 		}
 
 		// Waiting proxies always use function target since they represent unknown/in-flight values
@@ -1675,7 +1670,7 @@ export class UnifiedWrapper extends ComponentBase {
 		});
 
 		// Cache the waiting proxy so subsequent accesses return the same proxy object
-		wrapper.____waitingProxyCache.set(cacheKey, waitingProxy);
+		wrapper.____slothletInternal.waitingProxyCache.set(cacheKey, waitingProxy);
 
 		return waitingProxy;
 	}
