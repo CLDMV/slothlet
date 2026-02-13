@@ -1,8 +1,8 @@
 # Context Cross-Instance Behavior & Mutability Investigation
 
 **Investigation Completed:** February 12, 2026  
-**Status:** ✅ **RESOLVED - BEHAVIOR IS CORRECT**  
-**Priority:** MEDIUM  
+**Status:** ⚠️ **IDENTIFIED BUG - NEEDS FIXING**  
+**Priority:** HIGH  
 **Related Files:**
 - `docs/v3/todo/investigate-context-mutability.md` (consolidated here)
 - `docs/v3/todo/context-get-cross-instance-behavior.md` (consolidated here)
@@ -11,13 +11,21 @@
 
 ## Executive Summary
 
-Both `investigate-context-mutability.md` and `context-get-cross-instance-behavior.md` describe the **same fundamental behavior**: what happens when `context.get()` is called from a different instance than the one that created the `.run()` or `.scope()` context.
+Both `investigate-context-mutability.md` and `context-get-cross-instance-behavior.md` describe issues with context isolation in `.run()` and `.scope()`.
 
-**CONCLUSION:** The current behavior is **CORRECT BY DESIGN**. Cross-instance calls return base context because:
-1. Each Slothlet instance has its own isolated context
-2. Child contexts (created by `.run()`) belong to a specific instance
-3. When calling across instances, the target instance returns its own base context, not the caller's child context
-4. This prevents context leakage between independent API instances
+**FINDINGS:** The current implementation has **INSUFFICIENT ISOLATION**. 
+
+### Cross-Instance Behavior: ✅ CORRECT
+Cross-instance calls return base context - this is correct and prevents context leakage between independent API instances.
+
+### Context Mutability: ⚠️ **BUG - NEEDS FIXING**
+`.run()` and `.scope()` currently use **shallow copy**, which allows mutations to leak back to the parent instance. This violates the design intent.
+
+**EXPECTED BEHAVIOR:**
+- `.run()` and `.scope()` should create a fully isolated copy
+- Code runs with a snapshot of the current state
+- Modifications inside .run() should NOT affect the parent instance
+- Context should be **deep copied**, not shallow copied
 
 ---
 
@@ -197,23 +205,37 @@ await api.slothlet.context.run({ count: 10 }, async () => {
 
 ---
 
-## Design Decisions
+## Required Fixes
 
-### Why Shallow Copy Instead of Deep Clone?
+### Bug 1: Shallow Copy Allows Mutation Leakage
 
-**Pros of shallow copy:**
-- Fast performance (no deep cloning overhead)
-- Allows intentional object sharing (e.g., sharing a connection pool)
-- Predictable behavior - you control what's shared
+**Current Behavior:** Shallow copy means nested objects are shared by reference
 
-**Cons of shallow copy:**
-- Nested objects can be mutated across contexts
-- Requires developers to understand reference sharing
+```javascript
+const api = await slothlet({ context: { data: { count: 0 } } });
 
-**Decision:** Keep shallow copy. If full isolation is needed, user can:
-1. Use structuredClone() on context data before passing to .run()
-2. Avoid putting mutable objects in context
-3. Use immutable data structures
+await api.slothlet.context.run({ data: { count: 10 } }, async () => {
+    const ctx = api.slothlet.context.get();
+    ctx.data.count = 999; // ⚠️ MUTATES PARENT CONTEXT
+});
+
+// After .run() completes:
+const baseCtx = api.slothlet.context.get();
+console.log(baseCtx.data.count); // 999 ❌ WRONG - should still be 0
+```
+
+**Fix Required:** Use `structuredClone()` or deep copy when creating child contexts
+
+**Implementation Location:**
+- `src/lib/handlers/context-async.mjs` - AsyncContextManager.runInContext()
+- `src/lib/handlers/context-live.mjs` - LiveContextManager.runInContext()
+- `.run()` and `.scope()` implementations in api_builder.mjs
+
+### Bug 2: Live Mode In-Place Modification
+
+Live mode directly modifies `store.context` with `Object.assign()`, providing even weaker isolation than async mode.
+
+**Fix Required:** Create new context object for child instances instead of mutating in place
 
 ---
 
@@ -268,17 +290,30 @@ expect(ctx1Inner.appName).toBe("app1"); // Base context value preserved
 
 ## Final Verdict
 
-✅ **Current behavior is CORRECT**
-
+### ✅ Cross-Instance Behavior: CORRECT
 Cross-instance `context.get()` calls returning BASE context is:
 1. Intentional design
 2. Security-conscious (prevents context leakage)
 3. Documented in tests
 4. Working as expected
 
-Context mutability characteristics are:
-1. Well-understood tradeoffs
-2. Appropriate for performance
-3. Controllable by users if needed
+### ⚠️ Context Isolation: **BUG - CODE CHANGES REQUIRED**
 
-**No code changes required.** Documentation should be enhanced to explain these behaviors clearly.
+**Problem:** Shallow copy allows mutation leakage back to parent instance
+
+**Required Changes:**
+1. Use `structuredClone()` for deep copying context in `.run()` and `.scope()`
+2. Update both async and live mode context managers
+3. Add tests verifying nested object mutations don't leak
+4. Ensure performance impact is acceptable (structuredClone is fast in V8)
+
+**Impact:**
+- High - affects correctness of context isolation
+- Breaking change potential - code relying on shared references will break
+- Should be fixed in v3.0 since breaking changes are acceptable
+
+**Next Steps:**
+1. Move this document from /completed/ to /todo/ (it's NOT resolved)
+2. Implement deep copy in context managers
+3. Update tests to verify full isolation
+4. Document the change in BREAKING-CHANGES-V3.md
