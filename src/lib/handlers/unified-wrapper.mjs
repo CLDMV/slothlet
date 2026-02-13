@@ -191,9 +191,9 @@ export class UnifiedWrapper extends ComponentBase {
 			configurable: false
 		});
 
-		// For callable endpoints, store function in ____callableImpl (handled in proxy apply trap)
+		// For callable endpoints, store function in callableImpl (handled in proxy apply trap)
 		// Children attach directly to wrapper as properties
-		this.____callableImpl = null;
+		internal.callableImpl = null;
 
 		this.____waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
 		this.____proxy = null;
