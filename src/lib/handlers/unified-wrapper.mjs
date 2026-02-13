@@ -375,7 +375,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
 
 			const extractFullImpl_child = wrapper[key];
-			if (extractFullImpl_child && typeof extractFullImpl_child.____slothletInternal.wrapper === "object") {
+			if (extractFullImpl_child && typeof extractFullImpl_child.____slothletInternal?.wrapper === "object") {
 				// Recursively extract from child wrapper (handles nested depletion)
 				extractFullImpl_result[key] = UnifiedWrapper._extractFullImpl(extractFullImpl_child.____slothletInternal.wrapper);
 			} else {
