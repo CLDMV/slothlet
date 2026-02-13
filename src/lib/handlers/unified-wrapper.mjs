@@ -202,7 +202,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// See static _cloneImpl() for full rationale.
 		internal.impl = UnifiedWrapper._cloneImpl(initialImpl);
 
-		this.____materializeFunc = materializeFunc;
+		internal.materializeFunc = materializeFunc;
 
 		// Emit impl:created event for lifecycle management (wrapper creation)
 		if (filePath && slothlet.handlers?.lifecycle) {
@@ -509,7 +509,7 @@ export class UnifiedWrapper extends ComponentBase {
 		this.____materializationPromise = null;
 
 		// Swap in the fresh materialization function
-		this.____materializeFunc = newMaterializeFunc;
+		this.____slothletInternal.materializeFunc = newMaterializeFunc;
 
 		// Clear waiting proxy cache — stale references from previous materialization
 		if (this.____slothletInternal.waitingProxyCache) {
@@ -570,7 +570,7 @@ export class UnifiedWrapper extends ComponentBase {
 			this.____slothletInternal.state.inFlight = true;
 
 			try {
-				if (this.____materializeFunc) {
+				if (this.____slothletInternal.materializeFunc) {
 					if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
 							message: "_materialize calling materializeFunc",
@@ -582,7 +582,7 @@ export class UnifiedWrapper extends ComponentBase {
 					const lazy_setImpl = (value) => {
 						this._applyNewImpl(value);
 					};
-					const result = await this.____materializeFunc(lazy_setImpl);
+					const result = await this.____slothletInternal.materializeFunc(lazy_setImpl);
 
 					// If materializeFunc didn't call setter, set _impl from return value
 					if (!this.____slothletInternal.impl) {
@@ -857,13 +857,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 					if (rawImpl !== null && rawImpl !== undefined) {
 						existingChild.___setImpl(rawImpl, this.slothlet, this.____slothletInternal.moduleID, this.____slothletInternal.filePath);
-					} else if (newWrapper && newWrapper.____materializeFunc) {
+					} else if (newWrapper && newWrapper.____slothletInternal.materializeFunc) {
 						// Lazy wrapper not yet materialized — fully reset existing child to lazy
 						// state using ___resetLazy for proper cleanup (clears stale _impl,
 						// children, caches, and inFlight flag before swapping materializeFunc).
 						const existingChildWrapper = existingChild.__wrapper;
 						if (existingChildWrapper) {
-							existingChildWrapper.___resetLazy(newWrapper.____materializeFunc);
+							existingChildWrapper.___resetLazy(newWrapper.____slothletInternal.materializeFunc);
 						}
 					}
 					wrapped = existingChild;
@@ -1487,7 +1487,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Without this, folder properties remain as waiting proxies instead of being accessible
 				if (
 					wrapper.____slothletInternal.needsImmediateChildAdoption &&
-					wrapper.____materializeFunc &&
+					wrapper.____slothletInternal.materializeFunc &&
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
@@ -1690,7 +1690,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
 		// This triggers background loading - typeof will still return "function" but first access is faster
-		if (wrapper.____slothletInternal.materializeOnCreate && wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && wrapper.____materializeFunc) {
+		if (wrapper.____slothletInternal.materializeOnCreate && wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && wrapper.____slothletInternal.materializeFunc) {
 			wrapper._materialize(); // Fire-and-forget background materialization
 		}
 

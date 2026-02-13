@@ -399,8 +399,8 @@ export class ApiManager extends ComponentBase {
 
 		// Copy materialize function if present (lazy mode support)
 		// In merge mode, preserve existing materializer to avoid replacing existing module behavior
-		if (nextWrapper.____materializeFunc && collisionMode !== "merge") {
-			existingWrapper.____materializeFunc = nextWrapper.____materializeFunc;
+		if (nextWrapper.____slothletInternal.materializeFunc && collisionMode !== "merge") {
+			existingWrapper.____slothletInternal.materializeFunc = nextWrapper.____slothletInternal.materializeFunc;
 		}
 
 		// THE ACTUAL FIX: Transfer _childCache entries directly
@@ -2031,7 +2031,7 @@ return true;
 						freshWrapper &&
 						freshWrapper.____slothletInternal.mode === "lazy" &&
 						!freshWrapper.____slothletInternal.state.materialized &&
-						typeof freshWrapper.____materializeFunc === "function";
+						typeof freshWrapper.____slothletInternal.materializeFunc === "function";
 
 					// DEBUG: Trace lazy detection for every root key
 					this.slothlet.debug("reload", {
@@ -2040,7 +2040,7 @@ return true;
 						hasFreshWrapper: !!freshWrapper,
 						freshMode: freshWrapper?.____slothletInternal.mode,
 						freshMaterialized: freshWrapper?.____slothletInternal.state?.materialized,
-						hasMaterializeFunc: typeof freshWrapper?.____materializeFunc === "function",
+						hasMaterializeFunc: typeof freshWrapper?.____slothletInternal.materializeFunc === "function",
 						isLazyFresh,
 						existingMaterialized: existingAtKey?.___getState?.()?.materialized
 					});
@@ -2050,7 +2050,7 @@ return true;
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						existingAtKey.___resetLazy(freshWrapper.____materializeFunc);
+						existingAtKey.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);

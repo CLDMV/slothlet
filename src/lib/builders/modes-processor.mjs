@@ -842,7 +842,7 @@ export class ModesProcessor extends ComponentBase {
 									if (modes_existingWrapper) {
 										// In lazy mode, the file wrapper hasn't materialized yet.
 										// Force materialization so we can access its exports.
-										if (modes_existingWrapper.____materializeFunc && !modes_existingWrapper.____slothletInternal.state?.materialized) {
+										if (modes_existingWrapper.____slothletInternal.materializeFunc && !modes_existingWrapper.____slothletInternal.state?.materialized) {
 											await modes_existingWrapper._materialize();
 										}
 										// Ensure children are adopted from impl
