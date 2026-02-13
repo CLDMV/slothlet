@@ -196,7 +196,7 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.callableImpl = null;
 
 		internal.waitingProxyCache = new Map(); // Cache waiting proxies by propChain key
-		this.____proxy = null;
+		internal.proxy = null;
 
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
@@ -271,8 +271,8 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// For callables or leaf nodes - return actual _impl value if materialized
 		// For unmaterialized lazy wrappers, return the proxy to show it's a function
-		if (this.____slothletInternal.mode === "lazy" && this.____slothletInternal.state && !this.____slothletInternal.state.materialized && this.____proxy) {
-			return this.____proxy;
+		if (this.____slothletInternal.mode === "lazy" && this.____slothletInternal.state && !this.____slothletInternal.state.materialized && this.____slothletInternal.proxy) {
+			return this.____slothletInternal.proxy;
 		}
 		return this._impl;
 	}
@@ -1684,8 +1684,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	createProxy() {
 		const wrapper = this;
-		if (wrapper.____proxy) {
-			return wrapper.____proxy;
+		if (wrapper.____slothletInternal.proxy) {
+			return wrapper.____slothletInternal.proxy;
 		}
 
 		// Optional: materialize on create for lazy mode when materializeOnCreate flag is set
@@ -1735,7 +1735,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					// For lazy unmaterialized wrappers with null _impl, return the proxy itself
 					if (wrapper.____slothletInternal.mode === "lazy" && !wrapper.____slothletInternal.state.materialized && (wrapper._impl === null || wrapper._impl === undefined)) {
-						return wrapper.____proxy || wrapper;
+						return wrapper.____slothletInternal.proxy || wrapper;
 					}
 					// Otherwise return _impl (functions, primitives, etc)
 					return wrapper._impl;
@@ -1917,9 +1917,9 @@ export class UnifiedWrapper extends ComponentBase {
 							message: "util.inspect.custom: Lazy unmaterialized",
 							apiPath: wrapper.apiPath,
 							wrapper: wrapper,
-							____proxy: wrapper.____proxy
+							____proxy: wrapper.____slothletInternal.proxy
 						});
-						return wrapper || wrapper.____proxy;
+						return wrapper || wrapper.____slothletInternal.proxy;
 					}
 					// Otherwise return _impl
 					return wrapper._impl;
@@ -2697,7 +2697,7 @@ export class UnifiedWrapper extends ComponentBase {
 			return true;
 		};
 
-		wrapper.____proxy = new Proxy(proxyTarget, {
+		wrapper.____slothletInternal.proxy = new Proxy(proxyTarget, {
 			get: getTrap,
 			apply: applyTrap,
 			has: hasTrap,
@@ -2707,6 +2707,6 @@ export class UnifiedWrapper extends ComponentBase {
 			deleteProperty: deletePropertyTrap
 		});
 
-		return wrapper.____proxy;
+		return wrapper.____slothletInternal.proxy;
 	}
 }
