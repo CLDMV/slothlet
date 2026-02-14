@@ -68,6 +68,12 @@ class Slothlet {
 		this.reference = null;
 		this.context = null;
 
+		// Lazy materialization tracking (for api.slothlet.materialize)
+		this._totalLazyCount = 0; // Total lazy wrappers created
+		this._unmaterializedLazyCount = 0; // Currently unmaterialized lazy wrappers
+		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
+		this._materializationWaiters = []; // Promises waiting for full materialization
+
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors"];
 
@@ -220,6 +226,60 @@ class Slothlet {
 					});
 				}
 			});
+		}
+	}
+
+	/**
+	 * Register a lazy wrapper for materialization tracking
+	 * Called by UnifiedWrapper constructor when mode === "lazy"
+	 * @private
+	 */
+	_registerLazyWrapper() {
+		this._totalLazyCount++;
+		this._unmaterializedLazyCount++;
+		
+		if (this.config?.debug?.materialize) {
+			this.debug("materialize", {
+				message: "Lazy wrapper registered",
+				total: this._totalLazyCount,
+				unmaterialized: this._unmaterializedLazyCount
+			});
+		}
+	}
+
+	/**
+	 * Notify that a lazy wrapper has materialized
+	 * Called by UnifiedWrapper._materialize() after materialization completes
+	 * @private
+	 */
+	_onWrapperMaterialized() {
+		this._unmaterializedLazyCount--;
+		
+		if (this.config?.debug?.materialize) {
+			this.debug("materialize", {
+				message: "Lazy wrapper materialized",
+				total: this._totalLazyCount,
+				unmaterialized: this._unmaterializedLazyCount,
+				percentage: this._totalLazyCount > 0 ? ((this._totalLazyCount - this._unmaterializedLazyCount) / this._totalLazyCount) * 100 : 100
+			});
+		}
+
+		// Check if all lazy wrappers are materialized
+		if (this._unmaterializedLazyCount === 0 && !this._materializationComplete) {
+			this._materializationComplete = true;
+			
+			if (this.config?.debug?.materialize) {
+				this.debug("materialize", {
+					message: "All lazy wrappers materialized",
+					total: this._totalLazyCount
+				});
+			}
+
+			// Resolve all waiting promises
+			const waiters = this._materializationWaiters.splice(0);
+			for (const resolve of waiters) {
+				resolve();
+			}
 		}
 	}
 

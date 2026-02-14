@@ -850,6 +850,32 @@ export class ApiBuilder extends ComponentBase {
 					}
 					return null;
 				}
+			},
+
+			/**
+			 * Lazy materialization tracking namespace
+			 * Provides access to lazy folder materialization state
+			 * @type {object}
+			 *
+			 * @example
+			 * // Check if fully materialized
+			 * if (api.slothlet.materialize.materialized) {
+			 *   console.log("All lazy folders loaded!");
+			 * }
+			 *
+			 * @example
+			 * // Get statistics
+			 * const stats = api.slothlet.materialize.get();
+			 * console.log(`${stats.percentage}% loaded`);
+			 *
+			 * @example
+			 * // Wait for full materialization
+			 * await api.slothlet.materialize.wait();
+			 */
+			materialize: slothlet.handlers?.materialize || {
+				materialized: false,
+				get: () => ({ total: 0, materialized: 0, remaining: 0, percentage: 100 }),
+				wait: async () => {}
 			}
 		};
 
