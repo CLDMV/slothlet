@@ -43,7 +43,7 @@ export class Lifecycle extends ComponentBase {
 
 	/**
 	 * Subscribe to lifecycle event
-	 * @param {string} event - Event name (impl:created, impl:changed, impl:removed, path:collision)
+	 * @param {string} event - Event name (impl:created, impl:changed, impl:removed, materialized:complete, path:collision)
 	 * @param {Function} handler - Event handler function(eventData)
 	 * @returns {Function} Unsubscribe function
 	 * @public
@@ -69,6 +69,50 @@ export class Lifecycle extends ComponentBase {
 				handlers.delete(handler);
 			}
 		};
+	}
+
+	/**
+	 * Alias for subscribe() - standard EventEmitter pattern
+	 * @param {string} event - Event name
+	 * @param {Function} handler - Event handler function
+	 * @returns {Function} Unsubscribe function
+	 * @public
+	 *
+	 * @example
+	 * lifecycle.on('materialized:complete', (data) => {
+	 *   console.log(`${data.total} modules materialized`);
+	 * });
+	 */
+	on(event, handler) {
+		return this.subscribe(event, handler);
+	}
+
+	/**
+	 * Unsubscribe from lifecycle event - standard EventEmitter pattern
+	 * @param {string} event - Event name
+	 * @param {Function} handler - Event handler function to remove
+	 * @public
+	 *
+	 * @example
+	 * const handler = (data) => console.log(data);
+	 * lifecycle.on('impl:changed', handler);
+	 * lifecycle.off('impl:changed', handler);
+	 */
+	off(event, handler) {
+		const handlers = this.subscribers.get(event);
+		if (handlers) {
+			handlers.delete(handler);
+		}
+	}
+
+	/**
+	 * Alias for off() - standard EventEmitter pattern
+	 * @param {string} event - Event name
+	 * @param {Function} handler - Event handler function to remove
+	 * @public
+	 */
+	unsubscribe(event, handler) {
+		this.off(event, handler);
 	}
 
 	/**

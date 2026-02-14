@@ -345,7 +345,7 @@ metadata.removeUserMetadataByApiPath("plugins");
 ### 1. Adding Metadata During Load
 
 ```javascript
-const slothlet = await slothletFactory({ dir: "./api" });
+const slothlet = await slothlet({ dir: "./api" });
 
 await slothlet.api.addApi("plugins.trusted", "./trusted-plugins", {
   trusted: true,

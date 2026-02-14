@@ -1,11 +1,72 @@
 # Lazy Mode Background Materialization Tracking
 
-**Last Evaluated:** 2026-02-06
+**Last Evaluated:** 2026-02-14
 
-**Status:** 📋 Planning / Research  
+**Status:** ✅ Completed  
 **Created:** January 29, 2026  
+**Completed:** February 14, 2026  
 **Priority:** Medium  
 **Category:** Performance & Developer Experience
+
+---
+
+## ✅ Implementation Complete
+
+This feature has been fully implemented and tested. See the complete documentation at:
+
+- **[Lifecycle Events API](../features/lifecycle-events.md)** - Public API for subscribing to lifecycle events
+- **Tests:** 
+  - `tests/vitests/suites/lazy/lazy-materialization-tracking.test.vitest.mjs` (72 tests across 4 configs)
+  - `tests/vitests/suites/lazy/lazy-background-materialization.test.vitest.mjs` (48 tests across 4 configs)
+  - `tests/vitests/suites/lazy/public-lifecycle-api.test.vitest.mjs` (16 tests across 4 configs)
+
+### What Was Implemented
+
+1. **Materialization Tracking:**
+   - Added `_totalLazyCount` and `_unmaterializedLazyCount` to Slothlet instance
+   - Exposed via `api.slothlet.materialize` namespace with `materialized` property, `get()` method, and `wait()` function
+   - Tracks lazy wrapper registration and materialization callbacks
+
+2. **Background Materialization:**
+   - Opt-in via `config.tracking.materialization = true` (or shorthand `tracking: true`)
+   - Automatically materializes all lazy folders in the background on creation
+   - Fire-and-forget approach using `setImmediate()` for proper timing
+   - Zero performance impact when disabled
+
+3. **Lifecycle Events:**
+   - Public `api.slothlet.lifecycle` API with standard EventEmitter pattern
+   - Methods: `on()`, `off()`, `subscribe()`, `unsubscribe()`, `emit()`
+   - Event `materialized:complete` emitted when all lazy modules materialized
+   - Additional events: `impl:created`, `impl:changed`, `impl:removed`
+
+4. **Implementation Approach:**
+   - Used **Option 1: Central Registry** approach
+   - Wrapper registration in `UnifiedWrapper` constructor
+   - Materialization callbacks in both `___materialize()` and `___setImpl()` methods
+   - Event emission via existing `LifecycleManager` component
+
+### Key Files Modified
+
+- `src/slothlet.mjs` - Added tracking properties and registration/callback methods
+- `src/lib/handlers/unified-wrapper.mjs` - Added registration and materialization callbacks, background materialization trigger
+- `src/lib/handlers/lifecycle.mjs` - Added standard EventEmitter methods (on/off/unsubscribe)
+- `src/lib/helpers/config.mjs` - Added tracking config normalization
+- `src/lib/builders/api_builder.mjs` - Exposed lifecycle manager on public API
+
+### Test Coverage
+
+All 136 tests passing:
+- **Materialization tracking:** 18 tests × 4 configs = 72 tests
+- **Background materialization:** 12 tests × 4 configs = 48 tests  
+- **Public lifecycle API:** 4 tests × 4 configs = 16 tests
+
+Matrix configurations tested: LAZY_HOOKS, LAZY, LAZY_LIVE_HOOKS, LAZY_LIVE
+
+---
+
+## Original Planning Document
+
+The content below represents the original planning and research for this feature and is preserved for historical reference.
 
 ---
 

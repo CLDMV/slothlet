@@ -265,6 +265,24 @@ export class UnifiedWrapper extends ComponentBase {
 		// Register lazy wrapper for materialization tracking
 		if (mode === "lazy") {
 			slothlet._registerLazyWrapper();
+			
+			// If background materialization is enabled, trigger it (fire-and-forget)
+			if (slothlet.config.tracking?.materialization) {
+				// Defer to next tick to ensure wrapper and proxy are fully constructed
+				// Fire-and-forget: don't await, let it materialize in background
+				setImmediate(() => {
+					this._materialize().catch((err) => {
+						// Silently catch errors - background materialization is best-effort
+						if (slothlet.config?.debug?.materialize) {
+							slothlet.debug("materialize", {
+								message: "Background materialization error",
+								apiPath: this.____slothletInternal?.apiPath,
+								error: err.message
+							});
+						}
+					});
+				});
+			}
 		}
 	}
 
@@ -613,6 +631,11 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 
 					this.____slothletInternal.state.materialized = true;
+					
+					// Notify Slothlet that this lazy wrapper has materialized
+					if (this.slothlet._onWrapperMaterialized) {
+						this.slothlet._onWrapperMaterialized();
+					}
 
 					if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {

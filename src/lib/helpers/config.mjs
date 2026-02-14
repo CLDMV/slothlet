@@ -315,6 +315,16 @@ export class Config extends ComponentBase {
 			hookConfig.suppressErrors = config.hook.suppressErrors || false;
 		}
 
+		// Parse tracking configuration
+		let trackingConfig = { materialization: false };
+		if (config.tracking === true || config.tracking === false) {
+			// Boolean: enable/disable materialization tracking
+			trackingConfig.materialization = config.tracking;
+		} else if (config.tracking && typeof config.tracking === "object") {
+			// Object: { materialization: boolean }
+			trackingConfig.materialization = config.tracking.materialization === true;
+		}
+
 		// Build normalized config
 		return {
 			...config,
@@ -333,6 +343,7 @@ export class Config extends ComponentBase {
 				mutations: finalMutations
 			},
 			scope: scopeConfig,
+			tracking: trackingConfig,
 			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true
 		};
