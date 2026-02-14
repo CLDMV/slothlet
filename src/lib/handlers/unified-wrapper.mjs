@@ -261,6 +261,11 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 		}
+
+		// Register lazy wrapper for materialization tracking
+		if (mode === "lazy") {
+			slothlet._registerLazyWrapper();
+		}
 	}
 
 	/**
@@ -477,6 +482,11 @@ export class UnifiedWrapper extends ComponentBase {
 
 		this.____slothletInternal.state.materialized = true;
 		this.____slothletInternal.state.inFlight = false;
+
+		// Notify Slothlet that this lazy wrapper has materialized
+		if (this.slothlet._onWrapperMaterialized) {
+			this.slothlet._onWrapperMaterialized();
+		}
 	}
 
 	/**
