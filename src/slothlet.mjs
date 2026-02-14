@@ -73,6 +73,7 @@ class Slothlet {
 		this._unmaterializedLazyCount = 0; // Currently unmaterialized lazy wrappers
 		this._materializationComplete = false; // Set to true when all lazy wrappers materialized
 		this._materializationWaiters = []; // Promises waiting for full materialization
+		this._materializationCompleteEmitted = false; // Track if event was already emitted
 
 		// Component categories
 		this.componentCategories = ["helpers", "handlers", "builders", "processors"];
@@ -280,8 +281,21 @@ class Slothlet {
 			for (const resolve of waiters) {
 				resolve();
 			}
+
+			// Emit lifecycle event if tracking enabled and not already emitted
+			if (this.config?.tracking?.materialization && !this._materializationCompleteEmitted) {
+				this._materializationCompleteEmitted = true;
+				if (this.handlers?.lifecycle) {
+					this.handlers.lifecycle.emit("materialized:complete", {
+						total: this._totalLazyCount,
+						timestamp: Date.now()
+					});
+				}
+			}
 		}
 	}
+
+
 
 	/**
 	 * Load API from directory
@@ -380,6 +394,8 @@ class Slothlet {
 
 		// Inject runtime-aware metadata functions that have proper context access
 		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
+
+
 
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {

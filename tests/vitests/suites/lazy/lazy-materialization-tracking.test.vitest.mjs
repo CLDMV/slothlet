@@ -13,21 +13,21 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import slothletFactory from "@cldmv/slothlet";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const TEST_DIR = join(__dirname, "../../../../api_tests/api_test");
+// Only LAZY configs
+const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
 
-describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
+describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({ config }) => {
 	let api;
+	const TEST_DIR = TEST_DIRS.API_TEST;
 
 	describe("Materialization state tracking", () => {
 		beforeAll(async () => {
-			api = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			api = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 		});
 
@@ -139,9 +139,9 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 
 	describe("Wait functionality", () => {
 		beforeAll(async () => {
-			api = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			api = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 		});
 
@@ -227,9 +227,9 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 
 	describe("Materialized property", () => {
 		beforeAll(async () => {
-			api = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			api = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 		});
 
@@ -272,9 +272,9 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 
 		it("should be falsy when remaining > 0", async () => {
 			// Create a fresh instance with lazy mode
-			const freshApi = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			const freshApi = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 
 			const stats = freshApi.slothlet.materialize.get();
@@ -290,9 +290,9 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 
 	describe("Edge cases", () => {
 		it("should handle empty API directory", async () => {
-			const emptyApi = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			const emptyApi = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 
 			const stats = emptyApi.slothlet.materialize.get();
@@ -306,9 +306,9 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 		});
 
 		it("should maintain accurate counts across multiple module accesses", async () => {
-			const freshApi = await slothletFactory({
-				dir: TEST_DIR,
-				mode: "lazy"
+			const freshApi = await slothlet({
+				...config,
+				dir: TEST_DIR
 			});
 
 			const stats1 = freshApi.slothlet.materialize.get();
@@ -333,7 +333,7 @@ describe("Lazy Materialization Tracking (api.slothlet.materialize)", () => {
 		});
 
 		it("should not interfere with eager mode (no lazy tracking)", async () => {
-			const eagerApi = await slothletFactory({
+			const eagerApi = await slothlet({
 				dir: TEST_DIR,
 				mode: "eager"
 			});
