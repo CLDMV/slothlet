@@ -1,5 +1,6 @@
 [
 	"suites/addapi/add-api.test.vitest.mjs",
+	"suites/addapi/add-api-files.test.vitest.mjs",
 	"suites/addapi/addapi-path-resolution.test.vitest.mjs",
 	"suites/addapi/addapi-stack-trace-path.test.vitest.mjs",
 	"suites/api/function-name-preservation.test.vitest.mjs",

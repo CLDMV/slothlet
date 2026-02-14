@@ -26,6 +26,7 @@
  * @param {Object} options.config - Configuration
  * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
  * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
+ * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
  * @returns {Promise<Object>} Built API object
  * @public
  */
@@ -36,7 +37,8 @@ export async function buildEagerAPI({
 	moduleID,
 	slothlet,
 	apiDepth = Infinity,
-	cacheBust = null
+	cacheBust = null,
+	fileFilter = null
 }) {
 	const api = {};
 
@@ -44,8 +46,8 @@ export async function buildEagerAPI({
 	const { modesProcessor } = slothlet.builders;
 	const { loader } = slothlet.processors;
 
-	// Scan directory structure with depth limit
-	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth });
+	// Scan directory structure with depth limit and optional file filter
+	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
 
 	// Process root files (with root contributor pattern support)
 	// Pass synthetic root directory with children.directories for consistent handling

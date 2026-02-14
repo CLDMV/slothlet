@@ -84,11 +84,12 @@ export class Loader extends ComponentBase {
 	 * @param {boolean} [options.isRootScan=true] - Whether this is the root directory scan (shows empty dir warning)
 	 * @param {number} [options.currentDepth=0] - Current traversal depth
 	 * @param {number} [options.maxDepth=Infinity] - Maximum traversal depth
+	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
 	 * @returns {Promise<Object>} Directory structure
 	 * @public
 	 */
 	async scanDirectory(dir, options = {}) {
-		const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true, currentDepth = 0, maxDepth = Infinity } = options;
+		const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true, currentDepth = 0, maxDepth = Infinity, fileFilter = null } = options;
 
 		try {
 			await stat(dir);
@@ -113,6 +114,12 @@ export class Loader extends ComponentBase {
 			const fullPath = join(dir, entry.name);
 
 			if (entry.isDirectory()) {
+				// Skip directories if we're filtering for specific files
+				// (single file mode shouldn't load subdirectories)
+				if (fileFilter) {
+					continue;
+				}
+				
 				// Only recurse if within depth limit
 				if (recursive && currentDepth < maxDepth) {
 					const subStructure = await this.scanDirectory(fullPath, { ...options, isRootScan: false, currentDepth: currentDepth + 1 });
@@ -127,6 +134,11 @@ export class Loader extends ComponentBase {
 				if (extensions.includes(ext)) {
 					// Skip files starting with __ (JSDoc only, test helpers, etc.)
 					if (entry.name.startsWith("__")) {
+						continue;
+					}
+
+					// Apply file filter if provided
+					if (fileFilter && !fileFilter(entry.name)) {
 						continue;
 					}
 
