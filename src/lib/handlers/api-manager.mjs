@@ -1441,22 +1441,41 @@ return true;
 		}
 
 		// Detect if this is a moduleID or apiPath
-		// API paths contain dots (e.g., "plugins.tools"), moduleIDs don't
-		const isModuleId = !pathOrModuleId.includes(".");
-		const apiPath = isModuleId ? null : pathOrModuleId;
-		// Extract moduleID from full moduleID format "moduleID:path" if present
-		let moduleID = isModuleId ? pathOrModuleId.split(":")[0] : null;
-
-		// If it's a moduleID, find the actual registered moduleID (with suffix)
-		// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-		// Use findLast to prefer the most recently registered module when multiple match,
-		// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
-		if (moduleID && this.slothlet.handlers.ownership) {
+		// Try moduleID first (more specific), then fall back to API path
+		let apiPath = null;
+		let moduleID = null;
+		
+		if (this.slothlet.handlers.ownership) {
+			// Extract moduleID from full moduleID format "moduleID:path" if present
+			const candidateModuleID = pathOrModuleId.split(":")[0];
+			
+			// Try to find a matching moduleID
+			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
+			// Use findLast to prefer the most recently registered module when multiple match,
+			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
-			const matchingModule = registeredModules.findLast((m) => m === moduleID || m.startsWith(`${moduleID}_`));
+			const matchingModule = registeredModules.findLast((m) => m === candidateModuleID || m.startsWith(`${candidateModuleID}_`));
+			
 			if (matchingModule) {
+				// Found a moduleID match
 				moduleID = matchingModule;
+			} else {
+				// No moduleID match, check if it's a valid API path
+				const owner = this.slothlet.handlers.ownership.getCurrentOwner(pathOrModuleId);
+				if (owner) {
+					// It's a registered API path
+					apiPath = pathOrModuleId;
+					moduleID = owner.moduleID;
+				} else {
+					// Neither moduleID nor path found - not found
+					return false;
+				}
 			}
+		} else {
+			// No ownership tracking - use old heuristic (dots = apiPath)
+			const isModuleId = !pathOrModuleId.includes(".");
+			apiPath = isModuleId ? null : pathOrModuleId;
+			moduleID = isModuleId ? pathOrModuleId.split(":")[0] : null;
 		}
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {

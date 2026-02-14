@@ -1,6 +1,17 @@
 # TypeScript Declaration Generation
 
-**Last Evaluated:** 2026-02-14
+**Last Evaluated:** 2026-02-14  
+**Status:** ❌ Not Started (Dependent on TypeScript Strict Mode)
+
+---
+
+## Prerequisites
+
+This feature requires TypeScript strict mode to be implemented first. See `typescript-support.md` for:
+- ✅ Fast mode (esbuild) - **COMPLETED**
+- ❌ Strict mode (tsc with type checking) - **PENDING**
+
+Type generation will be integrated with strict mode to generate `.d.ts` files before loading modules.
 
 ---
 
