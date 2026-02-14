@@ -195,6 +195,49 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
+	 * Resolve and validate a path (file or directory) from caller context.
+	 * @param {string} inputPath - File or folder path provided by caller.
+	 * @returns {Promise<{resolvedPath: string, isDirectory: boolean, isFile: boolean}>} Path info.
+	 * @throws {SlothletError} When the path does not exist.
+	 * @private
+	 *
+	 * @description
+	 * Resolves relative paths from the caller and verifies the path exists.
+	 * Supports both files (.mjs, .cjs, .js) and directories.
+	 *
+	 * @example
+	 * const { resolvedPath, isDirectory, isFile } = await this.resolvePath("./plugins");
+	 * const { resolvedPath, isDirectory, isFile } = await this.resolvePath("./module.mjs");
+	 */
+	async resolvePath(inputPath) {
+		if (!inputPath || typeof inputPath !== "string") {
+			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
+				dir: inputPath,
+				validationError: true
+			});
+		}
+
+		const resolvedPath = this.slothlet.helpers.resolver.resolvePathFromCaller(inputPath);
+		try {
+			const stats = await fs.stat(resolvedPath);
+			return {
+				resolvedPath,
+				isDirectory: stats.isDirectory(),
+				isFile: stats.isFile()
+			};
+		} catch (error) {
+			if (error instanceof this.SlothletError) {
+				throw error;
+			}
+			// Use same error code as before for consistency with existing tests
+			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
+				dir: resolvedPath,
+				validationError: true
+			});
+		}
+	}
+
+	/**
 	 * Resolve and validate a folder path from caller context.
 	 * @param {string} folderPath - Folder path provided by caller.
 	 * @returns {Promise<string>} Absolute folder path.
@@ -203,6 +246,8 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @description
 	 * Resolves relative paths from the caller and verifies the folder exists.
+	 * 
+	 * @deprecated Use resolvePath() instead for file/directory support.
 	 *
 	 * @example
 	 * const resolved = await this.resolveFolderPath("./plugins");
@@ -971,25 +1016,65 @@ return true;
 	 * Add new API modules at runtime.
 	 * @param {object} params - Add parameters.
 	 * @param {string} params.apiPath - API path to attach.
-	 * @param {string} params.folderPath - Folder path to load.
+	 * @param {string|string[]} params.folderPath - File path, folder path, or array of paths to load.
 	 * @param {Record<string, unknown>} [params.options={}] - Add options (including optional metadata).
-	 * @returns {Promise<void>}
+	 * @returns {Promise<string|string[]>} Module ID or array of module IDs.
 	 * @throws {SlothletError} When the instance is not loaded or inputs are invalid.
 	 * @package
 	 *
 	 * @description
-	 * Loads modules from a folder using the instance configuration and merges the resulting
-	 * API under the specified apiPath.
+	 * Loads modules from a folder, file, or array of files/folders using the instance configuration 
+	 * and merges the resulting API under the specified apiPath.
+	 *
+	 * Supports three input types:
+	 * 1. Single directory path (original behavior)
+	 * 2. Single file path (.mjs, .cjs, .js)
+	 * 3. Array of file and/or directory paths
+	 *
+	 * When an array is provided, each path is processed sequentially,
+	 * honoring collision settings, metadata, and ownership for each.
 	 *
 	 * @example
+	 * // Directory
 	 * await manager.addApiComponent({
 	 * 	apiPath: "plugins",
 	 * 	folderPath: "./plugins",
 	 * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
 	 * });
+	 * 
+	 * @example
+	 * // Single file
+	 * await manager.addApiComponent({
+	 * 	apiPath: "utils",
+	 * 	folderPath: "./helpers/string-utils.mjs",
+	 * 	options: { metadata: { author: "team" } }
+	 * });
+	 * 
+	 * @example
+	 * // Array of files and folders
+	 * await manager.addApiComponent({
+	 * 	apiPath: "extensions",
+	 * 	folderPath: ["./ext/plugin1.mjs", "./ext/plugin2.mjs", "./ext/utils"],
+	 * 	options: { collisionMode: "merge" }
+	 * });
 	 */
 	async addApiComponent(params) {
 		const { apiPath, folderPath, options = {} } = params || {};
+		
+		// Handle array of paths - process each sequentially
+		if (Array.isArray(folderPath)) {
+			const moduleIDs = [];
+			for (const singlePath of folderPath) {
+				const moduleID = await this.addApiComponent({
+					apiPath,
+					folderPath: singlePath,
+					options
+				});
+				moduleIDs.push(moduleID);
+			}
+			return moduleIDs;
+		}
+		
 		const { metadata = {}, ...restOptions } = options;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
@@ -999,7 +1084,34 @@ return true;
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		const resolvedFolderPath = await this.resolveFolderPath(folderPath);
+		
+		// Resolve path - supports both files and directories
+		const { resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath);
+		
+		// Validate that the path is either a directory or a supported file type
+		if (!isDirectory && !isFile) {
+			throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
+				path: resolvedPath,
+				message: "Path must be a directory or a file",
+				validationError: true
+			});
+		}
+		
+		if (isFile) {
+			// Validate file extension for files
+			const ext = path.extname(resolvedPath);
+			if (![".mjs", ".cjs", ".js"].includes(ext)) {
+				throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
+					path: resolvedPath,
+					extension: ext,
+					message: "File must have .mjs, .cjs, or .js extension",
+					validationError: true
+				});
+			}
+		}
+		
+		// For backward compatibility and history tracking, use original behavior
+		const resolvedFolderPath = resolvedPath;
 
 		// Determine collision handling
 		// forceOverwrite flag forces replace mode (overrides config)
@@ -1021,8 +1133,19 @@ return true;
 			});
 		}
 
+		// For single files, we need to pass the parent directory to buildAPI
+		// along with a file filter to load only that specific file
+		let dirForBuild = resolvedFolderPath;
+		let fileFilter = null;
+		
+		if (isFile) {
+			dirForBuild = path.dirname(resolvedFolderPath);
+			const fileName = path.basename(resolvedFolderPath);
+			fileFilter = (file) => file === fileName;
+		}
+
 		const newApi = await this.slothlet.builders.builder.buildAPI({
-			dir: resolvedFolderPath,
+			dir: dirForBuild,
 			mode: this.config.mode,
 			// Use apiPathPrefix so wrappers have correct full API paths
 			// User specified the path, folder loads normally under that path
@@ -1031,7 +1154,9 @@ return true;
 			collisionContext: "addApi",
 			moduleID: moduleID,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
-			collisionMode: collisionMode
+			collisionMode: collisionMode,
+			// For single file loading, pass file filter
+			fileFilter: fileFilter
 		});
 
 		// Store API in cache (PRIMARY STORAGE)
@@ -1072,6 +1197,14 @@ return true;
 		// Example: api.add("", folder) or api.add(null, folder) loads directly to root
 		// This is expected - user said "load under math", folder creates "math" namespace
 		let apiToMerge = newApi;
+		
+		// Special handling for single file loads:
+		// When loading a single file, buildAPI returns { filename: exports }
+		// We want to expose the exports directly at the target path, not nested under filename
+		if (isFile && Object.keys(newApi).length === 1) {
+			const fileName = Object.keys(newApi)[0];
+			apiToMerge = newApi[fileName];
+		}
 
 		if (this.config.debug?.api) {
 			this.slothlet.debug("api", {

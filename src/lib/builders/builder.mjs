@@ -70,9 +70,9 @@ export class Builder extends ComponentBase {
 	}
 
 	/**
-	 * Build API from directory.
+	 * Build API from directory or file.
 	 * @param {Object} options - Build options
-	 * @param {string} options.dir - Directory to build from
+	 * @param {string} options.dir - Directory or file to build from
 	 * @param {string} [options.mode="eager"] - Loading mode (eager or lazy)
 	 * @param {Object} [options.ownership] - Ownership manager (uses slothlet's if not provided)
 	 * @param {Object} [options.contextManager] - Context manager (uses slothlet's if not provided)
@@ -80,17 +80,27 @@ export class Builder extends ComponentBase {
 	 * @param {Object} [options.config] - Configuration (uses slothlet's if not provided)
 	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths (for api.add support)
 	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
 	 * @returns {Promise<Object>} Raw API object (unwrapped)
 	 * @public
 	 *
 	 * @description
 	 * Validates inputs and delegates to mode-specific builder (buildEagerAPI or buildLazyAPI).
+	 * When fileFilter is provided, only files matching the filter are loaded.
 	 *
 	 * @example
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
+	 * 
+	 * @example
+	 * // Load specific file only
+	 * const api = await builder.buildAPI({ 
+	 *   dir: "./api_tests/api_test", 
+	 *   mode: "eager",
+	 *   fileFilter: (fileName) => fileName === "math.mjs"
+	 * });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null } = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null, fileFilter = null } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -125,7 +135,8 @@ export class Builder extends ComponentBase {
 				moduleID,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
-				cacheBust
+				cacheBust,
+				fileFilter
 			});
 		} else if (mode === "lazy") {
 			rawAPI = await buildLazyAPI({
@@ -135,7 +146,8 @@ export class Builder extends ComponentBase {
 				moduleID,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
-				cacheBust
+				cacheBust,
+				fileFilter
 			});
 		} else {
 			throw new this.SlothletError(

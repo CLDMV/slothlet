@@ -44,6 +44,7 @@ function createNamedMaterializeFunc(apiPath, handler) {
  * @param {Object} options.contextManager - Context manager for binding
  * @param {string} options.instanceID - Slothlet instance ID
  * @param {Object} [options.config={}] - Configuration
+ * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
  * @returns {Promise<Object>} Built API object with lazy proxies
  * @public
  */
@@ -54,7 +55,8 @@ export async function buildLazyAPI({
 	moduleID,
 	slothlet,
 	apiDepth = Infinity,
-	cacheBust = null
+	cacheBust = null,
+	fileFilter = null
 }) {
 	const api = {};
 
@@ -62,8 +64,8 @@ export async function buildLazyAPI({
 	const { modesProcessor } = slothlet.builders;
 	const { loader } = slothlet.processors;
 
-	// Scan directory structure with depth limit
-	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth });
+	// Scan directory structure with depth limit and optional file filter
+	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
 
 	// Process root files (with root contributor pattern support)
 	// Pass synthetic root directory with children.directories so processFiles can create lazy wrappers
