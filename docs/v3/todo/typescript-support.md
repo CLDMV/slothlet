@@ -36,6 +36,44 @@ npm run vitest tests/vitests/suites/context/per-request-context.test.vitest.mjs
 
 Add native TypeScript support to Slothlet, allowing users to write modules in TypeScript that are automatically transpiled and loaded.
 
+## Installation
+
+TypeScript support uses **peer dependencies** to keep Slothlet lightweight. Install only what you need:
+
+### Fast Mode (esbuild)
+
+```bash
+# Install Slothlet
+npm install @cldmv/slothlet
+
+# Install esbuild for TypeScript fast mode
+npm install esbuild
+```
+
+### Strict Mode (tsc)
+
+```bash
+# Install Slothlet
+npm install @cldmv/slothlet
+
+# Install TypeScript compiler for strict mode
+npm install typescript
+```
+
+### Both Modes
+
+```bash
+# Install all TypeScript dependencies
+npm install @cldmv/slothlet esbuild typescript
+```
+
+**Why peer dependencies?**
+- Slothlet core stays lightweight (~0.5MB)
+- Users only install what they need
+- esbuild adds ~8MB (only for fast mode users)
+- TypeScript adds ~30MB (only for strict mode users)
+- No TypeScript? No extra dependencies!
+
 ## Implementation Approach
 
 ### Architectural Design
@@ -57,6 +95,22 @@ Create a dedicated TypeScript transformation processor:
 import esbuild from "esbuild";
 import fs from "fs";
 
+// Lazy-load esbuild - only imported when TypeScript files are encountered
+let esbuildInstance = null;
+
+async function getEsbuild() {
+  if (!esbuildInstance) {
+    try {
+      esbuildInstance = await import("esbuild");
+    } catch (error) {
+      throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", {
+        hint: "Install esbuild: npm install esbuild"
+      });
+    }
+  }
+  return esbuildInstance;
+}
+
 /**
  * Transform TypeScript code to JavaScript using esbuild
  * @param {string} filePath - Path to the TypeScript file
@@ -64,6 +118,7 @@ import fs from "fs";
  * @returns {Promise<string>} Transformed JavaScript code
  */
 export async function transformTypeScript(filePath, options = {}) {
+  const esbuild = await getEsbuild(); // Check at usage time
   const code = fs.readFileSync(filePath, "utf8");
   
   const result = await esbuild.transform(code, {
@@ -135,17 +190,208 @@ await import(`data:text/javascript,${encodeURIComponent(result.code)}#${bust}`);
 
 ### Dependencies
 
-- **esbuild**: Required as a dependency (currently a devDependency in the project)
-- **Version Compatibility**: Ensure esbuild version supports required features
+TypeScript support uses **peer dependencies**:
+
+```json
+{
+  "peerDependencies": {
+    "esbuild": ">=0.19.0",      // For fast mode
+    "typescript": ">=5.0.0"     // For strict mode
+  },
+  "peerDependenciesMeta": {
+    "esbuild": { "optional": true },
+    "typescript": { "optional": true }
+  }
+}
+```
+
+**Package Sizes:**
+- `@cldmv/slothlet`: ~0.5MB (core)
+- `esbuild`: ~8MB (fast mode)
+- `typescript`: ~30MB (strict mode)
+
+**User Impact:**
+- No TypeScript usage → 0 extra dependencies
+- Fast mode only → +8MB (esbuild)
+- Strict mode only → +30MB (typescript)
+- Both modes → +38MB (esbuild + typescript)
 
 ### Configuration Options
 
-Consider allowing users to configure:
+### Fast Mode (Default)
 
-- `typescript`: Enable/disable TypeScript support
-- `tsconfig`: Path to tsconfig.json for compiler options
-- `esbuildOptions`: Custom esbuild transform options
-- `cacheTransforms`: Enable transform caching for production
+Use esbuild for fast transformation without type checking:
+
+```javascript
+const api = await slothlet.load({
+  path: "./api_test",
+  typescript: true  // or typescript: "fast"
+});
+```
+
+### Strict Mode
+
+Use tsc for transformation with full type checking:
+
+```javascript
+const api = await slothlet.load({
+  path: "./api_test",
+  typescript: {
+    mode: "strict",
+    types: {
+      output: "./types/api.d.ts",      // Required
+      interfaceName: "MyAPI",           // Required
+      includeDocumentation: true,       // Optional
+      fallbackType: "unknown"           // Optional: "any" | "unknown" | "never"
+    }
+  }
+});
+```
+
+**Strict Mode Behavior:**
+1. Generates/updates `.d.ts` file first (if needed/stale)
+2. Uses tsc for transformation with type checking
+3. Emits type errors if found
+4. Slower but provides full type safety
+
+**Fast Mode Behavior:**
+1. Uses esbuild for transformation only
+2. No type checking (relies on IDE)
+3. Fast startup for development
+4. Optional: Can still generate `.d.ts` separately (see typescript-declarations.md)
+
+## Runtime Dependency Checking
+
+Since the processor would be loaded when imported (even if not used), **lazy imports are required** to avoid forcing users to install peer dependencies they don't need.
+
+### Implementation
+
+**Lazy Import Pattern (Required):**
+```javascript
+// src/lib/processors/typescript.mjs
+// NO static imports - only dynamic imports when needed
+import fs from "fs";
+
+let esbuildInstance = null;
+let typescriptInstance = null;
+
+async function getEsbuild() {
+  if (!esbuildInstance) {
+    try {
+      esbuildInstance = await import("esbuild");
+    } catch (error) {
+      throw new this.SlothletError(
+        "TYPESCRIPT_ESBUILD_NOT_INSTALLED",
+        { mode: "fast" },
+        error
+      );
+    }
+  }
+  return esbuildInstance;
+}
+
+async function getTypeScript() {
+  if (!typescriptInstance) {
+    try {
+      typescriptInstance = await import("typescript");
+    } catch (error) {
+      throw new this.SlothletError(
+        "TYPESCRIPT_TSC_NOT_INSTALLED",
+        { mode: "strict" },
+        error
+      );
+    }
+  }
+  return typescriptInstance;
+}
+```
+
+**Usage in Transform Functions:**
+```javascript
+export async function transformTypeScript(filePath, options = {}) {
+  const esbuild = await getEsbuild(); // Lazy load - only when actually needed
+  const code = fs.readFileSync(filePath, "utf8");
+  
+  const result = await esbuild.transform(code, {
+    loader: "ts",
+    format: "esm",
+    ...options
+  });
+  
+  return result.code;
+}
+```
+
+### Translation Keys
+
+**Error Messages (en.json):**
+```json
+{
+  "TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript fast mode requires 'esbuild' to be installed.",
+  "HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Install it with: npm install esbuild",
+  
+  "TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript strict mode requires 'typescript' to be installed.",
+  "HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "Install it with: npm install typescript"
+}
+```
+
+**Output:**
+```
+[TYPESCRIPT_ESBUILD_NOT_INSTALLED] SlothletError
+TypeScript fast mode requires 'esbuild' to be installed.
+
+Hint: Install it with: npm install esbuild
+```
+
+```
+[TYPESCRIPT_TSC_NOT_INSTALLED] SlothletError
+TypeScript strict mode requires 'typescript' to be installed.
+
+Hint: Install it with: npm install typescript
+```
+
+### When Checks Occur
+
+- ✅ **Fast mode**: First `.ts` file encountered during loading
+- ✅ **Strict mode**: During initialization (before type generation)
+- ✅ **Type generation**: When `generateTypes()` is called
+- ✅ **Early detection**: Fails fast before attempting transformation
+
+### Benefits
+
+- Clear, actionable error messages
+- No cryptic import/require errors
+- Exact installation command provided
+- Only checks when feature is actually used
+- Lazy loading keeps startup fast when not using TypeScript
+
+### Advanced Options
+
+```javascript
+typescript: {
+  mode: "fast" | "strict",
+  
+  // Type generation config (required for strict mode)
+  types: {
+    output: string,              // Output file path
+    interfaceName: string,       // Interface name
+    includeDocumentation?: boolean,
+    exportStyle?: "interface" | "namespace" | "both",
+    fallbackType?: "any" | "unknown" | "never",
+    includePrivate?: boolean
+  },
+  
+  // Transform options
+  target?: "ES2020" | "ES2022" | "ESNext",
+  tsconfig?: string,            // Path to tsconfig.json
+  esbuildOptions?: object       // Custom esbuild options (fast mode only)
+}
+```
+
+**Validation:**
+- Strict mode requires `types.output` and `types.interfaceName`
+- Fast mode can omit `types` config
+- `esbuildOptions` only applies to fast mode
 
 ## Integration Points
 
@@ -156,6 +402,7 @@ Consider allowing users to configure:
 - `createDataUrl()` - Generate cache-busted data URLs
 - esbuild configuration and options management
 - Error handling for TypeScript compilation issues
+- **Runtime dependency checking** - validates esbuild/typescript are installed
 
 ### Module Discovery (`src/lib/helpers/discovery.mjs`)
 
@@ -216,13 +463,33 @@ export function add(a: number, b: number, options?: MathOptions): number {
 
 ### Usage
 
+**Fast Mode (Development):**
 ```js
 import slothlet from "@cldmv/slothlet";
 
 const api = await slothlet.load({ 
   path: "./api_test",
-  typescript: true 
+  typescript: true  // Fast esbuild transformation
 });
+
+const result = api.math.add(1.1, 2.2, { precision: 2 });
+```
+
+**Strict Mode (Type-Safe):**
+```js
+import type { MyAPI } from "./types/api";
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet.load({ 
+  path: "./api_test",
+  typescript: {
+    mode: "strict",
+    types: {
+      output: "./types/api.d.ts",
+      interfaceName: "MyAPI"
+    }
+  }
+}) as MyAPI;
 
 const result = api.math.add(1.1, 2.2, { precision: 2 });
 ```
