@@ -345,7 +345,51 @@ export class Config extends ComponentBase {
 			scope: scopeConfig,
 			tracking: trackingConfig,
 			backgroundMaterialize: config.backgroundMaterialize === true,
-			silent: config.silent === true
+			silent: config.silent === true,
+			typescript: this.normalizeTypeScript(config.typescript)
 		};
+	}
+
+	/**
+	 * Normalize TypeScript configuration
+	 * @param {boolean|string|Object} typescript - TypeScript config (true, "fast", or { mode: "fast"|"strict", ... })
+	 * @returns {Object|null} Normalized TypeScript configuration or null if disabled
+	 * @public
+	 */
+	normalizeTypeScript(typescript) {
+		// Disabled by default
+		if (!typescript) {
+			return null;
+		}
+
+		// Boolean true defaults to fast mode
+		if (typescript === true) {
+			return { enabled: true, mode: "fast" };
+		}
+
+		// String "fast" or "strict"
+		if (typeof typescript === "string") {
+			const mode = typescript.toLowerCase();
+			if (mode === "fast" || mode === "strict") {
+				return { enabled: true, mode };
+			}
+			// Unknown string defaults to fast
+			return { enabled: true, mode: "fast" };
+		}
+
+		// Object configuration
+		if (typeof typescript === "object") {
+			const mode = typescript.mode === "strict" ? "strict" : "fast";
+			return {
+				enabled: true,
+				mode,
+				types: typescript.types || null,
+				target: typescript.target || "es2020",
+				sourcemap: typescript.sourcemap || false
+			};
+		}
+
+		// Unknown type, disable
+		return null;
 	}
 }

@@ -50,21 +50,43 @@ export class Loader extends ComponentBase {
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
-			const fileUrl = pathToFileURL(filePath).href;
-			// Cache bust using instanceID to prevent cross-instance pollution
-			// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
-			let cacheBustedUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
-			if (moduleID) {
-				cacheBustedUrl += `&module=${moduleID}`;
+			// Check if TypeScript transformation is needed
+			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
+			const typescriptConfig = this.slothlet.config?.typescript;
+			
+			let moduleUrl;
+			
+			if (isTypeScript && typescriptConfig?.enabled) {
+				// Lazy load TypeScript processor (only when needed)
+				const { transformTypeScript, createDataUrl } = await import("@cldmv/slothlet/processors/typescript");
+				
+				// Transform TypeScript to JavaScript
+				const transformedCode = await transformTypeScript(filePath, {
+					target: typescriptConfig.target,
+					sourcemap: typescriptConfig.sourcemap
+				});
+				
+				// Create data URL for dynamic import
+				moduleUrl = createDataUrl(transformedCode);
+			} else {
+				// Regular JavaScript file
+				const fileUrl = pathToFileURL(filePath).href;
+				// Cache bust using instanceID to prevent cross-instance pollution
+				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
+				moduleUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
+				if (moduleID) {
+					moduleUrl += `&module=${moduleID}`;
+				}
+				// Append reload timestamp to force fresh imports during rebuildCache.
+				// This prevents the Node.js module cache from returning the same function
+				// reference used by the live API (which would cause applyRootContributor's
+				// Object.assign to overwrite the live API's properties).
+				if (cacheBust) {
+					moduleUrl += `&_reload=${cacheBust}`;
+				}
 			}
-			// Append reload timestamp to force fresh imports during rebuildCache.
-			// This prevents the Node.js module cache from returning the same function
-			// reference used by the live API (which would cause applyRootContributor's
-			// Object.assign to overwrite the live API's properties).
-			if (cacheBust) {
-				cacheBustedUrl += `&_reload=${cacheBust}`;
-			}
-			const module = await import(cacheBustedUrl);
+			
+			const module = await import(moduleUrl);
 			return module;
 		} catch (error) {
 			throw new this.SlothletError(
@@ -89,7 +111,13 @@ export class Loader extends ComponentBase {
 	 * @public
 	 */
 	async scanDirectory(dir, options = {}) {
-		const { recursive = true, extensions = [".mjs", ".cjs", ".js"], isRootScan = true, currentDepth = 0, maxDepth = Infinity, fileFilter = null } = options;
+		// Check if TypeScript is enabled and add .ts/.mts extensions
+		const typescriptConfig = this.slothlet.config?.typescript;
+		const defaultExtensions = [".mjs", ".cjs", ".js"];
+		const typescriptExtensions = typescriptConfig?.enabled ? [".ts", ".mts"] : [];
+		const allExtensions = [...defaultExtensions, ...typescriptExtensions];
+		
+		const { recursive = true, extensions = allExtensions, isRootScan = true, currentDepth = 0, maxDepth = Infinity, fileFilter = null } = options;
 
 		try {
 			await stat(dir);

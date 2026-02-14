@@ -134,7 +134,13 @@
 		"HINT_INVALID_HOOK_HANDLER": "Provide a function as the hook handler, not a string or other type.",
 		"HINT_DUPLICATE_HOOK_ID": "Either use a different id value or remove the id option to let Slothlet auto-generate a unique ID.",
 		"HINT_INVALID_HOOK_SUBSET": "Subsets control execution order. Use 'before' for pre-processing, 'primary' (default) for main hooks, or 'after' for post-processing.",
-		"HINT_INVALID_TYPE_PATTERN": "Type patterns must be in the format 'type:pattern', such as 'before:math.*' or 'error:**'."
+		"HINT_INVALID_TYPE_PATTERN": "Type patterns must be in the format 'type:pattern', such as 'before:math.*' or 'error:**'.",
+		"TYPESCRIPT_ESBUILD_NOT_INSTALLED": "TypeScript fast mode requires 'esbuild' to be installed.",
+		"HINT_TYPESCRIPT_ESBUILD_NOT_INSTALLED": "Install it with: npm install esbuild",
+		"TYPESCRIPT_TSC_NOT_INSTALLED": "TypeScript strict mode requires 'typescript' to be installed.",
+		"HINT_TYPESCRIPT_TSC_NOT_INSTALLED": "Install it with: npm install typescript",
+		"TYPESCRIPT_NOT_INSTALLED": "Type generation requires 'typescript' to be installed.",
+		"HINT_TYPESCRIPT_NOT_INSTALLED": "Install it with: npm install typescript"
 	},
 	"metadata": {
 		"code": "en-us",
