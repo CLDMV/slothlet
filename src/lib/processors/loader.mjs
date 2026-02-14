@@ -57,17 +57,48 @@ export class Loader extends ComponentBase {
 			let moduleUrl;
 			
 			if (isTypeScript && typescriptConfig?.enabled) {
-				// Lazy load TypeScript processor (only when needed)
-				const { transformTypeScript, createDataUrl } = await import("@cldmv/slothlet/processors/typescript");
+				const mode = typescriptConfig.mode || "fast";
 				
-				// Transform TypeScript to JavaScript
-				const transformedCode = await transformTypeScript(filePath, {
-					target: typescriptConfig.target,
-					sourcemap: typescriptConfig.sourcemap
-				});
-				
-				// Create data URL for dynamic import
-				moduleUrl = createDataUrl(transformedCode);
+				if (mode === "strict") {
+					// Lazy load TypeScript strict mode processor
+					const { transformTypeScriptStrict, createDataUrl, formatDiagnostics } = await import("@cldmv/slothlet/processors/typescript");
+					
+					// Transform TypeScript with type checking
+					const result = await transformTypeScriptStrict(filePath, {
+						target: typescriptConfig.target,
+						module: typescriptConfig.module,
+						strict: typescriptConfig.strict,
+						compilerOptions: typescriptConfig.compilerOptions
+					});
+					
+					// Check for type errors
+					if (result.diagnostics && result.diagnostics.length > 0) {
+						// Get TypeScript module to format diagnostics
+						const ts = await import("typescript");
+						const errors = formatDiagnostics(result.diagnostics, ts.default || ts);
+						
+						// Throw error with formatted diagnostics
+						const error = new Error(`TypeScript type errors in ${filePath}:\n${errors.join("\n")}`);
+						error.code = "TYPESCRIPT_TYPE_ERROR";
+						error.diagnostics = result.diagnostics;
+						throw error;
+					}
+					
+					// Create data URL for dynamic import
+					moduleUrl = createDataUrl(result.code);
+				} else {
+					// Fast mode: Use esbuild
+					const { transformTypeScript, createDataUrl } = await import("@cldmv/slothlet/processors/typescript");
+					
+					// Transform TypeScript to JavaScript
+					const transformedCode = await transformTypeScript(filePath, {
+						target: typescriptConfig.target,
+						sourcemap: typescriptConfig.sourcemap
+					});
+					
+					// Create data URL for dynamic import
+					moduleUrl = createDataUrl(transformedCode);
+				}
 			} else {
 				// Regular JavaScript file
 				const fileUrl = pathToFileURL(filePath).href;
