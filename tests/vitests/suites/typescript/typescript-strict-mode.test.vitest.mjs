@@ -6,13 +6,17 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
 import fs from "fs";
 import path from "path";
-import os from "os";
 
 describe("TypeScript Strict Mode with Type Generation", () => {
 	let api;
-	const tmpDir = path.join(os.tmpdir(), `slothlet-test-types-${Date.now()}`);
+	const tmpDir = path.join("tmp", `slothlet-test-types-${Date.now()}`);
 	const outputPath = path.join(tmpDir, "test-api.d.ts");
 	const outputDir = tmpDir;
+	
+	// Ensure tmp directory exists
+	if (!fs.existsSync("tmp")) {
+		fs.mkdirSync("tmp", { recursive: true });
+	}
 	
 	afterEach(async () => {
 		// Clean up API
@@ -26,10 +30,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		}
 		
 		if (fs.existsSync(outputDir)) {
-			const files = fs.readdirSync(outputDir);
-			if (files.length === 0) {
-				fs.rmdirSync(outputDir);
-			}
+			fs.rmdirSync(outputDir, { recursive: true });
 		}
 	});
 	
