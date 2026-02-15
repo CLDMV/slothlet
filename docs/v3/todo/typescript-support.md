@@ -538,26 +538,40 @@ const result = api.math.add(1.1, 2.2, { precision: 2 });
 - Fragment-based cache busting
 - Runtime dependency checking with clear error messages
 
-**Strict Mode** (TypeScript Program API with type checking):
+**Strict Mode** (TypeScript Program API with type checking + Type Generation):
 - `src/lib/processors/typescript.mjs` - Extended with `transformTypeScriptStrict()` function
+- `src/lib/processors/type-generator.mjs` - **NEW: Type generation from loaded API**
+- `tools/generate-types-worker.mjs` - **NEW: Fork-based worker for type generation**
 - TypeScript Program API integration for full semantic type checking
 - `getTypeScript()` lazy loader for typescript package
 - Type error detection and formatted error reporting
-- `src/lib/processors/loader.mjs` - Mode detection and strict transformation
+- Automatic `.d.ts` generation with `self` declaration
+- Fork architecture to prevent recursion and cache conflicts
+- `src/lib/processors/loader.mjs` - Mode detection, strict transformation, and type generation
 - `api_tests/api_test_typescript_errors/` - Test files with intentional type errors
-- Manual validation with test-typescript-strict-mode.mjs
+- `tests/vitests/suites/typescript/typescript-strict-mode.test.vitest.mjs` - 13 passing tests
 - Proper handling of type diagnostics with file/line/column information
 
 ### Tests Status
 
 - ✅ Debug tests: 206 paths checked, all passed
-- ✅ Baseline tests: 2,683 tests across 39 suites, all passed
+- ✅ Baseline tests: Multiple test suites passing
 - ✅ TypeScript fast mode: 23 tests, all passed
-- ✅ TypeScript strict mode: Manual tests verified type checking works correctly
+- ✅ TypeScript strict mode: 13 tests, all passed (includes type generation)
 
 ### Note on Type Generation
 
-Type declaration generation (`.d.ts` files) is a separate feature tracked in [typescript-declarations.md](./typescript-declarations.md). While strict mode provides runtime type checking, type generation would provide design-time type safety for consuming code. This is a complex feature that requires API introspection and type extraction.
+✅ **Type declaration generation has been implemented!** See [completed/typescript-declarations.md](./completed/typescript-declarations.md) for details.
+
+**Completed Features:**
+- Automatic `.d.ts` generation from loaded API structure
+- Fork-based worker process to prevent recursion
+- API traversal using `__metadata` for introspection
+- Function signature extraction from TypeScript sources
+- Interface generation with nested structure
+- `declare const self: InterfaceName` for self-referential typing
+- Full test coverage with 13 passing tests
+- Integrated with strict mode for seamless type checking
 
 ### Core Bug Fixed
 
