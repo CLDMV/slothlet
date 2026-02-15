@@ -35,7 +35,12 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 	beforeEach(async () => {
 		api = await slothlet({
 			...config,
-			dir: TEST_DIRS.API_TEST
+			dir: TEST_DIRS.API_TEST,
+			api: {
+				mutations: {
+					reload: true
+				}
+			}
 		});
 	});
 
@@ -88,7 +93,9 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 		});
 
-		it("should handle reload with metadata changes", async () => {
+		it("should handle reload with metadata changes", async () => {		// Before reload
+		await materialize(api, "rootMath.add", 1, 2);
+		const meta1 = api.rootMath.add.__metadata;
 			// Reload (simulates file changes on disk)
 			await api.slothlet.reload();
 
@@ -123,7 +130,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const metaBefore = api.reloadable.config.settings.getPluginConfig.__metadata;
 
 			// Reload just this API path
-			await api.slothlet.api.reload({ apiPath: "reloadable" });
+			await api.slothlet.api.reload("reloadable");
 
 			await materialize(api, "reloadable.config.settings.getPluginConfig");
 			const metaAfter = api.reloadable.config.settings.getPluginConfig.__metadata;
@@ -157,7 +164,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const stableMetaBefore = api.stable.config.settings.getPluginConfig.__metadata;
 
 			// Reload only reloadTarget
-			await api.slothlet.api.reload({ apiPath: "reloadTarget" });
+			await api.slothlet.api.reload("reloadTarget");
 
 			// Stable should be unchanged
 			await materialize(api, "stable.config.settings.getPluginConfig");
@@ -182,7 +189,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const metaBefore = api.nested.config.settings.getPluginConfig.__metadata;
 
 			// Reload nested path
-			await api.slothlet.api.reload({ apiPath: "nested.config" });
+			await api.slothlet.api.reload("nested.config");
 
 			if (api.nested?.config?.settings?.getPluginConfig) {
 				await materialize(api, "nested.config.settings.getPluginConfig");
@@ -228,7 +235,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const cycles = 3;
 
 			for (let i = 0; i < cycles; i++) {
-				await api.slothlet.api.reload({ apiPath: "multicycle" });
+				await api.slothlet.api.reload("multicycle");
 
 				if (api.multicycle?.config?.settings?.getPluginConfig) {
 					await materialize(api, "multicycle.config.settings.getPluginConfig");
@@ -254,13 +261,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			// Reload with updated metadata
-			await api.slothlet.api.reload({
-				apiPath: "updateable",
-				metadata: {
-					version: "2.0.0",
-					updated: true
-				}
-			});
+			await api.slothlet.api.reload("updateable");
 
 			if (api.updateable?.config?.settings?.getPluginConfig) {
 				await materialize(api, "updateable.config.settings.getPluginConfig");
@@ -301,7 +302,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 
 			try {
-				await api.slothlet.api.reload({ apiPath: "nonexistent.path" });
+				await api.slothlet.api.reload("nonexistent.path");
 			} catch (error) {
 				// Should throw appropriate error
 				expect(error).toBeDefined();
@@ -326,7 +327,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			const meta1 = api.lazyReload.config.settings.getPluginConfig.__metadata;
 
 			// Reload
-			await api.slothlet.api.reload({ apiPath: "lazyReload" });
+			await api.slothlet.api.reload("lazyReload");
 
 			// Rematerialize
 			if (api.lazyReload?.config?.settings?.getPluginConfig) {
@@ -405,7 +406,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			expect(api.testReload.rootMath.add.__metadata.status).toBe("initial");
 
 			// Partial reload
-			await api.slothlet.api.reload({ apiPath: "testReload" });
+			await api.slothlet.api.reload("testReload");
 			await materialize(api, "testReload.rootMath.add", 1, 2);
 
 			// Update metadata after reload
