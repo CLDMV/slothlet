@@ -130,6 +130,22 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 			expect(content).toContain("string");
 			expect(content).toContain("capitalize");
 		});
+		
+		it("should declare self constant with interface type", async () => {
+			api = await slothlet({
+				dir: "./api_tests/api_test_typescript",
+				typescript: {
+					mode: "strict",
+					types: {
+						output: outputPath,
+						interfaceName: "TestAPI"
+					}
+				}
+			});
+			
+			const content = fs.readFileSync(outputPath, "utf8");
+			expect(content).toContain("declare const self: TestAPI");
+		});
 	});
 	
 	describe("Type Checking with Generated Types", () => {

@@ -255,6 +255,10 @@ function generateDeclaration(nodes, options) {
 	lines.push("}");
 	lines.push("");
 	
+	// Generate self declaration for TypeScript files to use
+	lines.push(`declare const self: ${interfaceName};`);
+	lines.push("");
+	
 	return lines.join("\n");
 }
 
