@@ -52,7 +52,7 @@ const BASE_DIRS = [
 	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
 ];
 
-const HOOKED_HOT_RELOAD_MATRIX = getMatrixConfigs({ hooks: true }).flatMap(({ name, config }) =>
+const HOOKED_HOT_RELOAD_MATRIX = getMatrixConfigs({ hook: { enabled: true } }).flatMap(({ name, config }) =>
 	BASE_DIRS.map(({ label, dir }) => ({
 		name: `${name} | ${label}`,
 		config: { ...config, dir }
