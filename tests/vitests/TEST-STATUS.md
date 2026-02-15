@@ -1,20 +1,3 @@
-/*
- * @Project: @cldmv/slothlet
- * @Filename: /tests/vitests/TEST-STATUS.md
- * @Date: 2026-01-29 02:57:21 -08:00 (1769684241)
- * @Author: Nate Hyson <CLDMV>
- * @Email: <Shinrai@users.noreply.github.com>
- * -----
- * @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- * @Last modified time: 2026-01-30 11:33:51 -08:00 (1769801631)
- * -----
- * @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-
-
-
-
 
 # V3 Vitest Status
 
@@ -30,8 +13,8 @@
 **⚠️ IMPORTANT: Always tail test output (last 40 lines):**
 ```powershell
 npm run debug 2>&1 | Select-Object -Last 40
-npm run testv3 -- --baseline 2>&1 | Select-Object -Last 60
-npm run testv3 -- suites/<folder>/<test-file>.test.vitest.mjs 2>&1 | Select-Object -Last 40
+npm run baseline 2>&1 | Select-Object -Last 60
+npm run vitest suites/<folder>/<test-file>.test.vitest.mjs 2>&1 | Select-Object -Last 40
 ```
 
 **Why tail?**
@@ -46,14 +29,16 @@ Relative base: tests/vitests
 | suites/rules/rule-coverage.test.vitest.mjs | API Rules | ✅ 1st pass (2026-01-28 14:27) | ✅ pass (2026-01-28 14:27) | 61/61 tests pass (100%) - Fixed paths: docs/API-RULE-MAPPING.md, src/lib/processors/flatten.mjs |
 | suites/rules/rule-12-comprehensive.test.vitest.mjs | API Rules | ✅ 1st pass (2026-01-28 15:00) | ❌ fail (2026-01-28 15:00) | 4/14 pass, 10 fail - Fixed OWNERSHIP_MATRIX import to use getMatrixConfigs({ collision: { initial: "merge", api: "merge" } }) |
 | suites/addapi/add-api.test.vitest.mjs | API Manager | ✅ Yes (2026-01-27 20:52) | ✅ pass (2026-01-27 20:52) | 56/56 tests pass - All error messages updated to match v3 output |
+| suites/addapi/add-api-files.test.vitest.mjs | API Manager | | | |
 | suites/addapi/addapi-path-resolution.test.vitest.mjs | API Manager | ✅ Yes (2026-01-27 20:52) | ✅ pass (2026-01-27 20:52) | 72/72 tests pass - Updated helper-executor.mjs to use api.slothlet.api.add() |
 | suites/addapi/addapi-stack-trace-path.test.vitest.mjs | API Manager | ✅ Yes (2026-01-27 20:52) | ✅ pass (2026-01-27 20:52) | 8/8 tests pass - Reconstructed file with proper structure and v3 API |
+| suites/api/api-sanitize.test.vitest.mjs | API Methods | | | |
 | suites/api/eager/api-eager-basic.test.vitest.mjs | Core API | ✅ Yes (2026-01-28 14:23) | ❌ fail (2026-01-28 14:23) | 42/44 pass, 2 fail - Fixed api.describe test to use api.slothlet.diag.describe() with diagnostics:true, exportDefault.extra still wrong |
 | suites/api/eager/api-eager-hooks.test.vitest.mjs | Core API + Hooks | ✅ Yes (2026-01-28 14:23) | ❌ fail - NOT IMPLEMENTED | Fixed api.describe test to use api.slothlet.diag.describe(), hooks stubbed |
 | suites/api/eager/api-eager-hot.test.vitest.mjs | Core API + API Manager | ✅ 1st pass (2026-01-28 14:34) | ❌ fail (2026-01-28 14:34) | 84/88 pass, 4 fail - Fixed api.describe test, minor failures remain |
 | suites/api/eager/api-eager-live.test.vitest.mjs | Core API + Live Binding | ✅ 1st pass (2026-01-28 14:35) | ❌ fail (2026-01-28 14:35) | 84/88 pass, 4 fail - Fixed api.describe test, minor failures remain |
 | suites/api/function-name-preservation.test.vitest.mjs | API Sanitization | ✅ Yes (2026-01-28 14:38) | ✅ pass (2026-01-28 14:38) | 48/48 tests pass (100%) - No v3 changes needed, function names preserved correctly through API wrapping |
-| processed/api/api-sanitize.test.vitest.mjs | API Methods | ✅ Yes (2026-01-30 11:30) | ✅ pass (2026-01-30 11:30) | 104/104 tests pass (100%) - Tests api.slothlet.sanitize() method for property name sanitization. Validates filename/path sanitization, technical term preservation, various naming conventions (kebab-case, snake_case, camelCase), error handling for invalid inputs |
+| suites/api/api-sanitize.test.vitest.mjs | API Methods | ✅ Yes (2026-01-30 11:30) | ✅ pass (2026-01-30 11:30) | 104/104 tests pass (100%) - Tests api.slothlet.sanitize() method for property name sanitization. Validates filename/path sanitization, technical term preservation, various naming conventions (kebab-case, snake_case, camelCase), error handling for invalid inputs |
 | suites/api/lazy/api-lazy-basic.test.vitest.mjs | Core API | ✅ Yes (2026-01-28 14:23) | ❌ fail (2026-01-28) | 42/44 pass, 2 fail - Same as eager-basic |
 | suites/cjs/cjs-default-exports.test.vitest.mjs | CJS Interop | ✅ Yes (2026-01-28) | ✅ pass (2026-01-28 11:35:22) | 64/64 tests pass (100%) - Tests CJS modules using `module.exports = { default: obj, namedExport: fn }` pattern behave identically to ESM `export default obj; export { namedExport }`. Verifies Node.js CJS wrapper normalization ensures both default object properties AND named exports are accessible on the API without extra `.default` layer. |
 | suites/api/lazy/api-lazy-hooks.test.vitest.mjs | Core API + Hooks | ✅ Yes (2026-01-28 14:23) | ❌ fail - NOT IMPLEMENTED | Fixed api.describe test to use api.slothlet.diag.describe(), hooks stubbed |
@@ -69,6 +54,11 @@ Relative base: tests/vitests
 | suites/context/map-set-proxy-fix.test.vitest.mjs | Context Management | ✅ 1st pass (2026-01-28 14:34) | ✅ pass (2026-01-29 10:06) | 16/16 pass (100%) - **FIXED (2026-01-29)**: Built-in objects (Map, Set, WeakMap, WeakSet, Date, RegExp, Promise, Error, TypedArrays) now returned unwrapped to preserve proper 'this' binding. Modified _createChildWrapper to return null for these types, signaling they should be stored unwrapped in childCache. Getter properties (like Map.size) now correctly resolved via getOwnPropertyDescriptor check. |
 | suites/context/per-request-context.test.vitest.mjs | Context Management | ✅ Updated (2025-01-28 23:58) | ✅ pass (2026-01-29 09:55) | 157/157 pass (100%) - **MAJOR REFACTORING**: Implemented child instance approach for .run()/.scope() isolation. **BREAKING CHANGE**: Cross-instance context.get() now returns BASE context only (not parent .run() context). Added isolation modes: "partial" (default, shared self) vs "full" (cloned self). Unified .run() and .scope() implementations - .run() now delegates to .scope(). Child instances use pattern `{baseID}__run_{timestamp}_{random}` with parentInstanceID tracking. Both async and live modes now work identically. Test updates: Changed nested .run() assertions to expect base context for cross-instance calls, added isolation mode tests. Related: docs/v3/todo/architecture-context-instanceid-management.md |
 | suites/context/tcp-eventemitter-context.test.vitest.mjs | Context Management + EventEmitter | ✅ 1st pass (2026-01-28 14:34) | ✅ pass (2026-01-29 09:55) | 40/40 pass (100%) - **EventEmitter context propagation WORKING** via AsyncResource wrapping in src/lib/helpers/eventemitter-context.mjs. Tests verify TCP server/socket event callbacks maintain API and context access. **FIXED (2026-01-29)**: Runtime proxy Object.keys(self) enumeration - getOwnPropertyDescriptor now returns configurable properties to avoid proxy invariant violations. |
+| suites/core/core-reference-persistence.test.vitest.mjs | Core API | | | |
+| suites/core/core-reload-full.test.vitest.mjs | Core API + API Manager | | | |
+| suites/core/core-reload-lazy-mode.test.vitest.mjs | Core API + API Manager | | | |
+| suites/core/core-reload-path-multicache.test.vitest.mjs | Core API + API Manager | | | |
+| suites/core/core-reload-selective.test.vitest.mjs | Core API + API Manager | | | |
 | suites/diagnostics/mixed-diagnostic.test.vitest.mjs | Diagnostics | ✅ 1st pass (2026-01-28 14:38) | ❌ fail (2026-01-28 14:38) | 32/48 pass, 16 fail - Updated hotReload test to use api.slothlet.reload(), reload tests need allowMutation:true |
 | suites/hooks/hooks-after-chaining.test.vitest.mjs | Hooks | ✅ Yes (2026-01-29 22:12) | ✅ pass (2026-01-29 22:12) | 12/12 tests pass (100%) - All tests passing |
 | suites/hooks/hooks-always-error-context.test.vitest.mjs | Hooks | ✅ Yes (2026-01-30 11:34) | ✅ pass (2026-01-30 11:34) | 28/28 tests pass (100%) - **FIXED (2026-01-30)**: (1) Short-circuit double-call bug - always hooks were called twice (once at short-circuit, again in finally block). Fixed by removing always hooks call from short-circuit and setting finalResult instead. (2) Error comparison - changed from identity check to message comparison (caught error is wrapped SlothletError, hooks receive unwrapped error). |
@@ -93,6 +83,9 @@ Relative base: tests/vitests
 | suites/api-manager/api-manager-test-remove-reload-isolated.test.vitest.mjs | API Manager + Remove/Reload | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-28 12:07:40) | 0/0 tests - No test suite found in file |
 | suites/isolation/multi-instance-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ❌ fail (2026-01-28 13:58) | 24/42 pass, 18 fail - Already uses api.slothlet.instanceID correctly, failures are diagnostics-related (needs diagnostics:true in some tests) |
 | suites/isolation/tv-config-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ✅ pass (2026-01-28 14:05) | 48/48 tests pass (100%) - Fixed instanceId references to use api.slothlet.instanceID |
+| suites/lazy/lazy-background-materialization.test.vitest.mjs | Lazy Loading | | | |
+| suites/lazy/lazy-materialization-tracking.test.vitest.mjs | Lazy Loading | | | |
+| suites/lazy/public-lifecycle-api.test.vitest.mjs | Lazy Loading + Lifecycle | | | |
 | suites/listener-cleanup/listener-cleanup.test.vitest.mjs | Lifecycle + EventEmitter + Hooks | ✅ Yes (2026-01-28 12:52) | ❌ fail - NOT IMPLEMENTED | Hooks system stubbed - updated API calls to v3 syntax - Related to eventemitter-context-propagation.md and hooks-system.md |
 | suites/listener-cleanup/third-party-cleanup.test.vitest.mjs | Lifecycle + EventEmitter | ✅ 1st pass (2026-01-28 14:27) | ❌ fail (2026-01-28 14:27) | 8/40 pass, 32 fail - Actual test failures (cleanup not working, api.math.add returns 1300 instead of 300) - Related to eventemitter-context-propagation.md |
 | suites/metadata/metadata-api-manager.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-27) | ✅ pass (2026-01-27 19:17:00) | 96/96 tests pass (100%) - Tests metadata with api.add/remove cycles + internal API tests (self.slothlet.metadata.*). **FIXED (2026-01-27 19:17)**: (1) ModuleId detection: API paths contain dots, moduleIDs don't - fixed removeApiComponent to use `!includes(".")` instead of `includes("_")`. (2) ModuleId prefix matching: `api.remove("removableInternal")` now finds and removes "removableInternal_abc123" by searching ownership.moduleToPath for matching prefix. (3) Prevented duplicate ownership registrations via currentOwner check in impl:changed subscription. (4) Added moduleID parameter to ___setImpl for correct lifecycle event tracking during replacements. All tests passing. Related to metadata-tagging.md |
@@ -113,6 +106,8 @@ Relative base: tests/vitests
 | suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-28 12:09:15) | 16/32 tests fail, 16 pass - Objects undefined after api.add() for autoFlatten=false cases |
 | suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-28 12:10:51) | 32/48 tests fail, 16 pass - Functions undefined after api.add() for edge cases |
 | suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-01-28 12:11:09) | 56/56 tests fail, 0 pass - Objects undefined after api.add() for folder flattening |
+| suites/typescript/typescript-fast-mode.test.vitest.mjs | TypeScript | ✅ Yes (2026-02-14 19:00) | ✅ pass (2026-02-14 19:00) | 23/23 tests pass (100%) - TypeScript fast mode using esbuild transformation. Tests .ts/.mts file loading, data URL imports, cache busting, error handling, and function execution |
+| suites/typescript/typescript-strict-mode.test.vitest.mjs | TypeScript | ✅ Yes (2026-02-14 19:00) | ✅ pass (2026-02-14 19:00) | 13/13 tests pass (100%) - TypeScript strict mode with automatic .d.ts generation via forked worker. Tests type generation, self declaration, type checking, and proper cleanup |
 
 ## Feature Categories
 
@@ -132,6 +127,8 @@ Relative base: tests/vitests
 - **Runtime**: Runtime mode tests (async/live)
 - **API Sanitization**: Filename to API property name transformation
 - **Config**: Configuration option tests
+- **TypeScript**: TypeScript file loading and type checking tests
+- **Lazy Loading**: Lazy mode materialization and lifecycle tests
 
 ## V3 Update Status
 
