@@ -45,7 +45,7 @@ describe("All API Structures Validation", () => {
 
 		for (const config of matrixConfigs) {
 			// Create a key from all config params except mode
-			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.apiDepth}_${config.config.hooks}`;
+			const key = `${config.config.runtime}_${config.config.allowApiOverwrite}_${config.config.apiDepth}_${config.config.hook?.enabled ?? false}`;
 
 			if (!configGroups.has(key)) {
 				configGroups.set(key, { eager: null, lazy: null });
@@ -62,7 +62,7 @@ describe("All API Structures Validation", () => {
 		// Create pairs from groups that have both modes
 		for (const [key, group] of configGroups) {
 			if (group.eager && group.lazy) {
-				const baseName = `${group.eager.config.runtime}_${group.eager.config.allowApiOverwrite ? "overwrite" : "nooverwrite"}_depth${group.eager.config.apiDepth}_${group.eager.config.hooks ? "hooks" : "nohooks"}`;
+				const baseName = `${group.eager.config.runtime}_${group.eager.config.allowApiOverwrite ? "overwrite" : "nooverwrite"}_depth${group.eager.config.apiDepth}_${group.eager.config.hook?.enabled ? "hooks" : "nohooks"}`;
 
 				matrixPairs.push({
 					name: baseName,
@@ -222,8 +222,16 @@ describe("All API Structures Validation", () => {
 			structure.callablePathsCount = paths.length;
 		}
 
-		// Check for errors
-		structure.hasErrors = output.includes("❌") || output.includes("Error:");
+		// Check for errors - exclude success messages containing checkmarks
+		const lines = output.split('\n');
+		structure.hasErrors = lines.some(line => {
+			// Ignore lines that start with success checkmarks
+			if (line.trim().startsWith('✅')) return false;
+			// Check for actual error indicators  
+// Check for actual error indicators (not property listings like "  error: function")
+// Real errors start with "Error:" at beginning of line (no spaces before)
+return line.includes('❌') || /^Error:/i.test(line);
+		});
 
 		return structure;
 	}
