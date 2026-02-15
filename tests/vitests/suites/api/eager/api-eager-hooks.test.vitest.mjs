@@ -25,7 +25,7 @@ function mockMd5(input) {
 }
 
 // EAGER configs with hooks
-const matrixConfigs = getMatrixConfigs({ mode: "eager", hooks: true, runtime: "async" });
+const matrixConfigs = getMatrixConfigs({ mode: "eager", hook: { enabled: true }, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
 describe("API (eager-hooks)", () => {

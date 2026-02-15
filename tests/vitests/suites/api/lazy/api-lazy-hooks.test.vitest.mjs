@@ -25,7 +25,7 @@ function mockMd5(input) {
 }
 
 // LAZY configs with hooks
-const matrixConfigs = getMatrixConfigs({ mode: "lazy", hooks: true, runtime: "async" });
+const matrixConfigs = getMatrixConfigs({ mode: "lazy", hook: { enabled: true }, runtime: "async" });
 const { apiTests } = testConfig.testConfig;
 
 describe("API (lazy-hooks)", () => {
