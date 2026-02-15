@@ -25,7 +25,7 @@ function mockMd5(input) {
 }
 
 // EAGER configs (no hooks)
-const matrixConfigs = getMatrixConfigs({ mode: "eager", hooks: false });
+const matrixConfigs = getMatrixConfigs({ mode: "eager", hook: { enabled: false } });
 const { apiTests } = testConfig.testConfig;
 
 describe("API (eager-hot)", () => {
