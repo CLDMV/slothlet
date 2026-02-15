@@ -18,6 +18,7 @@
 
 // NO static imports of esbuild/typescript - only dynamic imports when needed
 import fs from "fs";
+import path from "path";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 let esbuildInstance = null;
@@ -112,6 +113,7 @@ export function createDataUrl(code) {
  * @param {string} [options.module] - Module format (default: "ESNext")
  * @param {boolean} [options.strict] - Enable strict type checking (default: true)
  * @param {boolean} [options.skipTypeCheck] - Skip type checking and only transform (default: false)
+ * @param {string} [options.typeDefinitionPath] - Path to .d.ts file for type checking
  * @returns {Promise<{code: string, diagnostics: object[]}>} Transformed code and type diagnostics
  * @throws {SlothletError} If transformation fails
  * @public
@@ -163,6 +165,10 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		esModuleInterop: true,
 		skipLibCheck: true,
 		noEmit: false, // We need emit for transformation
+		...(options.typeDefinitionPath && {
+			typeRoots: [path.dirname(options.typeDefinitionPath)],
+			types: [path.basename(options.typeDefinitionPath, '.d.ts')]
+		}),
 		...options.compilerOptions
 	};
 	

@@ -60,6 +60,70 @@ export class Loader extends ComponentBase {
 				const mode = typescriptConfig.mode || "fast";
 				
 				if (mode === "strict") {
+					// Validate strict mode config
+					if (!typescriptConfig.types?.output) {
+						throw new Error("TypeScript strict mode requires 'types.output' to be configured");
+					}
+					if (!typescriptConfig.types?.interfaceName) {
+						throw new Error("TypeScript strict mode requires 'types.interfaceName' to be configured");
+					}
+
+					// Generate types if not already generated for this instance
+					if (!this.slothlet._typesGenerated) {
+						const { fork } = await import("child_process");
+						const path = await import("path");
+						const { fileURLToPath } = await import("url");
+						
+						// Get the path to the type generation script (in tools/ not src/tools/)
+						const __dirname = path.dirname(fileURLToPath(import.meta.url));
+						const scriptPath = path.resolve(__dirname, "../../../tools/generate-types-worker.mjs");
+						
+						// Prepare config for child process
+						// Note: Child process needs 'dir' not 'root', and should use eager mode
+						const childConfig = JSON.stringify({
+							dir: this.slothlet.config.root || this.slothlet.config.dir,
+							mode: "eager",
+							typescript: { 
+								enabled: true, 
+								mode: "fast" 
+							},
+							types: typescriptConfig.types
+						});
+						
+						// Fork child process to generate types
+						await new Promise((resolve, reject) => {
+							const child = fork(scriptPath, [], {
+								stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+								env: { ...process.env, SLOTHLET_CONFIG: childConfig }
+							});
+							
+							let output = '';
+							let errorOutput = '';
+							
+							child.stdout?.on('data', (data) => { output += data.toString(); });
+							child.stderr?.on('data', (data) => { errorOutput += data.toString(); });
+							
+							child.on('message', (msg) => {
+								if (msg.type === 'success') {
+									this.slothlet._typesGenerated = true;
+									resolve();
+								} else if (msg.type === 'error') {
+									reject(new Error(`Type generation failed: ${msg.error}`));
+								}
+							});
+							
+							child.on('error', (error) => {
+								reject(new Error(`Failed to fork type generation process: ${error.message}`));
+							});
+							
+							child.on('exit', (code) => {
+								if (code !== 0 && !this.slothlet._typesGenerated) {
+									reject(new Error(`Type generation process exited with code ${code}\n${errorOutput}`));
+								}
+							});
+						});
+					}
+
 					// Lazy load TypeScript strict mode processor
 					const { transformTypeScriptStrict, createDataUrl, formatDiagnostics } = await import("@cldmv/slothlet/processors/typescript");
 					
@@ -68,6 +132,7 @@ export class Loader extends ComponentBase {
 						target: typescriptConfig.target,
 						module: typescriptConfig.module,
 						strict: typescriptConfig.strict,
+						typeDefinitionPath: typescriptConfig.types.output,
 						compilerOptions: typescriptConfig.compilerOptions
 					});
 					
