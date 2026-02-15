@@ -38,7 +38,8 @@ describe("API (eager-hot)", () => {
 				...config,
 				dir: TEST_DIRS.API_TEST,
 				reference: { md5: mockMd5 },
-				diagnostics: true
+				diagnostics: true,
+				api: { collision: { initial: "replace", api: "replace" } } // Match basic/hooks test collision mode
 			});
 		});
 
