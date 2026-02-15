@@ -368,7 +368,7 @@
 					{
 						"path": ["exportDefault", "extra"],
 						"args": [],
-						"expected": "extra method overridden",
+						"expected": "extra method",
 						"label": "api.exportDefault.extra()"
 					}
 				]

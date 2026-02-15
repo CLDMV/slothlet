@@ -39,7 +39,8 @@ describe("API (lazy-basic)", () => {
 				dir: TEST_DIRS.API_TEST,
 				api_mode: "function",
 				reference: { md5: mockMd5 },
-				diagnostics: true
+				diagnostics: true,
+				collision: "replace" // Replace mode for deterministic results in basic tests
 			});
 		});
 
