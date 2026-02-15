@@ -818,26 +818,12 @@ export class ModesProcessor extends ComponentBase {
 										// Add named exports to the default (function or object)
 										if (typeof implToWrap === "function") {
 											// Function default: attach named exports as properties
-									const collisionConfig = config.api?.collision || config.collision;
-									const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
 											for (const key of moduleKeys) {
 												if (key !== "default") {
 													const hasExisting = implToWrap[key] !== undefined;
-											if (hasExisting) {
-												if (collisionMode === "merge" || collisionMode === "skip") {
-													// Keep existing property from default export
-													continue;
-												} else if (collisionMode === "error") {
-													throw new Error(`Collision detected: property "${key}" already exists on default export at ${apiPathPrefix}.${subDirName}`);
-												} else if (collisionMode === "warn") {
-													new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-														key,
-														apiPath: `${apiPathPrefix}.${subDirName}`
-													});
-												}
-												// collisionMode === "replace" or "merge-replace" falls through to assignment
-											}
-											implToWrap[key] = exports[key];
+													if (!hasExisting) {
+														implToWrap[key] = exports[key];
+													}
 												}
 											}
 										} else if (typeof implToWrap === "object" && implToWrap !== null) {

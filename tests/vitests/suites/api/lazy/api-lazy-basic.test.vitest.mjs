@@ -40,7 +40,7 @@ describe("API (lazy-basic)", () => {
 				api_mode: "function",
 				reference: { md5: mockMd5 },
 				diagnostics: true,
-				collision: "replace" // Replace mode for deterministic results in basic tests
+				api: { collision: { initial: "replace", api: "replace" } } // Replace mode for deterministic results in basic tests
 			});
 		});
 

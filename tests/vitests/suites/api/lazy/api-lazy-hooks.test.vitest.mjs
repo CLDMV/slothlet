@@ -39,7 +39,7 @@ describe("API (lazy-hooks)", () => {
 				dir: TEST_DIRS.API_TEST,
 				reference: { md5: mockMd5 },
 				diagnostics: true,
-				collision: "replace" // Replace mode for deterministic results in basic tests
+				api: { collision: { initial: "replace", api: "replace" } } // Replace mode for deterministic results in basic tests
 			});
 		});
 

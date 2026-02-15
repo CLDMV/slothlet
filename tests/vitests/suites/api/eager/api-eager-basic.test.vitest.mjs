@@ -39,7 +39,8 @@ describe("API (eager-basic)", () => {
 				dir: TEST_DIRS.API_TEST,
 				api_mode: "function",
 				reference: { md5: mockMd5 },
-				diagnostics: true
+				diagnostics: true,
+				api: { collision: { initial: "replace", api: "replace" } }
 			});
 		});
 
