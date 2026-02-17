@@ -100,7 +100,7 @@ export class Builder extends ComponentBase {
 	 * });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null, fileFilter = null } = options;
+		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null, fileFilter = null, collisionMode = null } = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -143,6 +143,7 @@ export class Builder extends ComponentBase {
 				dir,
 				apiPathPrefix,
 				collisionContext,
+				collisionMode,
 				moduleID,
 				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,

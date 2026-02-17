@@ -62,24 +62,25 @@ export class Flatten extends ComponentBase {
 	 * Rule 5 - Conditions C02-C03 from API-RULES-CONDITIONS.md.
 	 * @param {object} analysis - Export analysis
 	 * @param {boolean} hasMultipleDefaults - Whether folder has multiple defaults
-	 * @returns {object|null} Multi-default decision or null
+	 * @param {function} t - Translation function
+	 * @returns {Promise<object|null>} Multi-default decision or null
 	 * @private
 	 */
-	#checkMultiDefault(analysis, hasMultipleDefaults) {
+	async #checkMultiDefault(analysis, hasMultipleDefaults, t) {
 		if (!hasMultipleDefaults) return null;
 
 		// Rule 5 - C02: Multi-default with default export - preserve namespace
 		if (analysis.hasDefault) {
 			return {
 				preserveAsNamespace: true,
-				reason: "Multi-default context with default export"
+				reason: await t("FLATTEN_REASON_MULTI_DEFAULT_WITH_DEFAULT")
 			};
 		}
 
 		// Rule 5 - C03: Multi-default without default - flatten
 		return {
 			flattenToRoot: true,
-			reason: "Multi-default context without default export"
+			reason: await t("FLATTEN_REASON_MULTI_DEFAULT_WITHOUT_DEFAULT")
 		};
 	}
 
@@ -107,22 +108,43 @@ export class Flatten extends ComponentBase {
 	 * @param {object} options.analysis - Export analysis
 	 * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
 	 * @param {array} options.moduleKeys - Keys from module
-	 * @returns {object} Flattening decision
+	 * @param {function} options.t - Translation function
+	 * @returns {Promise<object>} Flattening decision
 	 * @public
 	 */
-	getFlatteningDecision(options) {
-		const { mod, moduleName, categoryName, analysis, hasMultipleDefaults, moduleKeys } = options;
+	async getFlatteningDecision(options) {
+		const { mod, moduleName, categoryName, analysis, hasMultipleDefaults, moduleKeys, t } = options;
+
+		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// Files named addapi.{mjs,cjs,js,ts} always flatten regardless of autoFlatten setting
+		const isAddapiFile = moduleName === "addapi";
+		if (isAddapiFile) {
+			// Check for metadata default export pattern (object default + named exports)
+			if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleKeys.length > 0) {
+				return {
+					flattenToCategory: true,
+					flattenType: "addapi-metadata-default",
+					reason: await t("FLATTEN_REASON_ADDAPI_METADATA_DEFAULT")
+				};
+			}
+			// Even without metadata pattern, addapi files should always flatten
+			return {
+				flattenToCategory: true,
+				flattenType: "addapi-special-file",
+				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
+			};
+		}
 
 		// Rule 6 - C01: Self-referential check - preserve namespace
 		if (this.#checkSelfReferential(mod, moduleName)) {
 			return {
 				preserveAsNamespace: true,
-				reason: "Self-referential export detected"
+				reason: await t("FLATTEN_REASON_SELF_REFERENTIAL")
 			};
 		}
 
 		// Rule 5 - C02, C03: Multi-default context handling
-		const multiDefaultDecision = this.#checkMultiDefault(analysis, hasMultipleDefaults);
+		const multiDefaultDecision = await this.#checkMultiDefault(analysis, hasMultipleDefaults, t);
 		if (multiDefaultDecision) {
 			return multiDefaultDecision;
 		}
@@ -131,7 +153,7 @@ export class Flatten extends ComponentBase {
 		if (this.#checkAutoFlatten(mod, moduleName, moduleKeys)) {
 			return {
 				useAutoFlattening: true,
-				reason: "Single named export matches filename"
+				reason: await t("FLATTEN_REASON_SINGLE_EXPORT_MATCHES_FILENAME")
 			};
 		}
 
@@ -139,7 +161,7 @@ export class Flatten extends ComponentBase {
 		if (moduleName === categoryName) {
 			return {
 				flattenToCategory: true,
-				reason: "Filename matches category name"
+				reason: await t("FLATTEN_REASON_FILENAME_MATCHES_CATEGORY")
 			};
 		}
 
@@ -158,7 +180,7 @@ export class Flatten extends ComponentBase {
 				return {
 					preserveAsNamespace: true,
 					preferredName: exportToCheck.name, // Use exact function name
-					reason: "Preserving function name over filename"
+					reason: await t("FLATTEN_REASON_PRESERVING_FUNCTION_NAME")
 				};
 			}
 		}
@@ -170,7 +192,7 @@ export class Flatten extends ComponentBase {
 		// Rule 2 - C07: Default fallback - preserve as namespace
 		return {
 			preserveAsNamespace: true,
-			reason: "Default behavior - preserve namespace"
+			reason: await t("FLATTEN_REASON_DEFAULT_PRESERVE_NAMESPACE")
 		};
 	}
 
@@ -292,17 +314,18 @@ export class Flatten extends ComponentBase {
 	 * @param {array} options.moduleKeys - Module keys
 	 * @param {number} options.currentDepth - Current depth
 	 * @param {array} options.moduleFiles - Files in category
-	 * @returns {object} Category decision
+	 * @param {function} options.t - Translation function
+	 * @returns {Promise<object>} Category decision
 	 * @public
 	 */
-	buildCategoryDecisions(options) {
-		const { categoryName, mod, moduleName, fileBaseName, analysis, moduleKeys, currentDepth, moduleFiles = [] } = options;
+	async buildCategoryDecisions(options) {
+		const { categoryName, mod, moduleName, fileBaseName, analysis, moduleKeys, currentDepth, moduleFiles = [], t } = options;
 
 		const decision = {
 			shouldFlatten: false,
 			flattenType: "preserve",
 			preferredName: null,
-			reason: "No flattening conditions met"
+			reason: await t("FLATTEN_REASON_NO_CONDITIONS_MET")
 		};
 
 		// Rule 11 (F06) - C33: AddApi Special File Pattern
@@ -315,14 +338,14 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: true,
 					flattenType: "addapi-metadata-default",
-					reason: "AddApi special file pattern with metadata default - flatten named exports to parent"
+					reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE_PARENT")
 				};
 			}
 			// Even without metadata pattern, addapi files should always flatten
 			return {
 				shouldFlatten: true,
 				flattenType: "addapi-special-file",
-				reason: "AddApi special file pattern - always flatten"
+				reason: await t("FLATTEN_REASON_ADDAPI_SPECIAL_FILE")
 			};
 		}
 
@@ -331,7 +354,7 @@ export class Flatten extends ComponentBase {
 			return {
 				shouldFlatten: true,
 				flattenType: "function-folder-match",
-				reason: "Function name matches folder name"
+				reason: await t("FLATTEN_REASON_FUNCTION_FOLDER_MATCH")
 			};
 		}
 
@@ -340,7 +363,7 @@ export class Flatten extends ComponentBase {
 			return {
 				shouldFlatten: true,
 				flattenType: "default-export-flatten",
-				reason: "Default object export matches folder name"
+				reason: await t("FLATTEN_REASON_DEFAULT_OBJECT_EXPORT_FLATTEN")
 			};
 		}
 
@@ -350,7 +373,7 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: true,
 					flattenType: "object-auto-flatten",
-					reason: "Single named export matches filename"
+					reason: await t("FLATTEN_REASON_SINGLE_EXPORT_MATCHES_FILENAME")
 				};
 			}
 		}
@@ -360,7 +383,7 @@ export class Flatten extends ComponentBase {
 			return {
 				shouldFlatten: true,
 				flattenType: "filename-folder-match-flatten",
-				reason: "File basename matches category name"
+				reason: await t("FLATTEN_REASON_BASENAME_MATCHES_CATEGORY")
 			};
 		}
 
@@ -373,7 +396,7 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: true,
 					flattenType: "parent-level-flatten",
-					reason: "Generic filename with single export"
+					reason: await t("FLATTEN_REASON_GENERIC_FILENAME_SINGLE_EXPORT")
 				};
 			}
 		}
@@ -389,7 +412,7 @@ export class Flatten extends ComponentBase {
 					shouldFlatten: true,
 					flattenType: "function-folder-match",
 					preferredName: mod.name,
-					reason: "Function name matches folder name"
+					reason: await t("FLATTEN_REASON_FUNCTION_FOLDER_MATCH")
 				};
 			}
 		}
@@ -409,7 +432,7 @@ export class Flatten extends ComponentBase {
 				return {
 					shouldFlatten: false,
 					preferredName: exportToCheck.name, // Use exact function name (preserves XMLParser, getHTTPStatus, etc.)
-					reason: "Preserving function name over filename"
+					reason: await t("FLATTEN_REASON_PRESERVING_FUNCTION_NAME")
 				};
 			}
 		}
@@ -420,7 +443,7 @@ export class Flatten extends ComponentBase {
 				shouldFlatten: true,
 				flattenType: "default-function",
 				preferredName: categoryName,
-				reason: "Default function export"
+				reason: await t("FLATTEN_REASON_DEFAULT_FUNCTION_EXPORT")
 			};
 		}
 
@@ -430,7 +453,7 @@ export class Flatten extends ComponentBase {
 				shouldFlatten: true,
 				flattenType: "object-auto-flatten",
 				preferredName: moduleName,
-				reason: "Single named export matches module name (final check)"
+				reason: await t("FLATTEN_REASON_SINGLE_EXPORT_MATCHES_MODULE")
 			};
 		}
 
