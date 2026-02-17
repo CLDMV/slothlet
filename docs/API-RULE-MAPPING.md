@@ -66,7 +66,7 @@ Some conditions (like C09b, C16) are used by multiple rules. Each occurrence sho
 | 8      | F02, F04, F05 | C11, C17                     | Single Module Default Export Promotion         | flatten.mjs         |
 | 9      | -             | C15, C16                     | Function Name Preference Over Sanitization     | flatten.mjs         |
 | 10     | F02           | C14                          | Generic Filename Parent-Level Promotion        | flatten.mjs         |
-| 11     | F06           | -                            | AddApi Special File Pattern                    | modes.mjs (runtime) |
+| 11     | F06           | C33                          | AddApi Special File Pattern                    | flatten.mjs         |
 | 12     | F07           | -                            | Module Ownership and Selective API Overwriting | ownership.mjs (runtime) |
 
 **Note**: **C06 is intentionally not implemented** (architectural decision). The original concept was "auto-flatten single file directories" but this was rejected because it reduces API path flexibility. It exists as a placeholder in the C01-C18 sequence to maintain consistent numbering. Users should use other rules (like C05 filename matching) if they want flattening.

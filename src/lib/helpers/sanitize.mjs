@@ -296,7 +296,9 @@ export class Sanitize extends ComponentBase {
 		if (preserveAllUpper && isAllUpper) {
 			return originalString;
 		}
-		if (preserveAllLower && isAllLower) {
+		// For preserveAllLower, only return early if string has NO hyphens/separators
+		// If it has separators, we need to process and remove them first
+		if (preserveAllLower && isAllLower && !/-/.test(originalString)) {
 			return originalString;
 		}
 
