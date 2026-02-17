@@ -1704,11 +1704,8 @@ export class UnifiedWrapper extends ComponentBase {
 				if (typeof current === "function") {
 					// Call with proper `this` binding - use lastObject as `this` if available
 					// This preserves `this` binding for methods called on objects
-					// Use Function.prototype.call to avoid triggering apply trap twice
-					if (lastObject) {
-						return Function.prototype.call.call(current, lastObject, ...args);
-					}
-					return current(...args);
+					// Use Reflect.apply to avoid accessing .apply property on proxy (which triggers another trap)
+					return Reflect.apply(current, lastObject, args);
 				}
 
 				// Handle util.inspect checking for hasAttribute on primitives
