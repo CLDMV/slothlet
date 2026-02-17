@@ -247,7 +247,18 @@ export class ModesProcessor extends ComponentBase {
 				// Build module content based on decision
 				let moduleContent = {};
 
-				if (decision.useAutoFlattening) {
+				// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
+				// When addapi.{mjs,cjs,js,ts} has object default + named exports,
+				// flatten only the named exports to parent, ignoring the metadata default
+				const isAddapiFile = moduleName === "addapi" || file.name === "addapi" || 
+					(file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
+				if (isAddapiFile && analysis.hasDefault && analysis.defaultExportType === "object" && moduleKeys.length > 0) {
+					// Create object with only named exports, ignore the metadata default
+					moduleContent = {};
+					for (const key of moduleKeys) {
+						moduleContent[key] = mod[key];
+					}
+				} else if (decision.useAutoFlattening) {
 					// C04: Single named export matches module name
 					moduleContent = mod[moduleName];
 				} else if (mod.default && moduleKeys.length > 0) {
@@ -664,6 +675,49 @@ export class ModesProcessor extends ComponentBase {
 						}
 					}
 				}
+				// Rule 11 (F06) - C33: AddApi Special File Pattern - flatten named exports to parent
+				// Instead of creating targetApi.addapi.{exports}, create targetApi.{exports}
+				if (isAddapiFile && moduleContent && typeof moduleContent === "object" && !Array.isArray(moduleContent) && Object.keys(moduleContent).length > 0) {
+					// Assign each named export directly to the parent API object
+					for (const [key, value] of Object.entries(moduleContent)) {
+						const localPath = isRoot ? key : `${categoryName}.${key}`;
+						if (shouldWrap && (typeof value === "function" || (typeof value === "object" && value !== null))) {
+							const wrapper = new UnifiedWrapper(this.slothlet, {
+								mode: effectiveMode,
+								apiPath: buildApiPath(localPath),
+								initialImpl: value,
+								materializeOnCreate: config.backgroundMaterialize,
+								filePath: file.path,
+								moduleID: moduleID || file.moduleID,
+								sourceFolder
+							});
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+								useCollisionDetection: true,
+								config,
+								collisionContext
+							});
+						} else {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+								useCollisionDetection: true,
+								config,
+								collisionContext
+							});
+						}
+						// Register ownership for each flattened export
+						if (ownership) {
+							const apiPath = isRoot ? key : `${categoryName}.${key}`;
+							ownership.register({
+								moduleID: moduleID || file.moduleID,
+								apiPath,
+								source: "core",
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+								config
+							});
+						}
+					}
+					// Skip the normal assignment since we've handled it above
+					continue;
+				}
 				// Wrap in UnifiedWrapper
 				if (shouldWrap) {
 					const localPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
@@ -808,7 +862,19 @@ export class ModesProcessor extends ComponentBase {
 								// For filename-folder match with named export, extract the matching export
 								// Example: date/date.mjs with 'export const date = {...}' → nested.date = {...}
 								let implToWrap;
-								if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
+								
+								// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
+								// When addapi.{mjs,cjs,js,ts} has object default + named exports,
+								// flatten only the named exports to parent, ignoring the metadata default
+								if (categoryDecision.flattenType === "addapi-metadata-default") {
+									// Create object with only named exports, ignore default
+									implToWrap = {};
+									for (const key of moduleKeys) {
+										if (key !== "default") {
+											implToWrap[key] = exports[key];
+										}
+									}
+								} else if (moduleName === subDirName && moduleKeys.includes(subDirName)) {
 									// Named export matches folder name - use that specific export
 									implToWrap = exports[subDirName];
 								} else if (exports.default !== undefined) {
@@ -1183,7 +1249,19 @@ export class ModesProcessor extends ComponentBase {
 					});
 					if (categoryDecision.shouldFlatten) {
 						let implToWrap;
-						if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
+						
+						// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
+						// When addapi.{mjs,cjs,js,ts} has object default + named exports,
+						// flatten only the named exports to parent, ignoring the metadata default
+						if (categoryDecision.flattenType === "addapi-metadata-default") {
+							// Create object with only named exports, ignore default
+							implToWrap = {};
+							for (const key of moduleKeys) {
+								if (key !== "default") {
+									implToWrap[key] = exports[key];
+								}
+							}
+						} else if (moduleName === categoryName && moduleKeys.includes(categoryName)) {
 							implToWrap = exports[categoryName];
 						} else if (exports.default !== undefined) {
 							implToWrap = exports.default;
