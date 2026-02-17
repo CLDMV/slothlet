@@ -11,6 +11,16 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * Add two numbers together.
+ * @param {number} a - First number.
+ * @param {number} b - Second number.
+ * @returns {number} Sum of the two numbers.
+ */
+export function add(a, b) {
+	return a + b;
+}
+
 export function power(base, exponent) {
 	return Math.pow(base, exponent);
 }

@@ -11,6 +11,8 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+import { context } from "@cldmv/slothlet/runtime";
+
 class TestService {
 	constructor(name) {
 		this.name = name;

@@ -37,10 +37,9 @@ export async function executeWithApi(api, fn) {
  * @param {object} api - Slothlet API instance
  * @param {string} apiPath - API path
  * @param {string} folderPath - Folder path (relative to caller, not this file)
- * @param {object} metadata - Metadata object
  * @param {object} options - Options object
  * @returns {Promise<void>}
  */
-export async function addApiFromNested(api, apiPath, folderPath, metadata = {}, options = {}) {
-	return await api.slothlet.api.add(apiPath, folderPath, metadata, options);
+export async function addApiFromNested(api, apiPath, folderPath, options = {}) {
+	return await api.slothlet.api.add(apiPath, folderPath, options);
 }

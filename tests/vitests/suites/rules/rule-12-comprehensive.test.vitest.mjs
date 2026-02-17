@@ -51,7 +51,6 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		await api.slothlet.api.add(
 			"plugins.moduleA",
 			TEST_DIRS.API_TEST_MIXED,
-			{},
 			{
 				moduleID: "moduleA",
 				forceOverwrite: true
@@ -64,7 +63,6 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		await api.slothlet.api.add(
 			"plugins.moduleA",
 			TEST_DIRS.API_TEST,
-			{},
 			{
 				moduleID: "moduleA",
 				forceOverwrite: true
@@ -78,7 +76,6 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		await api.slothlet.api.add(
 			"plugins.moduleB",
 			TEST_DIRS.API_TEST_COLLECTIONS,
-			{},
 			{
 				moduleID: "moduleB",
 				forceOverwrite: true
@@ -93,7 +90,6 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 		await api.slothlet.api.add(
 			"plugins.moduleC",
 			TEST_DIRS.API_TEST,
-			{},
 			{
 				moduleID: "moduleC",
 				forceOverwrite: true
@@ -106,7 +102,6 @@ describe.each(OWNERSHIP_CONFIGS)("Rule 12 Ownership Tracking - $name", ({ name: 
 			api.slothlet.api.add(
 				"plugins.moduleC",
 				TEST_DIRS.API_TEST_MIXED,
-				{},
 				{
 					moduleID: "moduleD" // Different module trying to overwrite
 				}
@@ -140,7 +135,6 @@ describe.each(BASIC_CONFIGS)("Rule 12 Configuration Validation - $name", ({ name
 			await api.slothlet.api.add(
 				"test.path",
 				TEST_DIRS.API_TEST,
-				{},
 				{
 					forceOverwrite: true,
 					moduleID: "testModule"
@@ -176,9 +170,9 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "replace", api: "skip" }
+			}
 		});
 		apisToClean.push(api);
 
@@ -200,17 +194,16 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "merge-replace", api: "error" }
+			}
 		});
 		apisToClean.push(api);
 
 		// Register with moduleID
 		await api.slothlet.api.add(
 			"ownership.test",
-			TEST_DIRS.API_TEST,
-			{},
+			TEST_DIRS.API_TEST_COLLECTIONS,
 			{
 				moduleID: "testModule",
 				forceOverwrite: true
@@ -221,7 +214,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		await api.slothlet.api.add(
 			"ownership.test",
 			TEST_DIRS.API_TEST_MIXED,
-			{},
 			{
 				moduleID: "testModule",
 				forceOverwrite: true
@@ -240,37 +232,35 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: true,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "merge-replace", api: "error" }
+			}
 		});
 		apisToClean.push(api);
 
 		// Register with moduleID
 		await api.slothlet.api.add(
 			"ownership.cross",
-			TEST_DIRS.API_TEST,
-			{},
+			TEST_DIRS.API_TEST_COLLECTIONS,
 			{
 				moduleID: "testModule",
 				forceOverwrite: true
 			}
 		);
 
-		// Different module should be blocked
+		// Different module should be blocked by collision mode
 		try {
 			await api.slothlet.api.add(
 				"ownership.cross",
 				TEST_DIRS.API_TEST_COLLECTIONS,
-				{},
 				{
 					moduleID: "differentModule"
 				}
 			);
 			throw new Error("Expected cross-module overwrite to be blocked");
 		} catch (error) {
-			expect(error.message).toContain("owned by module");
-			expect(error.message).toContain("testModule");
+			expect(error.message).toContain("path already exists");
+			expect(error.message).toContain("collision mode is 'error'");
 		}
 	});
 
@@ -278,16 +268,16 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		const slothletModule = await import("@cldmv/slothlet");
 		const slothlet = slothletModule.default;
 		const api = await slothlet({
-			dir: TEST_DIRS.API_TEST,
+			dir: TEST_DIRS.API_TEST_COLLECTIONS,
 			eager: false,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "replace", api: "skip" }
+			}
 		});
 		apisToClean.push(api);
 
-		await api.slothlet.api.add("normal.test2", TEST_DIRS.API_TEST);
+		await api.slothlet.api.add("normal.test2", TEST_DIRS.API_TEST_COLLECTIONS);
 		const originalApi = api.normal.test2;
 
 		await api.slothlet.api.add("normal.test2", TEST_DIRS.API_TEST_MIXED);
@@ -302,16 +292,15 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "merge-replace", api: "error" }
+			}
 		});
 		apisToClean.push(api);
 
 		await api.slothlet.api.add(
 			"ownership.test2",
-			TEST_DIRS.API_TEST,
-			{},
+			TEST_DIRS.API_TEST_COLLECTIONS,
 			{
 				moduleID: "testModule2",
 				forceOverwrite: true
@@ -321,7 +310,6 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 		await api.slothlet.api.add(
 			"ownership.test2",
 			TEST_DIRS.API_TEST_MIXED,
-			{},
 			{
 				moduleID: "testModule2",
 				forceOverwrite: true
@@ -339,16 +327,15 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			dir: TEST_DIRS.API_TEST,
 			eager: false,
 			api: {
-				mutations: { reload: true }
-			},
-			allowAddApiOverwrite: false
+				mutations: { reload: true },
+				collision: { initial: "merge-replace", api: "error" }
+			}
 		});
 		apisToClean.push(api);
 
 		await api.slothlet.api.add(
 			"ownership.cross2",
-			TEST_DIRS.API_TEST,
-			{},
+			TEST_DIRS.API_TEST_COLLECTIONS,
 			{
 				moduleID: "testModule2",
 				forceOverwrite: true
@@ -359,15 +346,14 @@ describe("Rule 12 with allowApiOverwrite: false", () => {
 			await api.slothlet.api.add(
 				"ownership.cross2",
 				TEST_DIRS.API_TEST_COLLECTIONS,
-				{},
 				{
 					moduleID: "differentModule2"
 				}
 			);
 			throw new Error("Expected cross-module overwrite to be blocked");
 		} catch (error) {
-			expect(error.message).toContain("owned by module");
-			expect(error.message).toContain("testModule2");
+			expect(error.message).toContain("path already exists");
+			expect(error.message).toContain("collision mode is 'error'");
 		}
 	});
 });
