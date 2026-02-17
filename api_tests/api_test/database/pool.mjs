@@ -1,106 +1,74 @@
 /**
- * Simulates a database connection pool (like pg-pool) for testing cleanup.
- * This API file creates EventEmitters internally and should clean them up
- * when the module is unloaded or slothlet shuts down.
+ * Simulates a database connection pool for testing EventEmitter cleanup.
+ * Creates REAL Node.js EventEmitters within the slothlet API context.
+ * These should be tracked and cleaned up when slothlet shuts down.
  */
 
 import { EventEmitter } from "node:events";
 
-let poolInstance = null;
+const emitters = [];
 
 /**
- * Simulate a connection pool with EventEmitters
- */
-class ConnectionPool {
-	constructor() {
-		this.clients = [];
-		this.isShutdown = false;
-
-		// Create 5 client connections, each is an EventEmitter
-		for (let i = 0; i < 5; i++) {
-			const client = new EventEmitter();
-
-			// Add typical database client listeners
-			client.once("error", () => {});
-			client.on("response", () => {});
-			client.on("connect", () => {});
-			client.on("end", () => {});
-
-			this.clients.push(client);
-		}
-	}
-
-	/**
-	 * Get listener count across all clients
-	 */
-	getListenerCount() {
-		return this.clients.reduce(
-			(sum, client) =>
-				sum +
-				client.listenerCount("error") +
-				client.listenerCount("response") +
-				client.listenerCount("connect") +
-				client.listenerCount("end"),
-			0
-		);
-	}
-
-	/**
-	 * Shutdown the pool and clean up all client listeners
-	 */
-	shutdown() {
-		if (this.isShutdown) return;
-
-		this.clients.forEach((client) => {
-			client.removeAllListeners();
-		});
-
-		this.isShutdown = true;
-	}
-}
-
-/**
- * Database pool API
+ * Database pool API using native EventEmitter
  */
 export const pool = {
 	/**
-	 * Initialize the connection pool
+	 * Create event emitters to simulate database connections
 	 */
-	init() {
-		if (!poolInstance) {
-			poolInstance = new ConnectionPool();
+	createConnections(count = 5) {
+		const newEmitters = [];
+
+		for (let i = 0; i < count; i++) {
+			const emitter = new EventEmitter();
+
+			// Add typical database event listeners
+			emitter.on("connect", () => {});
+			emitter.on("query", () => {});
+			emitter.on("error", () => {});
+			emitter.on("disconnect", () => {});
+
+			newEmitters.push(emitter);
+			emitters.push(emitter);
 		}
+
 		return {
-			clientCount: poolInstance.clients.length,
-			listenerCount: poolInstance.getListenerCount()
+			count: newEmitters.length,
+			totalListeners: newEmitters.reduce(
+				(sum, e) =>
+					sum +
+					e.listenerCount("connect") +
+					e.listenerCount("query") +
+					e.listenerCount("error") +
+					e.listenerCount("disconnect"),
+				0
+			)
 		};
 	},
 
 	/**
-	 * Get current pool statistics
+	 * Get current emitter statistics
 	 */
 	getStats() {
-		if (!poolInstance) {
-			return { clientCount: 0, listenerCount: 0, isShutdown: null };
-		}
+		const totalListeners = emitters.reduce(
+			(sum, e) =>
+				sum +
+				e.listenerCount("connect") +
+				e.listenerCount("query") +
+				e.listenerCount("error") +
+				e.listenerCount("disconnect"),
+			0
+		);
 
 		return {
-			clientCount: poolInstance.clients.length,
-			listenerCount: poolInstance.getListenerCount(),
-			isShutdown: poolInstance.isShutdown
+			emitterCount: emitters.length,
+			totalListeners
 		};
 	},
 
 	/**
-	 * Shutdown the pool
+	 * Get the raw emitters for external verification
 	 */
-	shutdown() {
-		if (poolInstance) {
-			poolInstance.shutdown();
-			const wasShutdown = poolInstance.isShutdown;
-			poolInstance = null;
-			return { success: true, wasShutdown };
-		}
-		return { success: false, wasShutdown: null };
+	getEmitters() {
+		return emitters;
 	}
 };

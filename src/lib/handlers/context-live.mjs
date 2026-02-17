@@ -16,6 +16,7 @@
  * @module @cldmv/slothlet/handlers/context-live
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
+import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
  * Live bindings context manager (direct global state)
@@ -26,6 +27,17 @@ export class LiveContextManager {
 	constructor() {
 		this.instances = new Map(); // instanceID → context data
 		this.currentInstanceID = null; // Currently active instance
+	}
+
+	/**
+	 * Register the EventEmitter context checker
+	 * Must be called AFTER EventEmitter patching is enabled
+	 * @public
+	 */
+	registerEventEmitterContextChecker() {
+		setApiContextChecker(() => {
+			return this.currentInstanceID !== null;
+		});
 	}
 
 	/**

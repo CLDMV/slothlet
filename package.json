@@ -226,6 +226,7 @@
 		}
 	},
 	"devDependencies": {
+		"@cldmv/holdmytask": "^1.6.1",
 		"@eslint/css": "^0.10.0",
 		"@eslint/js": "^9.33.0",
 		"@eslint/json": "^0.13.1",
@@ -234,6 +235,7 @@
 		"@html-eslint/parser": "^0.45.0",
 		"@types/node": "^24.9.1",
 		"chalk": "^5.6.0",
+		"chokidar": "^5.0.0",
 		"dmd": "^7.1.1",
 		"esbuild": "^0.27.3",
 		"eslint": "^9.33.0",

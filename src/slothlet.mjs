@@ -36,7 +36,8 @@ import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/e
 import {
 	enableEventEmitterPatching,
 	disableEventEmitterPatching,
-	cleanupEventEmitterResources
+	cleanupEventEmitterResources,
+	setApiContextChecker
 } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
@@ -341,6 +342,12 @@ class Slothlet {
 		// Get appropriate context manager based on runtime
 		this.contextManager = getContextManager(this.config.runtime);
 
+		// Set up EventEmitter tracking to use the correct runtime context
+		setApiContextChecker(() => {
+			const ctx = this.contextManager.tryGetContext();
+			return !!(ctx && ctx.self);
+		});
+
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
 		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
@@ -355,6 +362,11 @@ class Slothlet {
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
 		enableEventEmitterPatching();
+
+		// Register context checker for EventEmitter tracking (must be after patching)
+		if (typeof this.contextManager.registerEventEmitterContextChecker === "function") {
+			this.contextManager.registerEventEmitterContextChecker();
+		}
 
 		// Note: ownership manager and hook manager already initialized via auto-discovery
 

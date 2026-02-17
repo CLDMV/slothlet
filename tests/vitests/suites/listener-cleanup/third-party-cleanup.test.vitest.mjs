@@ -16,17 +16,14 @@
  * @module third-party-cleanup.test.vitest
  *
  * @description
- * Tests that API files can properly manage EventEmitter cleanup for third-party
- * libraries (like pg-pool) that they instantiate.
+ * Tests that EventEmitters created within slothlet API files are properly
+ * tracked and cleaned up when slothlet shuts down. This includes:
+ * - Native Node.js EventEmitters
+ * - Third-party file watchers (chokidar)
  *
- * Key principle: Slothlet should NOT clean up EventEmitters created outside of
- * slothlet API files. However, API files that create EventEmitters (e.g., by
- * instantiating pg-pool) are responsible for cleaning them up.
- *
- * This test verifies that API files can:
- * - Create third-party library instances with EventEmitters
- * - Track their own EventEmitter instances
- * - Clean them up when the API file provides a cleanup method
+ * Key principle: Slothlet tracks and cleans up EventEmitters created WITHIN
+ * slothlet API context, regardless of whether they're native or from third-party
+ * libraries. EventEmitters created OUTSIDE slothlet context are NOT cleaned up.
  */
 
 import { describe, test, expect, afterEach } from "vitest";
@@ -43,7 +40,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		api = null;
 	});
 
-	test("API file can create and manage third-party EventEmitters", async () => {
+	test("Native EventEmitters created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
@@ -51,36 +48,51 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Materialize if lazy
 		if (config.mode === "lazy") {
-			await api.database.pool.init();
+			await api.database.pool.createConnections();
 		}
 
-		// Initialize the pool (creates EventEmitters within the API file)
-		const initStats = await api.database.pool.init();
+		// Create EventEmitters within API context
+		const createResult = await api.database.pool.createConnections(5);
+		expect(createResult.count).toBe(5);
+		expect(createResult.totalListeners).toBe(20); // 5 emitters × 4 events
 
-		expect(initStats.clientCount).toBe(5);
-		expect(initStats.listenerCount).toBe(20); // 5 clients × 4 events
+		// Verify listeners exist
+		const beforeStats = await api.database.pool.getStats();
+		expect(beforeStats.emitterCount).toBe(5);
+		expect(beforeStats.totalListeners).toBe(20);
 
-		// Get current stats
-		const currentStats = await api.database.pool.getStats();
-		expect(currentStats.clientCount).toBe(5);
-		expect(currentStats.listenerCount).toBe(20);
-		expect(currentStats.isShutdown).toBe(false);
+		// Get emitters for direct verification
+		const emitters = await api.database.pool.getEmitters();
+		expect(emitters).toHaveLength(5);
 
-		// API file should provide cleanup method
-		const shutdownResult = await api.database.pool.shutdown();
-		expect(shutdownResult.success).toBe(true);
-		expect(shutdownResult.wasShutdown).toBe(true);
+		const totalListenersBefore = emitters.reduce(
+			(sum, e) =>
+				sum +
+				e.listenerCount("connect") +
+				e.listenerCount("query") +
+				e.listenerCount("error") +
+				e.listenerCount("disconnect"),
+			0
+		);
+		expect(totalListenersBefore).toBe(20);
 
-		// After API file cleanup, listeners should be gone
-		const afterStats = await api.database.pool.getStats();
-		expect(afterStats.listenerCount).toBe(0);
-		expect(afterStats.isShutdown).toBe(null); // Pool instance was nulled
-
-		// Slothlet shutdown should complete successfully
+		// Shutdown slothlet - should clean up tracked EventEmitters
 		await api.shutdown();
+
+		// Verify all listeners were removed
+		const totalListenersAfter = emitters.reduce(
+			(sum, e) =>
+				sum +
+				e.listenerCount("connect") +
+				e.listenerCount("query") +
+				e.listenerCount("error") +
+				e.listenerCount("disconnect"),
+			0
+		);
+		expect(totalListenersAfter).toBe(0);
 	});
 
-	test("API file cleanup is independent of slothlet shutdown", async () => {
+	test("Third-party EventEmitters (chokidar) created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
 			...config,
 			dir: TEST_DIRS.API_TEST
@@ -88,21 +100,104 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Materialize if lazy
 		if (config.mode === "lazy") {
-			await api.database.pool.init();
+			await api.events.watcher.init();
 		}
 
-		// Initialize pool
-		await api.database.pool.init();
+		// Initialize file watcher (creates EventEmitter within API context)
+		const initResult = await api.events.watcher.init();
+		expect(initResult.created).toBe(true);
+		expect(initResult.listenerCount).toBe(5); // 5 event types
 
-		const beforeShutdown = await api.database.pool.getStats();
-		expect(beforeShutdown.listenerCount).toBe(20);
+		// Verify listeners exist
+		const listenersBefore = await api.events.watcher.getListenerCount();
+		expect(listenersBefore).toBe(5);
 
-		// Shutdown slothlet WITHOUT calling pool.shutdown()
+		// Get instance for direct verification
+		const watcher = await api.events.watcher.getInstance();
+		expect(watcher).toBeTruthy();
+
+		const directCountBefore =
+			watcher.listenerCount("add") +
+			watcher.listenerCount("change") +
+			watcher.listenerCount("unlink") +
+			watcher.listenerCount("error") +
+			watcher.listenerCount("ready");
+		expect(directCountBefore).toBe(5);
+
+		// Shutdown slothlet - should clean up tracked EventEmitters
 		await api.shutdown();
 
-		// The pool's EventEmitters are NOT automatically cleaned up by slothlet
-		// because they were created within the API file, not by slothlet itself.
-		// This is correct behavior - API files manage their own resources.
-		// (We can't check this after shutdown since the API is no longer accessible)
+		// Verify all listeners were removed
+		const directCountAfter =
+			watcher.listenerCount("add") +
+			watcher.listenerCount("change") +
+			watcher.listenerCount("unlink") +
+			watcher.listenerCount("error") +
+			watcher.listenerCount("ready");
+		expect(directCountAfter).toBe(0);
+	});
+
+	test("Both native and third-party EventEmitters are cleaned up simultaneously", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Materialize all if lazy
+		if (config.mode === "lazy") {
+			await api.database.pool.createConnections();
+			await api.events.watcher.init();
+		}
+
+		// Create both types of EventEmitters
+		await api.database.pool.createConnections(3);
+		await api.events.watcher.init();
+
+		// Get instances for verification
+		const poolEmitters = await api.database.pool.getEmitters();
+		const watcher = await api.events.watcher.getInstance();
+
+		// Count listeners before shutdown
+		const poolBefore = poolEmitters.reduce(
+			(sum, e) =>
+				sum +
+				e.listenerCount("connect") +
+				e.listenerCount("query") +
+				e.listenerCount("error") +
+				e.listenerCount("disconnect"),
+			0
+		);
+		const watcherBefore =
+			watcher.listenerCount("add") +
+			watcher.listenerCount("change") +
+			watcher.listenerCount("unlink") +
+			watcher.listenerCount("error") +
+			watcher.listenerCount("ready");
+
+		expect(poolBefore).toBe(12); // 3 emitters × 4 events
+		expect(watcherBefore).toBe(5);
+
+		// Shutdown slothlet - should clean up ALL tracked EventEmitters
+		await api.shutdown();
+
+		// Verify all listeners were removed from both types
+		const poolAfter = poolEmitters.reduce(
+			(sum, e) =>
+				sum +
+				e.listenerCount("connect") +
+				e.listenerCount("query") +
+				e.listenerCount("error") +
+				e.listenerCount("disconnect"),
+			0
+		);
+		const watcherAfter =
+			watcher.listenerCount("add") +
+			watcher.listenerCount("change") +
+			watcher.listenerCount("unlink") +
+			watcher.listenerCount("error") +
+			watcher.listenerCount("ready");
+
+		expect(poolAfter).toBe(0);
+		expect(watcherAfter).toBe(0);
 	});
 });
