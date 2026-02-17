@@ -39,7 +39,9 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => 
 		});
 
 		// Without backgroundMaterialize, __type returns IN_FLIGHT or UNMATERIALIZED (not materialized yet)
-		const typeValue = api.math.__type;
+		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
+		// because root files are always eager even in lazy mode for collision handling
+		const typeValue = api.deep.folder.config.__type;
 		const isNotMaterialized = typeValue === api.slothlet.types.UNMATERIALIZED || typeValue === api.slothlet.types.IN_FLIGHT;
 		expect(isNotMaterialized).toBe(true);
 
@@ -56,14 +58,16 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => 
 		// NOTE: Due to architecture limitation, lazy mode loads modules during init for flattening analysis,
 		// so backgroundMaterialize doesn't actually change behavior. __type still returns IN_FLIGHT initially.
 		// This test documents actual behavior, not intended behavior.
-		const mathType = api.math.__type;
-		const isNotFullyMaterialized = mathType === api.slothlet.types.UNMATERIALIZED || mathType === api.slothlet.types.IN_FLIGHT;
+		// NOTE: Must test nested module (api.deep.folder.config) not root (api.math)
+		// because root files are always eager even in lazy mode for collision handling
+		const configType = api.deep.folder.config.__type;
+		const isNotFullyMaterialized = configType === api.slothlet.types.UNMATERIALIZED || configType === api.slothlet.types.IN_FLIGHT;
 		expect(isNotFullyMaterialized).toBe(true);
 
-		// NOTE: typeof api.math.add ALWAYS returns "function" in lazy mode because the proxy target
+		// NOTE: typeof api.deep.folder.config.get ALWAYS returns "function" in lazy mode because the proxy target
 		// is a function (see docs/v3/changelog/typeof-always-function-lazy-mode.md).
 		// Use __type to check actual materialization status.
-		expect(typeof api.math.add).toBe("function");
+		expect(typeof api.deep.folder.config.get).toBe("function");
 
 		// FIXED: Was failing due to Node.js module cache pollution between instances. When multiple
 		// slothlet instances loaded the same modules, Node cached them, causing wrapper/state bleed.
