@@ -207,8 +207,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 	// Current issue: Adding same directory twice with different moduleIDs doesn't trigger
 	// OWNERSHIP_CONFLICT as expected. Need to investigate ownership tracking.
 
-	it.skip("should allow only reload with granular mutations control", async () => {
-		// SKIPPED: reload() not implemented yet
+	it("should allow only reload with granular mutations control", async () => {
 		api = await createApiInstance(config, {
 			api: {
 				mutations: {
@@ -229,8 +228,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		await expect(api.slothlet.reload()).resolves.not.toThrow();
 	});
 
-	it.skip("should allow all mutations by default", async () => {
-		// SKIPPED: reload() not implemented yet
+	it("should allow all mutations by default", async () => {
 		api = await createApiInstance(config);
 
 		// All mutations should work
@@ -241,8 +239,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		await expect(api.slothlet.api.remove("extra")).resolves.not.toThrow();
 	});
 
-	it.skip("should allow all mutations with api.mutations: { add: true, remove: true, reload: true }", async () => {
-		// SKIPPED: reload() not implemented yet
+	it("should allow all mutations with api.mutations: { add: true, remove: true, reload: true }", async () => {
 		api = await createApiInstance(config, {
 			api: {
 				mutations: {
