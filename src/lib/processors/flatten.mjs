@@ -282,7 +282,7 @@ export class Flatten extends ComponentBase {
 
 	/**
 	 * Build category-level flattening decisions.
-	 * Implements conditions C10-C18 from buildCategoryDecisions().
+	 * Implements conditions C10-C33 from buildCategoryDecisions().
 	 * @param {object} options - Category options
 	 * @param {string} options.categoryName - Category name
 	 * @param {object} options.mod - Module exports
@@ -304,6 +304,27 @@ export class Flatten extends ComponentBase {
 			preferredName: null,
 			reason: "No flattening conditions met"
 		};
+
+		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// Files named addapi.{mjs,cjs,js,ts} always flatten regardless of autoFlatten setting
+		const isAddapiFile = moduleName === "addapi" || fileBaseName === "addapi" || 
+			(fileBaseName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(fileBaseName.toLowerCase()));
+		if (isAddapiFile) {
+			// Check for metadata default export pattern (object default + named exports)
+			if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleKeys.length > 0) {
+				return {
+					shouldFlatten: true,
+					flattenType: "addapi-metadata-default",
+					reason: "AddApi special file pattern with metadata default - flatten named exports to parent"
+				};
+			}
+			// Even without metadata pattern, addapi files should always flatten
+			return {
+				shouldFlatten: true,
+				flattenType: "addapi-special-file",
+				reason: "AddApi special file pattern - always flatten"
+			};
+		}
 
 		// Rule 3 - C10: Single-file function folder match
 		if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
