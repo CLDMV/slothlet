@@ -18,6 +18,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { runtime_isClassInstance, runtime_wrapClassInstance } from "@cldmv/slothlet/helpers/class-instance-wrapper";
+import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";
 
 /**
  * AsyncLocalStorage-based context manager for async runtime
@@ -28,6 +29,18 @@ export class AsyncContextManager {
 	constructor() {
 		this.als = new AsyncLocalStorage();
 		this.instances = new Map(); // instanceID → context data
+	}
+
+	/**
+	 * Register the EventEmitter context checker
+	 * Must be called AFTER EventEmitter patching is enabled
+	 * @public
+	 */
+	registerEventEmitterContextChecker() {
+		setApiContextChecker(() => {
+			const store = this.als.getStore();
+			return store && store.instanceID ? true : false;
+		});
 	}
 
 	/**

@@ -19,8 +19,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 
 // Detect V2 vs V3 based on NODE_OPTIONS conditions
-const isV3 = process.env.NODE_OPTIONS?.includes("slothlet-three");
-const sanitizeModule = isV3 ? "../../../../src3/lib/helpers/sanitize.mjs" : "../../../../src/lib/helpers/sanitize.mjs";
+const isV3 = process.env.NODE_OPTIONS?.includes("slothlet-three") || process.env.NODE_OPTIONS?.includes("slothlet-dev");
+const sanitizeModule = isV3 ? "../../../../src/lib/helpers/sanitize.mjs" : "../../../../src/lib/helpers/sanitize.mjs";
 
 let sanitizePropertyName;
 
