@@ -56,7 +56,8 @@ export class ModesProcessor extends ComponentBase {
 		collisionContext = "initial",
 		moduleID = null,
 		sourceFolder = null,
-		cacheBust = null
+		cacheBust = null,
+		collisionModeOverride = null
 	) {
 		// Access components and data via slothlet instance
 		const { ownership, metadata } = this.slothlet.handlers;
@@ -203,7 +204,12 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			// Check for root contributor (only at root level)
-			const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function";
+			// Exception: addapi files with OBJECT defaults should use flatten-to-category logic
+			// But addapi files with FUNCTION defaults should be root contributors (callable namespace)
+			const isAddapiFile = moduleName === "addapi" || file.name === "addapi" || 
+				(file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
+			const isAddapiObjectDefault = isAddapiFile && analysis.hasDefault && typeof mod.default !== "function";
+			const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function" && !isAddapiObjectDefault;
 			if (moduleName === "config" || moduleKeys.some((k) => k.includes("Config") || k.includes("config"))) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
@@ -227,15 +233,17 @@ export class ModesProcessor extends ComponentBase {
 				}
 				// Track root-level default function exports for post-processing
 				rootContributors.push({ moduleName, file, defaultFunc });
+				continue; // Skip normal processing for root contributors
 			} else {
 				// Regular module - apply flattening decisions
-				const decision = flatten.getFlatteningDecision({
+				const decision = await flatten.getFlatteningDecision({
 					mod,
 					moduleName,
 					categoryName: categoryName || moduleName,
 					analysis,
 					hasMultipleDefaults,
-					moduleKeys
+					moduleKeys,
+					t
 				});
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
@@ -244,17 +252,22 @@ export class ModesProcessor extends ComponentBase {
 				}
 				// Use preferred name from decision (Rule 9 - Function Name Preference)
 				const propertyName = decision.preferredName || moduleName;
+				
+				// For root-level files, categoryName is null, but we may need it for flatten-to-category
+				// Use moduleName as fallback for API path assignment
+				const effectiveCategoryName = categoryName || moduleName;
+				
 				// Build module content based on decision
 				let moduleContent = {};
 
-				// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
-				// When addapi.{mjs,cjs,js,ts} has object default + named exports,
-				// flatten only the named exports to parent, ignoring the metadata default
+				// Rule 11 (F06) - C33: AddApi Special File Pattern
+				// When addapi.{mjs,cjs,js,ts} has default export + named exports,
+				// use default export as namespace base and merge named exports onto it
 				const isAddapiFile = moduleName === "addapi" || file.name === "addapi" || 
 					(file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
-				if (isAddapiFile && analysis.hasDefault && analysis.defaultExportType === "object" && moduleKeys.length > 0) {
-					// Create object with only named exports, ignore the metadata default
-					moduleContent = {};
+				if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
+					// Default export becomes the namespace, named exports merge onto it
+					moduleContent = mod.default;
 					for (const key of moduleKeys) {
 						moduleContent[key] = mod[key];
 					}
@@ -675,37 +688,87 @@ export class ModesProcessor extends ComponentBase {
 						}
 					}
 				}
-				// Rule 11 (F06) - C33: AddApi Special File Pattern - flatten named exports to parent
-				// Instead of creating targetApi.addapi.{exports}, create targetApi.{exports}
-				if (isAddapiFile && moduleContent && typeof moduleContent === "object" && !Array.isArray(moduleContent) && Object.keys(moduleContent).length > 0) {
-					// Assign each named export directly to the parent API object
-					for (const [key, value] of Object.entries(moduleContent)) {
-						const localPath = isRoot ? key : `${categoryName}.${key}`;
-						if (shouldWrap && (typeof value === "function" || (typeof value === "object" && value !== null))) {
+				
+				// Handle flatten-to-category decision (C09, C33)
+				// Flatten named exports directly to parent category instead of creating nested namespace
+				if (decision.flattenToCategory && moduleContent && effectiveCategoryName) {
+					const isAddapiFile = decision.flattenType === "addapi-metadata-default" || decision.flattenType === "addapi-special-file";
+					
+					if (isAddapiFile && typeof moduleContent === "object" && !Array.isArray(moduleContent) && typeof moduleContent !== "function") {
+						// ADDAPI OBJECT DEFAULT: Merge exports directly into targetApi without creating addapi namespace
+						// When api.add('plugins', './dir'), addapi exports become api.plugins.{exports}, NOT api.plugins.addapi.{exports}
+						for (const key of Object.keys(moduleContent)) {
+							const value = moduleContent[key];
+							const keyPath = isRoot ? key : `${apiPathPrefix ? apiPathPrefix + '.' : ''}${key}`;
+							
+							if (shouldWrap && typeof value === "function") {
+								const wrapper = new UnifiedWrapper(this.slothlet, {
+									mode: effectiveMode,
+									apiPath: buildApiPath(keyPath),
+									initialImpl: value,
+									materializeOnCreate: config.backgroundMaterialize,
+									filePath: file.path,
+									moduleID: moduleID || file.moduleID,
+									sourceFolder
+								});
+								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+									useCollisionDetection: true,
+									config,
+									collisionContext
+								});
+							} else {
+								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+									useCollisionDetection: true,
+									config,
+									collisionContext
+								});
+							}
+						}
+						
+						// Register ownership for each merged property
+						if (ownership) {
+							for (const key of Object.keys(moduleContent)) {
+								const apiPath = isRoot ? key : (apiPathPrefix ? `${apiPathPrefix}.${key}` : key);
+								ownership.register({
+									moduleID: moduleID || file.moduleID,
+									apiPath,
+									source: "core",
+									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+									config
+								});
+							}
+						}
+					} else {
+						// NORMAL FLATTEN-TO-CATEGORY: Assign moduleContent (function or object) to category name
+						const localPath = isRoot ? effectiveCategoryName : `${apiPathPrefix ? apiPathPrefix + '.' : ''}${effectiveCategoryName}`;
+						
+						if (shouldWrap) {
 							const wrapper = new UnifiedWrapper(this.slothlet, {
 								mode: effectiveMode,
 								apiPath: buildApiPath(localPath),
-								initialImpl: value,
+								initialImpl: moduleContent,
 								materializeOnCreate: config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: moduleID || file.moduleID,
-								sourceFolder
+								sourceFolder,
+								isCallable: typeof moduleContent === "function"
 							});
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
 								useCollisionDetection: true,
 								config,
 								collisionContext
 							});
 						} else {
-							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
+							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
 								useCollisionDetection: true,
 								config,
 								collisionContext
 							});
 						}
-						// Register ownership for each flattened export
+						
+						// Register ownership
 						if (ownership) {
-							const apiPath = isRoot ? key : `${categoryName}.${key}`;
+							const apiPath = isRoot ? effectiveCategoryName : (apiPathPrefix ? `${apiPathPrefix}.${effectiveCategoryName}` : effectiveCategoryName);
 							ownership.register({
 								moduleID: moduleID || file.moduleID,
 								apiPath,
@@ -715,9 +778,10 @@ export class ModesProcessor extends ComponentBase {
 							});
 						}
 					}
-					// Skip the normal assignment since we've handled it above
+					// Skip normal assignment since we've handled it
 					continue;
 				}
+				
 				// Wrap in UnifiedWrapper
 				if (shouldWrap) {
 					const localPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
@@ -841,7 +905,7 @@ export class ModesProcessor extends ComponentBase {
 								defaultExportType: exports.default ? typeof exports.default : null
 							};
 							const modContent = exports.default !== undefined ? exports.default : exports;
-							const categoryDecision = flatten.buildCategoryDecisions({
+							const categoryDecision = await flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
 								moduleName,
@@ -849,7 +913,8 @@ export class ModesProcessor extends ComponentBase {
 								analysis,
 								moduleKeys,
 								currentDepth: currentDepth + 1,
-								moduleFiles: subDir.children.files
+								moduleFiles: subDir.children.files,
+								t
 							});
 							// Flattening is about module internal structure (math/math.mjs → math),
 							// not about the target path prefix. Must flatten regardless of apiPathPrefix
@@ -1052,7 +1117,7 @@ export class ModesProcessor extends ComponentBase {
 					// The replace mode collision in api-assignment.mjs handles materialization.
 					const collisionConfig = config.api?.collision;
 					const modes_initialCollisionMode =
-						(collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
+						collisionModeOverride || (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
 					let modes_fileFolderImpl = null;
 					const modes_lazyExisting = targetApi[subDirName];
 					if (modes_initialCollisionMode !== "replace" && modes_lazyExisting?.____slothletInternal.wrapper) {
@@ -1237,7 +1302,7 @@ export class ModesProcessor extends ComponentBase {
 						defaultExportType: exports.default ? typeof exports.default : null
 					};
 					const modContent = exports.default !== undefined ? exports.default : exports;
-					const categoryDecision = flatten.buildCategoryDecisions({
+					const categoryDecision = await flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
 						moduleName,
@@ -1245,17 +1310,18 @@ export class ModesProcessor extends ComponentBase {
 						analysis,
 						moduleKeys,
 						currentDepth: apiPath.split(".").length,
-						moduleFiles: dir.children.files
+						moduleFiles: dir.children.files,
+						t
 					});
 					if (categoryDecision.shouldFlatten) {
 						let implToWrap;
 						
-						// Rule 11 (F06) - C33: AddApi Special File Pattern with metadata default
-						// When addapi.{mjs,cjs,js,ts} has object default + named exports,
-						// flatten only the named exports to parent, ignoring the metadata default
+						// Rule 11 (F06) - C33: AddApi Special File Pattern
+						// When addapi.{mjs,cjs,js,ts} has default export + named exports,
+						// use default export as namespace base and merge named exports onto it
 						if (categoryDecision.flattenType === "addapi-metadata-default") {
-							// Create object with only named exports, ignore default
-							implToWrap = {};
+							// Default export becomes the namespace, named exports merge onto it
+							implToWrap = exports.default;
 							for (const key of moduleKeys) {
 								if (key !== "default") {
 									implToWrap[key] = exports[key];
@@ -1375,7 +1441,8 @@ export class ModesProcessor extends ComponentBase {
 				"initial",
 				moduleID, // Pass parent moduleID to children
 				actualSourceFolder, // Use computed actual subdirectory path for metadata
-				cacheBust
+				cacheBust,
+				collisionMode // Pass collision mode to child wrappers
 			);
 			if (config.debug?.modes) {
 				this.slothlet.debug("modes", {
@@ -1459,6 +1526,11 @@ export class ModesProcessor extends ComponentBase {
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder
 		});
+
+		// Set collision mode from parent (api.add config or parent wrapper's collision mode)
+		if (collisionMode) {
+			wrapper.____slothletInternal.state.collisionMode = collisionMode;
+		}
 
 		// CRITICAL: Add file-folder collision exports as immediate children on the wrapper.
 		// These come from a same-name file (e.g., math.mjs) that collides with this folder (math/).

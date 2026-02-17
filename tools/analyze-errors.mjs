@@ -1018,6 +1018,78 @@ if (allConsoleWarns.length > 0) {
 	console.log(`✅ No console.warn calls found in src folder\n`);
 }
 
+// ===== HARDCODED REASON STRINGS DETECTION =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Hardcoded 'reason:' Strings Detection ===");
+console.log("=".repeat(80) + "\n");
+
+/**
+ * Parse hardcoded reason: strings that should use i18n
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of hardcoded reason strings
+ */
+function parseHardcodedReasons(content, filePath) {
+	const reasons = [];
+	// Match: reason: "string" or reason: 'string' (not using await t())
+	const reasonPattern = /reason:\s*["'`]([^"'`]+)["'`]/g;
+	
+	let match;
+	while ((match = reasonPattern.exec(content)) !== null) {
+		// Check if this match is inside a comment
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+		
+		// Skip if it's in a line comment
+		if (currentLine.trim().startsWith("//")) {
+			continue;
+		}
+		
+		// Skip if it's in a block comment
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) {
+			continue;
+		}
+		
+		// Find line number
+		const lineNumber = beforeMatch.split("\n").length;
+		
+		reasons.push({
+			filePath,
+			lineNumber,
+			reasonText: match[1],
+			fullMatch: match[0]
+		});
+	}
+	
+	return reasons;
+}
+
+const allHardcodedReasons = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	const reasons = parseHardcodedReasons(content, file);
+	allHardcodedReasons.push(...reasons);
+}
+
+if (allHardcodedReasons.length > 0) {
+	console.log(`❌ Found ${allHardcodedReasons.length} hardcoded reason: strings:\n`);
+	console.log(`   These should use i18n translation keys.\n`);
+	
+	allHardcodedReasons.forEach((reason, idx) => {
+		const relPath = relative(rootDir, reason.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${reason.lineNumber}`);
+		console.log(`    Code: ${reason.fullMatch}`);
+		console.log(`    Text: "${reason.reasonText}"`);
+		console.log(`    ❌ Should use: reason: await t("FLATTEN_REASON_KEY")`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No hardcoded reason: strings found\n`);
+}
+
 // ===== CONSOLE.LOG DETECTION (SRC FOLDER) =====
 console.log("\n" + "=".repeat(80));
 console.log("=== Console.log Detection (Outside SlothletDebug Class) - src folder ===");
@@ -1232,6 +1304,13 @@ if (allConsoleWarns.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Console.warn Calls:          0`);
+}
+
+if (allHardcodedReasons.length > 0) {
+	console.log(`❌ Hardcoded reason: Strings:   ${allHardcodedReasons.length} - MUST convert to i18n`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Hardcoded reason: Strings:   0`);
 }
 
 if (allConsoleLogs.length > 0) {

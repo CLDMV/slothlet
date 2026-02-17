@@ -61,8 +61,8 @@ for (const { config, name } of configs) {
 			// Add a component
 			await api.slothlet.api.add("custom", TEST_DIRS.API_TEST);
 
-			// Verify component works
-			expect(typeof api.custom).toBe("object");
+			// Verify component works - API_TEST has root-function.mjs so namespace is callable
+			expect(typeof api.custom).toBe("function");
 			expect(api.custom.math.add(1, 1)).toBe(1002);
 
 			// Modify added component (custom properties should persist across selective reload)

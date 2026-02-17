@@ -52,12 +52,19 @@ export async function buildLazyAPI({
 	dir,
 	apiPathPrefix = "",
 	collisionContext = "initial",
+	collisionMode = null,
 	moduleID,
 	slothlet,
 	apiDepth = Infinity,
 	cacheBust = null,
 	fileFilter = null
 }) {
+	slothlet.debug("modes", {
+		message: "buildLazyAPI called",
+		apiPathPrefix,
+		collisionMode,
+		collisionContext
+	});
 	const api = {};
 
 	// Access components via slothlet instance
@@ -93,7 +100,8 @@ export async function buildLazyAPI({
 		collisionContext,
 		moduleID,
 		dir, // sourceFolder for metadata
-		cacheBust
+		cacheBust,
+		collisionMode // Pass collision mode from api.add config
 	);
 
 	// Apply root contributor pattern: if a root function exists, make it THE api
@@ -108,10 +116,11 @@ export async function buildLazyAPI({
  * @param {string} apiPath - Current API path
  * @param {Object} slothlet - Slothlet instance
  * @param {string} moduleIDOverride - Module ID from api.add() to use instead of file.moduleID
+ * @param {string|null} collisionModeOverride - Collision mode from api.add() config
  * @returns {Proxy} Lazy unified wrapper
  * @private
  */
-function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride) {
+function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionModeOverride = null) {
 	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
 		slothlet.debug("modes", {
@@ -210,10 +219,10 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride) {
 			}
 		}
 
-		// Create lazy wrappers for subdirectories (inherit moduleIDOverride from parent)
+		// Create lazy wrappers for subdirectories (inherit moduleIDOverride and collisionModeOverride from parent)
 		for (const subdir of dir.children.directories || []) {
 			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride);
+			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride, collisionModeOverride);
 		}
 
 		// Store the file path mapping as non-enumerable property
@@ -257,6 +266,16 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride) {
 		moduleID: moduleIDOverride, // Use the override if provided, otherwise null
 		sourceFolder: slothlet.config?.dir
 	});
+
+	// Set collision mode if provided (from api.add config)
+	if (collisionModeOverride) {
+		wrapper.____slothletInternal.state.collisionMode = collisionModeOverride;
+		slothlet.debug("modes", {
+			message: "LAZY-CREATE: Set collision mode from api.add config",
+			apiPath,
+			collisionMode: collisionModeOverride
+		});
+	}
 
 	// Store directory structure for later access (e.g., replace mode pre-population)
 	wrapper._directoryStructure = dir;

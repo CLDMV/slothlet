@@ -1246,27 +1246,21 @@ return true;
 			// This ensures api.lookup.__metadata exists and works properly
 			// The wrapper acts as a namespace container for the loaded API modules
 			if (!apiToMerge.____slothletInternal?.wrapper) {
-				// CRITICAL: If buildAPI returned a function (root contributor pattern),
-				// extract properties into a plain object for the container wrapper.
-				// The container is a namespace, not a callable — root contributor behavior
-				// only applies at the root level, not when loaded under a nested path.
-				let implForContainer = apiToMerge;
-				if (typeof apiToMerge === "function") {
-					implForContainer = {};
-					for (const key of Object.keys(apiToMerge)) {
-						implForContainer[key] = apiToMerge[key];
-					}
-				}
+				// Check if apiToMerge is a function (root contributor pattern).
+				// Functions with properties should remain callable even when loaded at nested paths.
+				// This supports patterns like: api.logger() callable + api.logger.utils.debug()
+				const isCallableNamespace = typeof apiToMerge === "function";
+				
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: normalizedPath,
 					mode: this.config.mode,
-					isCallable: false, // Container is a namespace, not callable
+					isCallable: isCallableNamespace, // Preserve callable nature
 					moduleID: moduleID,
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
 				});
-				// Set the apiToMerge object as the impl
-				containerWrapper.___setImpl(implForContainer, moduleID);
+				// Set apiToMerge as the impl (function or object)
+				containerWrapper.___setImpl(apiToMerge, moduleID);
 				// Replace apiToMerge with the wrapped proxy
 				apiToMerge = containerWrapper.createProxy();
 			}
