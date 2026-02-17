@@ -1614,6 +1614,7 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 				let current = wrapper.createProxy();
 				let lastWrapper = wrapper;
+				let lastObject = null; // Track the parent object for `this` binding
 
 				for (const prop of propChain) {
 					wrapper.slothlet.debug("wrapper", {
@@ -1670,6 +1671,7 @@ export class UnifiedWrapper extends ComponentBase {
 						lastWrapper = currentWrapper; // Track the wrapper we're accessing
 						const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
 						if (!isInternal && prop in currentWrapper) {
+							lastObject = current; // Track parent before moving to next property
 							current = currentWrapper[prop];
 							continue;
 						}
@@ -1680,11 +1682,13 @@ export class UnifiedWrapper extends ComponentBase {
 							currentWrapper.____slothletInternal.impl !== null &&
 							prop in currentWrapper.____slothletInternal.impl
 						) {
+							lastObject = currentWrapper.____slothletInternal.impl; // Track parent object
 							current = currentWrapper.____slothletInternal.impl[prop];
 							continue;
 						}
 					}
 
+					lastObject = current; // Track parent before moving to next property
 					current = current[prop];
 				}
 
@@ -1698,7 +1702,9 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 
 				if (typeof current === "function") {
-					return current(...args);
+					// Call with proper `this` binding - use lastObject as `this` if available
+					// This preserves `this` binding for methods called on objects
+					return current.apply(lastObject, args);
 				}
 
 				// Handle util.inspect checking for hasAttribute on primitives

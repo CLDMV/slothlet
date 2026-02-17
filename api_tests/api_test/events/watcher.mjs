@@ -52,7 +52,7 @@ export default {
 		return {
 			created: true,
 			watchPath,
-			listenerCount: getListenerCount()
+			listenerCount: this.getListenerCount()
 		};
 	},
 
@@ -60,7 +60,15 @@ export default {
 	 * Get current listener count
 	 */
 	getListenerCount() {
-		return getListenerCount();
+		if (!watcher) return 0;
+
+		return (
+			watcher.listenerCount("add") +
+			watcher.listenerCount("change") +
+			watcher.listenerCount("unlink") +
+			watcher.listenerCount("error") +
+			watcher.listenerCount("ready")
+		);
 	},
 
 	/**
