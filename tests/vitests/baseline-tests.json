@@ -51,6 +51,7 @@
 	"suites/lazy/lazy-background-materialization.test.vitest.mjs",
 	"suites/lazy/lazy-materialization-tracking.test.vitest.mjs",
 	"suites/lazy/public-lifecycle-api.test.vitest.mjs",
+	"suites/listener-cleanup/listener-cleanup.test.vitest.mjs",
 	"suites/listener-cleanup/third-party-cleanup.test.vitest.mjs",
 	"suites/metadata/metadata-api-manager.test.vitest.mjs",
 	"suites/metadata/metadata-collision-modes.test.vitest.mjs",
