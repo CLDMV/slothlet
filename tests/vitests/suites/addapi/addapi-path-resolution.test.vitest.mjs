@@ -37,18 +37,18 @@ describe("api.slothlet.api.add Path Resolution", () => {
 	/**
 	 * Helper function in the same file - simulates passing api.slothlet.api.add through a layer
 	 */
-	async function helperInSameFile(api, path, metadata, options) {
-		return await api.slothlet.api.add("helper.same", path, metadata, options);
+	async function helperInSameFile(api, path, options) {
+		return await api.slothlet.api.add("helper.same", path, options);
 	}
 
 	/**
 	 * Deeply nested helper - simulates multiple layers
 	 */
-	async function deeplyNestedHelper(api, path, metadata, options) {
-		async function innerHelper(api, path, metadata, options) {
-			return await api.slothlet.api.add("helper.nested", path, metadata, options);
+	async function deeplyNestedHelper(api, path, options) {
+		async function innerHelper(api, path, options) {
+			return await api.slothlet.api.add("helper.nested", path, options);
 		}
-		return await innerHelper(api, path, metadata, options);
+		return await innerHelper(api, path, options);
 	}
 
 	describe.each(getMatrixConfigs({}))("Config: $name", ({ config }) => {

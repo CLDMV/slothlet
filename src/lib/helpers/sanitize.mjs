@@ -318,7 +318,9 @@ export class Sanitize extends ComponentBase {
 		// 1. Split by underscores into sub-segments (capturing separators to preserve underscore count)
 		// 2. Apply rules to each sub-segment
 		// 3. Rejoin with original separators
-		const processedPrimarySegments = primarySegments.map((primarySeg) => {
+		// Track which segments had lower rules applied for camelCase processing
+		const lowerRuleApplied = [];
+		const processedPrimarySegments = primarySegments.map((primarySeg, primaryIdx) => {
 			// Split by underscores, capturing the separators to preserve exact count
 			const parts = primarySeg.split(/(_+)/);
 
@@ -334,7 +336,37 @@ export class Sanitize extends ComponentBase {
 
 				// Apply segment rules (without camelCase - that happens at primary level)
 				const config = { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules };
-				return this.#applySegmentRules(cleanSeg, 0, originalString, config);
+				const result = this.#applySegmentRules(cleanSeg, 0, originalString, config);
+				
+				// Track if a lower rule was applied
+				// Check if any lower rule pattern matches the original string
+				const matchesLower = lowerRules.some(pattern => {
+					if (pattern.includes("*") || pattern.includes("?")) {
+						const regex = this.#compileGlobPattern(pattern, false);
+						if (regex && regex.test(originalString)) {
+							// Check if this segment is a target of the pattern
+							const literals = this.#extractPatternLiterals(pattern);
+							for (const literal of literals) {
+								const cleanLiteral = literal.replace(/[^A-Za-z0-9_$]/g, "").replace(/^_+|_+$/g, "");
+								if (cleanLiteral && cleanSeg.toLowerCase() === cleanLiteral.toLowerCase()) {
+									return true;
+								}
+							}
+						}
+					} else {
+						// Exact match on segment
+						if (cleanSeg.toLowerCase() === pattern.toLowerCase()) {
+							return true;
+						}
+					}
+					return false;
+				});
+				
+				if (matchesLower && result === cleanSeg.toLowerCase()) {
+					lowerRuleApplied[primaryIdx] = true;
+				}
+				
+				return result;
 			});
 
 			// Rejoin with original separators preserved
@@ -347,7 +379,6 @@ export class Sanitize extends ComponentBase {
 			const matchesLeave = this.#matchesAnyPattern(seg, leaveRules, true);
 			const matchesLeaveInsensitive = this.#matchesAnyPattern(seg, leaveInsensitiveRules, false);
 			const matchesUpper = this.#matchesAnyPattern(seg, upperRules, false);
-			const matchesLower = this.#matchesAnyPattern(seg, lowerRules, false);
 			// Only check preserveAllUpper/Lower if segment doesn't contain underscores
 			// (underscore-separated parts were already handled individually)
 			const hasUnderscores = seg.includes("_");
@@ -355,7 +386,7 @@ export class Sanitize extends ComponentBase {
 			const isAllLower = !hasUnderscores && preserveAllLower && seg === seg.toLowerCase() && seg !== seg.toUpperCase() && /[a-z]/.test(seg);
 
 			// If any rule matches, preserve the segment as-is (don't apply camelCase)
-			if (matchesLeave || matchesLeaveInsensitive || matchesUpper || matchesLower || isAllUpper || isAllLower) {
+			if (matchesLeave || matchesLeaveInsensitive || matchesUpper || isAllUpper || isAllLower) {
 				return seg;
 			}
 
@@ -366,8 +397,13 @@ export class Sanitize extends ComponentBase {
 				// First primary segment: lowercase first character
 				transformed = lowerFirst ? seg[0].toLowerCase() + seg.slice(1) : seg;
 			} else {
-				// Subsequent primary segments: capitalize first character
-				transformed = seg[0].toUpperCase() + seg.slice(1);
+				// Subsequent primary segments: capitalize first character (unless lower rule applied)
+				// Check if a lower rule was applied to this segment during processing
+				if (lowerRuleApplied[idx]) {
+					transformed = seg; // Keep lowercase from lower rule
+				} else {
+					transformed = seg[0].toUpperCase() + seg.slice(1);
+				}
 			}
 
 			return transformed;

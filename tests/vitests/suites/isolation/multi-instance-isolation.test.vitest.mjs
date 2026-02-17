@@ -103,8 +103,9 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 		const result1 = config.mode === "lazy" ? await api1.math.add(2, 3) : api1.math.add(2, 3);
 		const result2 = config.mode === "lazy" ? await api2.math.add(5, 7) : api2.math.add(5, 7);
 
-		expect(result1).toBe(5);
-		expect(result2).toBe(12);
+		// V3: File version wins collision (adds 1000)
+		expect(result1).toBe(1005);
+		expect(result2).toBe(1012);
 	});
 
 	it("should maintain separate API structures for each instance", async () => {
@@ -147,7 +148,8 @@ describe.each(ALL_CONFIGS)("Multi-Instance Isolation > Config: '$name'", ({ conf
 
 		// api2 should still work
 		const result = config.mode === "lazy" ? await api2.math.add(1, 1) : api2.math.add(1, 1);
-		expect(result).toBe(2);
+		// V3: File version wins collision (adds 1000)
+		expect(result).toBe(1002);
 
 		// Remove api1 from cleanup list since we already shut it down
 		instances = instances.filter((i) => i !== api1);
@@ -184,17 +186,21 @@ describe("Multi-Instance Mode Mixing", () => {
 		instances.push(eagerApi);
 
 		const lazyApi = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "lazy",
+			runtime: "async",
 			hooks: false
 		});
 		instances.push(lazyApi);
 
 		// Eager returns result directly
 		const eagerResult = eagerApi.math.add(2, 3);
-		expect(eagerResult).toBe(5);
+		// V3: File version wins collision (adds 1000)
+		expect(eagerResult).toBe(1005);
 
 		// Lazy requires await
 		const lazyResult = await lazyApi.math.add(2, 3);
-		expect(lazyResult).toBe(5);
+		expect(lazyResult).toBe(1005);
 
 		// Verify they're different instances
 		expect(eagerApi.slothlet.instanceID).not.toBe(lazyApi.slothlet.instanceID);
@@ -221,8 +227,9 @@ describe("Multi-Instance Mode Mixing", () => {
 		const asyncResult = asyncApi.math.add(2, 3);
 		const liveResult = liveApi.math.add(2, 3);
 
-		expect(asyncResult).toBe(5);
-		expect(liveResult).toBe(5);
+		// V3: File version wins collision (adds 1000)
+		expect(asyncResult).toBe(1005);
+		expect(liveResult).toBe(1005);
 
 		// Verify they're different instances
 		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);

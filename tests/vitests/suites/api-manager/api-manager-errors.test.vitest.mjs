@@ -37,35 +37,43 @@ async function createApiInstance(baseConfig, overrides = {}) {
 	return slothlet({ ...baseConfig, ...overrides });
 }
 
-const NON_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
+const NON_HOT_CONFIG = { 
+	...getMatrixConfigs({})[0].config, 
+	dir: TEST_DIRS.API_TEST,
+	api: { mutations: { reload: false } }
+};
 const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.API_TEST };
 
 describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.slothlet.reload()).rejects.toThrow("reload");
+		await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		await api.shutdown();
 	});
 
 	it("rejects invalid reloadApi arguments", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
-		await expect(api.slothlet.api.reload(123)).rejects.toThrow("must be a string");
-		await expect(api.slothlet.api.reload("")).rejects.toThrow("non-empty");
-		await expect(api.slothlet.api.reload("   ")).rejects.toThrow("non-whitespace");
+		// V3: Uses [INVALID_ARGUMENT] error code for type errors
+		await expect(api.slothlet.api.reload(123)).rejects.toThrow("INVALID_ARGUMENT");
+		// V3: Empty string is valid (reloads root), whitespace throws INVALID_API_PATH
+		await expect(api.slothlet.api.reload("")).resolves.toBeUndefined();
+		await expect(api.slothlet.api.reload("   ")).rejects.toThrow("INVALID_API_PATH");
 
 		await api.shutdown();
 	});
 
 	it("rejects reloadApi when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.slothlet.api.reload("test")).rejects.toThrow("reload");
+		// V3: Should throw mutations disabled error, not invalid path error
+		await expect(api.slothlet.api.reload("test")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
 		await api.shutdown();
 	});
 
 	it("allows reloadApi on non-existent paths without throwing", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
-		await expect(api.slothlet.api.reload("nonExistentPath")).resolves.toBeUndefined();
+		// V3: Throws INVALID_API_PATH for non-existent paths instead of silently succeeding
+		await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("INVALID_API_PATH");
 		await api.shutdown();
 	});
 

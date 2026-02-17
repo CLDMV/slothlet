@@ -24,6 +24,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootDir = join(__dirname, "..");
 const vitestsDir = join(rootDir, "tests/vitests");
 const baselineFile = join(vitestsDir, "baseline-tests.json");
+const testStatusFile = join(vitestsDir, "TEST-STATUS.md");
 
 /**
  * Recursively find all vitest test files in a directory
@@ -70,19 +71,46 @@ async function loadBaseline() {
 }
 
 /**
+ * Parse TEST-STATUS.md to extract tests marked as passing
+ * @returns {Promise<string[]>} Array of test file paths marked as passing
+ */
+async function loadPassingTestsFromStatus() {
+	try {
+		const content = await readFile(testStatusFile, "utf-8");
+		const lines = content.split("\n");
+		const passingTests = [];
+		
+		for (const line of lines) {
+			// Match table rows: | suites/path/to/test.test.vitest.mjs | ... | ✅ pass (date) | ...
+			const match = line.match(/^\|\s*(suites\/[^|]+\.vitest\.mjs)\s*\|[^|]*\|[^|]*\|\s*✅\s*pass\s*\(/);
+			if (match) {
+				passingTests.push(match[1].trim());
+			}
+		}
+		
+		return passingTests;
+	} catch (error) {
+		// File doesn't exist or couldn't be read - return empty array
+		return [];
+	}
+}
+
+/**
  * Compare filesystem tests with baseline and output differences
  */
 async function compareTests() {
 	console.log("🔍 Comparing vitest files with baseline...\n");
 
-	const [filesystemTests, baselineTests] = await Promise.all([
+	const [filesystemTests, baselineTests, passingTests] = await Promise.all([
 		findVitestFiles(vitestsDir),
-		loadBaseline()
+		loadBaseline(),
+		loadPassingTestsFromStatus()
 	]);
 
 	// Normalize paths for comparison (handle forward slashes)
 	const normalizedBaseline = new Set(baselineTests.map(p => p.replace(/\\/g, "/")));
 	const normalizedFilesystem = filesystemTests.map(p => p.replace(/\\/g, "/"));
+	const normalizedPassing = new Set(passingTests.map(p => p.replace(/\\/g, "/")));
 
 	// Find files not in baseline
 	const notInBaseline = normalizedFilesystem.filter(file => !normalizedBaseline.has(file));
@@ -92,12 +120,21 @@ async function compareTests() {
 		!normalizedFilesystem.includes(file.replace(/\\/g, "/"))
 	);
 
+	// Find tests marked as passing in TEST-STATUS.md but not in baseline
+	const passingNotInBaseline = Array.from(normalizedPassing).filter(file => !normalizedBaseline.has(file));
+
 	// Output results
 	console.log(`📊 Summary:`);
 	console.log(`   Total filesystem tests: ${normalizedFilesystem.length}`);
 	console.log(`   Total baseline tests: ${baselineTests.length}`);
+	if (passingTests.length > 0) {
+		console.log(`   Total passing tests (TEST-STATUS.md): ${passingTests.length}`);
+	}
 	console.log(`   Tests not in baseline: ${notInBaseline.length}`);
 	console.log(`   Tests in baseline but missing from filesystem: ${notInFilesystem.length}`);
+	if (passingNotInBaseline.length > 0) {
+		console.log(`   ⚠️  Passing tests not in baseline: ${passingNotInBaseline.length}`);
+	}
 	console.log();
 
 	if (notInBaseline.length > 0) {
@@ -119,8 +156,17 @@ async function compareTests() {
 		console.log();
 	}
 
+	if (passingNotInBaseline.length > 0) {
+		console.log(`🔴 Tests marked as PASSING in TEST-STATUS.md but NOT in baseline.json (${passingNotInBaseline.length}):`);
+		console.log(`   These tests should be added to baseline-tests.json:\n`);
+		passingNotInBaseline.sort().forEach(file => {
+			console.log(`   - ${file}`);
+		});
+		console.log();
+	}
+
 	// Exit with appropriate code
-	if (notInBaseline.length > 0 || notInFilesystem.length > 0) {
+	if (notInBaseline.length > 0 || notInFilesystem.length > 0 || passingNotInBaseline.length > 0) {
 		process.exit(1);
 	} else {
 		console.log(`✅ All tests match baseline perfectly!`);

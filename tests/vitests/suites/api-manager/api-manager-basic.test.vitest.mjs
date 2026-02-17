@@ -75,7 +75,9 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 		api = await createApiInstance(config);
 		const mathAdd = getMathAdd(api, config.dir);
 		expect(mathAdd).toBeTypeOf("function");
-		expect(await mathAdd(2, 3)).toBe(5);
+		// V3: Default collision mode prefers FILE over FOLDER, so math.add returns 1005
+		const expected = config.dir === TEST_DIRS.API_TEST ? 1005 : 5;
+		expect(await mathAdd(2, 3)).toBe(expected);
 
 		const originalInstanceId = api.slothlet.instanceID;
 		await api.slothlet.reload();
@@ -83,7 +85,9 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Basic - $name", ({ config }) => {
 
 		const mathAddAfter = getMathAdd(api, config.dir);
 		expect(mathAddAfter).toBeTypeOf("function");
-		expect(await mathAddAfter(4, 5)).toBe(9);
+		// V3: After reload, same collision behavior
+		const expectedAfter = config.dir === TEST_DIRS.API_TEST ? 1009 : 9;
+		expect(await mathAddAfter(4, 5)).toBe(expectedAfter);
 	});
 
 	it("preserves api.slothlet.api.add modules with moduleID across reloads", async () => {

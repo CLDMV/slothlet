@@ -242,4 +242,96 @@ When dynamically assigning properties to function objects, always handle potenti
 
 ---
 
-_Last updated: November 5, 2025_
+## ~~Bug #5: Sanitization preserveAllLower Returns Original String Unchanged~~
+
+**Status**: ❌ **NOT A BUG** - This is correct V3 behavior
+
+**Description**: Initially reported as a bug, but this is actually a documented V3 feature. The `preserveAllLower` option has an early return check that preserves the entire original string if it contains only lowercase letters and valid identifier characters (including hyphens).
+
+**Behavior**:
+- `sanitizePropertyName("parse-xml-data", { preserveAllLower: true })` → `"parse-xml-data"` ✅ (entire string preserved)
+- `sanitizePropertyName("parse-xml-data", {})` → `"parseXmlData"` ✅ (normal camelCase)
+- `sanitizePropertyName("common_apps", { preserveAllLower: true })` → `"common_apps"` ✅ (underscores preserved)
+
+**Why This Is Correct**:
+The early return (lines 290-299 in `src/lib/helpers/sanitize.mjs`) checks if the ENTIRE string matches the preserve criteria. If it does, it returns the string unchanged - including delimiters. This is a feature, not a bug, allowing strings like `"parse-xml-data"` to be preserved as-is when using `preserveAllLower`.
+
+This is symmetric with `preserveAllUpper` behavior:
+- `sanitizePropertyName("PARSE-XML-DATA", { preserveAllUpper: true })` → `"PARSE-XML-DATA"` ✅
+
+---
+
+
+## Bug #6: Sanitization lower Pattern Rule Overridden by CamelCase
+
+**Status**: ✅ **FIXED** (February 15, 2026)
+
+**Description**: Pattern-based `lower` rules are correctly applied during segment processing but get overridden by the subsequent camelCase transformation, making them ineffective for non-first segments.
+
+**Symptoms**:
+- `sanitizePropertyName("get-API-status", { rules: { lower: ["*-api-*"] } })` returns `"getApiStatus"` instead of `"getapiStatus"`
+- The "API" segment matches the pattern and is lowercased to "api" correctly
+- But camelCase logic then capitalizes it to "Api" because it's not the first segment
+- The `upper` rule works correctly: `sanitizePropertyName("get-api-status", { rules: { upper: ["*-api-*"] } })` → `"getAPIStatus"` ✅
+
+**Expected Behavior**:
+Pattern rules should be preserved through camelCase transformation:
+- `lower: ["*-api-*"]` → `"getapiStatus"` (api stays lowercase)
+- `upper: ["*-api-*"]` → `"getAPIStatus"` (API stays uppercase) ✅
+- Symmetric behavior between upper and lower rules
+
+**Root Cause**:
+The `#applySegmentRules` method (lines 112-167) correctly applies pattern-based lowercasing, but doesn't communicate this to the camelCase logic (lines 340-380). The camelCase transformation blindly capitalizes non-first segments without checking if they had explicit case rules applied.
+
+**Fix Needed**:
+Track which segments had explicit case transformations and skip camelCase capitalization for those segments.
+
+**Fix Applied**:
+Added tracking during segment processing to identify which primary segments had `lower` rules applied. The tracking checks if:
+1. A lower rule pattern matches the original string
+2. The segment itself is a target of that pattern (via literal extraction)
+3. The segment result is lowercase
+
+During camelCase transformation, segments marked as having lower rules applied are preserved in lowercase instead of being capitalized:
+
+```javascript
+// Track lower rule application during segment processing
+const lowerRuleApplied = [];
+const matchesLower = lowerRules.some(pattern => {
+    // Check if pattern matches original string
+    // AND this segment is a target of the pattern
+    if (regex.test(originalString) && segmentMatchesPatternLiteral) {
+        return true;
+    }
+});
+if (matchesLower && result === cleanSeg.toLowerCase()) {
+    lowerRuleApplied[primaryIdx] = true;  // Mark for camelCase phase
+}
+
+// During camelCase, check tracking instead of pattern matching
+if (lowerRuleApplied[idx]) {
+    transformed = seg;  // ✅ Keep "api" lowercase
+} else {
+    transformed = seg[0].toUpperCase() + seg.slice(1);  // Normal camelCase
+}
+```
+
+**Why Not Just Check Pattern in CamelCase?**
+The segment has already been transformed ("API" → "api") by the time camelCase runs. Pattern `*-api-*` matches "get-API-status" (original string), but checking the pattern against the already-processed segment "api" doesn't work. We need to track the decision from the segment processing phase.
+
+**Files Modified**:
+- `src/lib/helpers/sanitize.mjs` - Added `lowerRuleApplied` tracking array and modified camelCase logic to check tracking
+
+**Result**:
+- `lower: ["*-api-*"]` now produces `"getapiStatus"` ✅
+- `lower: ["*id"]` produces `"validateUserid"` ✅
+- `upper: ["*-api-*"]` still produces `"getAPIStatus"` ✅  
+- Symmetric behavior achieved between upper and lower rules
+- All v3 features preserved (early returns, underscore handling)
+
+**Affected Tests**:
+- `tests/vitests/suites/sanitization/sanitize.test.vitest.mjs` - "should apply lower with pattern match"
+
+---
+
+_Last updated: November 9, 2025_

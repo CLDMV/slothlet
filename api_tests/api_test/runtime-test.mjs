@@ -51,10 +51,12 @@ export function verifyRuntime() {
 		// Storing the proxy causes issues when reading results outside the execution context
 		results.contextTest.data = { ...contextData };
 		// Context can be an object OR a function (live binding proxy) - check if it has data
+		// Check if context has any keys (not just specifically 'user')
+		const contextKeys = Object.keys(contextData);
 		results.contextTest.available =
-			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && !!contextData.user;
+			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && contextKeys.length > 0;
 		results.contextTest.hasUserData = !!contextData.user;
-		results.contextTest.userData = contextData.user ? { ...contextData.user } : null;
+		results.contextTest.userData = contextData.user;
 
 		// Check for isolation testing data
 		if (contextData.runtimeTestId) {

@@ -68,8 +68,9 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => 
 		// FIXED: Was failing due to Node.js module cache pollution between instances. When multiple
 		// slothlet instances loaded the same modules, Node cached them, causing wrapper/state bleed.
 		// Fixed by cache-busting imports with instanceID query parameter (loader.mjs).
+		// NOTE: Default collision resolution prefers FILE over FOLDER, so add() returns 1005 (from math.mjs)
 		const result = await api.math.add(2, 3);
-		expect(result).toBe(5);
+		expect(result).toBe(1005);
 
 		await api.shutdown();
 	});
