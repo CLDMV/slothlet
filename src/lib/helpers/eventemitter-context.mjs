@@ -19,10 +19,31 @@
  * to event listeners. This module patches EventEmitter.prototype methods to wrap
  * all listeners with AsyncResource, preserving the context where they were registered.
  *
+ * Additionally tracks EventEmitters created within slothlet API context so they can
+ * be cleaned up on shutdown.
+ *
  * @module @cldmv/slothlet/helpers/eventemitter-context
  */
 import { EventEmitter } from "node:events";
 import { AsyncResource } from "node:async_hooks";
+
+/**
+ * Callback to check if we're currently in a slothlet API context
+ * Set by the runtime (async or live) during initialization
+ * @type {Function|null}
+ * @private
+ */
+let isInApiContext = null;
+
+/**
+ * Set the context checker callback
+ * Called by the runtime to register a way to detect API context
+ * @param {Function} checker - Function that returns true if in API context
+ * @public
+ */
+export function setApiContextChecker(checker) {
+	isInApiContext = checker;
+}
 
 /**
  * Storage for original EventEmitter methods
@@ -33,11 +54,20 @@ const originalMethods = new Map();
 
 /**
  * Storage for wrapped listeners per emitter
- * WeakMap<emitter, Map<event, Map<originalListener, wrappedListener>>>
- * @type {WeakMap}
+ * Map<emitter, Map<event, Map<originalListener, wrappedListener>>>
+ * Changed from WeakMap to Map so we can iterate for cleanup
+ * @type {Map}
  * @private
  */
-const wrappedListeners = new WeakMap();
+const wrappedListeners = new Map();
+
+/**
+ * Set of EventEmitters created within slothlet API context
+ * These will be cleaned up on shutdown
+ * @type {Set<EventEmitter>}
+ * @private
+ */
+const trackedEmitters = new Set();
 
 /**
  * Whether EventEmitter patching is currently enabled
@@ -178,6 +208,18 @@ function runtime_shouldWrapListener(listener) {
 }
 
 /**
+ * Track an EventEmitter if it was created within slothlet API context
+ * @param {EventEmitter} emitter - EventEmitter instance to potentially track
+ * @private
+ */
+function runtime_maybeTrackEmitter(emitter) {
+	// Only track if context checker is registered and returns true
+	if (isInApiContext && isInApiContext()) {
+		trackedEmitters.add(emitter);
+	}
+}
+
+/**
  * Patch EventEmitter.prototype.on and addListener
  * @private
  */
@@ -186,15 +228,19 @@ function runtime_patchOn() {
 	originalMethods.set("on", original);
 
 	EventEmitter.prototype.on = function (event, listener) {
-		if (runtime_shouldWrapListener(listener)) {
-			const wrapped = runtime_wrapEventListener(listener);
-			runtime_trackListener(this, event, listener, wrapped);
-			return original.call(this, event, wrapped);
+		// Track this emitter if created in slothlet context
+		runtime_maybeTrackEmitter(this);
+
+		if (!runtime_shouldWrapListener(listener)) {
+			return original.call(this, event, listener);
 		}
-		return original.call(this, event, listener);
+
+		const wrapped = runtime_wrapEventListener(listener);
+		runtime_trackListener(this, event, listener, wrapped);
+		return original.call(this, event, wrapped);
 	};
 
-	// addListener is an alias for on
+	// Alias: addListener = on
 	EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 }
 
@@ -207,25 +253,29 @@ function runtime_patchOnce() {
 	originalMethods.set("once", original);
 
 	EventEmitter.prototype.once = function (event, listener) {
-		if (runtime_shouldWrapListener(listener)) {
-			const wrapped = runtime_wrapEventListener(listener);
+		// Track this emitter if created in slothlet context
+		runtime_maybeTrackEmitter(this);
 
-			// Wrap again to add auto-cleanup after first execution
-			const runtime_onceWrapper = function (...args) {
-				const result = wrapped.apply(this, args);
-				// Auto-cleanup after execution
-				runtime_untrackListener(this, event, listener);
-				return result;
-			};
-
-			// Copy metadata
-			runtime_onceWrapper._slothletOriginal = listener;
-			runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-
-			runtime_trackListener(this, event, listener, runtime_onceWrapper);
-			return original.call(this, event, runtime_onceWrapper);
+		if (!runtime_shouldWrapListener(listener)) {
+			return original.call(this, event, listener);
 		}
-		return original.call(this, event, listener);
+
+		const wrapped = runtime_wrapEventListener(listener);
+
+		// Wrap again to add auto-cleanup after first execution
+		const runtime_onceWrapper = function (...args) {
+			const result = wrapped.apply(this, args);
+			// Auto-cleanup after execution
+			runtime_untrackListener(this, event, listener);
+			return result;
+		};
+
+		// Copy metadata
+		runtime_onceWrapper._slothletOriginal = listener;
+		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+
+		runtime_trackListener(this, event, listener, runtime_onceWrapper);
+		return original.call(this, event, runtime_onceWrapper);
 	};
 }
 
@@ -238,12 +288,16 @@ function runtime_patchPrependListener() {
 	originalMethods.set("prependListener", original);
 
 	EventEmitter.prototype.prependListener = function (event, listener) {
-		if (runtime_shouldWrapListener(listener)) {
-			const wrapped = runtime_wrapEventListener(listener);
-			runtime_trackListener(this, event, listener, wrapped);
-			return original.call(this, event, wrapped);
+		// Track this emitter if created in slothlet context
+		runtime_maybeTrackEmitter(this);
+
+		if (!runtime_shouldWrapListener(listener)) {
+			return original.call(this, event, listener);
 		}
-		return original.call(this, event, listener);
+
+		const wrapped = runtime_wrapEventListener(listener);
+		runtime_trackListener(this, event, listener, wrapped);
+		return original.call(this, event, wrapped);
 	};
 }
 
@@ -256,25 +310,29 @@ function runtime_patchPrependOnceListener() {
 	originalMethods.set("prependOnceListener", original);
 
 	EventEmitter.prototype.prependOnceListener = function (event, listener) {
-		if (runtime_shouldWrapListener(listener)) {
-			const wrapped = runtime_wrapEventListener(listener);
+		// Track this emitter if created in slothlet context
+		runtime_maybeTrackEmitter(this);
 
-			// Wrap again to add auto-cleanup after first execution
-			const runtime_onceWrapper = function (...args) {
-				const result = wrapped.apply(this, args);
-				// Auto-cleanup after execution
-				runtime_untrackListener(this, event, listener);
-				return result;
-			};
-
-			// Copy metadata
-			runtime_onceWrapper._slothletOriginal = listener;
-			runtime_onceWrapper._slothletResource = wrapped._slothletResource;
-
-			runtime_trackListener(this, event, listener, runtime_onceWrapper);
-			return original.call(this, event, runtime_onceWrapper);
+		if (!runtime_shouldWrapListener(listener)) {
+			return original.call(this, event, listener);
 		}
-		return original.call(this, event, listener);
+
+		const wrapped = runtime_wrapEventListener(listener);
+
+		// Wrap again to add auto-cleanup after first execution
+		const runtime_onceWrapper = function (...args) {
+			const result = wrapped.apply(this, args);
+			// Auto-cleanup after execution
+			runtime_untrackListener(this, event, listener);
+			return result;
+		};
+
+		// Copy metadata
+		runtime_onceWrapper._slothletOriginal = listener;
+		runtime_onceWrapper._slothletResource = wrapped._slothletResource;
+
+		runtime_trackListener(this, event, listener, runtime_onceWrapper);
+		return original.call(this, event, runtime_onceWrapper);
 	};
 }
 
@@ -399,18 +457,24 @@ export function disableEventEmitterPatching() {
 }
 
 /**
- * Cleanup all AsyncResource references for EventEmitters.
- * This should be called during shutdown to prevent memory leaks.
- *
- * Note: WeakMaps don't have .values() or .entries() methods - they automatically
- * garbage collect when emitters are destroyed. We can't iterate over a WeakMap,
- * so this function is a no-op. AsyncResources will be cleaned up when emitters
- * are garbage collected.
+ * Cleanup all tracked EventEmitters created within slothlet API context.
+ * This removes all listeners from tracked emitters and clears tracking structures.
+ * Should be called during shutdown to prevent memory leaks and hanging processes.
  *
  * @public
  */
 export function cleanupEventEmitterResources() {
-	// WeakMap doesn't support iteration - it automatically GCs when emitters are destroyed
-	// AsyncResource cleanup happens automatically via garbage collection
-	// This function is kept for API compatibility but doesn't need to do anything
+	// Clean up all listeners on tracked emitters
+	for (const emitter of trackedEmitters) {
+		try {
+			// Remove all listeners from this emitter
+			emitter.removeAllListeners();
+		} catch (error) {
+			// Silently ignore errors (emitter may already be destroyed)
+		}
+	}
+
+	// Clear tracking structures
+	trackedEmitters.clear();
+	wrappedListeners.clear();
 }
