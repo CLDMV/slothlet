@@ -1160,6 +1160,33 @@ export class ModesProcessor extends ComponentBase {
 							}
 						}
 					}
+					
+					// Folder Transparency: If subfolder name matches current category, don't create nested namespace
+					// Example: api.add('config', './path') where path contains config/ subfolder
+					// Result: config/server.mjs → api.config.server (not api.config.config.server)
+					// Note: apiPathPrefix contains the current category path (e.g., "config")
+					// Extract the last segment to get the current category name
+					const currentCategoryName = apiPathPrefix ? apiPathPrefix.split('.').pop() : categoryName;
+					if (subDirName === currentCategoryName && currentCategoryName !== null) {
+						// Process folder contents directly into current targetApi (transparent folder)
+						await this.processFiles(
+							targetApi, // Use current targetApi, don't create new namespace
+							subDir.children.files,
+							subDir, // Pass subDir as directory for metadata
+							currentDepth + 1,
+							mode,
+							false, // Not root
+							recursive,
+							true, // populateDirectly - don't create category wrapper
+							apiPathPrefix,
+							collisionContext,
+							moduleID,
+							sourceFolder,
+							cacheBust
+						);
+						continue;
+					}
+					
 					// Regular subdirectory processing
 					await this.processFiles(
 						targetApi,
