@@ -10,6 +10,22 @@ import { join } from "node:path";
 let watcher = null;
 
 /**
+ * Helper function to get listener count
+ * @private
+ */
+function getListenerCount() {
+	if (!watcher) return 0;
+
+	return (
+		watcher.listenerCount("add") +
+		watcher.listenerCount("change") +
+		watcher.listenerCount("unlink") +
+		watcher.listenerCount("error") +
+		watcher.listenerCount("ready")
+	);
+}
+
+/**
  * File watcher API using chokidar
  */
 export default {
@@ -36,7 +52,7 @@ export default {
 		return {
 			created: true,
 			watchPath,
-			listenerCount: this.getListenerCount()
+			listenerCount: getListenerCount()
 		};
 	},
 
@@ -44,15 +60,7 @@ export default {
 	 * Get current listener count
 	 */
 	getListenerCount() {
-		if (!watcher) return 0;
-
-		return (
-			watcher.listenerCount("add") +
-			watcher.listenerCount("change") +
-			watcher.listenerCount("unlink") +
-			watcher.listenerCount("error") +
-			watcher.listenerCount("ready")
-		);
+		return getListenerCount();
 	},
 
 	/**

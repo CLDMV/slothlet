@@ -48,7 +48,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Materialize if lazy
 		if (config.mode === "lazy") {
-			await api.database.pool.createConnections();
+			await api.database.pool.createConnections(0);
 		}
 
 		// Create EventEmitters within API context
@@ -145,7 +145,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Materialize all if lazy
 		if (config.mode === "lazy") {
-			await api.database.pool.createConnections();
+			await api.database.pool.createConnections(0);
 			await api.events.watcher.init();
 		}
 
