@@ -579,6 +579,92 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Set metadata for all functions reachable at an API path.
+	 *
+	 * @description
+	 * Stores metadata keyed by `apiPath` so that every function whose system
+	 * `apiPath` starts with (or equals) the given path inherits the values via
+	 * `collectMetadataFromParents()` in `getMetadata()`.
+	 *
+	 * Accepts either a single key/value pair or a plain object to merge.
+	 * Multiple calls to the same path are merged; later calls override earlier
+	 * ones for conflicting keys.
+	 *
+	 * Priority (lowest → highest): global → setForPath → set() → system.
+	 *
+	 * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
+	 * @param {string|Object} keyOrObj - Key string (with `value`) OR metadata object to merge
+	 * @param {unknown} [value] - Value when `keyOrObj` is a string key
+	 * @public
+	 */
+	setPathMetadata(apiPath, keyOrObj, value) {
+		if (typeof apiPath !== "string" || !apiPath) {
+			throw new this.SlothletError(
+				"INVALID_ARGUMENT",
+				{ argument: "apiPath", expected: "non-empty string", received: typeof apiPath },
+				null,
+				{ validationError: true }
+			);
+		}
+
+		const metadataObj = typeof keyOrObj === "string" ? { [keyOrObj]: value } : keyOrObj;
+
+		if (!metadataObj || typeof metadataObj !== "object" || Array.isArray(metadataObj)) {
+			throw new this.SlothletError(
+				"INVALID_ARGUMENT",
+				{ argument: "keyOrObj", expected: "string key or plain object", received: typeof keyOrObj },
+				null,
+				{ validationError: true }
+			);
+		}
+
+		this.registerUserMetadata(apiPath, metadataObj);
+	}
+
+	/**
+	 * Remove metadata keys (or all metadata) for an API path.
+	 *
+	 * @description
+	 * Removes one specific key, multiple keys, or ALL user metadata stored under
+	 * the given `apiPath` key in the path store.
+	 * Only affects metadata set via `setForPath()` / `registerUserMetadata()` for
+	 * this exact path segment — it does not walk descendant paths.
+	 *
+	 * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
+	 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all metadata for the path.
+	 * @public
+	 */
+	removePathMetadata(apiPath, key) {
+		if (!apiPath || typeof apiPath !== "string") return;
+
+		const entry = this.#userMetadataStore.get(apiPath);
+		if (!entry) return;
+
+		if (key === undefined) {
+			this.#userMetadataStore.delete(apiPath);
+		} else if (Array.isArray(key)) {
+			for (const k of key) {
+				if (typeof k !== "string") {
+					throw new this.SlothletError("INVALID_METADATA_KEY", {
+						key: k,
+						type: typeof k,
+						expected: "string"
+					});
+				}
+				delete entry.metadata[k];
+			}
+		} else if (typeof key === "string") {
+			delete entry.metadata[key];
+		} else {
+			throw new this.SlothletError("INVALID_METADATA_KEY", {
+				key,
+				type: typeof key,
+				expected: "string or string[]"
+			});
+		}
+	}
+
+	/**
 	 * Export user-managed metadata state for preservation across reload.
 	 *
 	 * @description

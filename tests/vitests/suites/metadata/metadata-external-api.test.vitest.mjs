@@ -463,4 +463,125 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			expect(api.nested.date.today.__metadata.tag).toBe("date");
 		});
 	});
+
+	describe("api.slothlet.metadata.setForPath()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should set metadata on all functions under an API path (single key)", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.multiply", 5, 3);
+
+			api.slothlet.metadata.setForPath("rootMath", "category", "math");
+
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+			expect(api.rootMath.multiply.__metadata.category).toBe("math");
+		});
+
+		it("should set metadata via object merge", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "2.0.0" });
+
+			const meta = api.rootMath.add.__metadata;
+			expect(meta.category).toBe("math");
+			expect(meta.version).toBe("2.0.0");
+		});
+
+		it("should target a specific subpath without affecting siblings", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			await materialize(api, "rootMath.multiply", 5, 3);
+
+			api.slothlet.metadata.setForPath("rootMath.add", "specificToAdd", true);
+
+			expect(api.rootMath.add.__metadata.specificToAdd).toBe(true);
+			// multiply is at rootMath.multiply — not under rootMath.add
+			expect(api.rootMath.multiply.__metadata.specificToAdd).toBeUndefined();
+		});
+
+		it("should accumulate across multiple calls and last value wins for same key", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", "version", "1.0.0");
+			api.slothlet.metadata.setForPath("rootMath", "version", "2.0.0");
+			api.slothlet.metadata.setForPath("rootMath", "author", "test");
+
+			const meta = api.rootMath.add.__metadata;
+			expect(meta.version).toBe("2.0.0");
+			expect(meta.author).toBe("test");
+		});
+
+		it("function-level set() should take priority over setForPath() for same key", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", "version", "1.0.0");
+			api.slothlet.metadata.set(api.rootMath.add, "version", "3.0.0");
+
+			// set() (moduleID-level) wins over setForPath() (path-level)
+			expect(api.rootMath.add.__metadata.version).toBe("3.0.0");
+		});
+
+		it("should not affect system metadata", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+			const systemModuleID = api.rootMath.add.__metadata.moduleID;
+
+			api.slothlet.metadata.setForPath("rootMath", "moduleID", "HACKED");
+
+			// System metadata always wins
+			expect(api.rootMath.add.__metadata.moduleID).toBe(systemModuleID);
+		});
+	});
+
+	describe("api.slothlet.metadata.removeForPath()", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should remove a specific key from path-level metadata", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "1.0.0" });
+			expect(api.rootMath.add.__metadata.category).toBe("math");
+
+			api.slothlet.metadata.removeForPath("rootMath", "category");
+
+			expect(api.rootMath.add.__metadata.category).toBeUndefined();
+			// Other keys from the same path entry should remain
+			expect(api.rootMath.add.__metadata.version).toBe("1.0.0");
+		});
+
+		it("should remove all path-level metadata when no key is given", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "1.0.0" });
+			api.slothlet.metadata.removeForPath("rootMath");
+
+			expect(api.rootMath.add.__metadata.category).toBeUndefined();
+			expect(api.rootMath.add.__metadata.version).toBeUndefined();
+			// System metadata should remain
+			expect(api.rootMath.add.__metadata.moduleID).toBeDefined();
+		});
+
+		it("should not affect function-level metadata set via set()", async () => {
+			await materialize(api, "rootMath.add", 1, 2);
+
+			api.slothlet.metadata.setForPath("rootMath", "tag", "path");
+			api.slothlet.metadata.set(api.rootMath.add, "tag", "function");
+
+			// function-level wins
+			expect(api.rootMath.add.__metadata.tag).toBe("function");
+
+			api.slothlet.metadata.removeForPath("rootMath", "tag");
+
+			// function-level still present after path removal
+			expect(api.rootMath.add.__metadata.tag).toBe("function");
+		});
+	});
 });
