@@ -1214,9 +1214,10 @@ return true;
 		//   1. normalizedPath is non-empty (not a root-level add)
 		//   2. newApi contains a key equal to the last segment of normalizedPath
 		//   3. The value at that key is an object or function (a real namespace, not a primitive)
-		//   4. The matching value originates from a DIRECT subfolder of the mounted directory
-		//      (sourceFolder === resolvedFolderPath/lastPart) — prevents hoisting deeper subfolders
-		//      that coincidentally share the mount-path name (e.g. services/services/ inside services/)
+		//   4. The matching value originates from a direct child of the mounted directory:
+		//      a) A FILE at the root of the mounted folder (config.mjs → dupFileDir === resolvedFolderPath)
+		//      b) A DIRECT subfolder of the mounted directory (config/ → dupFileDir === resolvedFolderPath/lastPart)
+		//      Deeper paths (e.g. services/services/services.mjs) match neither and are correctly rejected.
 		if (!isFile && normalizedPath) {
 			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
 			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
@@ -1232,8 +1233,16 @@ return true;
 					const dupFileDir = dupFilePath
 						? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/")
 						: null;
-					const expectedDir = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "") + "/" + lastPart;
-					const isDirectChild = dupFileDir === expectedDir;
+					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
+					const expectedDir = normalizedFolderPath + "/" + lastPart;
+					// Accept two cases:
+					// 1. dupFileDir === expectedDir: the value came from a direct subfolder
+					//    (e.g. config/config.mjs inside a "config" mount)
+					// 2. dupFileDir === normalizedFolderPath: the value came from a file at the
+					//    root of the mounted folder (e.g. config.mjs inside a "config" mount)
+					// Deeper paths (e.g. services/services/services.mjs) match neither and are
+					// correctly rejected.
+					const isDirectChild = dupFileDir === expectedDir || dupFileDir === normalizedFolderPath;
 
 					if (isDirectChild) {
 						// Hoist all children of the duplicate key up to the same level
