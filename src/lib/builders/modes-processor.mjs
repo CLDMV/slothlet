@@ -1047,88 +1047,6 @@ export class ModesProcessor extends ComponentBase {
 									}
 								}
 
-								// Rule 1 (C13) - Filename Matches Folder: Flatten exports to parent category
-								// Example: config/config.mjs → api.config.* (not api.config.config.*)
-								if (categoryDecision.flattenType === "filename-folder-match-flatten") {
-									// Merge exports directly into targetApi (like addapi pattern)
-									if (typeof implToWrap === "object" && !Array.isArray(implToWrap) && typeof implToWrap !== "function") {
-										for (const key of Object.keys(implToWrap)) {
-											const value = implToWrap[key];
-											const keyPath = categoryName ? `${categoryName}.${key}` : key;
-											
-											if (effectiveMode !== "NOWR") {
-												const wrapper = new UnifiedWrapper(this.slothlet, {
-													mode: effectiveMode,
-													apiPath: buildApiPath(keyPath),
-													initialImpl: value,
-													materializeOnCreate: config.backgroundMaterialize,
-													filePath: file.path,
-													moduleID: moduleID || file.moduleID,
-													sourceFolder
-												});
-												this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
-													useCollisionDetection: true,
-													config,
-													collisionContext
-												});
-											} else {
-												this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
-													useCollisionDetection: true,
-													config,
-													collisionContext
-												});
-											}
-										}
-										
-										// Register ownership for each merged property
-										if (ownership) {
-											for (const key of Object.keys(implToWrap)) {
-												const apiPath = categoryName ? `${categoryName}.${key}` : key;
-												ownership.register({
-													moduleID: moduleID || file.moduleID,
-													apiPath,
-													source: "core",
-													collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-													config
-												});
-											}
-										}
-									} else {
-										// Non-object implToWrap (function, primitive, etc.)
-										// This shouldn't happen for Rule 1, but handle it gracefully
-										this.slothlet.debug("modes", {
-											message: "Rule 1 flatten: implToWrap is not an object, falling back to normal wrapper",
-											subDir: subDirName,
-											type: typeof implToWrap
-										});
-										const wrapper = new UnifiedWrapper(this.slothlet, {
-											mode: effectiveMode,
-											apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
-											initialImpl: implToWrap,
-											materializeOnCreate: config.backgroundMaterialize,
-											filePath: file.path,
-											moduleID: moduleID || file.moduleID,
-											sourceFolder
-										});
-										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
-											useCollisionDetection: true,
-											config,
-											collisionContext
-										});
-										if (ownership) {
-											const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
-											ownership.register({
-												moduleID: moduleID || file.moduleID,
-												apiPath,
-												source: "core",
-												collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-												config
-											});
-										}
-									}
-									continue;
-								}
-
 								// Flatten: put the module content directly at targetApi[subDirName]
 								const wrapper = new UnifiedWrapper(this.slothlet, {
 									mode: effectiveMode,
@@ -1208,7 +1126,8 @@ export class ModesProcessor extends ComponentBase {
 				// Lazy mode: create lazy wrappers for subdirectories
 				for (const subDir of directory.children.directories) {
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
-					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
+
+										const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
 					if (config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							message: "Creating lazy subdirectory",
