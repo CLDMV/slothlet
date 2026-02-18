@@ -26,7 +26,7 @@ Relative base: tests/vitests
 
 | Test (relative) | Feature Category | V3 Updated | Status | Notes |
 | --- | --- | --- | --- | --- |
-| suites/rules/rule-coverage.test.vitest.mjs | API Rules | ✅ 1st pass (2026-01-28 14:27) | ✅ baseline (2026-02-17) | 61/61 tests pass (100%) - Fixed paths: docs/API-RULE-MAPPING.md, src/lib/processors/flatten.mjs |
+| suites/rules/rule-coverage.test.vitest.mjs | API Rules | ✅ 1st pass (2026-01-28 14:27) | ✅ baseline (2026-02-18) | 66/66 tests pass (100%) - Updated to scan api-manager.mjs in addition to flatten.mjs (C34 lives in api-manager.mjs); rule count updated 12 → 13; runtime-only allowlist narrowed to [12] only (Rule 13 has C34). |
 | suites/rules/rule-12-comprehensive.test.vitest.mjs | API Rules | ✅ 1st pass (2026-01-28 15:00) | ✅ baseline (2026-02-17) | Tests pass (100%) |
 | suites/addapi/add-api-files.test.vitest.mjs | API Manager | ✅ Yes (2026-02-14) | ✅ baseline (2026-02-17) | Tests pass (100%) |
 | suites/addapi/add-api.test.vitest.mjs | API Manager | ✅ Yes (2026-01-27 20:52) | ✅ baseline (2026-02-17) | 56/56 tests pass - All error messages updated to match v3 output |
@@ -106,7 +106,7 @@ Relative base: tests/vitests
 | suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ 1st pass (2026-01-28 15:05) | ❌ fail (2026-02-17) | 24/40 pass, 16 fail (60%) - autoFlatten=false tests failing. Expected api.config.getConfig to be function but is undefined. Rule 7 auto-flattening not working correctly when autoFlatten is disabled |
 | suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-02-17) | 16/32 pass, 16 fail (50%) - Similar to case1-case2, autoFlatten=false tests failing. Objects not being properly exposed when auto-flattening is disabled |
 | suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-02-17) | 16/48 pass, 32 fail (33%) - Edge case tests failing. Multiple scenarios with undefined functions/objects when autoFlatten is disabled |
-| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-02-17) | 0/56 pass, 56 fail (0%) - All folder flattening tests failing. Complete failure suggests fundamental issue with folder handling when autoFlatten=false |
+| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-18) | 56/56 tests pass (100%) - Fixed by: (1) Rule 13 (C34) AddApi Path Deduplication Flattening in api-manager.mjs — hoists key matching mount path's last segment. (2) LAZY Folder Transparency `&& !populateDirectly` guard — prevents false-positive hoist during lazy wrapper materialization. (3) `_hasCategoryFile` guard in createLazySubdirectoryWrapper — requires a file named after the category before promoting wrapper. |
 
 ## Feature Categories
 
