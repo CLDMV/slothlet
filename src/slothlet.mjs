@@ -510,8 +510,18 @@ class Slothlet {
 		const originalInstanceID = this.instanceID;
 		this.instanceID = `${originalInstanceID}_reload_${Date.now()}`;
 
+		// 3b. Save user-managed metadata state before load() destroys the current
+		//     Metadata instance. This preserves setGlobal() and set() values across reload.
+		const savedMetadataState = this.handlers.metadata?.exportUserState?.();
+
 		// 4. Do a FRESH load() with temp instanceID (busts ESM cache)
 		await this.load(this.config, this.instanceID);
+
+		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
+		//     replay so that registerUserMetadata() from replay merges over it correctly.
+		if (savedMetadataState && this.handlers.metadata) {
+			this.handlers.metadata.importUserState(savedMetadataState);
+		}
 
 		// 5. Restore original instanceID and move context
 		const tempInstanceID = this.instanceID;

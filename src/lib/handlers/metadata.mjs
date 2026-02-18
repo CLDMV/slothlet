@@ -389,6 +389,20 @@ export class Metadata extends ComponentBase {
 
 		// Set the metadata key
 		entry.metadata[key] = value;
+
+		// ALSO store by apiPath so path-based lookups survive moduleID changes after reload.
+		// collectMetadataFromParents() in getMetadata() traverses the path hierarchy and
+		// will find this entry even when the moduleID has changed (e.g. after api.slothlet.reload()).
+		const apiPath = systemData.apiPath;
+		if (apiPath) {
+			let pathEntry = this.#userMetadataStore.get(apiPath);
+			if (!pathEntry) {
+				pathEntry = { metadata: {}, apiPaths: new Set() };
+				this.#userMetadataStore.set(apiPath, pathEntry);
+			}
+			pathEntry.metadata[key] = value;
+			pathEntry.apiPaths.add(apiPath);
+		}
 	}
 
 	/**
@@ -411,64 +425,70 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = target.____slothletInternal?.wrapper || target;
 
-		// Get system metadata to find moduleID
+		// Get system metadata to find moduleID and apiPath
 		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
-		const moduleID = systemData.moduleID || systemData.moduleID;
+		const moduleID = systemData.moduleID;
+		const apiPath = systemData.apiPath;
 
 		if (!moduleID) return;
 
-		const entry = this.#userMetadataStore.get(moduleID);
-		if (!entry) return;
+		// Helper to apply removal to a single store entry
+		const applyRemoval = (storeKey) => {
+			const storeEntry = this.#userMetadataStore.get(storeKey);
+			if (!storeEntry) return;
 
-		if (key === undefined) {
-			// Remove all user metadata for this moduleID
-			this.#userMetadataStore.delete(moduleID);
-		} else if (Array.isArray(key)) {
-			// Remove multiple keys - each element must be a string
-			for (const k of key) {
-				if (typeof k !== "string") {
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
-						key: k,
-						type: typeof k,
-						expected: "string"
-					});
+			if (key === undefined) {
+				this.#userMetadataStore.delete(storeKey);
+			} else if (Array.isArray(key)) {
+				for (const k of key) {
+					if (typeof k !== "string") {
+						throw new this.SlothletError("INVALID_METADATA_KEY", {
+							key: k,
+							type: typeof k,
+							expected: "string"
+						});
+					}
+					delete storeEntry.metadata[k];
 				}
-				delete entry.metadata[k];
-			}
-		} else if (typeof key === "object" && key !== null) {
-			// Remove nested keys from object values: {metadataKey: [nestedKey1, nestedKey2]}
-			for (const [metadataKey, nestedKeys] of Object.entries(key)) {
-				if (!Array.isArray(nestedKeys)) {
-					throw new this.SlothletError("INVALID_METADATA_KEY", {
-						key: metadataKey,
-						type: typeof nestedKeys,
-						expected: "array"
-					});
-				}
-
-				const metadataValue = entry.metadata[metadataKey];
-				if (metadataValue && typeof metadataValue === "object") {
-					for (const nestedKey of nestedKeys) {
-						if (typeof nestedKey !== "string") {
-							throw new this.SlothletError("INVALID_METADATA_KEY", {
-								key: nestedKey,
-								type: typeof nestedKey,
-								expected: "string"
-							});
+			} else if (typeof key === "object" && key !== null) {
+				for (const [metadataKey, nestedKeys] of Object.entries(key)) {
+					if (!Array.isArray(nestedKeys)) {
+						throw new this.SlothletError("INVALID_METADATA_KEY", {
+							key: metadataKey,
+							type: typeof nestedKeys,
+							expected: "array"
+						});
+					}
+					const metadataValue = storeEntry.metadata[metadataKey];
+					if (metadataValue && typeof metadataValue === "object") {
+						for (const nestedKey of nestedKeys) {
+							if (typeof nestedKey !== "string") {
+								throw new this.SlothletError("INVALID_METADATA_KEY", {
+									key: nestedKey,
+									type: typeof nestedKey,
+									expected: "string"
+								});
+							}
+							delete metadataValue[nestedKey];
 						}
-						delete metadataValue[nestedKey];
 					}
 				}
+			} else if (typeof key === "string") {
+				delete storeEntry.metadata[key];
+			} else {
+				throw new this.SlothletError("INVALID_METADATA_KEY", {
+					key: key,
+					type: typeof key,
+					expected: "string, string[], or object"
+				});
 			}
-		} else if (typeof key === "string") {
-			// Remove specific key
-			delete entry.metadata[key];
-		} else {
-			throw new this.SlothletError("INVALID_METADATA_KEY", {
-				key: key,
-				type: typeof key,
-				expected: "string, string[], or object"
-			});
+		};
+
+		// Apply removal to both the moduleID entry and the apiPath entry.
+		// setUserMetadata() stores under both keys, so both must be cleaned up.
+		applyRemoval(moduleID);
+		if (apiPath && apiPath !== moduleID) {
+			applyRemoval(apiPath);
 		}
 	}
 
@@ -556,6 +576,78 @@ export class Metadata extends ComponentBase {
 	removeUserMetadataByApiPath(apiPath) {
 		if (!apiPath) return;
 		this.#userMetadataStore.delete(apiPath);
+	}
+
+	/**
+	 * Export user-managed metadata state for preservation across reload.
+	 *
+	 * @description
+	 * Captures `#globalUserMetadata` and all entries in `#userMetadataStore`
+	 * so they can be restored to a fresh Metadata instance after reload.
+	 * Called by `slothlet.reload()` BEFORE `load()` destroys this instance.
+	 *
+	 * @returns {{ globalMetadata: Object, userMetadataStore: Map }} Snapshot of user state
+	 * @package
+	 */
+	exportUserState() {
+		const storeCopy = new Map();
+		for (const [key, entry] of this.#userMetadataStore) {
+			storeCopy.set(key, {
+				metadata: { ...entry.metadata },
+				apiPaths: new Set(entry.apiPaths)
+			});
+		}
+		return {
+			globalMetadata: { ...this.#globalUserMetadata },
+			userMetadataStore: storeCopy
+		};
+	}
+
+	/**
+	 * Restore user-managed metadata state after a fresh load.
+	 *
+	 * @description
+	 * Merges previously exported state into the new (empty) Metadata instance.
+	 * Called by `slothlet.reload()` AFTER `load()` creates the new instance and
+	 * BEFORE operation-history replay so that `registerUserMetadata()` from replay
+	 * can properly merge over the restored base state.
+	 *
+	 * Merge priority: existing (from load) > saved state.
+	 * This means replay-registered api.add metadata overrides restored values
+	 * for the same key, which is the desired behaviour.
+	 *
+	 * @param {{ globalMetadata: Object, userMetadataStore: Map }} state - Previously exported state
+	 * @package
+	 */
+	importUserState(state) {
+		if (!state) return;
+
+		// Restore global metadata (merge, existing keys win)
+		if (state.globalMetadata) {
+			for (const [k, v] of Object.entries(state.globalMetadata)) {
+				if (!(k in this.#globalUserMetadata)) {
+					this.#globalUserMetadata[k] = v;
+				}
+			}
+		}
+
+		// Restore user metadata store entries (merge, existing keys win)
+		if (state.userMetadataStore) {
+			for (const [key, savedEntry] of state.userMetadataStore) {
+				const existing = this.#userMetadataStore.get(key);
+				if (!existing) {
+					// No current entry — restore the saved one directly
+					this.#userMetadataStore.set(key, {
+						metadata: { ...savedEntry.metadata },
+						apiPaths: new Set(savedEntry.apiPaths)
+					});
+				} else {
+					// Merge: saved values fill in missing keys; existing keys (from load) win
+					existing.metadata = { ...savedEntry.metadata, ...existing.metadata };
+					for (const p of savedEntry.apiPaths) existing.apiPaths.add(p);
+				}
+			}
+		}
 	}
 
 	/**
