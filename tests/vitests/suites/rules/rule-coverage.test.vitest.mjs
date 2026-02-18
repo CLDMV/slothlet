@@ -31,6 +31,13 @@ const mappingDoc = readFileSync(mappingDocPath, "utf-8");
 const flattenPath = join(__dirname, "../../../../src/lib/processors/flatten.mjs");
 const flattenCode = readFileSync(flattenPath, "utf-8");
 
+// Also read api-manager.mjs (C34 lives here, not in flatten.mjs)
+const apiManagerPath = join(__dirname, "../../../../src/lib/handlers/api-manager.mjs");
+const apiManagerCode = readFileSync(apiManagerPath, "utf-8");
+
+// Combined code for condition scanning
+const allImplementationCode = flattenCode + "\n" + apiManagerCode;
+
 /**
  * Parse the mapping table from RULE-MAPPING.md
  * @returns {Array<Object>} Array of rule mappings
@@ -116,7 +123,7 @@ function rule_coverage_isConditionDocumented(condition) {
 		new RegExp(`//.*?\\b${condition}\\b`, "i")
 	];
 
-	return patterns.some((pattern) => pattern.test(flattenCode));
+	return patterns.some((pattern) => pattern.test(allImplementationCode));
 }
 
 /**
@@ -125,7 +132,7 @@ function rule_coverage_isConditionDocumented(condition) {
  */
 function rule_coverage_extractImplementedConditions() {
 	const conditionPattern = /\bC\d{2}[a-z]?\b/gi;
-	const matches = flattenCode.match(conditionPattern) || [];
+	const matches = allImplementationCode.match(conditionPattern) || [];
 	// Normalize to uppercase immediately to avoid duplicates
 	return [...new Set(matches.map((m) => m.toUpperCase()))];
 }
@@ -142,10 +149,10 @@ function rule_coverage_hasRuleReference(ruleNum, condition) {
 	let match;
 	const occurrences = [];
 
-	while ((match = pattern.exec(flattenCode)) !== null) {
+	while ((match = pattern.exec(allImplementationCode)) !== null) {
 		const contextStart = Math.max(0, match.index - 200);
-		const contextEnd = Math.min(flattenCode.length, match.index + 50);
-		occurrences.push(flattenCode.substring(contextStart, contextEnd));
+		const contextEnd = Math.min(allImplementationCode.length, match.index + 50);
+		occurrences.push(allImplementationCode.substring(contextStart, contextEnd));
 	}
 
 	// Check if ANY occurrence has the Rule # reference
@@ -166,10 +173,10 @@ function rule_coverage_hasFPatternReference(fPatterns, condition) {
 	let match;
 	const occurrences = [];
 
-	while ((match = pattern.exec(flattenCode)) !== null) {
+	while ((match = pattern.exec(allImplementationCode)) !== null) {
 		const contextStart = Math.max(0, match.index - 200);
-		const contextEnd = Math.min(flattenCode.length, match.index + 50);
-		occurrences.push(flattenCode.substring(contextStart, contextEnd));
+		const contextEnd = Math.min(allImplementationCode.length, match.index + 50);
+		occurrences.push(allImplementationCode.substring(contextStart, contextEnd));
 	}
 
 	// Check if ANY occurrence has ANY of the F## patterns
@@ -182,7 +189,7 @@ describe("Rule Coverage Validation", () => {
 
 	test("Mapping table parsed successfully", () => {
 		expect(mappings.length).toBeGreaterThan(0);
-		expect(mappings.length).toBe(12); // Should have 12 rules
+		expect(mappings.length).toBe(13); // Should have 13 rules
 	});
 
 	test("All expected C## conditions exist in flatten.mjs", () => {
@@ -220,8 +227,8 @@ describe("Rule Coverage Validation", () => {
 		for (const mapping of mappings) {
 			if (mapping.cConditions.length === 0) {
 				test(`Rule ${mapping.ruleNum}: ${mapping.ruleName} (no C## conditions - runtime only)`, () => {
-					// Rules 11 and 12 are runtime-only, no C## conditions
-					expect([11, 12]).toContain(mapping.ruleNum);
+					// Rule 12 is runtime-only (ownership tracking), no C## conditions
+					expect([12]).toContain(mapping.ruleNum);
 				});
 				continue;
 			}

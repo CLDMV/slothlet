@@ -77,8 +77,9 @@ The [FLATTENING guide](API-FLATTENING.md) focuses on **when content gets promote
 10. [Rule 10: Generic Filename Parent-Level Promotion](#rule-10-generic-filename-parent-level-promotion)
 11. [Rule 11: AddApi Special File Pattern](#rule-11-addapi-special-file-pattern)
 12. [Rule 12: Module Ownership and Selective API Overwriting](#rule-12-module-ownership-and-selective-api-overwriting)
-13. [Verification Status](#verification-status)
-14. [Cross-Reference Index](#cross-reference-index)
+13. [Rule 13: AddApi Path Deduplication Flattening](#rule-13-addapi-path-deduplication-flattening)
+14. [Verification Status](#verification-status)
+15. [Cross-Reference Index](#cross-reference-index)
 
 ---
 
@@ -785,6 +786,51 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 
 ---
 
+## Rule 13: AddApi Path Deduplication Flattening
+
+**Category**: AddApi  
+**Status**: ✅ **IMPLEMENTED** (api_tests/smart_flatten/api_smart_flatten_folder_config)  
+**User Guide**: [FLATTENING F08](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)  
+**Technical**: [CONDITIONS C34](API-RULES-CONDITIONS.md#c34-addapi-path-deduplication)
+
+**Purpose**: When `api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exported functions up to `api.config.*`.
+
+**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value's `filePath` has its parent directory equal to `resolvedFolderPath/lastPart` (direct child check), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key.
+
+**Verified Example**:
+
+```javascript
+// Folder structure: api_smart_flatten_folder_config/
+//   main.mjs             ← exports getRootInfo, setRootConfig
+//   config/
+//     config.mjs         ← exports getNestedConfig, setNestedConfig
+
+await api.slothlet.api.add("config", "./api_smart_flatten_folder_config", {});
+
+// Without Rule 13 (double-nested — undesirable):
+api.config.config.getNestedConfig(); // ❌
+
+// With Rule 13 (hoisted — correct):
+api.config.getNestedConfig(); // ✅ subfolder exports promoted
+api.config.setNestedConfig(); // ✅
+api.config.main.getRootInfo(); // ✅ other files unaffected
+```
+
+**Guard — `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
+
+```
+// services fixture — should NOT hoist:
+// api.add("services", folder)  →  newApi has key "services"
+// but filePath = .../services/services/services.mjs
+//     dirname  = .../services/services   ≠ resolvedFolderPath/services
+// → Rule 13 does NOT fire
+// → api.services.services.getNestedService remains properly nested ✅
+```
+
+**Implementation**: `src/lib/handlers/api-manager.mjs` — immediately after `buildAPI` call, before `setValueAtPath`
+
+---
+
 ## Verification Status
 
 | Rule | Title                                          | Status            | Test Source                                 |
@@ -801,6 +847,7 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 | 10   | Generic Filename Parent-Level Promotion        | ✅ VERIFIED       | nest4/singlefile.mjs                        |
 | 11   | AddApi Special File Pattern                    | ✅ VERIFIED       | api_tests/api_smart_flatten_addapi          |
 | 12   | Module Ownership and Selective API Overwriting | ⚠️ IN DEVELOPMENT | Not yet implemented                         |
+| 13   | AddApi Path Deduplication Flattening           | ✅ VERIFIED       | api_tests/smart_flatten/api_smart_flatten_folder_config |
 
 ---
 
@@ -817,6 +864,7 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 | [F05](API-FLATTENING.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES-CONDITIONS.md#c08c)                |
 | [F06](API-FLATTENING.md#f06) | Rule 11                    | [C33](API-RULES-CONDITIONS.md#c33)                       |
 | [F07](API-FLATTENING.md#f07) | Rule 12 (planned)          | _Implementation pending_                                    |
+| [F08](API-FLATTENING.md#f08) | Rule 13                    | [C34](API-RULES-CONDITIONS.md#c34)                       |
 
 ### By Technical Conditions (C##)
 
@@ -828,6 +876,7 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 | [C22-C26](API-RULES-CONDITIONS.md#c22)  | Rules 4, 6                    | F04, F05                |
 | [C27-C32](API-RULES-CONDITIONS.md#c27)  | Rules 5, 6, 7                 | Multi-default scenarios |
 | [C33](API-RULES-CONDITIONS.md#c33)      | Rule 11                       | F06                     |
+| [C34](API-RULES-CONDITIONS.md#c34)      | Rule 13                       | F08                     |
 
 ### By Processing Context
 
@@ -836,7 +885,7 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 | **Single-File Directories** | 1, 7, 8, 10   | C11, C12, C04, C17                             |
 | **Multi-File Directories**  | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19                     |
 | **Multi-Default Scenarios** | 5, 6, 7       | C02, C03, C27-C32                              |
-| **AddApi Operations**       | 11, 12        | C33, [C19-C22](API-RULES-CONDITIONS.md#c19) |
+| **AddApi Operations**       | 11, 12, 13    | C33, C34, [C19-C22](API-RULES-CONDITIONS.md#c19) |
 | **Root-Level Processing**   | 4, 8, 10      | C08c, C22, C17                                 |
 | **Subfolder Processing**    | 4, 6, 8       | C08d, C20, C24                                 |
 
@@ -848,7 +897,7 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 **Last Full Review**: January 3, 2026  
 **Test Verification**: All examples verified against current test files  
 **Cross-References**: Enhanced linking to FLATTENING-v2 and CONDITIONS-v2  
-**Implementation Status**: 12/12 rules fully implemented and verified
+**Implementation Status**: 12/13 rules fully implemented and verified (Rule 12 in development)
 
 **Update Triggers**:
 

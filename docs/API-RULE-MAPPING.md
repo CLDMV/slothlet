@@ -68,6 +68,7 @@ Some conditions (like C09b, C16) are used by multiple rules. Each occurrence sho
 | 10     | F02           | C14                          | Generic Filename Parent-Level Promotion        | flatten.mjs         |
 | 11     | F06           | C33                          | AddApi Special File Pattern                    | flatten.mjs         |
 | 12     | F07           | -                            | Module Ownership and Selective API Overwriting | ownership.mjs (runtime) |
+| 13     | F08           | C34                          | AddApi Path Deduplication Flattening           | api-manager.mjs     |
 
 **Note**: **C06 is intentionally not implemented** (architectural decision). The original concept was "auto-flatten single file directories" but this was rejected because it reduces API path flexibility. It exists as a placeholder in the C01-C18 sequence to maintain consistent numbering. Users should use other rules (like C05 filename matching) if they want flattening.
 
@@ -82,6 +83,7 @@ Some conditions (like C09b, C16) are used by multiple rules. Each occurrence sho
 - **Rule 10** (F02): Generic filename promotion
 - **Rule 11** (F06): AddApi special file pattern
 - **Rule 12** (F07): AddApi root-level file matching
+- **Rule 13** (F08): AddApi path deduplication flattening
 
 ### Non-Flattening Rules (No F## Pattern)
 - **Rule 2**: Named-only export collection
@@ -96,6 +98,10 @@ Some conditions (like C09b, C16) are used by multiple rules. Each occurrence sho
 ## Condition Details
 
 ### C## Conditions by Category
+
+#### AddApi Operations (C33-C34)
+- **C33**: AddApi special file detection (`addapi.mjs` always-flatten)
+- **C34**: AddApi path deduplication (hoist direct-child folder matching mount-path last segment)
 
 #### Core Flattening Decisions (C01-C07)
 - **C01**: Self-referential check - preserve namespace

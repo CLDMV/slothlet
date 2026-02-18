@@ -714,3 +714,30 @@ api.plugins.addapi.cleanup(); // ❌ Breaks API extension pattern
 - ✅ Extraction and deletion of `addapi` key
 - ✅ Direct merge using `Object.assign(newModules, addapiContent)`
 - ✅ Support for both object and function exports
+
+---
+
+## C34: AddApi Path Deduplication
+
+**Category**: AddApi  
+**Related Rule**: [Rule 13](API-RULES.md#rule-13-addapi-path-deduplication-flattening)  
+**Flattening Guide**: [F08: AddApi Path Deduplication Flattening](API-FLATTENING.md#f08-addapi-path-deduplication-flattening)  
+**Status**: ✅ **IMPLEMENTED** (api_tests/smart_flatten/api_smart_flatten_folder_config)
+
+**Pattern**: After `buildAPI` returns `newApi` for an `api.add()` call, if `newApi` contains a key matching the last segment of the mount path AND that key's value originated from a direct subfolder of the mounted directory, hoist the key's exports up one level and remove the duplicate key.
+
+**Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.add("config", folder)` should yield `api.config.*` not `api.config.config.*`.
+
+**Implementation Location**: `src/lib/handlers/api-manager.mjs` — in `addApiComponent()`, immediately after the single-file unwrap block.
+
+**When Evaluated**: After `buildAPI` returns, before the result is merged into the live API tree.
+
+**Guard — `isDirectChild`**: Ensures the matching key came from `mountDir/lastPart/`, not from a deeper nested folder that coincidentally shares the name (e.g. `services/services/` inside a `services` mount).
+
+**Example**:
+
+```javascript
+await api.slothlet.api.add("config", "./api_smart_flatten_folder_config", {});
+// config/ subfolder contains config/config.mjs
+// C34 hoists: api.config.getNestedConfig() ✅ (not api.config.config.getNestedConfig)
+```
