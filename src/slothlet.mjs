@@ -493,7 +493,9 @@ class Slothlet {
 	 * await api.slothlet.reload();
 	 */
 	async reload() {
-		if (!this.isLoaded) {
+		// Allow reload from shutdown state as long as config was previously loaded.
+		// Reject only if the instance was never loaded at all (no config.dir).
+		if (!this.config?.dir) {
 			throw new SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reload",
 				validationError: true
@@ -506,15 +508,20 @@ class Slothlet {
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
-		// 3. Temporarily change instanceID to bust ESM cache
-		const originalInstanceID = this.instanceID;
-		this.instanceID = `${originalInstanceID}_reload_${Date.now()}`;
+		// 3. Create a NEW permanent instanceID (busts internal caches; the old ID is
+		//    cleaned up after load so stale ALS/context entries don't accumulate).
+		const oldInstanceID = this.instanceID;
+		this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
 
 		// 3b. Save user-managed metadata state before load() destroys the current
 		//     Metadata instance. This preserves setGlobal() and set() values across reload.
 		const savedMetadataState = this.handlers.metadata?.exportUserState?.();
 
-		// 4. Do a FRESH load() with temp instanceID (busts ESM cache)
+		// 3c. Save hook registrations before load() destroys the current HookManager.
+		//     This preserves hook.on() registrations across full reload.
+		const savedHooks = this.handlers.hookManager?.exportHooks?.();
+
+		// 4. Do a FRESH load() with the new permanent instanceID
 		await this.load(this.config, this.instanceID);
 
 		// 4b. Restore saved metadata state into the new Metadata instance, BEFORE
@@ -523,16 +530,19 @@ class Slothlet {
 			this.handlers.metadata.importUserState(savedMetadataState);
 		}
 
-		// 5. Restore original instanceID and move context
-		const tempInstanceID = this.instanceID;
-		this.instanceID = originalInstanceID;
-		this.contextManager.instances.set(originalInstanceID, this.contextManager.instances.get(tempInstanceID));
-		this.contextManager.instances.delete(tempInstanceID);
+		// 4c. Restore hook registrations into the new HookManager instance.
+		if (savedHooks?.length && this.handlers.hookManager) {
+			this.handlers.hookManager.importHooks(savedHooks);
+		}
 
-		// 6. Temporarily change instanceID for replay to bust cache
-		this.instanceID = `${originalInstanceID}_replay_${Date.now()}`;
+		// 5. Clean up the old context store now that the new one is active.
+		//    This ensures stale ALS instanceIDs are removed after each reload.
+		//    Guard with .has() because shutdown() may have already removed the store.
+		if (oldInstanceID && oldInstanceID !== this.instanceID && this.contextManager.instances?.has(oldInstanceID)) {
+			this.contextManager.cleanup(oldInstanceID);
+		}
 
-		// 7. Replay operation history in chronological order
+		// 6. Replay operation history in chronological order
 		for (const operation of operationHistory) {
 			if (operation.type === "add") {
 				await this.handlers.apiManager.addApiComponent({
@@ -553,9 +563,6 @@ class Slothlet {
 				}
 			}
 		}
-
-		// 8. Restore original instanceID
-		this.instanceID = originalInstanceID;
 
 		return this.boundApi;
 	}
@@ -684,9 +691,8 @@ class Slothlet {
 			this.handlers.ownership.clear();
 		}
 
-		// Clear references
-		this.api = null;
-		this._currentApi = {}; // Reset to empty object, proxy persists
+		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
+		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).
 		this.isLoaded = false;
 	}
 
