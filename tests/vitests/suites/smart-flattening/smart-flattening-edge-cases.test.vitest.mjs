@@ -71,9 +71,9 @@ describe.each(FULL_MATRIX)("Smart Flattening Edge Cases - $name", ({ name: ___na
 		);
 
 		// Should create nested structure but flatten config.mjs contents
-		expect(typeof api.deep).toBe("object");
-		expect(typeof api.deep.nested).toBe("object");
-		expect(typeof api.deep.nested.config).toBe("object");
+		expect(isValidFolderType(api.deep, config.mode)).toBe(true);
+		expect(isValidFolderType(api.deep.nested, config.mode)).toBe(true);
+		expect(isValidFolderType(api.deep.nested.config, config.mode)).toBe(true);
 		expect(typeof api.deep.nested.config.getConfig).toBe("function");
 		expect(api.deep.nested.config.config).toBeUndefined();
 
