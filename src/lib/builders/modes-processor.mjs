@@ -1127,7 +1127,35 @@ export class ModesProcessor extends ComponentBase {
 				for (const subDir of directory.children.directories) {
 					const subDirName = this.slothlet.helpers.sanitize.sanitizePropertyName(subDir.name);
 
-										const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
+					// Folder Transparency: if subfolder name matches current category, process its contents
+					// directly into targetApi instead of creating a nested namespace.
+					// Example: api.add('config', './path') where path/config/ exists → config/server.mjs becomes api.config.server
+					// Use eager mode so files at this level become objects (same as root-level file behavior).
+					// IMPORTANT: Only fire at root-level registration boundary (populateDirectly=false).
+					// When populateDirectly=true we are inside a lazy wrapper materialization —
+					// e.g. services/ materialising finds services/services/ whose name matches,
+					// but that is a legitimate nested namespace, NOT a transparent root folder.
+					const lazy_currentCategoryName = apiPathPrefix ? apiPathPrefix.split('.').pop() : categoryName;
+					if (subDirName === lazy_currentCategoryName && lazy_currentCategoryName !== null && !populateDirectly) {
+						await this.processFiles(
+							targetApi,
+							subDir.children.files,
+							subDir,
+							currentDepth + 1,
+							"eager",
+							false,
+							true,  // recursive = true to process nested subdirs too
+							true,  // populateDirectly
+							apiPathPrefix,
+							collisionContext,
+							moduleID,
+							sourceFolder,
+							cacheBust
+						);
+						continue;
+					}
+
+					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
 					if (config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							message: "Creating lazy subdirectory",
@@ -1497,7 +1525,14 @@ export class ModesProcessor extends ComponentBase {
 			const materializedKeys = Object.keys(materialized);
 			// Check for folder/folder.mjs pattern - if materialized has a property matching the folder name,
 			// attach all other properties to it (e.g., logger/logger.mjs + logger/utils.mjs → logger function with .utils attached)
-			if (materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
+			// GUARD: Only fire when there is an ACTUAL FILE named after the folder in this directory's
+			// direct files.  Without this guard, a lazy subdirectory wrapper whose name happens to equal
+			// the folder name (e.g. services/ containing services/services/ subdir) would wrongly trigger
+			// the hoist, turning the folder wrapper into just that subdirectory wrapper.
+			const _hasCategoryFile = dir.children.files.some(
+				(f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name) === categoryName
+			);
+			if (_hasCategoryFile && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Folder pattern match",

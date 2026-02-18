@@ -1206,6 +1206,63 @@ return true;
 			apiToMerge = newApi[fileName];
 		}
 
+		// Rule 13 (F08) - C34: AddApi Path Deduplication Flattening
+		// When api.add("config", folder) produces newApi containing a key that matches the last
+		// segment of the mount path (e.g. newApi.config), the user already scoped the mount point
+		// so "config" inside produces a duplicate level.  Hoist: spread newApi[lastPart]'s own
+		// keys directly into newApi and delete the duplicate key.  Conditions:
+		//   1. normalizedPath is non-empty (not a root-level add)
+		//   2. newApi contains a key equal to the last segment of normalizedPath
+		//   3. The value at that key is an object or function (a real namespace, not a primitive)
+		//   4. The matching value originates from a DIRECT subfolder of the mounted directory
+		//      (sourceFolder === resolvedFolderPath/lastPart) — prevents hoisting deeper subfolders
+		//      that coincidentally share the mount-path name (e.g. services/services/ inside services/)
+		if (!isFile && normalizedPath) {
+			const lastPart = normalizedPath.includes(".") ? normalizedPath.split(".").pop() : normalizedPath;
+			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
+				const dupValue = apiToMerge[lastPart];
+				const dupType = typeof dupValue;
+				if (dupValue !== null && (dupType === "object" || dupType === "function")) {
+					// Verify the value came from a direct subfolder of the mounted directory.
+					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
+					// This prevents hoisting deeper subfolders that share the mount-path name
+					// (e.g. services/services/ inside a "services" mount).
+					const dupWrapper = dupValue?.____slothletInternal?.wrapper;
+					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
+					const dupFileDir = dupFilePath
+						? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/")
+						: null;
+					const expectedDir = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "") + "/" + lastPart;
+					const isDirectChild = dupFileDir === expectedDir;
+
+					if (isDirectChild) {
+						// Hoist all children of the duplicate key up to the same level
+						const hoisted = {};
+						for (const k of Object.keys(apiToMerge)) {
+							if (k !== lastPart) hoisted[k] = apiToMerge[k];
+						}
+						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
+						if (dupWrapper) {
+							// It's a UnifiedWrapper proxy — copy child-cache keys across
+							for (const k of Object.keys(dupWrapper).filter(k => !k.startsWith("_") && !k.startsWith("__"))) {
+								hoisted[k] = dupWrapper[k];
+							}
+						} else {
+							for (const k of Object.keys(dupValue)) {
+								hoisted[k] = dupValue[k];
+							}
+						}
+						apiToMerge = hoisted;
+						this.slothlet.debug("api", {
+							message: "Rule 13 C34: AddApi path deduplication - hoisted duplicate key",
+							lastPart,
+							newKeys: Object.keys(apiToMerge)
+						});
+					}
+				}
+			}
+		}
+
 
 		if (this.config.debug?.api) {
 			this.slothlet.debug("api", {
