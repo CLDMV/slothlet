@@ -101,7 +101,7 @@ export function verifyRuntime() {
 			hasInstanceId = false;
 		}
 
-		results.instanceIDTest = {
+		results.instanceIdTest = {
 			available: hasInstanceId,
 			value: instanceIdValue
 		};
@@ -131,7 +131,7 @@ export function verifyRuntime() {
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {
-		results.instanceIDTest = { available: false, error: error.message };
+		results.instanceIdTest = { available: false, error: error.message };
 		results.runtimeType = "unknown";
 	}
 
@@ -158,16 +158,17 @@ export function testSelfCrossCall(a = 5, b = 3) {
 	};
 
 	try {
-		// Check if self.math.add is directly available (don't rely on Object.keys for proxies)
-		if (self && self.math && typeof self.math.add === "function") {
+		// Check if self.rootMath.add is directly available (use rootMath to avoid the
+		// math.mjs / math/ folder collision which adds +1000 to results)
+		if (self && self.rootMath && typeof self.rootMath.add === "function") {
 			results.selfAvailable = true;
 			results.mathAvailable = true;
-			results.actual = self.math.add(a, b);
+			results.actual = self.rootMath.add(a, b);
 			results.success = results.actual === results.expected;
 		} else {
-			results.error = "self.math.add not available";
+			results.error = "self.rootMath.add not available";
 			results.selfAvailable = !!self;
-			results.mathAvailable = !!(self && self.math);
+			results.mathAvailable = !!(self && self.rootMath);
 		}
 	} catch (error) {
 		results.error = error.message;

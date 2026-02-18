@@ -30,16 +30,18 @@ const liveRuntimeModule = await import("@cldmv/slothlet/runtime/live");
  * @private
  */
 function getCurrentRuntime() {
-	// Try live runtime first (synchronous check)
-	const liveCtx = liveRuntime.tryGetContext();
-	if (liveCtx) {
-		return liveRuntimeModule;
-	}
-
-	// Try async runtime (synchronous check)
+	// Try async runtime first (ALS-based — only set when actively inside an async scope)
+	// This must be checked before live so that async functions aren't misidentified as
+	// live when a live instance has a stale currentInstanceID from a previous call.
 	const asyncCtx = asyncRuntime.tryGetContext();
 	if (asyncCtx) {
 		return asyncRuntimeModule;
+	}
+
+	// Try live runtime (synchronous global binding)
+	const liveCtx = liveRuntime.tryGetContext();
+	if (liveCtx) {
+		return liveRuntimeModule;
 	}
 
 	// Default to async if no active context (will throw proper error)

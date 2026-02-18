@@ -909,6 +909,48 @@ export class HookManager extends ComponentBase {
 	}
 
 	/**
+	 * Export all registered hooks (including handler closures) so they can be
+	 * re-registered on a fresh HookManager instance after a full reload.
+	 *
+	 * @returns {Array<object>} Snapshot of all current hook registrations.
+	 * @public
+	 */
+	exportHooks() {
+		const registrations = [];
+		for (const hook of this.#byId.values()) {
+			registrations.push({
+				typePattern: `${hook.type}:${hook.pattern}`,
+				handler: hook.handler,
+				options: {
+					id: hook.id,
+					priority: hook.priority,
+					subset: hook.subset
+				},
+				enabled: hook.enabled
+			});
+		}
+		return registrations;
+	}
+
+	/**
+	 * Re-register hooks exported by {@link exportHooks} into this (new) instance.
+	 * Called after a full `api.slothlet.reload()` to restore user-registered hooks.
+	 *
+	 * @param {Array<object>} registrations - Snapshot returned by exportHooks().
+	 * @returns {void}
+	 * @public
+	 */
+	importHooks(registrations) {
+		if (!Array.isArray(registrations)) return;
+		for (const reg of registrations) {
+			this.on(reg.typePattern, reg.handler, reg.options);
+			if (!reg.enabled) {
+				this.disable({ id: reg.options.id });
+			}
+		}
+	}
+
+	/**
 	 * Cleanup hook manager on shutdown.
 	 * @public
 	 */
