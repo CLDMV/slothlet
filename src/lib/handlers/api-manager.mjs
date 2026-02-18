@@ -1206,6 +1206,7 @@ return true;
 			apiToMerge = newApi[fileName];
 		}
 
+
 		if (this.config.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "addApiComponent apiToMerge keys",
