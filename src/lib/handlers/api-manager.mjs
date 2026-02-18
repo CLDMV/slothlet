@@ -1843,7 +1843,7 @@ return true;
 	 * await manager.reloadApiComponent({ apiPath: "plugins" });
 	 */
 	async reloadApiComponent(params) {
-		const { apiPath, moduleID } = params || {};
+		const { apiPath, moduleID, options } = params || {};
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
 				operation: "reloadApi",
@@ -1859,7 +1859,7 @@ return true;
 
 		// ApiPath-based reload: rebuild all contributing caches
 		if (apiPath) {
-			await this._reloadByApiPath(apiPath);
+			await this._reloadByApiPath(apiPath, options);
 			return;
 		}
 
@@ -1955,10 +1955,12 @@ return true;
 	 * 4. Parent cache (most specific cache whose scope covers the path)
 	 *
 	 * @param {string} apiPath - API path or "." for base module
+	 * @param {Object} [options] - Optional reload options
+	 * @param {Object} [options.metadata] - Metadata to merge for the reloaded path after rebuild
 	 * @returns {Promise<void>}
 	 * @private
 	 */
-	async _reloadByApiPath(apiPath) {
+	async _reloadByApiPath(apiPath, options = {}) {
 		this.slothlet.debug("reload", {
 			message: "Reloading by API path",
 			apiPath
@@ -2012,6 +2014,19 @@ return true;
 		for (const [, moduleIDs] of endpointOrder) {
 			for (let i = 0; i < moduleIDs.length; i++) {
 				await this._reloadByModuleID(moduleIDs[i], { forceReplace: i === 0 });
+			}
+		}
+
+		// Apply metadata update from reload options AFTER all caches are rebuilt.
+		// This ensures the freshly-tagged wrappers inherit the updated path metadata
+		// the next time getMetadata() is called on them.
+		const reloadMetadata = options?.metadata;
+		if (reloadMetadata && typeof reloadMetadata === "object" && Object.keys(reloadMetadata).length > 0) {
+			if (this.slothlet.handlers.metadata) {
+				const targetPath = apiPath === "." ? null : apiPath.split(".")[0];
+				if (targetPath) {
+					this.slothlet.handlers.metadata.registerUserMetadata(targetPath, reloadMetadata);
+				}
 			}
 		}
 

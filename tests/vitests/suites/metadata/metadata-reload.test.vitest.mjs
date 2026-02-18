@@ -94,8 +94,8 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 		});
 
 		it("should handle reload with metadata changes", async () => {		// Before reload
-		await materialize(api, "rootMath.add", 1, 2);
-		const meta1 = api.rootMath.add.__metadata;
+			await materialize(api, "rootMath.add", 1, 2);
+			const meta1 = api.rootMath.add.__metadata;
 			// Reload (simulates file changes on disk)
 			await api.slothlet.reload();
 
@@ -260,15 +260,22 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 				}
 			});
 
-			// Reload with updated metadata
-			await api.slothlet.api.reload("updateable");
+			// Reload while supplying UPDATED metadata — this is the primary way to change
+			// path-registered metadata after initialization without touching each function.
+			await api.slothlet.api.reload("updateable", {
+				metadata: {
+					version: "2.0.0",
+					updated: true
+				}
+			});
 
 			if (api.updateable?.config?.settings?.getPluginConfig) {
 				await materialize(api, "updateable.config.settings.getPluginConfig");
 				const meta = api.updateable.config.settings.getPluginConfig.__metadata;
 
-				// Metadata registered via api.add should persist through partial reload
-				expect(meta.version).toBe("1.0.0");
+				// Metadata should reflect the values passed to reload
+				expect(meta.version).toBe("2.0.0");
+				expect(meta.updated).toBe(true);
 			}
 		});
 	});

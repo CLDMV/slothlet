@@ -262,6 +262,9 @@ export class ApiBuilder extends ComponentBase {
 				 *   Pass null, undefined, "", or "." to reload the base module.
 				 *   Pass a string matching a loaded moduleID to reload that specific module.
 				 *   Pass an API path string to reload the module(s) that contribute to that path.
+				 * @param {Object} [options] - Optional reload options.
+				 * @param {Object} [options.metadata] - Metadata to merge/update for the reloaded path.
+				 *   Applied after the cache rebuild so it takes effect on all freshly-tagged wrappers.
 				 * @returns {Promise<void>}
 				 * @public
 				 *
@@ -288,7 +291,7 @@ export class ApiBuilder extends ComponentBase {
 				 * // Reload by module ID
 				 * await api.slothlet.api.reload("myModule_abc123");
 				 */
-				reload: async function slothlet_api_reload(pathOrModuleId) {
+				reload: async function slothlet_api_reload(pathOrModuleId, options) {
 					// Check if reload mutation is allowed
 					if (!config.api?.mutations?.reload) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -300,7 +303,7 @@ export class ApiBuilder extends ComponentBase {
 
 					// Normalize base module identifiers: null, undefined, "", "." all mean base module
 					if (pathOrModuleId == null || pathOrModuleId === "" || pathOrModuleId === ".") {
-						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: "." });
+						return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: ".", options });
 					}
 
 					if (typeof pathOrModuleId !== "string") {
@@ -316,7 +319,7 @@ export class ApiBuilder extends ComponentBase {
 					const isModuleId = slothlet.handlers.apiManager.state.addHistory.some((entry) => entry.moduleID === pathOrModuleId);
 
 					if (isModuleId) {
-						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId });
+						return slothlet.handlers.apiManager.reloadApiComponent({ moduleID: pathOrModuleId, options });
 					}
 
 					// Treat as API path - validate it exists in the user-facing API
@@ -343,7 +346,7 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					// Reload by API path — _findAffectedCaches resolves which caches to rebuild
-					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath });
+					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
 				}
 			},
 
@@ -751,6 +754,65 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				remove: function slothlet_metadata_remove(fn, key) {
 					return slothlet.handlers.metadata.removeUserMetadata(fn, key);
+				},
+
+				/**
+				 * @param {string} apiPath - Dot-notation API path (e.g. `"math"`, `"math.add"`).
+				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
+				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Sets metadata for ALL functions reachable under the given API path.
+				 * Unlike `metadata.set()` which targets a specific function reference,
+				 * `setForPath()` uses the path string and applies to all current and
+				 * future functions mounted at (or under) that path.
+				 *
+				 * Multiple calls to the same path are merged; later calls override earlier
+				 * ones for conflicting keys. Metadata set via `set()` still overrides
+				 * path-level metadata for that specific function.
+				 *
+				 * Survives `api.slothlet.reload()` (full reload) without extra steps.
+				 *
+				 * @example
+				 * // Tag all functions under 'math' with a category
+				 * api.slothlet.metadata.setForPath("math", "category", "math");
+				 *
+				 * @example
+				 * // Bulk update via object
+				 * api.slothlet.metadata.setForPath("math", { category: "math", version: "2.0.0" });
+				 */
+				setForPath: function slothlet_metadata_setForPath(apiPath, keyOrObj, value) {
+					if (!slothlet.handlers?.metadata) {
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							hint: "Metadata handler not initialized - this is a bug"
+						});
+					}
+					return slothlet.handlers.metadata.setPathMetadata(apiPath, keyOrObj, value);
+				},
+
+				/**
+				 * @param {string} apiPath - Dot-notation API path (e.g. `"math"`, `"math.add"`).
+				 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all path metadata.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Removes metadata keys (or all metadata) from the path store for `apiPath`.
+				 * Only affects metadata set via `setForPath()` for this exact path segment.
+				 *
+				 * @example
+				 * // Remove a single key from the 'math' path store
+				 * api.slothlet.metadata.removeForPath("math", "category");
+				 *
+				 * @example
+				 * // Remove all path-level metadata for 'math'
+				 * api.slothlet.metadata.removeForPath("math");
+				 */
+				removeForPath: function slothlet_metadata_removeForPath(apiPath, key) {
+					if (!slothlet.handlers?.metadata) return;
+					return slothlet.handlers.metadata.removePathMetadata(apiPath, key);
 				}
 			},
 
