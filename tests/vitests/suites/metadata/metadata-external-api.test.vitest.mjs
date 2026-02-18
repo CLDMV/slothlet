@@ -464,7 +464,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		});
 	});
 
-	describe("api.slothlet.metadata.setForPath()", () => {
+	describe("api.slothlet.metadata.setFor()", () => {
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
@@ -476,7 +476,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			await materialize(api, "rootMath.add", 1, 2);
 			await materialize(api, "rootMath.multiply", 5, 3);
 
-			api.slothlet.metadata.setForPath("rootMath", "category", "math");
+			api.slothlet.metadata.setFor("rootMath", "category", "math");
 
 			expect(api.rootMath.add.__metadata.category).toBe("math");
 			expect(api.rootMath.multiply.__metadata.category).toBe("math");
@@ -485,7 +485,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		it("should set metadata via object merge", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "2.0.0" });
+			api.slothlet.metadata.setFor("rootMath", { category: "math", version: "2.0.0" });
 
 			const meta = api.rootMath.add.__metadata;
 			expect(meta.category).toBe("math");
@@ -496,7 +496,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			await materialize(api, "rootMath.add", 1, 2);
 			await materialize(api, "rootMath.multiply", 5, 3);
 
-			api.slothlet.metadata.setForPath("rootMath.add", "specificToAdd", true);
+			api.slothlet.metadata.setFor("rootMath.add", "specificToAdd", true);
 
 			expect(api.rootMath.add.__metadata.specificToAdd).toBe(true);
 			// multiply is at rootMath.multiply — not under rootMath.add
@@ -506,22 +506,22 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		it("should accumulate across multiple calls and last value wins for same key", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", "version", "1.0.0");
-			api.slothlet.metadata.setForPath("rootMath", "version", "2.0.0");
-			api.slothlet.metadata.setForPath("rootMath", "author", "test");
+			api.slothlet.metadata.setFor("rootMath", "version", "1.0.0");
+			api.slothlet.metadata.setFor("rootMath", "version", "2.0.0");
+			api.slothlet.metadata.setFor("rootMath", "author", "test");
 
 			const meta = api.rootMath.add.__metadata;
 			expect(meta.version).toBe("2.0.0");
 			expect(meta.author).toBe("test");
 		});
 
-		it("function-level set() should take priority over setForPath() for same key", async () => {
+		it("function-level set() should take priority over setFor() for same key", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", "version", "1.0.0");
+			api.slothlet.metadata.setFor("rootMath", "version", "1.0.0");
 			api.slothlet.metadata.set(api.rootMath.add, "version", "3.0.0");
 
-			// set() (moduleID-level) wins over setForPath() (path-level)
+			// set() (moduleID-level) wins over setFor() (path-level)
 			expect(api.rootMath.add.__metadata.version).toBe("3.0.0");
 		});
 
@@ -529,14 +529,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			await materialize(api, "rootMath.add", 1, 2);
 			const systemModuleID = api.rootMath.add.__metadata.moduleID;
 
-			api.slothlet.metadata.setForPath("rootMath", "moduleID", "HACKED");
+			api.slothlet.metadata.setFor("rootMath", "moduleID", "HACKED");
 
 			// System metadata always wins
 			expect(api.rootMath.add.__metadata.moduleID).toBe(systemModuleID);
 		});
 	});
 
-	describe("api.slothlet.metadata.removeForPath()", () => {
+	describe("api.slothlet.metadata.removeFor()", () => {
 		beforeEach(async () => {
 			api = await slothlet({
 				...config,
@@ -547,10 +547,10 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		it("should remove a specific key from path-level metadata", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "1.0.0" });
+			api.slothlet.metadata.setFor("rootMath", { category: "math", version: "1.0.0" });
 			expect(api.rootMath.add.__metadata.category).toBe("math");
 
-			api.slothlet.metadata.removeForPath("rootMath", "category");
+			api.slothlet.metadata.removeFor("rootMath", "category");
 
 			expect(api.rootMath.add.__metadata.category).toBeUndefined();
 			// Other keys from the same path entry should remain
@@ -560,8 +560,8 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		it("should remove all path-level metadata when no key is given", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", { category: "math", version: "1.0.0" });
-			api.slothlet.metadata.removeForPath("rootMath");
+			api.slothlet.metadata.setFor("rootMath", { category: "math", version: "1.0.0" });
+			api.slothlet.metadata.removeFor("rootMath");
 
 			expect(api.rootMath.add.__metadata.category).toBeUndefined();
 			expect(api.rootMath.add.__metadata.version).toBeUndefined();
@@ -572,13 +572,13 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 		it("should not affect function-level metadata set via set()", async () => {
 			await materialize(api, "rootMath.add", 1, 2);
 
-			api.slothlet.metadata.setForPath("rootMath", "tag", "path");
+			api.slothlet.metadata.setFor("rootMath", "tag", "path");
 			api.slothlet.metadata.set(api.rootMath.add, "tag", "function");
 
 			// function-level wins
 			expect(api.rootMath.add.__metadata.tag).toBe("function");
 
-			api.slothlet.metadata.removeForPath("rootMath", "tag");
+			api.slothlet.metadata.removeFor("rootMath", "tag");
 
 			// function-level still present after path removal
 			expect(api.rootMath.add.__metadata.tag).toBe("function");

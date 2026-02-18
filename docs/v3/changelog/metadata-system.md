@@ -18,7 +18,7 @@ The Slothlet v3 metadata system provides **secure, immutable system metadata** c
 - **Security Verification**: Stack trace validation to detect metadata mismatches
 - **Per-Wrapper Tracking**: Each UnifiedWrapper instance has unique metadata independent of implementation
 - **Hot Reload Support**: Metadata updates automatically when implementations change
-- **Path-Level Metadata**: `setForPath()` applies metadata to all functions under an API path without needing function references
+- **Path-Level Metadata**: `setFor()` applies metadata to all functions under an API path without needing function references
 - **Reload Persistence**: `set()` and `setGlobal()` values survive `api.slothlet.reload()` (full instance reload)
 - **Reload-with-Metadata**: `api.slothlet.api.reload(path, { metadata })` atomically updates path metadata during partial reload
 
@@ -257,20 +257,20 @@ Set metadata for all functions reachable under an API path.
 - `keyOrObj` {string|Object} - Single key (with `value`) or metadata object to merge
 - `value` {*} - Value when `keyOrObj` is a string
 
-**Public surface**: `api.slothlet.metadata.setForPath(apiPath, keyOrObj, value?)`
+**Public surface**: `api.slothlet.metadata.setFor(pathOrModuleId, keyOrObj, value?)`
 
 ```javascript
 // Single key
-api.slothlet.metadata.setForPath("math", "category", "math");
+api.slothlet.metadata.setFor("math", "category", "math");
 
 // Object merge
-api.slothlet.metadata.setForPath("math", { category: "math", version: "2.0.0" });
+api.slothlet.metadata.setFor("math", { category: "math", version: "2.0.0" });
 
 // Target specific subpath
-api.slothlet.metadata.setForPath("math.add", "description", "Adds two numbers");
+api.slothlet.metadata.setFor("math.add", "description", "Adds two numbers");
 ```
 
-**Priority** (lowest → highest): global → setForPath → set() → system.
+**Priority** (lowest → highest): global → setFor → set() → system.
 
 #### `removePathMetadata(apiPath, key?)`
 
@@ -280,14 +280,14 @@ Remove metadata keys (or all metadata) stored under the given path segment.
 - `apiPath` {string} - Dot-notation path
 - `key` {string|string[]} - Key(s) to remove; omit to remove all
 
-**Public surface**: `api.slothlet.metadata.removeForPath(apiPath, key?)`
+**Public surface**: `api.slothlet.metadata.removeFor(pathOrModuleId, key?)`
 
 ```javascript
 // Remove a single key
-api.slothlet.metadata.removeForPath("math", "category");
+api.slothlet.metadata.removeFor("math", "category");
 
 // Remove all path-level metadata
-api.slothlet.metadata.removeForPath("math");
+api.slothlet.metadata.removeFor("math");
 ```
 
 #### `exportUserState()` / `importUserState(state)` *(package-internal)*
@@ -702,7 +702,7 @@ The v3 metadata system provides enterprise-grade security and flexibility:
 ✅ **Immutable**: Deep freezing prevents tampering  
 ✅ **Verified**: Stack trace validation detects mismatches  
 ✅ **Flexible**: Dual storage for system + user metadata  
-✅ **Path-Level**: `setForPath()` tags all functions under a path without refs  
+✅ **Path-Level**: `setFor()` tags all functions under a path without refs  
 ✅ **Reload-Persistent**: `set()` and `setGlobal()` survive full instance reload  
 ✅ **Atomic Reload**: `api.reload(path, { metadata })` updates metadata during rebuild  
 ✅ **Hot-Reload Ready**: Updates automatically on impl changes  
