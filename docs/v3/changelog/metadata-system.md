@@ -18,6 +18,9 @@ The Slothlet v3 metadata system provides **secure, immutable system metadata** c
 - **Security Verification**: Stack trace validation to detect metadata mismatches
 - **Per-Wrapper Tracking**: Each UnifiedWrapper instance has unique metadata independent of implementation
 - **Hot Reload Support**: Metadata updates automatically when implementations change
+- **Path-Level Metadata**: `setForPath()` applies metadata to all functions under an API path without needing function references
+- **Reload Persistence**: `set()` and `setGlobal()` values survive `api.slothlet.reload()` (full instance reload)
+- **Reload-with-Metadata**: `api.slothlet.api.reload(path, { metadata })` atomically updates path metadata during partial reload
 
 ---
 
@@ -45,8 +48,13 @@ The Slothlet v3 metadata system provides **secure, immutable system metadata** c
 #### 2. User Metadata Store (Map)
 
 **Storage**: Private `#userMetadataStore` Map  
-**Keys**: `moduleID` or root `apiPath`  
-**Access**: Managed via `registerUserMetadata()`, `setUserMetadata()`, `removeUserMetadata()`
+**Keys**: `moduleID`, full `moduleID:apiPath`, root `apiPath`, or full `apiPath` for targeted entries  
+**Access**: Managed via `registerUserMetadata()`, `setUserMetadata()`, `setPathMetadata()`, `removeUserMetadata()`, `removePathMetadata()`
+
+> **Dual-key storage**: `setUserMetadata()` (i.e. `set()`) stores under **both** the
+> `moduleID` key (fast immediate lookup) and the `apiPath` key (e.g. `"rootMath.add"`).
+> This ensures metadata set via `set()` also survives a full `reload()` where
+> moduleIDs change, because `collectMetadataFromParents()` finds the apiPath entry.
 
 ```javascript
 // Structure in Map
@@ -239,6 +247,58 @@ Set global user metadata that applies to all functions.
 metadata.setGlobalMetadata("environment", "production");
 metadata.setGlobalMetadata("tenant", "acme-corp");
 ```
+
+#### `setPathMetadata(apiPath, keyOrObj, value?)`
+
+Set metadata for all functions reachable under an API path.
+
+**Parameters**:
+- `apiPath` {string} - Dot-notation path (e.g. `"math"`, `"math.add"`)
+- `keyOrObj` {string|Object} - Single key (with `value`) or metadata object to merge
+- `value` {*} - Value when `keyOrObj` is a string
+
+**Public surface**: `api.slothlet.metadata.setForPath(apiPath, keyOrObj, value?)`
+
+```javascript
+// Single key
+api.slothlet.metadata.setForPath("math", "category", "math");
+
+// Object merge
+api.slothlet.metadata.setForPath("math", { category: "math", version: "2.0.0" });
+
+// Target specific subpath
+api.slothlet.metadata.setForPath("math.add", "description", "Adds two numbers");
+```
+
+**Priority** (lowest → highest): global → setForPath → set() → system.
+
+#### `removePathMetadata(apiPath, key?)`
+
+Remove metadata keys (or all metadata) stored under the given path segment.
+
+**Parameters**:
+- `apiPath` {string} - Dot-notation path
+- `key` {string|string[]} - Key(s) to remove; omit to remove all
+
+**Public surface**: `api.slothlet.metadata.removeForPath(apiPath, key?)`
+
+```javascript
+// Remove a single key
+api.slothlet.metadata.removeForPath("math", "category");
+
+// Remove all path-level metadata
+api.slothlet.metadata.removeForPath("math");
+```
+
+#### `exportUserState()` / `importUserState(state)` *(package-internal)*
+
+Used by `slothlet.reload()` to preserve user metadata across a full instance reload.
+
+- `exportUserState()` → snapshots `#globalUserMetadata` and all `#userMetadataStore` entries
+- `importUserState(state)` → merges the snapshot into a fresh `Metadata` instance
+
+Merge strategy: existing keys (from fresh `load()`) win over saved state, so
+`api.add`-registered metadata from operation-history replay takes priority.
 
 #### `async caller()`
 
@@ -642,7 +702,10 @@ The v3 metadata system provides enterprise-grade security and flexibility:
 ✅ **Immutable**: Deep freezing prevents tampering  
 ✅ **Verified**: Stack trace validation detects mismatches  
 ✅ **Flexible**: Dual storage for system + user metadata  
+✅ **Path-Level**: `setForPath()` tags all functions under a path without refs  
+✅ **Reload-Persistent**: `set()` and `setGlobal()` survive full instance reload  
+✅ **Atomic Reload**: `api.reload(path, { metadata })` updates metadata during rebuild  
 ✅ **Hot-Reload Ready**: Updates automatically on impl changes  
-✅ **Tested**: 672 tests across 8 configurations  
+✅ **Tested**: 672+ tests across 8 configurations  
 
 The system is production-ready and fully integrated with the ownership, lifecycle, and hot reload systems.
