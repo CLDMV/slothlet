@@ -28,6 +28,28 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
+ * Resolve a pathOrModuleId string to a dot-notation apiPath.
+ *
+ * @description
+ * Checks whether the given string matches a moduleID recorded in `addHistory`.
+ * If it does, returns the `apiPath` that was registered with it. Otherwise
+ * returns the string as-is (treating it as a dot-notation path), consistent
+ * with the resolution logic used by `api.reload()` and `api.remove()`.
+ *
+ * @param {object} slothlet - Slothlet instance
+ * @param {string} pathOrModuleId - Dot-notation API path or a registered moduleID
+ * @returns {string} Resolved dot-notation apiPath
+ */
+function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
+	const history = slothlet.handlers?.apiManager?.state?.addHistory;
+	if (history) {
+		const match = history.findLast((entry) => entry.moduleID === pathOrModuleId);
+		if (match) return match.apiPath;
+	}
+	return pathOrModuleId;
+}
+
+/**
  * Builds final API with built-in methods attached
  * @class ApiBuilder
  * @extends ComponentBase
@@ -757,7 +779,7 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * @param {string} apiPath - Dot-notation API path (e.g. `"math"`, `"math.add"`).
+				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
 				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
 				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
 				 * @returns {void}
@@ -766,8 +788,12 @@ export class ApiBuilder extends ComponentBase {
 				 * @description
 				 * Sets metadata for ALL functions reachable under the given API path.
 				 * Unlike `metadata.set()` which targets a specific function reference,
-				 * `setForPath()` uses the path string and applies to all current and
+				 * `setFor()` uses the path string and applies to all current and
 				 * future functions mounted at (or under) that path.
+				 *
+				 * Accepts either a dot-notation API path or a moduleID from a prior
+				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * before storing, consistent with how `api.reload()` and `api.remove()` work.
 				 *
 				 * Multiple calls to the same path are merged; later calls override earlier
 				 * ones for conflicting keys. Metadata set via `set()` still overrides
@@ -776,43 +802,58 @@ export class ApiBuilder extends ComponentBase {
 				 * Survives `api.slothlet.reload()` (full reload) without extra steps.
 				 *
 				 * @example
-				 * // Tag all functions under 'math' with a category
-				 * api.slothlet.metadata.setForPath("math", "category", "math");
+				 * // Tag all functions under 'math' with a category (by API path)
+				 * api.slothlet.metadata.setFor("math", "category", "math");
+				 *
+				 * @example
+				 * // Tag by moduleID (resolved to the path it was registered at)
+				 * api.slothlet.metadata.setFor("plugins-core", "version", "2.0.0");
 				 *
 				 * @example
 				 * // Bulk update via object
-				 * api.slothlet.metadata.setForPath("math", { category: "math", version: "2.0.0" });
+				 * api.slothlet.metadata.setFor("math", { category: "math", version: "2.0.0" });
 				 */
-				setForPath: function slothlet_metadata_setForPath(apiPath, keyOrObj, value) {
+				setFor: function slothlet_metadata_setFor(pathOrModuleId, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							hint: "Metadata handler not initialized - this is a bug"
 						});
 					}
-					return slothlet.handlers.metadata.setPathMetadata(apiPath, keyOrObj, value);
+					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
 				},
 
 				/**
-				 * @param {string} apiPath - Dot-notation API path (e.g. `"math"`, `"math.add"`).
+				 * @param {string} pathOrModuleId - Dot-notation API path (e.g. `"math"`, `"math.add"`) OR a moduleID from a previous `api.add()` call.
 				 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all path metadata.
 				 * @returns {void}
 				 * @public
 				 *
 				 * @description
-				 * Removes metadata keys (or all metadata) from the path store for `apiPath`.
-				 * Only affects metadata set via `setForPath()` for this exact path segment.
+				 * Removes metadata keys (or all metadata) from the path store for the given
+				 * API path or moduleID. Only affects metadata set via `setFor()` for
+				 * this exact path segment.
+				 *
+				 * Accepts either a dot-notation API path or a moduleID from a prior
+				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * before removing, consistent with how `api.reload()` and `api.remove()` work.
 				 *
 				 * @example
 				 * // Remove a single key from the 'math' path store
-				 * api.slothlet.metadata.removeForPath("math", "category");
+				 * api.slothlet.metadata.removeFor("math", "category");
 				 *
 				 * @example
 				 * // Remove all path-level metadata for 'math'
-				 * api.slothlet.metadata.removeForPath("math");
+				 * api.slothlet.metadata.removeFor("math");
+				 *
+				 * @example
+				 * // Remove by moduleID
+				 * api.slothlet.metadata.removeFor("plugins-core", "version");
 				 */
-				removeForPath: function slothlet_metadata_removeForPath(apiPath, key) {
+				removeFor: function slothlet_metadata_removeFor(pathOrModuleId, key) {
 					if (!slothlet.handlers?.metadata) return;
-					return slothlet.handlers.metadata.removePathMetadata(apiPath, key);
+					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
+					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
 				}
 			},
 
