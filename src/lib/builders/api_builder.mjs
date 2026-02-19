@@ -142,14 +142,6 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
-		// Store instance reference (non-enumerable for internal use)
-		Object.defineProperty(userApi, "__slothletInstance", {
-			value: this.slothlet,
-			enumerable: false,
-			writable: false,
-			configurable: true
-		});
-
 		return userApi;
 	}
 
@@ -416,13 +408,18 @@ export class ApiBuilder extends ComponentBase {
 					if (slothlet.contextManager.constructor.name === "LiveContextManager") {
 						const currentID = slothlet.contextManager.currentInstanceID;
 
-						// Check if current is this instance or a child of this instance
-						const isOurInstance = currentID === slothlet.instanceID || currentID?.startsWith(slothlet.instanceID + "__run_");
+						// Check if current is this instance or a child of this instance.
+						// Also check parentInstanceID so that child __run_ contexts created
+						// before a reload() (whose base instanceID changed) still resolve.
+						if (currentID) {
+							const activeStore = slothlet.contextManager.instances.get(currentID);
+							const isOurInstance =
+								currentID === slothlet.instanceID ||
+								currentID?.startsWith(slothlet.instanceID + "__run_") ||
+								activeStore?.parentInstanceID === slothlet.instanceID;
 
-						if (isOurInstance && currentID) {
-							const store = slothlet.contextManager.instances.get(currentID);
-							if (store) {
-								return key ? store.context[key] : { ...store.context };
+							if (isOurInstance && activeStore) {
+								return key ? activeStore.context[key] : { ...activeStore.context };
 							}
 						}
 
