@@ -696,6 +696,20 @@ async function runAllFiles() {
 			});
 	}
 
+	// Top duration
+	if (results.length > 0) {
+		console.log("\n" + chalk.bold("⏱️  TOP DURATION"));
+		console.log("-".repeat(80));
+
+		[...results]
+			.sort((a, b) => b.duration - a.duration)
+			.slice(0, 10)
+			.forEach((r) => {
+				const sec = (r.duration / 1000).toFixed(2);
+				console.log(`  ${(sec + "s").padStart(8)}  ${chalk.dim(r.file)}`);
+			});
+	}
+
 	// Passed test files summary
 	if (passedFiles.length > 0) {
 		console.log("\n" + "=".repeat(80));
@@ -703,9 +717,12 @@ async function runAllFiles() {
 		console.log("=".repeat(80));
 
 		passedFiles.forEach((result) => {
-			const heapInfo = result.heapMb ? chalk.dim(` (${result.heapMb} MB)`) : "";
+			const durationSec = (result.duration / 1000).toFixed(2);
+			const statsInfo = [];
+			if (result.heapMb) statsInfo.push(`${result.heapMb} MB`);
+			statsInfo.push(`${durationSec}s`);
 			const testInfo = result.testsPass > 0 ? ` - ${result.testsPass} tests` : "";
-			console.log(chalk.green(`✓ ${result.file}${testInfo}${heapInfo}`));
+			console.log(chalk.green(`✓ ${result.file}${testInfo}`) + chalk.dim(` (${statsInfo.join(", ")})`));
 		});
 	}
 	/* 
@@ -742,12 +759,16 @@ async function runAllFiles() {
 		console.log(`\n❌ ${failedFiles.length} test file(s) failed`);
 		console.log(chalk.bold.red("\nFailed Test Files:"));
 		failedFiles.forEach((result) => {
+			const durationSec = (result.duration / 1000).toFixed(2);
 			const testCounts = [];
 			if (result.testsFail > 0) testCounts.push(chalk.red(`${result.testsFail} failed`));
 			if (result.testsPass > 0) testCounts.push(chalk.green(`${result.testsPass} passed`));
 			if (result.testsSkip > 0) testCounts.push(chalk.yellow(`${result.testsSkip} skipped`));
+			const statsInfo = [];
+			if (result.heapMb) statsInfo.push(`${result.heapMb} MB`);
+			statsInfo.push(`${durationSec}s`);
 			const countStr = testCounts.length > 0 ? ` (${testCounts.join(", ")})` : "";
-			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}`);
+			console.log(`  ${chalk.red("✖")} ${result.file}${countStr}` + chalk.dim(` [${statsInfo.join(", ")}]`));
 
 			// Show error details indented under each failed test file (if not suppressed)
 			if (showErrorDetails && result.errors.length > 0) {

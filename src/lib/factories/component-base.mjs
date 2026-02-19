@@ -39,7 +39,7 @@
  * const { ComponentBase } = require("@cldmv/slothlet/factories/component-base");
  * class MyHandler extends ComponentBase {
  *   doSomething() {
- *     return this.config.mode;
+ *     return this.____config.mode;
  *   }
  * }
  */
@@ -112,11 +112,12 @@ export class ComponentBase {
 	 *
 	 * @description
 	 * Provides access to the Slothlet config for collision modes, debug settings, etc.
+	 * Named with ____ prefix to avoid shadowing user API names like 'config'.
 	 *
 	 * @example
-	 * const collisionMode = this.config.collision.api;
+	 * const collisionMode = this.____config.collision.api;
 	 */
-	get config() {
+	get ____config() {
 		return this.____slothlet.config;
 	}
 

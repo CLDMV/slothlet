@@ -176,7 +176,8 @@ export class UnifiedWrapper extends ComponentBase {
 		internal.invalid = false;
 		internal.state = {
 			materialized: initialImpl !== null,
-			inFlight: false
+			inFlight: false,
+			collisionMode: "merge"
 		};
 		internal.displayName = apiPath ? `${String(apiPath).replace(/\./g, "__")}__UnifiedWrapper` : "UnifiedWrapper";
 		// These are set dynamically by api-assignment.mjs during collision handling:
@@ -242,7 +243,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		if (initialImpl !== null) {
 			const implKeys = Object.keys(initialImpl || {});
-			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
 					message: "UnifiedWrapper constructor - impl keys",
 					apiPath,
@@ -251,7 +252,7 @@ export class UnifiedWrapper extends ComponentBase {
 				});
 			}
 			this.___adoptImplChildren();
-			if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
+			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				const childKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 				this.slothlet.debug("wrapper", {
 					message: "UnifiedWrapper constructor - after adopt",
@@ -337,7 +338,29 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	static _cloneImpl(value) {
-		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function" && !util.types.isProxy(value)) {
+		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
+			if (util.types.isProxy(value)) {
+				// Distinguish slothlet wrapper proxies from custom user proxies:
+				// - Slothlet wrapper proxies (from api.add()) have ____slothletInternal and must
+				//   be shallow-copied into a plain object so that ___adoptImplChildren's delete
+				//   operations don't trigger the source proxy's deleteProperty trap (which would
+				//   invalidate child wrappers on the original tree).
+				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
+				//   must NOT be cloned — cloning destroys their custom trap behavior.
+				if (value.____slothletInternal) {
+					const clone = {};
+					for (const key of Reflect.ownKeys(value)) {
+						try {
+							clone[key] = value[key];
+						} catch {
+							// Skip keys that throw on access (e.g., proxy invariant violations)
+						}
+					}
+					return clone;
+				}
+				// Custom user proxy — return as-is to preserve trap behavior
+				return value;
+			}
 			const uw_cloneDescriptors = Object.getOwnPropertyDescriptors(value);
 			return Object.create(Object.getPrototypeOf(value), uw_cloneDescriptors);
 		}
@@ -465,7 +488,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @private
 	 */
 	___setImpl(newImpl, moduleID = null) {
-		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "___setImpl called",
 				apiPath: this.____slothletInternal.apiPath,
@@ -599,7 +622,7 @@ export class UnifiedWrapper extends ComponentBase {
 			return this.____slothletInternal.materializationPromise;
 		}
 
-		if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.apiPath === "string") {
+		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "_materialize start",
 				apiPath: this.apiPath
@@ -612,7 +635,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			try {
 				if (this.____slothletInternal.materializeFunc) {
-					if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
 							message: "_materialize calling materializeFunc",
 							apiPath: this.____slothletInternal.apiPath
@@ -637,7 +660,7 @@ export class UnifiedWrapper extends ComponentBase {
 						this.slothlet._onWrapperMaterialized();
 					}
 
-					if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
 							message: "_materialize complete",
 							apiPath: this.____slothletInternal.apiPath,
@@ -647,7 +670,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 				}
 			} catch (error) {
-				if ((wrapperDebugEnabled || this.config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
+				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 					this.slothlet.debug("wrapper", {
 						message: "_materialize error",
 						apiPath: this.____slothletInternal.apiPath,
@@ -732,7 +755,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
-		const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "___getState", "_materialize", "_impl", "_state", "_invalid"]);
+		const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "___getState", "_materialize", "_impl", "_state", "_invalid", "____slothlet", "____slothletInternal"]);
 		const keepImplProperties =
 			typeof this.____slothletInternal.impl === "function" || (this.____slothletInternal.impl && typeof this.____slothletInternal.impl === "object" && typeof this.____slothletInternal.impl.default === "function");
 		if (keepImplProperties && this.____slothletInternal.impl && typeof this.____slothletInternal.impl === "object" && typeof this.____slothletInternal.impl.default === "function") {
@@ -757,6 +780,9 @@ export class UnifiedWrapper extends ComponentBase {
 		});
 
 		// If collision mode is "replace", clear existing properties from collision
+		// CRITICAL: Save existing child wrapper references BEFORE deleting so they can be
+		// reused during adoption to preserve proxy identity (reference stability across reload).
+		const savedChildren = new Map();
 		if (storedCollisionMode === "replace" && existingKeys.length > 0) {
 			this.slothlet.debug("wrapper", {
 				message: "ADOPT: REPLACE MODE - Clearing existing properties",
@@ -764,6 +790,10 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 
 			for (const key of existingKeys) {
+				const child = this[key];
+				if (child && typeof child.___setImpl === "function") {
+					savedChildren.set(key, child);
+				}
 				const descriptor = Object.getOwnPropertyDescriptor(this, key);
 				if (descriptor?.configurable) {
 					delete this[key];
@@ -868,10 +898,21 @@ export class UnifiedWrapper extends ComponentBase {
 
 			// CRITICAL: Check if child wrapper already exists to maintain live binding
 			// If it exists, update its implementation instead of creating new wrapper
-			const existingChild = this[key];
+			// Also check savedChildren map for wrappers saved before replace-mode deletion.
+			// IMPORTANT: Check savedChildren FIRST because after replace-mode deletion of
+			// own properties, prototype getters (e.g. ComponentBase's '____config', 'debug')
+			// shadow the lookup — this[key] returns the prototype getter result (truthy
+			// but not a wrapper), preventing the || fallback from reaching savedChildren.
+			const existingChild = savedChildren.get(key) || this[key];
 			let wrapped;
 
-			if (existingChild && typeof existingChild.___setImpl === "function") {
+			// LAZY REFERENCE CONTRACT: In lazy+replace mode (reload), do NOT reuse
+			// existing child wrappers — create fresh ones so references break.
+			// In merge mode (multi-cache subsequent modules), reuse children from
+			// the current reload cycle so keys from prior modules aren't lost.
+			const skipChildReuse = this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
+
+			if (!skipChildReuse && existingChild && typeof existingChild.___setImpl === "function") {
 				// Reuse existing wrapper - update its implementation to maintain live binding
 				// CRITICAL: If value is one of our wrapper proxies (detected by ___getState),
 				// extract its raw _impl instead of passing the proxy to ___setImpl.
@@ -1822,6 +1863,14 @@ export class UnifiedWrapper extends ComponentBase {
 					if (typeof prop === "string" && prop.startsWith("__")) {
 						return wrapper[prop];
 					}
+					return target[prop];
+				}
+			}
+			// When target IS the wrapper (non-callable), non-configurable props must return
+			// their actual value to satisfy proxy invariants (e.g. ____slothlet from ComponentBase).
+			if (target === wrapper && typeof prop === "string") {
+				const desc = Object.getOwnPropertyDescriptor(target, prop);
+				if (desc && !desc.configurable) {
 					return target[prop];
 				}
 			}

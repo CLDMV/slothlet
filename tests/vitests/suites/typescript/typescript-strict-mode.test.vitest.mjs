@@ -30,7 +30,7 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		}
 		
 		if (fs.existsSync(outputDir)) {
-			fs.rmdirSync(outputDir, { recursive: true });
+			fs.rmSync(outputDir, { recursive: true });
 		}
 	});
 	

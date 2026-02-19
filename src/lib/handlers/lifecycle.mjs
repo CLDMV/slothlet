@@ -141,7 +141,7 @@ export class Lifecycle extends ComponentBase {
 	 */
 	async emit(event, data) {
 		// Log event if debugging enabled
-		if (this.config?.debug?.lifecycle) {
+		if (this.____config?.debug?.lifecycle) {
 			this.eventLog.push({
 				event,
 				data: { ...data },
@@ -175,7 +175,7 @@ export class Lifecycle extends ComponentBase {
 						handlerPromises.push(
 							result.catch((error) => {
 								// Log error but don't stop other handlers
-								if (!this.config?.silent) {
+								if (!this.____config?.silent) {
 									console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
 								}
 							})
@@ -183,7 +183,7 @@ export class Lifecycle extends ComponentBase {
 					}
 				} catch (error) {
 					// Log synchronous errors but don't stop other handlers
-					if (!this.config?.silent) {
+					if (!this.____config?.silent) {
 						console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
 					}
 				}

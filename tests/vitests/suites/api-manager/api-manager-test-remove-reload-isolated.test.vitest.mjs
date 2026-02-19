@@ -23,7 +23,7 @@ import slothlet from "@cldmv/slothlet";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 async function createApiInstance(baseConfig, overrides = {}) {
-	return slothlet({ ...baseConfig, debug: true, ...overrides });
+	return slothlet({ ...baseConfig, ...overrides });
 }
 
 const BASE_DIRS = [
