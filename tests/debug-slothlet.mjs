@@ -274,10 +274,6 @@ export function compareApiShapes(
 		if (key === "____slothlet") {
 			return true;
 		}
-		// Skip __slothletInstance - internal Slothlet instance, not part of user API
-		if (key === "__slothletInstance") {
-			return true;
-		}
 		return false;
 	};
 
@@ -294,10 +290,6 @@ export function compareApiShapes(
 		if (shouldSkipKey(key, a)) {
 			continue;
 		}
-		if (currentPath === "__slothletInstance" && key === "config") {
-			continue;
-		}
-
 		const valA = a[key];
 		const valB = b[key];
 		const fullPath = currentPath ? `${currentPath}.${key}` : key;
@@ -1135,14 +1127,6 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// Filter out expected nested differences (mode configs naturally differ between eager and lazy)
 	const significantNestedDifferences = compared.nestedDifferences.filter(
 		(diff) =>
-			diff.path !== "__slothletInstance.debugLogger.config.mode" &&
-			diff.path !== "__slothletInstance.config.mode" &&
-			diff.path !== "__slothletInstance.handlers.metadata._instanceId" &&
-			diff.path !== "__slothletInstance.handlers.apiManager.state.initialConfig.mode" &&
-			!diff.path.includes("prototype.constructor.__slothletInstance.debugLogger.config.mode") &&
-			!diff.path.includes("prototype.constructor.__slothletInstance.config.mode") &&
-			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.apiManager.state.initialConfig.mode") &&
-			!diff.path.includes("prototype.constructor.__slothletInstance.handlers.metadata._instanceId") &&
 			// __childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
 			!diff.path.includes("__childFilePaths")
 	);

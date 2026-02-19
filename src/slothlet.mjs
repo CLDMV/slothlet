@@ -535,8 +535,16 @@ class Slothlet {
 			this.handlers.hookManager.importHooks(savedHooks);
 		}
 
-		// 5. Clean up the old context store now that the new one is active.
-		//    This ensures stale ALS instanceIDs are removed after each reload.
+		// 5. Reparent any child __run_ context stores that were created before reload.
+		//    Their parentInstanceID points to the old base instanceID; updating it lets
+		//    context.get() still find them for callers that call reload() inside a .run() scope.
+		for (const [, store] of this.contextManager.instances) {
+			if (store.parentInstanceID === oldInstanceID) {
+				store.parentInstanceID = this.instanceID;
+			}
+		}
+
+		// 6. Clean up the old base context store now that the new one is active.
 		//    Guard with .has() because shutdown() may have already removed the store.
 		if (oldInstanceID && oldInstanceID !== this.instanceID && this.contextManager.instances?.has(oldInstanceID)) {
 			this.contextManager.cleanup(oldInstanceID);

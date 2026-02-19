@@ -44,7 +44,7 @@ async function createApiInstance(baseConfig, overrides = {}) {
  * @returns {Function|undefined} Math add function.
  */
 function getMathAdd(api, dir) {
-	return dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.math?.add;
+	return dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.rootMath?.add;
 }
 
 const BASE_DIRS = [
@@ -104,25 +104,27 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 	});
 
 	it("preserves context across reloads", async () => {
-		api = await createApiInstance(config);
-		api.context.userId = 123;
-		api.context.session = "abc";
+		api = await createApiInstance(config, {
+			context: { userId: 123, session: "abc" }
+		});
 
 		await api.slothlet.reload();
 
-		expect(api.context.userId).toBe(123);
-		expect(api.context.session).toBe("abc");
+		const ctx = api.slothlet.context.get();
+		expect(ctx.userId).toBe(123);
+		expect(ctx.session).toBe("abc");
 	});
 
 	it("preserves reference object across reloads", async () => {
-		api = await createApiInstance(config);
-		api.reference.customUtil = () => "test";
-		api.reference.constant = 42;
+		const customUtil = () => "test";
+		api = await createApiInstance(config, {
+			reference: { customUtil, constant: 42 }
+		});
 
 		await api.slothlet.reload();
 
-		expect(api.reference.customUtil()).toBe("test");
-		expect(api.reference.constant).toBe(42);
+		expect(api.customUtil()).toBe("test");
+		expect(api.constant).toBe(42);
 	});
 
 	it("reloads nested API paths while preserving siblings", async () => {
