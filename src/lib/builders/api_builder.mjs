@@ -87,7 +87,7 @@ export class ApiBuilder extends ComponentBase {
 	async buildFinalAPI(userApi) {
 		this.slothlet.debug("api", {
 			message: "buildFinalAPI called",
-			diagnostics: this.config.diagnostics,
+			diagnostics: this.____config.diagnostics,
 			userApiKeys: Object.keys(userApi)
 		});
 
@@ -159,7 +159,7 @@ export class ApiBuilder extends ComponentBase {
 	 */
 	async createSlothletNamespace(userApi) {
 		const slothlet = this.slothlet;
-		const config = this.config;
+		const config = this.____config;
 
 		// Read version from package.json
 		let version = "unknown";

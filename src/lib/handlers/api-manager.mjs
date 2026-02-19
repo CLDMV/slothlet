@@ -349,7 +349,7 @@ export class ApiManager extends ComponentBase {
 				// Create a UnifiedWrapper for the container instead of plain object
 				const containerPath = parts.slice(0, i + 1).join(".");
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
-					mode: this.config.mode,
+					mode: this.____config.mode,
 					apiPath: containerPath,
 					moduleID: moduleID,
 					sourceFolder: sourceFolder
@@ -410,7 +410,7 @@ export class ApiManager extends ComponentBase {
 	 * proxy to preserve references during reload operations.
 	 *
 	 * @example
-	 * await this.syncWrapper(existingProxy, nextProxy, this.config);
+	 * await this.syncWrapper(existingProxy, nextProxy, this.____config);
 	 */
 	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null) {
 		if (config?.debug?.api) {
@@ -600,7 +600,7 @@ export class ApiManager extends ComponentBase {
 	 * merge behavior between initial build and hot reload.
 	 *
 	 * @example
-	 * await this.mutateApiValue(existing, next, { removeMissing: true }, this.config);
+	 * await this.mutateApiValue(existing, next, { removeMissing: true }, this.____config);
 	 */
 	async mutateApiValue(existingValue, nextValue, options, config) {
 		if (config?.debug?.api) {
@@ -767,7 +767,7 @@ export class ApiManager extends ComponentBase {
 			}
 
 			if (collisionMode === "warn") {
-				if (this.slothlet && !this.config?.silent) {
+				if (this.slothlet && !this.____config?.silent) {
 					new this.SlothletWarning("WARNING_HOT_RELOAD_PATH_COLLISION", {
 						apiPath: parts.join(".")
 					});
@@ -790,7 +790,7 @@ export class ApiManager extends ComponentBase {
 						existing,
 						value,
 						{ removeMissing: false, allowOverwrite: true, collisionMode: "replace", moduleID },
-						this.config
+						this.____config
 					);
 					return true;
 				} else {
@@ -809,11 +809,11 @@ export class ApiManager extends ComponentBase {
 						message: "setValueAtPath - merging properties",
 						mode: collisionMode
 					});
-					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.config);
+					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.____config);
 					return true;
 				} else {
 					// Can't merge primitives - log warning and keep existing
-					if (this.slothlet && !this.config?.silent) {
+					if (this.slothlet && !this.____config?.silent) {
 						new this.SlothletWarning("WARNING_HOT_RELOAD_MERGE_PRIMITIVES", {
 							apiPath: parts.join(".")
 						});
@@ -976,8 +976,8 @@ return true;
 
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
-				dir: this.config.dir,
-				mode: this.config.mode,
+				dir: this.____config.dir,
+				mode: this.____config.mode,
 				moduleID: "base" // Use "base" as moduleID for temporary API
 			});
 
@@ -1120,7 +1120,7 @@ return true;
 		if (restOptions.forceOverwrite) {
 			collisionMode = "replace";
 		} else {
-			collisionMode = restOptions.collisionMode || this.config.api?.collision?.api || "error";
+			collisionMode = restOptions.collisionMode || this.____config.api?.collision?.api || "error";
 		}
 
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
@@ -1146,7 +1146,7 @@ return true;
 
 		const newApi = await this.slothlet.builders.builder.buildAPI({
 			dir: dirForBuild,
-			mode: this.config.mode,
+			mode: this.____config.mode,
 			// Use apiPathPrefix so wrappers have correct full API paths
 			// User specified the path, folder loads normally under that path
 			// Empty string means root level (no prefix)
@@ -1166,10 +1166,10 @@ return true;
 				moduleID: moduleID,
 				api: newApi,
 				folderPath: resolvedFolderPath,
-				mode: this.config.mode,
-				sanitizeOptions: this.config.sanitize || {},
+				mode: this.____config.mode,
+				sanitizeOptions: this.____config.sanitize || {},
 				collisionMode: collisionMode,
-				config: { ...this.config },
+				config: { ...this.____config },
 				timestamp: Date.now()
 			});
 		}
@@ -1273,7 +1273,7 @@ return true;
 		}
 
 
-		if (this.config.debug?.api) {
+		if (this.____config.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "addApiComponent apiToMerge keys",
 				keys: Object.keys(apiToMerge),
@@ -1320,7 +1320,7 @@ return true;
 				
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: normalizedPath,
-					mode: this.config.mode,
+					mode: this.____config.mode,
 					isCallable: isCallableNamespace, // Preserve callable nature
 					moduleID: moduleID,
 					filePath: resolvedFolderPath,
@@ -1418,7 +1418,7 @@ return true;
 
 			// Wait for all pending materializations to complete
 			if (pendingMaterializations.length > 0) {
-				if (this.config.debug?.api) {
+				if (this.____config.debug?.api) {
 					this.slothlet.debug("api", {
 						message: `Awaiting ${pendingMaterializations.length} pending materialization(s) before completing add`,
 						apiPath: normalizedPath
@@ -2467,7 +2467,7 @@ return true;
 				}
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: endpoint,
-					mode: this.config.mode,
+					mode: this.____config.mode,
 					moduleID: moduleID,
 					filePath: resolvedFolderPath,
 					sourceFolder: resolvedFolderPath
