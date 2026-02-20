@@ -111,6 +111,25 @@ function createNamedProxyTarget(nameHint, fallback) {
  */
 export class UnifiedWrapper extends ComponentBase {
 	/**
+	 * @private
+	 * @description
+	 * Private field holding all internal wrapper state. Backed by a prototype getter so
+	 * internal framework code can access `wrapper.____slothletInternal` while the proxy
+	 * traps legally return `undefined` (not an own property → no proxy invariant enforcement).
+	 */
+	#internal = null;
+
+	/**
+	 * Internal state accessor used by framework-internal code only.
+	 * Backed by the private `#internal` field — prototype property, not an own property,
+	 * so proxy invariants never apply and getTrap can legally return undefined for it.
+	 * @returns {Object} Internal state container
+	 */
+	get ____slothletInternal() {
+		return this.#internal;
+	}
+
+	/**
 	 * @param {Object} slothlet - Slothlet instance (provides contextManager, instanceID, ownership)
 	 * @param {Object} options - Configuration options
 	 * @param {string} options.mode - "lazy" or "eager"
@@ -185,12 +204,8 @@ export class UnifiedWrapper extends ComponentBase {
 		// internal.childFilePathsPreMaterialize — Map of child key → file path
 		// internal.needsImmediateChildAdoption — boolean flag for eager adoption
 
-		Object.defineProperty(this, "____slothletInternal", {
-			value: internal,
-			writable: false,
-			enumerable: false,
-			configurable: false
-		});
+		// Store internal state in private field — not an own property, invisible to proxy invariants.
+		this.#internal = internal;
 
 		// Add wrapper self-reference as getter AFTER ____slothletInternal is set (avoid circular reference in traversal)
 		const wrapper = this;
