@@ -14,6 +14,11 @@
 import chalk from "chalk";
 import { spawn } from "node:child_process";
 
+// Populated after ensureDevEnvFlags() confirms slothlet-dev condition is active.
+// Must NOT be a static top-level import — that fires before the respawn check and
+// fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
+let resolveWrapper;
+
 let slothlet;
 const verbose =
 	process.argv.includes("--verbose") ||
@@ -63,6 +68,12 @@ function ensureDevEnvFlags() {
 	if (!needsRespawn) {
 		return false;
 	}
+
+	process.stderr.write(
+		`[debug-slothlet] Missing env flags detected — relaunching with: NODE_ENV=development NODE_OPTIONS="${process.env.NODE_OPTIONS}"\n` +
+			`[debug-slothlet] All output below is from the respawned child process.\n` +
+			`[debug-slothlet] -------------------------------------------------------\n`
+	);
 
 	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
 		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
@@ -136,7 +147,7 @@ export function compareApiShapes(
 		if (valueType !== "object" && valueType !== "function") {
 			return value;
 		}
-		const wrapper = value.____slothletInternal?.wrapper;
+		const wrapper = resolveWrapper(value);
 		if (wrapper && typeof wrapper === "object") {
 			const impl = wrapper.____slothletInternal.impl;
 			// Children are stored directly on the wrapper, not in a separate childCache
@@ -962,6 +973,9 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	if (ensureDevEnvFlags()) {
 		return;
 	}
+
+	// Now safe to import — slothlet-dev condition is active
+	({ resolveWrapper } = await import("@cldmv/slothlet/handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");
 	// Prefer default export, fallback to named, then module itself

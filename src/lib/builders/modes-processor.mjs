@@ -25,7 +25,7 @@
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
-import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -88,12 +88,12 @@ export class ModesProcessor extends ComponentBase {
 
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
-			if (existingTarget && existingTarget.____slothletInternal?.wrapper) {
+			if (existingTarget && resolveWrapper(existingTarget)) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Category reuse - using existing wrapper",
 						categoryName,
-						apiPath: existingTarget.____slothletInternal?.wrapper.apiPath
+						apiPath: resolveWrapper(existingTarget)?.apiPath
 					});
 				}
 				targetApi = existingTarget;
@@ -101,7 +101,7 @@ export class ModesProcessor extends ComponentBase {
 				// If existingTarget is a wrapper proxy, don't try to clone it - use empty object
 				// The wrapper will be populated with new children during file processing
 				const initialImpl =
-					existingTarget && existingTarget.____slothletInternal?.wrapper ? {} : this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
+					resolveWrapper(existingTarget) ? {} : this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: "Category wrapper created",
@@ -148,7 +148,7 @@ export class ModesProcessor extends ComponentBase {
 					});
 					this.slothlet.debug("modes", {
 						message: "Category targetApi status",
-						isWrapper: !!targetApi.____slothletInternal.wrapper,
+						isWrapper: !!resolveWrapper(targetApi),
 						targetApiKeys: Object.keys(targetApi)
 					});
 				}
@@ -577,7 +577,7 @@ export class ModesProcessor extends ComponentBase {
 								});
 								this.slothlet.debug("modes", {
 									message: "Flatten multi-export targetApi status",
-									isWrapper: !!targetApi.____slothletInternal.wrapper,
+									isWrapper: !!resolveWrapper(targetApi),
 									keysBefore: Object.keys(targetApi)
 								});
 							}
@@ -798,7 +798,7 @@ export class ModesProcessor extends ComponentBase {
 						message: "File wrapper assignment",
 						propertyName,
 						apiPath: buildApiPath(localPath),
-						overwriting: propertyName in targetApi ? (targetApi[propertyName]?.____slothletInternal.wrapper ? "wrapper" : "value") : "nothing"
+						overwriting: propertyName in targetApi ? (resolveWrapper(targetApi[propertyName]) ? "wrapper" : "value") : "nothing"
 					});
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
@@ -818,8 +818,8 @@ export class ModesProcessor extends ComponentBase {
 						targetApiType: typeof targetApi,
 						propertyName,
 						hasProperty: propertyName in targetApi,
-						implType: typeof targetApi.____slothletInternal.wrapper?.____slothletInternal.impl,
-						implHasProperty: !!targetApi.____slothletInternal.wrapper?.____slothletInternal.impl?.utils
+						implType: typeof resolveWrapper(targetApi)?.____slothletInternal.impl,
+						implHasProperty: !!resolveWrapper(targetApi)?.____slothletInternal.impl?.utils
 					});
 				}
 				if (ownership) {
@@ -1001,15 +1001,15 @@ export class ModesProcessor extends ComponentBase {
 									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) || "merge";
 								const modes_existingAtKey = targetApi[subDirName];
 								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
-									const modes_existingWrapper = modes_existingAtKey?.____slothletInternal.wrapper;
+									const modes_existingWrapper = resolveWrapper(modes_existingAtKey);
 									if (modes_existingWrapper) {
 										// In lazy mode, the file wrapper hasn't materialized yet.
 										// Force materialization so we can access its exports.
-										if (modes_existingWrapper.____slothletInternal.materializeFunc && !modes_existingWrapper.____slothletInternal.state?.materialized) {
+										if (modes_existingWrapper.____slothletInternal?.materializeFunc && !modes_existingWrapper.____slothletInternal?.state?.materialized) {
 											await modes_existingWrapper._materialize();
 										}
 										// Ensure children are adopted from impl
-										if (modes_existingWrapper.____slothletInternal.impl && !modes_existingWrapper.____slothletInternal.state?.childrenAdopted) {
+										if (modes_existingWrapper.____slothletInternal?.impl && !modes_existingWrapper.____slothletInternal?.state?.childrenAdopted) {
 											modes_existingWrapper.___adoptImplChildren();
 										}
 										const modes_existingImpl = modes_existingWrapper.__impl;
@@ -1176,8 +1176,8 @@ export class ModesProcessor extends ComponentBase {
 						collisionModeOverride || (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
 					let modes_fileFolderImpl = null;
 					const modes_lazyExisting = targetApi[subDirName];
-					if (modes_initialCollisionMode !== "replace" && modes_lazyExisting?.____slothletInternal.wrapper) {
-						const modes_lazyExistingW = modes_lazyExisting.____slothletInternal.wrapper;
+					if (modes_initialCollisionMode !== "replace" && resolveWrapper(modes_lazyExisting)) {
+						const modes_lazyExistingW = resolveWrapper(modes_lazyExisting);
 						// Root files are processed eagerly even in lazy mode, so impl should exist
 						const existImpl = modes_lazyExistingW.__impl;
 						if (existImpl && typeof existImpl === "object" && !Array.isArray(existImpl)) {
@@ -1567,7 +1567,7 @@ export class ModesProcessor extends ComponentBase {
 			}
 			if (materializedKeys.length === 1 && materializedKeys[0] === categoryName) {
 				const nestedValue = materialized[categoryName];
-				if (nestedValue && (nestedValue.____slothletInternal?.wrapper || nestedValue.___getState)) {
+				if (nestedValue && (resolveWrapper(nestedValue) || nestedValue.___getState)) {
 					const attachedKeys = Object.keys(nestedValue).filter((key) => key !== "____slothletInternal");
 					if (attachedKeys.length > 0) {
 						return nestedValue;

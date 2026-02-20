@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 17:19:59 -08:00 (1770513599)
+ *	@Last modified time: 2026-02-20 13:20:45 -08:00 (1771622445)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -23,6 +23,7 @@
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Manages unified API assignment logic
@@ -60,7 +61,7 @@ export class ApiAssignment extends ComponentBase {
 	 * @private
 	 */
 	isWrapperProxy(value) {
-		return value && (typeof value === "object" || typeof value === "function") && "____slothletInternal" in value && "wrapper" in (value.____slothletInternal || {});
+		return !!(value && resolveWrapper(value));
 	}
 
 	/**
@@ -104,7 +105,7 @@ export class ApiAssignment extends ComponentBase {
 	 */
 	assignToApiPath(targetApi, key, value, options = {}) {
 		const valueIsWrapper = this.isWrapperProxy(value);
-		const valueId = valueIsWrapper ? value.____slothletInternal.wrapper?.____slothletInternal.id : "not-wrapper";
+		const valueId = valueIsWrapper ? (resolveWrapper(value)?.____slothletInternal?.id ?? "no-id") : "not-wrapper";
 		this.slothlet.debug("api", {
 			message: "ASSIGN-TO-API",
 			key,
@@ -189,15 +190,17 @@ export class ApiAssignment extends ComponentBase {
 				key,
 				existingIsWrapper,
 				valueIsWrapper,
-				hasExistingWrapper: existing?.____slothletInternal.wrapper ? "yes" : "no",
-				hasValueWrapper: value?.____slothletInternal.wrapper ? "yes" : "no"
+				hasExistingWrapper: resolveWrapper(existing) ? "yes" : "no",
+				hasValueWrapper: resolveWrapper(value) ? "yes" : "no"
 			});
 
 			if (existingIsWrapper && valueIsWrapper) {
-				const existingWrapper = existing.____slothletInternal.wrapper;
-				const valueWrapper = value.____slothletInternal.wrapper;
-				const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
-				const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
+				const existingWrapper = resolveWrapper(existing);
+				const valueWrapper = resolveWrapper(value);
+				const existingIsLazyUnmaterialized =
+					existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+				const valueIsLazyUnmaterialized =
+					valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 				this.slothlet.debug("api", {
 					message: "COLLISION: lazy detection",
@@ -249,10 +252,12 @@ export class ApiAssignment extends ComponentBase {
 			// Replace mode: Last loaded completely replaces first loaded
 			if (effectiveMode === "replace") {
 				if (existingIsWrapper && valueIsWrapper) {
-			const existingWrapper = existing.____slothletInternal?.wrapper;
-			const valueWrapper = value.____slothletInternal?.wrapper;
-					const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
-					const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
+					const existingWrapper = resolveWrapper(existing);
+					const valueWrapper = resolveWrapper(value);
+					const existingIsLazyUnmaterialized =
+						existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+					const valueIsLazyUnmaterialized =
+						valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 					// For lazy folder replacing eager file: Just assign the lazy folder, don't copy anything
 					if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
@@ -262,7 +267,7 @@ export class ApiAssignment extends ComponentBase {
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: BEFORE assignment",
 							key,
-						currentWrapperId: existing.____slothletInternal.wrapper.____slothletInternal.id
+							currentWrapperId: resolveWrapper(existing)?.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
 							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
@@ -273,12 +278,12 @@ export class ApiAssignment extends ComponentBase {
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: AFTER assignment",
 							key,
-						newWrapperId: targetApi[key].____slothletInternal.wrapper.____slothletInternal.id
+							newWrapperId: resolveWrapper(targetApi[key])?.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
 							message: "COLLISION-REPLACE: Verification",
-						expectedId: valueWrapper.____slothletInternal.id,
-						actualId: targetApi[key].____slothletInternal.wrapper.____slothletInternal.id
+							expectedId: valueWrapper.____slothletInternal.id,
+							actualId: resolveWrapper(targetApi[key])?.____slothletInternal.id
 						});
 						return true; // Assignment completed
 					}
@@ -295,13 +300,15 @@ export class ApiAssignment extends ComponentBase {
 
 				if (existingIsWrapper && valueIsWrapper) {
 					// Both are wrappers - merge their child caches (properties are moved there during adoption)
-					const existingWrapper = existing.____slothletInternal.wrapper;
-					const valueWrapper = value.____slothletInternal.wrapper;
+					const existingWrapper = resolveWrapper(existing);
+					const valueWrapper = resolveWrapper(value);
 
 					// Strategy: Keep the lazy wrapper and copy the other wrapper's childCache into it
 					// When the lazy wrapper materializes, it will merge with the copied childCache
-					const existingIsLazyUnmaterialized = existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
-					const valueIsLazyUnmaterialized = valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
+					const existingIsLazyUnmaterialized =
+						existingWrapper.____slothletInternal.mode === "lazy" && !existingWrapper.____slothletInternal.state.materialized;
+					const valueIsLazyUnmaterialized =
+						valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 					if (existingIsLazyUnmaterialized && !valueIsLazyUnmaterialized) {
 						// Case 1: Lazy folder processed first, file processed second
@@ -360,7 +367,7 @@ export class ApiAssignment extends ComponentBase {
 								existingChildKeys: existingChildKeys.join(","),
 								fromApiPath: existingWrapper.____slothletInternal.apiPath,
 								toApiPath: valueWrapper.____slothletInternal.apiPath,
-							valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
+								valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 							});
 
 							// Track collision-merged properties so materialization knows these are from file, not folder children
@@ -375,7 +382,7 @@ export class ApiAssignment extends ComponentBase {
 									key,
 									childName: child?.name,
 									typeOf: typeof child,
-								valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
+									valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
 								});
 								Object.defineProperty(valueWrapper, key, {
 									value: child,
@@ -400,9 +407,16 @@ export class ApiAssignment extends ComponentBase {
 								apiPath: valueWrapper.____slothletInternal.apiPath
 							});
 							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
-							if (valueWrapper.____slothletInternal.materializeFunc && !valueWrapper.____slothletInternal.state?.materialized && !valueWrapper.____slothletInternal.state?.inFlight) {
+							if (
+								valueWrapper.____slothletInternal.materializeFunc &&
+								!valueWrapper.____slothletInternal.state?.materialized &&
+								!valueWrapper.____slothletInternal.state?.inFlight
+							) {
 								valueWrapper._materialize().catch((err) => {
-									console.error(`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.____slothletInternal.apiPath}":`, err);
+									console.error(
+										`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.____slothletInternal.apiPath}":`,
+										err
+									);
 								});
 							}
 						} else {
@@ -473,8 +487,8 @@ export class ApiAssignment extends ComponentBase {
 							// Example: existing math has {add, multiply, divide}, new math has {power, sqrt, modulo}
 							// → merge adds power, sqrt, modulo into existing math wrapper
 							const existingChild = existingWrapper[key];
-							const existingChildWrapper = existingChild?.____slothletInternal.wrapper;
-							const newChildWrapper = child?.____slothletInternal.wrapper;
+							const existingChildWrapper = resolveWrapper(existingChild);
+							const newChildWrapper = resolveWrapper(child);
 							if (existingChildWrapper && newChildWrapper) {
 								// Ensure new child has adopted its impl children before merge
 								const newChildChildCount = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length;
@@ -498,7 +512,11 @@ export class ApiAssignment extends ComponentBase {
 						}
 					}
 					// The value wrapper has the materializeFunc that will load folder's exports
-					if (valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized && valueWrapper.____slothletInternal.materializeFunc) {
+					if (
+						valueWrapper.____slothletInternal.mode === "lazy" &&
+						!valueWrapper.____slothletInternal.state.materialized &&
+						valueWrapper.____slothletInternal.materializeFunc
+					) {
 						// Don't copy impl - the lazy folder needs to materialize on its own
 						// The childCache already has the file's exports from the copy above
 						return false; // Assign value, not existing
@@ -507,7 +525,7 @@ export class ApiAssignment extends ComponentBase {
 					return true;
 				} else if (existingIsWrapper && !valueIsWrapper) {
 					// Existing is wrapper, new value is plain - merge into impl
-					const existingWrapper = existing.____slothletInternal.wrapper;
+					const existingWrapper = resolveWrapper(existing);
 					const existingImpl = existingWrapper.__impl;
 					const mergedImpl = { ...(existingImpl || {}), ...value };
 					existingWrapper.___setImpl(mergedImpl);

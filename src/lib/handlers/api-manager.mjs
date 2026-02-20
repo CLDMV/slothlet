@@ -45,7 +45,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Manages runtime API component lifecycle (add/remove/reload).
@@ -393,7 +393,7 @@ export class ApiManager extends ComponentBase {
 		return !!(
 			value &&
 			(typeof value === "object" || typeof value === "function") &&
-			(value.____slothletInternal?.wrapper || value.___setImpl || value.___getState)
+			(resolveWrapper(value) !== null || value.___setImpl || value.___getState)
 		);
 	}
 
@@ -416,11 +416,11 @@ export class ApiManager extends ComponentBase {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - existingProxy",
-				apiPath: existingProxy?.____slothletInternal.wrapper?.apiPath
+				apiPath: resolveWrapper(existingProxy)?.apiPath
 			});
 			this.slothlet.debug("api", {
 				message: "syncWrapper entry - nextProxy",
-				apiPath: nextProxy?.____slothletInternal.wrapper?.apiPath
+				apiPath: resolveWrapper(nextProxy)?.apiPath
 			});
 		}
 
@@ -428,8 +428,8 @@ export class ApiManager extends ComponentBase {
 			return false;
 		}
 
-		const existingWrapper = existingProxy.____slothletInternal?.wrapper || existingProxy;
-		const nextWrapper = nextProxy.____slothletInternal?.wrapper || nextProxy;
+		const existingWrapper = resolveWrapper(existingProxy) ?? existingProxy;
+		const nextWrapper = resolveWrapper(nextProxy) ?? nextProxy;
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
@@ -531,7 +531,7 @@ export class ApiManager extends ComponentBase {
 					const existingChild = existingWrapper[key];
 					const nextChild = nextWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(nextChild)) {
-						const syncWrapper_nextChildWrapper = nextChild.____slothletInternal.wrapper || nextChild;
+						const syncWrapper_nextChildWrapper = resolveWrapper(nextChild) ?? nextChild;
 						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
 							(k) => !k.startsWith("_") && !k.startsWith("__")
 						);
@@ -883,8 +883,8 @@ export class ApiManager extends ComponentBase {
 
 		// CRITICAL: Delete from wrapper's child properties AND _impl if current is a proxy
 		// Properties are stored in wrapper and _impl, not on the proxy itself
-		if (current.____slothletInternal?.wrapper) {
-			const wrapper = current.____slothletInternal?.wrapper;
+		if (resolveWrapper(current)) {
+			const wrapper = resolveWrapper(current);
 			// Delete from wrapper (child properties)
 			const isInternal = typeof finalKey === "string" && (finalKey.startsWith("_") || finalKey.startsWith("__"));
 			if (!isInternal && finalKey in wrapper) {
@@ -902,8 +902,8 @@ export class ApiManager extends ComponentBase {
 		// AFTER deletion, clean up wrapper state for removed proxy
 		if (removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
-			if (removedImpl.____slothletInternal?.wrapper) {
-				const wrapper = removedImpl.____slothletInternal?.wrapper;
+			if (resolveWrapper(removedImpl)) {
+				const wrapper = resolveWrapper(removedImpl);
 				// Set impl to null to prevent stale access
 				if (wrapper.____slothletInternal.impl !== undefined) {
 					wrapper.____slothletInternal.impl = null;
@@ -1179,16 +1179,19 @@ return true;
 			topLevelKeys: Object.keys(newApi),
 			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
 			wrappers: Object.keys(newApi)
-				.filter((k) => newApi[k]?.____slothletInternal?.wrapper)
-				.map((k) => ({
-					key: k,
-					apiPath: newApi[k].____slothletInternal.wrapper.apiPath,
-					implKeys: Object.keys(newApi[k].____slothletInternal.wrapper.____slothletInternal.impl || {}),
-					childCacheSize: Object.keys(newApi[k].____slothletInternal.wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
-					childCacheKeys: Object.keys(newApi[k].____slothletInternal.wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
-				})),
+				.filter((k) => resolveWrapper(newApi[k]) !== null)
+				.map((k) => {
+					const _w = resolveWrapper(newApi[k]);
+					return {
+						key: k,
+						apiPath: _w.apiPath,
+						implKeys: Object.keys(_w.____slothletInternal.impl || {}),
+						childCacheSize: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length,
+						childCacheKeys: Object.keys(_w).filter((k) => !k.startsWith("_") && !k.startsWith("__"))
+					};
+				}),
 			nonWrappers: Object.keys(newApi)
-				.filter((k) => !newApi[k]?.____slothletInternal?.wrapper)
+				.filter((k) => resolveWrapper(newApi[k]) === null)
 				.map((k) => ({ key: k, type: typeof newApi[k] }))
 		});
 
@@ -1228,7 +1231,7 @@ return true;
 					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
 					// This prevents hoisting deeper subfolders that share the mount-path name
 					// (e.g. services/services/ inside a "services" mount).
-					const dupWrapper = dupValue?.____slothletInternal?.wrapper;
+					const dupWrapper = resolveWrapper(dupValue);
 					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
 					const dupFileDir = dupFilePath
 						? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/")
@@ -1312,7 +1315,7 @@ return true;
 			// Nested path - wrap apiToMerge in a UnifiedWrapper for the container
 			// This ensures api.lookup.__metadata exists and works properly
 			// The wrapper acts as a namespace container for the loaded API modules
-			if (!apiToMerge.____slothletInternal?.wrapper) {
+			if (resolveWrapper(apiToMerge) === null) {
 				// Check if apiToMerge is a function (root contributor pattern).
 				// Functions with properties should remain callable even when loaded at nested paths.
 				// This supports patterns like: api.logger() callable + api.logger.utils.debug()
@@ -1366,8 +1369,8 @@ return true;
 			const collectPendingMaterializations = (obj, depth = 0) => {
 				if (!obj || typeof obj !== "object" || depth > 10) return;
 
-				if (obj.____slothletInternal?.wrapper) {
-					const wrapper = obj.____slothletInternal?.wrapper;
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
 					// Skip if we've already processed this wrapper (avoid infinite recursion)
 					if (seenWrappers.has(wrapper)) return;
 					seenWrappers.add(wrapper);
@@ -2144,7 +2147,7 @@ return true;
 			return customProps;
 		}
 
-		const wrapper = existingProxy.____slothletInternal?.wrapper;
+		const wrapper = resolveWrapper(existingProxy);
 		if (!wrapper) {
 			return customProps;
 		}
@@ -2168,10 +2171,7 @@ return true;
 
 				// Skip all wrapper-type values (API-built, not user-set custom props)
 				// This includes both valid and invalidated wrappers
-				if (val && typeof val === "object" && val.____slothletInternal?.wrapper) {
-					continue;
-				}
-				if (typeof val === "function" && val.____slothletInternal?.wrapper) {
+				if (val && (typeof val === "object" || typeof val === "function") && resolveWrapper(val)) {
 					continue;
 				}
 
@@ -2254,7 +2254,7 @@ return true;
 
 					// Check if the fresh value is an un-materialized lazy wrapper
 					// (subdirectory from buildLazyAPI that hasn't been accessed yet)
-					const freshWrapper = freshValue?.____slothletInternal.wrapper;
+					const freshWrapper = resolveWrapper(freshValue);
 					const isLazyFresh =
 						freshWrapper &&
 						freshWrapper.____slothletInternal.mode === "lazy" &&
@@ -2316,7 +2316,7 @@ return true;
 						// Conditionally force replace mode for reload
 						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
-						const wrapper = existingAtKey.____slothletInternal?.wrapper;
+						const wrapper = resolveWrapper(existingAtKey);
 						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 						if (forceReplace && wrapper) {
 							wrapper.____slothletInternal.state.collisionMode = "replace";
@@ -2384,7 +2384,7 @@ return true;
 				// Conditionally force "replace" mode for reload
 				// forceReplace=true (single-module or first in multi-cache): clear old keys
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
-				const wrapper = existing.____slothletInternal.wrapper;
+				const wrapper = resolveWrapper(existing);
 				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 
 				if (forceReplace && wrapper) {
@@ -2404,7 +2404,7 @@ return true;
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
 				if (freshApi && typeof freshApi.___getState === "function") {
-					const freshWrapper = freshApi.____slothletInternal.wrapper;
+					const freshWrapper = resolveWrapper(freshApi);
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
 					implForReload = {};
@@ -2424,8 +2424,8 @@ return true;
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
-						if (val && typeof val.___getState === "function" && val.____slothletInternal?.wrapper) {
-							const childWrapper = val.____slothletInternal?.wrapper;
+						if (val && typeof val.___getState === "function" && resolveWrapper(val)) {
+							const childWrapper = resolveWrapper(val);
 							if (childWrapper.____slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
 							}
