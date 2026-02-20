@@ -39,6 +39,7 @@ import {
 	cleanupEventEmitterResources,
 	setApiContextChecker
 } from "@cldmv/slothlet/helpers/eventemitter-context";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -645,7 +646,7 @@ class Slothlet {
 			}
 
 			// Get metadata for the resolved function
-			if (typeof target === "function" || (target && target.____slothletInternal.impl)) {
+			if (typeof target === "function" || (target && resolveWrapper(target)?.____slothletInternal.impl)) {
 				return metadataHandler.getMetadata(target);
 			}
 
