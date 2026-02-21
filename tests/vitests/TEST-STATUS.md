@@ -21,6 +21,15 @@ npm run vitest suites/<folder>/<test-file>.test.vitest.mjs 2>&1 | Select-Object 
 - ❌ **WRONG:** Running without tailing shows the START of output, not results
 - ✅ **CORRECT:** Tailing last 40 lines shows the RESULTS at the end
 
+### Baseline Addition Policy
+
+> ⚠️ **A test MUST NOT be added to `baseline-tests.json` until ALL of the following pass at 100%:**
+> 1. `npm run debug` — full debug suite passes with zero failures
+> 2. `npm run baseline` — full baseline suite passes with zero failures
+> 3. The individual test being added — passes at 100% (all tests, no skips that shouldn't be skipped)
+>
+> Only after all three conditions are met:  update `baseline-tests.json` AND change status to `✅ baseline (YYYY-MM-DD)` in this file.
+> Do **not** mark a test as `✅ baseline` here without also adding it to `baseline-tests.json`, and vice-versa.
 
 Relative base: tests/vitests
 
@@ -90,23 +99,38 @@ Relative base: tests/vitests
 | suites/metadata/metadata-api-manager.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-27) | ✅ baseline (2026-02-17) | 96/96 tests pass (100%) - Tests metadata with api.add/remove cycles + internal API tests (self.slothlet.metadata.*). **FIXED (2026-01-27 19:17)**: (1) ModuleId detection: API paths contain dots, moduleIDs don't - fixed removeApiComponent to use `!includes(".")` instead of `includes("_")`. (2) ModuleId prefix matching: `api.remove("removableInternal")` now finds and removes "removableInternal_abc123" by searching ownership.moduleToPath for matching prefix. (3) Prevented duplicate ownership registrations via currentOwner check in impl:changed subscription. (4) Added moduleID parameter to ___setImpl for correct lifecycle event tracking during replacements. All tests passing. Related to metadata-tagging.md |
 | suites/metadata/metadata-collision-modes.test.vitest.mjs | Metadata - Collision Modes | ✅ Yes (2026-01-27 08:18:00) | ✅ baseline (2026-02-17) | 96/96 tests pass (100%) - Tests metadata behavior across collision modes (skip/warn/replace/merge/merge-replace/error). **FIXED (2026-01-27)**: Replace mode now fully implemented in setValueAtPath - preserves unified wrapper via mutateApiValue. **FIXED (2026-01-27 earlier)**: (1) Unified wrapper pattern preserves references across api.slothlet.api.add via ___setImpl (2) syncWrapper receives collisionMode parameter (3) Merge/merge-replace modes update child impl while preserving wrappers. Related to metadata-tagging.md |
 | suites/metadata/metadata-edge-cases.test.vitest.mjs | Metadata - Edge Cases | ✅ Yes (2026-01-26) | ✅ baseline (2026-02-17) | 112/112 tests pass (100%) - Tests edge cases: root contributor, deep nesting, special chars, large objects. All tests passing. Related to metadata-tagging.md |
-| suites/metadata/metadata-external-api.test.vitest.mjs | Metadata - External API | ✅ Yes (2026-01-26) | ✅ pass (2026-02-18) | 248/248 tests pass (100%) - Added `setFor(apiPath, key, val)` and `removeFor(apiPath, key?)` APIs. All functions under the path inherit path-level metadata. 96 new tests across 2 new describe blocks. |
-| suites/metadata/metadata-reload.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-26) | ✅ pass (2026-02-18) | 168/168 tests pass (100%) |
+| suites/metadata/metadata-external-api.test.vitest.mjs | Metadata - External API | ✅ Yes (2026-01-26) | ✅ baseline (2026-02-18) | 248/248 tests pass (100%) - Added `setFor(apiPath, key, val)` and `removeFor(apiPath, key?)` APIs. All functions under the path inherit path-level metadata. 96 new tests across 2 new describe blocks. |
+| suites/metadata/metadata-reload.test.vitest.mjs | Metadata - API Manager | ✅ Yes (2026-01-26) | ✅ baseline (2026-02-20) | 168/168 tests pass (100%) - **FIXED (2026-02-20)**: `setUserMetadata` was resolving system data impl-first while `getMetadata` resolves wrapper-first. After reload, wrapper retains old moduleID; impl gets new one. Set wrote to new moduleID, but get read from old moduleID → stale value. Fixed by making both use wrapper-first lookup. |
 | suites/metadata/system-metadata.test.vitest.mjs | Metadata - System | ✅ Yes (2026-01-27 08:18:00) | ✅ baseline (2026-02-17) | 184/184 tests pass (100%) - Tests immutable system metadata (moduleID, filePath, apiPath, sourceFolder) + internal API tests (self.slothlet.metadata.*) + lazy mode __type behavior. **FIXED (2026-01-27)**: Lazy mode __type test expectations - __type triggers materialization then returns symbol (UNMATERIALIZED/IN_FLIGHT) if pending or typeof string ('function') if complete. After materialization returns 'function' not undefined. **FIXED (2026-01-26)**: Null-to-undefined conversion in helper. Related to metadata-tagging.md |
 | suites/metadata/user-metadata.test.vitest.mjs | Metadata - User | ✅ Yes (2026-01-26) | ✅ baseline (2026-02-17) | 176/176 tests pass (100%) - Tests user metadata via add(), init, merge, metadata API (self.slothlet.metadata.*). **NEW TESTS**: Added 7 complex path scenario tests. **FIXED**: Missing beforeEach() in "Complex Path Scenarios" test suite - tests were attempting to use uninitialized API instance. All tests now passing. Related to metadata-tagging.md |
 | suites/ownership/module-ownership-removal.test.vitest.mjs | Ownership | ✅ Yes (2026-01-27 08:34:00) | ✅ baseline (2026-02-17) | 72/72 tests pass (100%) - All tests passing |
 | suites/ownership/ownership-replacement.test.vitest.mjs | Ownership Tracking | ✅ Yes (2026-01-27 14:18:00) | ✅ baseline (2026-02-17) | 24/24 tests pass (100%) - All tests passing |
 | suites/proxies/proxy-baseline.test.vitest.mjs | Proxies | ✅ Yes (2026-01-28 14:42) | ✅ baseline (2026-02-17) | 53/53 tests pass (100%) - No v3 changes needed, proxy operations work correctly across all modes |
+| suites/proxies/proxy-internals-attack.test.vitest.mjs | Proxies - Security | ✅ Yes (2026-02-20) | ✅ baseline (2026-02-20) | 232/232 tests pass (100%) - Security tests validating framework internals are unreachable via user-facing proxies (property reads, enumeration, mutation, introspection attacks on both main and waiting proxies). |
 | suites/ref/reference-readonly-properties.test.vitest.mjs | Reference | ✅ Yes (2026-01-28 14:25) | ✅ baseline (2026-02-17) | 32/32 tests pass (100%) - No v3 changes needed |
-| suites/runtime/runtime-verification.test.vitest.mjs | Runtime | ✅ Yes (2026-01-28 14:05) | ❌ fail (2026-02-17) | 2/19 pass, 17 fail (11%) - Runtime type detection failing. Tests expect 'async' but get 'live'. Cross-instance calls not working correctly |
+| suites/runtime/runtime-verification.test.vitest.mjs | Runtime | ✅ Yes (2026-01-28 14:05) | ✅ baseline (2026-02-20) | 19/19 pass (100%) - Re-verified 2026-02-20, all runtime type detection tests now pass correctly |
 | suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs | API Sanitization | ✅ Yes (2026-01-28 14:28) | ✅ baseline (2026-02-17) | 83/83 tests pass (100%), 6 skipped (89 total) - No v3 changes needed |
 | suites/sanitization/sanitize.test.vitest.mjs | API Sanitization | ✅ 1st pass (2026-01-28 14:30) | ✅ baseline (2026-02-17) | 42/42 tests pass (100%) |
 | suites/typescript/typescript-fast-mode.test.vitest.mjs | TypeScript | ✅ Yes (2026-02-14 19:00) | ✅ baseline (2026-02-17) | 23/23 tests pass (100%) |
 | suites/typescript/typescript-strict-mode.test.vitest.mjs | TypeScript | ✅ Yes (2026-02-14 19:00) | ✅ baseline (2026-02-17) | 13/13 tests pass (100%) |
-| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ 1st pass (2026-01-28 15:05) | ✅ pass (2026-02-18) | 40/40 tests pass (100%) - Fixed by Rule 13 C34 guard extension: `isDirectChild` now also accepts `dupFileDir === resolvedFolderPath` (file at mount root), not just `dupFileDir === resolvedFolderPath/lastPart` (subfolder). Both produce the same duplicate-key nesting problem. |
-| suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ pass (2026-02-18) | 32/32 tests pass (100%) - Same root cause as case1-case2. Rule 13 C34 `isDirectChild` guard extended to accept files at mount folder root. |
-| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ pass (2026-02-18) | 48/48 tests pass (100%) - Two fixes: (1) Rule 13 C34 `isDirectChild` guard extended for root-file case. (2) Nested container assertions changed from raw `typeof === 'object'` to `isValidFolderType()` — LAZY proxies have typeof==='function' and the raw check was incorrectly failing for all 4 LAZY modes. |
+| suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ 1st pass (2026-01-28 15:05) | ✅ baseline (2026-02-20) | 40/40 tests pass (100%) - Fixed by Rule 13 C34 guard extension: `isDirectChild` now also accepts `dupFileDir === resolvedFolderPath` (file at mount root), not just `dupFileDir === resolvedFolderPath/lastPart` (subfolder). Both produce the same duplicate-key nesting problem. |
+| suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 32/32 tests pass (100%) - Same root cause as case1-case2. Rule 13 C34 `isDirectChild` guard extended to accept files at mount folder root. |
+| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 48/48 tests pass (100%) - Two fixes: (1) Rule 13 C34 `isDirectChild` guard extended for root-file case. (2) Nested container assertions changed from raw `typeof === 'object'` to `isValidFolderType()` — LAZY proxies have typeof==='function' and the raw check was incorrectly failing for all 4 LAZY modes. |
 | suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-18) | 56/56 tests pass (100%) - Fixed by: (1) Rule 13 (C34) AddApi Path Deduplication Flattening in api-manager.mjs — hoists key matching mount path's last segment. (2) LAZY Folder Transparency `&& !populateDirectly` guard — prevents false-positive hoist during lazy wrapper materialization. (3) `_hasCategoryFile` guard in createLazySubdirectoryWrapper — requires a file named after the category before promoting wrapper. |
+
+---
+
+## Baseline Cross-Reference
+
+Run `node tools/compare-baseline-tests.mjs` and `node tools/check-baseline-mismatch.cjs` to regenerate this section.
+
+### ⏳ Passing Tests NOT Yet in `baseline-tests.json`
+
+None — all currently passing tests are in the baseline. Failing tests that need fixing before they can be promoted: `als-cleanup` (50%), `api-manager-advanced` (43%), `api-manager-hooks` (0%), `api-manager-reference-identity` (20%), `core-reference-persistence` (15%).
+
+### ⚠️ Inconsistencies Detected
+
+None as of 2026-02-20 — all known issues resolved.
 
 ## Feature Categories
 
@@ -122,6 +146,7 @@ Relative base: tests/vitests
 - **Lifecycle**: Cleanup and shutdown behavior
 - **Metadata**: Module metadata handling
 - **Proxies**: Proxy wrapper behavior
+- **Proxies - Security**: Internal state access prevention and attack surface tests
 - **Reference**: Reference and binding tests
 - **Runtime**: Runtime mode tests (async/live)
 - **API Sanitization**: Filename to API property name transformation
