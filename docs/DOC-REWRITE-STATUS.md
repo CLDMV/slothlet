@@ -21,10 +21,10 @@ When rewriting a V2 or root-level doc for V3:
 
 | Source | Output File | Status | Notes |
 |---|---|---|---|
-| `docs/v2/API-FLATTENING.md` | `docs/API-FLATTENING.md` | ⬜ Not Started | |
-| `docs/v2/API-RULE-MAPPING.md` | `docs/API-RULE-MAPPING.md` | ⬜ Not Started | |
-| `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES-CONDITIONS.md` | ⬜ Not Started | |
-| `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ⬜ Not Started | |
+| `docs/v2/API-FLATTENING.md` | `docs/API-RULES/API-FLATTENING.md` | ✅ Complete | F01-F08; F08 new in v3 (path deduplication); updated decision tree Mermaid |
+| `docs/v2/API-RULE-MAPPING.md` | `docs/API-RULES/API-RULE-MAPPING.md` | ✅ Complete | 13-rule traceability matrix; Rule 13 new in v3; impl file refs corrected for v3 |
+| `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES/API-RULES-CONDITIONS.md` | ✅ Complete | C01-C18 updated; C06 deprecated noted; C33-C34 added (v3 AddApi cases) |
+| `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ✅ Complete | Index file; detail docs in `docs/API-RULES/`; Rule 12 updated (fully impl.); Rule 13 marked new in v3 |
 | `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ⬜ Not Started | |
 | `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ⬜ Not Started | |
 | `docs/v2/METADATA.md` | `docs/METADATA.md` | ⬜ Not Started | |
