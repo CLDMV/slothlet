@@ -42,12 +42,12 @@
  *    B2.  __state returns undefined through the proxy
  *
  * C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
- *    C1.  These ARE accessible (intentional framework extension points — documents exposure)
- *    C2.  ___invalidate() callable from outside (documents effect)
+ *    C1.  These are BLOCKED through proxy — access via resolveWrapper internally
+ *    C2.  resolveWrapper gives internal framework access to these methods
  *
- * D. Implementation / server-path info leaks (__impl, __filePath, __sourceFolder)
- *    D1.  __impl returns raw implementation (intentional — documents exposure)
- *    D2.  __filePath / __sourceFolder may expose server-side paths (documents exposure)
+ * D. Implementation / server-path info (__impl, _impl, __filePath, __sourceFolder, __moduleID)
+ *    D1.  __impl / _impl blocked through proxy — access via resolveWrapper().__impl internally
+ *    D2.  __filePath / __sourceFolder / __moduleID are exposed read-only through proxy (informational)
  *
  * E. Read-only informational properties — cannot be overwritten from outside
  *    E1.  Writing to any read-only prop is silently absorbed — read returns original value
@@ -76,7 +76,12 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 const BLOCKED_KEYS = [
 	{ key: "____slothletInternal", desc: "private state bag backed by #internal field" },
 	{ key: "___getState", desc: "state accessor — removed from allowedInternals, use resolveWrapper internally" },
-	{ key: "__state", desc: "state alias — removed from allowedInternals" }
+	{ key: "__state", desc: "state alias — removed from allowedInternals" },
+	{ key: "___setImpl", desc: "implementation replacement API — blocked, use resolveWrapper(proxy).___setImpl internally" },
+	{ key: "___resetLazy", desc: "lazy reset API — blocked, use resolveWrapper(proxy).___resetLazy internally" },
+	{ key: "___invalidate", desc: "invalidation API — blocked, use resolveWrapper(proxy).___invalidate internally" },
+	{ key: "__impl", desc: "raw implementation — blocked, use resolveWrapper(proxy).__impl internally" },
+	{ key: "_impl", desc: "raw implementation alias — blocked, use resolveWrapper(proxy).__impl internally" }
 ];
 
 /**
@@ -314,47 +319,54 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	// ---------------------------------------------------------------------------
 	// C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
+	// The A1–A13 loop above already validates all three are blocked in every attack vector.
+	// These tests confirm the internal framework can still access them via resolveWrapper.
 	// ---------------------------------------------------------------------------
 
-	it("C1. ___setImpl / ___resetLazy / ___invalidate are accessible (intentional framework APIs)", async () => {
+	it("C1. ___setImpl / ___resetLazy / ___invalidate are blocked through the proxy", async () => {
 		const { ns } = await getMaterializedProxies();
-		// These are in allowedInternals — documents their intentional exposure
-		expect(typeof ns.___setImpl).toBe("function");
-		expect(typeof ns.___resetLazy).toBe("function");
-		expect(typeof ns.___invalidate).toBe("function");
+		expect(ns.___setImpl).toBeUndefined();
+		expect(ns.___resetLazy).toBeUndefined();
+		expect(ns.___invalidate).toBeUndefined();
 	});
 
-	it("C2. ___invalidate() callable externally — marks wrapper invalid", async () => {
+	it("C2. Internal framework can still call these via resolveWrapper", async () => {
 		const { ns } = await getMaterializedProxies();
-		expect(() => {
-			ns.___invalidate();
-		}).not.toThrow();
 		const wrapper = resolveWrapper(ns);
-		expect(wrapper[INTERNAL_KEY].invalid).toBe(true);
+		expect(typeof wrapper.___setImpl).toBe("function");
+		expect(typeof wrapper.___resetLazy).toBe("function");
+		expect(typeof wrapper.___invalidate).toBe("function");
 	});
 
 	// ---------------------------------------------------------------------------
 	// D. Implementation / server-path info leaks
+	// The A1–A13 loop already validates __impl and _impl are blocked in every attack vector.
+	// These tests additionally confirm the path props and that resolveWrapper still works.
 	// ---------------------------------------------------------------------------
 
-	it("D1. __impl returns the raw implementation (intentional — documents exposure)", async () => {
+	it("D1. __impl / _impl are blocked through the proxy — access via resolveWrapper().__impl internally", async () => {
 		const { leaf } = await getMaterializedProxies();
-		const impl = leaf.__impl;
-		// May be a function, object, or null; verify it's not undefined to confirm it's exposed
-		expect(["function", "object"].includes(typeof impl)).toBe(true);
+		expect(leaf.__impl).toBeUndefined();
+		expect(leaf._impl).toBeUndefined();
+		// Raw wrapper can still access impl:
+		const wrapper = resolveWrapper(leaf);
+		expect(["function", "object"].includes(typeof wrapper.__impl)).toBe(true);
 	});
 
-	it("D2. __filePath / __sourceFolder expose server-side paths (intentional — documents exposure)", async () => {
+	it("D2. __filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
-		const filePath = leaf.__filePath;
-		const sourceFolder = leaf.__sourceFolder;
-		// If present they must be strings (paths), not the internal state object
-		if (filePath !== undefined) {
-			expect(typeof filePath).toBe("string");
+		// These are informational props — readable through the proxy, write/delete is silently absorbed.
+		if (leaf.__filePath !== undefined) {
+			expect(typeof leaf.__filePath).toBe("string");
 		}
-		if (sourceFolder !== undefined) {
-			expect(typeof sourceFolder).toBe("string");
+		if (leaf.__moduleID !== undefined) {
+			expect(typeof leaf.__moduleID).toBe("string");
 		}
+		// Values visible through proxy match the raw wrapper internals:
+		const wrapper = resolveWrapper(leaf);
+		expect(leaf.__filePath).toBe(wrapper.____slothletInternal.filePath ?? undefined);
+		expect(leaf.__sourceFolder).toBe(wrapper.____slothletInternal.sourceFolder ?? undefined);
+		expect(leaf.__moduleID).toBe(wrapper.____slothletInternal.moduleID ?? undefined);
 	});
 
 	// ---------------------------------------------------------------------------
@@ -378,7 +390,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		"__materializeOnCreate",
 		"__displayName",
 		"__type",
-		// Server-info (D section)
+		// Server-info props — exposed read-only through proxy; write/delete silently absorbed.
 		"__filePath",
 		"__sourceFolder",
 		"__moduleID",

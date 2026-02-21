@@ -668,14 +668,15 @@ export class ApiManager extends ComponentBase {
 				return;
 			}
 
-			// Fallback: if nextValue has no properties, try ___setImpl
-			if (existingValue.___setImpl) {
+			// Fallback: if nextValue has no properties, try ___setImpl via resolveWrapper
+			const existingValueRaw = resolveWrapper(existingValue);
+			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
 						message: "mutateApiValue - using ___setImpl fallback"
 					});
 				}
-				existingValue.___setImpl(nextValue?.__impl ?? nextValue);
+				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue);
 				return;
 			}
 		}
@@ -992,8 +993,9 @@ export class ApiManager extends ComponentBase {
 			// The temporary buildAPI creates wrappers which we need to unwrap
 			// For eager mode: __impl is the actual implementation (object/function) - extract it
 			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
-			if (baseValue && baseValue.__impl !== undefined) {
-				baseValue = baseValue.__impl;
+			const baseValueRaw = resolveWrapper(baseValue);
+			if (baseValue && baseValueRaw !== null) {
+				baseValue = baseValueRaw.__impl;
 			}
 
 			await this.setValueAtPath(this.slothlet.api, parts, baseValue, {
@@ -1691,14 +1693,16 @@ export class ApiManager extends ComponentBase {
 				if (previousImpl !== undefined) {
 					// Get the existing wrapper and update its _impl
 					const existingWrapper = this.getValueAtPath(this.slothlet.api, parts);
-					if (existingWrapper?.___setImpl) {
+					const existingWrapperRaw = resolveWrapper(existingWrapper);
+					if (existingWrapperRaw) {
 						// Pass the restored moduleID for correct ownership tracking
-						existingWrapper.___setImpl(previousImpl, rollback.restoredTo);
+						existingWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 					// Also update boundApi
 					const existingBoundWrapper = this.getValueAtPath(this.slothlet.boundApi, parts);
-					if (existingBoundWrapper?.___setImpl) {
-						existingBoundWrapper.___setImpl(previousImpl, rollback.restoredTo);
+					const existingBoundWrapperRaw = resolveWrapper(existingBoundWrapper);
+					if (existingBoundWrapperRaw) {
+						existingBoundWrapperRaw.___setImpl(previousImpl, rollback.restoredTo);
 					}
 				}
 			}
@@ -2244,7 +2248,7 @@ export class ApiManager extends ComponentBase {
 				const existingAtKey = this.slothlet.api[key];
 				const freshValue = freshApi[key];
 
-				if (existingAtKey && typeof existingAtKey.___setImpl === "function") {
+				if (existingAtKey && resolveWrapper(existingAtKey) !== null) {
 					// Existing wrapper found — collect custom props before any modification
 					const customProps = this._collectCustomProperties(existingAtKey, freshValue);
 
@@ -2274,7 +2278,7 @@ export class ApiManager extends ComponentBase {
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
-						existingAtKey.___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
+						resolveWrapper(existingAtKey).___resetLazy(freshWrapper.____slothletInternal.materializeFunc);
 
 						// Restore custom properties after lazy reset
 						this._restoreCustomProperties(existingAtKey, customProps);
@@ -2318,7 +2322,7 @@ export class ApiManager extends ComponentBase {
 							wrapper.____slothletInternal.state.collisionMode = "replace";
 						}
 
-						existingAtKey.___setImpl(implForReload, moduleID);
+						resolveWrapper(existingAtKey).___setImpl(implForReload, moduleID);
 
 						// Restore collision mode
 						if (wrapper && originalCollisionMode !== null) {
@@ -2369,11 +2373,11 @@ export class ApiManager extends ComponentBase {
 				moduleID,
 				partsPath: parts.join("."),
 				existingFound: !!existing,
-				hasSetImpl: existing ? typeof existing.___setImpl === "function" : false,
+				hasSetImpl: existing ? resolveWrapper(existing) !== null : false,
 				freshApiKeys: Object.keys(freshApi || {})
 			});
 
-			if (existing && typeof existing.___setImpl === "function") {
+			if (existing && resolveWrapper(existing) !== null) {
 				// Collect custom properties from existing wrapper before reload
 				const customProps = this._collectCustomProperties(existing, freshApi);
 
@@ -2429,7 +2433,7 @@ export class ApiManager extends ComponentBase {
 					}
 				}
 
-				existing.___setImpl(implForReload, moduleID);
+				resolveWrapper(existing).___setImpl(implForReload, moduleID);
 
 				// Restore original collision mode
 				if (wrapper && originalCollisionMode !== null) {
