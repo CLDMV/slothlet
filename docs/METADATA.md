@@ -1,10 +1,10 @@
 # Metadata System
 
-The metadata system provides secure, immutable function tagging and runtime introspection for authorization, auditing, and multi-tenant architectures. Functions loaded through `addApi()` can carry both automatic system metadata and user-defined metadata that persists across calls and survives hot reloads.
+The metadata system provides secure, immutable function tagging and runtime introspection for authorization, auditing, and multi-tenant architectures. Functions loaded through `api.slothlet.api.add()` can carry both automatic system metadata and user-defined metadata that persists across calls and survives hot reloads.
 
 ## Overview
 
-Every function loaded by slothlet automatically receives **system metadata** — immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `addApi()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
+Every function loaded by slothlet automatically receives **system metadata** — immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
 
 All metadata is deeply frozen and protected by Proxy traps. No code can modify an existing metadata value — modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
 
@@ -49,7 +49,7 @@ Provided by user code. Stored separately and merged with system metadata at read
 | Scope | API | Priority |
 |---|---|---|
 | Global | `api.slothlet.metadata.setGlobal()` | Lowest |
-| Path | `api.slothlet.metadata.setFor()` / `addApi()` | Middle |
+| Path | `api.slothlet.metadata.setFor()` / `api.slothlet.api.add()` | Middle |
 | Function | `api.slothlet.metadata.set()` | Highest (overrides path and global, but not system) |
 
 System metadata always wins regardless of user metadata scope.
@@ -58,19 +58,19 @@ System metadata always wins regardless of user metadata scope.
 
 ## Setting Metadata at Load Time
 
-Pass a metadata object as the third argument to `addApi()`:
+Pass a metadata object as the third argument to `api.slothlet.api.add()`:
 
 ```javascript
 const api = await slothlet({ dir: "./api" });
 
-await api.slothlet.api.addApi("plugins.trusted", "./trusted-plugins", {
+await api.slothlet.api.add("plugins.trusted", "./trusted-plugins", {
 	trusted: true,
 	permissions: ["read", "write", "admin"],
 	version: "1.0.0",
 	author: "TeamSecurity"
 });
 
-await api.slothlet.api.addApi("plugins.external", "./third-party", {
+await api.slothlet.api.add("plugins.external", "./third-party", {
 	trusted: false,
 	permissions: ["read"],
 	sandbox: true
@@ -169,33 +169,35 @@ Only affects metadata stored for that exact path segment — does not walk desce
 
 ## Runtime Introspection
 
-Import `metadataAPI` from `@cldmv/slothlet/runtime` to inspect metadata from within slothlet-loaded functions:
+Use `self.slothlet.metadata.*` to inspect metadata from within slothlet-loaded functions. The `self` proxy from `@cldmv/slothlet/runtime` gives access to the full running API — including `self.slothlet.metadata.*` — from any loaded module.
+
+> **Note:** `self.slothlet.metadata.self()` and `self.slothlet.metadata.caller()` are **synchronous**. Only `self.slothlet.metadata.get(path)` is async.
+
+### self.slothlet.metadata.self()
+
+Get the currently executing function's metadata (synchronous):
 
 ```javascript
-import { metadataAPI } from "@cldmv/slothlet/runtime";
-```
+import { self } from "@cldmv/slothlet/runtime";
 
-### metadataAPI.self()
-
-Get the currently executing function's metadata:
-
-```javascript
 export async function chargeCard(amount) {
-	const self = await metadataAPI.self();
+	const funcMeta = self.slothlet.metadata.self();
 
-	console.log(`Service: ${self.service}`);     // user metadata
-	console.log(`Source: ${self.filePath}`);     // system metadata
-	console.log(`Path: ${self.apiPath}`);        // system metadata
+	console.log(`Service: ${funcMeta.service}`);     // user metadata
+	console.log(`Source: ${funcMeta.filePath}`);     // system metadata
+	console.log(`Path: ${funcMeta.apiPath}`);        // system metadata
 }
 ```
 
-### metadataAPI.caller()
+### self.slothlet.metadata.caller()
 
-Get the metadata of the function that called the current function:
+Get the metadata of the function that called the current function (synchronous):
 
 ```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
 export async function sensitiveOperation() {
-	const caller = await metadataAPI.caller();
+	const caller = self.slothlet.metadata.caller();
 
 	if (!caller?.trusted) {
 		throw new Error("Unauthorized: caller is not trusted");
@@ -209,33 +211,23 @@ export async function sensitiveOperation() {
 }
 ```
 
-`caller()` uses V8 stack trace introspection to find the calling function. Returns `null` if the caller was not tracked by slothlet (e.g., external code, setTimeout callbacks, event emitter callbacks).
+Returns `null` if the calling function is not tracked by slothlet (e.g., external code, setTimeout callbacks, event emitter callbacks).
 
-**Security warning detection**: If the caller's stack file path does not match the stored `filePath` metadata, the returned object includes:
+### self.slothlet.metadata.get(path)
 
-```javascript
-{
-	...callerMeta,
-	__securityWarning: "FILE_PATH_MISMATCH",
-	__stackFile: "/actual/path/from/stack"
-}
-```
-
-Check `__securityWarning` in security-sensitive code to detect potential tampering.
-
-### metadataAPI.get(path)
-
-Get metadata for any function by dot-notation path:
+Get metadata for any function by dot-notation path (async):
 
 ```javascript
+import { self } from "@cldmv/slothlet/runtime";
+
 export async function checkPlugin(task) {
-	const pluginMeta = await metadataAPI.get("plugins.external.processTask");
+	const pluginMeta = await self.slothlet.metadata.get("plugins.external.processTask");
 
 	if (!pluginMeta?.trusted) {
 		throw new Error("Cannot delegate to untrusted plugin");
 	}
 
-	return api.plugins.external.processTask(task);
+	return self.plugins.external.processTask(task);
 }
 ```
 
@@ -248,7 +240,7 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 | Layer | Source |
 |---|---|
 | 1 — Global | `api.slothlet.metadata.setGlobal()` |
-| 2 — Path | `api.slothlet.metadata.setFor()`, `addApi()` metadata |
+| 2 — Path | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
 | 3 — Function | `api.slothlet.metadata.set()` |
 | 4 — System | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt` |
 
@@ -337,7 +329,7 @@ In lazy mode, modules are not loaded until first call. Metadata is only availabl
 
 ```javascript
 const api = await slothlet({ dir: "./api", mode: "lazy" });
-await api.slothlet.api.addApi("plugins", "./plugins", { trusted: true });
+await api.slothlet.api.add("plugins", "./plugins", { trusted: true });
 
 // Module not yet loaded — only proxy exists
 console.log(api.plugins.someFunc.__metadata); // undefined
@@ -358,11 +350,10 @@ console.log(api.plugins.someFunc.__metadata.trusted); // true
 Metadata-based authorization is one layer — not a complete security solution:
 
 ```javascript
-import { metadataAPI } from "@cldmv/slothlet/runtime";
-import { context } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 export async function deleteUser(userId) {
-	const caller = await metadataAPI.caller();
+	const caller = self.slothlet.metadata.caller();
 
 	// Layer 1: metadata trust check
 	if (!caller?.trusted || !caller.permissions?.includes("admin")) {
@@ -385,7 +376,7 @@ export async function deleteUser(userId) {
 
 ```javascript
 export async function protectedOp() {
-	const caller = await metadataAPI.caller();
+	const caller = self.slothlet.metadata.caller();
 
 	if (!caller) {
 		// No tracked caller — require explicit auth token
@@ -416,23 +407,23 @@ export async function protectedOp() {
 
 ```javascript
 // Load different plugin tiers
-await api.slothlet.api.addApi("plugins.core", "./core-plugins", {
+await api.slothlet.api.add("plugins.core", "./core-plugins", {
 	trusted: true,
 	tier: "core",
 	permissions: ["read", "write", "admin", "config"]
 });
 
-await api.slothlet.api.addApi("plugins.community", "./community-plugins", {
+await api.slothlet.api.add("plugins.community", "./community-plugins", {
 	trusted: false,
 	tier: "community",
 	permissions: ["read"]
 });
 
 // Enforce in sensitive functions
-import { metadataAPI } from "@cldmv/slothlet/runtime";
+import { self } from "@cldmv/slothlet/runtime";
 
 export async function updateConfig(key, value) {
-	const caller = await metadataAPI.caller();
+	const caller = self.slothlet.metadata.caller();
 
 	if (!caller?.trusted) {
 		throw new Error("Untrusted plugins cannot modify config");
@@ -450,14 +441,14 @@ export async function updateConfig(key, value) {
 
 ```javascript
 // Load tenant-specific modules
-await api.slothlet.api.addApi("tenants.acme", "./tenants/acme", {
+await api.slothlet.api.add("tenants.acme", "./tenants/acme", {
 	tenantId: "acme",
 	tier: "enterprise",
 	features: ["analytics", "api", "webhooks", "sso"],
 	maxUsers: 1000
 });
 
-await api.slothlet.api.addApi("tenants.startup", "./tenants/startup", {
+await api.slothlet.api.add("tenants.startup", "./tenants/startup", {
 	tenantId: "startup",
 	tier: "basic",
 	features: ["analytics"],
@@ -466,7 +457,7 @@ await api.slothlet.api.addApi("tenants.startup", "./tenants/startup", {
 
 // Enforce in feature code
 export async function createWebhook(url, events) {
-	const caller = await metadataAPI.caller();
+	const caller = self.slothlet.metadata.caller();
 
 	if (!caller?.features.includes("webhooks")) {
 		throw new Error(`Webhooks not available on ${caller.tier} tier`);
@@ -476,11 +467,11 @@ export async function createWebhook(url, events) {
 }
 
 export async function addUser(email) {
-	const self = await metadataAPI.self();
-	const currentUsers = await countUsers(self.tenantId);
+	const funcMeta = self.slothlet.metadata.self();
+	const currentUsers = await countUsers(funcMeta.tenantId);
 
-	if (currentUsers >= self.maxUsers) {
-		throw new Error(`User limit reached (${self.maxUsers} max)`);
+	if (currentUsers >= funcMeta.maxUsers) {
+		throw new Error(`User limit reached (${funcMeta.maxUsers} max)`);
 	}
 
 	return { id: "user_456", email };
@@ -490,7 +481,7 @@ export async function addUser(email) {
 ### Audit Logging
 
 ```javascript
-await api.slothlet.api.addApi("services.payment", "./services/payment", {
+await api.slothlet.api.add("services.payment", "./services/payment", {
 	service: "payment",
 	version: "2.3.1",
 	author: "TeamPayments",
@@ -498,17 +489,17 @@ await api.slothlet.api.addApi("services.payment", "./services/payment", {
 	gitCommit: "a1b2c3d"
 });
 
-import { metadataAPI } from "@cldmv/slothlet/runtime";
+import { self } from "@cldmv/slothlet/runtime";
 
 export async function chargeCard(amount, cardId) {
-	const caller = await metadataAPI.caller();
-	const self = await metadataAPI.self();
+	const caller = self.slothlet.metadata.caller();
+	const funcMeta = self.slothlet.metadata.self();
 
 	await logAudit({
 		timestamp: new Date().toISOString(),
 		operation: "chargeCard",
 		amount,
-		service: { name: self.service, version: self.version, commit: self.gitCommit },
+		service: { name: funcMeta.service, version: funcMeta.version, commit: funcMeta.gitCommit },
 		caller: { service: caller?.service, version: caller?.version }
 	});
 
@@ -522,21 +513,21 @@ export async function chargeCard(amount, cardId) {
 
 | Operation | Approximate cost |
 |---|---|
-| `addApi()` metadata tagging | ~0.1 ms per module |
+| `api.slothlet.api.add()` metadata tagging | ~0.1 ms per module |
 | `__metadata` property read | ~0.01 ms (Map lookup + freeze) |
-| `metadataAPI.get()` | ~0.01 ms |
-| `metadataAPI.caller()` | ~0.5–1 ms (V8 stack trace) |
-| `metadataAPI.self()` | ~0.5–1 ms (V8 stack trace) |
+| `self.slothlet.metadata.get()` | ~0.01 ms |
+| `self.slothlet.metadata.caller()` | ~0.001 ms (context lookup) |
+| `self.slothlet.metadata.self()` | ~0.001 ms (context lookup) |
 
-Cache `caller()` and `self()` results within a function body — each call captures a new stack trace:
+Cache the results at the top of a function body — both calls are synchronous but caching keeps intent clear:
 
 ```javascript
 // ✅ Cache at top of function
 export async function handler(data) {
-	const caller = await metadataAPI.caller(); // one stack capture
-	const self = await metadataAPI.self();     // one stack capture
+	const caller = self.slothlet.metadata.caller();
+	const funcMeta = self.slothlet.metadata.self();
 
-	if (caller?.trusted && self?.permissions) {
+	if (caller?.trusted && funcMeta?.permissions) {
 		// use cached values throughout
 	}
 }
@@ -590,29 +581,31 @@ Remove path-level metadata.
 
 ---
 
-### metadataAPI (from @cldmv/slothlet/runtime)
+### Runtime Introspection (from within modules)
+
+Use `self.slothlet.metadata.*` from within any slothlet-loaded module via the `self` proxy:
 
 ```javascript
-import { metadataAPI } from "@cldmv/slothlet/runtime";
+import { self } from "@cldmv/slothlet/runtime";
 ```
 
-### metadataAPI.self()
+### self.slothlet.metadata.self()
 
-Get metadata of the current function.
+Get metadata of the currently executing function (synchronous).
 
-**Returns:** `Promise<Object | null>`
+**Returns:** `Object | null`
 
-### metadataAPI.caller()
+**Throws:** `SlothletError("RUNTIME_NO_ACTIVE_CONTEXT")` if called outside an active function execution context.
 
-Get metadata of the calling function.
+### self.slothlet.metadata.caller()
 
-**Returns:** `Promise<Object | null>`
+Get metadata of the calling function (synchronous).
 
-**Note:** May return `null` when called from outside tracked slothlet context (timers, event callbacks, etc.).
+**Returns:** `Object | null` — Returns `null` if no tracked caller (external code, timers, event callbacks, etc.).
 
-### metadataAPI.get(path)
+### self.slothlet.metadata.get(path)
 
-Get metadata for any function by dot-notation path.
+Get metadata for any function by dot-notation path (async).
 
 **Parameters:**
 - `path` (string) — Dot-notation API path (e.g. `"plugins.trusted.someFunc"`)
