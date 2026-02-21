@@ -75,7 +75,7 @@ for (const { config, name } of configs) {
 			it("should maintain wrapper._impl reference to cached API", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const slothletInstance = wrapper.slothlet;
 				const cacheManager = slothletInstance.handlers.apiCacheManager;
 
@@ -92,14 +92,14 @@ for (const { config, name } of configs) {
 
 				const cacheEntry = cacheManager.get(moduleID);
 
-				// Verify wrapper._impl is a reference to cached API
-				expect(wrapper._impl).toBe(cacheEntry.api);
+				// Verify wrapper.__impl is a reference to cached API
+				expect(wrapper.__impl).toBe(cacheEntry.api);
 			});
 
 			it("should reflect cache modifications in user API", async () => {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const slothletInstance = wrapper.slothlet;
 				const cacheManager = slothletInstance.handlers.apiCacheManager;
 
@@ -139,7 +139,7 @@ for (const { config, name } of configs) {
 				expect(topLevelInitial).toBe(1002);
 
 				// Call ___setImpl with new implementation
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
@@ -165,7 +165,7 @@ for (const { config, name } of configs) {
 				expect(nestedInitial).toBe(1002);
 
 				// Call ___setImpl with new implementation
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
@@ -191,7 +191,7 @@ for (const { config, name } of configs) {
 				expect(funcInitial).toBe(1002);
 
 				// Call ___setImpl with new implementation
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const newImpl = {
 					math: {
 						add: (a, b) => a + b + 5000
@@ -218,7 +218,7 @@ for (const { config, name } of configs) {
 				expect(resultBefore).toBe("alpha hello");
 
 				// Call ___setImpl with new implementation
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 				const newImpl = {
 					advanced: {
 						nest2: {
@@ -253,7 +253,7 @@ for (const { config, name } of configs) {
 
 				// NOW capture reference after materialization
 				const capturedMath = api.testComp.math;
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 
 				// Initial state
 				const multiInitial = config.mode === "lazy" ? await capturedMath.add(1, 1) : capturedMath.add(1, 1);
@@ -300,7 +300,7 @@ for (const { config, name } of configs) {
 				await api.slothlet.api.add("testComp", TEST_DIRS.API_TEST);
 
 				const captured = api.testComp;
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 
 				// Start with math only
 				wrapper.___setImpl(
@@ -353,7 +353,7 @@ for (const { config, name } of configs) {
 
 				// NOW capture reference after materialization
 				const capturedMath = api.testComp.math;
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 
 				// Add new property alongside existing
 				wrapper.___setImpl(
@@ -363,7 +363,8 @@ for (const { config, name } of configs) {
 							subtract: (a, b) => a - b
 						}
 					},
-					"test-expand"
+					"test-expand",
+					true
 				);
 
 				// Reference should work with new implementation
@@ -384,7 +385,7 @@ for (const { config, name } of configs) {
 
 				// NOW capture reference after materialization
 				const capturedTestComp = api.testComp;
-				const wrapper = api.testComp.__wrapper;
+				const wrapper = resolveWrapper(api.testComp);
 
 				// Remove most properties, keep only math
 				wrapper.___setImpl(
@@ -393,7 +394,8 @@ for (const { config, name } of configs) {
 							add: (a, b) => a + b + 8000
 						}
 					},
-					"test-reduce"
+					"test-reduce",
+					true
 				);
 
 				// Reference should still work for remaining property
@@ -424,14 +426,15 @@ for (const { config, name } of configs) {
 				expect(crossInitial2).toBe(1002);
 
 				// Update comp1 only
-				const wrapper1 = api.comp1.__wrapper;
+				const wrapper1 = resolveWrapper(api.comp1);
 				wrapper1.___setImpl(
 					{
 						math: {
 							add: (a, b) => a + b + 5000
 						}
 					},
-					"test-comp1"
+					"test-comp1",
+					true
 				);
 
 				// Only ref1 should change

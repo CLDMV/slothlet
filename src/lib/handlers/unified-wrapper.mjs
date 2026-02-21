@@ -477,9 +477,11 @@ export class UnifiedWrapper extends ComponentBase {
 	 * folder wrappers, and adopts children.
 	 *
 	 * @param {*} newImpl - The new implementation value.
+	 * @param {boolean} [forceReuseChildren=false] - When true, always reuse existing child
+	 *   wrappers regardless of mode (used by ___setImpl to preserve live references).
 	 * @private
 	 */
-	_applyNewImpl(newImpl) {
+	_applyNewImpl(newImpl, forceReuseChildren = false) {
 		// Clone to protect API cache from ___adoptImplChildren's delete operations.
 		// See static _cloneImpl() for full rationale.
 		this.____slothletInternal.impl = UnifiedWrapper._cloneImpl(newImpl);
@@ -509,7 +511,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		this.___adoptImplChildren();
+		this.___adoptImplChildren(forceReuseChildren);
 	}
 
 	/**
@@ -519,9 +521,13 @@ export class UnifiedWrapper extends ComponentBase {
 	 *
 	 * @param {*} newImpl - New implementation
 	 * @param {string} [moduleID] - Optional moduleID for lifecycle event (for replacements)
+	 * @param {boolean} [forceReuseChildren=false] - When true, always reuse existing child
+	 *   wrappers and bypass collision-merged key guards. Use this for direct/explicit
+	 *   ___setImpl calls where reference preservation is the intent. Do NOT set for
+	 *   hot-reload paths (syncWrapper) where lazy refs should intentionally break.
 	 * @private
 	 */
-	___setImpl(newImpl, moduleID = null) {
+	___setImpl(newImpl, moduleID = null, forceReuseChildren = false) {
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
 				message: "___setImpl called",
@@ -530,7 +536,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 		}
 
-		this._applyNewImpl(newImpl);
+		this._applyNewImpl(newImpl, forceReuseChildren);
 
 		// Emit impl:changed event for lifecycle management
 		if (newImpl && this.slothlet.handlers?.lifecycle) {
@@ -765,7 +771,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @example
 	 * wrapper.___adoptImplChildren();
 	 */
-	___adoptImplChildren() {
+	___adoptImplChildren(forceReuseChildren = false) {
 		const preExistingKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 		this.slothlet.debug("wrapper", {
 			message: "ADOPT-START",
@@ -918,10 +924,11 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				const isCollisionMerged = this.____slothletInternal.collisionMergedKeys && this.____slothletInternal.collisionMergedKeys.has(key);
 
-				if (isCollisionMerged) {
+				if (isCollisionMerged && !forceReuseChildren) {
 					// Collision-merged means this key came from file exports that won during merge.
 					// The file's version takes precedence — do NOT update with the folder's version.
-					// Just clean up the impl key and skip.
+					// Exception: when forceReuseChildren=true (explicit ___setImpl call), the caller
+					// is deliberately overriding — propagate to all child wrappers regardless.
 					if (typeof key !== "symbol") {
 						this.slothlet.debug("wrapper", {
 							message: "ADOPT-SKIP: is collision-merged, keeping file version",
@@ -960,7 +967,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// existing child wrappers — create fresh ones so references break.
 			// In merge mode (multi-cache subsequent modules), reuse children from
 			// the current reload cycle so keys from prior modules aren't lost.
-			const skipChildReuse = this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
+			const skipChildReuse = !forceReuseChildren && this.____slothletInternal.mode === "lazy" && storedCollisionMode === "replace";
 
 			if (!skipChildReuse && existingChild && resolveWrapper(existingChild) !== null) {
 				// Reuse existing wrapper - update its implementation to maintain live binding

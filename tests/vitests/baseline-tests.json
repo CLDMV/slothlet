@@ -31,6 +31,7 @@
 	"suites/context/map-set-proxy-fix.test.vitest.mjs",
 	"suites/context/per-request-context.test.vitest.mjs",
 	"suites/context/tcp-eventemitter-context.test.vitest.mjs",
+	"suites/core/core-reference-persistence.test.vitest.mjs",
 	"suites/core/core-reload-full.test.vitest.mjs",
 	"suites/core/core-reload-lazy-mode.test.vitest.mjs",
 	"suites/core/core-reload-path-multicache.test.vitest.mjs",
