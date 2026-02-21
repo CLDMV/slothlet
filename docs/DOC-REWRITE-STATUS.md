@@ -33,6 +33,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/SANITIZATION.md` | `docs/SANITIZATION.md` | ✅ Complete | Full v3 rewrite; change doc at `docs/v3/changes/sanitization.md` |
 | `docs/v2/sanitization-options.json` | _(supplemental — no output file)_ | ✅ Reviewed | V2 API spec; `splitBehavior`, `v2Bugs`, `rulePrecedence` incorporated into `docs/v3/changes/sanitization.md` |
 | _(new — no v2 equivalent)_ | `docs/CONFIGURATION.md` | ✅ Complete | New v3 doc; covers `runtime`, `apiDepth`, `api.mutations`, `debug`, `silent`, `diagnostics`, `api.slothlet.diag.*` namespace, `scope`, `tracking`, `backgroundMaterialize` |
+| _(new — no v2 equivalent)_ | `docs/RELOAD.md` | ✅ Complete | New v3 doc; covers `api.slothlet.api.add/remove/reload`, eager vs lazy reload divergence, reference preservation, ESM/CJS cache busting, operation history replay, moduleID ownership, lifecycle events |
 | `docs/v2/root/AGENT-USAGE.md` | `AGENT-USAGE.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/BUGS.md` | `BUGS.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/CONTRIBUTING.md` | `CONTRIBUTING.md` (in-place) | ⬜ Not Started | |
@@ -64,7 +65,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/changes/child-instance-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/changes/class-based-architecture-refactor-phase-3-documentation-tasks.md` | internal | ✅ Reviewed — architecture/refactor tracking only |
 | `docs/v3/changes/hook-system.md` | `docs/HOOKS.md` | ✅ Processed |
-| `docs/v3/changes/hot-reload-complete.md` | internal | ✅ Reviewed — implementation completion notes |
+| `docs/v3/changes/hot-reload-complete.md` | `docs/RELOAD.md` | ✅ Processed |
 | `docs/v3/changes/LAZY-MODE-PROXY-GOTCHAS.md` | internal | ✅ Reviewed — gotchas captured in LIFECYCLE.md |
 | `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/changes/metadata-system.md` | `docs/METADATA.md` | ✅ Processed |
@@ -86,10 +87,10 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | File | Attributed To | Notes |
 |---|---|---|
 | `docs/v3/old/BREAKING-CHANGES-V3.md` | internal | ✅ Reviewed — historical multi-doc coverage; all changes incorporated |
-| `docs/v3/old/HOT-RELOAD-ARCHITECTURE.md` | internal | ✅ Reviewed — impl design notes only |
-| `docs/v3/old/HOT-RELOAD-FLATTENING-ISSUE.md` | internal | ✅ Reviewed — impl bug fix only |
-| `docs/v3/old/HOT-RELOAD-MERGE-DUPLICATION.md` | internal | ✅ Reviewed — impl bug fix only |
-| `docs/v3/old/INITIAL-VS-HOTRELOAD-PATHS.md` | internal | ✅ Reviewed — impl investigation only |
+| `docs/v3/old/HOT-RELOAD-ARCHITECTURE.md` | `docs/RELOAD.md` | ✅ Processed |
+| `docs/v3/old/HOT-RELOAD-FLATTENING-ISSUE.md` | `docs/RELOAD.md` | ✅ Processed — wrapper sync divergence now documented |
+| `docs/v3/old/HOT-RELOAD-MERGE-DUPLICATION.md` | `docs/RELOAD.md` | ✅ Processed — merge/collision behavior documented |
+| `docs/v3/old/INITIAL-VS-HOTRELOAD-PATHS.md` | `docs/RELOAD.md` | ✅ Processed — eager/lazy divergence section |
 | `docs/v3/old/src3-README.md` | internal | ✅ Reviewed — early prototype; fully superseded |
 | `docs/v3/old/UNIFIED-WRAPPER-IMPL.md` | internal | ✅ Reviewed — impl design notes only |
 | `docs/v3/old/V2-V3-GAP-LIST.md` | internal | ✅ Reviewed — historical gap list; all gaps filled |
@@ -126,8 +127,8 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/file-based-api-add.md` | `docs/METADATA.md` | ✅ Processed — array/file form of `api.slothlet.metadata.set` documented |
 | `docs/v3/todo/completed/fix-context-isolation-shallow-copy-bug.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/hooks-system.md` | `docs/HOOKS.md` | ✅ Processed |
-| `docs/v3/todo/completed/hot-reload-issues-checklist.md` | internal | ✅ Reviewed — checklist only |
-| `docs/v3/todo/completed/hot-reload-system.md` | internal | ✅ Reviewed — impl design only |
+| `docs/v3/todo/completed/hot-reload-issues-checklist.md` | `docs/RELOAD.md` | ✅ Processed — issues all resolved; captured in reload doc |
+| `docs/v3/todo/completed/hot-reload-system.md` | `docs/RELOAD.md` | ✅ Processed |
 | `docs/v3/todo/completed/investigate-addapi-special-case.md` | `docs/API-RULES/` | ✅ Processed — investigation searched wrong dir; Rule 11/C33/F06 is implemented; source file refs corrected in all three API-RULES docs |
 | `docs/v3/todo/completed/INVESTIGATION-2026-01-30-FINDINGS.md` | internal | ✅ Reviewed — internal investigation only |
 | `docs/v3/todo/completed/INVESTIGATION-2026-01-30.md` | internal | ✅ Reviewed — internal investigation only |
