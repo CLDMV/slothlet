@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-09 22:31:44 -08:00 (1770705104)
+ *	@Last modified time: 2026-02-20 16:22:47 -08:00 (1771633367)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -246,7 +246,7 @@ export class ApiManager extends ComponentBase {
 	 *
 	 * @description
 	 * Resolves relative paths from the caller and verifies the folder exists.
-	 * 
+	 *
 	 * @deprecated Use resolvePath() instead for file/directory support.
 	 *
 	 * @example
@@ -390,11 +390,7 @@ export class ApiManager extends ComponentBase {
 	 * }
 	 */
 	isWrapperProxy(value) {
-		return !!(
-			value &&
-			(typeof value === "object" || typeof value === "function") &&
-			(resolveWrapper(value) !== null || value.___setImpl || value.___getState)
-		);
+		return !!(value && (typeof value === "object" || typeof value === "function") && resolveWrapper(value) !== null);
 	}
 
 	/**
@@ -488,7 +484,10 @@ export class ApiManager extends ComponentBase {
 				if (nextWrapper.____slothletInternal.impl !== undefined) {
 					existingWrapper.____slothletInternal.impl = nextWrapper.____slothletInternal.impl;
 					// Update callable status
-					if (typeof nextWrapper.____slothletInternal.impl === "function" || (nextWrapper.____slothletInternal.impl && typeof nextWrapper.____slothletInternal.impl.default === "function")) {
+					if (
+						typeof nextWrapper.____slothletInternal.impl === "function" ||
+						(nextWrapper.____slothletInternal.impl && typeof nextWrapper.____slothletInternal.impl.default === "function")
+					) {
 						existingWrapper.isCallable = true;
 					}
 				}
@@ -577,7 +576,8 @@ export class ApiManager extends ComponentBase {
 		// Mark as materialized only if _impl is actually materialized (not a function)
 		if (existingWrapper.____slothletInternal.state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
-			const isActuallyMaterialized = existingWrapper.____slothletInternal.impl && typeof existingWrapper.____slothletInternal.impl !== "function";
+			const isActuallyMaterialized =
+				existingWrapper.____slothletInternal.impl && typeof existingWrapper.____slothletInternal.impl !== "function";
 			existingWrapper.____slothletInternal.state.materialized = isActuallyMaterialized;
 			existingWrapper.____slothletInternal.state.inFlight = false;
 		}
@@ -935,9 +935,8 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-
-return true;
-}
+		return true;
+	}
 	/**
 	 * Restore a path from api.slothlet.api.add history or core load.
 	 * @param {string} apiPath - API path to restore.
@@ -1023,7 +1022,7 @@ return true;
 	 * @package
 	 *
 	 * @description
-	 * Loads modules from a folder, file, or array of files/folders using the instance configuration 
+	 * Loads modules from a folder, file, or array of files/folders using the instance configuration
 	 * and merges the resulting API under the specified apiPath.
 	 *
 	 * Supports three input types:
@@ -1041,7 +1040,7 @@ return true;
 	 * 	folderPath: "./plugins",
 	 * 	options: { moduleID: "plugins-core", metadata: { version: "1.0.0" } }
 	 * });
-	 * 
+	 *
 	 * @example
 	 * // Single file
 	 * await manager.addApiComponent({
@@ -1049,7 +1048,7 @@ return true;
 	 * 	folderPath: "./helpers/string-utils.mjs",
 	 * 	options: { metadata: { author: "team" } }
 	 * });
-	 * 
+	 *
 	 * @example
 	 * // Array of files and folders
 	 * await manager.addApiComponent({
@@ -1060,7 +1059,7 @@ return true;
 	 */
 	async addApiComponent(params) {
 		const { apiPath, folderPath, options = {} } = params || {};
-		
+
 		// Handle array of paths - process each sequentially
 		if (Array.isArray(folderPath)) {
 			const moduleIDs = [];
@@ -1074,7 +1073,7 @@ return true;
 			}
 			return moduleIDs;
 		}
-		
+
 		const { metadata = {}, ...restOptions } = options;
 		if (!this.slothlet || !this.slothlet.isLoaded) {
 			throw new this.SlothletError("INVALID_CONFIG_NOT_LOADED", {
@@ -1084,10 +1083,10 @@ return true;
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
-		
+
 		// Resolve path - supports both files and directories
 		const { resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath);
-		
+
 		// Validate that the path is either a directory or a supported file type
 		if (!isDirectory && !isFile) {
 			throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
@@ -1096,7 +1095,7 @@ return true;
 				validationError: true
 			});
 		}
-		
+
 		if (isFile) {
 			// Validate file extension for files
 			const ext = path.extname(resolvedPath);
@@ -1109,7 +1108,7 @@ return true;
 				});
 			}
 		}
-		
+
 		// For backward compatibility and history tracking, use original behavior
 		const resolvedFolderPath = resolvedPath;
 
@@ -1137,7 +1136,7 @@ return true;
 		// along with a file filter to load only that specific file
 		let dirForBuild = resolvedFolderPath;
 		let fileFilter = null;
-		
+
 		if (isFile) {
 			dirForBuild = path.dirname(resolvedFolderPath);
 			const fileName = path.basename(resolvedFolderPath);
@@ -1200,7 +1199,7 @@ return true;
 		// Example: api.add("", folder) or api.add(null, folder) loads directly to root
 		// This is expected - user said "load under math", folder creates "math" namespace
 		let apiToMerge = newApi;
-		
+
 		// Special handling for single file loads:
 		// When loading a single file, buildAPI returns { filename: exports }
 		// We want to expose the exports directly at the target path, not nested under filename
@@ -1233,9 +1232,7 @@ return true;
 					// (e.g. services/services/ inside a "services" mount).
 					const dupWrapper = resolveWrapper(dupValue);
 					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
-					const dupFileDir = dupFilePath
-						? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/")
-						: null;
+					const dupFileDir = dupFilePath ? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : null;
 					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
 					const expectedDir = normalizedFolderPath + "/" + lastPart;
 					// Accept two cases:
@@ -1256,7 +1253,7 @@ return true;
 						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
 						if (dupWrapper) {
 							// It's a UnifiedWrapper proxy — copy child-cache keys across
-							for (const k of Object.keys(dupWrapper).filter(k => !k.startsWith("_") && !k.startsWith("__"))) {
+							for (const k of Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
 								hoisted[k] = dupWrapper[k];
 							}
 						} else {
@@ -1274,7 +1271,6 @@ return true;
 				}
 			}
 		}
-
 
 		if (this.____config.debug?.api) {
 			this.slothlet.debug("api", {
@@ -1320,7 +1316,7 @@ return true;
 				// Functions with properties should remain callable even when loaded at nested paths.
 				// This supports patterns like: api.logger() callable + api.logger.utils.debug()
 				const isCallableNamespace = typeof apiToMerge === "function";
-				
+
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
 					apiPath: normalizedPath,
 					mode: this.____config.mode,
@@ -1508,18 +1504,18 @@ return true;
 		// Try moduleID first (more specific), then fall back to API path
 		let apiPath = null;
 		let moduleID = null;
-		
+
 		if (this.slothlet.handlers.ownership) {
 			// Extract moduleID from full moduleID format "moduleID:path" if present
 			const candidateModuleID = pathOrModuleId.split(":")[0];
-			
+
 			// Try to find a matching moduleID
 			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
 			// Use findLast to prefer the most recently registered module when multiple match,
 			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
 			const matchingModule = registeredModules.findLast((m) => m === candidateModuleID || m.startsWith(`${candidateModuleID}_`));
-			
+
 			if (matchingModule) {
 				// Found a moduleID match
 				moduleID = matchingModule;
@@ -2270,7 +2266,7 @@ return true;
 						freshMaterialized: freshWrapper?.____slothletInternal.state?.materialized,
 						hasMaterializeFunc: typeof freshWrapper?.____slothletInternal.materializeFunc === "function",
 						isLazyFresh,
-						existingMaterialized: existingAtKey?.___getState?.()?.materialized
+						existingMaterialized: resolveWrapper(existingAtKey)?.____slothletInternal?.state?.materialized
 					});
 
 					if (isLazyFresh) {
@@ -2298,7 +2294,7 @@ return true;
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
-						if (freshValue && typeof freshValue.___getState === "function") {
+						if (freshValue && resolveWrapper(freshValue) !== null) {
 							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
 							implForReload = freshValue;
@@ -2403,7 +2399,7 @@ return true;
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
-				if (freshApi && typeof freshApi.___getState === "function") {
+				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
 				} else if (typeof freshApi === "function") {
@@ -2424,7 +2420,7 @@ return true;
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
-						if (val && typeof val.___getState === "function" && resolveWrapper(val)) {
+						if (resolveWrapper(val) !== null) {
 							const childWrapper = resolveWrapper(val);
 							if (childWrapper.____slothletInternal.state.materialized) {
 								implForReload[key] = UnifiedWrapper._extractFullImpl(childWrapper);
