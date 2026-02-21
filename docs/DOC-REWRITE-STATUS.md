@@ -26,7 +26,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES/API-RULES-CONDITIONS.md` | ✅ Complete | C01-C18 updated; C06 deprecated noted; C33-C34 added (v3 AddApi cases) |
 | `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ✅ Complete | Index file; detail docs in `docs/API-RULES/`; Rule 12 updated (fully impl.); Rule 13 marked new in v3 |
 | `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Complete | v3 API: `api.slothlet.context.run/scope`; isolation modes (partial/full); deep-clone isolation fix; cross-instance behavior documented |
-| `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ⬜ Not Started | |
+| `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ✅ Complete | v3 API: `api.slothlet.hook.*`; `on(typePattern, handler, opts)`; filter object API for remove/enable/disable/list; brace expansion and negation patterns; sync-hook constraint; per-type context shapes |
 | `docs/v2/METADATA.md` | `docs/METADATA.md` | ⬜ Not Started | |
 | `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ⬜ Not Started | |
 | `docs/v2/PERFORMANCE.md` | `docs/PERFORMANCE.md` | ✅ Complete | New benchmarks (Linux/Node v24), v3.0.0 data |
@@ -62,7 +62,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/changes/background-materialize.md` | | |
 | `docs/v3/changes/child-instance-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/changes/class-based-architecture-refactor-phase-3-documentation-tasks.md` | | |
-| `docs/v3/changes/hook-system.md` | | |
+| `docs/v3/changes/hook-system.md` | `docs/HOOKS.md` | ✅ Processed |
 | `docs/v3/changes/hot-reload-complete.md` | | |
 | `docs/v3/changes/LAZY-MODE-PROXY-GOTCHAS.md` | | |
 | `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | | |
@@ -123,7 +123,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/eventemitter-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/file-based-api-add.md` | | |
 | `docs/v3/todo/completed/fix-context-isolation-shallow-copy-bug.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
-| `docs/v3/todo/completed/hooks-system.md` | | |
+| `docs/v3/todo/completed/hooks-system.md` | `docs/HOOKS.md` | ✅ Processed |
 | `docs/v3/todo/completed/hot-reload-issues-checklist.md` | | Likely internal only |
 | `docs/v3/todo/completed/hot-reload-system.md` | | |
 | `docs/v3/todo/completed/investigate-addapi-special-case.md` | | |
