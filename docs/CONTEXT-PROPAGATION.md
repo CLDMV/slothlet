@@ -93,6 +93,8 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 
 `api.slothlet.context.run()` and `api.slothlet.context.scope()` execute a callback with temporary context data that:
 
+> **Aliases**: `api.slothlet.run()` and `api.slothlet.scope()` are direct aliases for `api.slothlet.context.run()` and `api.slothlet.context.scope()` respectively and are interchangeable.
+
 - Does **not** affect the global instance context after the callback returns
 - **Inherits** from and merges with the current context
 - Supports **shallow** and **deep** merge strategies
@@ -102,6 +104,8 @@ Slothlet provides dedicated methods for executing functions with isolated contex
 ### API Reference
 
 #### api.slothlet.context.run(contextData, callback, ...args)
+
+> **Alias**: `api.slothlet.run(contextData, callback, ...args)`
 
 Executes a callback function with isolated context data. `.run()` is shorthand for `.scope()` with shallow merge and partial isolation.
 
@@ -134,6 +138,8 @@ const result = await api.slothlet.context.run(
 ```
 
 #### api.slothlet.context.scope({ context, fn, args, merge, isolation })
+
+> **Alias**: `api.slothlet.scope({ context, fn, args, merge, isolation })`
 
 Executes a function with isolated context using structured options.
 
