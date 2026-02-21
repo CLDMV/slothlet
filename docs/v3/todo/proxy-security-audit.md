@@ -110,17 +110,24 @@ These are low-risk reads that expose no mutable internals.
 
 | Property | What it exposes | Risk level |
 |---|---|---|
-| `__mode` | `"eager"` or `"lazy"` | Low — configuration info |
-| `__apiPath` / `__slothletPath` | Dot-path string e.g. `"math.add"` | Low — no filesystem info |
-| `__isCallable` | Boolean | Low |
-| `__materializeOnCreate` | Boolean | Low |
-| `__displayName` | Display string | Low |
-| `__type` | `"function"`, `"object"`, or type Symbol | Low |
-| `__metadata` | User-defined metadata object (from `__slothlet_jsdoc.mjs`) | Medium — depends on what host puts there |
+All of these are now enforced read-only by both `setTrap` and `deletePropertyTrap` blocklists.
+
+| Property | What it exposes | Risk level |
+|---|---|---|
+| `__mode` | `"eager"` or `"lazy"` | Low — configuration info ✔️ TESTED |
+| `__apiPath` / `__slothletPath` | Dot-path string e.g. `"math.add"` | Low — no filesystem info ✔️ TESTED |
+| `__isCallable` | Boolean | Low ✔️ TESTED |
+| `__materializeOnCreate` | Boolean | Low ✔️ TESTED |
+| `__displayName` | Display string | Low ✔️ TESTED |
+| `__type` | `"function"`, `"object"`, or type Symbol | Low ✔️ TESTED |
+| `__metadata` | User-defined metadata object (from `__slothlet_jsdoc.mjs`) | Medium — depends on what host puts there ✔️ TESTED |
 | `__state` | Alias for `___getState()` result — ✅ BLOCKED (removed from allowedInternals) | ✅ BLOCKED ✔️ TESTED |
-| `__invalid` | Boolean invalid flag | Low — read only, no write path |
-| `__materialized` | Boolean — whether the lazy wrapper has finished loading | Low — intentionally exposed for test/debug use |
-| `__inFlight` | Boolean — whether materialization is currently in progress | Low — intentionally exposed for test/debug use |
+| `__invalid` | Boolean invalid flag | Low ✔️ TESTED |
+| `__materialized` | Boolean — whether the lazy wrapper has finished loading | Low — intentionally exposed ✔️ TESTED |
+| `__inFlight` | Boolean — whether materialization is currently in progress | Low — intentionally exposed ✔️ TESTED |
+| `__filePath` | Absolute server-side file path | Low (read exposed) — write blocked ✔️ TESTED |
+| `__sourceFolder` | Absolute server-side directory | Low (read exposed) — write blocked ✔️ TESTED |
+| `__moduleID` | Internal module identifier string | Low (read exposed) — write blocked ✔️ TESTED |
 
 ---
 
@@ -144,12 +151,18 @@ These are low-risk reads that expose no mutable internals.
 | Priority | Item | Effort |
 |---|---|---|
 | ✅ Done | `___getState` / `__state` blocked, all call sites converted to `resolveWrapper` | — |
+| ✅ Done | All E-section read-only props confirmed write-immutable; setTrap + deletePropertyTrap block them | — |
 | 🟠 Medium | Remove `___setImpl` / `___resetLazy` / `___invalidate` from proxy `allowedInternals` (force `resolveWrapper` usage) | Medium — requires internal call-site audit |
 | 🟠 Medium | Remove `__filePath` / `__sourceFolder` / `__moduleID` from `allowedInternals` | Low |
 | 🟡 Low | Remove `_impl` alias (duplicate of `__impl`) | Low |
 | 🟡 Low | Decide whether `__impl` stays or requires `resolveWrapper` | Medium |
 
 ---
+
+## Files Changed in This Sprint (step 4)
+
+- `src/lib/handlers/unified-wrapper.mjs` — added `__materialized` / `__inFlight` to main getTrap + waiting proxy getTrap; expanded `setTrap.blockedKeys` and `deletePropertyTrap.internalKeys` to cover all E-section read-only props (`__mode`, `__apiPath`, `__slothletPath`, `__isCallable`, `__materializeOnCreate`, `__displayName`, `__type`, `__filePath`, `__sourceFolder`, `__moduleID`, `__metadata`, `__invalid`, `__materialized`, `__inFlight`)
+- `tests/vitests/suites/proxies/proxy-internals-attack.test.vitest.mjs` — added E1–E3 (read-only prop write/delete immutability); renamed old E (resolveWrapper) → F (F1–F5) to match audit section ordering; 456 tests, 0 skips, 0 failures
 
 ## Files Changed in This Sprint (step 2)
 

@@ -2864,9 +2864,20 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				wrapper._materialize();
 			}
-			// Keys that, if set, would shadow the #internal private field via a prototype getter or
-			// corrupt critical internal state reachable inside the class. Silently absorb the set.
-			const blockedKeys = new Set(["____slothletInternal", "___getState", "__state", "__invalid"]);
+			// Keys that must not be settable from outside — either they shadow private state or are
+			// read-only informational accessors whose values come directly from ____slothletInternal.
+			// Silently absorb the write so no TypeError leaks key existence.
+			const blockedKeys = new Set([
+				// Critical private internals
+				"____slothletInternal", "___getState", "__state", "__invalid",
+				// Read-only mode/identity props — getTrap returns these from ____slothletInternal directly
+				"__mode", "__apiPath", "__slothletPath", "__isCallable", "__materializeOnCreate",
+				"__displayName", "__type", "__metadata",
+				// Read-only server-info props
+				"__filePath", "__sourceFolder", "__moduleID",
+				// Read-only lazy-state props
+				"__materialized", "__inFlight"
+			]);
 			if (blockedKeys.has(prop)) return true;
 
 			const internalKeys = new Set(["__impl", "___setImpl", "___resetLazy", "_materialize", "___invalidate", "_impl"]);
@@ -2904,17 +2915,18 @@ export class UnifiedWrapper extends ComponentBase {
 			// 	wrapper._materialize();
 			// }
 
-			// Don't allow deletion of internal properties.
+			// Don't allow deletion of internal or read-only properties.
 			// Return true (silently absorb) rather than false to avoid leaking that these
 			// keys exist via the TypeError thrown by returning falsish in strict mode.
 			const internalKeys = new Set([
-				"____slothletInternal",
-				"__impl",
-				"___setImpl",
-				"___resetLazy",
-				"_materialize",
-				"___invalidate",
-				"_impl"
+				// Framework mutation APIs
+				"____slothletInternal", "__impl", "___setImpl", "___resetLazy",
+				"_materialize", "___invalidate", "_impl", "___getState", "__state",
+				// Read-only informational props
+				"__mode", "__apiPath", "__slothletPath", "__isCallable", "__materializeOnCreate",
+				"__displayName", "__type", "__metadata", "__invalid",
+				"__filePath", "__sourceFolder", "__moduleID",
+				"__materialized", "__inFlight"
 			]);
 			if (internalKeys.has(prop)) {
 				return true; // silently ignore — do not expose the key's existence via TypeError
