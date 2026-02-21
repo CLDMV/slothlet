@@ -12,10 +12,7 @@ The Slothlet sanitization system transforms arbitrary strings (file names, path 
 - [Pattern Matching](#pattern-matching)
 - [Rule Precedence](#rule-precedence)
 - [Examples](#examples)
-- [Runtime Convenience Method](#runtime-convenience-method)
-- [Testing](#testing)
-- [Implementation Notes](#implementation-notes)
-- [API Reference](#api-reference)
+- [V2 vs V3 Differences](#v2-vs-v3-differences)
 
 ## Overview
 
@@ -59,7 +56,7 @@ The sanitization system uses **two-level segmentation**:
    - Primary segments are joined with camelCase
 
 2. **Sub-Segments**: Within each primary segment, split by underscores
-   - Example: `"Mixed_APPS"` → `["Mixed", "APPS"]`
+   - Example: `"Mixed_APPS"` → `["Mixed", "APPS"]` 
    - Sub-segments are preserved with underscores
    - Individual sub-segments can have rules applied
 
@@ -103,15 +100,6 @@ sanitizePropertyName("common_apps", { preserveAllLower: true }); // "common_apps
 sanitizePropertyName("Mixed_apps", { preserveAllLower: true });  // "mixed_apps"
 ```
 
-> [!NOTE]
-> `preserveAllLower` operates at the **sub-segment level** (split by underscores). Hyphens still cause primary-segment splitting, which are then joined without camelCase capitalization:
->
-> ```javascript
-> sanitizePropertyName("parse-xml-data", { preserveAllLower: true }); // "parsexmldata" (joined, no caps)
-> sanitizePropertyName("parse-xml-data", {});                          // "parseXmlData" (normal camelCase)
-> sanitizePropertyName("common_apps", { preserveAllLower: true });     // "common_apps" (underscores preserved)
-> ```
-
 ## Rules
 
 Rules provide fine-grained control over segment transformation. All rules support glob patterns and are case-insensitive by default.
@@ -121,34 +109,31 @@ Rules provide fine-grained control over segment transformation. All rules suppor
 Preserve segments exactly as-is. Case-sensitive matching.
 
 ```javascript
-sanitizePropertyName("autoIP", {
-  rules: { leave: ["autoIP"] }
+sanitizePropertyName("autoIP", { 
+  rules: { leave: ["autoIP"] } 
 }); // "autoIP"
 
-sanitizePropertyName("auto-ip", {
-  rules: { leave: ["ip"] }
+sanitizePropertyName("auto-ip", { 
+  rules: { leave: ["ip"] } 
 }); // "autoip" (preserves "ip" segment)
 
 // Case mismatch - no preservation
-sanitizePropertyName("auto-ip", {
-  rules: { leave: ["IP"] }
+sanitizePropertyName("auto-ip", { 
+  rules: { leave: ["IP"] } 
 }); // "autoIp"
 ```
-
-> [!IMPORTANT]
-> `leave` is **case-sensitive**. This was a bug in older versions where it behaved case-insensitively.
 
 ### `leaveInsensitive` (case-insensitive)
 
 Preserve segments exactly as-is. Case-insensitive matching.
 
 ```javascript
-sanitizePropertyName("autoIP", {
-  rules: { leaveInsensitive: ["autoip"] }
+sanitizePropertyName("autoIP", { 
+  rules: { leaveInsensitive: ["autoip"] } 
 }); // "autoIP"
 
-sanitizePropertyName("AutoIP", {
-  rules: { leaveInsensitive: ["autoip"] }
+sanitizePropertyName("AutoIP", { 
+  rules: { leaveInsensitive: ["autoip"] } 
 }); // "AutoIP"
 ```
 
@@ -158,33 +143,28 @@ Force segments to UPPERCASE. Supports exact matches, glob patterns, and boundary
 
 ```javascript
 // Exact match
-sanitizePropertyName("get-http-status", {
-  rules: { upper: ["http"] }
+sanitizePropertyName("get-http-status", { 
+  rules: { upper: ["http"] } 
 }); // "getHTTPStatus"
 
 // Multiple segments
-sanitizePropertyName("parse-json-xml-data", {
-  rules: { upper: ["json", "xml"] }
+sanitizePropertyName("parse-json-xml-data", { 
+  rules: { upper: ["json", "xml"] } 
 }); // "parseJSONXMLData"
 ```
 
 ### `lower`
 
-Force segments to lowercase. Pattern-matched segments are **preserved in lowercase** through the camelCase phase — `lower` rules take full effect symmetrically with `upper`.
+Force segments to lowercase.
 
 ```javascript
-sanitizePropertyName("validate-USER-id", {
-  rules: { lower: ["user"] }
-}); // "validateUserId"  (exact match, no pattern — camelCase applies first char)
+sanitizePropertyName("validate-USER-id", { 
+  rules: { lower: ["user"] } 
+}); // "validateUserid"
 
-// Pattern-based lower — segment stays fully lowercase (Bug #6 fix)
-sanitizePropertyName("get-API-status", {
-  rules: { lower: ["*-api-*"] }
-}); // "getapiStatus"  (api stays lowercase, not capitalized)
-
-sanitizePropertyName("foo-API-json", {
-  rules: { lower: ["json"] }
-}); // "fooAPIjson"  (json stays lowercase)
+sanitizePropertyName("foo-API-json", { 
+  rules: { lower: ["json"] } 
+}); // "fooAPIjson"
 ```
 
 ## Pattern Matching
@@ -193,11 +173,11 @@ The sanitization system supports three types of pattern matching:
 
 ### 1. Exact Match
 
-Simple string matching (case-insensitive for `upper`/`lower` rules).
+Simple string matching (case-insensitive for upper/lower rules).
 
 ```javascript
-sanitizePropertyName("get-api-status", {
-  rules: { upper: ["api"] }
+sanitizePropertyName("get-api-status", { 
+  rules: { upper: ["api"] } 
 }); // "getAPIStatus"
 ```
 
@@ -209,32 +189,32 @@ Match patterns before string splitting using wildcards.
 
 ```javascript
 // *-ip matches strings ending with "-ip"
-sanitizePropertyName("auto-ip", {
-  rules: { upper: ["*-ip"] }
+sanitizePropertyName("auto-ip", { 
+  rules: { upper: ["*-ip"] } 
 }); // "autoIP"
 
 // *-api-* matches strings with "-api-" in the middle
-sanitizePropertyName("get-api-status", {
-  rules: { upper: ["*-api-*"] }
+sanitizePropertyName("get-api-status", { 
+  rules: { upper: ["*-api-*"] } 
 }); // "getAPIStatus"
 
 // Multiple patterns
-sanitizePropertyName("get-http-api-status", {
-  rules: { upper: ["http", "*-api-*"] }
+sanitizePropertyName("get-http-api-status", { 
+  rules: { upper: ["http", "*-api-*"] } 
 }); // "getHTTPAPIStatus"
 ```
 
-#### Underscore patterns
+#### Underscore patterns (V3 only)
 
 ```javascript
 // api_* matches strings starting with "api_"
-sanitizePropertyName("api_helper", {
-  rules: { upper: ["api_*"] }
+sanitizePropertyName("api_helper", { 
+  rules: { upper: ["api_*"] } 
 }); // "API_helper"
 
 // *_api_* matches strings with "_api_" in the middle
-sanitizePropertyName("get_api_data", {
-  rules: { upper: ["*_api_*"] }
+sanitizePropertyName("get_api_data", { 
+  rules: { upper: ["*_api_*"] } 
 }); // "get_API_data"
 ```
 
@@ -244,16 +224,16 @@ Transform parts within already camelCased identifiers.
 
 ```javascript
 // *URL* matches "url" anywhere in the segment
-sanitizePropertyName("buildUrlWithParams", {
-  rules: { upper: ["*URL*"] }
+sanitizePropertyName("buildUrlWithParams", { 
+  rules: { upper: ["*URL*"] } 
 }); // "buildURLWithParams"
 
-sanitizePropertyName("parseUrl", {
-  rules: { upper: ["*URL*"] }
+sanitizePropertyName("parseUrl", { 
+  rules: { upper: ["*URL*"] } 
 }); // "parseURL"
 
-sanitizePropertyName("parseUrlFromUrlString", {
-  rules: { upper: ["*URL*"] }
+sanitizePropertyName("parseUrlFromUrlString", { 
+  rules: { upper: ["*URL*"] } 
 }); // "parseURLFromURLString"
 ```
 
@@ -263,18 +243,18 @@ Match only when surrounded by other characters (requires positive lookbehind/ahe
 
 ```javascript
 // **url** only matches "url" when it has characters before AND after
-sanitizePropertyName("buildUrlWithParams", {
-  rules: { upper: ["**url**"] }
+sanitizePropertyName("buildUrlWithParams", { 
+  rules: { upper: ["**url**"] } 
 }); // "buildURLWithParams"
 
 // Standalone "url" is NOT matched
-sanitizePropertyName("url", {
-  rules: { upper: ["**url**"] }
+sanitizePropertyName("url", { 
+  rules: { upper: ["**url**"] } 
 }); // "url"
 
 // Multiple boundary patterns
-sanitizePropertyName("buildApiUrlParser", {
-  rules: { upper: ["**api**", "**url**"] }
+sanitizePropertyName("buildApiUrlParser", { 
+  rules: { upper: ["**api**", "**url**"] } 
 }); // "buildAPIURLParser"
 ```
 
@@ -405,45 +385,70 @@ sanitizePropertyName("parse-xml-to-json", {
 }); // "parseXMLToJSON"
 ```
 
----
+## V2 vs V3 Differences
 
-## Runtime Convenience Method
+### Improvements in V3
 
-When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** — identical to what Slothlet uses when building API paths from filenames:
+1. **Two-level segmentation**: V3 properly handles underscore-separated parts within hyphenated segments
+   ```javascript
+   // V2 and V3 both produce:
+   sanitizePropertyName("Mixed_APPS_some-thing", { preserveAllUpper: true });
+   // "mixed_APPS_someThing"
+   ```
 
-```javascript
-const api = await slothlet({
-  dir: "./api",
-  sanitize: {
-    rules: { upper: ["http", "api"] }
-  }
-});
+2. **Underscore pattern support**: V3 supports patterns with underscores
+   ```javascript
+   // V3 only:
+   sanitizePropertyName("api_helper", { rules: { upper: ["api_*"] } });
+   // "API_helper"
+   ```
 
-// Uses the same sanitize config as the instance
-api.slothlet.sanitize("get-http-status");  // "getHTTPStatus"
-api.slothlet.sanitize("post-api-data");    // "postAPIData"
-api.slothlet.sanitize("my-module");        // "myModule"
-```
+3. **Proper case preservation**: V3 better handles case preservation with two-level segmentation
+   ```javascript
+   sanitizePropertyName("mixed__APPS");  // "mixed__APPS" (preserves uppercase APPS)
+   ```
 
-This is useful for predicting exactly what API path a given filename will produce at runtime.
+### Behavior Compatibility
 
-> [!NOTE]
-> `api.slothlet.sanitize()` only accepts a string. It does not accept an options object — the options come from the instance config. Use the standalone `sanitizePropertyName` export if you need to pass custom options directly.
+V3 maintains full backward compatibility with V2 behavior for all standard use cases. The comprehensive test suite (89 tests) validates both V2 and V3 produce identical results for:
 
----
+- Basic camelCase transformations
+- All options (lowerFirst, preserveAllUpper, preserveAllLower)
+- All rule types (leave, leaveInsensitive, upper, lower)
+- Pattern matching (exact, glob, boundary, within-segment)
+- Rule precedence and conflicts
+- Edge cases and special characters
+
+### Migration Notes
+
+If migrating from V2 to V3:
+
+- **V2 bugs fixed in V3**:
+  - `leave` rule is now properly case-sensitive (V2 was incorrectly case-insensitive)
+  - Proper full camelCase transformation (V2 only changed first character of segments)
+  
+- **Improved consistency**: Two-level segmentation provides more predictable results with mixed delimiter types
+
+**Note**: While most common use cases produce identical results between V2 and V3, edge cases involving the `leave` rule or complex case transformations may differ due to the bug fixes above. Current V3 has full feature parity with V2 plus these improvements.
 
 ## Testing
 
-The sanitization system is covered by a single comprehensive test suite:
+The sanitization system is comprehensively tested with 89 tests covering:
 
-| Suite | Tests | Focus |
-|---|---|---|
-| `sanitize.test.vitest.mjs` | 104 | camelCase, all options, all rule types, patterns, precedence, edge cases |
+- 14 basic camelCase tests
+- 4 lowerFirst option tests
+- 9 preserve option tests
+- 11 rule tests (leave, leaveInsensitive, upper, lower)
+- 16 pattern matching tests
+- 5 conflict resolution tests
+- 3 lowerFirst interaction tests
+- 5 pattern edge case tests
+- 2 stress tests
+- 4 V3-specific improvement tests
 
 Tests are located at:
-- `tests/vitests/suites/sanitization/sanitize.test.vitest.mjs`
-
----
+- `tests/vitests/suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs` (V2/V3 compatibility)
+- `tests/vitests/suites/sanitization/sanitize.test.vitest.mjs` (pattern focus)
 
 ## Implementation Notes
 
@@ -451,9 +456,9 @@ Tests are located at:
 
 1. **Pattern Compilation**: Converts glob patterns to regex with proper escaping
 2. **Pre-split Matching**: Evaluates patterns against original string before segmentation
-3. **Segment Rules Application**: Applies transformation rules to individual segments; tracks `lower` rule applications
+3. **Segment Rules Application**: Applies transformation rules to individual segments
 4. **Within-Segment Patterns**: Transforms parts within already-processed segments
-5. **CamelCase Transformation**: Applies camelCase based on segment position, skipping segments marked by `lower` rules
+5. **CamelCase Transformation**: Applies final camelCase based on segment position
 6. **Cleanup**: Ensures valid JavaScript identifier output
 
 ### Performance Characteristics
@@ -462,8 +467,6 @@ Tests are located at:
 - **Early returns**: Preservation rules short-circuit processing
 - **Efficient splitting**: Two-level segmentation minimizes regex operations
 - **Minimal allocations**: In-place transformations where possible
-
----
 
 ## API Reference
 
@@ -497,7 +500,7 @@ function sanitizePropertyName(
     - **`leave`** (string[], case-sensitive): Preserve segments exactly
     - **`leaveInsensitive`** (string[], case-insensitive): Preserve segments exactly
     - **`upper`** (string[]): Force segments to UPPERCASE
-    - **`lower`** (string[]): Force segments to lowercase (pattern matches preserved through camelCase)
+    - **`lower`** (string[]): Force segments to lowercase
 
 ### Returns
 
@@ -507,11 +510,8 @@ function sanitizePropertyName(
 
 - **TypeError**: If input is not a string (rare, as input is coerced to string)
 
----
-
 ## See Also
 
-- [API-FLATTENING.md](./API-FLATTENING.md) - How sanitization integrates with API generation
-- [MODULE-STRUCTURE.md](./MODULE-STRUCTURE.md) - Module loading and naming conventions
-- [API-RULES.md](./API-RULES.md) - Complete API generation rule system
-- [v3/changes/sanitization.md](./v3/changes/sanitization.md) - V2 → V3 migration and behavior changes
+- [API Flattening](./API-FLATTENING.md) - How sanitization integrates with API generation
+- [Module Structure](./MODULE-STRUCTURE.md) - Module loading and naming conventions
+- [API Rules](./API-RULES.md) - Complete API generation rule system

@@ -370,7 +370,8 @@ export class ApiBuilder extends ComponentBase {
 			 * @public
 			 *
 			 * @description
-			 * Sanitizes a string using the same rules applied during API path construction.
+			 * Sanitizes a string using the same rules applied during API path construction,
+			 * including any sanitize options set in the Slothlet config.
 			 * Useful for predicting what API path a given filename will become.
 			 *
 			 * @example
@@ -386,7 +387,7 @@ export class ApiBuilder extends ComponentBase {
 						validationError: true
 					});
 				}
-				return slothlet.helpers.sanitize.sanitizePropertyName(str);
+				return slothlet.helpers.sanitize.sanitizePropertyName(str, slothlet.config.sanitize || {});
 			},
 
 			/**
