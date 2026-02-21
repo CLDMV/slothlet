@@ -87,7 +87,7 @@ Relative base: tests/vitests
 | suites/api-manager/api-manager-basic.test.vitest.mjs | API Manager Basic | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 112/112 tests pass (100%) |
 | suites/api-manager/api-manager-errors.test.vitest.mjs | API Manager + Error Handling | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 5/5 tests pass (100%) |
 | suites/api-manager/api-manager-hooks.test.vitest.mjs | API Manager + Hooks | ✅ Yes (2026-01-28 12:52) | ✅ baseline (2026-02-20) | 8/8 tests pass (100%) - Re-verified 2026-02-20: hook registrations now persist across hot reloads. |
-| suites/api-manager/api-manager-reference-identity.test.vitest.mjs | API Manager + Reference Identity | ✅ Yes (2026-01-20 21:30) | ❌ fail (2026-02-17) | 16/80 pass, 64 fail (20%) - Major issues with ___setImpl API. Tests using V2 internal APIs that don't exist or work differently in V3 |
+| suites/api-manager/api-manager-reference-identity.test.vitest.mjs | API Manager + Reference Identity | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 80/80 pass — fixed: _cloneImpl now uses resolveWrapper() to detect slothlet proxies (getTrap was blocking ____slothletInternal, causing live proxies to be set as impl and then invalidated during ___adoptImplChildren) |
 | suites/api-manager/api-manager-test-remove-reload-isolated.test.vitest.mjs | API Manager + Remove/Reload | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 16/16 tests pass (100%) |
 | suites/isolation/multi-instance-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ✅ baseline (2026-02-17) | 42/42 tests pass (100%) |
 | suites/isolation/tv-config-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ✅ baseline (2026-02-17) | 48/48 tests pass (100%) - Fixed instanceId references to use api.slothlet.instanceID |
@@ -126,7 +126,7 @@ Run `node tools/compare-baseline-tests.mjs` and `node tools/check-baseline-misma
 
 ### ⏳ Passing Tests NOT Yet in `baseline-tests.json`
 
-None — all currently passing tests are in the baseline. Failing tests that need fixing before they can be promoted: `api-manager-reference-identity` (20%), `core-reference-persistence` (15%).
+None — all currently passing tests are in the baseline. Failing tests that need fixing before they can be promoted: `core-reference-persistence` (15%).
 
 ### ⚠️ Inconsistencies Detected
 
