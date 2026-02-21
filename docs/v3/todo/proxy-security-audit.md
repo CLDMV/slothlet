@@ -2,7 +2,9 @@
 
 **Date:** 2026-02-20  
 **Branch:** `refactor/unified-wrapper-poc`  
-**Scope:** Everything accessible through a user-facing slothlet proxy (`api.foo`, `api.foo.bar`, waiting proxies in lazy mode).
+**HEAD:** `6c3425b` → steps 5–6 complete (C/D blocked, getPrototypeOf trap added)  
+**Scope:** Everything accessible through a user-facing slothlet proxy (`api.foo`, `api.foo.bar`, waiting proxies in lazy mode).  
+**Current test count:** 232 passing / 0 failures / 0 skips (`proxy-internals-attack.test.vitest.mjs`, 8 matrix configs)
 
 ---
 
@@ -11,7 +13,7 @@
 | Symbol | Meaning |
 |--------|---------|
 | ✅ BLOCKED | Key is not reachable from outside — returns `undefined`, `false`, or is silently absorbed |
-| ⚠️ EXPOSED | Key passes through the proxy — intentional framework extension point |
+| ⚠️ EXPOSED | Key passes through the proxy and is currently accessible from outside |
 | 🔴 RISK | Exposed key creates a concrete attack vector that is not yet mitigated |
 | ✔️ TESTED | A vitest covers this surface (`proxy-internals-attack.test.vitest.mjs`) |
 
@@ -30,7 +32,7 @@ The canonical private state object. Backed by a `#internal` ES private field (st
 | `for..in` enumeration | ✅ BLOCKED ✔️ TESTED | Follows ownKeys |
 | Spread `{ ...proxy }` | ✅ BLOCKED ✔️ TESTED | Follows ownKeys |
 | `Object.assign` | ✅ BLOCKED ✔️ TESTED | Follows ownKeys |
-| Prototype chain walk | ✅ BLOCKED ✔️ TESTED | Getter on prototype throws if `this` has no `#internal` — fixed to return `undefined` via brand check |
+| Prototype chain walk | ✅ BLOCKED ✔️ TESTED | `getPrototypeOf` trap returns `null` — proxy exposes no prototype chain at all. Both main proxy and waiting proxy. |
 | Mutation via `set` | ✅ BLOCKED ✔️ TESTED | setTrap silently absorbs write; does not shadow `#internal` getter on wrapper instance |
 | Mutation via `Object.defineProperty` | ✅ BLOCKED ✔️ TESTED | Either throws or is absorbed; key remains unreadable |
 | `delete proxy.____slothletInternal` | ✅ BLOCKED ✔️ TESTED | deletePropertyTrap returns `true` silently (was `false` which threw TypeError leaking key existence) |
@@ -52,55 +54,35 @@ No action needed.
 
 ---
 
-## C. Framework Mutation / Disruption APIs
+## C. Framework Mutation / Disruption APIs — ✅ BLOCKED (Step 5)
 
-All three are in `allowedInternals` and in the `hasTrap` allowlist, making them fully accessible.
+**Current status: ✅ COMPLETE.** All three are removed from `allowedInternals` and the `hasTrap` allowlist, blocked in `setTrap.blockedKeys` and `deletePropertyTrap.internalKeys`. All internal call sites converted to use `resolveWrapper(proxy).___setImpl(...)` etc. Tests C1–C2 passing.
 
 | Property | What it does | Status |
 |---|---|---|
-| `___setImpl(newImpl)` | Replaces the wrapper's implementation entirely | ⚠️ EXPOSED ✔️ TESTED |
-| `___resetLazy(newMaterializeFunc)` | Clears impl, invalidates children, resets materialization state | ⚠️ EXPOSED ✔️ TESTED |
-| `___invalidate()` | Marks wrapper as invalid — next access throws or re-fetches | ⚠️ EXPOSED ✔️ TESTED |
-
-### Concrete risks
-
-| Risk | Impact |
-|---|---|
-| `proxy.___setImpl(() => (...args) => exploit(...args))` | Injects arbitrary function as the API implementation |
-| `proxy.___resetLazy(() => { /* nothing */ })` | Silently neuters the API — every call becomes a no-op |
-| `proxy.___invalidate()` | Disrupts all consumers of this proxy |
-
-### Decision needed
-
-- [ ] **Option A — Move these behind `resolveWrapper`** (recommended): Remove from `allowedInternals` and the `hasTrap` allowlist. All internal framework callers must use `resolveWrapper(proxy).___setImpl(...)` instead of `proxy.___setImpl(...)`. This is a breaking change for any host-side reload code.
-- [ ] **Option B — Add a capability token**: Require a non-transferable token argument (e.g. a Symbol minted at `slothlet()` creation time) as a first parameter. Rejects calls without the correct token.
-- [ ] **Option C — Accept risk**: Document as trusted host-only extension points; unchanged.
+| `___setImpl(newImpl)` | Replaces the wrapper's implementation entirely | ✅ BLOCKED — use `resolveWrapper(proxy).___setImpl` internally |
+| `___resetLazy(newMaterializeFunc)` | Clears impl, invalidates children, resets materialization state | ✅ BLOCKED — use `resolveWrapper(proxy).___resetLazy` internally |
+| `___invalidate()` | Marks wrapper as invalid — next access throws or re-fetches | ✅ BLOCKED — use `resolveWrapper(proxy).___invalidate` internally |
 
 ---
 
-## D. Implementation & Filesystem Path Info Leaks
+## D. Implementation Info — Partially Blocked (Step 6)
+
+**Current status:** `__impl` and `_impl` are blocked. `__filePath`, `__sourceFolder`, and `__moduleID` are intentionally **exposed read-only** — they are informational props with no security risk to the framework itself.
 
 | Property | What it exposes | Status |
 |---|---|---|
-| `__impl` | Raw implementation (function/object) — exposes module internals | ⚠️ EXPOSED ✔️ TESTED |
-| `_impl` | Alias for `__impl` — same risk, two names | ⚠️ EXPOSED |
-| `__filePath` | Absolute server-side file path of the source module | ⚠️ EXPOSED ✔️ TESTED |
-| `__sourceFolder` | Absolute server-side directory of the source module | ⚠️ EXPOSED ✔️ TESTED |
-| `__moduleID` | Internal module identifier string | ⚠️ EXPOSED |
+| `__impl` | Raw implementation (function/object) — exposes module internals | ✅ BLOCKED — use `resolveWrapper(proxy).__impl` internally |
+| `_impl` | Alias for `__impl` — same risk, two names | ✅ BLOCKED — use `resolveWrapper(proxy).__impl` internally |
+| `__filePath` | Absolute server-side file path of the source module | ✅ EXPOSED READ-ONLY — informational, write/delete blocked |
+| `__sourceFolder` | Absolute server-side directory of the source module | ✅ EXPOSED READ-ONLY — informational, write/delete blocked |
+| `__moduleID` | Internal module identifier string | ✅ EXPOSED READ-ONLY — informational, write/delete blocked |
 
-### Concrete risks
+### Decision
 
-| Risk | Impact |
-|---|---|
-| `proxy.__filePath` | Leaks server filesystem layout to client — path traversal context |
-| `proxy.__sourceFolder` | Same as above |
-| `proxy.__impl` | Exposes raw function — caller can read `.toString()`, inspect closure scope, call it unbound |
+`__impl` / `_impl` are blocked because they expose raw module internals (callable functions, closure scope). The path props (`__filePath`, `__sourceFolder`, `__moduleID`) are informational metadata with no mutation risk — they are exposed read-only through the proxy (same treatment as `__mode`, `__apiPath`, etc.) and are blocked from write/delete by `setTrap`/`deletePropertyTrap`.
 
-### Decision needed
-
-- [ ] **Option A — Remove `__filePath` / `__sourceFolder` / `__moduleID` from `allowedInternals`**: Internal callers should use `resolveWrapper`. Low risk of breakage.
-- [ ] **Option B — Keep for debugging; add a `debug` config flag**: Only expose in `debug: true` mode.
-- [ ] **Option C — Keep `__impl` for host reload patterns; remove path props**: `__impl` is used by some host patterns; paths are purely internal.
+Internal callers use `resolveWrapper(proxy).__impl` for raw implementation access.
 
 ---
 
@@ -108,8 +90,6 @@ All three are in `allowedInternals` and in the `hasTrap` allowlist, making them 
 
 These are low-risk reads that expose no mutable internals.
 
-| Property | What it exposes | Risk level |
-|---|---|---|
 All of these are now enforced read-only by both `setTrap` and `deletePropertyTrap` blocklists.
 
 | Property | What it exposes | Risk level |
@@ -125,9 +105,9 @@ All of these are now enforced read-only by both `setTrap` and `deletePropertyTra
 | `__invalid` | Boolean invalid flag | Low ✔️ TESTED |
 | `__materialized` | Boolean — whether the lazy wrapper has finished loading | Low — intentionally exposed ✔️ TESTED |
 | `__inFlight` | Boolean — whether materialization is currently in progress | Low — intentionally exposed ✔️ TESTED |
-| `__filePath` | Absolute server-side file path | Low (read exposed) — write blocked ✔️ TESTED |
-| `__sourceFolder` | Absolute server-side directory | Low (read exposed) — write blocked ✔️ TESTED |
-| `__moduleID` | Internal module identifier string | Low (read exposed) — write blocked ✔️ TESTED |
+| `__filePath` | Absolute server-side file path | ✅ EXPOSED READ-ONLY — write/delete blocked |
+| `__sourceFolder` | Absolute server-side directory | ✅ EXPOSED READ-ONLY — write/delete blocked |
+| `__moduleID` | Internal module identifier string | ✅ EXPOSED READ-ONLY — write/delete blocked |
 
 ---
 
@@ -146,23 +126,51 @@ All of these are now enforced read-only by both `setTrap` and `deletePropertyTra
 
 ---
 
-## Summary — Recommended Action Order
+## Summary — Action Order
 
-| Priority | Item | Effort |
-|---|---|---|
-| ✅ Done | `___getState` / `__state` blocked, all call sites converted to `resolveWrapper` | — |
-| ✅ Done | All E-section read-only props confirmed write-immutable; setTrap + deletePropertyTrap block them | — |
-| 🟠 Medium | Remove `___setImpl` / `___resetLazy` / `___invalidate` from proxy `allowedInternals` (force `resolveWrapper` usage) | Medium — requires internal call-site audit |
-| 🟠 Medium | Remove `__filePath` / `__sourceFolder` / `__moduleID` from `allowedInternals` | Low |
-| 🟡 Low | Remove `_impl` alias (duplicate of `__impl`) | Low |
-| 🟡 Low | Decide whether `__impl` stays or requires `resolveWrapper` | Medium |
+| Step | Item | Status |
+|---|---:|---|
+| 1 | `_proxyRegistry` + `resolveWrapper` + block `____slothletInternal` | ✅ Done — commit `256f48e` |
+| 2 | Delete `___getState()` from prototype; block `__state`; add `__materialized`/`__inFlight` | ✅ Done — commit `8bd2393` |
+| 3 | Enforce read-only on all E-section informational props; add E1–E3 + F tests | ✅ Done — commit `6c3425b` |
+| 4 | Block `___setImpl` / `___resetLazy` / `___invalidate`; convert all internal callers | ✅ Done |
+| 5 | Block `__impl` / `_impl`; expose `__filePath` / `__sourceFolder` / `__moduleID` read-only | ✅ Done |
+| 6 | Add `getPrototypeOf: () => null` trap to main proxy + waiting proxy | ✅ Done |
+| 7 | Rewrite C/D/A9 test sections to assert new BLOCKED state | ✅ Done — 232/232 passing |
 
 ---
 
-## Files Changed in This Sprint (step 4)
+## Files Changed in This Sprint (steps 5–6)
+
+- `src/lib/handlers/unified-wrapper.mjs`
+  - Removed `___setImpl`, `___resetLazy`, `___invalidate`, `__impl`, `_impl` from `allowedInternals`
+  - Removed the `hasTrap` allowlist branch for those five props (only `_materialize` remains)
+  - Removed explicit getTrap handlers for all five; added `__filePath` / `__sourceFolder` / `__moduleID` getTrap handlers (exposed read-only)
+  - Added `__filePath`, `__sourceFolder`, `__moduleID` to `allowedInternals` (read-only informational)
+  - Added all five blocked props to `setTrap.blockedKeys` and `deletePropertyTrap.internalKeys`
+  - Added `getPrototypeOf: () => null` trap to both the main proxy and the waiting proxy
+  - Converted internal call sites in `___resetLazy` and `___adoptImplChildren` that called C props through proxy children to use `resolveWrapper(child).___invalidate()` etc.
+- `src/lib/handlers/api-manager.mjs`
+  - Rollback loop (lines ~1696–1703): replaced `existingWrapper?.___setImpl` duck-type guard with `resolveWrapper(existingWrapper)` guard + raw call
+  - All other `___setImpl` / `___resetLazy` call sites confirmed raw (via `resolveWrapper` or direct `new UnifiedWrapper` instances)
+- `src/lib/handlers/ownership.mjs`
+  - `getCurrentValue()`: replaced `"__impl" in value` proxy duck-type check with `resolveWrapper(value)` — the `in` check broke when `__impl` was removed from `hasTrap`
+  - Added `import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper"`
+- `tests/vitests/suites/proxies/proxy-internals-attack.test.vitest.mjs`
+  - Added `___setImpl`, `___resetLazy`, `___invalidate`, `__impl`, `_impl` to `BLOCKED_KEYS` array
+  - Rewrote C1 (was: asserts methods are callable through proxy) → asserts `undefined` through proxy
+  - Rewrote C2 (was: calls `___invalidate()` through proxy) → asserts `resolveWrapper` gives access
+  - Rewrote D1 → asserts `__impl`/`_impl` are `undefined` through proxy; verifies raw wrapper access
+  - Rewrote D2 → asserts `__filePath`/`__sourceFolder`/`__moduleID` are readable and match `____slothletInternal` values
+  - Updated `READ_ONLY_INFO_PROPS` comment for server-info props
+  - **232 tests passing, 0 skips, 0 failures**
+- `docs/v3/todo/proxy-security-audit.md` — updated throughout to reflect completion
+
+---
+
 
 - `src/lib/handlers/unified-wrapper.mjs` — added `__materialized` / `__inFlight` to main getTrap + waiting proxy getTrap; expanded `setTrap.blockedKeys` and `deletePropertyTrap.internalKeys` to cover all E-section read-only props (`__mode`, `__apiPath`, `__slothletPath`, `__isCallable`, `__materializeOnCreate`, `__displayName`, `__type`, `__filePath`, `__sourceFolder`, `__moduleID`, `__metadata`, `__invalid`, `__materialized`, `__inFlight`)
-- `tests/vitests/suites/proxies/proxy-internals-attack.test.vitest.mjs` — added E1–E3 (read-only prop write/delete immutability); renamed old E (resolveWrapper) → F (F1–F5) to match audit section ordering; 456 tests, 0 skips, 0 failures
+- `tests/vitests/suites/proxies/proxy-internals-attack.test.vitest.mjs` — added E1–E3 (read-only prop write/delete immutability); renamed old E (resolveWrapper) → F (F1–F5) to match audit section ordering; **232 tests passing, 0 skips, 0 failures**
 
 ## Files Changed in This Sprint (step 2)
 

@@ -16,6 +16,7 @@
  * @module @cldmv/slothlet/ownership
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Tracks which modules own which API paths for hot reload and rollback
@@ -247,12 +248,12 @@ export class OwnershipManager extends ComponentBase {
 
 		const value = owner.value;
 
-		// If value is a wrapper proxy, unwrap it to get the raw implementation
-		// Ownership stores wrappers for rollback capability, but when restoring,
-		// we need the raw impl to avoid double-wrapping
-		// Functions can also be wrappers (callable proxies), so check both objects and functions
-		if (value && (typeof value === "object" || typeof value === "function") && "__impl" in value) {
-			return value.__impl;
+		// If value is a wrapper proxy, unwrap it to get the raw implementation.
+		// Use resolveWrapper (checks the internal _proxyRegistry WeakMap directly) rather than
+		// `"__impl" in value`, which goes through the hasTrap — and __impl is now blocked there.
+		const rawWrapper = resolveWrapper(value);
+		if (rawWrapper) {
+			return rawWrapper.__impl;
 		}
 
 		return value;

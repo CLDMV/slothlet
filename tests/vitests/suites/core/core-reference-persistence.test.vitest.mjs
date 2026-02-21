@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const configs = getMatrixConfigs();
