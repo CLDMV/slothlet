@@ -532,8 +532,8 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 
 **Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions — it should never create an intermediate `.addapi.` level.
 
-**Function**: `addApiFromFolder()`  
-**Source**: `src/lib/helpers/api_builder/add_api.mjs` ~L266-L310
+**Function**: `getFlatteningDecision()` (detection) / modes-processor execution  
+**Source**: `src/lib/processors/flatten.mjs` ~L119-L133, L332-L347; `src/lib/builders/modes-processor.mjs` ~L207-L215, L699-L710
 
 **Condition Check**:
 
@@ -670,7 +670,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 
 **Total Active Conditions**: 20 (C01-C05, C07-C18, C33, C34)  
 **Deprecated Conditions**: 1 (C06 — intentionally disabled)  
-**Primary Source Files**: `src/lib/helpers/api_builder/decisions.mjs`, `src/lib/helpers/api_builder/add_api.mjs`, `src/lib/handlers/api-manager.mjs`
+**Primary Source Files**: `src/lib/helpers/api_builder/decisions.mjs`, `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
 
 ### Condition Categories
 

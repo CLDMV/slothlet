@@ -205,6 +205,7 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			// Check for root contributor (only at root level)
+			// Rule 11 (F06) - C33: AddApi Special File Pattern
 			// Exception: addapi files with OBJECT defaults should use flatten-to-category logic
 			// But addapi files with FUNCTION defaults should be root contributors (callable namespace)
 			const isAddapiFile =
@@ -699,6 +700,7 @@ export class ModesProcessor extends ComponentBase {
 				// Handle flatten-to-category decision (C09, C33)
 				// Flatten named exports directly to parent category instead of creating nested namespace
 				if (decision.flattenToCategory && moduleContent && effectiveCategoryName) {
+					// Rule 11 (F06) - C33: AddApi Special File Pattern
 					const isAddapiFile = decision.flattenType === "addapi-metadata-default" || decision.flattenType === "addapi-special-file";
 
 					if (isAddapiFile && typeof moduleContent === "object" && !Array.isArray(moduleContent) && typeof moduleContent !== "function") {
