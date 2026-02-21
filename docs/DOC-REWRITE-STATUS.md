@@ -28,7 +28,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Complete | v3 API: `api.slothlet.context.run/scope`; isolation modes (partial/full); deep-clone isolation fix; cross-instance behavior documented |
 | `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ✅ Complete | v3 API: `api.slothlet.hook.*`; `on(typePattern, handler, opts)`; filter object API for remove/enable/disable/list; brace expansion and negation patterns; sync-hook constraint; per-type context shapes |
 | `docs/v2/METADATA.md` | `docs/METADATA.md` | ✅ Complete | v3 dual-storage (WeakMap system + Map user); `api.slothlet.metadata.*` API (set/setGlobal/remove/setFor/removeFor); metadata priority model; reload-persistence; atomic reload-with-metadata; lifecycle enforcement |
-| `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ⬜ Not Started | |
+| `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ✅ Complete | CJS default export normalization noted; TypeScript section added; links updated to API-RULES/ subfolder |
 | `docs/v2/PERFORMANCE.md` | `docs/PERFORMANCE.md` | ✅ Complete | New benchmarks (Linux/Node v24), v3.0.0 data |
 | `docs/v2/SANITIZATION.md` | `docs/SANITIZATION.md` | ✅ Complete | Full v3 rewrite; change doc at `docs/v3/changes/sanitization.md` |
 | `docs/v2/sanitization-options.json` | _(supplemental — no output file)_ | ✅ Reviewed | V2 API spec; `splitBehavior`, `v2Bugs`, `rulePrecedence` incorporated into `docs/v3/changes/sanitization.md` |
@@ -111,7 +111,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/architecture-context-instanceid-management.md` | | |
 | `docs/v3/todo/completed/baseline-test-failures-2026-02-01.md` | | Likely internal only |
 | `docs/v3/todo/completed/baseline-test-failures-old.md` | | Likely internal only |
-| `docs/v3/todo/completed/cjs-default-exports.md` | | |
+| `docs/v3/todo/completed/cjs-default-exports.md` | `docs/MODULE-STRUCTURE.md` | ✅ Processed |
 | `docs/v3/todo/completed/class-based-architecture-refactor.md` | | Likely internal only |
 | `docs/v3/todo/completed/class-instance-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/cleanup-allowAddApiOverwrite.md` | | |
@@ -144,7 +144,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/thoughts.md` | | Likely internal only |
 | `docs/v3/todo/completed/tools-v3-compatibility.md` | | |
 | `docs/v3/todo/completed/typescript-declarations.md` | | |
-| `docs/v3/todo/completed/typescript-support.md` | | |
+| `docs/v3/todo/completed/typescript-support.md` | `docs/MODULE-STRUCTURE.md` | ✅ Processed (TypeScript section) |
 | `docs/v3/todo/completed/v2-feature-parity-checklist.md` | | High-value — covers multiple docs |
 | `docs/v3/todo/completed/V2-INFRASTRUCTURE-CLEANUP.md` | | Likely internal only |
 
