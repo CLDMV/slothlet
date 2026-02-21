@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-20 19:24:31 -08:00 (1771644271)
+ *	@Last modified time: 2026-02-21 03:36:46 -08:00 (1771673806)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -372,7 +372,8 @@ export class UnifiedWrapper extends ComponentBase {
 	static _cloneImpl(value) {
 		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
 			const isProxy = util.types.isProxy(value);
-			if (isProxy) {				// Distinguish slothlet wrapper proxies from custom user proxies:
+			if (isProxy) {
+				// Distinguish slothlet wrapper proxies from custom user proxies:
 				// - Slothlet wrapper proxies (from api.add()) are detected via resolveWrapper()
 				//   (NOT via value.____slothletInternal, which getTrap hides returning undefined).
 				//   They must be shallow-copied into a plain object so that ___adoptImplChildren's
