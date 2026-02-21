@@ -27,7 +27,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ✅ Complete | Index file; detail docs in `docs/API-RULES/`; Rule 12 updated (fully impl.); Rule 13 marked new in v3 |
 | `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Complete | v3 API: `api.slothlet.context.run/scope`; isolation modes (partial/full); deep-clone isolation fix; cross-instance behavior documented |
 | `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ✅ Complete | v3 API: `api.slothlet.hook.*`; `on(typePattern, handler, opts)`; filter object API for remove/enable/disable/list; brace expansion and negation patterns; sync-hook constraint; per-type context shapes |
-| `docs/v2/METADATA.md` | `docs/METADATA.md` | ⬜ Not Started | |
+| `docs/v2/METADATA.md` | `docs/METADATA.md` | ✅ Complete | v3 dual-storage (WeakMap system + Map user); `api.slothlet.metadata.*` API (set/setGlobal/remove/setFor/removeFor); metadata priority model; reload-persistence; atomic reload-with-metadata; lifecycle enforcement |
 | `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ⬜ Not Started | |
 | `docs/v2/PERFORMANCE.md` | `docs/PERFORMANCE.md` | ✅ Complete | New benchmarks (Linux/Node v24), v3.0.0 data |
 | `docs/v2/SANITIZATION.md` | `docs/SANITIZATION.md` | ✅ Complete | Full v3 rewrite; change doc at `docs/v3/changes/sanitization.md` |
@@ -65,8 +65,8 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/changes/hook-system.md` | `docs/HOOKS.md` | ✅ Processed |
 | `docs/v3/changes/hot-reload-complete.md` | | |
 | `docs/v3/changes/LAZY-MODE-PROXY-GOTCHAS.md` | | |
-| `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | | |
-| `docs/v3/changes/metadata-system.md` | | |
+| `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | `docs/METADATA.md` | ✅ Processed |
+| `docs/v3/changes/metadata-system.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/changes/ownership-and-history-system.md` | | |
 | `docs/v3/changes/README.md` | | Meta — describes changes dir |
 | `docs/v3/changes/sanitization.md` | `docs/SANITIZATION.md` | ✅ Processed |
@@ -134,7 +134,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/lazy-mode-collision-replace-investigation.md` | | Likely internal only |
 | `docs/v3/todo/completed/LAZY-MODE-MATERIALIZATION-TRACE.md` | | Likely internal only |
 | `docs/v3/todo/completed/lazy-mode-remove-timing-issue.md` | | |
-| `docs/v3/todo/completed/metadata-tagging.md` | | |
+| `docs/v3/todo/completed/metadata-tagging.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/todo/completed/naming-convention-cleanup.md` | | Likely internal only |
 | `docs/v3/todo/completed/per-request-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/proxy-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (solved by class instance wrapper) |
