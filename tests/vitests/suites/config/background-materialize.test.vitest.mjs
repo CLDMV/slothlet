@@ -86,10 +86,16 @@ describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => 
 			backgroundMaterialize: true
 		});
 
-		// NOTE: Same architecture limitation - modules load during init, backgroundMaterialize has no effect
+		// __type returns either the impl's actual type ("function") if already materialized,
+		// or a status symbol (IN_FLIGHT/UNMATERIALIZED) if still pending. Both are valid here
+		// since backgroundMaterialize=true triggers async materialization but doesn't guarantee
+		// completion before the assertion. Check __materialized to distinguish the two cases.
 		const loggerType = api.logger.__type;
-		const isNotFullyMaterialized = loggerType === api.slothlet.types.UNMATERIALIZED || loggerType === api.slothlet.types.IN_FLIGHT;
-		expect(isNotFullyMaterialized).toBe(true);
+		const isAlreadyMaterialized = api.logger.__materialized === true;
+		const isValidType = isAlreadyMaterialized
+			? loggerType === "function"
+			: loggerType === api.slothlet.types.UNMATERIALIZED || loggerType === api.slothlet.types.IN_FLIGHT;
+		expect(isValidType).toBe(true);
 
 		// Verify functionality - logger always returns formatted output: [LOG] timestamp: message
 		const result = await api.logger("test");
