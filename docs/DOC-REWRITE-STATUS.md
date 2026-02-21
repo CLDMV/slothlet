@@ -34,6 +34,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/sanitization-options.json` | _(supplemental — no output file)_ | ✅ Reviewed | V2 API spec; `splitBehavior`, `v2Bugs`, `rulePrecedence` incorporated into `docs/v3/changes/sanitization.md` |
 | _(new — no v2 equivalent)_ | `docs/CONFIGURATION.md` | ✅ Complete | New v3 doc; covers `runtime`, `apiDepth`, `api.mutations`, `debug`, `silent`, `diagnostics`, `api.slothlet.diag.*` namespace, `scope`, `tracking`, `backgroundMaterialize` |
 | _(new — no v2 equivalent)_ | `docs/RELOAD.md` | ✅ Complete | New v3 doc; covers `api.slothlet.api.add/remove/reload`, eager vs lazy reload divergence, reference preservation, ESM/CJS cache busting, operation history replay, moduleID ownership, lifecycle events |
+| _(new — no v2 equivalent)_ | `docs/I18N.md` | ✅ Complete | New v3 doc; covers `setLanguage`, `getLanguage`, `translate`/`t`, `initI18n`; auto-init on import; env-based language detection; language file format; `en-us` + `es-mx` |
 | `docs/v2/root/AGENT-USAGE.md` | `AGENT-USAGE.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/BUGS.md` | `BUGS.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/CONTRIBUTING.md` | `CONTRIBUTING.md` (in-place) | ⬜ Not Started | |
@@ -47,6 +48,14 @@ When rewriting a V2 or root-level doc for V3:
 These files were produced during V3 development and contain raw context, decisions, investigations, and change records. When rewriting a doc, scan this list and read any entries that are attributed to it.
 
 The *Attributed To* column should be filled in as each file is reviewed. Leave blank if a file is purely internal (test infra, investigation scratch, internal refactor tracking) with no public documentation impact.
+
+### `docs/v3/changelog/`
+
+| File | Attributed To | Notes |
+|---|---|---|
+| `docs/v3/changelog/v2.0.md` – `v2.12.md` (13 files) | structural | ✅ Reviewed — V2 release changelogs; historical record only; no v3 doc attribution needed |
+
+---
 
 ### `docs/v2/` — Supplemental / Non-Markdown
 
@@ -70,7 +79,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/changes/metadata-system.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/changes/ownership-and-history-system.md` | internal | ✅ Reviewed — ownership system impl notes only |
-| `docs/v3/changes/README.md` | — | Meta — describes changes dir |
+| `docs/v3/changes/README.md` | structural | ✅ Reviewed — directory index only; no content to attribute |
 | `docs/v3/changes/sanitization.md` | `docs/SANITIZATION.md` | ✅ Processed |
 | `docs/v3/changes/typeof-always-function-lazy-mode.md` | `docs/LIFECYCLE.md` | ✅ Processed |
 | `docs/v3/changes/type-property.md` | `docs/LIFECYCLE.md` | ✅ Processed |
@@ -86,7 +95,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/old/BREAKING-CHANGES-V3.md` | internal | ✅ Reviewed — historical multi-doc coverage; all changes incorporated |
+| `docs/v3/old/BREAKING-CHANGES-V3.md` | `docs/I18N.md` + internal | ✅ Processed — i18n section attributed to `docs/I18N.md`; all other changes already incorporated into respective docs |
 | `docs/v3/old/HOT-RELOAD-ARCHITECTURE.md` | `docs/RELOAD.md` | ✅ Processed |
 | `docs/v3/old/HOT-RELOAD-FLATTENING-ISSUE.md` | `docs/RELOAD.md` | ✅ Processed — wrapper sync divergence now documented |
 | `docs/v3/old/HOT-RELOAD-MERGE-DUPLICATION.md` | `docs/RELOAD.md` | ✅ Processed — merge/collision behavior documented |
@@ -101,7 +110,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 
 | File | Attributed To | Notes |
 |---|---|---|
-| _(all items moved to completed)_ | | |
+| _(structural — all items moved to completed)_ | structural | ✅ Reviewed — placeholder row; active todo dir is empty |
 
 ### `docs/v3/todo/completed/`
 
@@ -142,7 +151,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/per-request-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/proxy-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (solved by class instance wrapper) |
 | `docs/v3/todo/completed/proxy-security-audit.md` | internal | ✅ Reviewed — security audit only |
-| `docs/v3/todo/completed/README.md` | — | Meta — describes completed dir |
+| `docs/v3/todo/completed/README.md` | structural | ✅ Reviewed — directory index only; no content to attribute |
 | `docs/v3/todo/completed/remove-allowMutation-implement-collision-config.md` | `docs/CONFIGURATION.md` | ✅ Processed — `allowMutation` removal and `api.collision` addition documented |
 | `docs/v3/todo/completed/thoughts.md` | internal | ✅ Reviewed — design notes only |
 | `docs/v3/todo/completed/tools-v3-compatibility.md` | internal | ✅ Reviewed — tools internal compat work only |
