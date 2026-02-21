@@ -27,10 +27,12 @@ Context propagation ensures that the `context` object and full `self` API access
 
 ## Live Bindings
 
-Access live-bound references in your API modules via the runtime module:
+Access live-bound references in your API modules via the runtime module.
+
+The runtime exports `self`, `context`, and `instanceID`. Note that `reference` is **not** a runtime export — reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
 
 ```javascript
-// Create API with reference functions
+// Reference data is merged directly into the API — accessible via self
 const api = await slothlet({
 	dir: "./api",
 	reference: {
@@ -39,19 +41,21 @@ const api = await slothlet({
 		utils: { format: (msg) => `[LOG] ${msg}` }
 	}
 });
+// api.md5, api.version, api.utils are all available
+// Inside API modules: self.md5, self.version, self.utils
 ```
 
 ### ESM Module Example
 
 ```javascript
 // In your API modules (ESM)
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
 export function myFunction() {
 	console.log(context.user); // Access live context
 	return self.otherModule.helper(); // Access other API modules
 
-	// Reference functions are available directly on self
+	// Reference data is merged directly into the API and accessed via self
 	const hash = self.md5("hello world");
 	console.log(self.version); // Access reference data
 }
@@ -60,7 +64,7 @@ export function processData(data) {
 	// Call another module from anywhere in the API tree
 	const processed = self.cjsModule.process(data);
 
-	// Use reference utilities directly
+	// Use reference utilities directly via self
 	const logged = self.utils.format(`Processed: ${processed}`);
 	return self.md5(logged);
 }
@@ -70,12 +74,12 @@ export function processData(data) {
 
 ```javascript
 // In your CJS modules
-const { self, context, reference } = require("@cldmv/slothlet/runtime");
+const { self, context } = require("@cldmv/slothlet/runtime");
 
 function cjsFunction(data) {
 	console.log(context.env); // Access live context
 
-	const hash = self.md5(data); // Reference function on self
+	const hash = self.md5(data); // Reference data accessed via self
 
 	return self.esmModule.transform(hash); // Access ESM modules from CJS
 }
