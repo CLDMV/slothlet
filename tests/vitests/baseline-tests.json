@@ -7,6 +7,7 @@
 	"suites/api-manager/api-manager-basic.test.vitest.mjs",
 	"suites/api-manager/api-manager-errors.test.vitest.mjs",
 	"suites/api-manager/api-manager-hooks.test.vitest.mjs",
+	"suites/api-manager/api-manager-reference-identity.test.vitest.mjs",
 	"suites/api-manager/api-manager-test-remove-reload-isolated.test.vitest.mjs",
 	"suites/api-manager/api-mutations-control.test.vitest.mjs",
 	"suites/api-structures/all-api-structures.test.vitest.mjs",
