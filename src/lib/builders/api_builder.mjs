@@ -855,60 +855,16 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Create per-request scope with custom context
-			 * @param {Function} fn - Function to run in scope
-			 * @param {Object} context - Custom context
-			 * @returns {*} Result of fn
+			 * Alias for api.slothlet.context.scope — execute a function with isolated context.
+			 * @see api.slothlet.context.scope
 			 */
-			scope: (fn, context) => {
-				if (typeof fn !== "function") {
-					throw new slothlet.SlothletError("INVALID_CONFIG", {
-						option: "slothlet.scope",
-						value: typeof fn,
-						expected: "function",
-						hint: "First argument must be a function to execute in scope",
-						validationError: true
-					});
-				}
-
-				return slothlet.contextManager.runInContext(slothlet.instanceID, () => {
-					const ctx = slothlet.contextManager.getContext();
-					return fn(ctx.self);
-				});
-			},
+			scope: this.createScopeFunction(),
 
 			/**
-			 * Run function with specific context
-			 * @param {Function} fn - Function to run
-			 * @param {Object} context - Context to use
-			 * @returns {*} Result of fn
+			 * Alias for api.slothlet.context.run — execute a callback with isolated context data.
+			 * @see api.slothlet.context.run
 			 */
-			run: async (fn, context = {}) => {
-				if (config.runtime === "async") {
-					// Async mode: run with provided context
-					return slothlet.contextManager.runInContext(slothlet.instanceID, () => {
-						const ctx = slothlet.contextManager.getContext();
-						Object.assign(ctx.context, context);
-						return fn(ctx.self);
-					});
-				} else {
-					// Live mode: run with live binding
-					const ctx = slothlet.contextManager.tryGetContext();
-					if (ctx) {
-						Object.assign(ctx.context, context);
-						return fn(ctx.self);
-					}
-					throw new slothlet.SlothletError(
-						"CONTEXT_NOT_FOUND",
-						{
-							instanceID: slothlet.instanceID,
-							availableInstances: "none"
-						},
-						null,
-						{ validationError: true }
-					);
-				}
-			},
+			run: this.createRunFunction(),
 
 			/**
 			 * Reload entire instance (creates new references)

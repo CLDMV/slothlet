@@ -67,6 +67,8 @@ Relative base: tests/vitests
 | suites/core/core-reload-path-multicache.test.vitest.mjs | Core API + API Manager | ✅ Yes (2026-02-14) | ✅ baseline (2026-02-17) | Verified passing in baseline |
 | suites/core/core-reload-selective.test.vitest.mjs | Core API + API Manager | ✅ Yes (2026-02-14) | ✅ baseline (2026-02-17) | Verified passing in baseline |
 | suites/core/core-reference-persistence.test.vitest.mjs | Core API + Reference Identity | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-21) | 104/104 tests pass (100%) - **FIXED (2026-02-21)**: Rewrote tests for V3 API (resolveWrapper, ___setImpl with forceReuseChildren=true). Fixed collision-merged key bypass in ___adoptImplChildren so captured references survive ___setImpl even when collisionMergedKeys is set (api_test dir has math.mjs + math/ folder collision). |
+| suites/api-manager/api-cache-lazy-mode.test.vitest.mjs | API Manager + Lazy Loading | ✅ 1st pass (2026-02-21) | ✅ baseline (2026-02-21) | 20/20 tests pass (100%) - Verifies lazy mode contract through the API cache system: cache entry count/mode, wrappers unmaterialized at startup, access triggers materialization, diag call does NOT trigger materialization, api.add() stores lazy wrappers. Confirmed: `_countPaths()` concern from api-cache-lazy-mode-verification.md is NOT a bug. |
+| suites/diagnostics/diagnostics-endpoint-availability.test.vitest.mjs | Diagnostics | ✅ 1st pass (2026-02-21) | ✅ baseline (2026-02-21) | 90/90 tests pass (100%) - Exhaustively verifies api.slothlet.* endpoint availability across all combinations of diagnostics (on/off) × hook.enabled (on/off). Confirms: 15 always-present keys, `diag` only when diagnostics:true, `hooks` (plural) never exists (dead code in api_builder.mjs), `diag.hook` always present when diagnostics:true with `enabled` mirroring config. |
 | suites/diagnostics/mixed-diagnostic.test.vitest.mjs | Diagnostics | ✅ Yes (2026-01-28 14:38) | ✅ baseline (2026-02-17) | 48/48 tests pass (100%) - All tests passing |
 | suites/hooks/hooks-after-chaining.test.vitest.mjs | Hooks | ✅ Yes (2026-01-29 22:12) | ✅ baseline (2026-02-17) | 12/12 tests pass (100%) - All tests passing |
 | suites/hooks/hooks-always-error-context.test.vitest.mjs | Hooks | ✅ Yes (2026-01-30 11:34) | ✅ baseline (2026-02-17) | 28/28 tests pass (100%) - **FIXED (2026-01-30)**: (1) Short-circuit double-call bug - always hooks were called twice (once at short-circuit, again in finally block). Fixed by removing always hooks call from short-circuit and setting finalResult instead. (2) Error comparison - changed from identity check to message comparison (caught error is wrapped SlothletError, hooks receive unwrapped error). |
@@ -126,7 +128,7 @@ Run `node tools/compare-baseline-tests.mjs` and `node tools/check-baseline-misma
 
 ### ⏳ Passing Tests NOT Yet in `baseline-tests.json`
 
-None — all 82 tests are in the baseline (2026-02-21).
+None — all 84 tests are in the baseline (2026-02-21).
 
 ### ⚠️ Inconsistencies Detected
 
