@@ -23,15 +23,16 @@ When rewriting a V2 or root-level doc for V3:
 |---|---|---|---|
 | `docs/v2/API-FLATTENING.md` | `docs/API-RULES/API-FLATTENING.md` | ✅ Complete | F01-F08; F08 new in v3 (path deduplication); updated decision tree Mermaid |
 | `docs/v2/API-RULE-MAPPING.md` | `docs/API-RULES/API-RULE-MAPPING.md` | ✅ Complete | 13-rule traceability matrix; Rule 13 new in v3; impl file refs corrected for v3 |
-| `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES/API-RULES-CONDITIONS.md` | ✅ Complete | C01-C18 updated; C06 deprecated noted; C33-C34 added (v3 AddApi cases) |
+| `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES/API-RULES-CONDITIONS.md` | ✅ Complete | C01-C18 updated; C06 deprecated noted; C33-C34 added (v3 AddApi cases); C33 source file ref corrected to `src/lib/processors/flatten.mjs` + `src/lib/builders/modes-processor.mjs` |
 | `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ✅ Complete | Index file; detail docs in `docs/API-RULES/`; Rule 12 updated (fully impl.); Rule 13 marked new in v3 |
 | `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Complete | v3 API: `api.slothlet.context.run/scope`; isolation modes (partial/full); deep-clone isolation fix; cross-instance behavior documented |
-| `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ✅ Complete | v3 API: `api.slothlet.hook.*`; `on(typePattern, handler, opts)`; filter object API for remove/enable/disable/list; brace expansion and negation patterns; sync-hook constraint; per-type context shapes |
+| `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ✅ Complete | v3 API: `api.slothlet.hook.*`; `on(typePattern, handler, opts)`; filter object API for remove/enable/disable/list; brace expansion and negation patterns; sync-hook constraint; per-type context shapes; `hook:` config key corrected throughout (was `hooks:`) |
 | `docs/v2/METADATA.md` | `docs/METADATA.md` | ✅ Complete | v3 dual-storage (WeakMap system + Map user); `api.slothlet.metadata.*` API (set/setGlobal/remove/setFor/removeFor); metadata priority model; reload-persistence; atomic reload-with-metadata; lifecycle enforcement |
 | `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ✅ Complete | CJS default export normalization noted; TypeScript section added; links updated to API-RULES/ subfolder |
 | `docs/v2/PERFORMANCE.md` | `docs/PERFORMANCE.md` | ✅ Complete | New benchmarks (Linux/Node v24), v3.0.0 data |
 | `docs/v2/SANITIZATION.md` | `docs/SANITIZATION.md` | ✅ Complete | Full v3 rewrite; change doc at `docs/v3/changes/sanitization.md` |
 | `docs/v2/sanitization-options.json` | _(supplemental — no output file)_ | ✅ Reviewed | V2 API spec; `splitBehavior`, `v2Bugs`, `rulePrecedence` incorporated into `docs/v3/changes/sanitization.md` |
+| _(new — no v2 equivalent)_ | `docs/CONFIGURATION.md` | ✅ Complete | New v3 doc; covers `runtime`, `apiDepth`, `api.mutations`, `debug`, `silent`, `diagnostics`, `api.slothlet.diag.*` namespace, `scope`, `tracking`, `backgroundMaterialize` |
 | `docs/v2/root/AGENT-USAGE.md` | `AGENT-USAGE.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/BUGS.md` | `BUGS.md` (in-place) | ⬜ Not Started | |
 | `docs/v2/root/CONTRIBUTING.md` | `CONTRIBUTING.md` (in-place) | ⬜ Not Started | |
@@ -58,98 +59,99 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/changes/api-methods-and-config-options.md` | | |
-| `docs/v3/changes/background-materialize.md` | | |
+| `docs/v3/changes/api-methods-and-config-options.md` | `docs/CONFIGURATION.md` | ✅ Processed — primary config reference source |
+| `docs/v3/changes/background-materialize.md` | `docs/LIFECYCLE.md` | ✅ Processed |
 | `docs/v3/changes/child-instance-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
-| `docs/v3/changes/class-based-architecture-refactor-phase-3-documentation-tasks.md` | | |
+| `docs/v3/changes/class-based-architecture-refactor-phase-3-documentation-tasks.md` | internal | ✅ Reviewed — architecture/refactor tracking only |
 | `docs/v3/changes/hook-system.md` | `docs/HOOKS.md` | ✅ Processed |
-| `docs/v3/changes/hot-reload-complete.md` | | |
-| `docs/v3/changes/LAZY-MODE-PROXY-GOTCHAS.md` | | |
+| `docs/v3/changes/hot-reload-complete.md` | internal | ✅ Reviewed — implementation completion notes |
+| `docs/v3/changes/LAZY-MODE-PROXY-GOTCHAS.md` | internal | ✅ Reviewed — gotchas captured in LIFECYCLE.md |
 | `docs/v3/changes/metadata-path-api-and-reload-metadata.md` | `docs/METADATA.md` | ✅ Processed |
 | `docs/v3/changes/metadata-system.md` | `docs/METADATA.md` | ✅ Processed |
-| `docs/v3/changes/ownership-and-history-system.md` | | |
-| `docs/v3/changes/README.md` | | Meta — describes changes dir |
+| `docs/v3/changes/ownership-and-history-system.md` | internal | ✅ Reviewed — ownership system impl notes only |
+| `docs/v3/changes/README.md` | — | Meta — describes changes dir |
 | `docs/v3/changes/sanitization.md` | `docs/SANITIZATION.md` | ✅ Processed |
-| `docs/v3/changes/typeof-always-function-lazy-mode.md` | | |
-| `docs/v3/changes/type-property.md` | | |
+| `docs/v3/changes/typeof-always-function-lazy-mode.md` | `docs/LIFECYCLE.md` | ✅ Processed |
+| `docs/v3/changes/type-property.md` | `docs/LIFECYCLE.md` | ✅ Processed |
 
 ### `docs/v3/features/`
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/features/collision-modes.md` | | |
-| `docs/v3/features/lifecycle-events.md` | | |
+| `docs/v3/features/collision-modes.md` | `docs/METADATA.md` + `docs/CONFIGURATION.md` | ✅ Processed |
+| `docs/v3/features/lifecycle-events.md` | `docs/LIFECYCLE.md` | ✅ Processed |
 
 ### `docs/v3/old/`
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/old/BREAKING-CHANGES-V3.md` | | High-value — covers multiple docs |
-| `docs/v3/old/HOT-RELOAD-ARCHITECTURE.md` | | |
-| `docs/v3/old/HOT-RELOAD-FLATTENING-ISSUE.md` | | |
-| `docs/v3/old/HOT-RELOAD-MERGE-DUPLICATION.md` | | |
-| `docs/v3/old/INITIAL-VS-HOTRELOAD-PATHS.md` | | |
-| `docs/v3/old/src3-README.md` | | Early V3 README draft |
-| `docs/v3/old/UNIFIED-WRAPPER-IMPL.md` | | |
-| `docs/v3/old/V2-V3-GAP-LIST.md` | | High-value — covers multiple docs |
-| `docs/v3/old/V3-API-STRUCTURE-ISSUES.md` | | |
-| `docs/v3/old/V3-MIGRATION-STATUS.md` | | |
+| `docs/v3/old/BREAKING-CHANGES-V3.md` | internal | ✅ Reviewed — historical multi-doc coverage; all changes incorporated |
+| `docs/v3/old/HOT-RELOAD-ARCHITECTURE.md` | internal | ✅ Reviewed — impl design notes only |
+| `docs/v3/old/HOT-RELOAD-FLATTENING-ISSUE.md` | internal | ✅ Reviewed — impl bug fix only |
+| `docs/v3/old/HOT-RELOAD-MERGE-DUPLICATION.md` | internal | ✅ Reviewed — impl bug fix only |
+| `docs/v3/old/INITIAL-VS-HOTRELOAD-PATHS.md` | internal | ✅ Reviewed — impl investigation only |
+| `docs/v3/old/src3-README.md` | internal | ✅ Reviewed — early prototype; fully superseded |
+| `docs/v3/old/UNIFIED-WRAPPER-IMPL.md` | internal | ✅ Reviewed — impl design notes only |
+| `docs/v3/old/V2-V3-GAP-LIST.md` | internal | ✅ Reviewed — historical gap list; all gaps filled |
+| `docs/v3/old/V3-API-STRUCTURE-ISSUES.md` | internal | ✅ Reviewed — all issues resolved |
+| `docs/v3/old/V3-MIGRATION-STATUS.md` | `docs/CONFIGURATION.md` | ✅ Processed — revealed undocumented `diagnostics` config option |
 
 ### `docs/v3/todo/` (active)
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/todo/api-cache-lazy-mode-verification.md` | | Still active/open |
+| _(all items moved to completed)_ | | |
 
 ### `docs/v3/todo/completed/`
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/todo/completed/allowMutation-config-option.md` | | |
-| `docs/v3/todo/completed/api-assignment-history-context.md` | | |
-| `docs/v3/todo/completed/api-cache-system.md` | | |
-| `docs/v3/todo/completed/architecture-context-instanceid-management.md` | | |
-| `docs/v3/todo/completed/baseline-test-failures-2026-02-01.md` | | Likely internal only |
-| `docs/v3/todo/completed/baseline-test-failures-old.md` | | Likely internal only |
+| `docs/v3/todo/completed/allowMutation-config-option.md` | `docs/CONFIGURATION.md` | ✅ Processed — deprecated option mapped to `api.mutations` |
+| `docs/v3/todo/completed/api-cache-lazy-mode-verification.md` | internal | ✅ Completed — tests exist in vitests/suites/lazy/ |
+| `docs/v3/todo/completed/api-assignment-history-context.md` | internal | ✅ Reviewed — impl investigation only |
+| `docs/v3/todo/completed/api-cache-system.md` | internal | ✅ Reviewed — impl design only |
+| `docs/v3/todo/completed/architecture-context-instanceid-management.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
+| `docs/v3/todo/completed/baseline-test-failures-2026-02-01.md` | internal | ✅ Reviewed — test infrastructure only |
+| `docs/v3/todo/completed/baseline-test-failures-old.md` | internal | ✅ Reviewed — test infrastructure only |
 | `docs/v3/todo/completed/cjs-default-exports.md` | `docs/MODULE-STRUCTURE.md` | ✅ Processed |
-| `docs/v3/todo/completed/class-based-architecture-refactor.md` | | Likely internal only |
+| `docs/v3/todo/completed/class-based-architecture-refactor.md` | internal | ✅ Reviewed — refactor tracking only |
 | `docs/v3/todo/completed/class-instance-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
-| `docs/v3/todo/completed/cleanup-allowAddApiOverwrite.md` | | |
-| `docs/v3/todo/completed/collision-function-edge-case.md` | | |
-| `docs/v3/todo/completed/console-log-migration-map.md` | | Likely internal only |
+| `docs/v3/todo/completed/cleanup-allowAddApiOverwrite.md` | `docs/CONFIGURATION.md` | ✅ Processed — `allowAddApiOverwrite` removal documented |
+| `docs/v3/todo/completed/collision-function-edge-case.md` | internal | ✅ Reviewed — edge case fixed in impl; no public API change |
+| `docs/v3/todo/completed/console-log-migration-map.md` | internal | ✅ Reviewed — logging cleanup only |
 | `docs/v3/todo/completed/context-get-cross-instance-behavior.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (consolidated into fix-context-isolation-shallow-copy-bug.md) |
-| `docs/v3/todo/completed/dev-environment-detection-error.md` | | |
-| `docs/v3/todo/completed/eliminate-3-api-architecture.md` | | |
+| `docs/v3/todo/completed/dev-environment-detection-error.md` | internal | ✅ Reviewed — env detection bug fix only |
+| `docs/v3/todo/completed/eliminate-3-api-architecture.md` | internal | ✅ Reviewed — structural refactor only |
 | `docs/v3/todo/completed/eventemitter-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
-| `docs/v3/todo/completed/file-based-api-add.md` | | |
+| `docs/v3/todo/completed/file-based-api-add.md` | `docs/METADATA.md` | ✅ Processed — array/file form of `api.slothlet.metadata.set` documented |
 | `docs/v3/todo/completed/fix-context-isolation-shallow-copy-bug.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/hooks-system.md` | `docs/HOOKS.md` | ✅ Processed |
-| `docs/v3/todo/completed/hot-reload-issues-checklist.md` | | Likely internal only |
-| `docs/v3/todo/completed/hot-reload-system.md` | | |
-| `docs/v3/todo/completed/investigate-addapi-special-case.md` | | |
-| `docs/v3/todo/completed/INVESTIGATION-2026-01-30-FINDINGS.md` | | Likely internal only |
-| `docs/v3/todo/completed/INVESTIGATION-2026-01-30.md` | | Likely internal only |
-| `docs/v3/todo/completed/lazy-materialization-tracking.md` | | |
-| `docs/v3/todo/completed/LAZY-MODE-COLLISION-BUG.md` | | Likely internal only |
-| `docs/v3/todo/completed/lazy-mode-collision-replace-investigation.md` | | Likely internal only |
-| `docs/v3/todo/completed/LAZY-MODE-MATERIALIZATION-TRACE.md` | | Likely internal only |
-| `docs/v3/todo/completed/lazy-mode-remove-timing-issue.md` | | |
+| `docs/v3/todo/completed/hot-reload-issues-checklist.md` | internal | ✅ Reviewed — checklist only |
+| `docs/v3/todo/completed/hot-reload-system.md` | internal | ✅ Reviewed — impl design only |
+| `docs/v3/todo/completed/investigate-addapi-special-case.md` | `docs/API-RULES/` | ✅ Processed — investigation searched wrong dir; Rule 11/C33/F06 is implemented; source file refs corrected in all three API-RULES docs |
+| `docs/v3/todo/completed/INVESTIGATION-2026-01-30-FINDINGS.md` | internal | ✅ Reviewed — internal investigation only |
+| `docs/v3/todo/completed/INVESTIGATION-2026-01-30.md` | internal | ✅ Reviewed — internal investigation only |
+| `docs/v3/todo/completed/lazy-materialization-tracking.md` | `docs/LIFECYCLE.md` | ✅ Processed |
+| `docs/v3/todo/completed/LAZY-MODE-COLLISION-BUG.md` | internal | ✅ Reviewed — bug fix only |
+| `docs/v3/todo/completed/lazy-mode-collision-replace-investigation.md` | internal | ✅ Reviewed — internal investigation only |
+| `docs/v3/todo/completed/LAZY-MODE-MATERIALIZATION-TRACE.md` | internal | ✅ Reviewed — implementation trace only |
+| `docs/v3/todo/completed/lazy-mode-remove-timing-issue.md` | internal | ✅ Reviewed — timing bug fix only |
 | `docs/v3/todo/completed/metadata-tagging.md` | `docs/METADATA.md` | ✅ Processed |
-| `docs/v3/todo/completed/naming-convention-cleanup.md` | | Likely internal only |
+| `docs/v3/todo/completed/naming-convention-cleanup.md` | internal | ✅ Reviewed — naming conventions only |
 | `docs/v3/todo/completed/per-request-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/proxy-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (solved by class instance wrapper) |
-| `docs/v3/todo/completed/proxy-security-audit.md` | | |
-| `docs/v3/todo/completed/README.md` | | Meta — describes completed dir |
-| `docs/v3/todo/completed/remove-allowMutation-implement-collision-config.md` | | |
-| `docs/v3/todo/completed/thoughts.md` | | Likely internal only |
-| `docs/v3/todo/completed/tools-v3-compatibility.md` | | |
-| `docs/v3/todo/completed/typescript-declarations.md` | | |
+| `docs/v3/todo/completed/proxy-security-audit.md` | internal | ✅ Reviewed — security audit only |
+| `docs/v3/todo/completed/README.md` | — | Meta — describes completed dir |
+| `docs/v3/todo/completed/remove-allowMutation-implement-collision-config.md` | `docs/CONFIGURATION.md` | ✅ Processed — `allowMutation` removal and `api.collision` addition documented |
+| `docs/v3/todo/completed/thoughts.md` | internal | ✅ Reviewed — design notes only |
+| `docs/v3/todo/completed/tools-v3-compatibility.md` | internal | ✅ Reviewed — tools internal compat work only |
+| `docs/v3/todo/completed/typescript-declarations.md` | `docs/MODULE-STRUCTURE.md` | ✅ Processed |
 | `docs/v3/todo/completed/typescript-support.md` | `docs/MODULE-STRUCTURE.md` | ✅ Processed (TypeScript section) |
-| `docs/v3/todo/completed/v2-feature-parity-checklist.md` | | High-value — covers multiple docs |
-| `docs/v3/todo/completed/V2-INFRASTRUCTURE-CLEANUP.md` | | Likely internal only |
+| `docs/v3/todo/completed/v2-feature-parity-checklist.md` | internal | ✅ Reviewed — all v2 features confirmed implemented; checklist complete |
+| `docs/v3/todo/completed/V2-INFRASTRUCTURE-CLEANUP.md` | internal | ✅ Reviewed — v2 infra removal only |
 
 ### `docs/v3/todo/future/`
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/todo/future/lazy-mode-performance-optimization.md` | | |
+| `docs/v3/todo/future/lazy-mode-performance-optimization.md` | internal | Future work — no current public API impact |

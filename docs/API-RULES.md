@@ -478,7 +478,7 @@ export function logout() { /* ... */ }
 
 **Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`  
 **Behavior**: Exports are always flattened to the mount namespace regardless of other settings  
-**Processing Path**: Special case handling in `addApiFromFolder()`
+**Processing Path**: Detection in `getFlatteningDecision()` (`src/lib/processors/flatten.mjs`); execution in `src/lib/builders/modes-processor.mjs`
 
 **Verified Example**:
 

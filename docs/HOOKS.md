@@ -42,19 +42,19 @@ Hooks are configured when creating a slothlet instance:
 // Enable hooks (simple boolean)
 const api = await slothlet({
 	dir: "./api",
-	hooks: true
+	hook: true
 });
 
 // Enable with default pattern filter
 const api = await slothlet({
 	dir: "./api",
-	hooks: "database.*" // Only intercept database functions by default
+	hook: "database.*" // Only intercept database functions by default
 });
 
 // Full configuration object
 const api = await slothlet({
 	dir: "./api",
-	hooks: {
+	hook: {
 		enabled: true,
 		pattern: "**",
 		suppressErrors: false
@@ -74,12 +74,12 @@ const api = await slothlet({
 
 Error hooks **always receive errors** regardless of this setting. `suppressErrors` only controls whether the error is thrown after all error hooks have executed.
 
-> Hooks (including error hooks) only execute when `hooks.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution.
+> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution.
 
 ```javascript
 const api = await slothlet({
 	dir: "./api",
-	hooks: { enabled: true, suppressErrors: true }
+	hook: { enabled: true, suppressErrors: true }
 });
 
 api.slothlet.hook.on("error:**", ({ path, error }) => {
@@ -138,7 +138,7 @@ Executes only when an error occurs. Receives the error with detailed source trac
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({ dir: "./api", hooks: true });
+const api = await slothlet({ dir: "./api", hook: true });
 
 // Before hook: Modify arguments
 api.slothlet.hook.on(
@@ -438,7 +438,7 @@ always hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] �
 Enable and disable hooks at runtime without unregistering them:
 
 ```javascript
-const api = await slothlet({ dir: "./api", hooks: true });
+const api = await slothlet({ dir: "./api", hook: true });
 
 // Disable all hooks
 api.slothlet.hook.disable();
