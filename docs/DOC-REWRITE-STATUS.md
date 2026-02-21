@@ -25,7 +25,7 @@ When rewriting a V2 or root-level doc for V3:
 | `docs/v2/API-RULE-MAPPING.md` | `docs/API-RULES/API-RULE-MAPPING.md` | ✅ Complete | 13-rule traceability matrix; Rule 13 new in v3; impl file refs corrected for v3 |
 | `docs/v2/API-RULES-CONDITIONS.md` | `docs/API-RULES/API-RULES-CONDITIONS.md` | ✅ Complete | C01-C18 updated; C06 deprecated noted; C33-C34 added (v3 AddApi cases) |
 | `docs/v2/API-RULES.md` | `docs/API-RULES.md` | ✅ Complete | Index file; detail docs in `docs/API-RULES/`; Rule 12 updated (fully impl.); Rule 13 marked new in v3 |
-| `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ⬜ Not Started | |
+| `docs/v2/CONTEXT-PROPAGATION.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Complete | v3 API: `api.slothlet.context.run/scope`; isolation modes (partial/full); deep-clone isolation fix; cross-instance behavior documented |
 | `docs/v2/HOOKS.md` | `docs/HOOKS.md` | ⬜ Not Started | |
 | `docs/v2/METADATA.md` | `docs/METADATA.md` | ⬜ Not Started | |
 | `docs/v2/MODULE-STRUCTURE.md` | `docs/MODULE-STRUCTURE.md` | ⬜ Not Started | |
@@ -60,7 +60,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 |---|---|---|
 | `docs/v3/changes/api-methods-and-config-options.md` | | |
 | `docs/v3/changes/background-materialize.md` | | |
-| `docs/v3/changes/child-instance-context-isolation.md` | | |
+| `docs/v3/changes/child-instance-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/changes/class-based-architecture-refactor-phase-3-documentation-tasks.md` | | |
 | `docs/v3/changes/hook-system.md` | | |
 | `docs/v3/changes/hot-reload-complete.md` | | |
@@ -112,17 +112,17 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/baseline-test-failures-2026-02-01.md` | | Likely internal only |
 | `docs/v3/todo/completed/baseline-test-failures-old.md` | | Likely internal only |
 | `docs/v3/todo/completed/cjs-default-exports.md` | | |
-| `docs/v3/todo/completed/class-based-architecture-refactor.md` | | |
-| `docs/v3/todo/completed/class-instance-context-propagation.md` | | |
+| `docs/v3/todo/completed/class-based-architecture-refactor.md` | | Likely internal only |
+| `docs/v3/todo/completed/class-instance-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/cleanup-allowAddApiOverwrite.md` | | |
 | `docs/v3/todo/completed/collision-function-edge-case.md` | | |
 | `docs/v3/todo/completed/console-log-migration-map.md` | | Likely internal only |
-| `docs/v3/todo/completed/context-get-cross-instance-behavior.md` | | |
+| `docs/v3/todo/completed/context-get-cross-instance-behavior.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (consolidated into fix-context-isolation-shallow-copy-bug.md) |
 | `docs/v3/todo/completed/dev-environment-detection-error.md` | | |
 | `docs/v3/todo/completed/eliminate-3-api-architecture.md` | | |
-| `docs/v3/todo/completed/eventemitter-context-propagation.md` | | |
+| `docs/v3/todo/completed/eventemitter-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/file-based-api-add.md` | | |
-| `docs/v3/todo/completed/fix-context-isolation-shallow-copy-bug.md` | | |
+| `docs/v3/todo/completed/fix-context-isolation-shallow-copy-bug.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
 | `docs/v3/todo/completed/hooks-system.md` | | |
 | `docs/v3/todo/completed/hot-reload-issues-checklist.md` | | Likely internal only |
 | `docs/v3/todo/completed/hot-reload-system.md` | | |
@@ -136,8 +136,8 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 | `docs/v3/todo/completed/lazy-mode-remove-timing-issue.md` | | |
 | `docs/v3/todo/completed/metadata-tagging.md` | | |
 | `docs/v3/todo/completed/naming-convention-cleanup.md` | | Likely internal only |
-| `docs/v3/todo/completed/per-request-context-isolation.md` | | |
-| `docs/v3/todo/completed/proxy-context-propagation.md` | | |
+| `docs/v3/todo/completed/per-request-context-isolation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed |
+| `docs/v3/todo/completed/proxy-context-propagation.md` | `docs/CONTEXT-PROPAGATION.md` | ✅ Processed (solved by class instance wrapper) |
 | `docs/v3/todo/completed/proxy-security-audit.md` | | |
 | `docs/v3/todo/completed/README.md` | | Meta — describes completed dir |
 | `docs/v3/todo/completed/remove-allowMutation-implement-collision-config.md` | | |
