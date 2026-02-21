@@ -373,9 +373,11 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = resolveWrapper(target) ?? target;
 
-		// Get system metadata to find moduleID
-		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
-		const moduleID = systemData.moduleID || systemData.moduleID;
+		// Get system metadata to find moduleID — wrapper-first (same lookup order as getMetadata)
+		// so that set() and get() always resolve to the same moduleID, even after reload
+		// (the wrapper retains a stable moduleID while impl gets a new one after each reload).
+		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
+		const moduleID = systemData.moduleID;
 
 		if (!moduleID) {
 			throw new this.SlothletError("METADATA_NO_MODULE_ID", {}, null, { validationError: true });
@@ -426,8 +428,8 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = resolveWrapper(target) ?? target;
 
-		// Get system metadata to find moduleID and apiPath
-		const systemData = this.#secureMetadata.get(actualTarget.____slothletInternal?.impl || actualTarget) || {};
+		// Get system metadata to find moduleID and apiPath — wrapper-first (same lookup order as getMetadata)
+		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
 
