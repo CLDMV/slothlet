@@ -75,7 +75,6 @@
 	"suites/rules/rule-12-comprehensive.test.vitest.mjs",
 	"suites/rules/rule-coverage.test.vitest.mjs",
 	"suites/runtime/runtime-verification.test.vitest.mjs",
-	"suites/sanitization/sanitization-v2v3-compat.test.vitest.mjs",
 	"suites/sanitization/sanitize.test.vitest.mjs",
 	"suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs",
 	"suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs",
