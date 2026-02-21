@@ -371,15 +371,16 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	static _cloneImpl(value) {
 		if (value && typeof value === "object" && !Array.isArray(value) && typeof value !== "function") {
-			if (util.types.isProxy(value)) {
-				// Distinguish slothlet wrapper proxies from custom user proxies:
-				// - Slothlet wrapper proxies (from api.add()) have ____slothletInternal and must
-				//   be shallow-copied into a plain object so that ___adoptImplChildren's delete
-				//   operations don't trigger the source proxy's deleteProperty trap (which would
-				//   invalidate child wrappers on the original tree).
+			const isProxy = util.types.isProxy(value);
+			if (isProxy) {				// Distinguish slothlet wrapper proxies from custom user proxies:
+				// - Slothlet wrapper proxies (from api.add()) are detected via resolveWrapper()
+				//   (NOT via value.____slothletInternal, which getTrap hides returning undefined).
+				//   They must be shallow-copied into a plain object so that ___adoptImplChildren's
+				//   delete operations don't trigger the source proxy's deleteProperty trap (which
+				//   would invalidate child wrappers on the original tree).
 				// - Custom user proxies (e.g., LGTVControllers with numeric-index get traps)
 				//   must NOT be cloned — cloning destroys their custom trap behavior.
-				if (value.____slothletInternal) {
+				if (resolveWrapper(value)) {
 					const clone = {};
 					for (const key of Reflect.ownKeys(value)) {
 						try {
