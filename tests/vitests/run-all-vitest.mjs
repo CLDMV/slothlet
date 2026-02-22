@@ -510,6 +510,44 @@ async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = []) {
 }
 
 /**
+ * Run Vitest once directly with provided arguments
+ * @param {string[]} vitestArgs - Vitest arguments and optional file patterns
+ * @param {number | undefined} maxOldSpaceMb - Optional heap size limit
+ * @returns {Promise<number>} Process exit code
+ */
+async function runVitestDirect(vitestArgs = [], maxOldSpaceMb) {
+	return new Promise((resolve) => {
+		const args = [vitestEntrypoint, "--config", vitestConfigPath, "run", ...vitestArgs];
+
+		const baseEnv = { ...process.env };
+		if (!baseEnv.NODE_ENV) baseEnv.NODE_ENV = "development";
+		const hasDevCondition = baseEnv.NODE_OPTIONS?.includes("--conditions=slothlet-dev");
+		if (!hasDevCondition) {
+			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";
+			baseEnv.NODE_OPTIONS = `${existing}--conditions=slothlet-dev`.trim();
+		}
+		if (maxOldSpaceMb && !baseEnv.NODE_OPTIONS?.includes("--max-old-space-size")) {
+			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";
+			baseEnv.NODE_OPTIONS = `${existing}--max-old-space-size=${maxOldSpaceMb}`.trim();
+		}
+
+		const child = spawn(process.execPath, args, {
+			cwd: projectRoot,
+			stdio: "inherit",
+			env: baseEnv
+		});
+
+		child.on("close", (code) => {
+			resolve(code ?? 1);
+		});
+
+		child.on("error", () => {
+			resolve(1);
+		});
+	});
+}
+
+/**
  * Deduplicate similar error messages by grouping configs
  * @param {string[]} errors - Array of error messages (each is a complete error block with FAIL line + details)
  * @returns {string} Deduplicated error output as a single string
@@ -584,11 +622,29 @@ async function runAllFiles() {
 	// Parse CLI arguments - everything after script name
 	const rawArgs = process.argv.slice(2);
 	const { baseline, showErrorDetails, help, vitestPassthroughArgs, testPatterns } = parseArguments(rawArgs);
+	const maxOldSpaceMb = process.env.VITEST_HEAP_MB ? parseInt(process.env.VITEST_HEAP_MB, 10) : undefined;
+	const hasCoverage = vitestPassthroughArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
 
 	// Show help and exit if requested
 	if (help) {
 		showHelp();
 		process.exit(0);
+	}
+
+	if (hasCoverage) {
+		const directPatterns = baseline ? await discoverVitestFiles(testPatterns, baseline) : testPatterns;
+		const directArgs = [...vitestPassthroughArgs, ...directPatterns];
+
+		console.log("\n🧪 Running direct Vitest for coverage");
+		if (directArgs.length > 0) {
+			console.log(`🔧 Vitest args: ${directArgs.join(" ")}`);
+		}
+		if (maxOldSpaceMb) {
+			console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
+		}
+
+		const exitCode = await runVitestDirect(directArgs, maxOldSpaceMb);
+		process.exit(exitCode);
 	}
 
 	const testFiles = await discoverVitestFiles(testPatterns, baseline);
@@ -601,7 +657,6 @@ async function runAllFiles() {
 		return;
 	}
 
-	const maxOldSpaceMb = process.env.VITEST_HEAP_MB ? parseInt(process.env.VITEST_HEAP_MB, 10) : undefined;
 	const results = [];
 	const scriptStartTime = Date.now();
 	const scriptStartTimeFormatted = new Date().toLocaleTimeString("en-US", { hour12: false });

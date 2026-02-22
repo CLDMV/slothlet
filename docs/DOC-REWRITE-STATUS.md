@@ -35,11 +35,11 @@ When rewriting a V2 or root-level doc for V3:
 | _(new — no v2 equivalent)_ | `docs/CONFIGURATION.md` | ✅ Complete | New v3 doc; covers `runtime`, `apiDepth`, `api.mutations`, `debug`, `silent`, `diagnostics`, `api.slothlet.diag.*` namespace, `scope`, `tracking`, `backgroundMaterialize` |
 | _(new — no v2 equivalent)_ | `docs/RELOAD.md` | ✅ Complete | New v3 doc; covers `api.slothlet.api.add/remove/reload`, eager vs lazy reload divergence, reference preservation, ESM/CJS cache busting, operation history replay, moduleID ownership, lifecycle events |
 | _(new — no v2 equivalent)_ | `docs/I18N.md` | ✅ Complete | New v3 doc; covers `setLanguage`, `getLanguage`, `translate`/`t`, `initI18n`; auto-init on import; env-based language detection; language file format; `en-us` + `es-mx` |
-| `docs/v2/root/AGENT-USAGE.md` | `AGENT-USAGE.md` (in-place) | ⬜ Not Started | |
-| `docs/v2/root/BUGS.md` | `BUGS.md` (in-place) | ⬜ Not Started | |
-| `docs/v2/root/CONTRIBUTING.md` | `CONTRIBUTING.md` (in-place) | ⬜ Not Started | |
-| `docs/v2/root/README.md` | `README.md` (in-place) | ⬜ Not Started | |
-| `docs/v2/root/SECURITY.md` | `SECURITY.md` (in-place) | ⬜ Not Started | |
+| `docs/v2/root/AGENT-USAGE.md` | `AGENT-USAGE.md` (in-place) | ✅ Complete | Full v3 rewrite: all API refs updated to `api.slothlet.*` surface; hook system updated to `hook:` config + `hook.on(typePattern, ...)` + subsets; context/metadata/reload/lifecycle APIs updated; lazy mode and materialization section added; v2 API migration mistakes section added |
+| `docs/v2/root/BUGS.md` | `BUGS.md` (in-place) | ✅ Complete | All v2 bugs resolved; clean v3 doc with reporting instructions; no open v3 bugs |
+| `docs/v2/root/CONTRIBUTING.md` | `CONTRIBUTING.md` (in-place) | ✅ Complete | Updated npm scripts (`npm run vitest`, `npm run debug`, `npm run analyze`); added i18n conventions; updated API-RULES/ links to new subfolder |
+| `docs/v2/root/README.md` | `README.md` (in-place) | ⬜ Not Started | _Saved for last_ |
+| `docs/v2/root/SECURITY.md` | `SECURITY.md` (in-place) | ✅ Complete | Updated supported versions to 3.x.x; removed `mode: "vm"` reference (not in v3); updated security considerations for v3 API surface |
 
 ---
 
