@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-21 18:31:00 -08:00 (1771727460)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -330,7 +330,9 @@ export class Flatten extends ComponentBase {
 
 		// Rule 11 (F06) - C33: AddApi Special File Pattern
 		// Files named addapi.{mjs,cjs,js,ts} always flatten regardless of autoFlatten setting
-		const isAddapiFile = moduleName === "addapi" || fileBaseName === "addapi" || 
+		const isAddapiFile =
+			moduleName === "addapi" ||
+			fileBaseName === "addapi" ||
 			(fileBaseName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(fileBaseName.toLowerCase()));
 		if (isAddapiFile) {
 			// Check for metadata default export pattern (object default + named exports)

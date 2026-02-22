@@ -154,7 +154,8 @@ export class Lifecycle extends ComponentBase {
 			}
 
 			this.slothlet.debug("lifecycle", {
-				message: `Event: ${event}`,
+				key: "DEBUG_MODE_LIFECYCLE_EVENT",
+				event,
 				apiPath: data.apiPath,
 				source: data.source,
 				moduleID: data.moduleID

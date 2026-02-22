@@ -135,7 +135,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.caches.set(moduleID, entry);
 
 		this.slothlet.debug("cache", {
-			message: "Cache entry stored",
+			key: "DEBUG_MODE_CACHE_ENTRY_STORED",
 			moduleID,
 			endpoint: entry.endpoint,
 			mode: entry.mode,
@@ -191,7 +191,7 @@ export class ApiCacheManager extends ComponentBase {
 
 		if (deleted) {
 			this.slothlet.debug("cache", {
-				message: "Cache entry deleted",
+				key: "DEBUG_MODE_CACHE_ENTRY_DELETED",
 				moduleID
 			});
 		}
@@ -300,7 +300,7 @@ export class ApiCacheManager extends ComponentBase {
 		this.caches.clear();
 
 		this.slothlet.debug("cache", {
-			message: "All caches cleared"
+			key: "DEBUG_MODE_ALL_CACHES_CLEARED"
 		});
 	}
 
@@ -330,7 +330,7 @@ export class ApiCacheManager extends ComponentBase {
 		}
 
 		this.slothlet.debug("cache", {
-			message: "Rebuilding cache from disk",
+			key: "DEBUG_MODE_REBUILDING_CACHE_FROM_DISK",
 			moduleID,
 			folderPath: entry.folderPath,
 			mode: entry.mode
@@ -363,7 +363,7 @@ export class ApiCacheManager extends ComponentBase {
 		});
 
 		this.slothlet.debug("cache", {
-			message: "Cache rebuilt successfully",
+			key: "DEBUG_MODE_CACHE_REBUILT_SUCCESSFULLY",
 			moduleID,
 			timestamp: Date.now()
 		});

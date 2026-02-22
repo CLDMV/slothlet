@@ -272,7 +272,7 @@ export class UnifiedWrapper extends ComponentBase {
 			const implKeys = Object.keys(initialImpl || {});
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				this.slothlet.debug("wrapper", {
-					message: "UnifiedWrapper constructor - impl keys",
+					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_IMPL_KEYS",
 					apiPath,
 					keyCount: implKeys.length,
 					keySample: implKeys.slice(0, 5)
@@ -282,7 +282,7 @@ export class UnifiedWrapper extends ComponentBase {
 			if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && apiPath && (apiPath === "config" || apiPath.startsWith("config."))) {
 				const childKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 				this.slothlet.debug("wrapper", {
-					message: "UnifiedWrapper constructor - after adopt",
+					key: "DEBUG_MODE_WRAPPER_CONSTRUCTOR_AFTER_ADOPT",
 					apiPath,
 					childCount: childKeys.length,
 					childKeySample: childKeys.slice(0, 5)
@@ -303,7 +303,7 @@ export class UnifiedWrapper extends ComponentBase {
 						// Silently catch errors - background materialization is best-effort
 						if (slothlet.config?.debug?.materialize) {
 							slothlet.debug("materialize", {
-								message: "Background materialization error",
+								key: "DEBUG_MODE_BACKGROUND_MATERIALIZE_ERROR",
 								apiPath: this.____slothletInternal?.apiPath,
 								error: err.message
 							});
@@ -506,7 +506,7 @@ export class UnifiedWrapper extends ComponentBase {
 		if (!this.____slothletInternal.filePath && this.____slothletInternal.impl && this.____slothletInternal.impl.__filePath) {
 			this.____slothletInternal.filePath = this.____slothletInternal.impl.__filePath;
 			this.slothlet.debug("wrapper", {
-				message: "APPLY-IMPL-UPDATE-PATH: updated filePath from null",
+				key: "DEBUG_MODE_APPLY_IMPL_UPDATE_PATH",
 				apiPath: this.____slothletInternal.apiPath,
 				filePath: this.____slothletInternal.filePath
 			});
@@ -531,7 +531,7 @@ export class UnifiedWrapper extends ComponentBase {
 	___setImpl(newImpl, moduleID = null, forceReuseChildren = false) {
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
-				message: "___setImpl called",
+				key: "DEBUG_MODE_SETIMPL_CALLED",
 				apiPath: this.____slothletInternal.apiPath,
 				newImplKeys: Object.keys(newImpl || {})
 			});
@@ -583,7 +583,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 */
 	___resetLazy(newMaterializeFunc) {
 		this.slothlet.debug("wrapper", {
-			message: "___resetLazy called",
+			key: "DEBUG_MODE_RESETLAZY_CALLED",
 			apiPath: this.____slothletInternal.apiPath,
 			hadImpl: this.____slothletInternal.impl !== null,
 			hadChildren: Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__")).length
@@ -623,7 +623,7 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		this.slothlet.debug("wrapper", {
-			message: "___resetLazy complete — wrapper is now un-materialized",
+			key: "DEBUG_MODE_RESETLAZY_COMPLETE",
 			apiPath: this.____slothletInternal.apiPath
 		});
 	}
@@ -649,7 +649,7 @@ export class UnifiedWrapper extends ComponentBase {
 		// This allows multiple callers to await the same materialization without polling
 		if (this.____slothletInternal.materializationPromise) {
 			this.slothlet.debug("wrapper", {
-				message: "MATERIALIZE-AWAIT: awaiting existing materialization promise",
+				key: "DEBUG_MODE_MATERIALIZE_AWAIT",
 				apiPath: this.____slothletInternal.apiPath
 			});
 			return this.____slothletInternal.materializationPromise;
@@ -657,7 +657,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.apiPath === "string") {
 			this.slothlet.debug("wrapper", {
-				message: "_materialize start",
+				key: "DEBUG_MODE_MATERIALIZE_START",
 				apiPath: this.apiPath
 			});
 		}
@@ -670,7 +670,7 @@ export class UnifiedWrapper extends ComponentBase {
 				if (this.____slothletInternal.materializeFunc) {
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
-							message: "_materialize calling materializeFunc",
+							key: "DEBUG_MODE_MATERIALIZE_CALLING_FUNC",
 							apiPath: this.____slothletInternal.apiPath
 						});
 					}
@@ -695,7 +695,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 					if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 						this.slothlet.debug("wrapper", {
-							message: "_materialize complete",
+							key: "DEBUG_MODE_MATERIALIZE_COMPLETE",
 							apiPath: this.____slothletInternal.apiPath,
 							resultType: typeof result,
 							resultKeys: Object.keys(result || {})
@@ -705,7 +705,7 @@ export class UnifiedWrapper extends ComponentBase {
 			} catch (error) {
 				if ((wrapperDebugEnabled || this.____config?.debug?.wrapper) && this.____slothletInternal.apiPath === "string") {
 					this.slothlet.debug("wrapper", {
-						message: "_materialize error",
+						key: "DEBUG_MODE_MATERIALIZE_ERROR",
 						apiPath: this.____slothletInternal.apiPath,
 						error: error.message
 					});
@@ -775,7 +775,7 @@ export class UnifiedWrapper extends ComponentBase {
 	___adoptImplChildren(forceReuseChildren = false) {
 		const preExistingKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 		this.slothlet.debug("wrapper", {
-			message: "ADOPT-START",
+			key: "DEBUG_MODE_ADOPT_START",
 			apiPath: this.____slothletInternal.apiPath,
 			wrapperId: this.____slothletInternal.id || "no-id",
 			preExistingKeys: preExistingKeys.join(","),
@@ -825,7 +825,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const isMergeScenario = storedCollisionMode !== "replace" && existingKeys.length > 0;
 
 		this.slothlet.debug("wrapper", {
-			message: "ADOPT",
+			key: "DEBUG_MODE_ADOPT",
 			apiPath: this.____slothletInternal.apiPath,
 			mode: this.____slothletInternal.mode,
 			storedCollisionMode,
@@ -839,7 +839,7 @@ export class UnifiedWrapper extends ComponentBase {
 		const savedChildren = new Map();
 		if (storedCollisionMode === "replace" && existingKeys.length > 0) {
 			this.slothlet.debug("wrapper", {
-				message: "ADOPT: REPLACE MODE - Clearing existing properties",
+				key: "DEBUG_MODE_ADOPT_REPLACE_CLEARING",
 				count: existingKeys.length
 			});
 
@@ -900,9 +900,9 @@ export class UnifiedWrapper extends ComponentBase {
 			// Skip logging if key is a symbol (can't convert to string)
 			if (typeof key !== "symbol") {
 				this.slothlet.debug("wrapper", {
-					message: "ADOPT-PROCESS",
+					key: "DEBUG_MODE_ADOPT_PROCESS",
 					apiPath: this.____slothletInternal.apiPath,
-					key,
+					propKey: key,
 					typeOf: typeof value,
 					valueName: value?.name
 				});
@@ -916,7 +916,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// Skip logging if key is a symbol
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
-						message: "ADOPT-CHECK",
+						key: "DEBUG_MODE_ADOPT_CHECK",
 						apiPath: this.____slothletInternal.apiPath,
 						key,
 						has__collisionMergedKeys: !!this.____slothletInternal.collisionMergedKeys,
@@ -932,9 +932,9 @@ export class UnifiedWrapper extends ComponentBase {
 					// is deliberately overriding — propagate to all child wrappers regardless.
 					if (typeof key !== "symbol") {
 						this.slothlet.debug("wrapper", {
-							message: "ADOPT-SKIP: is collision-merged, keeping file version",
+							key: "DEBUG_MODE_ADOPT_SKIP_COLLISION_MERGED",
 							apiPath: this.____slothletInternal.apiPath,
-							key
+							propKey: key
 						});
 					}
 					if (descriptor.configurable) {
@@ -947,9 +947,9 @@ export class UnifiedWrapper extends ComponentBase {
 				// DON'T skip - fall through to add folder child alongside file properties
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
-						message: "ADOPT-ALLOW: is NOT collision-merged, allowing",
+						key: "DEBUG_MODE_ADOPT_ALLOW_NOT_COLLISION_MERGED",
 						apiPath: this.____slothletInternal.apiPath,
-						key
+						propKey: key
 					});
 				}
 			}
@@ -1024,9 +1024,9 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
-						message: "ADOPT-REUSE: Reused existing child wrapper",
+						key: "DEBUG_MODE_ADOPT_REUSE_CHILD_WRAPPER",
 						apiPath: this.____slothletInternal.apiPath,
-						key
+						propKey: key
 					});
 				}
 			} else {
@@ -1034,7 +1034,7 @@ export class UnifiedWrapper extends ComponentBase {
 				wrapped = this.___createChildWrapper(key, value);
 				if (typeof key !== "symbol") {
 					this.slothlet.debug("wrapper", {
-						message: "ADOPT-WRAP",
+						key: "DEBUG_MODE_ADOPT_WRAP",
 						apiPath: this.____slothletInternal.apiPath,
 						key,
 						wrapped: wrapped ? "YES" : wrapped === null ? "NULL" : "NO"
@@ -1052,20 +1052,20 @@ export class UnifiedWrapper extends ComponentBase {
 				if (existing === wrapped || (existingDescriptor && !existingDescriptor.configurable)) {
 					if (typeof key !== "symbol") {
 						this.slothlet.debug("wrapper", {
-							message:
+							key:
 								existingDescriptor && !existingDescriptor.configurable
-									? "ADOPT-SKIP: property is non-configurable (inherited)"
-									: "ADOPT-SKIP: property already exists with same wrapper",
+									? "DEBUG_MODE_ADOPT_SKIP_NON_CONFIGURABLE"
+									: "DEBUG_MODE_ADOPT_SKIP_SAME_WRAPPER",
 							apiPath: this.____slothletInternal.apiPath,
-							key
+							propKey: key
 						});
 					}
 				} else {
 					if (typeof key !== "symbol") {
 						this.slothlet.debug("wrapper", {
-							message: "ADOPT-DEFINE: defining on wrapper",
+							key: "DEBUG_MODE_ADOPT_DEFINE",
 							apiPath: this.____slothletInternal.apiPath,
-							key
+							propKey: key
 						});
 					}
 					Object.defineProperty(this, key, {
@@ -1076,9 +1076,9 @@ export class UnifiedWrapper extends ComponentBase {
 					});
 					if (typeof key !== "symbol") {
 						this.slothlet.debug("wrapper", {
-							message: "ADOPT-DEFINED: defined successfully on wrapper",
+							key: "DEBUG_MODE_ADOPT_DEFINED",
 							apiPath: this.____slothletInternal.apiPath,
-							key
+							propKey: key
 						});
 					}
 				}
@@ -1214,7 +1214,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// No existing metadata on child - try __childFilePaths map from lazy materialization
 			const keyStr = typeof key === "symbol" ? String(key) : key;
 			this.slothlet.debug("wrapper", {
-				message: "WRAP-CHILD-PATH: checking for child file path",
+				key: "DEBUG_MODE_WRAP_CHILD_PATH_CHECK",
 				apiPath: this.apiPath,
 				key: keyStr,
 				has_impl: !!this.____slothletInternal.impl,
@@ -1224,7 +1224,7 @@ export class UnifiedWrapper extends ComponentBase {
 			});
 			if (this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths) {
 				this.slothlet.debug("wrapper", {
-					message: "WRAP-CHILD-PATH: __childFilePaths available",
+					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
 					keys: Object.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
 					key: keyStr,
 					found: !!this.____slothletInternal.impl.__childFilePaths[key]
@@ -1237,21 +1237,21 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				childFilePath = this.____slothletInternal.impl.__childFilePaths[key];
 				this.slothlet.debug("wrapper", {
-					message: "WRAP-CHILD-PATH: Using __childFilePaths",
+					key: "DEBUG_MODE_WRAP_CHILD_PATH_USING",
 					childFilePath
 				});
 			} else if (this.____slothletInternal.childFilePathsPreMaterialize && this.____slothletInternal.childFilePathsPreMaterialize[key]) {
 				// Check pre-materialize mapping from collision merge
 				childFilePath = this.____slothletInternal.childFilePathsPreMaterialize[key];
 				this.slothlet.debug("wrapper", {
-					message: "WRAP-CHILD-PATH: Using __childFilePathsPreMaterialize",
+					key: "DEBUG_MODE_WRAP_CHILD_PATH_PRE_MAT",
 					childFilePath
 				});
 			} else {
 				// Fall back to parent's filePath (will be directory path for lazy wrappers)
 				childFilePath = parentMetadata?.filePath || null;
 				this.slothlet.debug("wrapper", {
-					message: "WRAP-CHILD-PATH: Using fallback parentMetadata?.filePath",
+					key: "DEBUG_MODE_WRAP_CHILD_PATH_FALLBACK",
 					childFilePath
 				});
 			}
@@ -1441,7 +1441,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 				if (prop === "__type") {
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-TYPE",
+						key: "DEBUG_MODE_WAITING_TYPE",
 						apiPath: wrapper.apiPath,
 						propChain: propChain.join(","),
 						materialized: wrapper.____slothletInternal.state.materialized,
@@ -1464,7 +1464,7 @@ export class UnifiedWrapper extends ComponentBase {
 								if (!isInternal && chainProp in currentWrapper) {
 									current = currentWrapper[chainProp];
 									wrapper.slothlet.debug("wrapper", {
-										message: "WAITING-TYPE-WALK: found in wrapper",
+										key: "DEBUG_MODE_WAITING_TYPE_WALK_WRAPPER",
 										chainProp: String(chainProp),
 										typeOf: typeof current
 									});
@@ -1478,7 +1478,7 @@ export class UnifiedWrapper extends ComponentBase {
 								) {
 									current = currentWrapper.____slothletInternal.impl[chainProp];
 									wrapper.slothlet.debug("wrapper", {
-										message: "WAITING-TYPE-WALK: found in _impl",
+										key: "DEBUG_MODE_WAITING_TYPE_WALK_IMPL",
 										chainProp: String(chainProp),
 										typeOf: typeof current
 									});
@@ -1486,7 +1486,7 @@ export class UnifiedWrapper extends ComponentBase {
 								}
 							}
 							wrapper.slothlet.debug("wrapper", {
-								message: "WAITING-TYPE-WALK: accessed directly",
+								key: "DEBUG_MODE_WAITING_TYPE_WALK_DIRECT",
 								chainProp: String(chainProp),
 								typeOf: typeof current
 							});
@@ -1496,7 +1496,7 @@ export class UnifiedWrapper extends ComponentBase {
 						const resolvedType =
 							typeof current === "function" ? "function" : typeof current === "object" && current !== null ? "object" : typeof current;
 						wrapper.slothlet.debug("wrapper", {
-							message: "WAITING-TYPE-RESOLVED",
+							key: "DEBUG_MODE_WAITING_TYPE_RESOLVED",
 							apiPath: wrapper.apiPath,
 							propChain: propChain.join(","),
 							resolvedType
@@ -1505,7 +1505,7 @@ export class UnifiedWrapper extends ComponentBase {
 					}
 					// Waiting proxies return IN_FLIGHT if wrapper not yet materialized
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-TYPE-INFLIGHT: returning IN_FLIGHT",
+						key: "DEBUG_MODE_WAITING_TYPE_INFLIGHT",
 						apiPath: wrapper.apiPath,
 						propChain: propChain.join(",")
 					});
@@ -1633,7 +1633,7 @@ export class UnifiedWrapper extends ComponentBase {
 				const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
 				if (!isInternal && hasOwn(wrapper, prop)) {
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-GET-PREMATURE: found in wrapper before materialization",
+						key: "DEBUG_MODE_WAITING_GET_PREMATURE",
 						apiPath: wrapper.____slothletInternal.apiPath,
 						prop
 					});
@@ -1650,14 +1650,14 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.inFlight
 				) {
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-GET-IMMEDIATE-MAT: triggering immediate materialization for collision-merged folder",
+						key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT",
 						apiPath: wrapper.____slothletInternal.apiPath,
 						prop
 					});
 					// Trigger materialization NOW (async but we'll check after)
 					wrapper._materialize().catch((err) => {
 						wrapper.slothlet.debug("wrapper", {
-							message: "WAITING-GET-IMMEDIATE-MAT-ERROR: materialization failed",
+							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_ERROR",
 							apiPath: wrapper.apiPath,
 							error: err.message
 						});
@@ -1667,7 +1667,7 @@ export class UnifiedWrapper extends ComponentBase {
 					const isInternal = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
 					if (!isInternal && hasOwn(wrapper, prop)) {
 						wrapper.slothlet.debug("wrapper", {
-							message: "WAITING-GET-IMMEDIATE-MAT-SUCCESS: now available in wrapper",
+							key: "DEBUG_MODE_WAITING_GET_IMMEDIATE_MAT_SUCCESS",
 							apiPath: wrapper.____slothletInternal.apiPath,
 							prop
 						});
@@ -1688,7 +1688,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 			async apply(___target, ___thisArg, args) {
 				wrapper.slothlet.debug("wrapper", {
-					message: "WAITING-APPLY-ENTRY",
+					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					propChain: propChain.join(","),
 					args: args.join(",")
@@ -1701,12 +1701,12 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.inFlight
 				) {
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-APPLY-MATERIALIZE: Triggering materialization",
+						key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZE",
 						apiPath: wrapper.____slothletInternal.apiPath
 					});
 					await wrapper._materialize();
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-APPLY-MATERIALIZED: Materialization complete",
+						key: "DEBUG_MODE_WAITING_APPLY_MATERIALIZED",
 						apiPath: wrapper.____slothletInternal.apiPath
 					});
 				} else if (
@@ -1725,7 +1725,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				wrapper.slothlet.debug("wrapper", {
-					message: "WAITING-APPLY-START-WALK: Starting propChain walk",
+					key: "DEBUG_MODE_WAITING_APPLY_START_WALK",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					propChain: propChain.join(",")
 				});
@@ -1735,7 +1735,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 				for (const prop of propChain) {
 					wrapper.slothlet.debug("wrapper", {
-						message: "WAITING-APPLY-WALK",
+						key: "DEBUG_MODE_WAITING_APPLY_WALK",
 						prop: String(prop),
 						typeOf: typeof current,
 						constructorName: current?.constructor?.name
@@ -1814,7 +1814,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				wrapper.slothlet.debug("wrapper", {
-					message: "WAITING-APPLY",
+					key: "DEBUG_MODE_WAITING_APPLY",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					propChain: propChain.join(","),
 					typeOf: typeof current,
@@ -2003,7 +2003,7 @@ export class UnifiedWrapper extends ComponentBase {
 			// Debug logging for collision scenarios
 			if (prop === "power" || prop === "add") {
 				this.slothlet.debug("wrapper", {
-					message: "GET-START",
+					key: "DEBUG_MODE_GET_START",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					prop: String(prop),
 					mode: wrapper.____slothletInternal.mode,
@@ -2109,7 +2109,7 @@ export class UnifiedWrapper extends ComponentBase {
 						(wrapper.____slothletInternal.impl === null || wrapper.____slothletInternal.impl === undefined)
 					) {
 						this.slothlet.debug("wrapper", {
-							message: "util.inspect.custom: Lazy unmaterialized",
+							key: "DEBUG_MODE_INSPECT_LAZY_UNMATERIALIZED",
 							apiPath: wrapper.apiPath,
 							wrapper: wrapper,
 							____proxy: wrapper.____slothletInternal.proxy
@@ -2203,7 +2203,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// CRITICAL: In replace mode, check if property should exist at all
 				if (wrapper.____slothletInternal.state.collisionMode === "replace" && (prop === "power" || prop === "add")) {
 					this.slothlet.debug("wrapper", {
-						message: "GET-CACHED-REPLACE",
+						key: "DEBUG_MODE_GET_CACHED_REPLACE",
 						apiPath: wrapper.apiPath,
 						prop: String(prop),
 						collisionMode: wrapper.____slothletInternal.state.collisionMode,
@@ -2213,7 +2213,7 @@ export class UnifiedWrapper extends ComponentBase {
 					});
 				}
 				this.slothlet.debug("wrapper", {
-					message: "GET-CACHED",
+					key: "DEBUG_MODE_GET_CACHED",
 					apiPath: wrapper.____slothletInternal.apiPath,
 					prop: String(prop),
 					materialized: wrapper.____slothletInternal.state.materialized,
@@ -2268,14 +2268,14 @@ export class UnifiedWrapper extends ComponentBase {
 				if (!isInternal && hasOwn(wrapper, prop)) {
 					if (prop === "power" || prop === "add") {
 						this.slothlet.debug("wrapper", {
-							message: "GET-PROXYGET: Accessing",
+							key: "DEBUG_MODE_GET_PROXYGET_ACCESSING",
 							prop,
 							wrapperId: wrapper.____slothletInternal.id,
 							apiPath: wrapper.apiPath,
 							collisionMode: wrapper.____slothletInternal.state.collisionMode || "none"
 						});
 						this.slothlet.debug("wrapper", {
-							message: "GET-PROXYGET: Found in wrapper",
+							key: "DEBUG_MODE_GET_PROXYGET_FOUND",
 							wrapperKeys: Object.keys(wrapper)
 								.filter((k) => !k.startsWith("_") && !k.startsWith("__"))
 								.join(", ")
@@ -2323,7 +2323,7 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 
 				this.slothlet.debug("wrapper", {
-					message: "LAZY-GET: will create waiting proxy",
+					key: "DEBUG_MODE_LAZY_GET_CREATE_WAITING_PROXY",
 					prop: String(prop),
 					collisionMode: wrapper.____slothletInternal.state.collisionMode || "none",
 					apiPath: wrapper.____slothletInternal.apiPath

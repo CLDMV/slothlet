@@ -91,7 +91,7 @@ export class ModesProcessor extends ComponentBase {
 			if (existingTarget && resolveWrapper(existingTarget)) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Category reuse - using existing wrapper",
+						key: "DEBUG_MODE_CATEGORY_REUSE_EXISTING_WRAPPER",
 						categoryName,
 						apiPath: resolveWrapper(existingTarget)?.apiPath
 					});
@@ -105,7 +105,7 @@ export class ModesProcessor extends ComponentBase {
 					: this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Category wrapper created",
+						key: "DEBUG_MODE_CATEGORY_WRAPPER_CREATED",
 						categoryName,
 						apiPath: buildApiPath(categoryName)
 					});
@@ -136,19 +136,19 @@ export class ModesProcessor extends ComponentBase {
 
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Category wrapper assigned to API",
+						key: "DEBUG_MODE_CATEGORY_WRAPPER_ASSIGNED",
 						categoryName
 					});
 				}
 				targetApi = api[categoryName];
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Category created",
+						key: "DEBUG_MODE_CATEGORY_CREATED",
 						categoryName,
 						apiPath: wrapper.apiPath
 					});
 					this.slothlet.debug("modes", {
-						message: "Category targetApi status",
+						key: "DEBUG_MODE_CATEGORY_TARGET_API_STATUS",
 						isWrapper: !!resolveWrapper(targetApi),
 						targetApiKeys: Object.keys(targetApi)
 					});
@@ -165,7 +165,7 @@ export class ModesProcessor extends ComponentBase {
 		for (const file of files) {
 			if (config.debug?.modes && categoryName === "string") {
 				this.slothlet.debug("modes", {
-					message: "Processing file",
+					key: "DEBUG_MODE_PROCESSING_FILE",
 					categoryName,
 					file: file.name,
 					isRoot,
@@ -195,7 +195,7 @@ export class ModesProcessor extends ComponentBase {
 		for (const { file, mod, moduleName, moduleKeys, analysis } of loadedModules) {
 			if (config.debug?.modes && categoryName === "logger") {
 				this.slothlet.debug("modes", {
-					message: "Processing module",
+					key: "DEBUG_MODE_PROCESSING_MODULE",
 					categoryName,
 					moduleName,
 					hasDefault: analysis.hasDefault,
@@ -217,7 +217,7 @@ export class ModesProcessor extends ComponentBase {
 			if (moduleName === "config" || moduleKeys.some((k) => k.includes("Config") || k.includes("config"))) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "File processing",
+						key: "DEBUG_MODE_FILE_PROCESSING",
 						module: moduleName,
 						category: categoryName || "(none)",
 						isRoot,
@@ -354,7 +354,7 @@ export class ModesProcessor extends ComponentBase {
 						if (typeof exportedValue === "object" && exportedValue !== null) {
 							if (config.debug?.modes && categoryName === "string") {
 								this.slothlet.debug("modes", {
-									message: "Single-file folder detected",
+									key: "DEBUG_MODE_SINGLE_FILE_FOLDER_DETECTED",
 									categoryName,
 									populateDirectly,
 									isRoot,
@@ -378,7 +378,7 @@ export class ModesProcessor extends ComponentBase {
 								targetApi = api[categoryName];
 							} else {
 								this.slothlet.debug("modes", {
-									message: "Single-file folder set to wrapped property",
+									key: "DEBUG_MODE_SINGLE_FILE_FOLDER_WRAPPED",
 									categoryName,
 									implKeys: Object.keys(exportedValue)
 								});
@@ -578,13 +578,13 @@ export class ModesProcessor extends ComponentBase {
 							// Regular multi-export file (no matching object)
 							if (config.debug?.modes) {
 								this.slothlet.debug("modes", {
-									message: "Flatten multi-export file",
+									key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_FILE",
 									moduleName,
 									categoryName,
 									exportCount: moduleKeys.length
 								});
 								this.slothlet.debug("modes", {
-									message: "Flatten multi-export targetApi status",
+									key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_TARGET_STATUS",
 									isWrapper: !!resolveWrapper(targetApi),
 									keysBefore: Object.keys(targetApi)
 								});
@@ -592,8 +592,8 @@ export class ModesProcessor extends ComponentBase {
 							for (const key of moduleKeys) {
 								if (config.debug?.modes) {
 									this.slothlet.debug("modes", {
-										message: "Flatten multi-export assigning key",
-										key
+										key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNING",
+										propKey: key
 									});
 								}
 								if (shouldWrap) {
@@ -613,14 +613,14 @@ export class ModesProcessor extends ComponentBase {
 									});
 									if (assigned) {
 										this.slothlet.debug("modes", {
-											message: "Flatten multi-export key assigned successfully",
-											key,
+											key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNED",
+											propKey: key,
 											keysAfter: Object.keys(targetApi)
 										});
 									} else {
 										this.slothlet.debug("modes", {
-											message: "Flatten multi-export key blocked by safeAssign",
-											key
+											key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_BLOCKED",
+											propKey: key
 										});
 									}
 								} else {
@@ -808,7 +808,7 @@ export class ModesProcessor extends ComponentBase {
 						sourceFolder
 					});
 					this.slothlet.debug("modes", {
-						message: "File wrapper assignment",
+						key: "DEBUG_MODE_FILE_WRAPPER_ASSIGNMENT",
 						propertyName,
 						apiPath: buildApiPath(localPath),
 						overwriting: propertyName in targetApi ? (resolveWrapper(targetApi[propertyName]) ? "wrapper" : "value") : "nothing"
@@ -827,7 +827,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (config.debug?.modes && categoryName === "logger") {
 					this.slothlet.debug("modes", {
-						message: "After assignment status",
+						key: "DEBUG_MODE_AFTER_ASSIGNMENT_STATUS",
 						targetApiType: typeof targetApi,
 						propertyName,
 						hasProperty: propertyName in targetApi,
@@ -850,7 +850,7 @@ export class ModesProcessor extends ComponentBase {
 		// Handle subdirectories based on mode
 		if (config.debug?.modes) {
 			this.slothlet.debug("modes", {
-				message: "Subdirectory check",
+				key: "DEBUG_MODE_SUBDIRECTORY_CHECK",
 				isRoot,
 				categoryName,
 				hasDirectory: !!directory,
@@ -859,19 +859,19 @@ export class ModesProcessor extends ComponentBase {
 			});
 		}
 		this.slothlet.debug("modes", {
-			message: "Directory check",
+			key: "DEBUG_MODE_DIRECTORY_CHECK",
 			hasChildren: !!directory?.children,
 			hasDirectories: !!directory?.children?.directories,
 			length: directory?.children?.directories?.length || 0
 		});
 		if (directory?.children?.directories) {
 			this.slothlet.debug("modes", {
-				message: "Directory check passed",
+				key: "DEBUG_MODE_DIRECTORY_CHECK_PASSED",
 				recursive
 			});
 			if (config.debug?.modes) {
 				this.slothlet.debug("modes", {
-					message: "Subdirectories found",
+					key: "DEBUG_MODE_SUBDIRECTORIES_FOUND",
 					subdirectoryCount: directory.children.directories.length,
 					recursive
 				});
@@ -879,12 +879,12 @@ export class ModesProcessor extends ComponentBase {
 			if (recursive) {
 				// Eager mode: recurse into subdirectories
 				this.slothlet.debug("modes", {
-					message: "Subdirectory loop start",
+					key: "DEBUG_MODE_SUBDIRECTORY_LOOP_START",
 					count: directory.children.directories.length
 				});
 				for (const subDir of directory.children.directories) {
 					this.slothlet.debug("modes", {
-						message: "Processing subdirectory",
+						key: "DEBUG_MODE_PROCESSING_SUBDIRECTORY",
 						name: subDir.name,
 						fileCount: subDir.children.files.length,
 						subdirCount: subDir.children.directories.length
@@ -903,7 +903,7 @@ export class ModesProcessor extends ComponentBase {
 						// 3. Has default export (checked below)
 						if (isGeneric || filenameMatchesFolder) {
 							this.slothlet.debug("modes", {
-								message: "Folder-level flatten check",
+								key: "DEBUG_MODE_FOLDER_LEVEL_FLATTEN_CHECK",
 								subDir: subDirName,
 								file: moduleName,
 								isGeneric,
@@ -934,7 +934,7 @@ export class ModesProcessor extends ComponentBase {
 							// so api.add() produces the same flattened structure as standalone loading.
 							if (categoryDecision.shouldFlatten) {
 								this.slothlet.debug("modes", {
-									message: "Folder-level flatten - skipping recursion",
+									key: "DEBUG_MODE_FOLDER_LEVEL_FLATTEN_SKIP_RECURSION",
 									subDir: subDirName
 								});
 								// For filename-folder match with named export, extract the matching export
@@ -1061,7 +1061,7 @@ export class ModesProcessor extends ComponentBase {
 											}
 										}
 										this.slothlet.debug("modes", {
-											message: "File-folder collision: merged file exports into folder impl",
+											key: "DEBUG_MODE_FILE_FOLDER_COLLISION_MERGED",
 											subDir: subDirName,
 											mergedKeys: Object.keys(implToWrap)
 										});
@@ -1178,11 +1178,11 @@ export class ModesProcessor extends ComponentBase {
 
 					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
 					if (config.debug?.modes) {
-						this.slothlet.debug("modes", {
-							message: "Creating lazy subdirectory",
-							apiPath,
-							fileCount: subDir.children.files.length
-						});
+					this.slothlet.debug("modes", {
+						key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
+						apiPath,
+						fileCount: subDir.children.files.length
+					});
 					}
 
 					// CRITICAL: File-folder collision within same module directory.
@@ -1341,11 +1341,11 @@ export class ModesProcessor extends ComponentBase {
 		 */
 		const lazy_materializeFunc = this.slothlet.helpers.modesUtils.createNamedMaterializeFunc(apiPath, async () => {
 			if (config.debug?.modes) {
-				this.slothlet.debug("modes", {
-					message: "Materialize function starting",
-					dir: dir.name,
-					fileCount: dir.children.files?.length || 0
-				});
+			this.slothlet.debug("modes", {
+				key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
+				dir: dir.name,
+				fileCount: dir.children.files?.length || 0
+			});
 			}
 			const categoryName = this.slothlet.helpers.sanitize.sanitizePropertyName(dir.name);
 			const materialized = {};
@@ -1522,11 +1522,11 @@ export class ModesProcessor extends ComponentBase {
 				collisionMode // Pass collision mode to child wrappers
 			);
 			if (config.debug?.modes) {
-				this.slothlet.debug("modes", {
-					message: "Materialize function returning impl",
-					dir: dir.name,
-					keys: Object.keys(materialized)
-				});
+			this.slothlet.debug("modes", {
+				key: "DEBUG_MODE_MATERIALIZE_FUNCTION_RETURNING_IMPL",
+				dir: dir.name,
+				keys: Object.keys(materialized)
+			});
 			}
 
 			// Debug for math folder
@@ -1554,7 +1554,7 @@ export class ModesProcessor extends ComponentBase {
 			if (_hasCategoryFile && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Folder pattern match",
+						key: "DEBUG_MODE_FOLDER_PATTERN_MATCH",
 						dir: dir.name,
 						categoryName,
 						keys: materializedKeys
@@ -1566,9 +1566,9 @@ export class ModesProcessor extends ComponentBase {
 					if (key !== categoryName) {
 						if (config.debug?.modes) {
 							this.slothlet.debug("modes", {
-								message: "Folder pattern attach property",
+								key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
 								categoryName,
-								key,
+								propKey: key,
 								valueType: typeof materialized[key]
 							});
 						}
@@ -1577,7 +1577,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 				if (config.debug?.modes) {
 					this.slothlet.debug("modes", {
-						message: "Folder pattern return",
+						key: "DEBUG_MODE_FOLDER_PATTERN_RETURN",
 						categoryName,
 						keys: Object.keys(mainValue).filter((k) => !k.startsWith("__"))
 					});

@@ -33,6 +33,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
+import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
 	disableEventEmitterPatching,
@@ -121,7 +122,7 @@ class Slothlet {
 
 						if (this.config?.debug?.initialization) {
 							this.debug("initialization", {
-								message: `Component initialized: ${ClassExport.name} → this.${category}.${propName}`,
+								key: "DEBUG_MODE_COMPONENT_INITIALIZED",
 								component: ClassExport.name,
 								category,
 								propertyName: propName
@@ -243,7 +244,7 @@ class Slothlet {
 		
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {
-				message: "Lazy wrapper registered",
+				key: "DEBUG_MODE_LAZY_WRAPPER_REGISTERED",
 				total: this._totalLazyCount,
 				unmaterialized: this._unmaterializedLazyCount
 			});
@@ -260,7 +261,7 @@ class Slothlet {
 		
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {
-				message: "Lazy wrapper materialized",
+				key: "DEBUG_MODE_LAZY_WRAPPER_MATERIALIZED",
 				total: this._totalLazyCount,
 				unmaterialized: this._unmaterializedLazyCount,
 				percentage: this._totalLazyCount > 0 ? ((this._totalLazyCount - this._unmaterializedLazyCount) / this._totalLazyCount) * 100 : 100
@@ -273,7 +274,7 @@ class Slothlet {
 			
 			if (this.config?.debug?.materialize) {
 				this.debug("materialize", {
-					message: "All lazy wrappers materialized",
+					key: "DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED",
 					total: this._totalLazyCount
 				});
 			}
@@ -329,6 +330,11 @@ class Slothlet {
 
 		// Transform and validate config using component classes
 		this.config = this.helpers.config.transformConfig(config);
+
+		// Apply i18n configuration (dev-facing; process-global)
+		if (this.config?.i18n?.language) {
+			initI18n({ language: this.config.i18n.language });
+		}
 
 		// Initialize debug logger with config
 		this.debugLogger = new SlothletDebug(this.config);
