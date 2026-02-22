@@ -76,6 +76,13 @@ export default defineConfig({
 		// 	}
 		// },
 
-		silent: false
+		silent: false,
+
+		coverage: {
+			provider: "v8",
+			include: ["src/**"],
+			exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
+			reporter: ["text", "html", "json-summary"]
+		}
 	}
 });
