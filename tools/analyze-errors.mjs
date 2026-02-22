@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:39 -08:00 (1770266379)
+ *	@Last modified time: 2026-02-21 15:29:46 -08:00 (1771716586)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -349,7 +349,10 @@ function hasProperFileHeader(content, filePath) {
 	const headerPattern =
 		/^\/\*\*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*Nate Hyson\s*<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*Nate Hyson\s*<CLDMV>\s*\(Shinrai@users\.noreply\.github\.com\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
 
-	return headerPattern.test(content);
+	// Strip shebang line (and any blank lines after it) so the header pattern can anchor to ^ correctly
+	const normalizedContent = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
+
+	return headerPattern.test(normalizedContent);
 }
 
 /**
@@ -358,8 +361,15 @@ function hasProperFileHeader(content, filePath) {
 function parseErrorThrows(content, filePath) {
 	const errors = [];
 
-	// Find throw statements for SlothletError and new SlothletWarning (including this.SlothletError/this.SlothletWarning)
-	const throwPattern = /(?:throw\s+(?:await\s+)?(?:new\s+)?(?:this\.)?SlothletError|new\s+(?:this\.)?SlothletWarning)(?:\.create)?/g;
+	// Matches all access patterns:
+	//   new SlothletError(...)                  — direct (standalone import)
+	//   new this.SlothletError(...)             — via ComponentBase getter
+	//   new this.slothlet.SlothletError(...)    — via double-hop (handler/builder classes)
+	//   new slothlet.SlothletError(...)         — closure variable (api_builder.mjs)
+	//   new wrapper.slothlet.SlothletError(...) — via proxy wrapper (unified-wrapper.mjs)
+	// Same patterns for SlothletWarning.
+	const throwPattern =
+		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
 
 	const throwStarts = [];
 	let match;
@@ -569,14 +579,19 @@ for (const filePath of files) {
 	allErrors.push(...errors);
 }
 
-// Also find direct t() usage for warnings, debug, and other translations
+// Also find direct t() and translate() usage for warnings, debug, and other translations
 const directTranslationUsage = new Set();
 for (const filePath of files) {
 	const content = await readFile(filePath, "utf-8");
-	// Match t("KEY", ...) or t('KEY', ...)
+	// Match t("KEY", ...) or t('KEY', ...) — direct shorthand calls
 	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
+	// Match translate("KEY", ...) or translate('KEY', ...) — direct full-function calls
+	const translateCallPattern = /\btranslate\(\s*["']([A-Z_]+)["']/g;
 	let match;
 	while ((match = tCallPattern.exec(content)) !== null) {
+		directTranslationUsage.add(match[1]);
+	}
+	while ((match = translateCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
 	}
 }
@@ -674,6 +689,11 @@ console.log("=".repeat(80) + "\n");
 
 // Collect all error codes used in codebase (from SlothletError + direct t() calls)
 const usedErrorCodes = new Set([...allErrors.map((e) => e.errorCode), ...directTranslationUsage]);
+
+// Keys intentionally used via console.warn in translations.mjs itself (circular dependency —
+// SlothletWarning cannot be imported in the i18n module, so these are used as raw string lookups).
+const CIRCULAR_I18N_KEYS = new Set(["WARNING_LANGUAGE_LOAD_FAILED", "WARNING_LANGUAGE_UNAVAILABLE"]);
+for (const key of CIRCULAR_I18N_KEYS) usedErrorCodes.add(key);
 
 // Get all translation keys (excluding HINT_ keys, but including DEBUG_ since they can be used directly)
 const translationKeys = Object.keys(translations).filter((k) => !k.startsWith("HINT_"));
@@ -909,18 +929,65 @@ if (missingTranslations.length > 0) {
 }
 
 // Unused translations report
+// Detection coverage notes:
+//   - HINT_* keys are EXCLUDED from this check — they are resolved dynamically by the error
+//     system via `HINT_${errorCode}` convention and via hint-detector.mjs rule matching.
+//   - DEBUG_MODE_* and FLATTEN_REASON_* keys are detected via direct t("KEY") literal scan.
+//   - WARNING_LANGUAGE_LOAD_FAILED / WARNING_LANGUAGE_UNAVAILABLE are excluded because they
+//     are used via console.warn in translations.mjs itself (circular dependency workaround).
+//   - Any key still appearing here has no SlothletError throw or t("KEY") literal usage in src/.
+const hintKeyCount = Object.keys(translations).filter((k) => k.startsWith("HINT_")).length;
+
 if (unusedTranslations.length > 0) {
-	console.log(`\n⚠️  Unused Translations (${unusedTranslations.length}):\n`);
-	unusedTranslations.slice(0, Math.min(20, unusedTranslations.length)).forEach((key) => {
-		console.log(`  ${key}: "${translations[key].substring(0, 60)}${translations[key].length > 60 ? "..." : ""}"`);
-	});
-	if (unusedTranslations.length > 20) {
-		console.log(`  ... and ${unusedTranslations.length - 20} more`);
+	console.log(`\n⚠️  Unused Translations (${unusedTranslations.length} of ${translationKeys.length} non-HINT_ keys):\n`);
+	console.log(`  (${hintKeyCount} HINT_* keys excluded — resolved dynamically by the error system)`);
+	console.log(
+		`  (${CIRCULAR_I18N_KEYS.size} circular i18n keys excluded — used directly in translations.mjs: ${[...CIRCULAR_I18N_KEYS].join(", ")})\n`
+	);
+
+	// Group by prefix family for easier analysis
+	const groups = {};
+	for (const key of unusedTranslations) {
+		// Determine prefix family: take everything up to the second underscore segment, or falling back to the first
+		const parts = key.split("_");
+		// Group by first 1-2 segments: e.g. INVALID_CONFIG, MODULE, RUNTIME, WARNING, INTERNAL, etc.
+		let family;
+		if (
+			parts.length >= 2 &&
+			(parts[0] === "INVALID" ||
+				parts[0] === "NO" ||
+				parts[0] === "WARNING" ||
+				parts[0] === "INTERNAL" ||
+				parts[0] === "FLATTEN" ||
+				parts[0] === "DEBUG" ||
+				parts[0] === "HINT")
+		) {
+			family = `${parts[0]}_${parts[1] || ""}`;
+		} else {
+			family = parts[0];
+		}
+		if (!groups[family]) groups[family] = [];
+		groups[family].push(key);
 	}
-	console.log(`\n  Note: These may be intentionally unused (templates, future use, etc.)`);
+
+	for (const [family, keys] of Object.entries(groups).sort()) {
+		console.log(`  [${family}*] (${keys.length})`);
+		for (const key of keys) {
+			const val = translations[key];
+			const preview = val.substring(0, 70) + (val.length > 70 ? "..." : "");
+			console.log(`    ${key}`);
+			console.log(`      "${preview}"`);
+		}
+		console.log();
+	}
+
+	console.log(`  Note: These keys have no SlothletError throw or t("KEY") literal in src/.`);
+	console.log(`        They may be: stale/removed keys, reserved for future use, or used via`);
+	console.log(`        a dynamic pattern not covered by this analyzer.`);
 	console.log();
 } else {
 	console.log(`\n✅ All translations are used\n`);
+	console.log(`  (${hintKeyCount} HINT_* keys excluded — resolved dynamically by the error system)\n`);
 }
 
 // Summary
@@ -1033,29 +1100,29 @@ function parseHardcodedReasons(content, filePath) {
 	const reasons = [];
 	// Match: reason: "string" or reason: 'string' (not using await t())
 	const reasonPattern = /reason:\s*["'`]([^"'`]+)["'`]/g;
-	
+
 	let match;
 	while ((match = reasonPattern.exec(content)) !== null) {
 		// Check if this match is inside a comment
 		const beforeMatch = content.substring(0, match.index);
 		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
 		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
-		
+
 		// Skip if it's in a line comment
 		if (currentLine.trim().startsWith("//")) {
 			continue;
 		}
-		
+
 		// Skip if it's in a block comment
 		const blockCommentStart = beforeMatch.lastIndexOf("/*");
 		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
 		if (blockCommentStart > blockCommentEnd) {
 			continue;
 		}
-		
+
 		// Find line number
 		const lineNumber = beforeMatch.split("\n").length;
-		
+
 		reasons.push({
 			filePath,
 			lineNumber,
@@ -1063,7 +1130,7 @@ function parseHardcodedReasons(content, filePath) {
 			fullMatch: match[0]
 		});
 	}
-	
+
 	return reasons;
 }
 
@@ -1077,7 +1144,7 @@ for (const file of files) {
 if (allHardcodedReasons.length > 0) {
 	console.log(`❌ Found ${allHardcodedReasons.length} hardcoded reason: strings:\n`);
 	console.log(`   These should use i18n translation keys.\n`);
-	
+
 	allHardcodedReasons.forEach((reason, idx) => {
 		const relPath = relative(rootDir, reason.filePath);
 		console.log(`[${idx + 1}] ${relPath}:${reason.lineNumber}`);
@@ -1088,6 +1155,117 @@ if (allHardcodedReasons.length > 0) {
 	});
 } else {
 	console.log(`✅ No hardcoded reason: strings found\n`);
+}
+
+// ===== HARDCODED DEBUG MESSAGE STRINGS DETECTION =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Hardcoded 'message:' Strings in debug() Calls Detection ===");
+console.log("=".repeat(80) + "\n");
+
+/**
+ * Parse hardcoded message: strings inside debug() calls that should use i18n DEBUG_MODE_ keys.
+ * The correct pattern is: { key: "DEBUG_MODE_KEY", ...params } — no await t() needed.
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of hardcoded debug message strings
+ */
+function parseHardcodedDebugMessages(content, filePath) {
+	const messages = [];
+	// Only look inside debug("modes", { message: ... }) blocks
+	// Match: message: "string" or message: 'string' (not using await t())
+	// We look for `debug(` calls specifically containing a hardcoded `message:` string
+	const debugCallPattern = /\.debug\([^)]*message:\s*["'`]([^"'`]+)["'`]/g;
+
+	let match;
+	while ((match = debugCallPattern.exec(content)) !== null) {
+		// Check if this match is inside a comment
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+
+		if (currentLine.trim().startsWith("//")) continue;
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) continue;
+
+		const lineNumber = beforeMatch.split("\n").length;
+		messages.push({
+			filePath,
+			lineNumber,
+			messageText: match[1],
+			fullMatch: match[0]
+		});
+	}
+	return messages;
+}
+
+// Also find multi-line debug() calls where message: is on its own line
+function parseHardcodedDebugMessagesMultiline(content, filePath) {
+	const messages = [];
+	// Match: message: "string" inside a slothlet.debug block. The correct pattern is
+	// { key: "DEBUG_MODE_KEY", ...params } — if message: is still a raw string literal, flag it.
+	// Strategy: find all `message: "literal"` occurrences, then verify they're inside a debug call
+	// by checking if `.debug(` appears within the preceding ~300 chars
+	const messagePattern = /message:\s*["'`]([^"'`\n]+)["'`]/g;
+
+	let match;
+	while ((match = messagePattern.exec(content)) !== null) {
+		const beforeMatch = content.substring(0, match.index);
+
+		// Skip comments
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+		if (currentLine.trim().startsWith("//")) continue;
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) continue;
+
+		// Check if this is inside a debug() call (look back up to 300 chars)
+		const lookback = beforeMatch.slice(-300);
+		if (!lookback.includes(".debug(")) continue;
+
+		// The regex only matches string literals, so { key: "DEBUG_MODE_KEY" } won't trigger this —
+		// 'key:' and 'message: await t(...)' are both safe and won't be flagged.
+
+		const lineNumber = beforeMatch.split("\n").length;
+		messages.push({
+			filePath,
+			lineNumber,
+			messageText: match[1],
+			fullMatch: match[0]
+		});
+	}
+	return messages;
+}
+
+const allHardcodedDebugMessages = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	// Use multiline strategy (covers both inline and multiline debug calls)
+	const msgs = parseHardcodedDebugMessagesMultiline(content, file);
+	allHardcodedDebugMessages.push(...msgs);
+}
+
+if (allHardcodedDebugMessages.length > 0) {
+	console.log(`❌ Found ${allHardcodedDebugMessages.length} hardcoded message: strings in debug() calls:\n`);
+	console.log(`   These should use DEBUG_MODE_* translation keys via: key: "DEBUG_MODE_KEY", ...params\n`);
+
+	allHardcodedDebugMessages.forEach((msg, idx) => {
+		const relPath = relative(rootDir, msg.filePath);
+		// Derive a suggested key: strip non-alphanum, uppercase, prefix DEBUG_MODE_
+		const suggestedKey =
+			"DEBUG_MODE_" +
+			msg.messageText
+				.toUpperCase()
+				.replace(/[^A-Z0-9]+/g, "_")
+				.replace(/^_+|_+$/g, "");
+		console.log(`[${idx + 1}] ${relPath}:${msg.lineNumber}`);
+		console.log(`    Text: "${msg.messageText}"`);
+		console.log(`    ❌ Should use: { key: "${suggestedKey}", ...params }  (no await needed)`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No hardcoded message: strings in debug() calls found\n`);
 }
 
 // ===== CONSOLE.LOG DETECTION (SRC FOLDER) =====
@@ -1135,12 +1313,12 @@ const vitestExcludePatterns = [
 const vitestConsoleLogs = [];
 for (const file of vitestFiles) {
 	const relPath = relative(rootDir, file);
-	
+
 	// Skip files that match exclusion patterns
 	if (vitestExcludePatterns.some((pattern) => relPath === pattern)) {
 		continue;
 	}
-	
+
 	const content = await readFile(file, "utf-8");
 	const logs = parseConsoleLogs(content, file);
 	vitestConsoleLogs.push(...logs);
@@ -1311,6 +1489,13 @@ if (allHardcodedReasons.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Hardcoded reason: Strings:   0`);
+}
+
+if (allHardcodedDebugMessages.length > 0) {
+	console.log(`❌ Hardcoded debug message:     ${allHardcodedDebugMessages.length} - MUST use { key: "DEBUG_MODE_*", ...params }`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Hardcoded debug message:     0`);
 }
 
 if (allConsoleLogs.length > 0) {

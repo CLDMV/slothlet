@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-14 00:00:00 -08:00
+ *	@Last modified time: 2026-02-21 16:10:02 -08:00 (1771719002)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -33,11 +33,7 @@ async function getTypeScript() {
 		try {
 			typescriptInstance = await import("typescript");
 		} catch (error) {
-			throw new SlothletError(
-				"TYPESCRIPT_NOT_INSTALLED",
-				{ feature: "type-generation" },
-				error
-			);
+			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}
 	}
 	return typescriptInstance;
@@ -55,42 +51,50 @@ async function getTypeScript() {
  */
 export async function generateTypes(api, options) {
 	const ts = await getTypeScript();
-	
+
 	if (!options.output) {
-		throw new SlothletError("INVALID_CONFIG", { 
-			message: "types.output is required for type generation" 
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "types.output",
+			expected: "a string output path",
+			value: options.output,
+			hint: "Provide a string output path for the generated .d.ts file, e.g. './types/api.d.ts'.",
+			validationError: true
 		});
 	}
-	
+
 	if (!options.interfaceName) {
-		throw new SlothletError("INVALID_CONFIG", { 
-			message: "types.interfaceName is required for type generation" 
+		throw new SlothletError("INVALID_CONFIG", {
+			option: "types.interfaceName",
+			expected: "a string interface name",
+			value: options.interfaceName,
+			hint: "Provide a string interface name for the generated TypeScript interface, e.g. 'SlothletAPI'.",
+			validationError: true
 		});
 	}
-	
+
 	// Traverse the API and extract structure
 	const nodes = traverseAPI(api);
-	
+
 	// Extract type information from source files
 	for (const node of nodes) {
 		if (node.metadata?.filePath) {
 			node.typeInfo = await extractTypesFromFile(node.metadata.filePath, ts);
 		}
 	}
-	
+
 	// Generate declaration content
 	const declaration = generateDeclaration(nodes, options);
-	
+
 	// Write to file
 	const outputPath = path.resolve(options.output);
 	const outputDir = path.dirname(outputPath);
-	
+
 	if (!fs.existsSync(outputDir)) {
 		fs.mkdirSync(outputDir, { recursive: true });
 	}
-	
+
 	fs.writeFileSync(outputPath, declaration, "utf8");
-	
+
 	return {
 		output: declaration,
 		filePath: outputPath
@@ -107,27 +111,26 @@ export async function generateTypes(api, options) {
  */
 function traverseAPI(api, currentPath = [], visited = new Set()) {
 	const nodes = [];
-	
+
 	if (!api || typeof api !== "object") {
 		return nodes;
 	}
-	
+
 	// Prevent infinite loops from circular references
 	if (visited.has(api)) {
 		return nodes;
 	}
 	visited.add(api);
-	
+
 	for (const [key, value] of Object.entries(api)) {
 		// Skip internal properties and Slothlet system properties
-		if (key.startsWith("_") || key.startsWith("__") || 
-		    key === "slothlet" || key === "shutdown" || key === "destroy") {
+		if (key.startsWith("_") || key.startsWith("__") || key === "slothlet" || key === "shutdown" || key === "destroy") {
 			continue;
 		}
-		
+
 		const nodePath = [...currentPath, key];
 		const metadata = value?.__metadata;
-		
+
 		if (typeof value === "function") {
 			nodes.push({
 				type: "function",
@@ -142,13 +145,13 @@ function traverseAPI(api, currentPath = [], visited = new Set()) {
 				value,
 				metadata
 			});
-			
+
 			// Recursively traverse nested objects
 			const childNodes = traverseAPI(value, nodePath, visited);
 			nodes.push(...childNodes);
 		}
 	}
-	
+
 	return nodes;
 }
 
@@ -162,20 +165,15 @@ function traverseAPI(api, currentPath = [], visited = new Set()) {
 async function extractTypesFromFile(filePath, ts) {
 	try {
 		const source = fs.readFileSync(filePath, "utf8");
-		const sourceFile = ts.createSourceFile(
-			filePath,
-			source,
-			ts.ScriptTarget.Latest,
-			true
-		);
-		
+		const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+
 		const exports = [];
-		
+
 		// Visit all nodes to find exports
 		function visit(node) {
 			// Export declarations
 			if (ts.isFunctionDeclaration(node) && node.name) {
-				const hasExport = node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword);
+				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
 				if (hasExport) {
 					exports.push({
 						name: node.name.text,
@@ -184,12 +182,12 @@ async function extractTypesFromFile(filePath, ts) {
 					});
 				}
 			}
-			
+
 			ts.forEachChild(node, visit);
 		}
-		
+
 		visit(sourceFile);
-		
+
 		return { exports, sourceFile };
 	} catch (error) {
 		// If we can't parse the file, return empty type info
@@ -206,14 +204,16 @@ async function extractTypesFromFile(filePath, ts) {
  * @private
  */
 function extractFunctionSignature(node, source, ts) {
-	const params = node.parameters.map(p => {
-		const name = p.name.getText(node.getSourceFile());
-		const type = p.type ? p.type.getText(node.getSourceFile()) : "any";
-		return `${name}: ${type}`;
-	}).join(", ");
-	
+	const params = node.parameters
+		.map((p) => {
+			const name = p.name.getText(node.getSourceFile());
+			const type = p.type ? p.type.getText(node.getSourceFile()) : "any";
+			return `${name}: ${type}`;
+		})
+		.join(", ");
+
 	const returnType = node.type ? node.type.getText(node.getSourceFile()) : "any";
-	
+
 	return `(${params}): ${returnType}`;
 }
 
@@ -227,16 +227,16 @@ function extractFunctionSignature(node, source, ts) {
 function generateDeclaration(nodes, options) {
 	const interfaceName = options.interfaceName;
 	const lines = [];
-	
+
 	lines.push("/**");
 	lines.push(` * Generated TypeScript declarations for Slothlet API`);
 	lines.push(` * @generated ${new Date().toISOString()}`);
 	lines.push(" */");
 	lines.push("");
-	
+
 	// Build nested structure
 	const structure = {};
-	
+
 	for (const node of nodes) {
 		if (node.type === "function" && node.typeInfo?.exports?.length > 0) {
 			const exportInfo = node.typeInfo.exports[0];
@@ -248,17 +248,17 @@ function generateDeclaration(nodes, options) {
 		// Skip intermediate "object" nodes - they're just containers for nested properties
 		// The structure will be built implicitly as we set nested function properties
 	}
-	
+
 	// Generate interface
 	lines.push(`export interface ${interfaceName} {`);
 	generateInterfaceContent(structure, lines, 1);
 	lines.push("}");
 	lines.push("");
-	
+
 	// Generate self declaration for TypeScript files to use
 	lines.push(`declare const self: ${interfaceName};`);
 	lines.push("");
-	
+
 	return lines.join("\n");
 }
 
@@ -271,7 +271,7 @@ function generateDeclaration(nodes, options) {
  */
 function setNestedProperty(obj, path, value) {
 	let current = obj;
-	
+
 	for (let i = 0; i < path.length - 1; i++) {
 		const key = path[i];
 		if (!current[key]) {
@@ -279,7 +279,7 @@ function setNestedProperty(obj, path, value) {
 		}
 		current = current[key];
 	}
-	
+
 	const lastKey = path[path.length - 1];
 	current[lastKey] = value;
 }
@@ -293,7 +293,7 @@ function setNestedProperty(obj, path, value) {
  */
 function generateInterfaceContent(structure, lines, indent) {
 	const indentation = "\t".repeat(indent);
-	
+
 	for (const [key, value] of Object.entries(structure)) {
 		// Check if this is a leaf node (has a 'type' property)
 		if (value.type === "function") {

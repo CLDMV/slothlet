@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tools/generate-types-worker.mjs
+ *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 15:36:24 -08:00 (1771716984)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * Worker script for generating TypeScript declaration files
  * This runs in a forked child process to avoid module cache conflicts
  */

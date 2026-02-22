@@ -53,7 +53,7 @@ The *Attributed To* column should be filled in as each file is reviewed. Leave b
 
 | File | Attributed To | Notes |
 |---|---|---|
-| `docs/v3/changelog/v2.0.md` – `v2.12.md` (13 files) | structural | ✅ Reviewed — V2 release changelogs; historical record only; no v3 doc attribution needed |
+| `docs/changelog/v2/v2.0.md` – `v2.12.md` (13 files) | structural | ✅ Reviewed — V2 release changelogs; historical record only; no v3 doc attribution needed |
 
 ---
 

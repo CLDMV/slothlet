@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/typescript/typescript-strict-mode.test.vitest.mjs
+ *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 15:36:29 -08:00 (1771716989)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview TypeScript Strict Mode Tests with Type Generation
  * Tests TypeScript strict mode with .d.ts generation and cleanup
  */

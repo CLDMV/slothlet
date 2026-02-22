@@ -30,11 +30,18 @@ export class SlothletError extends Error {
 	 * @param {boolean} [context.validationError] - Mark as validation error (no originalError needed)
 	 * @param {boolean} [context.stub] - Mark as stub error (not-yet-implemented feature)
 	 * @param {Error} [originalError] - The original error that caused this SlothletError
+	 * @param {Object} [options] - Additional options (alternative to embedding flags in context)
+	 * @param {boolean} [options.validationError] - Mark as validation error (no originalError needed)
+	 * @param {boolean} [options.stub] - Mark as stub error (not-yet-implemented feature)
 	 * @public
 	 */
-	constructor(code, context = {}, originalError = null) {
-		// Extract flags from context
-		const { validationError, stub, ...contextData } = context;
+	constructor(code, context = {}, originalError = null, options = {}) {
+		// Extract flags from context OR from the 4th options arg (backwards compat for the
+		// `new SlothletError("CODE", {}, null, { validationError: true })` calling convention)
+		const { validationError: ctxValidation, stub: ctxStub, ...contextData } = context;
+		const { validationError: optsValidation, stub: optsStub } = options;
+		const validationError = ctxValidation ?? optsValidation;
+		const stub = ctxStub ?? optsStub;
 
 		// Enrich context with originalError message if provided
 		const enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData;
@@ -151,11 +158,18 @@ export class SlothletWarning {
 	 * Create and emit a warning with automatic translation
 	 * @param {string} code - Warning code identifier
 	 * @param {Object} context - Additional context about the warning
+	 * @param {string} [context.key] - Optional translation key override. When provided, this key
+	 *   is used for translation instead of `code`. All other context properties are used as
+	 *   interpolation params. Allows sub-key variants without changing the warning code.
 	 * @public
 	 */
 	constructor(code, context = {}) {
+		// Allow context.key to override the translation key (key: "WARNING_FOO_VARIANT", ...params)
+		const { key: msgKey, ...contextData } = context;
+		const translationKey = msgKey ?? code;
+
 		// Translate message synchronously
-		const translatedMessage = translate(code, context);
+		const translatedMessage = translate(translationKey, contextData);
 
 		this.name = "SlothletWarning";
 		this.code = code;
@@ -166,9 +180,9 @@ export class SlothletWarning {
 		if (!SlothletWarning.suppressConsole) {
 			console.warn(`\n⚠️  [${this.code}] ${this.name}\n${this.message}`);
 
-			// Show context if provided
-			if (Object.keys(context).length > 0) {
-				console.warn("Context:", context);
+			// Show context if provided (exclude synthetic 'key' field from display)
+			if (Object.keys(contextData).length > 0) {
+				console.warn("Context:", contextData);
 			}
 		} else {
 			// Only capture when console is suppressed (for testing)
@@ -212,19 +226,29 @@ export class SlothletDebug {
 	 * Log a debug message if the code's debug flag is enabled
 	 * @param {string} code - Debug code/category (e.g., "modes", "wrapper", "api")
 	 * @param {Object} context - Contextual information to display
+	 * @param {string} [context.key] - Translation key for the message (e.g. "DEBUG_MODE_FLATTENING").
+	 *   When provided, translates via i18n using the remaining context properties as interpolation
+	 *   params — no `await t()` needed at the call site. Falls back to `DEBUG_{CODE}` category key
+	 *   if omitted, then to `context.message` for backwards compatibility.
+	 * @param {string} [context.message] - Raw message string (backwards-compat fallback).
+	 *   Prefer `context.key` for new call sites so messages are translatable.
 	 * @public
 	 *
 	 * @description
 	 * Centralized debug logging that respects debug configuration flags.
 	 * Only outputs when the specified code matches a truthy debug flag.
-	 * Translates messages using i18n system (looks for DEBUG_{CODE} keys).
+	 * Translates messages using i18n system with the following key resolution order:
+	 * 1. `context.key` — explicit per-message translation key (preferred)
+	 * 2. `DEBUG_{CODE}` — category-level key (e.g. DEBUG_MODES)
+	 * 3. `context.message` — raw string fallback for backwards compatibility
 	 *
 	 * @example
-	 * this.slothlet.debug("wrapper", {
-	 *   apiPath: "math.add",
-	 *   action: "materialized",
-	 *   implKeys: ["add", "subtract"]
-	 * });
+	 * // Preferred: pass translation key directly — no await needed
+	 * this.debug("modes", { key: "DEBUG_MODE_FLATTENING", mode, categoryName });
+	 *
+	 * @example
+	 * // Legacy: raw message string (still works, but not translatable)
+	 * this.debug("wrapper", { message: "Category reuse - using existing wrapper", apiPath });
 	 */
 	log(code, context = {}) {
 		// Only log if debug flag for this code is enabled
@@ -232,38 +256,30 @@ export class SlothletDebug {
 			return;
 		}
 
-		// Try to translate the message using DEBUG_{CODE} key
-		const debugKey = `DEBUG_${code.toUpperCase()}`;
-		const translatedMessage = translate(debugKey, context);
+		// Extract key and message; remaining props are i18n interpolation params / extra context
+		const { key: msgKey, message, ...contextParams } = context;
+
+		// Key resolution: explicit key > category key (DEBUG_{CODE}) > raw message fallback
+		const translationKey = msgKey ?? `DEBUG_${code.toUpperCase()}`;
+		const translatedMessage = translate(translationKey, contextParams);
+		const hasTranslation = translatedMessage && !translatedMessage.startsWith("Error:");
 
 		// Format label
 		const label = `[DEBUG:${code.toUpperCase()}]`;
 
-		// If translation exists (not fallback), use it
-		if (translatedMessage && !translatedMessage.startsWith("Error:")) {
+		if (hasTranslation) {
 			console.log(`${label} ${translatedMessage}`);
-			// Show additional context if available (excluding 'message' which is already shown)
-			const { message, ...additionalContext } = context;
-			if (Object.keys(additionalContext).length > 0) {
-				console.log(`${label} Context:`, additionalContext);
-			}
-		} else if (context.message) {
-			// Fallback to context.message
-			console.log(`${label} ${context.message}`);
-			// Show additional context if available (excluding 'message')
-			const { message, ...additionalContext } = context;
-			if (Object.keys(additionalContext).length > 0) {
-				console.log(`${label} Context:`, additionalContext);
-			}
+		} else if (message) {
+			// Backwards compat: raw message string (no key provided, no category key found)
+			console.log(`${label} ${message}`);
 		} else {
-			// No message or translation - show all context
-			console.log(label, context);
+			// No message or translation — dump raw context
+			console.log(label, contextParams);
 		}
 
-		// Show remaining context (excluding message)
-		const { message, ...remainingContext } = context;
-		if (Object.keys(remainingContext).length > 0) {
-			console.log(remainingContext);
+		// Show interpolation params / extra context if present (never show 'key' or 'message')
+		if ((hasTranslation || message) && Object.keys(contextParams).length > 0) {
+			console.log(`${label} Context:`, contextParams);
 		}
 	}
 

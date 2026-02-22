@@ -349,7 +349,7 @@ export class Flatten extends ComponentBase {
 			};
 		}
 
-		// Rule 3 - C10: Single-file function folder match
+		// Rule 2, Rule 3 - C10: Single-file function folder match
 		if (moduleName === categoryName && typeof mod === "function" && currentDepth > 0) {
 			return {
 				shouldFlatten: true,
@@ -358,7 +358,7 @@ export class Flatten extends ComponentBase {
 			};
 		}
 
-		// Rule 8 (F02, F04, F05) - C11: Default export flattening
+		// Rule 4, Rule 8 (F02, F04, F05) - C11: Default export flattening
 		if (analysis.hasDefault && analysis.defaultExportType === "object" && moduleName === categoryName && currentDepth > 0) {
 			return {
 				shouldFlatten: true,
@@ -378,7 +378,7 @@ export class Flatten extends ComponentBase {
 			}
 		}
 
-		// Rule 1 (F01) - C13: Filename-folder exact match flattening
+		// Rule 1, Rule 2 (F01) - C13: Filename-folder exact match flattening
 		if (fileBaseName === categoryName && moduleKeys.length > 0) {
 			return {
 				shouldFlatten: true,
@@ -437,7 +437,7 @@ export class Flatten extends ComponentBase {
 			}
 		}
 
-		// Rule 8 (F02, F04, F05) - C17: Default function export flattening
+		// Rule 4, Rule 8 (F02, F04, F05) - C17: Default function export flattening
 		if (typeof mod === "function" && (!mod.name || mod.name === "default" || mod.__slothletDefault === true) && currentDepth > 0) {
 			return {
 				shouldFlatten: true,
