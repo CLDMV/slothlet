@@ -670,10 +670,16 @@ async function runAllFiles() {
 		// Coverage mode: run each file individually with blob reporter, then merge all blobs.
 		// This avoids OOM while still producing a complete merged coverage report.
 		const blobsDir = path.resolve(projectRoot, ".vitest-coverage-blobs");
+		// Coverage temp dirs must be OUTSIDE blobsDir — vitest --mergeReports errors on
+		// any non-blob entry (including subdirectories) found inside the blobs directory.
+		const coverageTmpBase = path.resolve(projectRoot, ".vitest-coverage-tmp");
 
-		// Clean blobs dir from any previous run
-		await fs.rm(blobsDir, { recursive: true, force: true });
-		await fs.mkdir(blobsDir, { recursive: true });
+		// Clean both dirs from any previous run
+		await Promise.all([
+			fs.rm(blobsDir, { recursive: true, force: true }),
+			fs.rm(coverageTmpBase, { recursive: true, force: true })
+		]);
+		await Promise.all([fs.mkdir(blobsDir, { recursive: true }), fs.mkdir(coverageTmpBase, { recursive: true })]);
 
 		const coverageTestFiles = await discoverVitestFiles(testPatterns, baseline);
 		if (coverageTestFiles.length === 0) {
@@ -710,9 +716,9 @@ async function runAllFiles() {
 				console.log(`▶️  ${filePath}`);
 				console.log("=".repeat(80));
 
-				// Each run gets its own temp coverage dir to avoid concurrent write conflicts.
-				// These live inside blobsDir and are cleaned up with it after the merge step.
-				const tmpCoverageDir = path.join(blobsDir, `coverage-tmp-${blobIndex}`);
+				// Each run gets its own temp coverage dir (outside blobsDir) to avoid
+				// concurrent write conflicts and keep --mergeReports happy.
+				const tmpCoverageDir = path.join(coverageTmpBase, `run-${blobIndex}`);
 				const blobArgs = [
 					...nonCoveragePassthrough,
 					"--coverage",
@@ -762,8 +768,11 @@ async function runAllFiles() {
 
 		const mergeExitCode = await runMergeReports(blobsDir, extraCoverageArgs, maxOldSpaceMb);
 
-		// Clean up blobs
-		await fs.rm(blobsDir, { recursive: true, force: true }).catch(() => {});
+// Clean up blobs and tmp coverage dirs
+			await Promise.all([
+				fs.rm(blobsDir, { recursive: true, force: true }).catch(() => {}),
+				fs.rm(coverageTmpBase, { recursive: true, force: true }).catch(() => {})
+			]);
 
 		const coverageFailed = coverageResults.filter((r) => r.code !== 0);
 		process.exit(coverageFailed.length > 0 ? 1 : mergeExitCode);
