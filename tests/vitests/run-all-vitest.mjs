@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:44 -08:00 (1770266384)
+ *	@Last modified time: 2026-02-21 21:38:39 -08:00 (1771738719)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -132,7 +132,8 @@ ${chalk.bold("VITEST FLAGS:")}
   All standard Vitest CLI flags are supported and passed through:
   -t, --testNamePattern   Filter tests by name pattern (regex)
   --reporter              Change reporter (verbose, dot, json, etc.)
-  --coverage              Run with coverage
+  --coverage              Run full-suite coverage (blob-per-file + mergeReports,
+                          avoids OOM; final report written to ./coverage/)
   --bail                  Stop on first failure
   
   See Vitest documentation for full list of options.
@@ -616,6 +617,40 @@ function deduplicateErrors(errors) {
 }
 
 /**
+ * Merge blob reports and generate final coverage report
+ * @param {string} blobsDir - Directory containing blob files from individual runs
+ * @param {string[]} extraCoverageArgs - Additional --coverage.* args to pass through
+ * @param {number | undefined} maxOldSpaceMb - Optional heap size limit
+ * @returns {Promise<number>} Process exit code
+ */
+async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb) {
+	return new Promise((resolve) => {
+		const args = [vitestEntrypoint, "--config", vitestConfigPath, "--mergeReports", blobsDir, "--run", "--coverage", ...extraCoverageArgs];
+
+		const baseEnv = { ...process.env };
+		if (!baseEnv.NODE_ENV) baseEnv.NODE_ENV = "development";
+		const hasDevCondition = baseEnv.NODE_OPTIONS?.includes("--conditions=slothlet-dev");
+		if (!hasDevCondition) {
+			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";
+			baseEnv.NODE_OPTIONS = `${existing}--conditions=slothlet-dev`.trim();
+		}
+		if (maxOldSpaceMb && !baseEnv.NODE_OPTIONS?.includes("--max-old-space-size")) {
+			const existing = baseEnv.NODE_OPTIONS ? `${baseEnv.NODE_OPTIONS} ` : "";
+			baseEnv.NODE_OPTIONS = `${existing}--max-old-space-size=${maxOldSpaceMb}`.trim();
+		}
+
+		const child = spawn(process.execPath, args, {
+			cwd: projectRoot,
+			stdio: "inherit",
+			env: baseEnv
+		});
+
+		child.on("close", (code) => resolve(code ?? 1));
+		child.on("error", () => resolve(1));
+	});
+}
+
+/**
  * Main runner: executes all test files and provides final report
  */
 async function runAllFiles() {
@@ -632,19 +667,106 @@ async function runAllFiles() {
 	}
 
 	if (hasCoverage) {
-		const directPatterns = baseline ? await discoverVitestFiles(testPatterns, baseline) : testPatterns;
-		const directArgs = [...vitestPassthroughArgs, ...directPatterns];
+		// Coverage mode: run each file individually with blob reporter, then merge all blobs.
+		// This avoids OOM while still producing a complete merged coverage report.
+		const blobsDir = path.resolve(projectRoot, ".vitest-coverage-blobs");
 
-		console.log("\n🧪 Running direct Vitest for coverage");
-		if (directArgs.length > 0) {
-			console.log(`🔧 Vitest args: ${directArgs.join(" ")}`);
-		}
-		if (maxOldSpaceMb) {
-			console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
+		// Clean blobs dir from any previous run
+		await fs.rm(blobsDir, { recursive: true, force: true });
+		await fs.mkdir(blobsDir, { recursive: true });
+
+		const coverageTestFiles = await discoverVitestFiles(testPatterns, baseline);
+		if (coverageTestFiles.length === 0) {
+			if (testPatterns.length > 0) {
+				console.log(`❌ No Vitest test files found matching: ${testPatterns.join(", ")}`);
+			} else {
+				console.log("❌ No Vitest test files found in tests/vitests/suites/");
+			}
+			process.exit(1);
 		}
 
-		const exitCode = await runVitestDirect(directArgs, maxOldSpaceMb);
-		process.exit(exitCode);
+		// Separate --coverage / --coverage.* args (used only in merge step) from other passthrough args
+		const extraCoverageArgs = vitestPassthroughArgs.filter((a) => a !== "--coverage" && a.startsWith("--coverage."));
+		const nonCoveragePassthrough = vitestPassthroughArgs.filter((a) => a !== "--coverage" && !a.startsWith("--coverage."));
+
+		console.log(`\n🧪 Running ${coverageTestFiles.length} test files for coverage (blob + merge mode)`);
+		console.log(`⚙️  Workers: ${WORKER_COUNT}`);
+		if (maxOldSpaceMb) console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
+		console.log("");
+
+		const coverageResults = [];
+		let blobIndex = 0;
+		let coverageFileIndex = 0;
+		const coverageActivePromises = new Set();
+
+		while (coverageFileIndex < coverageTestFiles.length || coverageActivePromises.size > 0) {
+			while (coverageFileIndex < coverageTestFiles.length && coverageActivePromises.size < WORKER_COUNT) {
+				const filePath = coverageTestFiles[coverageFileIndex];
+				const blobPath = path.join(blobsDir, `run-${blobIndex}.blob`);
+				coverageFileIndex++;
+				blobIndex++;
+
+				console.log(`\n${"=".repeat(80)}`);
+				console.log(`▶️  ${filePath}`);
+				console.log("=".repeat(80));
+
+				// Each run gets its own temp coverage dir to avoid concurrent write conflicts.
+				// These live inside blobsDir and are cleaned up with it after the merge step.
+				const tmpCoverageDir = path.join(blobsDir, `coverage-tmp-${blobIndex}`);
+				const blobArgs = [
+					...nonCoveragePassthrough,
+					"--coverage",
+					`--coverage.reportsDirectory=${tmpCoverageDir}`,
+					"--reporter=default",
+					"--reporter=blob",
+					`--outputFile=${blobPath}`
+				];
+
+				const promise = runSingleFile(filePath, maxOldSpaceMb, blobArgs)
+					.then((result) => {
+						coverageResults.push(result);
+						if (result.code === 0) {
+							const durationSec = (result.duration / 1000).toFixed(2);
+							const heapInfo = result.heapMb ? ` | ${result.heapMb} MB heap` : "";
+							console.log(`\n✅ PASSED (${durationSec}s${heapInfo})\n`);
+						} else {
+							const durationSec = (result.duration / 1000).toFixed(2);
+							console.log(`\n❌ FAILED (exit code ${result.code}, ${durationSec}s)\n`);
+						}
+						coverageActivePromises.delete(promise);
+					})
+					.catch((err) => {
+						console.error(`Error running ${filePath}:`, err);
+						coverageActivePromises.delete(promise);
+					});
+
+				coverageActivePromises.add(promise);
+			}
+
+			if (coverageActivePromises.size > 0) {
+				await Promise.race(coverageActivePromises);
+			}
+		}
+
+		// Verify blobs were produced
+		const blobFiles = (await fs.readdir(blobsDir).catch(() => [])).filter((f) => f.endsWith(".blob"));
+		if (blobFiles.length === 0) {
+			console.error("❌ No coverage blobs were generated — coverage report cannot be produced");
+			process.exit(1);
+		}
+
+		// Merge all blobs into the final coverage report
+		console.log(`\n${"=".repeat(80)}`);
+		console.log(`📊 Merging ${blobFiles.length} coverage blobs into final report...`);
+		console.log("=".repeat(80));
+
+		const mergeExitCode = await runMergeReports(blobsDir, extraCoverageArgs, maxOldSpaceMb);
+
+		// Clean up blobs
+		await fs.rm(blobsDir, { recursive: true, force: true }).catch(() => {});
+
+		const coverageFailed = coverageResults.filter((r) => r.code !== 0);
+		process.exit(coverageFailed.length > 0 ? 1 : mergeExitCode);
 	}
 
 	const testFiles = await discoverVitestFiles(testPatterns, baseline);

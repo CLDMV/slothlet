@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-01-29 16:41:27 -08:00 (1769733687)
+ *	@Last modified time: 2026-02-21 21:57:18 -08:00 (1771739838)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -65,7 +65,7 @@ export default defineConfig({
 		env: {
 			NODE_ENV: "development"
 		},
-		testTimeout: 10000,
+		testTimeout: 30000,
 		// reporters: [new CustomReporter()],
 		reporters: [["default", { summary: false }]],
 		logHeapUsage: true,
