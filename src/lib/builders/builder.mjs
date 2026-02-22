@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-22 02:36:28 -08:00 (1771756588)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -16,8 +16,6 @@
  * @module @cldmv/slothlet/builder
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { buildEagerAPI } from "@cldmv/slothlet/modes/eager";
-import { buildLazyAPI } from "@cldmv/slothlet/modes/lazy";
 
 /**
  * API builder class for orchestrating mode-based API construction.
@@ -90,17 +88,26 @@ export class Builder extends ComponentBase {
 	 *
 	 * @example
 	 * const api = await builder.buildAPI({ dir: "./api_tests/api_test", mode: "eager" });
-	 * 
+	 *
 	 * @example
 	 * // Load specific file only
-	 * const api = await builder.buildAPI({ 
-	 *   dir: "./api_tests/api_test", 
+	 * const api = await builder.buildAPI({
+	 *   dir: "./api_tests/api_test",
 	 *   mode: "eager",
 	 *   fileFilter: (fileName) => fileName === "math.mjs"
 	 * });
 	 */
 	async buildAPI(options) {
-		const { dir, mode = "eager", apiPathPrefix = "", collisionContext = "initial", moduleID, cacheBust = null, fileFilter = null, collisionMode = null } = options;
+		const {
+			dir,
+			mode = "eager",
+			apiPathPrefix = "",
+			collisionContext = "initial",
+			moduleID,
+			cacheBust = null,
+			fileFilter = null,
+			collisionMode = null
+		} = options;
 
 		// Validate inputs
 		if (!dir || typeof dir !== "string") {
@@ -128,24 +135,22 @@ export class Builder extends ComponentBase {
 		// Build based on mode - each mode handles its own scanning and flattening
 		let rawAPI;
 		if (mode === "eager") {
-			rawAPI = await buildEagerAPI({
+			rawAPI = await this.slothlet.modes.eager.buildAPI({
 				dir,
 				apiPathPrefix,
 				collisionContext,
 				moduleID,
-				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
 				fileFilter
 			});
 		} else if (mode === "lazy") {
-			rawAPI = await buildLazyAPI({
+			rawAPI = await this.slothlet.modes.lazy.buildAPI({
 				dir,
 				apiPathPrefix,
 				collisionContext,
 				collisionMode,
 				moduleID,
-				slothlet: this.slothlet,
 				apiDepth: this.slothlet.config.apiDepth,
 				cacheBust,
 				fileFilter

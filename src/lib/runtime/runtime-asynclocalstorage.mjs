@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-22 13:12:22 -08:00 (1771794742)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -43,6 +43,21 @@ import { asyncRuntime } from "@cldmv/slothlet/factories/context";
 import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
+ * Safely retrieve the current ALS context without throwing.
+ * `asyncRuntime.getContext()` throws `NO_ACTIVE_CONTEXT_ASYNC` when no store is active,
+ * so every proxy trap that needs a graceful fallback should use this helper instead.
+ * @returns {object|null} Current context store, or null if no context is active.
+ * @private
+ */
+function safeGetContext() {
+	try {
+		return asyncRuntime.getContext();
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Live binding to the current API (self-reference)
  * @type {Proxy}
  * @public
@@ -63,24 +78,24 @@ export const self = new Proxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
 			return ctx.self[prop];
 		},
 		ownKeys() {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) return [];
 			return Reflect.ownKeys(ctx.self);
 		},
 		has(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) return false;
 			return prop in ctx.self;
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.self) return undefined;
 			const desc = Reflect.getOwnPropertyDescriptor(ctx.self, prop);
 			// If the property exists on ctx.self, return a descriptor that's always configurable
@@ -116,14 +131,14 @@ export const context = new Proxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) {
 				return undefined;
 			}
 			return ctx.context[prop];
 		},
 		set(_, prop, value) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) {
 				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
 			}
@@ -131,17 +146,17 @@ export const context = new Proxy(
 			return true;
 		},
 		ownKeys() {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) return [];
 			return Reflect.ownKeys(ctx.context);
 		},
 		has(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) return false;
 			return prop in ctx.context;
 		},
 		getOwnPropertyDescriptor(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.context) return undefined;
 			return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 		}
@@ -184,7 +199,7 @@ export const instanceID = new Proxy(
 	{},
 	{
 		get(_, prop) {
-			const ctx = asyncRuntime.getContext();
+			const ctx = safeGetContext();
 			if (!ctx || !ctx.instanceID) {
 				return undefined;
 			}
@@ -195,9 +210,10 @@ export const instanceID = new Proxy(
 			return ctx.instanceID[prop];
 		},
 		has(_, prop) {
-			const ctx = asyncRuntime.getContext();
-			return ctx && ctx.instanceID ? prop in ctx.instanceID : false;
+			const ctx = safeGetContext();
+			if (!ctx || !ctx.instanceID) return false;
+			// ctx.instanceID is a string — wrap in Object() so `in` doesn't throw
+			return prop in Object(ctx.instanceID);
 		}
 	}
 );
-

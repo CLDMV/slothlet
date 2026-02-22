@@ -949,7 +949,7 @@ export class ApiBuilder extends ComponentBase {
 
 			/**
 			 * Lifecycle event manager for subscribing to API events.
-			 * Exposes only `on` and `off` - emit and subscribe are internal.
+			 * Exposes `on` and `off`.
 			 * @type {object}
 			 * @public
 			 *
@@ -960,7 +960,8 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			lifecycle: (() => {
 				const handler = slothlet.handlers?.lifecycle;
-				if (!handler) return { on: () => {}, off: () => {} };
+				const noop = () => {};
+				if (!handler) return { on: noop, off: noop };
 				return {
 					on: handler.on.bind(handler),
 					off: handler.off.bind(handler)
@@ -1232,46 +1233,7 @@ export class ApiBuilder extends ComponentBase {
 					throw new slothlet.SlothletError("NO_CONTEXT_MANAGER", { validationError: true });
 				}
 
-				// Helper for deep merge
-				const deepMerge = (target, source) => {
-					const result = { ...target };
-					for (const key in source) {
-						if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
-							result[key] = deepMerge(target[key] || {}, source[key]);
-						} else {
-							result[key] = source[key];
-						}
-					}
-					return result;
-				};
-
-				// Helper for deep clone (for full isolation)
-				// Handles callable Proxies (API objects) and nested structures properly
-				const deepClone = (obj) => {
-					try {
-						return structuredClone(obj);
-					} catch (e) {
-						// Fallback for objects that can't be structured cloned (functions, proxies, symbols, etc.)
-						// Use .__type for wrapped objects, fallback to typeof for non-wrapped
-						const objType = obj?.__type || typeof obj;
-
-						if (obj === null || (objType !== "object" && objType !== "function")) return obj;
-						if (obj instanceof Date) return new Date(obj.getTime());
-						if (obj instanceof Array) return obj.map((item) => deepClone(item));
-						// For callable objects (like API proxy), clone properties but not the function itself
-						// Create new object and copy all properties (works for both objects and callable proxies)
-						const cloned = {};
-						for (const key in obj) {
-							try {
-								cloned[key] = deepClone(obj[key]);
-							} catch (err) {
-								// If cloning a property fails, keep the original reference
-								cloned[key] = obj[key];
-							}
-						}
-						return cloned;
-					}
-				};
+				const { utilities } = slothlet.helpers;
 
 				// For live binding mode, use child instance approach
 				if (contextManager.constructor.name === "LiveContextManager") {
@@ -1309,7 +1271,7 @@ export class ApiBuilder extends ComponentBase {
 					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
 					let mergedContext;
 					if (merge === "deep") {
-						mergedContext = deepMerge(currentStore.context, contextData);
+						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
 						mergedContext = structuredClone(mergedContext);
 					} else {
@@ -1324,7 +1286,7 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						self: isolationMode === "full" ? deepClone(currentStore.self) : currentStore.self,
+						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID
@@ -1382,7 +1344,7 @@ export class ApiBuilder extends ComponentBase {
 					// SECURITY FIX: Use structuredClone to ensure nested objects are not shared by reference
 					let mergedContext;
 					if (merge === "deep") {
-						mergedContext = deepMerge(currentStore.context, contextData);
+						mergedContext = utilities.deepMerge(currentStore.context, contextData);
 						// Deep merge still needs cloning to prevent shared references
 						mergedContext = structuredClone(mergedContext);
 					} else {
@@ -1397,7 +1359,7 @@ export class ApiBuilder extends ComponentBase {
 					const childStore = {
 						instanceID: childInstanceID,
 						context: mergedContext,
-						self: isolationMode === "full" ? deepClone(currentStore.self) : currentStore.self,
+						self: isolationMode === "full" ? utilities.deepClone(currentStore.self) : currentStore.self,
 						config: currentStore.config,
 						createdAt: currentStore.createdAt,
 						parentInstanceID: slothlet.instanceID

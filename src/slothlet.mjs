@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 15:30:55 -08:00 (1770507055)
+ *	@Last modified time: 2026-02-22 02:36:30 -08:00 (1771756590)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -79,7 +79,7 @@ class Slothlet {
 		this._materializationCompleteEmitted = false; // Track if event was already emitted
 
 		// Component categories
-		this.componentCategories = ["helpers", "handlers", "builders", "processors"];
+		this.componentCategories = ["helpers", "handlers", "builders", "processors", "modes"];
 
 		// Component namespaces (populated by _initializeComponents)
 		for (const category of this.componentCategories) {
@@ -97,7 +97,6 @@ class Slothlet {
 		// NOTE: Does NOT auto-discover:
 		//   - errors/ (throw-able classes, not instance components)
 		//   - runtime/ (context managers set manually during load)
-		//   - modes/ (lazy/eager mode handlers, not instance components)
 		//   - i18n/ (translation utilities, not instance components)
 
 		const baseDir = join(import.meta.dirname, "lib");
@@ -241,7 +240,7 @@ class Slothlet {
 	_registerLazyWrapper() {
 		this._totalLazyCount++;
 		this._unmaterializedLazyCount++;
-		
+
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {
 				key: "DEBUG_MODE_LAZY_WRAPPER_REGISTERED",
@@ -258,7 +257,7 @@ class Slothlet {
 	 */
 	_onWrapperMaterialized() {
 		this._unmaterializedLazyCount--;
-		
+
 		if (this.config?.debug?.materialize) {
 			this.debug("materialize", {
 				key: "DEBUG_MODE_LAZY_WRAPPER_MATERIALIZED",
@@ -271,7 +270,7 @@ class Slothlet {
 		// Check if all lazy wrappers are materialized
 		if (this._unmaterializedLazyCount === 0 && !this._materializationComplete) {
 			this._materializationComplete = true;
-			
+
 			if (this.config?.debug?.materialize) {
 				this.debug("materialize", {
 					key: "DEBUG_MODE_ALL_LAZY_WRAPPERS_MATERIALIZED",
@@ -297,8 +296,6 @@ class Slothlet {
 			}
 		}
 	}
-
-
 
 	/**
 	 * Load API from directory
@@ -413,8 +410,6 @@ class Slothlet {
 
 		// Inject runtime-aware metadata functions that have proper context access
 		this.injectRuntimeMetadataFunctions(apiWithBuiltins);
-
-
 
 		// Apply init metadata if provided in config
 		if (this.config.metadata && typeof this.config.metadata === "object") {
