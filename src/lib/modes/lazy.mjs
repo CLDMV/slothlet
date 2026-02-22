@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-22 00:00:00 -08:00 (1771737600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -15,275 +15,115 @@
  * @fileoverview Lazy mode implementation - deferred loading with unified wrapper
  * @module @cldmv/slothlet/modes/lazy
  */
-import { UnifiedWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
- * Create a named async materialization function for clearer debug output.
- * @param {string} apiPath - API path to derive the function name from.
- * @param {function} handler - Async handler that performs materialization.
- * @returns {function} Named async materialization function.
+ * Lazy mode component - builds APIs with deferred (on-demand) loading.
+ * @class LazyMode
+ * @extends ComponentBase
+ * @package
  */
-function createNamedMaterializeFunc(apiPath, handler) {
-	const safePath = String(apiPath || "api")
-		.replace(/\./g, "__")
-		.replace(/[^A-Za-z0-9_$]/g, "_");
-	const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
-	const funcName = `${normalized}__lazy_materializeFunc`;
-	return {
-		[funcName]: async function (...args) {
-			return handler(...args);
-		}
-	}[funcName];
-}
+export class LazyMode extends ComponentBase {
+	static slothletProperty = "lazy";
 
-/**
- * Build API in lazy mode (proxy-based deferred loading)
- * @param {Object} options - Build options
- * @param {string} options.dir - Directory to build from
- * @param {Object} options.ownership - Ownership manager
- * @param {Object} options.contextManager - Context manager for binding
- * @param {string} options.instanceID - Slothlet instance ID
- * @param {Object} [options.config={}] - Configuration
- * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
- * @returns {Promise<Object>} Built API object with lazy proxies
- * @public
- */
-export async function buildLazyAPI({
-	dir,
-	apiPathPrefix = "",
-	collisionContext = "initial",
-	collisionMode = null,
-	moduleID,
-	slothlet,
-	apiDepth = Infinity,
-	cacheBust = null,
-	fileFilter = null
-}) {
-	slothlet.debug("modes", {
-		key: "DEBUG_MODE_BUILD_LAZY_API_CALLED",
-		apiPathPrefix,
-		collisionMode,
-		collisionContext
-	});
-	const api = {};
-
-	// Access components via slothlet instance
-	const { modesProcessor } = slothlet.builders;
-	const { loader } = slothlet.processors;
-
-	// Scan directory structure with depth limit and optional file filter
-	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
-
-	// Process root files (with root contributor pattern support)
-	// Pass synthetic root directory with children.directories so processFiles can create lazy wrappers
-	const rootDirectory = {
-		name: ".",
-		path: dir, // Add path so folder wrappers can be tagged with metadata
-		children: {
-			files: structure.files,
-			directories: structure.directories
-		}
-	};
-
-	// Load all root-level content (files and folders)
-	// Root files will be wrapped eagerly (see modes-processor.mjs special handling)
-	const rootDefaultFunction = await modesProcessor.processFiles(
-		api,
-		structure.files,
-		rootDirectory,
-		0,
-		"lazy",
-		true, // isRoot=true for root contributor detection
-		false, // recursive=false to create lazy wrappers for subdirectories (not eager load)
-		false, // populateDirectly=false for root level
-		apiPathPrefix,
-		collisionContext,
-		moduleID,
-		dir, // sourceFolder for metadata
-		cacheBust,
-		collisionMode // Pass collision mode from api.add config
-	);
-
-	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, slothlet.config, "lazy");
-
-	return finalApi;
-}
-
-/**
- * Create lazy wrapper using UnifiedWrapper
- * @param {Object} dir - Directory structure
- * @param {string} apiPath - Current API path
- * @param {Object} slothlet - Slothlet instance
- * @param {string} moduleIDOverride - Module ID from api.add() to use instead of file.moduleID
- * @param {string|null} collisionModeOverride - Collision mode from api.add() config
- * @returns {Proxy} Lazy unified wrapper
- * @private
- */
-function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionModeOverride = null) {
-	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
-	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
-		slothlet.debug("modes", {
-			key: "DEBUG_MODE_LAZY_MATERIALIZEFUNC_STARTED",
-			apiPath,
-			dirName: dir.name
-		});
-		const materialized = {};
-		// Store file paths for each property so child wrappers get correct filePath
-		const childFilePaths = {};
-
-		// Load files in directory
-		for (const file of dir.children.files) {
-			try {
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_LOADING_FILE",
-					fileName: file.name,
-					filePath: file.path
-				});
-				// Use moduleIDOverride from api.add() if provided, otherwise use file's auto-generated ID
-				const effectiveModuleId = moduleIDOverride || file.moduleID;
-				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID, effectiveModuleId);
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_FILE_LOADED_EXTRACTING_EXPORTS",
-					fileName: file.name
-				});
-				const exports = slothlet.processors.loader.extractExports(mod);
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_EXPORTS_EXTRACTED",
-					fileName: file.name,
-					exportKeys: Object.keys(exports)
-				});
-				const moduleName = slothlet.helpers.sanitize.sanitizePropertyName(file.name);
-
-				// Register ownership
-				if (slothlet.handlers.ownership) {
-					slothlet.handlers.ownership.register({
-						moduleID: effectiveModuleId,
-						apiPath: `${apiPath}.${moduleName}`,
-						source: "core",
-						collisionMode: slothlet.config.collision?.core || "error",
-						filePath: file.path
-					});
-				}
-
-				// Store the file path for this property
-				childFilePaths[moduleName] = file.path;
-
-				// Merge exports into materialized object
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_MERGING_EXPORTS",
-					fileName: file.name
-				});
-				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
-				// Tag system metadata for the merged module AND its properties with correct file path
-				if (materialized[moduleName] && slothlet.handlers?.lifecycle) {
-					// Emit impl:created event for the module object itself
-					slothlet.handlers.lifecycle.emit("impl:created", {
-						apiPath: `${apiPath}.${moduleName}`,
-						impl: materialized[moduleName],
-						source: "lazy-merge",
-						moduleID: effectiveModuleId,
-						filePath: file.path,
-						sourceFolder: dir.path
-					});
-
-					// Emit impl:created events for all properties (functions) in the module
-					if (typeof materialized[moduleName] === "object") {
-						for (const key of Object.keys(materialized[moduleName])) {
-							const prop = materialized[moduleName][key];
-							if (typeof prop === "function" || (typeof prop === "object" && prop !== null)) {
-								slothlet.handlers.lifecycle.emit("impl:created", {
-									apiPath: `${apiPath}.${moduleName}.${key}`,
-									impl: prop,
-									source: "lazy-merge-property",
-									moduleID: effectiveModuleId,
-									filePath: file.path,
-									sourceFolder: dir.path
-								});
-							}
-						}
-					}
-				}
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_EXPORTS_MERGED",
-					fileName: file.name,
-					materializedKeys: Object.keys(materialized)
-				});
-			} catch (error) {
-				slothlet.debug("modes", {
-					key: "DEBUG_MODE_ERROR_LOADING_FILE",
-					fileName: file.name,
-					error: error.message
-				});
-				throw error;
-			}
-		}
-
-		// Create lazy wrappers for subdirectories (inherit moduleIDOverride and collisionModeOverride from parent)
-		for (const subdir of dir.children.directories || []) {
-			const propName = slothlet.helpers.sanitize.sanitizePropertyName(subdir.name);
-			materialized[propName] = createLazyWrapper(subdir, `${apiPath}.${propName}`, slothlet, moduleIDOverride, collisionModeOverride);
-		}
-
-		// Store the file path mapping as non-enumerable property
-		Object.defineProperty(materialized, "__childFilePaths", {
-			value: childFilePaths,
-			enumerable: false,
-			configurable: false,
-			writable: false
-		});
-
-		slothlet.debug("modes", {
-			key: "DEBUG_MODE_LAZY_MATERIALIZEFUNC_COMPLETE",
-			apiPath,
-			keys: Object.keys(materialized)
-		});
-		// Log what's in materialized for "math" in collision scenarios
-		if (apiPath === "math") {
-			slothlet.debug("modes", {
-				key: "DEBUG_MODE_MATERIALIZE_COMPLETE_MATH_KEYS",
-				keys: Object.keys(materialized).join(", ")
-			});
-		}
-		// CRITICAL: Set _impl synchronously (matches v2 behavior where 'materialized' variable is set immediately)
-		// This allows property access to work without waiting for the function to return
-		if (lazy_setImpl) {
-			lazy_setImpl(materialized);
-		}
-
-		// POC pattern: return the materialized implementation (for backward compatibility)
-		return materialized;
-	});
-
-	// Create unified wrapper in lazy mode
-	const wrapper = new UnifiedWrapper(slothlet, {
-		mode: "lazy",
-		apiPath,
-		initialImpl: null, // Lazy mode starts with null
-		materializeFunc,
-		materializeOnCreate: slothlet.config.backgroundMaterialize,
-		filePath: null, // Don't set filePath yet - will be set during materialization
-		moduleID: moduleIDOverride, // Use the override if provided, otherwise null
-		sourceFolder: slothlet.config?.dir
-	});
-
-	// Set collision mode if provided (from api.add config)
-	if (collisionModeOverride) {
-		wrapper.____slothletInternal.state.collisionMode = collisionModeOverride;
-		slothlet.debug("modes", {
-			key: "DEBUG_MODE_LAZY_CREATE_SET_COLLISION",
-			apiPath,
-			collisionMode: collisionModeOverride
-		});
+	/**
+	 * Create LazyMode instance.
+	 * @param {object} slothlet - Slothlet orchestrator instance.
+	 * @package
+	 */
+	constructor(slothlet) {
+		super(slothlet);
 	}
 
-	// Store directory structure for later access (e.g., replace mode pre-population)
-	wrapper._directoryStructure = dir;
-	slothlet.debug("modes", {
-		key: "DEBUG_MODE_LAZY_CREATE_STORED_DIR_STRUCTURE",
-		apiPath,
-		fileCount: dir?.children?.files?.length || 0
-	});
+	/**
+	 * Create a named async materialization function for lazy subdirectories.
+	 * @param {string} apiPath - API path to derive the function name from.
+	 * @param {Function} handler - Async handler that performs materialization.
+	 * @returns {Function} Named async materialization function.
+	 * @public
+	 *
+	 * @example
+	 * const fn = lazyMode.createNamedMaterializeFunc('api.math', async () => ({ add: (a,b) => a+b }));
+	 */
+	createNamedMaterializeFunc(apiPath, handler) {
+		const safePath = String(apiPath || "api")
+			.replace(/\./g, "__")
+			.replace(/[^A-Za-z0-9_$]/g, "_");
+		const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
+		const funcName = `${normalized}__lazy_materializeFunc`;
+		return {
+			[funcName]: async function (...args) {
+				return handler(...args);
+			}
+		}[funcName];
+	}
 
-	return wrapper.createProxy();
+	/**
+	 * Build API in lazy mode (proxy-based deferred loading).
+	 * @param {Object} options - Build options
+	 * @param {string} options.dir - Directory to build from
+	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
+	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {string|null} [options.collisionMode=null] - Collision mode override from api.add()
+	 * @param {string} [options.moduleID] - Module ID
+	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
+	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
+	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
+	 * @returns {Promise<Object>} Built API object with lazy proxies
+	 * @public
+	 *
+	 * @example
+	 * const api = await slothlet.modes.lazy.buildAPI({ dir: "./api", moduleID: "base" });
+	 */
+	async buildAPI({
+		dir,
+		apiPathPrefix = "",
+		collisionContext = "initial",
+		collisionMode = null,
+		moduleID,
+		apiDepth = Infinity,
+		cacheBust = null,
+		fileFilter = null
+	}) {
+		this.slothlet.debug("modes", {
+			key: "DEBUG_MODE_BUILD_LAZY_API_CALLED",
+			apiPathPrefix,
+			collisionMode,
+			collisionContext
+		});
+		const api = {};
+
+		const { modesProcessor } = this.slothlet.builders;
+		const { loader } = this.slothlet.processors;
+
+		const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
+
+		const rootDirectory = {
+			name: ".",
+			path: dir,
+			children: {
+				files: structure.files,
+				directories: structure.directories
+			}
+		};
+
+		const rootDefaultFunction = await modesProcessor.processFiles(
+			api,
+			structure.files,
+			rootDirectory,
+			0,
+			"lazy",
+			true, // isRoot
+			false, // recursive=false — lazy wrappers for subdirs, not eager load
+			false, // populateDirectly=false for root level
+			apiPathPrefix,
+			collisionContext,
+			moduleID,
+			dir,
+			cacheBust,
+			collisionMode
+		);
+
+		return modesProcessor.applyRootContributor(api, rootDefaultFunction, this.slothlet.config, "lazy");
+	}
 }

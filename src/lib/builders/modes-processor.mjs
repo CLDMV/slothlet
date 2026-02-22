@@ -230,7 +230,7 @@ export class ModesProcessor extends ComponentBase {
 				// Build the function with named exports attached
 				const defaultFunc = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, moduleName);
 				for (const key of moduleKeys) {
-					if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
+					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], defaultFunc, mod.default)) {
 						continue;
 					}
 					defaultFunc[key] = mod[key];
@@ -288,7 +288,7 @@ export class ModesProcessor extends ComponentBase {
 						const collisionConfig = config.api?.collision || config.collision;
 						const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
 						for (const key of moduleKeys) {
-							if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+							if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 								continue;
 							}
 							// Respect collision mode when attaching named exports
@@ -323,7 +323,7 @@ export class ModesProcessor extends ComponentBase {
 								// Skip if already exists in default object
 								continue;
 							}
-							if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+							if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 								continue;
 							}
 							moduleContent[key] = mod[key];
@@ -415,7 +415,7 @@ export class ModesProcessor extends ComponentBase {
 								if (key in callableModule) {
 									continue;
 								}
-								if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
+								if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
 									continue;
 								}
 								callableModule[key] = mod[key];
@@ -1339,7 +1339,7 @@ export class ModesProcessor extends ComponentBase {
 		 * @returns {Promise<unknown>} Materialized implementation for this subdirectory
 		 * @private
 		 */
-		const lazy_materializeFunc = this.slothlet.helpers.modesUtils.createNamedMaterializeFunc(apiPath, async () => {
+		const lazy_materializeFunc = this.slothlet.modes.lazy.createNamedMaterializeFunc(apiPath, async () => {
 			if (config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
@@ -1414,7 +1414,7 @@ export class ModesProcessor extends ComponentBase {
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								const collisionMode = this.slothlet.config?.collision?.initial || "merge";
 								for (const key of moduleKeys) {
-									if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
+									if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
 										continue;
 									}
 									// Respect collision mode when attaching named exports

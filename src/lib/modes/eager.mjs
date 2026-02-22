@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-22 00:00:00 -08:00 (1771737600)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -15,70 +15,83 @@
  * @fileoverview Eager mode implementation - loads all modules immediately with unified wrapper
  * @module @cldmv/slothlet/modes/eager
  */
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
- * Build API in eager mode (load all modules immediately)
- * @param {Object} options - Build options
- * @param {string} options.dir - Directory path to load from
- * @param {Object} options.ownership - Ownership manager
- * @param {Object} options.contextManager - Context manager for binding
- * @param {string} options.instanceID - Slothlet instance ID
- * @param {Object} options.config - Configuration
- * @param {number} [options.maxDepth=Infinity] - Maximum depth for directory traversal
- * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
- * @param {Function|null} [options.fileFilter=null] - Optional filter function (fileName) => boolean to load specific files only
- * @returns {Promise<Object>} Built API object
- * @public
+ * Eager mode component - builds APIs by loading all modules immediately.
+ * @class EagerMode
+ * @extends ComponentBase
+ * @package
  */
-export async function buildEagerAPI({
-	dir,
-	apiPathPrefix = "",
-	collisionContext = "initial",
-	moduleID,
-	slothlet,
-	apiDepth = Infinity,
-	cacheBust = null,
-	fileFilter = null
-}) {
-	const api = {};
+export class EagerMode extends ComponentBase {
+	static slothletProperty = "eager";
 
-	// Access components via slothlet instance
-	const { modesProcessor } = slothlet.builders;
-	const { loader } = slothlet.processors;
+	/**
+	 * Create EagerMode instance.
+	 * @param {object} slothlet - Slothlet orchestrator instance.
+	 * @package
+	 */
+	constructor(slothlet) {
+		super(slothlet);
+	}
 
-	// Scan directory structure with depth limit and optional file filter
-	const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
-
-	// Process root files (with root contributor pattern support)
-	// Pass synthetic root directory with children.directories for consistent handling
-	const rootDirectory = {
-		name: ".",
-		path: dir, // Add path so folder wrappers can be tagged with metadata
-		children: {
-			files: structure.files,
-			directories: structure.directories
-		}
-	};
-	const rootDefaultFunction = await modesProcessor.processFiles(
-		api,
-		structure.files,
-		rootDirectory,
-		0,
-		"eager",
-		true, // isRoot
-		true, // recursive - MUST be true to process subdirectories!
-		false, // populateDirectly - keep false
-		apiPathPrefix,
-		collisionContext,
+	/**
+	 * Build API in eager mode (load all modules immediately).
+	 * @param {Object} options - Build options
+	 * @param {string} options.dir - Directory path to load from
+	 * @param {string} [options.apiPathPrefix=""] - Prefix for API paths
+	 * @param {string} [options.collisionContext="initial"] - Collision context
+	 * @param {string} [options.moduleID] - Module ID
+	 * @param {number} [options.apiDepth=Infinity] - Maximum directory depth
+	 * @param {string|null} [options.cacheBust=null] - Cache-busting value
+	 * @param {Function|null} [options.fileFilter=null] - Optional filter (fileName) => boolean
+	 * @returns {Promise<Object>} Built API object
+	 * @public
+	 *
+	 * @example
+	 * const api = await slothlet.modes.eager.buildAPI({ dir: "./api", moduleID: "base" });
+	 */
+	async buildAPI({
+		dir,
+		apiPathPrefix = "",
+		collisionContext = "initial",
 		moduleID,
-		dir, // sourceFolder for metadata
-		cacheBust
-	);
+		apiDepth = Infinity,
+		cacheBust = null,
+		fileFilter = null
+	}) {
+		const api = {};
 
-	// Directory processing is now handled by processFiles when recursive=true
+		const { modesProcessor } = this.slothlet.builders;
+		const { loader } = this.slothlet.processors;
 
-	// Apply root contributor pattern: if a root function exists, make it THE api
-	const finalApi = await modesProcessor.applyRootContributor(api, rootDefaultFunction, slothlet.config, "eager");
+		const structure = await loader.scanDirectory(dir, { maxDepth: apiDepth, fileFilter });
 
-	return finalApi;
+		const rootDirectory = {
+			name: ".",
+			path: dir,
+			children: {
+				files: structure.files,
+				directories: structure.directories
+			}
+		};
+
+		const rootDefaultFunction = await modesProcessor.processFiles(
+			api,
+			structure.files,
+			rootDirectory,
+			0,
+			"eager",
+			true, // isRoot
+			true, // recursive — load all subdirectories immediately
+			false, // populateDirectly=false
+			apiPathPrefix,
+			collisionContext,
+			moduleID,
+			dir,
+			cacheBust
+		);
+
+		return modesProcessor.applyRootContributor(api, rootDefaultFunction, this.slothlet.config, "eager");
+	}
 }

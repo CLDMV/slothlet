@@ -34,7 +34,7 @@
  *   shutdown      - shutdown instance
  *   owner         - ownership query: { get }
  *   materialize   - lazy materialization tracking: { materialized, get, wait }
- *   lifecycle     - lifecycle event emitter: { on, off, subscribe, unsubscribe, emit }
+ *   lifecycle     - lifecycle event emitter: { on, off }
  *
  * ## Only present when `diagnostics: true` (adds `diag`)
  *
@@ -115,7 +115,7 @@ const EXPECTED_HOOK_SUBKEYS = ["on", "remove", "clear", "off", "enable", "disabl
 const EXPECTED_METADATA_SUBKEYS = ["setGlobal", "set", "remove", "setFor", "removeFor"];
 const EXPECTED_OWNER_SUBKEYS = ["get"];
 const EXPECTED_MATERIALIZE_SUBKEYS = ["materialized", "get", "wait"];
-const EXPECTED_LIFECYCLE_SUBKEYS = ["on", "off", "subscribe", "unsubscribe", "emit"];
+const EXPECTED_LIFECYCLE_SUBKEYS = ["on", "off"];
 
 const EXPECTED_DIAG_SUBKEYS = ["describe", "reference", "context", "inspect", "owner", "caches", "SlothletWarning", "hook"];
 const EXPECTED_DIAG_CACHES_SUBKEYS = ["get", "getAllModuleIDs", "has"];
@@ -258,7 +258,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 				expectKeysPresent(api.slothlet.materialize, EXPECTED_MATERIALIZE_SUBKEYS, "api.slothlet.materialize");
 			});
 
-			it("api.slothlet.lifecycle should have on, off, subscribe, unsubscribe, emit", () => {
+			it("api.slothlet.lifecycle should have on, off", () => {
 				expectKeysPresent(api.slothlet.lifecycle, EXPECTED_LIFECYCLE_SUBKEYS, "api.slothlet.lifecycle");
 			});
 		});

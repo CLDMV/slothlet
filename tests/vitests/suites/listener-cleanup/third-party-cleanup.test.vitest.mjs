@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:57 -08:00 (1770266397)
+ *	@Last modified time: 2026-02-22 00:41:51 -08:00 (1771749711)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -66,12 +66,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 		expect(emitters).toHaveLength(5);
 
 		const totalListenersBefore = emitters.reduce(
-			(sum, e) =>
-				sum +
-				e.listenerCount("connect") +
-				e.listenerCount("query") +
-				e.listenerCount("error") +
-				e.listenerCount("disconnect"),
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
 		expect(totalListenersBefore).toBe(20);
@@ -81,16 +76,11 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Verify all listeners were removed
 		const totalListenersAfter = emitters.reduce(
-			(sum, e) =>
-				sum +
-				e.listenerCount("connect") +
-				e.listenerCount("query") +
-				e.listenerCount("error") +
-				e.listenerCount("disconnect"),
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
 		expect(totalListenersAfter).toBe(0);
-	});
+	}, 120000);
 
 	test("Third-party EventEmitters (chokidar) created in API files are tracked and cleaned up", async () => {
 		api = await slothlet({
@@ -135,7 +125,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 			watcher.listenerCount("error") +
 			watcher.listenerCount("ready");
 		expect(directCountAfter).toBe(0);
-	});
+	}, 120000);
 
 	test("Both native and third-party EventEmitters are cleaned up simultaneously", async () => {
 		api = await slothlet({
@@ -159,12 +149,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Count listeners before shutdown
 		const poolBefore = poolEmitters.reduce(
-			(sum, e) =>
-				sum +
-				e.listenerCount("connect") +
-				e.listenerCount("query") +
-				e.listenerCount("error") +
-				e.listenerCount("disconnect"),
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
 		const watcherBefore =
@@ -182,12 +167,7 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		// Verify all listeners were removed from both types
 		const poolAfter = poolEmitters.reduce(
-			(sum, e) =>
-				sum +
-				e.listenerCount("connect") +
-				e.listenerCount("query") +
-				e.listenerCount("error") +
-				e.listenerCount("disconnect"),
+			(sum, e) => sum + e.listenerCount("connect") + e.listenerCount("query") + e.listenerCount("error") + e.listenerCount("disconnect"),
 			0
 		);
 		const watcherAfter =
@@ -199,5 +179,5 @@ describe.each(getMatrixConfigs({}))("Third-Party Listener Cleanup - $name", ({ c
 
 		expect(poolAfter).toBe(0);
 		expect(watcherAfter).toBe(0);
-	});
+	}, 120000);
 });

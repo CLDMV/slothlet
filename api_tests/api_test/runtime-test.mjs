@@ -6,18 +6,19 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-10 18:02:02 -08:00 (1770775322)
+ *	@Last modified time: 2026-02-22 13:12:22 -08:00 (1771794742)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { self, context } from "@cldmv/slothlet/runtime";
+import { instanceID as asyncInstanceID } from "@cldmv/slothlet/runtime/async";
 
 /**
-	* Comprehensive runtime verification that tests all aspects of the runtime system.
-	* @function verifyRuntime
-	* @returns {object} Complete runtime verification results
-	*/
+ * Comprehensive runtime verification that tests all aspects of the runtime system.
+ * @function verifyRuntime
+ * @returns {object} Complete runtime verification results
+ */
 export function verifyRuntime() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -109,10 +110,6 @@ export function verifyRuntime() {
 		// Detect runtime type from context.expectedRuntime (set by test harness)
 		// or fall back to heuristics
 		try {
-			console.log("DEBUG runtime-test: typeof context =", typeof context);
-			console.log("DEBUG runtime-test: context keys =", Object.keys(context || {}));
-			console.log("DEBUG runtime-test: context.expectedRuntime =", context?.expectedRuntime);
-
 			if (context && context.expectedRuntime) {
 				results.runtimeType = context.expectedRuntime;
 			} else {
@@ -127,7 +124,6 @@ export function verifyRuntime() {
 				}
 			}
 		} catch (error) {
-			console.log("DEBUG runtime-test: ERROR accessing context:", error.message);
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {
@@ -139,12 +135,12 @@ export function verifyRuntime() {
 }
 
 /**
-	* Test self cross-calls using math operations.
-	* @function testSelfCrossCall
-	* @param {number} a - First number
-	* @param {number} b - Second number
-	* @returns {object} Cross-call test results
-	*/
+ * Test self cross-calls using math operations.
+ * @function testSelfCrossCall
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {object} Cross-call test results
+ */
 export function testSelfCrossCall(a = 5, b = 3) {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -178,10 +174,10 @@ export function testSelfCrossCall(a = 5, b = 3) {
 }
 
 /**
-	* Test context isolation by checking for unique context data.
-	* @function testContextIsolation
-	* @returns {object} Context isolation test results
-	*/
+ * Test context isolation by checking for unique context data.
+ * @function testContextIsolation
+ * @returns {object} Context isolation test results
+ */
 export function testContextIsolation() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -214,10 +210,10 @@ export function testContextIsolation() {
 }
 
 /**
-	* Performance test to help distinguish between runtime types.
-	* @function testPerformance
-	* @returns {object} Performance test results
-	*/
+ * Performance test to help distinguish between runtime types.
+ * @function testPerformance
+ * @returns {object} Performance test results
+ */
 export function testPerformance() {
 	const results = {
 		timestamp: new Date().toISOString(),
@@ -251,10 +247,10 @@ export function testPerformance() {
 }
 
 /**
-	* Comprehensive runtime test that combines all verification methods.
-	* @function comprehensiveRuntimeTest
-	* @returns {object} Complete runtime test results
-	*/
+ * Comprehensive runtime test that combines all verification methods.
+ * @function comprehensiveRuntimeTest
+ * @returns {object} Complete runtime test results
+ */
 export function comprehensiveRuntimeTest() {
 	return {
 		verification: verifyRuntime(),
@@ -265,10 +261,10 @@ export function comprehensiveRuntimeTest() {
 }
 
 /**
-	* Test self and reference propagation through API function calls.
-	* @function testSelfAndReference
-	* @returns {object} Self and reference test results
-	*/
+ * Test self and reference propagation through API function calls.
+ * @function testSelfAndReference
+ * @returns {object} Self and reference test results
+ */
 export function testSelfAndReference() {
 	const results = {
 		hasSelfAccess: false,
@@ -316,3 +312,32 @@ export function testSelfAndReference() {
 	return results;
 }
 
+/**
+ * Exercise all proxy traps on the `instanceID` export from the async runtime.
+ * Must be called within an active slothlet async-runtime context so the in-context
+ * branches of the get/has traps are reached.
+ * @function getAsyncInstanceID
+ * @returns {{ id: string, coerced: string, length: number, hasProp: boolean }} Proxy trap results
+ * @example
+ * const result = api.runtimeTest.getAsyncInstanceID();
+ * // result.id === api.slothlet.instanceID
+ */
+export function getAsyncInstanceID() {
+	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
+	const toStringFn = asyncInstanceID.toString;
+	const id = typeof toStringFn === "function" ? toStringFn() : "";
+
+	// get trap — Symbol.toPrimitive branch: String() coercion
+	const coerced = String(asyncInstanceID);
+
+	// get trap — ctx.instanceID[prop] fallback: normal string property
+	const length = asyncInstanceID.length;
+
+	// has trap — "length" exists on any string (via Object wrapping in the proxy)
+	const hasProp = "length" in asyncInstanceID;
+
+	// has trap — undefined prop should be false
+	const missingProp = "__nonexistent__" in asyncInstanceID;
+
+	return { id, coerced, length, hasProp, missingProp };
+}

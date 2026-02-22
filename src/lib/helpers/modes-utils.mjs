@@ -54,26 +54,6 @@ export class ModesUtils extends ComponentBase {
 	}
 
 	/**
-	 * Create a named async materialization function for lazy subdirectories.
-	 * @param {string} apiPath - API path to derive the function name from.
-	 * @param {Function} handler - Async handler that performs materialization.
-	 * @returns {Function} Named async materialization function.
-	 * @public
-	 */
-	createNamedMaterializeFunc(apiPath, handler) {
-		const safePath = String(apiPath || "api")
-			.replace(/\./g, "__")
-			.replace(/[^A-Za-z0-9_$]/g, "_");
-		const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
-		const funcName = `${normalized}__lazy_materializeFunc`;
-		return {
-			[funcName]: async function (...args) {
-				return handler(...args);
-			}
-		}[funcName];
-	}
-
-	/**
 	 * Clone eager-mode module exports to avoid mutating import cache objects.
 	 * @param {unknown} value - Value to clone for wrapping
 	 * @param {string} mode - Current mode ("eager" or "lazy")

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-22 12:10:10 -08:00 (1771791010)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -41,10 +41,20 @@ export class Utilities extends ComponentBase {
 	}
 
 	/**
-	 * Deep merge objects
-	 * @param {Object} target - Target object
-	 * @param {Object} source - Source object
-	 * @returns {Object} Merged object
+	 * Deep merge two plain objects recursively.
+	 *
+	 * Differences from a simple spread:
+	 * - Recursively merges nested plain objects rather than replacing them.
+	 * - Uses `hasOwnProperty` to skip prototype-chain keys (no prototype pollution).
+	 * - Non-plain values (arrays, class instances, primitives) are always copied by
+	 *   value from `source`, never merged.
+	 * - When `source[key]` is a plain object but `target[key]` is not (or absent),
+	 *   the merge starts from `{}` so the returned sub-tree is always a fresh copy.
+	 * - If either top-level argument is not a plain object, returns `source` as-is.
+	 *
+	 * @param {Object} target - Base object (not mutated).
+	 * @param {Object} source - Source object whose keys are merged in.
+	 * @returns {Object} New merged object.
 	 * @public
 	 */
 	deepMerge(target, source) {
@@ -56,8 +66,10 @@ export class Utilities extends ComponentBase {
 
 		for (const key in source) {
 			if (Object.prototype.hasOwnProperty.call(source, key)) {
-				if (this.isPlainObject(source[key]) && this.isPlainObject(target[key])) {
-					result[key] = this.deepMerge(target[key], source[key]);
+				if (this.isPlainObject(source[key])) {
+					// Recurse: start from target[key] if it's a plain object, otherwise {}
+					// so new nested keys in source always produce a fresh copy.
+					result[key] = this.deepMerge(this.isPlainObject(target[key]) ? target[key] : {}, source[key]);
 				} else {
 					result[key] = source[key];
 				}
@@ -65,6 +77,44 @@ export class Utilities extends ComponentBase {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Deep clone a value, handling Proxy objects and functions that `structuredClone`
+	 * cannot serialise.
+	 *
+	 * Strategy:
+	 * 1. Try `structuredClone` — fast and spec-correct for plain data.
+	 * 2. Fall back to a manual recursive copy for Proxies, callables, and other
+	 *    non-serialisable objects; errors on individual property clones are swallowed
+	 *    and the original reference is retained for that key.
+	 *
+	 * @param {unknown} obj - Value to clone.
+	 * @returns {unknown} Deep clone of `obj`.
+	 * @public
+	 */
+	deepClone(obj) {
+		try {
+			return structuredClone(obj);
+		} catch {
+			// Fallback for Proxy / function / symbol values that structuredClone rejects.
+			// Use .__type for Slothlet-wrapped objects, otherwise fall back to typeof.
+			const objType = obj?.__type || typeof obj;
+			if (obj === null || (objType !== "object" && objType !== "function")) return obj;
+			if (obj instanceof Date) return new Date(obj.getTime());
+			if (Array.isArray(obj)) return obj.map((item) => this.deepClone(item));
+			// For callable Proxies and plain objects: clone all enumerable keys.
+			const cloned = {};
+			for (const key in obj) {
+				try {
+					cloned[key] = this.deepClone(obj[key]);
+				} catch {
+					// Keep original reference if an individual property can't be cloned.
+					cloned[key] = obj[key];
+				}
+			}
+			return cloned;
+		}
 	}
 
 	/**
@@ -87,30 +137,5 @@ export class Utilities extends ComponentBase {
 		// Windows: C:\ or \\
 		// Unix: /
 		return /^([a-zA-Z]:\\|\\\\|\/)/i.test(path);
-	}
-
-	/**
-	 * Decide whether a named export should be attached to a callable default export.
-	 * @param {string} key - Named export key.
-	 * @param {unknown} value - Named export value.
-	 * @param {Function} defaultFunc - Wrapped callable default export.
-	 * @param {Function} originalDefault - Original default export.
-	 * @returns {boolean} True if the export should be attached.
-	 * @public
-	 */
-	shouldAttachNamedExport(key, value, defaultFunc, originalDefault) {
-		if (!key || key === "default") {
-			return false;
-		}
-		if (value === defaultFunc || value === originalDefault) {
-			return false;
-		}
-		if (typeof defaultFunc === "function" && key === defaultFunc.name) {
-			return false;
-		}
-		if (typeof originalDefault === "function" && key === originalDefault.name) {
-			return false;
-		}
-		return true;
 	}
 }

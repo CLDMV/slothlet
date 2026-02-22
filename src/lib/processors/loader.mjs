@@ -415,7 +415,7 @@ export class Loader extends ComponentBase {
 			if (typeof exports.default === "function") {
 				const callable = ensureNamedDefaultFunction(exports.default, propertyName);
 				for (const key of exportKeys) {
-					if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], callable, exports.default)) {
+					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], callable, exports.default)) {
 						continue;
 					}
 					callable[key] = exports[key];
@@ -432,7 +432,7 @@ export class Loader extends ComponentBase {
 				// Result: api.property becomes the default object with named exports as properties
 				target[propertyName] = exports.default;
 				for (const key of exportKeys) {
-					if (!this.slothlet.helpers.utilities.shouldAttachNamedExport(key, exports[key], target[propertyName], exports.default)) {
+					if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], target[propertyName], exports.default)) {
 						continue;
 					}
 					target[propertyName][key] = exports[key];
