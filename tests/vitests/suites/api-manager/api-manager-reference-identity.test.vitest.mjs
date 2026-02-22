@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 21:28:10 -08:00 (1771738090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -95,7 +95,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		await api.slothlet.api.reload("extra");
 
 		if (config.mode === "lazy") {
-			// Lazy reload fully resets wrappers — references break
+			// Lazy reload fully resets wrappers - references break
 			expect(api.extra?.mathCjs).not.toBe(mathCjsRef);
 			expect(api.extra?.mathCjs?.multiply).not.toBe(multiplyRef);
 			expect(api.extra?.mathEsm).not.toBe(mathEsmRef);
@@ -129,7 +129,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		await api.slothlet.api.reload("deep");
 
 		if (config.mode === "lazy") {
-			// Lazy reload fully resets wrappers — references break
+			// Lazy reload fully resets wrappers - references break
 			expect(api.deep?.util).not.toBe(utilRef);
 			expect(api.deep?.math).not.toBe(mathRef);
 		} else {
@@ -160,7 +160,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		await api.slothlet.api.reload("extra");
 
 		if (config.mode === "lazy") {
-			// Lazy reload fully resets wrappers — references break
+			// Lazy reload fully resets wrappers - references break
 			expect(api.extra?.mixed).not.toBe(mixedRef);
 			expect(api.extra?.mixed?.mixedNamed).not.toBe(mixedNamedRef);
 			expect(api.extra?.mixed?.mixedAnother).not.toBe(mixedAnotherRef);
@@ -201,7 +201,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ con
 		await api.slothlet.api.reload("comprehensive");
 
 		if (config.mode === "lazy") {
-			// Lazy reload fully resets wrappers — references break
+			// Lazy reload fully resets wrappers - references break
 			expect(api.comprehensive?.math).not.toBe(refs.math);
 			expect(api.comprehensive?.util).not.toBe(refs.util);
 			expect(api.comprehensive?.advanced).not.toBe(refs.advanced);

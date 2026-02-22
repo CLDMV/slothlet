@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:29 -08:00 (1771716989)
+ *	@Last modified time: 2026-02-21 21:28:11 -08:00 (1771738091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -17,12 +17,12 @@
  * @description
  * Validates that the framework's private internal state cannot be accessed, enumerated,
  * mutated, or leaked through any standard or advanced JavaScript introspection technique
- * on a user-facing slothlet proxy — for BOTH main proxies (all modes) and waiting proxies
+ * on a user-facing slothlet proxy - for BOTH main proxies (all modes) and waiting proxies
  * (lazy pre-materialization).
  *
  * Attack surfaces covered:
  *
- * A. ____slothletInternal (the private state bag — backed by #internal private field)
+ * A. ____slothletInternal (the private state bag - backed by #internal private field)
  *    A1.  Direct property read
  *    A2.  Bracket notation read
  *    A3.  `in` operator (hasTrap)
@@ -32,27 +32,27 @@
  *    A7.  Spread operator ({ ...proxy })
  *    A8.  Object.assign
  *    A9.  Prototype chain walk
- *    A10. Mutation via set — must NOT shadow the #internal private field getter
+ *    A10. Mutation via set - must NOT shadow the #internal private field getter
  *    A11. Mutation via Object.defineProperty
- *    A12. Delete attempt — must not throw (return true silently)
- *    A13. Waiting proxy (lazy pre-materialization) — must also block ____slothletInternal
+ *    A12. Delete attempt - must not throw (return true silently)
+ *    A13. Waiting proxy (lazy pre-materialization) - must also block ____slothletInternal
  *
- * B. ___getState / __state — now blocked (removed from allowedInternals)
+ * B. ___getState / __state - now blocked (removed from allowedInternals)
  *    B1.  ___getState returns undefined through the proxy (internal access uses resolveWrapper)
  *    B2.  __state returns undefined through the proxy
  *
  * C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
- *    C1.  These are BLOCKED through proxy — access via resolveWrapper internally
+ *    C1.  These are BLOCKED through proxy - access via resolveWrapper internally
  *    C2.  resolveWrapper gives internal framework access to these methods
  *
  * D. Implementation / server-path info (__impl, _impl, __filePath, __sourceFolder, __moduleID)
- *    D1.  __impl / _impl blocked through proxy — access via resolveWrapper().__impl internally
+ *    D1.  __impl / _impl blocked through proxy - access via resolveWrapper().__impl internally
  *    D2.  __filePath / __sourceFolder / __moduleID are exposed read-only through proxy (informational)
  *
- * E. Read-only informational properties — cannot be overwritten from outside
- *    E1.  Writing to any read-only prop is silently absorbed — read returns original value
+ * E. Read-only informational properties - cannot be overwritten from outside
+ *    E1.  Writing to any read-only prop is silently absorbed - read returns original value
  *    E2.  Writing to read-only props on a waiting proxy (lazy pre-materialization) is also absorbed
- *    E3.  Deleting a read-only prop is silently absorbed — read still returns original value
+ *    E3.  Deleting a read-only prop is silently absorbed - read still returns original value
  *
  * F. resolveWrapper as the safe internal access path
  *    F1.  resolveWrapper(proxy) returns the UnifiedWrapper
@@ -75,18 +75,18 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  */
 const BLOCKED_KEYS = [
 	{ key: "____slothletInternal", desc: "private state bag backed by #internal field" },
-	{ key: "___getState", desc: "state accessor — removed from allowedInternals, use resolveWrapper internally" },
-	{ key: "__state", desc: "state alias — removed from allowedInternals" },
-	{ key: "___setImpl", desc: "implementation replacement API — blocked, use resolveWrapper(proxy).___setImpl internally" },
-	{ key: "___resetLazy", desc: "lazy reset API — blocked, use resolveWrapper(proxy).___resetLazy internally" },
-	{ key: "___invalidate", desc: "invalidation API — blocked, use resolveWrapper(proxy).___invalidate internally" },
-	{ key: "__impl", desc: "raw implementation — blocked, use resolveWrapper(proxy).__impl internally" },
-	{ key: "_impl", desc: "raw implementation alias — blocked, use resolveWrapper(proxy).__impl internally" }
+	{ key: "___getState", desc: "state accessor - removed from allowedInternals, use resolveWrapper internally" },
+	{ key: "__state", desc: "state alias - removed from allowedInternals" },
+	{ key: "___setImpl", desc: "implementation replacement API - blocked, use resolveWrapper(proxy).___setImpl internally" },
+	{ key: "___resetLazy", desc: "lazy reset API - blocked, use resolveWrapper(proxy).___resetLazy internally" },
+	{ key: "___invalidate", desc: "invalidation API - blocked, use resolveWrapper(proxy).___invalidate internally" },
+	{ key: "__impl", desc: "raw implementation - blocked, use resolveWrapper(proxy).__impl internally" },
+	{ key: "_impl", desc: "raw implementation alias - blocked, use resolveWrapper(proxy).__impl internally" }
 ];
 
 /**
  * The key used by framework code to access the state bag on a raw UnifiedWrapper instance
- * (i.e. via resolveWrapper). This is intentionally accessible on the raw wrapper — never
+ * (i.e. via resolveWrapper). This is intentionally accessible on the raw wrapper - never
  * through a user-facing proxy.
  */
 const INTERNAL_KEY = "____slothletInternal";
@@ -113,7 +113,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	/**
 	 * Returns a materialized leaf proxy (api.math.add) and namespace proxy (api.math).
-	 * Triggers _materialize() unconditionally — it is a no-op in eager mode and
+	 * Triggers _materialize() unconditionally - it is a no-op in eager mode and
 	 * performs actual async work in lazy mode, ensuring the proxies are fully resolved.
 	 * @returns {Promise<{ leaf: unknown, ns: unknown }>}
 	 */
@@ -126,7 +126,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	}
 
 	// ---------------------------------------------------------------------------
-	// A. Blocked keys — must be completely inaccessible through any proxy surface.
+	// A. Blocked keys - must be completely inaccessible through any proxy surface.
 	//    Each test iterates all BLOCKED_KEYS so we share a single API instance.
 	// ---------------------------------------------------------------------------
 
@@ -247,7 +247,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		}
 	});
 
-	it("A10. Mutation via set is silently absorbed for all blocked keys — proxy remains functional", async () => {
+	it("A10. Mutation via set is silently absorbed for all blocked keys - proxy remains functional", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		const sentinel = { injected: true };
 		for (const { key } of BLOCKED_KEYS) {
@@ -271,7 +271,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 			try {
 				Object.defineProperty(ns, key, { value: 42, configurable: true });
 			} catch {
-				// Acceptable — proxy may reject defineProperty
+				// Acceptable - proxy may reject defineProperty
 			}
 			expect(ns[key], `ns["${key}"] after defineProperty`).toBeUndefined();
 		}
@@ -303,16 +303,16 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	});
 
 	// ---------------------------------------------------------------------------
-	// B. ___getState / __state — blocked (removed from allowedInternals)
+	// B. ___getState / __state - blocked (removed from allowedInternals)
 	//    Internal state reads go via resolveWrapper(...).____slothletInternal.state
 	// ---------------------------------------------------------------------------
 
-	it("B1. ___getState is blocked — returns undefined through the proxy", async () => {
+	it("B1. ___getState is blocked - returns undefined through the proxy", async () => {
 		const { ns } = await getMaterializedProxies();
 		expect(ns.___getState).toBeUndefined();
 	});
 
-	it("B2. __state is blocked — returns undefined through the proxy", async () => {
+	it("B2. __state is blocked - returns undefined through the proxy", async () => {
 		const { ns } = await getMaterializedProxies();
 		expect(ns.__state).toBeUndefined();
 	});
@@ -344,7 +344,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	// These tests additionally confirm the path props and that resolveWrapper still works.
 	// ---------------------------------------------------------------------------
 
-	it("D1. __impl / _impl are blocked through the proxy — access via resolveWrapper().__impl internally", async () => {
+	it("D1. __impl / _impl are blocked through the proxy - access via resolveWrapper().__impl internally", async () => {
 		const { leaf } = await getMaterializedProxies();
 		expect(leaf.__impl).toBeUndefined();
 		expect(leaf._impl).toBeUndefined();
@@ -355,7 +355,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	it("D2. __filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
-		// These are informational props — readable through the proxy, write/delete is silently absorbed.
+		// These are informational props - readable through the proxy, write/delete is silently absorbed.
 		if (leaf.__filePath !== undefined) {
 			expect(typeof leaf.__filePath).toBe("string");
 		}
@@ -370,7 +370,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	});
 
 	// ---------------------------------------------------------------------------
-	// E. Read-only informational properties — external writes must be silently absorbed.
+	// E. Read-only informational properties - external writes must be silently absorbed.
 	//    Each prop's getTrap handler returns directly from ____slothletInternal, so
 	//    any own-property installation by setTrap would be bypassed on read anyway.
 	//    setTrap explicitly blocks these in blockedKeys for a clean no-op.
@@ -378,7 +378,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	/**
 	 * Informational / state-read props that must be read-only from outside.
-	 * getTrap returns all of these from wrapper.____slothletInternal — writes cannot corrupt them.
+	 * getTrap returns all of these from wrapper.____slothletInternal - writes cannot corrupt them.
 	 * @type {string[]}
 	 */
 	const READ_ONLY_INFO_PROPS = [
@@ -390,7 +390,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		"__materializeOnCreate",
 		"__displayName",
 		"__type",
-		// Server-info props — exposed read-only through proxy; write/delete silently absorbed.
+		// Server-info props - exposed read-only through proxy; write/delete silently absorbed.
 		"__filePath",
 		"__sourceFolder",
 		"__moduleID",
@@ -402,7 +402,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		"__invalid"
 	];
 
-	it("E1. Writing to any read-only informational prop is silently absorbed — read returns original value", async () => {
+	it("E1. Writing to any read-only informational prop is silently absorbed - read returns original value", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		const SENTINEL = Symbol("hijack-attempt");
 		for (const prop of READ_ONLY_INFO_PROPS) {
@@ -420,7 +420,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	});
 
 	it("E2. Writing to read-only props on a waiting proxy (pre-materialization) is also absorbed", () => {
-		// api.math is a waiting proxy in lazy mode, or already resolved in eager mode —
+		// api.math is a waiting proxy in lazy mode, or already resolved in eager mode -
 		// either way the write must not corrupt the read.
 		const proxy = api.math;
 		const SENTINEL = Symbol("hijack-attempt");
@@ -433,7 +433,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		}
 	});
 
-	it("E3. Deleting a read-only informational prop is silently absorbed — read still returns original value", async () => {
+	it("E3. Deleting a read-only informational prop is silently absorbed - read still returns original value", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		for (const prop of READ_ONLY_INFO_PROPS) {
 			const originalLeaf = leaf[prop];
@@ -453,7 +453,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	// F. resolveWrapper as the correct internal access path
 	// ---------------------------------------------------------------------------
 
-	it("F1. resolveWrapper(proxy) returns the UnifiedWrapper — not null", async () => {
+	it("F1. resolveWrapper(proxy) returns the UnifiedWrapper - not null", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		expect(resolveWrapper(leaf)).not.toBeNull();
 		expect(resolveWrapper(ns)).not.toBeNull();

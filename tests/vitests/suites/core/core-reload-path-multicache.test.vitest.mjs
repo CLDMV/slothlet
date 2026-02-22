@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-10 18:02:00 -08:00 (1770775320)
+ *	@Last modified time: 2026-02-21 21:28:10 -08:00 (1771738090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -89,7 +89,7 @@ for (const { config, name } of configs) {
 				const sharedPower = await api.shared.math.power(2, 3);
 				expect(sharedPower).toBe(8);
 
-				// Reload "shared" — should find both caches (exact endpoint match)
+				// Reload "shared" - should find both caches (exact endpoint match)
 				await api.slothlet.api.reload("shared");
 
 				// After reload, keys from both modules should still exist
@@ -104,7 +104,7 @@ for (const { config, name } of configs) {
 			});
 
 			it("should preserve keys from first module when second merges", async () => {
-				// API_TEST has config.host — API_TEST_COLLISIONS does NOT
+				// API_TEST has config.host - API_TEST_COLLISIONS does NOT
 				await api.slothlet.api.add("merged", TEST_DIRS.API_TEST);
 
 				// Verify API_TEST unique key exists
@@ -167,10 +167,10 @@ for (const { config, name } of configs) {
 			});
 
 			it("should rebuild caches in add-history order", async () => {
-				// Add first module — provides math.add, config, etc.
+				// Add first module - provides math.add, config, etc.
 				const moduleID1 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST);
 
-				// Add second module — provides collections (new top-level) and power/sqrt/modulo (merge into math)
+				// Add second module - provides collections (new top-level) and power/sqrt/modulo (merge into math)
 				const moduleID2 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST_COLLISIONS);
 
 				// Merged keys from COLLISIONS present before reload
@@ -178,7 +178,7 @@ for (const { config, name } of configs) {
 				const orderedPower = await api.ordered.math.power(2, 3);
 				expect(orderedPower).toBe(8);
 
-				// Reload "ordered" — caches should rebuild in add-history order
+				// Reload "ordered" - caches should rebuild in add-history order
 				await api.slothlet.api.reload("ordered");
 
 				// After reload: first module (API_TEST) rebuilds with replace,
@@ -234,7 +234,7 @@ for (const { config, name } of configs) {
 				const child1Math = await api.parent.child1.math.add(3, 4);
 				expect(child1Math).toBeDefined();
 
-				// child2 (API_TEST_COLLISIONS): properly flattened — math has all exports
+				// child2 (API_TEST_COLLISIONS): properly flattened - math has all exports
 				// from both math.mjs (power, sqrt, modulo, collisionVersion) and math/math.mjs (add, multiply, divide)
 				const child2Power = await api.parent.child2.math.power(2, 3);
 				expect(child2Power).toBe(8);
@@ -242,7 +242,7 @@ for (const { config, name } of configs) {
 				expect(child2Add).toBe(7);
 				expect(api.parent.child2.math.collisionVersion).toBe("math-collision-v1");
 
-				// Reload parent — should find both child caches
+				// Reload parent - should find both child caches
 				await api.slothlet.api.reload("parent");
 
 				// Both children should still work after reload
@@ -404,14 +404,14 @@ for (const { config, name } of configs) {
 			});
 
 			it("should merge keys from second module after reload", async () => {
-				// First module at "collide" — has config.host, math.add, math.multiply, etc.
+				// First module at "collide" - has config.host, math.add, math.multiply, etc.
 				await api.slothlet.api.add("collide", TEST_DIRS.API_TEST);
 
 				// Verify API_TEST unique keys
 				const hostBefore = await api.collide.config.host;
 				expect(hostBefore).toBe("https://slothlet");
 
-				// Second module at "collide" — merge mode adds new keys:
+				// Second module at "collide" - merge mode adds new keys:
 				// - collections: new top-level key
 				// - math.power, math.sqrt, math.modulo: new keys merged into existing math wrapper
 				// - math.collisionVersion: exists in BOTH → merge preserves API_TEST's value ("collision-math-file")
@@ -423,7 +423,7 @@ for (const { config, name } of configs) {
 				const collidePower = await api.collide.math.power(2, 3);
 				expect(collidePower).toBe(8);
 
-				// Reload path — multi-cache rebuild
+				// Reload path - multi-cache rebuild
 				await api.slothlet.api.reload("collide");
 
 				// First module rebuilds with replace: config.host present

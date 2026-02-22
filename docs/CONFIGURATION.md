@@ -76,8 +76,8 @@ const api = await slothlet({ dir: "/absolute/path/to/api" });
 
 Controls when API modules are loaded and materialized.
 
-- **`"eager"`** — All modules are loaded and the API is fully built on initialization. Safe for all runtimes.
-- **`"lazy"`** — Modules are loaded on first access via a Proxy. Reduces startup time for large APIs.
+- **`"eager"`** - All modules are loaded and the API is fully built on initialization. Safe for all runtimes.
+- **`"lazy"`** - Modules are loaded on first access via a Proxy. Reduces startup time for large APIs.
 
 Also accepted: `"immediate"` / `"preload"` (aliases for `"eager"`); `"deferred"` / `"proxy"` (aliases for `"lazy"`).
 
@@ -96,8 +96,8 @@ See [LIFECYCLE.md](LIFECYCLE.md) for lazy mode behavior, proxy semantics, and ma
 
 Selects the context-propagation runtime.
 
-- **`"async"`** — Uses AsyncLocalStorage (Node.js built-in). Recommended for all production use.
-- **`"live"`** — Experimental live bindings mode. Has known limitations; do not use in production.
+- **`"async"`** - Uses AsyncLocalStorage (Node.js built-in). Recommended for all production use.
+- **`"live"`** - Experimental live bindings mode. Has known limitations; do not use in production.
 
 Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` (aliases for `"async"`).
 
@@ -136,8 +136,8 @@ Controls behavior when two modules export a property at the same API path.
 
 | Mode | Behavior |
 |---|---|
-| `"merge"` | Merge properties — preserve originals and add new ones *(default)* |
-| `"merge-replace"` | Merge properties — add new ones and overwrite overlapping values |
+| `"merge"` | Merge properties - preserve originals and add new ones *(default)* |
+| `"merge-replace"` | Merge properties - add new ones and overwrite overlapping values |
 | `"replace"` | Replace existing value completely |
 | `"skip"` | Silently ignore the collision, keep the existing value |
 | `"warn"` | Warn about the collision, keep the existing value |
@@ -178,9 +178,9 @@ Controls which runtime API mutation methods are available on `api.slothlet.api`.
 
 | Property | Default | Controls |
 |---|---|---|
-| `add` | `true` | `api.slothlet.api.add()` — mount new API modules at runtime |
-| `remove` | `true` | `api.slothlet.api.remove()` — unmount API modules at runtime |
-| `reload` | `true` | `api.slothlet.api.reload()` — hot-reload a module or directory |
+| `add` | `true` | `api.slothlet.api.add()` - mount new API modules at runtime |
+| `remove` | `true` | `api.slothlet.api.remove()` - unmount API modules at runtime |
+| `reload` | `true` | `api.slothlet.api.reload()` - hot-reload a module or directory |
 
 Disable all mutations to create a locked, immutable API:
 
@@ -243,8 +243,8 @@ api.config    // ✅
 
 Controls how per-request scope data is merged.
 
-- **`"shallow"`** — Top-level keys are merged (default when scope is provided)
-- **`"deep"`** — Deep recursive merge of all nested keys
+- **`"shallow"`** - Top-level keys are merged (default when scope is provided)
+- **`"deep"`** - Deep recursive merge of all nested keys
 
 ```javascript
 const api = await slothlet({
@@ -330,7 +330,7 @@ const api = await slothlet({ dir: "./api", silent: true });
 **Type**: `boolean`  
 **Default**: `false`
 
-Enables the `api.slothlet.diag.*` namespace for runtime introspection. Intended for testing and debugging — do not enable in production.
+Enables the `api.slothlet.diag.*` namespace for runtime introspection. Intended for testing and debugging - do not enable in production.
 
 ```javascript
 const api = await slothlet({ dir: "./api", diagnostics: true });
@@ -436,7 +436,7 @@ console.log(diag.context); // { db, logger } or {}
 
 ### `diag.inspect()`
 
-Returns internal instance state from `getDiagnostics()` — config snapshot, handler state, and materialization stats.
+Returns internal instance state from `getDiagnostics()` - config snapshot, handler state, and materialization stats.
 
 ```javascript
 const state = diag.inspect();
@@ -444,7 +444,7 @@ const state = diag.inspect();
 
 ### `diag.owner.get(apiPath)`
 
-Returns the ownership set for the given API path — the set of `moduleId` strings that currently own that path.
+Returns the ownership set for the given API path - the set of `moduleId` strings that currently own that path.
 
 ```javascript
 const owners = diag.owner.get("math.add");

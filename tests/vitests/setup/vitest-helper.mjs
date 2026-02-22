@@ -179,6 +179,136 @@ export async function callNestedFunction(api, pathParts, args, isAsync = false) 
 }
 
 /**
+ * Run an async callback while suppressing SlothletError console noise.
+ *
+ * @template T
+ * @param {() => Promise<T>} callback - Async callback containing an expected SlothletError assertion.
+ * @returns {Promise<T>} Callback result.
+ */
+export async function withSuppressedSlothletErrorOutput(callback) {
+	const originalConsoleError = console.error;
+	const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+	/**
+	 * Determine whether a log message matches noisy SlothletError output.
+	 * @param {string} message - Message to inspect.
+	 * @returns {boolean} True when message should be suppressed.
+	 */
+	const isSlothletErrorNoiseText = (message) => {
+		return (
+			message.includes("SlothletError") ||
+			message.includes("ERROR [") ||
+			message.includes("Stack Trace:") ||
+			message.includes("Details:") ||
+			message.includes("[slothlet] Lifecycle event handler error") ||
+			message.includes("Path is already owned by another module") ||
+			message.includes("================================================================================")
+		);
+	};
+
+	console.error = (...args) => {
+		const message = args
+			.map((arg) => {
+				if (typeof arg === "string") return arg;
+				if (arg instanceof Error) return arg.message;
+				try {
+					return JSON.stringify(arg);
+				} catch {
+					return String(arg);
+				}
+			})
+			.join(" ");
+
+		const isSlothletErrorNoise = isSlothletErrorNoiseText(message);
+
+		if (!isSlothletErrorNoise) {
+			originalConsoleError(...args);
+		}
+	};
+
+	process.stderr.write = (chunk, encoding, callbackArg) => {
+		const text = typeof chunk === "string" ? chunk : chunk?.toString?.(encoding || "utf8") || "";
+		if (isSlothletErrorNoiseText(text)) {
+			if (typeof callbackArg === "function") callbackArg();
+			return true;
+		}
+		return originalStderrWrite(chunk, encoding, callbackArg);
+	};
+
+	try {
+		return await callback();
+	} finally {
+		console.error = originalConsoleError;
+		process.stderr.write = originalStderrWrite;
+	}
+}
+
+/**
+ * Run a sync callback while suppressing SlothletError console noise.
+ *
+ * @template T
+ * @param {() => T} callback - Sync callback containing an expected SlothletError assertion.
+ * @returns {T} Callback result.
+ */
+export function withSuppressedSlothletErrorOutputSync(callback) {
+	const originalConsoleError = console.error;
+	const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+	/**
+	 * Determine whether a log message matches noisy SlothletError output.
+	 * @param {string} message - Message to inspect.
+	 * @returns {boolean} True when message should be suppressed.
+	 */
+	const isSlothletErrorNoiseText = (message) => {
+		return (
+			message.includes("SlothletError") ||
+			message.includes("ERROR [") ||
+			message.includes("Stack Trace:") ||
+			message.includes("Details:") ||
+			message.includes("[slothlet] Lifecycle event handler error") ||
+			message.includes("Path is already owned by another module") ||
+			message.includes("================================================================================")
+		);
+	};
+
+	console.error = (...args) => {
+		const message = args
+			.map((arg) => {
+				if (typeof arg === "string") return arg;
+				if (arg instanceof Error) return arg.message;
+				try {
+					return JSON.stringify(arg);
+				} catch {
+					return String(arg);
+				}
+			})
+			.join(" ");
+
+		const isSlothletErrorNoise = isSlothletErrorNoiseText(message);
+
+		if (!isSlothletErrorNoise) {
+			originalConsoleError(...args);
+		}
+	};
+
+	process.stderr.write = (chunk, encoding, callbackArg) => {
+		const text = typeof chunk === "string" ? chunk : chunk?.toString?.(encoding || "utf8") || "";
+		if (isSlothletErrorNoiseText(text)) {
+			if (typeof callbackArg === "function") callbackArg();
+			return true;
+		}
+		return originalStderrWrite(chunk, encoding, callbackArg);
+	};
+
+	try {
+		return callback();
+	} finally {
+		console.error = originalConsoleError;
+		process.stderr.write = originalStderrWrite;
+	}
+}
+
+/**
  * Generate all possible combinations from configuration space
  * @param {object} configSpace - Object defining possible values for each config option
  * @returns {Array<{name: string, config: object}>} Complete matrix of all combinations

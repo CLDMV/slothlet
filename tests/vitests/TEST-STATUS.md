@@ -24,9 +24,9 @@ npm run vitest suites/<folder>/<test-file>.test.vitest.mjs 2>&1 | Select-Object 
 ### Baseline Addition Policy
 
 > ⚠️ **A test MUST NOT be added to `baseline-tests.json` until ALL of the following pass at 100%:**
-> 1. `npm run debug` — full debug suite passes with zero failures
-> 2. `npm run baseline` — full baseline suite passes with zero failures
-> 3. The individual test being added — passes at 100% (all tests, no skips that shouldn't be skipped)
+> 1. `npm run debug` - full debug suite passes with zero failures
+> 2. `npm run baseline` - full baseline suite passes with zero failures
+> 3. The individual test being added - passes at 100% (all tests, no skips that shouldn't be skipped)
 >
 > Only after all three conditions are met:  update `baseline-tests.json` AND change status to `✅ baseline (YYYY-MM-DD)` in this file.
 > Do **not** mark a test as `✅ baseline` here without also adding it to `baseline-tests.json`, and vice-versa.
@@ -89,7 +89,7 @@ Relative base: tests/vitests
 | suites/api-manager/api-manager-basic.test.vitest.mjs | API Manager Basic | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 112/112 tests pass (100%) |
 | suites/api-manager/api-manager-errors.test.vitest.mjs | API Manager + Error Handling | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 5/5 tests pass (100%) |
 | suites/api-manager/api-manager-hooks.test.vitest.mjs | API Manager + Hooks | ✅ Yes (2026-01-28 12:52) | ✅ baseline (2026-02-20) | 8/8 tests pass (100%) - Re-verified 2026-02-20: hook registrations now persist across hot reloads. |
-| suites/api-manager/api-manager-reference-identity.test.vitest.mjs | API Manager + Reference Identity | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 80/80 pass — fixed: _cloneImpl now uses resolveWrapper() to detect slothlet proxies (getTrap was blocking ____slothletInternal, causing live proxies to be set as impl and then invalidated during ___adoptImplChildren) |
+| suites/api-manager/api-manager-reference-identity.test.vitest.mjs | API Manager + Reference Identity | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 80/80 pass - fixed: _cloneImpl now uses resolveWrapper() to detect slothlet proxies (getTrap was blocking ____slothletInternal, causing live proxies to be set as impl and then invalidated during ___adoptImplChildren) |
 | suites/api-manager/api-manager-test-remove-reload-isolated.test.vitest.mjs | API Manager + Remove/Reload | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-17) | 16/16 tests pass (100%) |
 | suites/isolation/multi-instance-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ✅ baseline (2026-02-17) | 42/42 tests pass (100%) |
 | suites/isolation/tv-config-isolation.test.vitest.mjs | Isolation | ✅ Yes (2026-01-28 14:05) | ✅ baseline (2026-02-17) | 48/48 tests pass (100%) - Fixed instanceId references to use api.slothlet.instanceID |
@@ -117,8 +117,8 @@ Relative base: tests/vitests
 | suites/typescript/typescript-strict-mode.test.vitest.mjs | TypeScript | ✅ Yes (2026-02-14 19:00) | ✅ baseline (2026-02-17) | 13/13 tests pass (100%) |
 | suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs | Smart Flattening | ✅ 1st pass (2026-01-28 15:05) | ✅ baseline (2026-02-20) | 40/40 tests pass (100%) - Fixed by Rule 13 C34 guard extension: `isDirectChild` now also accepts `dupFileDir === resolvedFolderPath` (file at mount root), not just `dupFileDir === resolvedFolderPath/lastPart` (subfolder). Both produce the same duplicate-key nesting problem. |
 | suites/smart-flattening/smart-flattening-case3-case4.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 32/32 tests pass (100%) - Same root cause as case1-case2. Rule 13 C34 `isDirectChild` guard extended to accept files at mount folder root. |
-| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 48/48 tests pass (100%) - Two fixes: (1) Rule 13 C34 `isDirectChild` guard extended for root-file case. (2) Nested container assertions changed from raw `typeof === 'object'` to `isValidFolderType()` — LAZY proxies have typeof==='function' and the raw check was incorrectly failing for all 4 LAZY modes. |
-| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-18) | 56/56 tests pass (100%) - Fixed by: (1) Rule 13 (C34) AddApi Path Deduplication Flattening in api-manager.mjs — hoists key matching mount path's last segment. (2) LAZY Folder Transparency `&& !populateDirectly` guard — prevents false-positive hoist during lazy wrapper materialization. (3) `_hasCategoryFile` guard in createLazySubdirectoryWrapper — requires a file named after the category before promoting wrapper. |
+| suites/smart-flattening/smart-flattening-edge-cases.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-20) | 48/48 tests pass (100%) - Two fixes: (1) Rule 13 C34 `isDirectChild` guard extended for root-file case. (2) Nested container assertions changed from raw `typeof === 'object'` to `isValidFolderType()` - LAZY proxies have typeof==='function' and the raw check was incorrectly failing for all 4 LAZY modes. |
+| suites/smart-flattening/smart-flattening-folders.test.vitest.mjs | Smart Flattening | ✅ Yes (2026-01-20 21:30) | ✅ baseline (2026-02-18) | 56/56 tests pass (100%) - Fixed by: (1) Rule 13 (C34) AddApi Path Deduplication Flattening in api-manager.mjs - hoists key matching mount path's last segment. (2) LAZY Folder Transparency `&& !populateDirectly` guard - prevents false-positive hoist during lazy wrapper materialization. (3) `_hasCategoryFile` guard in createLazySubdirectoryWrapper - requires a file named after the category before promoting wrapper. |
 
 ---
 
@@ -128,11 +128,11 @@ Run `node tools/compare-baseline-tests.mjs` and `node tools/check-baseline-misma
 
 ### ⏳ Passing Tests NOT Yet in `baseline-tests.json`
 
-None — all 84 tests are in the baseline (2026-02-21).
+None - all 84 tests are in the baseline (2026-02-21).
 
 ### ⚠️ Inconsistencies Detected
 
-None as of 2026-02-20 — all known issues resolved.
+None as of 2026-02-20 - all known issues resolved.
 
 ## Feature Categories
 

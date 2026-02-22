@@ -100,7 +100,7 @@
   - Features: Ownership-based removal, stack history
 
 - [x] **api.slothlet.api.reload()** ✅ IMPLEMENTED
-  - Status: Fully functional — selective reload by apiPath or moduleID, multi-cache path reload
+  - Status: Fully functional - selective reload by apiPath or moduleID, multi-cache path reload
   - Location: `src/lib/handlers/api-manager.mjs`
   - Tests: 56/56 selective + 112/112 multi-cache + 63/68 lazy-mode passing (all in baseline)
   - Features: Cache-based rebuild from disk, ownership stack preservation, lazy-aware reload

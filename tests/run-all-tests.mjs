@@ -6,13 +6,13 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 13:30:14 -08:00 (1771709414)
+ *	@Last modified time: 2026-02-21 21:28:09 -08:00 (1771738089)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Test runner — runs all files found in tests/node/.
+ * @fileoverview Test runner - runs all files found in tests/node/.
  * @module @cldmv/slothlet/tests/run-all-tests
  * @package
  * @internal

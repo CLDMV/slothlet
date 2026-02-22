@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 20:48:30 -08:00 (1771735710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -25,7 +25,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 /**
  * Create a slothlet API instance for a given configuration.
@@ -37,8 +37,8 @@ async function createApiInstance(baseConfig, overrides = {}) {
 	return slothlet({ ...baseConfig, ...overrides });
 }
 
-const NON_HOT_CONFIG = { 
-	...getMatrixConfigs({})[0].config, 
+const NON_HOT_CONFIG = {
+	...getMatrixConfigs({})[0].config,
 	dir: TEST_DIRS.API_TEST,
 	api: { mutations: { reload: false } }
 };
@@ -47,7 +47,9 @@ const DEFAULT_HOT_CONFIG = { ...getMatrixConfigs({})[0].config, dir: TEST_DIRS.A
 describe("Hot Reload Error Handling", () => {
 	it("rejects reload() when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
-		await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.reload()).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		});
 		await api.shutdown();
 	});
 
@@ -55,10 +57,14 @@ describe("Hot Reload Error Handling", () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 
 		// V3: Uses [INVALID_ARGUMENT] error code for type errors
-		await expect(api.slothlet.api.reload(123)).rejects.toThrow("INVALID_ARGUMENT");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.reload(123)).rejects.toThrow("INVALID_ARGUMENT");
+		});
 		// V3: Empty string is valid (reloads root), whitespace throws INVALID_API_PATH
 		await expect(api.slothlet.api.reload("")).resolves.toBeUndefined();
-		await expect(api.slothlet.api.reload("   ")).rejects.toThrow("INVALID_API_PATH");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.reload("   ")).rejects.toThrow("INVALID_API_PATH");
+		});
 
 		await api.shutdown();
 	});
@@ -66,14 +72,18 @@ describe("Hot Reload Error Handling", () => {
 	it("rejects reloadApi when api.mutations.reload is disabled", async () => {
 		const api = await createApiInstance(NON_HOT_CONFIG);
 		// V3: Should throw mutations disabled error, not invalid path error
-		await expect(api.slothlet.api.reload("test")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.reload("test")).rejects.toThrow("INVALID_CONFIG_MUTATIONS_DISABLED");
+		});
 		await api.shutdown();
 	});
 
 	it("allows reloadApi on non-existent paths without throwing", async () => {
 		const api = await createApiInstance(DEFAULT_HOT_CONFIG);
 		// V3: Throws INVALID_API_PATH for non-existent paths instead of silently succeeding
-		await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("INVALID_API_PATH");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.reload("nonExistentPath")).rejects.toThrow("INVALID_API_PATH");
+		});
 		await api.shutdown();
 	});
 

@@ -176,7 +176,7 @@
 		"HINT_INVALID_API_PATH": "Ensure the API path exists before using it. Use a dot-separated path (e.g. 'math.add') that refers to a currently loaded module.",
 		"HOOKS_NOT_INITIALIZED": "Cannot access hook functionality: the hook manager is not initialized.",
 		"HINT_HOOKS_NOT_INITIALIZED": "Hook support requires 'hooks: true' in your slothlet configuration.",
-		"METADATA_NOT_AVAILABLE": "Cannot access metadata functionality: the metadata handler is not initialized. Available handlers: {handlersKeys}. This is an internal bug — please report it.",
+		"METADATA_NOT_AVAILABLE": "Cannot access metadata functionality: the metadata handler is not initialized. Available handlers: {handlersKeys}. This is an internal bug - please report it.",
 		"HINT_METADATA_NOT_AVAILABLE": "Metadata support is built-in. If the metadata handler is missing, this indicates an internal slothlet initialization error.",
 		"NO_CONTEXT_MANAGER": "No context manager is configured for this slothlet instance.",
 		"HINT_NO_CONTEXT_MANAGER": "Context operations require a context manager. Initialize slothlet with 'contextManager: new AsyncContextManager()' or 'contextManager: new LiveContextManager()' in your configuration.",

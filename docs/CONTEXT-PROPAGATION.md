@@ -29,10 +29,10 @@ Context propagation ensures that the `context` object and full `self` API access
 
 Access live-bound references in your API modules via the runtime module.
 
-The runtime exports `self`, `context`, and `instanceID`. Note that `reference` is **not** a runtime export — reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
+The runtime exports `self`, `context`, and `instanceID`. Note that `reference` is **not** a runtime export - reference data is merged directly into the API at initialization and is accessible via `self` alongside your API modules.
 
 ```javascript
-// Reference data is merged directly into the API — accessible via self
+// Reference data is merged directly into the API - accessible via self
 const api = await slothlet({
 	dir: "./api",
 	reference: {
@@ -115,9 +115,9 @@ Executes a callback function with isolated context data. `.run()` is shorthand f
 
 **Parameters:**
 
-- `contextData` (Object) — Context data to merge with current context
-- `callback` (Function) — Function to execute with isolated context
-- `...args` (any) — Arguments forwarded to the callback
+- `contextData` (Object) - Context data to merge with current context
+- `callback` (Function) - Function to execute with isolated context
+- `...args` (any) - Arguments forwarded to the callback
 
 **Returns:** Result of the callback function
 
@@ -149,11 +149,11 @@ Executes a function with isolated context using structured options.
 
 **Parameters:**
 
-- `context` (Object) — Context data to merge
-- `fn` (Function) — Function to execute
-- `args` (Array, optional) — Arguments array for the function
-- `merge` (String, optional) — Merge strategy: `"shallow"` (default) or `"deep"`
-- `isolation` (String, optional) — Isolation mode: `"partial"` (default) or `"full"` — overrides instance default
+- `context` (Object) - Context data to merge
+- `fn` (Function) - Function to execute
+- `args` (Array, optional) - Arguments array for the function
+- `merge` (String, optional) - Merge strategy: `"shallow"` (default) or `"deep"`
+- `isolation` (String, optional) - Isolation mode: `"partial"` (default) or `"full"` - overrides instance default
 
 **Returns:** Result of the function
 
@@ -165,7 +165,7 @@ const api = await slothlet({
 	context: { config: { timeout: 5000 } }
 });
 
-// Shallow merge (default) — replaces entire config object
+// Shallow merge (default) - replaces entire config object
 const result1 = await api.slothlet.context.scope({
 	context: { config: { retries: 3 } },
 	fn: async () => {
@@ -174,7 +174,7 @@ const result1 = await api.slothlet.context.scope({
 	}
 });
 
-// Deep merge — merges nested properties
+// Deep merge - merges nested properties
 const result2 = await api.slothlet.context.scope({
 	context: { config: { retries: 3 } },
 	fn: async () => {
@@ -237,7 +237,7 @@ const api = await slothlet({ dir: "./api", scope: false });
 Per-request context uses `structuredClone()` to deep-copy the parent context before merging. This means:
 
 - Mutations to `context` properties inside `.run()` do **not** propagate back to the parent context
-- Nested objects in context are independent copies — mutations are not shared
+- Nested objects in context are independent copies - mutations are not shared
 
 ```javascript
 const api = await slothlet({
@@ -252,12 +252,12 @@ await api.slothlet.context.run({ extra: true }, async () => {
 });
 
 const base = await api.slothlet.context.get();
-console.log(base.config.count); // 0 — parent context unchanged
+console.log(base.config.count); // 0 - parent context unchanged
 ```
 
 ### Cross-Instance Behavior
 
-When calling `api.slothlet.context.get()` from inside another instance's `.run()` block, the called instance returns its own **base context** — not the calling instance's child context. This provides clear instance isolation.
+When calling `api.slothlet.context.get()` from inside another instance's `.run()` block, the called instance returns its own **base context** - not the calling instance's child context. This provides clear instance isolation.
 
 ```javascript
 const api1 = await slothlet({ dir: "./api1", context: { app: "one" } });
@@ -268,12 +268,12 @@ await api1.slothlet.context.run({ userId: 100 }, async () => {
 
 	// Calling api2 from inside api1's run block:
 	const ctx2 = await api2.slothlet.context.get();
-	// ctx2 = { app: "two" } — api2's BASE context, not api1's child context
+	// ctx2 = { app: "two" } - api2's BASE context, not api1's child context
 
 	// If you need api1's context inside api2 code, capture it first:
 	const api1Ctx = await api1.slothlet.context.get();
 	await api2.slothlet.context.run({ requestId: "abc" }, async () => {
-		console.log(api1Ctx.userId); // 100 — explicit capture works
+		console.log(api1Ctx.userId); // 100 - explicit capture works
 	});
 });
 ```
@@ -316,8 +316,8 @@ const api = await slothlet({
 });
 
 await api.slothlet.context.run({ config: { maxSize: 1000 } }, async () => {
-	// context.config = { maxSize: 1000 } — timeout and retries are gone
-	// context.user = "alice"             — top-level key preserved
+	// context.config = { maxSize: 1000 } - timeout and retries are gone
+	// context.user = "alice"             - top-level key preserved
 });
 ```
 
@@ -418,7 +418,7 @@ async function handleTenantRequest(tenantId, requestData) {
 	});
 }
 
-// Process multiple tenants concurrently — each has its own isolated context
+// Process multiple tenants concurrently - each has its own isolated context
 const results = await Promise.all([
 	handleTenantRequest("tenant-001", { action: "create" }),
 	handleTenantRequest("tenant-002", { action: "read" }),
@@ -426,7 +426,7 @@ const results = await Promise.all([
 ]);
 ```
 
-> **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context objects are deep-cloned via `structuredClone()` for isolation — performance overhead is minimal.
+> **Performance**: Per-request context uses `AsyncLocalStorage.run()` internally, which is highly optimized in Node.js. Context objects are deep-cloned via `structuredClone()` for isolation - performance overhead is minimal.
 
 ---
 
@@ -485,7 +485,7 @@ const server = api.startServer(8080);
 
 ### Key Characteristics
 
-- **Automatic**: No configuration or code changes needed — works transparently in all API modules
+- **Automatic**: No configuration or code changes needed - works transparently in all API modules
 - **Complete context**: Full `context` object and `self` access in all event handlers
 - **Nested events**: Works at any depth (server → socket → custom emitters)
 - **All EventEmitter methods**: `on`, `once`, `addListener` are all automatically context-aware
@@ -500,7 +500,7 @@ const server = api.startServer(8080);
 
 Slothlet automatically preserves AsyncLocalStorage context across all class instance method calls. When your API functions return class instances, slothlet wraps them transparently so all method calls maintain full context access.
 
-**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively — nested class instances are also wrapped. Standard built-in types (Array, Date, Map, EventEmitter, etc.) are excluded from wrapping.
+**Implementation**: `src/lib/helpers/class-instance-wrapper.mjs` wraps class instances returned from `runInContext()` using a Proxy. Methods are cached per instance. Wrapping is applied recursively - nested class instances are also wrapped. Standard built-in types (Array, Date, Map, EventEmitter, etc.) are excluded from wrapping.
 
 ### Data Processor Example
 
@@ -528,7 +528,7 @@ class DataProcessor {
 }
 
 export function createProcessor(config) {
-	// Return class instance — slothlet automatically wraps it
+	// Return class instance - slothlet automatically wraps it
 	return new DataProcessor(config);
 }
 ```
@@ -549,17 +549,17 @@ const result = processor.process({ data: "test" }); // ✅ All methods have full
 ### Key Characteristics
 
 - **Automatic**: Class instances returned from API functions are automatically context-aware
-- **Transparent**: No code changes needed — works with existing class patterns
+- **Transparent**: No code changes needed - works with existing class patterns
 - **Complete context**: Full `context` object and `self` access in all class methods, including nested calls
 - **Recursive**: If a class method returns another class instance, that instance is also wrapped
 - **Cached**: Method wrapping is cached per instance to avoid repeated overhead
 - **Built-ins excluded**: `Array`, `Date`, `Map`, `Set`, `EventEmitter`, and all typed arrays are not wrapped (they handle their own context or have no need for it)
 
-> Any class instance returned from your API functions automatically maintains slothlet context. This includes database models, service classes, utility classes, and any other object-oriented patterns — as long as the class is not a built-in type.
+> Any class instance returned from your API functions automatically maintains slothlet context. This includes database models, service classes, utility classes, and any other object-oriented patterns - as long as the class is not a built-in type.
 
 ---
 
 ## See Also
 
-- [Hooks Documentation](HOOKS.md) — Hook system with context access
-- [README](../README.md) — Main project documentation
+- [Hooks Documentation](HOOKS.md) - Hook system with context access
+- [README](../README.md) - Main project documentation

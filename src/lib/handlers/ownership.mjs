@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 15:31:00 -08:00 (1770507060)
+ *	@Last modified time: 2026-02-21 21:27:57 -08:00 (1771738077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -250,7 +250,7 @@ export class OwnershipManager extends ComponentBase {
 
 		// If value is a wrapper proxy, unwrap it to get the raw implementation.
 		// Use resolveWrapper (checks the internal _proxyRegistry WeakMap directly) rather than
-		// `"__impl" in value`, which goes through the hasTrap — and __impl is now blocked there.
+		// `"__impl" in value`, which goes through the hasTrap - and __impl is now blocked there.
 		const rawWrapper = resolveWrapper(value);
 		if (rawWrapper) {
 			return rawWrapper.__impl;

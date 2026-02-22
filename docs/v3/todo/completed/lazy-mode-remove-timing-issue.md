@@ -51,17 +51,17 @@ for (let cycle = 1; cycle <= 3; cycle++) {
 
 The bug is a race condition between lazy wrapper materialization and module ownership cleanup:
 
-1. **Cycle 1 `api.add("cycled")`** — creates lazy wrapper, registers `cycled_hakmbb` in `ownership.moduleToPath`
-2. **Cycle 1 `api.remove("cycled")`** — calls `ownership.unregister("cycled_hakmbb")`, deletes the map entry
-3. **🐛 Lazy materialization from cycle 1 completes asynchronously** — `lazy.mjs:149` calls `ownership.register()` with the captured `cycled_hakmbb` moduleID from the closure, **re-creating the deleted entry** in `moduleToPath`
-4. **Cycle 2 `api.add("cycled")`** — registers a new `cycled_vg7xg1`
-5. **Cycle 2 `api.remove("cycled")`** — prefix lookup with `find()` finds `cycled_hakmbb` (stale, first match) instead of `cycled_vg7xg1` (current) → **wrong module gets unregistered** → only 2 paths deleted instead of 28 → `"cycled"` property remains on the API
+1. **Cycle 1 `api.add("cycled")`** - creates lazy wrapper, registers `cycled_hakmbb` in `ownership.moduleToPath`
+2. **Cycle 1 `api.remove("cycled")`** - calls `ownership.unregister("cycled_hakmbb")`, deletes the map entry
+3. **🐛 Lazy materialization from cycle 1 completes asynchronously** - `lazy.mjs:149` calls `ownership.register()` with the captured `cycled_hakmbb` moduleID from the closure, **re-creating the deleted entry** in `moduleToPath`
+4. **Cycle 2 `api.add("cycled")`** - registers a new `cycled_vg7xg1`
+5. **Cycle 2 `api.remove("cycled")`** - prefix lookup with `find()` finds `cycled_hakmbb` (stale, first match) instead of `cycled_vg7xg1` (current) → **wrong module gets unregistered** → only 2 paths deleted instead of 28 → `"cycled"` property remains on the API
 
 ### Why LAZY Mode Only
 
 In **EAGER** mode, all modules are loaded synchronously during `buildAPI()`. By the time `api.remove()` is called, everything is fully registered and `unregister()` cleans up all paths completely.
 
-In **LAZY** mode, `registerSubtree()` uses `Object.entries()` on lazy proxy wrappers. The `ownKeysTrap` calls `_materialize()` **fire-and-forget** (no `await`). So materialization continues in the background, and when it eventually completes, it calls `ownership.register()` with the old moduleID — after that moduleID was already unregistered.
+In **LAZY** mode, `registerSubtree()` uses `Object.entries()` on lazy proxy wrappers. The `ownKeysTrap` calls `_materialize()` **fire-and-forget** (no `await`). So materialization continues in the background, and when it eventually completes, it calls `ownership.register()` with the old moduleID - after that moduleID was already unregistered.
 
 ### Why Timing-Dependent
 
@@ -165,23 +165,23 @@ if (this.__invalid) {
 
 ### After Fix
 - **metadata-api-manager.test.vitest.mjs:** 96/96 passing ✅ (verified 3 consecutive runs)
-- **Full suite baseline:** 31 files failed, 587 tests failed (8 fewer failures — all the LAZY timing failures fixed, no regressions)
+- **Full suite baseline:** 31 files failed, 587 tests failed (8 fewer failures - all the LAZY timing failures fixed, no regressions)
 
 ---
 
 ## Related Files
 
-- `src/lib/handlers/ownership.mjs` — Primary fix: `_unregisteredModules` guard
-- `src/lib/handlers/api-manager.mjs` — Defense-in-depth: `findLast()` lookup
-- `src/lib/handlers/unified-wrapper.mjs` — Early termination: `__invalid` materialization check
-- `src/lib/modes/lazy.mjs` — Source of stale registrations (closure captures moduleIDOverride)
-- `tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs` — Previously failing tests
+- `src/lib/handlers/ownership.mjs` - Primary fix: `_unregisteredModules` guard
+- `src/lib/handlers/api-manager.mjs` - Defense-in-depth: `findLast()` lookup
+- `src/lib/handlers/unified-wrapper.mjs` - Early termination: `__invalid` materialization check
+- `src/lib/modes/lazy.mjs` - Source of stale registrations (closure captures moduleIDOverride)
+- `tests/vitests/suites/metadata/metadata-api-manager.test.vitest.mjs` - Previously failing tests
 
 ---
 
 ## Key Learnings
 
-1. **Async closures capturing state** — Lazy materialization closures capture the moduleID at creation time. If the module is removed before materialization completes, the closure operates on a stale moduleID.
-2. **`find()` ordering matters** — Map insertion order determines `find()` results. Stale entries that get re-registered end up before newer entries. `findLast()` is the correct approach for "most recent match" semantics.
-3. **Defense-in-depth** — Three layers of protection ensure no single failure mode causes the bug to resurface: prevent stale registration, prefer newest match, skip materialization for invalid wrappers.
-4. **Previous failed approaches** — Making `lifecycle.emit()` async, adding recursive cleanup, and adding timeouts all failed because they addressed symptoms (lifecycle timing, wrapper cleanup) rather than the root cause (stale ownership re-registration).
+1. **Async closures capturing state** - Lazy materialization closures capture the moduleID at creation time. If the module is removed before materialization completes, the closure operates on a stale moduleID.
+2. **`find()` ordering matters** - Map insertion order determines `find()` results. Stale entries that get re-registered end up before newer entries. `findLast()` is the correct approach for "most recent match" semantics.
+3. **Defense-in-depth** - Three layers of protection ensure no single failure mode causes the bug to resurface: prevent stale registration, prefer newest match, skip materialization for invalid wrappers.
+4. **Previous failed approaches** - Making `lifecycle.emit()` async, adding recursive cleanup, and adding timeouts all failed because they addressed symptoms (lifecycle timing, wrapper cleanup) rather than the root cause (stale ownership re-registration).

@@ -10,7 +10,7 @@ Slothlet uses a collision mode system to control what happens when two sources t
 ## Configuration
 
 ```js
-// String shorthand — applies to both contexts
+// String shorthand - applies to both contexts
 await slothlet({ dir: "./api", collision: "merge" });
 
 // Per-context object
@@ -30,13 +30,13 @@ await slothlet({
 
 ## Contexts
 
-### `collision.initial` — During `load()`
+### `collision.initial` - During `load()`
 
-Controls what happens when two sources collide during the initial module load. The most common scenario is a **file and folder sharing the same name** (e.g., `math.mjs` and `math/`), but the system is order-based — it's always **first loaded vs. second loaded**, not file-specific.
+Controls what happens when two sources collide during the initial module load. The most common scenario is a **file and folder sharing the same name** (e.g., `math.mjs` and `math/`), but the system is order-based - it's always **first loaded vs. second loaded**, not file-specific.
 
 Files are processed before directories, so in a file-folder collision the file is "first" and the folder is "second".
 
-### `collision.api` — During `api.add()`
+### `collision.api` - During `api.add()`
 
 Controls what happens when a newly-added module collides with existing API paths. This mode governs **both**:
 
@@ -58,9 +58,9 @@ Both sources are merged into the result. **First loaded wins** on conflicting ke
 
 **Example:** `math.mjs` exports `add(a,b) => a+b+1000` and `collisionVersion`. `math/math.mjs` exports `add(a,b) => a+b`, `multiply`, `divide`.
 
-- `math.add(2,3)` → `1005` (file's version — first loaded wins)
-- `math.collisionVersion` → `"collision-math-file"` (from file — non-conflicting, kept)
-- `math.multiply(2,3)` → `6` (from folder — non-conflicting, added)
+- `math.add(2,3)` → `1005` (file's version - first loaded wins)
+- `math.collisionVersion` → `"collision-math-file"` (from file - non-conflicting, kept)
+- `math.multiply(2,3)` → `6` (from folder - non-conflicting, added)
 
 ### `merge-replace`
 
@@ -73,13 +73,13 @@ Both sources are merged into the result. **Second loaded wins** on conflicting k
 
 **Example:** Same `math.mjs` + `math/math.mjs` scenario:
 
-- `math.add(2,3)` → `5` (folder's version — second replaces first)
-- `math.collisionVersion` → `"collision-math-file"` (from file — non-conflicting, still kept)
-- `math.multiply(2,3)` → `6` (from folder — non-conflicting, added)
+- `math.add(2,3)` → `5` (folder's version - second replaces first)
+- `math.collisionVersion` → `"collision-math-file"` (from file - non-conflicting, still kept)
+- `math.multiply(2,3)` → `6` (from folder - non-conflicting, added)
 
 ### `replace`
 
-Second loaded **completely replaces** first. Only one source survives — the last one to load. No merging occurs.
+Second loaded **completely replaces** first. Only one source survives - the last one to load. No merging occurs.
 
 | | All Keys |
 |---|---|
@@ -118,23 +118,23 @@ When a file and folder share the same name (e.g., `math.mjs` + `math/`), the fil
 
 ## Test Fixtures
 
-### `api_test/` — Primary collision test directory
+### `api_test/` - Primary collision test directory
 
 | Source | Exports | `add(2,3)` returns |
 |---|---|---|
 | `math.mjs` (file) | `add`, `collisionVersion` | `1005` |
 | `math/math.mjs` (folder) | `add`, `multiply`, `divide` | `5` |
 
-File and folder share the `add` key — used to verify which source wins per mode.
+File and folder share the `add` key - used to verify which source wins per mode.
 
-### `api_test_collisions/` — Secondary collision test directory
+### `api_test_collisions/` - Secondary collision test directory
 
 | Source | Exports | Unique keys |
 |---|---|---|
 | `math.mjs` (file) | `power`, `sqrt`, `modulo`, `collisionVersion` | `power`, `sqrt`, `modulo` |
 | `math/math.mjs` (folder) | `add`, `multiply`, `divide` | `add`, `multiply`, `divide` |
 
-File and folder have **zero overlapping keys** — useful for testing that non-conflicting keys from both sources appear in merge modes and only one source survives in replace/skip modes.
+File and folder have **zero overlapping keys** - useful for testing that non-conflicting keys from both sources appear in merge modes and only one source survives in replace/skip modes.
 
 ## `collision.api` Behavior Summary
 

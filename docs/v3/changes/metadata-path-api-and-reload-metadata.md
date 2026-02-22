@@ -12,13 +12,13 @@
 
 Two related enhancements to the metadata and hot-reload systems:
 
-1. **`metadata.setFor()` / `metadata.removeFor()`** — set or remove user metadata
+1. **`metadata.setFor()` / `metadata.removeFor()`** - set or remove user metadata
    by API path string rather than by function reference. All functions whose
    `apiPath` starts with (or equals) the given path inherit the values automatically.
-2. **`api.slothlet.api.reload(path, { metadata })` option** — pass updated metadata
+2. **`api.slothlet.api.reload(path, { metadata })` option** - pass updated metadata
    directly to a partial reload call, atomically updating path metadata during
    the cache-rebuild step.
-3. **Metadata now survives full `api.slothlet.reload()`** — `set()` and `setGlobal()`
+3. **Metadata now survives full `api.slothlet.reload()`** - `set()` and `setGlobal()`
    values are preserved across a complete instance hot-reload.
 
 ---
@@ -96,12 +96,12 @@ The metadata is merged into the path store **after** the cache rebuild completes
 so all freshly-tagged wrappers will return the new values on their next
 `__metadata` access.
 
-This is the canonical way to change path-registered metadata at runtime — you
+This is the canonical way to change path-registered metadata at runtime - you
 get the fresh module implementations AND the updated metadata in one atomic step.
 
 **Without reload** (just updating metadata in place):
 ```javascript
-// Use setFor — no reload needed, takes effect immediately
+// Use setFor - no reload needed, takes effect immediately
 api.slothlet.metadata.setFor("plugins", "version", "2.0.0");
 ```
 
@@ -156,7 +156,7 @@ lookup) and the `apiPath` key (e.g. `"rootMath.add"`). This means:
 
 - Immediate `__metadata` reads still hit the moduleID-keyed entry (fast path).
 - After a `reload()`, the moduleID changes, but `collectMetadataFromParents()`
-  finds the apiPath-keyed entry — so `set()` metadata also survives reload.
+  finds the apiPath-keyed entry - so `set()` metadata also survives reload.
 
 ### `exportUserState()` / `importUserState()`
 
@@ -183,8 +183,8 @@ this.handlers.metadata.importUserState(saved);
 
 ## Related Documentation
 
-- [metadata-system.md](./metadata-system.md) — full metadata system reference
-- [hot-reload-complete.md](./hot-reload-complete.md) — full and partial reload implementation
-- `src/lib/handlers/metadata.mjs` — implementation
-- `src/slothlet.mjs` — `reload()` method
+- [metadata-system.md](./metadata-system.md) - full metadata system reference
+- [hot-reload-complete.md](./hot-reload-complete.md) - full and partial reload implementation
+- `src/lib/handlers/metadata.mjs` - implementation
+- `src/slothlet.mjs` - `reload()` method
 ````

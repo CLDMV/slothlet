@@ -4,9 +4,9 @@
 
 ## 📋 Related Documentation
 
-- **[`docs/API-RULES.md`](docs/API-RULES.md)** — All 13 API transformation rules with verified test examples
-- **[`README.md`](README.md)** — Complete project overview and usage examples
-- **[`api_tests/*/README.md`](api_tests/)** — Live examples demonstrating each pattern below
+- **[`docs/API-RULES.md`](docs/API-RULES.md)** - All 13 API transformation rules with verified test examples
+- **[`README.md`](README.md)** - Complete project overview and usage examples
+- **[`api_tests/*/README.md`](api_tests/)** - Live examples demonstrating each pattern below
 
 ---
 
@@ -36,7 +36,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
 
 export const myModule = {
 	async processData(input) {
-		// Access other API modules via `self` (live binding — always current)
+		// Access other API modules via `self` (live binding - always current)
 		const mathResult = self.math.add(2, 3);
 		const configValue = self.config.get("setting");
 		// context holds the current request/call context
@@ -119,7 +119,7 @@ export function cleanup() { return "Plugin cleaned up"; }
 
 ```js
 await api.slothlet.api.add("plugins", "./plugins-folder");
-api.plugins.initializePlugin(); // ✅ Direct extension — no intermediate namespace
+api.plugins.initializePlugin(); // ✅ Direct extension - no intermediate namespace
 ```
 
 > 📖 See [API-RULES.md Rule 11](docs/API-RULES.md) for addApi flattening details.
@@ -148,7 +148,7 @@ const api = await slothlet({
 	dir: "./api",
 	mode: "lazy"
 });
-// api.math is a proxy — file not loaded yet
+// api.math is a proxy - file not loaded yet
 const result = api.math.add(2, 3); // First access triggers load
 ```
 
@@ -160,8 +160,7 @@ Enable `backgroundMaterialize: true` to pre-load all modules in the background i
 const api = await slothlet({
 	dir: "./api",
 	mode: "lazy",
-	backgroundMaterialize: true,
-	tracking: { materialization: true } // Optional: enable progress tracking
+	backgroundMaterialize: true
 });
 
 // Subscribe to completion event
@@ -207,17 +206,17 @@ const api = await slothlet({
 
 ### Hook Types
 
-- **`before`** — Executes before the function. Can modify arguments or short-circuit. **Must be synchronous.**
-- **`after`** — Executes after successful completion. Can transform the return value.
-- **`always`** — Read-only observer. Always executes (even on short-circuit). Return value ignored.
-- **`error`** — Executes only when an error occurs. Receives error with source tracking.
+- **`before`** - Executes before the function. Can modify arguments or short-circuit. **Must be synchronous.**
+- **`after`** - Executes after successful completion. Can transform the return value.
+- **`always`** - Read-only observer. Always executes (even on short-circuit). Return value ignored.
+- **`error`** - Executes only when an error occurs. Receives error with source tracking.
 
 ### Basic Hook Usage
 
 The `hook.on(typePattern, handler, options)` signature uses `"type:pattern"` as the first argument:
 
 ```js
-// Before hook — modify arguments
+// Before hook - modify arguments
 api.slothlet.hook.on(
 	"before:math.add",
 	({ path, args, ctx }) => {
@@ -228,7 +227,7 @@ api.slothlet.hook.on(
 	{ id: "double-args", priority: 100 }
 );
 
-// After hook — transform result
+// After hook - transform result
 api.slothlet.hook.on(
 	"after:math.*",
 	({ path, args, result, ctx }) => {
@@ -237,7 +236,7 @@ api.slothlet.hook.on(
 	{ id: "scale-result" }
 );
 
-// Always hook — observe (read-only)
+// Always hook - observe (read-only)
 api.slothlet.hook.on(
 	"always:**",
 	({ path, result, hasError, errors }) => {
@@ -248,7 +247,7 @@ api.slothlet.hook.on(
 	{ id: "logger" }
 );
 
-// Error hook — monitor failures
+// Error hook - monitor failures
 api.slothlet.hook.on(
 	"error:**",
 	({ path, error, source }) => {
@@ -324,14 +323,14 @@ const api = await slothlet({
 	context: { appName: "MyApp", version: "3.0" }
 });
 
-// run() — execute a function inside a scoped context
+// run() - execute a function inside a scoped context
 await api.slothlet.context.run({ userId: "alice", role: "admin" }, async () => {
 	// Inside this scope: context = { appName, version, userId, role }
 	await api.database.query();
 	await api.audit.log();
 });
 
-// scope() — return a new API object with merged context
+// scope() - return a new API object with merged context
 const scopedApi = api.slothlet.context.scope({ userId: "bob" });
 await scopedApi.database.query(); // context includes userId: "bob"
 ```
@@ -428,7 +427,7 @@ await api.slothlet.api.reload("database.*");
 await api.slothlet.api.reload("plugins.auth");
 ```
 
-> **Lazy mode reload behavior**: In lazy mode, reload restores modules to an unmaterialized proxy state — existing references to lazy wrappers are intentionally not preserved. Eager mode merges new module exports into the existing live wrapper, preserving references.
+> **Lazy mode reload behavior**: In lazy mode, reload restores modules to an unmaterialized proxy state - existing references to lazy wrappers are intentionally not preserved. Eager mode merges new module exports into the existing live wrapper, preserving references.
 
 > 📖 See [`docs/RELOAD.md`](docs/RELOAD.md) for reload system documentation.
 
@@ -466,7 +465,7 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 api/
 ├── config.mjs              → api.config.*
 ├── math/
-│   └── math.mjs            → api.math.* (flattened — filename matches folder)
+│   └── math.mjs            → api.math.* (flattened - filename matches folder)
 ├── util/
 │   ├── util.mjs            → api.util.* (flattened methods)
 │   ├── extract.mjs         → api.util.extract.*
@@ -504,7 +503,7 @@ import { self } from "@cldmv/slothlet/runtime";
 ### ❌ Mistake 2: Using V2 API Surface
 
 ```js
-// ❌ WRONG (v2 API — does not exist in v3)
+// ❌ WRONG (v2 API - does not exist in v3)
 await api.addApi("plugins", "./dir");
 await api.reloadApi("math.*");
 api.hooks.on("validate", "before", handler, { pattern: "math.*" });
@@ -542,11 +541,11 @@ export const math = { /* methods */ };
 ### ❌ Mistake 5: Using lifecycle.subscribe / lifecycle.emit
 
 ```js
-// ❌ WRONG — subscribe/emit are internal
+// ❌ WRONG - subscribe/emit are internal
 api.slothlet.lifecycle.subscribe("materialized:complete", handler);
 api.slothlet.lifecycle.emit("impl:changed", data);
 
-// ✅ CORRECT — public surface is on/off only
+// ✅ CORRECT - public surface is on/off only
 api.slothlet.lifecycle.on("materialized:complete", handler);
 api.slothlet.lifecycle.off("materialized:complete", handler);
 ```
@@ -555,7 +554,7 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 
 ## ✅ AI Agent Checklist
 
-- [ ] **No cross-module imports** — use `self` from `@cldmv/slothlet/runtime` instead
+- [ ] **No cross-module imports** - use `self` from `@cldmv/slothlet/runtime` instead
 - [ ] **Match filename to folder** for cleaner APIs (auto-flattening)
 - [ ] **Hook config key is `hook:` (singular)**, not `hooks:`
 - [ ] **Hook API** is `api.slothlet.hook.*`, not `api.hooks.*`
@@ -564,7 +563,7 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 - [ ] **Lifecycle** uses `api.slothlet.lifecycle.on/off()` only
 - [ ] **Lazy mode**: if using background materialization, use `api.slothlet.materialize.wait()` before accessing the API
 - [ ] **Hook subsets**: auth/security → `subset: "before"`, main logic → `"primary"`, audit → `"after"`
-- [ ] **Double quotes everywhere** — follow Slothlet coding standards
+- [ ] **Double quotes everywhere** - follow Slothlet coding standards
 
 ---
 
@@ -582,27 +581,27 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 
 ### Core Architecture
 
-- **[`docs/API-RULES.md`](docs/API-RULES.md)** — All 13 API transformation rules
-- **[`docs/API-RULES/API-RULES-CONDITIONS.md`](docs/API-RULES/API-RULES-CONDITIONS.md)** — All C01–C34 conditional logic
-- **[`docs/API-RULES/API-FLATTENING.md`](docs/API-RULES/API-FLATTENING.md)** — Flattening rules F01–F08
+- **[`docs/API-RULES.md`](docs/API-RULES.md)** - All 13 API transformation rules
+- **[`docs/API-RULES/API-RULES-CONDITIONS.md`](docs/API-RULES/API-RULES-CONDITIONS.md)** - All C01–C34 conditional logic
+- **[`docs/API-RULES/API-FLATTENING.md`](docs/API-RULES/API-FLATTENING.md)** - Flattening rules F01–F08
 
 ### Configuration & Features
 
-- **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)** — All config options
-- **[`docs/HOOKS.md`](docs/HOOKS.md)** — Hook system (types, subsets, patterns, management)
-- **[`docs/METADATA.md`](docs/METADATA.md)** — Metadata system
-- **[`docs/CONTEXT-PROPAGATION.md`](docs/CONTEXT-PROPAGATION.md)** — Per-request context and EventEmitter propagation
-- **[`docs/RELOAD.md`](docs/RELOAD.md)** — Hot reload and dynamic API management
-- **[`docs/LIFECYCLE.md`](docs/LIFECYCLE.md)** — Lazy mode, materialization, and lifecycle events
-- **[`docs/SANITIZATION.md`](docs/SANITIZATION.md)** — Property name sanitization rules
-- **[`docs/I18N.md`](docs/I18N.md)** — Internationalization and language support
-- **[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** — Performance characteristics and benchmarks
+- **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)** - All config options
+- **[`docs/HOOKS.md`](docs/HOOKS.md)** - Hook system (types, subsets, patterns, management)
+- **[`docs/METADATA.md`](docs/METADATA.md)** - Metadata system
+- **[`docs/CONTEXT-PROPAGATION.md`](docs/CONTEXT-PROPAGATION.md)** - Per-request context and EventEmitter propagation
+- **[`docs/RELOAD.md`](docs/RELOAD.md)** - Hot reload and dynamic API management
+- **[`docs/LIFECYCLE.md`](docs/LIFECYCLE.md)** - Lazy mode, materialization, and lifecycle events
+- **[`docs/SANITIZATION.md`](docs/SANITIZATION.md)** - Property name sanitization rules
+- **[`docs/I18N.md`](docs/I18N.md)** - Internationalization and language support
+- **[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** - Performance characteristics and benchmarks
 
 ### Critical Reading Order for AI Agents
 
-1. **This file** — Prevents architectural mistakes
-2. **[`README.md`](README.md)** — Project overview and quickstart
-3. **[`docs/API-RULES.md`](docs/API-RULES.md)** — API transformation rules
-4. **[`docs/HOOKS.md`](docs/HOOKS.md)** — Hook system (if needed)
-5. **[`docs/METADATA.md`](docs/METADATA.md)** — Metadata system (if needed)
-6. **[`api_tests/api_test/README.md`](api_tests/api_test/README.md)** — Live examples
+1. **This file** - Prevents architectural mistakes
+2. **[`README.md`](README.md)** - Project overview and quickstart
+3. **[`docs/API-RULES.md`](docs/API-RULES.md)** - API transformation rules
+4. **[`docs/HOOKS.md`](docs/HOOKS.md)** - Hook system (if needed)
+5. **[`docs/METADATA.md`](docs/METADATA.md)** - Metadata system (if needed)
+6. **[`api_tests/api_test/README.md`](api_tests/api_test/README.md)** - Live examples

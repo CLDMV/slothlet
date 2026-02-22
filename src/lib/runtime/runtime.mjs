@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-21 21:28:02 -08:00 (1771738082)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -30,7 +30,7 @@ const liveRuntimeModule = await import("@cldmv/slothlet/runtime/live");
  * @private
  */
 function getCurrentRuntime() {
-	// Try async runtime first (ALS-based — only set when actively inside an async scope)
+	// Try async runtime first (ALS-based - only set when actively inside an async scope)
 	// This must be checked before live so that async functions aren't misidentified as
 	// live when a live instance has a stale currentInstanceID from a previous call.
 	const asyncCtx = asyncRuntime.tryGetContext();

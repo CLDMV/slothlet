@@ -25,11 +25,11 @@ All V2 folders have been moved to `reference/v2/` (gitignored) and all code refe
 
 ## ✅ Deleted / Moved to reference/v2/ (gitignored)
 
-- `src2/` — ✅ Deleted
-- `api_tests_v2/` — ✅ Deleted  
-- `tests/vitests_v2/` — ✅ Deleted
-- `index2.mjs` — ✅ Deleted
-- `index2.cjs` — ✅ Deleted
+- `src2/` - ✅ Deleted
+- `api_tests_v2/` - ✅ Deleted  
+- `tests/vitests_v2/` - ✅ Deleted
+- `index2.mjs` - ✅ Deleted
+- `index2.cjs` - ✅ Deleted
 
 ---
 

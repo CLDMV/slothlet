@@ -107,7 +107,7 @@ if (hasMultipleDefaultExports) {
 **Flattening Guide**: [F03: Auto-Flatten](API-FLATTENING.md#f03-auto-flatten-single-named-export)  
 **Status**: ✅ Active
 
-**Pattern**: A module with exactly one named export, and that export key matches the file's API path key, is an auto-flatten candidate — no intermediate namespace is needed.
+**Pattern**: A module with exactly one named export, and that export key matches the file's API path key, is an auto-flatten candidate - no intermediate namespace is needed.
 
 **Function**: `getFlatteningDecision()`  
 **Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L138
@@ -163,7 +163,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 
 ---
 
-## C07: Default Fallback — Preserve as Namespace
+## C07: Default Fallback - Preserve as Namespace
 
 **Category**: Basic Flattening  
 **Related Rule**: All rules (fallback)  
@@ -265,7 +265,7 @@ else if (isSelfReferential) {
 **Category**: Module Processing  
 **Status**: ✅ Active
 
-**Pattern**: Final fallback in `processModuleForAPI()` — if no processing branch matches, preserve the module under its namespace key.
+**Pattern**: Final fallback in `processModuleForAPI()` - if no processing branch matches, preserve the module under its namespace key.
 
 **Function**: `processModuleForAPI()`  
 **Source**: `src/lib/helpers/api_builder/decisions.mjs` ~L444
@@ -283,7 +283,7 @@ else {
 
 ---
 
-## C10: Single-File Function — Folder Match
+## C10: Single-File Function - Folder Match
 
 **Category**: Category Decisions  
 **Related Rule**: [Rule 2](../API-RULES.md#rule-2-single-function-file-promotion)  
@@ -392,7 +392,7 @@ if (fileBaseName === categoryName && moduleKeys.length > 0) {
 
 ---
 
-## C14: Parent-Level Flattening — Generic Filenames
+## C14: Parent-Level Flattening - Generic Filenames
 
 **Category**: Category Decisions  
 **Related Rule**: [Rule 10](../API-RULES.md#rule-10-parent-level-promotion-generic-filenames)  
@@ -498,7 +498,7 @@ if (
 
 ---
 
-## C18: Object Auto-Flatten — Final Check
+## C18: Object Auto-Flatten - Final Check
 
 **Category**: Category Decisions  
 **Related Rule**: [Rule 7](../API-RULES.md#rule-7-auto-flattening-single-named-export)  
@@ -530,7 +530,7 @@ if (moduleKeys.length === 1 && moduleKeys[0] === moduleName) {
 **Flattening Guide**: [F06: AddApi Special File Pattern](API-FLATTENING.md#f06-addapi-special-file-pattern)  
 **Status**: ✅ Active
 
-**Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions — it should never create an intermediate `.addapi.` level.
+**Pattern**: Files named `addapi.mjs` loaded via `api.slothlet.api.add()` always flatten regardless of the `autoFlatten` setting. The file is designed for seamless namespace extensions - it should never create an intermediate `.addapi.` level.
 
 **Function**: `getFlatteningDecision()` (detection) / modes-processor execution  
 **Source**: `src/lib/processors/flatten.mjs` ~L119-L133, L332-L347; `src/lib/builders/modes-processor.mjs` ~L207-L215, L699-L710
@@ -573,7 +573,7 @@ api.plugins.cleanup();          // ✅ No .addapi. intermediate level
 2. Extraction: content stored, `addapi` key deleted from `newModules`
 3. Flattening: `Object.assign(newModules, addapiContent)` merges exports flat
 4. Works regardless of `autoFlatten` setting
-5. Applies only when loading via `api.slothlet.api.add()` — not initial load
+5. Applies only when loading via `api.slothlet.api.add()` - not initial load
 
 ---
 
@@ -589,9 +589,9 @@ api.plugins.cleanup();          // ✅ No .addapi. intermediate level
 **Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.slothlet.api.add("config", folder)` should produce `api.config.*`, not `api.config.config.*`.
 
 **Function**: `addApiComponent()`  
-**Source**: `src/lib/handlers/api-manager.mjs` — immediately after single-file unwrap block
+**Source**: `src/lib/handlers/api-manager.mjs` - immediately after single-file unwrap block
 
-**Guard — `isDirectChild`**:
+**Guard - `isDirectChild`**:
 
 ```javascript
 // Ensures the matching key came from mountDir/lastPart/, not a deeper nested folder
@@ -669,7 +669,7 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 ## Summary
 
 **Total Active Conditions**: 20 (C01-C05, C07-C18, C33, C34)  
-**Deprecated Conditions**: 1 (C06 — intentionally disabled)  
+**Deprecated Conditions**: 1 (C06 - intentionally disabled)  
 **Primary Source Files**: `src/lib/helpers/api_builder/decisions.mjs`, `src/lib/processors/flatten.mjs`, `src/lib/builders/modes-processor.mjs`, `src/lib/handlers/api-manager.mjs`
 
 ### Condition Categories

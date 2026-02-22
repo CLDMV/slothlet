@@ -37,7 +37,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 /**
  * Create a slothlet API instance for a given configuration.
@@ -321,11 +321,13 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 		});
 
 		it("error mode: should throw error on collision", async () => {
-			await expect(async () => {
-				api = await createApiInstance(config, {
-					api: { collision: { initial: "error", api: "merge" } }
-				});
-			}).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					api = await createApiInstance(config, {
+						api: { collision: { initial: "error", api: "merge" } }
+					});
+				}).rejects.toThrow();
+			});
 		});
 	});
 
@@ -481,11 +483,13 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(math.add).toBeTypeOf("function");
 
 			// Try to add collision content to math path (should throw)
-			await expect(
-				api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-					moduleID: "math-error"
-				})
-			).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(
+					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
+						moduleID: "math-error"
+					})
+				).rejects.toThrow();
+			});
 		});
 	});
 
@@ -499,11 +503,13 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			expect(getMath(api, config.dir)).toBeDefined();
 
 			// api.add() collision should throw (error mode)
-			await expect(
-				api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
-					moduleID: "test-error"
-				})
-			).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(
+					api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {
+						moduleID: "test-error"
+					})
+				).rejects.toThrow();
+			});
 		});
 	});
 

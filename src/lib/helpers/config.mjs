@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 00:00:00 -08:00 (1770192000)
+ *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -323,6 +323,11 @@ export class Config extends ComponentBase {
 		} else if (config.tracking && typeof config.tracking === "object") {
 			// Object: { materialization: boolean }
 			trackingConfig.materialization = config.tracking.materialization === true;
+		}
+
+		// backgroundMaterialize implies materialization tracking - auto-enable
+		if (config.backgroundMaterialize === true) {
+			trackingConfig.materialization = true;
 		}
 
 		// Parse i18n configuration (dev-facing; process-global)

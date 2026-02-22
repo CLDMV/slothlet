@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 19:11:48 -08:00 (1771729908)
+ *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1153,7 +1153,7 @@ export class ModesProcessor extends ComponentBase {
 					// Example: api.add('config', './path') where path/config/ exists → config/server.mjs becomes api.config.server
 					// Use eager mode so files at this level become objects (same as root-level file behavior).
 					// IMPORTANT: Only fire at root-level registration boundary (populateDirectly=false).
-					// When populateDirectly=true we are inside a lazy wrapper materialization —
+					// When populateDirectly=true we are inside a lazy wrapper materialization -
 					// e.g. services/ materialising finds services/services/ whose name matches,
 					// but that is a legitimate nested namespace, NOT a transparent root folder.
 					const lazy_currentCategoryName = apiPathPrefix ? apiPathPrefix.split(".").pop() : categoryName;
@@ -1190,7 +1190,7 @@ export class ModesProcessor extends ComponentBase {
 					// its exports must be preserved and merged into the lazy folder wrapper
 					// during materialization. Extract the file's exports BEFORE replacement.
 					// IMPORTANT: Only extract for merge/merge-replace modes. In replace mode,
-					// the folder completely replaces the file — no file exports should persist.
+					// the folder completely replaces the file - no file exports should persist.
 					// The replace mode collision in api-assignment.mjs handles materialization.
 					const collisionConfig = config.api?.collision;
 					const modes_initialCollisionMode =
@@ -1619,7 +1619,7 @@ export class ModesProcessor extends ComponentBase {
 		// Without this, the exports are trapped in the materialization closure and invisible
 		// to merge operations in api-assignment.mjs until materialization completes.
 		// IMPORTANT: Only pre-populate for merge/warn modes where the FILE (first) wins conflicts.
-		// For merge-replace mode, the FOLDER (second) should win — pre-populating file exports
+		// For merge-replace mode, the FOLDER (second) should win - pre-populating file exports
 		// causes the get trap to return them before materialization can replace them with folder versions.
 		// For merge-replace, the _mergeAfterMaterialize mechanism in api-assignment handles
 		// adding non-conflicting file keys after materialization completes.

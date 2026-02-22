@@ -170,14 +170,14 @@ sanitizePropertyName("parse-json-xml-data", {
 
 ### `lower`
 
-Force segments to lowercase. Pattern-matched segments are **preserved in lowercase** through the camelCase phase — `lower` rules take full effect symmetrically with `upper`.
+Force segments to lowercase. Pattern-matched segments are **preserved in lowercase** through the camelCase phase - `lower` rules take full effect symmetrically with `upper`.
 
 ```javascript
 sanitizePropertyName("validate-USER-id", {
   rules: { lower: ["user"] }
-}); // "validateUserId"  (exact match, no pattern — camelCase applies first char)
+}); // "validateUserId"  (exact match, no pattern - camelCase applies first char)
 
-// Pattern-based lower — segment stays fully lowercase (Bug #6 fix)
+// Pattern-based lower - segment stays fully lowercase (Bug #6 fix)
 sanitizePropertyName("get-API-status", {
   rules: { lower: ["*-api-*"] }
 }); // "getapiStatus"  (api stays lowercase, not capitalized)
@@ -409,7 +409,7 @@ sanitizePropertyName("parse-xml-to-json", {
 
 ## Runtime Convenience Method
 
-When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** — identical to what Slothlet uses when building API paths from filenames:
+When working with a live Slothlet API instance, a convenience method is available on `api.slothlet` that sanitizes a string using the **same sanitize configuration the instance was initialized with** - identical to what Slothlet uses when building API paths from filenames:
 
 ```javascript
 const api = await slothlet({
@@ -428,7 +428,7 @@ api.slothlet.sanitize("my-module");        // "myModule"
 This is useful for predicting exactly what API path a given filename will produce at runtime.
 
 > [!NOTE]
-> `api.slothlet.sanitize()` only accepts a string. It does not accept an options object — the options come from the instance config. Use the standalone `sanitizePropertyName` export if you need to pass custom options directly.
+> `api.slothlet.sanitize()` only accepts a string. It does not accept an options object - the options come from the instance config. Use the standalone `sanitizePropertyName` export if you need to pass custom options directly.
 
 ---
 

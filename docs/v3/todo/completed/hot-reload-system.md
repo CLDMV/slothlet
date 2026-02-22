@@ -16,7 +16,7 @@ All three hot reload modes are fully implemented, tested, and in the baseline te
 
 **All reload test suites are in the baseline** (`tests/vitests/baseline-tests.json`).
 
-**Known Issue:** 5 failures in lazy-mode "Full Instance Reload Respects Lazy Mode" tests — `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state (pre-existing issue in `slothlet.mjs` reload() method, not the selective reload system).
+**Known Issue:** 5 failures in lazy-mode "Full Instance Reload Respects Lazy Mode" tests - `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state (pre-existing issue in `slothlet.mjs` reload() method, not the selective reload system).
 
 ## Implementation Details
 
@@ -26,7 +26,7 @@ See [api-cache-system.md](./api-cache-system.md) for the full implementation his
 
 #### ✅ Full Instance Reload (`api.slothlet.reload()`)
 - **Status**: COMPLETE & WORKING
-- **Tests**: 56/56 passing (100%) — IN BASELINE
+- **Tests**: 56/56 passing (100%) - IN BASELINE
 - **Implementation**: `src/slothlet.mjs` - `async reload()` method
 - **Features**:
   - Fresh module loading with ESM/CJS cache busting
@@ -58,7 +58,7 @@ console.log(api.config); // Shows actual nested values, not {}
 
 ### ✅ Selective Module Reload (`api.slothlet.api.reload(pathOrModuleId)`)
 - **Status**: COMPLETE & WORKING
-- **Tests**: 56/56 passing (100%) — IN BASELINE
+- **Tests**: 56/56 passing (100%) - IN BASELINE
 - **Implementation**: `src/lib/handlers/api-manager.mjs` - `_reloadByModuleID()` and `_reloadByApiPath()`
 - **Test File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs`
 
@@ -72,7 +72,7 @@ console.log(api.config); // Shows actual nested values, not {}
 
 #### ✅ Multi-Cache Path Reload
 - **Status**: COMPLETE & WORKING
-- **Tests**: 112/112 passing (100%) — IN BASELINE
+- **Tests**: 112/112 passing (100%) - IN BASELINE
 - **Implementation**: `src/lib/handlers/api-manager.mjs` - `_reloadByApiPath()` with per-endpoint forceReplace grouping
 - **Test File**: `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs`
 
@@ -84,7 +84,7 @@ console.log(api.config); // Shows actual nested values, not {}
 - Custom property preservation through reload
 
 #### ✅ Lazy-Mode Reload
-- **Status**: MOSTLY COMPLETE (63/68, 92.6%) — IN BASELINE
+- **Status**: MOSTLY COMPLETE (63/68, 92.6%) - IN BASELINE
 - **Tests**: 63/68 passing (5 failures in "Full Instance Reload Respects Lazy Mode")
 - **Implementation**: `___resetLazy` on UnifiedWrapper + lazy-aware `_restoreApiTree`
 - **Test File**: `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs`
@@ -115,8 +115,8 @@ console.log(api.config); // Shows actual nested values, not {}
 - ✅ All 56 tests passing (100%)
 
 ### Phase 3: Selective Reload (February 2026)
-- ✅ **COMPLETE** — All tests in baseline
-- ✅ API cache system (Steps 1-6) — See [api-cache-system.md](./api-cache-system.md)
+- ✅ **COMPLETE** - All tests in baseline
+- ✅ API cache system (Steps 1-6) - See [api-cache-system.md](./api-cache-system.md)
 - ✅ Selective reload by moduleID: 56/56 passing
 - ✅ Selective reload by apiPath: 56/56 passing
 - ✅ Multi-cache path reload: 112/112 passing
@@ -192,17 +192,17 @@ Reload should restore "clean" state (only module exports, no runtime mutations).
 
 ### Selective Module Reload Tests
 - **File**: `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs`
-- **Status**: ✅ 56/56 tests passing (100%) — IN BASELINE
+- **Status**: ✅ 56/56 tests passing (100%) - IN BASELINE
 - **Coverage**: API path reload, moduleID reload, nested path reload, removed component handling
 
 ### Multi-Cache Path Reload Tests
 - **File**: `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs`
-- **Status**: ✅ 112/112 tests passing (100%) — IN BASELINE
+- **Status**: ✅ 112/112 tests passing (100%) - IN BASELINE
 - **Coverage**: Same-endpoint multi-cache, load order, child caches, collision modes, ownership stack
 
 ### Lazy-Mode Reload Tests
 - **File**: `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs`
-- **Status**: ⚠️ 63/68 tests passing (92.6%) — IN BASELINE
+- **Status**: ⚠️ 63/68 tests passing (92.6%) - IN BASELINE
 - **Coverage**: Memory release, surgical reload, re-materialization, proxy identity, nested children
 - **Known Issue**: 5 failures in "Full Instance Reload Respects Lazy Mode" (pre-existing)
 
@@ -216,7 +216,7 @@ Reload should restore "clean" state (only module exports, no runtime mutations).
 ## Action Items
 
 ### Remaining Issue
-- [ ] Fix 5 lazy-mode full instance reload failures — `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state
+- [ ] Fix 5 lazy-mode full instance reload failures - `api.slothlet.reload()` doesn't reset lazy wrappers to un-materialized state
 
 ### Future Enhancements
 - Watch file system for changes

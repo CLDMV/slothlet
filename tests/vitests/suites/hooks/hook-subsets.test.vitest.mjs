@@ -25,7 +25,7 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 /**
  * Create a slothlet API instance for a given configuration.
@@ -807,9 +807,11 @@ describe.each(HOOK_SUBSET_MATRIX)("Hook Subsets - $name", ({ config }) => {
 		it("throws error for invalid subset value", async () => {
 			api = await createApiInstance(config);
 
-			expect(() => {
-				api.slothlet.hook.on("before:**", () => {}, { subset: "invalid" });
-			}).toThrow('Invalid hook subset "invalid". Must be "before", "primary", or "after".');
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.slothlet.hook.on("before:**", () => {}, { subset: "invalid" });
+				}).toThrow('Invalid hook subset "invalid". Must be "before", "primary", or "after".');
+			});
 		});
 
 		it("accepts valid subset values", async () => {

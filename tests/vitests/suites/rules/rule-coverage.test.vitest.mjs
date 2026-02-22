@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:59 -08:00 (1770266399)
+ *	@Last modified time: 2026-02-21 21:28:11 -08:00 (1771738091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -96,7 +96,7 @@ function rule_coverage_parseMappingTable() {
 		const cCell = hasDescriptionColumn ? cells[3] : cells[2];
 		const ruleNameCell = hasDescriptionColumn ? cells[1] : cells[3];
 
-		// Extract F## identifiers — handles plain "F01" or "[F01](...)" markdown links
+		// Extract F## identifiers - handles plain "F01" or "[F01](...)" markdown links
 		const fPatterns = fCell
 			.split(",")
 			.flatMap((p) => {
@@ -104,9 +104,9 @@ function rule_coverage_parseMappingTable() {
 				return linkMatch ? linkMatch : [p.trim()];
 			})
 			.map((p) => p.trim())
-			.filter((p) => p && p !== "-" && p !== "—" && /^F\d+/i.test(p));
+			.filter((p) => p && p !== "-" && p !== "-" && /^F\d+/i.test(p));
 
-		// Extract C## identifiers — handles plain "C05" or "[C05](...)" markdown links
+		// Extract C## identifiers - handles plain "C05" or "[C05](...)" markdown links
 		const cConditions = cCell
 			.split(",")
 			.flatMap((c) => {
@@ -114,7 +114,7 @@ function rule_coverage_parseMappingTable() {
 				return linkMatch ? linkMatch : [c.trim()];
 			})
 			.map((c) => c.trim())
-			.filter((c) => c && c !== "-" && c !== "—" && /^C\d+/i.test(c));
+			.filter((c) => c && c !== "-" && c !== "-" && /^C\d+/i.test(c));
 
 		const ruleName = ruleNameCell.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").trim();
 

@@ -1,6 +1,6 @@
 # API Cache System & Lazy Mode Verification
 
-**Status**: Todo — needs test  
+**Status**: Todo - needs test  
 **Priority**: Medium  
 **Date Created**: 2026-02-20
 
@@ -9,7 +9,7 @@
 ## Overview: The API Cache System
 
 `ApiCacheManager` (→ `src/lib/handlers/api-cache-manager.mjs`) is the single source of truth for all
-built API trees. It stores one **cache entry per `moduleID`** — one entry for the base module
+built API trees. It stores one **cache entry per `moduleID`** - one entry for the base module
 (created during `slothlet()` initialization), and one entry for every subsequent
 `api.slothlet.api.add()` call.
 
@@ -19,7 +19,7 @@ built API trees. It stores one **cache entry per `moduleID`** — one entry for 
 {
   endpoint:       string,  // API path endpoint ("." for base, "plugins" for add)
   moduleID:       string,  // Unique identifier, e.g. "base_abc12345"
-  api:            Object,  // Complete buildAPI result tree (PRIMARY STORAGE — live refs point here)
+  api:            Object,  // Complete buildAPI result tree (PRIMARY STORAGE - live refs point here)
   folderPath:     string,  // Source folder on disk
   mode:           string,  // "lazy" | "eager"
   sanitizeOptions: Object, // Sanitization config snapshot
@@ -70,7 +70,7 @@ api.math           → UnifiedWrapper { __materialized: false, __inFlight: false
 api.math.add       → (triggers materialization on first access)
 ```
 
-The cache entry is **always created at startup** — regardless of mode. However,
+The cache entry is **always created at startup** - regardless of mode. However,
 the `api` tree stored inside it contains **lazy (unmaterialized) wrappers** in lazy
 mode. The underlying module files on disk are NOT read until a wrapper is first
 accessed.
@@ -84,11 +84,11 @@ accessed.
 
 ### Current Behavior (Observed)
 
-The cache entry **is created eagerly** in both modes — immediately after `buildFinalAPI()`
+The cache entry **is created eagerly** in both modes - immediately after `buildFinalAPI()`
 (or `addApiComponent()`) returns. The difference is what is stored inside the `api` property:
 
 - **Eager mode**: `api` tree contains fully loaded module implementations.
-- **Lazy mode**: `api` tree contains `UnifiedWrapper` proxy shells — module files are NOT
+- **Lazy mode**: `api` tree contains `UnifiedWrapper` proxy shells - module files are NOT
   loaded from disk until first property access.
 
 So the cache record itself is always eager, but the *content* of the wrappers within it is lazy.
@@ -107,7 +107,7 @@ behave identically to eager mode at startup.
    (`__materialized === false`) immediately after startup.
 3. Accessing a lazy wrapper path triggers materialization (modifies the wrapper to
    `__materialized === true`).
-4. `_countPaths()` (used by `getCacheDiagnostics()`) does **not** trigger materialization —
+4. `_countPaths()` (used by `getCacheDiagnostics()`) does **not** trigger materialization -
    it iterates over the wrapper object's own enumerable keys without invoking proxy get traps in
    a way that forces a load.
 
@@ -116,7 +116,7 @@ behave identically to eager mode at startup.
 ## Test to Write
 
 **File**: `tests/vitests/suites/api-manager/api-cache-lazy-mode.test.vitest.mjs`  
-**Suite**: `API Cache — Lazy Mode`
+**Suite**: `API Cache - Lazy Mode`
 
 ### Test Cases
 
@@ -181,16 +181,16 @@ it("should store unmaterialized wrappers for api.add() modules in lazy mode", as
 - Use `getMatrixConfigs({ mode: "lazy" })` to run only against lazy configs.
 - Use `api.__materialized` and `api.__inFlight` (builtins exposed by the wrapper) to check
   materialization state without triggering it.
-- The `_countPaths()` method iterates `Object.entries(api)` — verify that accessing
+- The `_countPaths()` method iterates `Object.entries(api)` - verify that accessing
   enumerable keys on a lazy wrapper proxy does NOT fire the materializeFunc.
 
 ---
 
 ## Related Files
 
-- `src/lib/handlers/api-cache-manager.mjs` — Cache storage and diagnostics
-- `src/slothlet.mjs` (line ~394) — Base cache entry creation after `buildFinalAPI`
-- `src/lib/handlers/api-manager.mjs` (line ~1165) — Cache entry creation in `addApiComponent`
-- `src/lib/handlers/unified-wrapper.mjs` — `UnifiedWrapper` lazy materialization logic
-- `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs` — Existing lazy-mode reload tests
-- `docs/v3/todo/future/lazy-mode-performance-optimization.md` — Related perf investigation
+- `src/lib/handlers/api-cache-manager.mjs` - Cache storage and diagnostics
+- `src/slothlet.mjs` (line ~394) - Base cache entry creation after `buildFinalAPI`
+- `src/lib/handlers/api-manager.mjs` (line ~1165) - Cache entry creation in `addApiComponent`
+- `src/lib/handlers/unified-wrapper.mjs` - `UnifiedWrapper` lazy materialization logic
+- `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs` - Existing lazy-mode reload tests
+- `docs/v3/todo/future/lazy-mode-performance-optimization.md` - Related perf investigation

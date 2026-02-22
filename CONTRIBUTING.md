@@ -42,10 +42,10 @@ Thank you for your interest in contributing to Slothlet!
 
 When modifying API generation logic, refer to the technical references in `docs/API-RULES/`:
 
-- **[`docs/API-RULES.md`](docs/API-RULES.md)** — Index of all 13 API transformation rules
-- **[`docs/API-RULES/API-RULES-CONDITIONS.md`](docs/API-RULES/API-RULES-CONDITIONS.md)** — Complete reference for all C01–C34 conditionals
-- **[`docs/API-RULES/API-FLATTENING.md`](docs/API-RULES/API-FLATTENING.md)** — Flattening rules F01–F08 with decision trees
-- **[`docs/API-RULES/API-RULE-MAPPING.md`](docs/API-RULES/API-RULE-MAPPING.md)** — Traceability matrix mapping rules to code and tests
+- **[`docs/API-RULES.md`](docs/API-RULES.md)** - Index of all 13 API transformation rules
+- **[`docs/API-RULES/API-RULES-CONDITIONS.md`](docs/API-RULES/API-RULES-CONDITIONS.md)** - Complete reference for all C01–C34 conditionals
+- **[`docs/API-RULES/API-FLATTENING.md`](docs/API-RULES/API-FLATTENING.md)** - Flattening rules F01–F08 with decision trees
+- **[`docs/API-RULES/API-RULE-MAPPING.md`](docs/API-RULES/API-RULE-MAPPING.md)** - Traceability matrix mapping rules to code and tests
 
 These documents ensure that changes to API generation logic maintain consistency with existing behavior and don't introduce regressions.
 
@@ -62,8 +62,8 @@ These documents ensure that changes to API generation logic maintain consistency
 
 All user-facing error messages, debug messages, and warnings must go through the i18n system:
 
-- Error codes use `new SlothletError("CODE", context)` — keys must exist in `src/lib/i18n/languages/en-us.json`
-- Debug calls use `this.debug("category", { key: "DEBUG_MODE_KEY", ...params })` — no hardcoded message strings
+- Error codes use `new SlothletError("CODE", context)` - keys must exist in `src/lib/i18n/languages/en-us.json`
+- Debug calls use `this.debug("category", { key: "DEBUG_MODE_KEY", ...params })` - no hardcoded message strings
 - Run `npm run analyze` to catch missing translations, placeholder mismatches, and hardcoded strings
 
 See [`docs/I18N.md`](docs/I18N.md) for the full i18n system documentation.

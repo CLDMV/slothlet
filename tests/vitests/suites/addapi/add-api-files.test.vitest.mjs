@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:26 -08:00 (1771716986)
+ *	@Last modified time: 2026-02-21 20:48:30 -08:00 (1771735710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -20,6 +20,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import slothlet from "@cldmv/slothlet";
+import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -81,9 +82,9 @@ describe("File-based api.add() Functionality", () => {
 
 		it("should reject files with invalid extensions", async () => {
 			const txtPath = join(__dirname, "test.txt");
-			await expect(
-				api.slothlet.api.add("invalid", txtPath)
-			).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("invalid", txtPath)).rejects.toThrow();
+			});
 		});
 
 		it("should handle file paths with metadata", async () => {
@@ -100,10 +101,7 @@ describe("File-based api.add() Functionality", () => {
 
 	describe("Array of Paths Loading", () => {
 		it("should load multiple files from an array", async () => {
-			const files = [
-				join(TEST_DIRS.API_TEST, "math/math.mjs"),
-				join(TEST_DIRS.API_TEST, "rootstring.mjs")
-			];
+			const files = [join(TEST_DIRS.API_TEST, "math/math.mjs"), join(TEST_DIRS.API_TEST, "rootstring.mjs")];
 
 			await api.slothlet.api.add("multi", files);
 
@@ -115,10 +113,7 @@ describe("File-based api.add() Functionality", () => {
 		});
 
 		it("should load multiple directories from an array", async () => {
-			const dirs = [
-				join(TEST_DIRS.API_TEST, "math"),
-				join(TEST_DIRS.API_TEST, "advanced")
-			];
+			const dirs = [join(TEST_DIRS.API_TEST, "math"), join(TEST_DIRS.API_TEST, "advanced")];
 
 			await api.slothlet.api.add("multiDir", dirs);
 
@@ -141,10 +136,7 @@ describe("File-based api.add() Functionality", () => {
 		});
 
 		it("should process array items sequentially", async () => {
-			const files = [
-				join(TEST_DIRS.API_TEST, "math/math.mjs"),
-				join(TEST_DIRS.API_TEST, "rootstring.mjs")
-			];
+			const files = [join(TEST_DIRS.API_TEST, "math/math.mjs"), join(TEST_DIRS.API_TEST, "rootstring.mjs")];
 
 			const moduleIDs = await api.slothlet.api.add("sequential", files);
 
@@ -156,24 +148,21 @@ describe("File-based api.add() Functionality", () => {
 		});
 
 		it("should throw on invalid file in array", async () => {
-			const paths = [
-				join(TEST_DIRS.API_TEST, "math/math.mjs"),
-				"/non/existent/file.mjs"
-			];
+			const paths = [join(TEST_DIRS.API_TEST, "math/math.mjs"), "/non/existent/file.mjs"];
 
-			await expect(
-				api.slothlet.api.add("invalidArray", paths)
-			).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("invalidArray", paths)).rejects.toThrow();
+			});
 		});
 	});
 
 	describe("Collision Handling with Files", () => {
 		it("should respect collision mode 'error' with file loading", async () => {
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");
-			
+
 			// First add
 			await api.slothlet.api.add("collision", mathPath);
-			
+
 			// Second add to same path should succeed (returns new moduleID)
 			const moduleID2 = await api.slothlet.api.add("collision", mathPath);
 			expect(typeof moduleID2).toBe("string");
@@ -231,18 +220,15 @@ describe("File-based api.add() Functionality", () => {
 		});
 
 		it("should track ownership for array-based additions", async () => {
-			const files = [
-				join(TEST_DIRS.API_TEST, "math/math.mjs"),
-				join(TEST_DIRS.API_TEST, "rootstring.mjs")
-			];
+			const files = [join(TEST_DIRS.API_TEST, "math/math.mjs"), join(TEST_DIRS.API_TEST, "rootstring.mjs")];
 
 			const moduleIDs = await api.slothlet.api.add("ownedArray", files);
 
 			// Should return array of moduleIDs
 			expect(Array.isArray(moduleIDs)).toBe(true);
 			expect(moduleIDs).toHaveLength(2);
-			moduleIDs.forEach(id => expect(typeof id).toBe("string"));
-			
+			moduleIDs.forEach((id) => expect(typeof id).toBe("string"));
+
 			// Verify API is loaded with both modules
 			expect(api.ownedArray).toBeDefined();
 			expect(typeof api.ownedArray.add).toBe("function");

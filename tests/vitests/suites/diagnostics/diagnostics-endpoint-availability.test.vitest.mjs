@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:27 -08:00 (1771716987)
+ *	@Last modified time: 2026-02-21 21:28:11 -08:00 (1771738091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -20,43 +20,43 @@
  * Regardless of diagnostics or hook configuration, these namespaces and values
  * must always be available:
  *
- *   version       — semver string from package.json
- *   instanceID    — unique instance identifier string
- *   types         — TYPE_STATES symbol map ({ UNMATERIALIZED, IN_FLIGHT })
- *   api           — mutation control: { add, remove, reload }
- *   sanitize      — sanitize a string using API path rules
- *   context       — per-request context: { get, diagnostics, run, scope }
- *   hook          — hook registration: { on, remove, clear, off, enable, disable, list }
- *   metadata      — metadata API: { setGlobal, set, remove, setFor, removeFor }
- *   scope         — run a function with current context
- *   run           — run a function with provided context
- *   reload        — reload entire instance
- *   shutdown      — shutdown instance
- *   owner         — ownership query: { get }
- *   materialize   — lazy materialization tracking: { materialized, get, wait }
- *   lifecycle     — lifecycle event emitter: { on, off, subscribe, unsubscribe, emit }
+ *   version       - semver string from package.json
+ *   instanceID    - unique instance identifier string
+ *   types         - TYPE_STATES symbol map ({ UNMATERIALIZED, IN_FLIGHT })
+ *   api           - mutation control: { add, remove, reload }
+ *   sanitize      - sanitize a string using API path rules
+ *   context       - per-request context: { get, diagnostics, run, scope }
+ *   hook          - hook registration: { on, remove, clear, off, enable, disable, list }
+ *   metadata      - metadata API: { setGlobal, set, remove, setFor, removeFor }
+ *   scope         - run a function with current context
+ *   run           - run a function with provided context
+ *   reload        - reload entire instance
+ *   shutdown      - shutdown instance
+ *   owner         - ownership query: { get }
+ *   materialize   - lazy materialization tracking: { materialized, get, wait }
+ *   lifecycle     - lifecycle event emitter: { on, off, subscribe, unsubscribe, emit }
  *
  * ## Only present when `diagnostics: true` (adds `diag`)
  *
- *   diag          — diagnostics namespace:
- *     describe        — list or describe the user-facing API structure
- *     reference       — reference object passed at init (or null)
- *     context         — context object from config
- *     inspect         — returns full getDiagnostics() snapshot
- *     owner           — ownership diagnostics: { get }
- *     caches          — cache diagnostics: { get, getAllModuleIDs, has }
- *     SlothletWarning — SlothletWarning class (for captured-warning access in tests)
- *     hook            — hook manager introspection: { enabled, compilePattern }
+ *   diag          - diagnostics namespace:
+ *     describe        - list or describe the user-facing API structure
+ *     reference       - reference object passed at init (or null)
+ *     context         - context object from config
+ *     inspect         - returns full getDiagnostics() snapshot
+ *     owner           - ownership diagnostics: { get }
+ *     caches          - cache diagnostics: { get, getAllModuleIDs, has }
+ *     SlothletWarning - SlothletWarning class (for captured-warning access in tests)
+ *     hook            - hook manager introspection: { enabled, compilePattern }
  *                       always present (hookManager is always instantiated, even when
- *                       hook.enabled: false — it's just in disabled state)
+ *                       hook.enabled: false - it's just in disabled state)
  *
  * ## Never present (regardless of any config)
  *
- *   hooks (plural) — there is a `delete namespace.hooks` in api_builder.mjs but
+ *   hooks (plural) - there is a `delete namespace.hooks` in api_builder.mjs but
  *                    `namespace.hooks` is never assigned, making it a no-op dead code
  *                    path. `api.slothlet.hooks` is always undefined.
  *
- * @see src/lib/builders/api_builder.mjs — namespace construction and conditional logic
+ * @see src/lib/builders/api_builder.mjs - namespace construction and conditional logic
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -94,7 +94,7 @@ const ALWAYS_PRESENT_KEYS = [
 
 /**
  * Keys that must NEVER be present on `api.slothlet` regardless of any config.
- * `hooks` (plural) is never assigned to the namespace — `delete namespace.hooks`
+ * `hooks` (plural) is never assigned to the namespace - `delete namespace.hooks`
  * in api_builder.mjs is a no-op dead code path. The actual hook API is `hook`
  * (singular), which is always present.
  * @type {string[]}
@@ -131,7 +131,7 @@ const EXPECTED_DIAG_OWNER_SUBKEYS = ["get"];
  */
 function expectKeysPresent(obj, keys, label = "") {
 	for (const key of keys) {
-		expect(obj[key], `${label} — key "${key}" should be defined`).toBeDefined();
+		expect(obj[key], `${label} - key "${key}" should be defined`).toBeDefined();
 	}
 }
 
@@ -143,7 +143,7 @@ function expectKeysPresent(obj, keys, label = "") {
  */
 function expectKeysAbsent(obj, keys, label = "") {
 	for (const key of keys) {
-		expect(obj[key], `${label} — key "${key}" should be undefined`).toBeUndefined();
+		expect(obj[key], `${label} - key "${key}" should be undefined`).toBeUndefined();
 	}
 }
 
@@ -158,7 +158,7 @@ const MATRIX = [
 
 // ─── Suites ───────────────────────────────────────────────────────────────────
 
-describe("api.slothlet — diagnostics endpoint availability", () => {
+describe("api.slothlet - diagnostics endpoint availability", () => {
 	describe.each(MATRIX)("$label", ({ diagnostics, hook }) => {
 		let api;
 
@@ -266,7 +266,7 @@ describe("api.slothlet — diagnostics endpoint availability", () => {
 		// ─── Never-present endpoints ──────────────────────────────────────
 
 		describe("never-present keys", () => {
-			it("api.slothlet.hooks (plural) should never be defined — it is a dead code path in api_builder.mjs", () => {
+			it("api.slothlet.hooks (plural) should never be defined - it is a dead code path in api_builder.mjs", () => {
 				expectKeysAbsent(api.slothlet, NEVER_PRESENT_KEYS, "api.slothlet");
 			});
 		});
@@ -274,7 +274,7 @@ describe("api.slothlet — diagnostics endpoint availability", () => {
 		// ─── Diagnostics-conditional endpoints ───────────────────────────
 
 		if (diagnostics === false) {
-			describe("diagnostics:false — diag namespace must be absent", () => {
+			describe("diagnostics:false - diag namespace must be absent", () => {
 				it("api.slothlet.diag should be undefined", () => {
 					expectKeysAbsent(api.slothlet, DIAG_ONLY_KEYS, "api.slothlet");
 				});
@@ -295,7 +295,7 @@ describe("api.slothlet — diagnostics endpoint availability", () => {
 		}
 
 		if (diagnostics === true) {
-			describe("diagnostics:true — diag namespace must be fully present", () => {
+			describe("diagnostics:true - diag namespace must be fully present", () => {
 				it("api.slothlet.diag should be defined", () => {
 					expect(api.slothlet.diag).toBeDefined();
 				});
@@ -329,7 +329,7 @@ describe("api.slothlet — diagnostics endpoint availability", () => {
 				});
 
 				it("api.slothlet.diag.hook should always be defined (hookManager is always instantiated) and reflect hook.enabled state", () => {
-					// The hookManager is always created regardless of hook.enabled — it's just
+					// The hookManager is always created regardless of hook.enabled - it's just
 					// disabled (intercepting nothing) when hook.enabled: false. Therefore
 					// api.slothlet.diag.hook is always present when diagnostics is on, and its
 					// `enabled` property mirrors the hook.enabled config value.

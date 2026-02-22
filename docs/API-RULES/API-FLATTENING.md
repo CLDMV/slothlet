@@ -32,10 +32,10 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 
 **Key Benefits:**
 
-- Cleaner APIs — eliminates redundant nesting levels
-- Intuitive structure — file organization aligns with API usage
-- Smart automation — no manual configuration required
-- Robust edge case handling — protection against circular references
+- Cleaner APIs - eliminates redundant nesting levels
+- Intuitive structure - file organization aligns with API usage
+- Smart automation - no manual configuration required
+- Robust edge case handling - protection against circular references
 
 ---
 
@@ -58,8 +58,8 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 - **F01** → Rule 1 (Filename Matches Container Flattening)
 - **F02** → Rules 7, 8, 10 (Index files, single module patterns, generic filename promotion)
 - **F03** → Rule 7 (Single Module Named Export Flattening)
-- **F04** → Rule 8 (Single Module Default Export Promotion — matching filename)
-- **F05** → Rule 8 (Single Module Default Export Promotion — any filename)
+- **F04** → Rule 8 (Single Module Default Export Promotion - matching filename)
+- **F05** → Rule 8 (Single Module Default Export Promotion - any filename)
 - **F06** → Rule 11 (AddApi Special File Pattern)
 - **F07** → Rule 12 (Module Ownership and Selective API Overwriting)
 - **F08** → Rule 13 (AddApi Path Deduplication Flattening)
@@ -71,7 +71,7 @@ API flattening automatically removes unnecessary nesting levels when certain pat
 ### F01: Folder/File Name Matching
 
 **When:** A file's name matches its containing folder name  
-**Result:** File contents promoted to folder level — no intermediate namespace  
+**Result:** File contents promoted to folder level - no intermediate namespace  
 **Detailed Coverage**: [API-RULES Rule 1](../API-RULES.md#rule-1-filename-matches-container-flattening) | **Technical**: [C05, C09b](API-RULES-CONDITIONS.md#c05-filename-matches-container-category-level-flatten)
 
 **Example:**
@@ -118,7 +118,7 @@ api.utils.validate(true);  // ✅ true
 // NOT: api.utils.index.format("hello") ❌
 ```
 
-**Why:** Index files are folder entry points — the `index` name should be transparent to API consumers. Same applies to other generic names like `main` and `default`.
+**Why:** Index files are folder entry points - the `index` name should be transparent to API consumers. Same applies to other generic names like `main` and `default`.
 
 ---
 
@@ -212,7 +212,7 @@ api.processor("hello"); // ✅ "HELLO"
 ### F06: AddApi Special File Pattern
 
 **When:** A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`  
-**Result:** Always flattened to the mount namespace — never creates an intermediate `addapi` level  
+**Result:** Always flattened to the mount namespace - never creates an intermediate `addapi` level  
 **Detailed Coverage**: [API-RULES Rule 11](../API-RULES.md#rule-11-addapi-special-file-pattern) | **Technical**: [C33](API-RULES-CONDITIONS.md#c33-addapi-special-file-detection)
 
 **Example:**
@@ -256,13 +256,13 @@ api.plugins.cleanup();          // ✅
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, { moduleId: "moduleA" });
 await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, { moduleId: "moduleB" });
 
-// Hot-reload module A — only its own paths are updated
+// Hot-reload module A - only its own paths are updated
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {}, {
 	moduleId: "moduleA",
-	forceOverwrite: true  // ✅ Allowed — moduleA owns these paths
+	forceOverwrite: true  // ✅ Allowed - moduleA owns these paths
 });
 
-// Cross-module protection — blocked in "error" collision mode
+// Cross-module protection - blocked in "error" collision mode
 await api.slothlet.api.add("plugins.moduleB", "./other", {}, {
 	moduleId: "moduleA",  // moduleA does not own moduleB's paths
 	forceOverwrite: true  // ❌ OWNERSHIP_CONFLICT thrown
@@ -304,7 +304,7 @@ api.config.main.getRootInfo();   // ✅ other files unaffected
 // NOT: api.config.config.getNestedConfig() ❌
 ```
 
-**Guard — Direct Child Only:** Rule only applies when the matching subfolder is a **direct child** of the mounted folder. Deeper nesting (e.g. `folder/config/config/config.mjs`) is intentional and not flattened.
+**Guard - Direct Child Only:** Rule only applies when the matching subfolder is a **direct child** of the mounted folder. Deeper nesting (e.g. `folder/config/config/config.mjs`) is intentional and not flattened.
 
 **Why:** When you mount a folder at a path named `config`, a direct `config/config.mjs` inside it would create redundant `api.config.config.*` nesting.
 
@@ -346,7 +346,7 @@ flowchart TD
 
 **Decision Tree Logic:**
 
-1. **F06 Priority**: Always check for `addapi.mjs` files first — special case
+1. **F06 Priority**: Always check for `addapi.mjs` files first - special case
 2. **F08 Check**: AddApi path deduplication (direct subfolder match)
 3. **F01 & F04**: Folder/file name matching (with and without default export)
 4. **F02**: Index / generic filename transparency

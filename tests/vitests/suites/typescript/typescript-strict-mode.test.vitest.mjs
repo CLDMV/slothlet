@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "../../../../index.mjs";
 import fs from "fs";
 import path from "path";
+import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 describe("TypeScript Strict Mode with Type Generation", () => {
 	let api;
@@ -49,33 +50,37 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 	
 	describe("Configuration Validation", () => {
 		it("should require types.output for strict mode", async () => {
-			await expect(async () => {
-				api = await slothlet({
-					dir: "./api_tests/api_test_typescript",
-					typescript: {
-						mode: "strict",
-						types: {
-							// Missing output
-							interfaceName: "TestAPI"
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					api = await slothlet({
+						dir: "./api_tests/api_test_typescript",
+						typescript: {
+							mode: "strict",
+							types: {
+								// Missing output
+								interfaceName: "TestAPI"
+							}
 						}
-					}
-				});
-			}).rejects.toThrow("types.output");
+					});
+				}).rejects.toThrow("types.output");
+			});
 		});
 		
 		it("should require types.interfaceName for strict mode", async () => {
-			await expect(async () => {
-				api = await slothlet({
-					dir: "./api_tests/api_test_typescript",
-					typescript: {
-						mode: "strict",
-						types: {
-							output: outputPath
-							// Missing interfaceName
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					api = await slothlet({
+						dir: "./api_tests/api_test_typescript",
+						typescript: {
+							mode: "strict",
+							types: {
+								output: outputPath
+								// Missing interfaceName
+							}
 						}
-					}
-				});
-			}).rejects.toThrow("types.interfaceName");
+					});
+				}).rejects.toThrow("types.interfaceName");
+			});
 		});
 	});
 	
@@ -181,18 +186,20 @@ describe("TypeScript Strict Mode with Type Generation", () => {
 		});
 		
 		it("should detect type errors in source files", async () => {
-			await expect(async () => {
-				api = await slothlet({
-					dir: "./api_tests/api_test_typescript_errors",
-					typescript: {
-						mode: "strict",
-						types: {
-							output: outputPath,
-							interfaceName: "TestAPI"
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					api = await slothlet({
+						dir: "./api_tests/api_test_typescript_errors",
+						typescript: {
+							mode: "strict",
+							types: {
+								output: outputPath,
+								interfaceName: "TestAPI"
+							}
 						}
-					}
-				});
-			}).rejects.toThrow();
+					});
+				}).rejects.toThrow();
+			});
 		});
 	});
 	

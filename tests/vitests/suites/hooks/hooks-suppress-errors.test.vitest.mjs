@@ -20,7 +20,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const describe_each_matrix = getMatrixConfigs({ hook: { enabled: true } });
 
@@ -82,7 +82,9 @@ describe.each(describe_each_matrix)("Hooks Suppress Errors > Config: '$name'", (
 			{ id: "failing-before" }
 		);
 
-		await expect(async () => await api.math.add(2, 3)).rejects.toThrow("Before hook failed");
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(async () => await api.math.add(2, 3)).rejects.toThrow("Before hook failed");
+		});
 		expect(flags.called).toBe(true);
 	});
 

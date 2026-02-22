@@ -92,7 +92,7 @@ sanitizePropertyName("get_api_data", { rules: { upper: ["*_api_*"] } });
 
 ## New API: `api.slothlet.sanitize(str)`
 
-A runtime convenience method that sanitizes a string using the **same sanitize config the instance was initialized with** — identical to what Slothlet uses when building API paths from filenames. Useful for predicting API paths without importing the helper directly.
+A runtime convenience method that sanitizes a string using the **same sanitize config the instance was initialized with** - identical to what Slothlet uses when building API paths from filenames. Useful for predicting API paths without importing the helper directly.
 
 ```javascript
 const api = await slothlet({
@@ -113,4 +113,4 @@ console.log(`api.${apiPath}`); // → "api.dataProcessor"
 
 ## Backward Compatibility
 
-All standard use cases produce identical results between V2 and V3. The consolidated test suite (`tests/vitests/suites/sanitization/sanitize.test.vitest.mjs`, 104 tests) validates this. Only edge cases involving `leave` case-sensitivity or `lower` pattern rules differ — both were bugs in V2.
+All standard use cases produce identical results between V2 and V3. The consolidated test suite (`tests/vitests/suites/sanitization/sanitize.test.vitest.mjs`, 104 tests) validates this. Only edge cases involving `leave` case-sensitivity or `lower` pattern rules differ - both were bugs in V2.

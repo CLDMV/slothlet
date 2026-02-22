@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:57 -08:00 (1770266397)
+ *	@Last modified time: 2026-02-21 21:28:14 -08:00 (1771738094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -27,7 +27,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, materialize, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ config }) => {
 	let api;
@@ -245,15 +245,17 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.set(api.rootMath.add, "version", "1.0.0");
 
 			// Try to remove with non-string array element
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, ["version", 123]);
-			}).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, ["version", null]);
-			}).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, ["version", undefined]);
-			}).toThrow(/INVALID_METADATA_KEY/);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, ["version", 123]);
+				}).toThrow(/INVALID_METADATA_KEY/);
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, ["version", null]);
+				}).toThrow(/INVALID_METADATA_KEY/);
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, ["version", undefined]);
+				}).toThrow(/INVALID_METADATA_KEY/);
+			});
 		});
 
 		it("should remove nested keys from object values with object parameter", async () => {
@@ -299,12 +301,14 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.set(api.rootMath.add, "config", { timeout: 5000 });
 
 			// Try to remove with non-array object value
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, { config: "timeout" });
-			}).toThrow(/INVALID_METADATA_KEY/);
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, { config: 123 });
-			}).toThrow(/INVALID_METADATA_KEY/);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, { config: "timeout" });
+				}).toThrow(/INVALID_METADATA_KEY/);
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, { config: 123 });
+				}).toThrow(/INVALID_METADATA_KEY/);
+			});
 		});
 
 		it("should throw error for non-string nested keys in object parameter", async () => {
@@ -313,9 +317,11 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.set(api.rootMath.add, "config", { timeout: 5000 });
 
 			// Try to remove with non-string nested key
-			expect(() => {
-				api.slothlet.metadata.remove(api.rootMath.add, { config: ["timeout", 123] });
-			}).toThrow(/INVALID_METADATA_KEY/);
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() => {
+					api.slothlet.metadata.remove(api.rootMath.add, { config: ["timeout", 123] });
+				}).toThrow(/INVALID_METADATA_KEY/);
+			});
 		});
 
 		it("should handle object parameter gracefully when metadata value is not an object", async () => {
@@ -499,7 +505,7 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			api.slothlet.metadata.setFor("rootMath.add", "specificToAdd", true);
 
 			expect(api.rootMath.add.__metadata.specificToAdd).toBe(true);
-			// multiply is at rootMath.multiply — not under rootMath.add
+			// multiply is at rootMath.multiply - not under rootMath.add
 			expect(api.rootMath.multiply.__metadata.specificToAdd).toBeUndefined();
 		});
 

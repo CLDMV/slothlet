@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:28 -08:00 (1771716988)
+ *	@Last modified time: 2026-02-21 21:28:10 -08:00 (1771738090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -65,7 +65,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 				dir: TEST_DIRS.API_TEST
 			});
 
-			// Verify public API structure (on/off only — emit/subscribe are internal)
+			// Verify public API structure (on/off only - emit/subscribe are internal)
 			expect(api.slothlet.lifecycle).toBeDefined();
 			expect(typeof api.slothlet.lifecycle.on).toBe("function");
 			expect(typeof api.slothlet.lifecycle.off).toBe("function");

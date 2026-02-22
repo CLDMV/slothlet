@@ -728,11 +728,11 @@ api.plugins.addapi.cleanup(); // ❌ Breaks API extension pattern
 
 **Purpose**: Prevents double-nesting when a mounted folder contains a same-named subfolder. `api.add("config", folder)` should yield `api.config.*` not `api.config.config.*`.
 
-**Implementation Location**: `src/lib/handlers/api-manager.mjs` — in `addApiComponent()`, immediately after the single-file unwrap block.
+**Implementation Location**: `src/lib/handlers/api-manager.mjs` - in `addApiComponent()`, immediately after the single-file unwrap block.
 
 **When Evaluated**: After `buildAPI` returns, before the result is merged into the live API tree.
 
-**Guard — `isDirectChild`**: Ensures the matching key came from `mountDir/lastPart/`, not from a deeper nested folder that coincidentally shares the name (e.g. `services/services/` inside a `services` mount).
+**Guard - `isDirectChild`**: Ensures the matching key came from `mountDir/lastPart/`, not from a deeper nested folder that coincidentally shares the name (e.g. `services/services/` inside a `services` mount).
 
 **Example**:
 
