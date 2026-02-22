@@ -874,17 +874,21 @@ async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb, 
 				const output = `${stdout}\n${stderr}`;
 				if ((code ?? 1) === 0) {
 					const marker = "% Coverage report from v8";
-					const rawStartIndex = output.lastIndexOf(marker);
+					const rawLines = output.split("\n");
+					const markerLineIndex = rawLines.findIndex((line) => stripAnsi(line).includes(marker));
 
-					if (rawStartIndex >= 0) {
-						const lineStart = output.lastIndexOf("\n", rawStartIndex);
-						const coverageBlock = output.slice(lineStart >= 0 ? lineStart + 1 : 0).trimEnd();
-						console.log(`\n${coverageBlock}\n`);
-					} else {
-						const rawLines = output.split("\n");
-						const markerLineIndex = rawLines.findIndex((line) => stripAnsi(line).includes(marker));
-						if (markerLineIndex >= 0) {
-							const coverageBlock = rawLines.slice(markerLineIndex).join("\n").trimEnd();
+					if (markerLineIndex >= 0) {
+						let endLineIndex = rawLines.length;
+						for (let i = markerLineIndex + 1; i < rawLines.length; i++) {
+							const line = stripAnsi(rawLines[i]).trimStart();
+							if (line.startsWith("stderr |") || line.startsWith("stdout |")) {
+								endLineIndex = i;
+								break;
+							}
+						}
+
+						const coverageBlock = rawLines.slice(markerLineIndex, endLineIndex).join("\n").trimEnd();
+						if (coverageBlock) {
 							console.log(`\n${coverageBlock}\n`);
 						}
 					}
