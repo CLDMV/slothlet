@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 19:00:37 -08:00 (1770346837)
+ *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -312,7 +312,7 @@ export class ApiBuilder extends ComponentBase {
 				 *
 				 * For base module reload, pass null, undefined, empty string, or ".".
 				 * For specific module reload, pass the moduleID from an add operation.
-				 * For path-based reload, pass a dot-separated API path — the system
+				 * For path-based reload, pass a dot-separated API path - the system
 				 * finds the owning cache(s) automatically (exact match, children,
 				 * ownership history, or parent scope).
 				 *
@@ -380,7 +380,7 @@ export class ApiBuilder extends ComponentBase {
 						});
 					}
 
-					// Reload by API path — _findAffectedCaches resolves which caches to rebuild
+					// Reload by API path - _findAffectedCaches resolves which caches to rebuild
 					return slothlet.handlers.apiManager.reloadApiComponent({ apiPath: normalizedPath, options });
 				}
 			},
@@ -802,7 +802,7 @@ export class ApiBuilder extends ComponentBase {
 				 * future functions mounted at (or under) that path.
 				 *
 				 * Accepts either a dot-notation API path or a moduleID from a prior
-				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * `api.add()` call - the moduleID is resolved to its registered apiPath
 				 * before storing, consistent with how `api.reload()` and `api.remove()` work.
 				 *
 				 * Multiple calls to the same path are merged; later calls override earlier
@@ -846,7 +846,7 @@ export class ApiBuilder extends ComponentBase {
 				 * this exact path segment.
 				 *
 				 * Accepts either a dot-notation API path or a moduleID from a prior
-				 * `api.add()` call — the moduleID is resolved to its registered apiPath
+				 * `api.add()` call - the moduleID is resolved to its registered apiPath
 				 * before removing, consistent with how `api.reload()` and `api.remove()` work.
 				 *
 				 * @example
@@ -869,13 +869,13 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Alias for api.slothlet.context.scope — execute a function with isolated context.
+			 * Alias for api.slothlet.context.scope - execute a function with isolated context.
 			 * @see api.slothlet.context.scope
 			 */
 			scope: this.createScopeFunction(),
 
 			/**
-			 * Alias for api.slothlet.context.run — execute a callback with isolated context data.
+			 * Alias for api.slothlet.context.run - execute a callback with isolated context data.
 			 * @see api.slothlet.context.run
 			 */
 			run: this.createRunFunction(),
@@ -949,7 +949,7 @@ export class ApiBuilder extends ComponentBase {
 
 			/**
 			 * Lifecycle event manager for subscribing to API events.
-			 * Exposes only `on` and `off` — emit and subscribe are internal.
+			 * Exposes only `on` and `off` - emit and subscribe are internal.
 			 * @type {object}
 			 * @public
 			 *

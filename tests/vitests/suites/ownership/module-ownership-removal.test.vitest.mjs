@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -153,10 +153,14 @@ describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ conf
 		});
 
 		// Test invalid types
-		await expect(api.slothlet.api.remove(123)).rejects.toThrow();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.remove(123)).rejects.toThrow();
+		});
 
 		// Test empty object
-		await expect(api.slothlet.api.remove({})).rejects.toThrow();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.remove({})).rejects.toThrow();
+		});
 
 		// Test non-existent path (should return false, not throw)
 		const removed = await api.slothlet.api.remove("nonexistent.path");

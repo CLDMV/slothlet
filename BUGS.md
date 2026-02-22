@@ -15,7 +15,7 @@ Before filing a bug report:
 
 To report: open a [GitHub Issue](https://github.com/CLDMV/slothlet/issues/new) with a clear description, reproduction steps, and expected vs actual behavior.
 
-For **security vulnerabilities**, see [`SECURITY.md`](SECURITY.md) — do not open a public issue.
+For **security vulnerabilities**, see [`SECURITY.md`](SECURITY.md) - do not open a public issue.
 
 ---
 

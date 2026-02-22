@@ -16,7 +16,7 @@
  */
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutputSync } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ config }) => {
 	let api;
@@ -75,11 +75,13 @@ describe.each(getMatrixConfigs())("API Sanitize Method > Config: '$name'", ({ co
 	});
 
 	test("should throw error for non-string input", () => {
-		expect(() => api.slothlet.sanitize(123)).toThrow();
-		expect(() => api.slothlet.sanitize(null)).toThrow();
-		expect(() => api.slothlet.sanitize(undefined)).toThrow();
-		expect(() => api.slothlet.sanitize({})).toThrow();
-		expect(() => api.slothlet.sanitize([])).toThrow();
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => api.slothlet.sanitize(123)).toThrow();
+			expect(() => api.slothlet.sanitize(null)).toThrow();
+			expect(() => api.slothlet.sanitize(undefined)).toThrow();
+			expect(() => api.slothlet.sanitize({})).toThrow();
+			expect(() => api.slothlet.sanitize([])).toThrow();
+		});
 	});
 
 	test("should handle empty strings", () => {

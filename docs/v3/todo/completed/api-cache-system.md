@@ -107,49 +107,49 @@ apiCaches = Map<string, CacheEntry>
 
 **Implementation Summary:**
 
-1. **Cache-bust parameter threading** — Passed `cacheBust` timestamp through the entire call chain:
+1. **Cache-bust parameter threading** - Passed `cacheBust` timestamp through the entire call chain:
    `rebuildCache` → `buildAPI` → `buildEagerAPI`/`buildLazyAPI` → `processFiles` → `loadModule`
    This forces `import()` to return fresh module objects, preventing Node.js module cache from
    returning the same function reference used by the live API (which would cause `applyRootContributor`'s
    `Object.assign` to overwrite live API properties).
 
-2. **CollisionContext fix** — Changed `rebuildCache` to use `"initial"` for base modules and
+2. **CollisionContext fix** - Changed `rebuildCache` to use `"initial"` for base modules and
    `"addApi"` for added modules (was incorrectly using `"core"` which doesn't exist in config,
    causing fallback to merge instead of the configured collision mode).
 
-3. **Mode-preserving rebuilds** — `rebuildCache` uses `entry.mode` (the original loading mode)
+3. **Mode-preserving rebuilds** - `rebuildCache` uses `entry.mode` (the original loading mode)
    instead of forcing eager. Lazy modules rebuild as lazy, eager modules rebuild as eager.
    This respects lazy mode's contract: only load what's actually accessed.
 
-4. **`___resetLazy` method on UnifiedWrapper** — Resets a wrapper to un-materialized lazy state
+4. **`___resetLazy` method on UnifiedWrapper** - Resets a wrapper to un-materialized lazy state
    with a fresh `materializeFunc`. Clears `_impl`, children, caches, and state flags. Preserves
    proxy identity so existing references continue to work. Used by `_restoreApiTree` (root level)
    and `_adoptImplChildren` (nested children).
 
-5. **Lazy-aware `_restoreApiTree`** — Root-level keys detect whether the fresh value is an
+5. **Lazy-aware `_restoreApiTree`** - Root-level keys detect whether the fresh value is an
    un-materialized lazy wrapper (via `__mode === "lazy"` + `!materialized` + `_materializeFunc`).
    If so, calls `___resetLazy` to swap the materializeFunc. Otherwise uses `___setImpl` for eager
    values. Nested paths work through `___setImpl` → `_adoptImplChildren` which also uses
    `___resetLazy` for lazy children.
 
-6. **Root-level ___setImpl preservation** — `_restoreApiTree` uses `___setImpl` directly on existing
+6. **Root-level ___setImpl preservation** - `_restoreApiTree` uses `___setImpl` directly on existing
    wrappers for root-level eager keys, preserving proxy identity and custom properties. Custom
    properties are collected before and restored after.
 
-7. **Defensive _waitingProxyCache guard** — Added initialization guard in `_createWaitingProxy`
+7. **Defensive _waitingProxyCache guard** - Added initialization guard in `_createWaitingProxy`
    for edge cases where `_waitingProxyCache` can become undefined during reload/adoption cycles.
 
-8. **Lazy materialization closure fix** — Added `cacheBust` parameter to `createLazySubdirectoryWrapper`
+8. **Lazy materialization closure fix** - Added `cacheBust` parameter to `createLazySubdirectoryWrapper`
    so lazy materialization closures have access to the cache-bust timestamp.
 
-9. **`UnifiedWrapper._extractFullImpl()` static method** — Reconstructs full impl from wrapper tree
+9. **`UnifiedWrapper._extractFullImpl()` static method** - Reconstructs full impl from wrapper tree
    when `_impl` is depleted by `_adoptImplChildren()`. During construction, child values (host,
    port for config) are moved from `_impl` onto the wrapper as own properties and deleted from
    `_impl`. This helper walks the wrapper tree to reconstruct the complete impl for eager reload
    restore. Moved from api-manager instance method to UnifiedWrapper static during post-Step 6
    refactoring (commit ac0b7ca).
 
-10. **Impl cloning via `_cloneImpl` and `_applyNewImpl`** — All impl-setting paths (constructor,
+10. **Impl cloning via `_cloneImpl` and `_applyNewImpl`** - All impl-setting paths (constructor,
     `___setImpl`, `lazy_setImpl` callback, `___materialize` fallback) use `UnifiedWrapper._cloneImpl()`
     for Proxy-safe shallow cloning and `_applyNewImpl()` for the full clone+invalidation+adoption
     pipeline. Prevents `_adoptImplChildren` from mutating shared Node.js module export references.
@@ -157,37 +157,37 @@ apiCaches = Map<string, CacheEntry>
     keys from `_impl` destroys the shared export for subsequent materializations. Extracted during
     post-Step 6 refactoring (commits f8f3139, 7ccfb07).
 
-11. **`_findAffectedCaches` method** — 5-tier cache resolution for path-based reload:
+11. **`_findAffectedCaches` method** - 5-tier cache resolution for path-based reload:
     (1) base module, (2) exact endpoint match, (3) child caches, (4) ownership history,
     (5) parent cache fallback. Aggregates tiers 1-3 for multi-contributor paths, deduplicates,
     and sorts by load order (base first, then addHistory order).
 
-12. **Full-reload remove-replay fix** — `removeApiComponent` now records a single root-level
+12. **Full-reload remove-replay fix** - `removeApiComponent` now records a single root-level
     `apiPath` in `operationHistory` (e.g., `"path1"`) instead of every leaf path. During
     replay in `slothlet.reload()`, uses `deletePath` directly instead of `removeApiComponent`
     (which misidentified no-dot strings as moduleIDs, causing silent failures).
 
-13. **`slothlet_api_reload` accepts null/undefined/""/"."** — Base module reload via any
+13. **`slothlet_api_reload` accepts null/undefined/""/"."** - Base module reload via any
     of these values. Validates non-string inputs with descriptive error message.
 
 **Key Design Decisions:**
-- moduleID is NEVER changed during reload — it is the identity for ownership, cache lookup, and metadata
+- moduleID is NEVER changed during reload - it is the identity for ownership, cache lookup, and metadata
 - Cache-busting happens at the import URL level only (appends `&_reload=<timestamp>`)
 - cacheBust is passed as a parameter through the chain, NOT stored as shared mutable state
-- Lazy mode is preserved through reload — rebuild in original mode, let things re-materialize on demand
+- Lazy mode is preserved through reload - rebuild in original mode, let things re-materialize on demand
 - Root-level files are always eager in both modes (per modes-processor.mjs design)
 
 **Files Modified:**
-- `src/lib/handlers/api-cache-manager.mjs` — `rebuildCache`: collisionContext fix, `entry.mode` rebuild, cacheBust param
-- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`: root-level `___resetLazy` detection + `___setImpl`, custom prop collect/restore
-- `src/lib/handlers/unified-wrapper.mjs` — New `___resetLazy` method + proxy plumbing (allowedInternals, getTrap, hasTrap, setTrap, deletePropertyTrap); `_adoptImplChildren` uses `___resetLazy` for lazy children; `_createWaitingProxy` defensive guard
-- `src/lib/builders/builder.mjs` — `buildAPI`: pass cacheBust to mode builders
-- `src/lib/modes/eager.mjs` — `buildEagerAPI`: accept and pass cacheBust
-- `src/lib/modes/lazy.mjs` — `buildLazyAPI`: accept and pass cacheBust
-- `src/lib/builders/modes-processor.mjs` — `processFiles`: accept cacheBust, pass to loadModule (3 sites) and recursive calls (2 sites); `createLazySubdirectoryWrapper`: accept cacheBust
-- `src/lib/processors/loader.mjs` — `loadModule`: accept cacheBust param, append to import URL
-- `src/slothlet.mjs` — `reload()` replay remove: direct `deletePath` instead of `removeApiComponent` for root-path removes
-- `src/lib/builders/api_builder.mjs` — `slothlet_api_reload`: accepts null/undefined/""/"." for base module reload
+- `src/lib/handlers/api-cache-manager.mjs` - `rebuildCache`: collisionContext fix, `entry.mode` rebuild, cacheBust param
+- `src/lib/handlers/api-manager.mjs` - `_restoreApiTree`: root-level `___resetLazy` detection + `___setImpl`, custom prop collect/restore
+- `src/lib/handlers/unified-wrapper.mjs` - New `___resetLazy` method + proxy plumbing (allowedInternals, getTrap, hasTrap, setTrap, deletePropertyTrap); `_adoptImplChildren` uses `___resetLazy` for lazy children; `_createWaitingProxy` defensive guard
+- `src/lib/builders/builder.mjs` - `buildAPI`: pass cacheBust to mode builders
+- `src/lib/modes/eager.mjs` - `buildEagerAPI`: accept and pass cacheBust
+- `src/lib/modes/lazy.mjs` - `buildLazyAPI`: accept and pass cacheBust
+- `src/lib/builders/modes-processor.mjs` - `processFiles`: accept cacheBust, pass to loadModule (3 sites) and recursive calls (2 sites); `createLazySubdirectoryWrapper`: accept cacheBust
+- `src/lib/processors/loader.mjs` - `loadModule`: accept cacheBust param, append to import URL
+- `src/slothlet.mjs` - `reload()` replay remove: direct `deletePath` instead of `removeApiComponent` for root-path removes
+- `src/lib/builders/api_builder.mjs` - `slothlet_api_reload`: accepts null/undefined/""/"." for base module reload
 
 ### ✅ Step 6: Implement path reload with multi-cache rebuild
 **Status:** ✅ Complete  
@@ -196,32 +196,32 @@ apiCaches = Map<string, CacheEntry>
 
 **Implementation Summary:**
 
-1. **Per-endpoint forceReplace grouping** — `_reloadByApiPath` groups modules by endpoint before
+1. **Per-endpoint forceReplace grouping** - `_reloadByApiPath` groups modules by endpoint before
    applying forceReplace. Within each endpoint group, first module gets `forceReplace: true`,
    subsequent modules use original collision mode. This ensures each endpoint gets a clean slate
    for its first module (preventing stale data), while allowing proper merge behavior for additional
    modules at the same endpoint.
 
-2. **Load-order preservation** — Modules sorted by load order: base module always first,
+2. **Load-order preservation** - Modules sorted by load order: base module always first,
    then additional modules in addHistory chronological order. Ensures deterministic rebuild order
    and proper collision resolution.
 
-3. **`_reloadByModuleID` options parameter** — Added `{ forceReplace = true }` options object.
+3. **`_reloadByModuleID` options parameter** - Added `{ forceReplace = true }` options object.
    When `forceReplace: true`, passes `"replace"` to `_restoreApiTree` instead of cached collision mode.
    Used by per-endpoint grouping to ensure first module in each group gets clean slate.
 
-4. **`_restoreApiTree` forceReplace parameter** — Added `forceReplace = true` parameter.
+4. **`_restoreApiTree` forceReplace parameter** - Added `forceReplace = true` parameter.
    When true, uses `"replace"` for both root-level and nested path collision modes (overriding
    cached collision mode). When false, uses cached collision mode. Enables proper multi-cache
    rebuild with first-module-replace + subsequent-merge pattern.
 
-5. **Lazy-aware custom property collection** — Fixed `_collectCustomProperties` to:
+5. **Lazy-aware custom property collection** - Fixed `_collectCustomProperties` to:
    - Accept both object and function-type wrappers (lazy mode creates function wrappers)
    - Skip ALL wrapper-type values (check `val.__wrapper`) before freshKeys comparison
    - Only collect plain custom properties (actual user-set values)
    - This prevents collecting API-built child wrappers that will be invalidated by `___resetLazy`
 
-6. **Multi-cache rebuild tests** — Created comprehensive test suite (112 tests = 7 describe blocks × 8 configs × 2 tests avg):
+6. **Multi-cache rebuild tests** - Created comprehensive test suite (112 tests = 7 describe blocks × 8 configs × 2 tests avg):
    - Same-endpoint multi-cache rebuild
    - Load order preservation
    - Child caches under parent path
@@ -238,8 +238,8 @@ apiCaches = Map<string, CacheEntry>
 - Custom property preservation: Only collect plain values, skip wrapper-type children
 
 **Files Modified:**
-- `src/lib/handlers/api-manager.mjs` — `_reloadByApiPath` endpoint grouping, `_reloadByModuleID` options, `_restoreApiTree` forceReplace, `_collectCustomProperties` lazy wrapper support
-- `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs` — 112 multi-cache path reload tests (NEW)
+- `src/lib/handlers/api-manager.mjs` - `_reloadByApiPath` endpoint grouping, `_reloadByModuleID` options, `_restoreApiTree` forceReplace, `_collectCustomProperties` lazy wrapper support
+- `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs` - 112 multi-cache path reload tests (NEW)
 
 **Test Results:**
 - Multi-cache path reload: 112/112 ✅
@@ -416,7 +416,7 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 
 ### 2026-02-09
 - ✅ **Completed Step 6**: Multi-cache path reload with per-endpoint forceReplace grouping
-  - Implemented endpoint grouping in `_reloadByApiPath` — group modules by endpoint, apply `forceReplace: i === 0` per group
+  - Implemented endpoint grouping in `_reloadByApiPath` - group modules by endpoint, apply `forceReplace: i === 0` per group
   - Added `{ forceReplace = true }` options to `_reloadByModuleID`
   - Added `forceReplace = true` parameter to `_restoreApiTree` for conditional collision mode override
   - Fixed `_collectCustomProperties` to handle lazy wrappers: accept function-type wrappers, skip ALL wrapper-type values (only collect plain custom properties)
@@ -447,17 +447,17 @@ npm run vitest tests/vitests/suites/core/core-reload-selective.test.vitest.mjs |
 
 ## Related Files
 
-- `src/lib/handlers/api-cache-manager.mjs` — Cache storage and `rebuildCache` logic (mode-preserving)
-- `src/lib/handlers/api-manager.mjs` — `_restoreApiTree`, `removeApiComponent`, `deletePath` (uses `UnifiedWrapper._extractFullImpl`)
-- `src/lib/handlers/unified-wrapper.mjs` — `___setImpl`, `___resetLazy`, `_adoptImplChildren`, `_createWaitingProxy`, `_cloneImpl` (static), `_applyNewImpl`, `_extractFullImpl` (static)
-- `src/lib/builders/builder.mjs` — `buildAPI` options forwarding
-- `src/lib/modes/eager.mjs` — `buildEagerAPI` with cacheBust
-- `src/lib/modes/lazy.mjs` — `buildLazyAPI` with cacheBust
-- `src/lib/builders/modes-processor.mjs` — `processFiles`, `createLazySubdirectoryWrapper`
-- `src/lib/processors/loader.mjs` — `loadModule` with cacheBust URL parameter
-- `src/lib/builders/api_builder.mjs` — buildAPI interface
-- `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` — Selective reload tests (56 tests)
-- `tests/vitests/suites/core/core-reload-full.test.vitest.mjs` — Full instance reload tests (56 tests)
-- `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs` — Lazy-mode reload tests (68 tests, 63 passing)
-- `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs` — Multi-cache path reload tests (112 tests)
-- `src/slothlet.mjs` — Main orchestrator: `reload()` with operation history replay
+- `src/lib/handlers/api-cache-manager.mjs` - Cache storage and `rebuildCache` logic (mode-preserving)
+- `src/lib/handlers/api-manager.mjs` - `_restoreApiTree`, `removeApiComponent`, `deletePath` (uses `UnifiedWrapper._extractFullImpl`)
+- `src/lib/handlers/unified-wrapper.mjs` - `___setImpl`, `___resetLazy`, `_adoptImplChildren`, `_createWaitingProxy`, `_cloneImpl` (static), `_applyNewImpl`, `_extractFullImpl` (static)
+- `src/lib/builders/builder.mjs` - `buildAPI` options forwarding
+- `src/lib/modes/eager.mjs` - `buildEagerAPI` with cacheBust
+- `src/lib/modes/lazy.mjs` - `buildLazyAPI` with cacheBust
+- `src/lib/builders/modes-processor.mjs` - `processFiles`, `createLazySubdirectoryWrapper`
+- `src/lib/processors/loader.mjs` - `loadModule` with cacheBust URL parameter
+- `src/lib/builders/api_builder.mjs` - buildAPI interface
+- `tests/vitests/suites/core/core-reload-selective.test.vitest.mjs` - Selective reload tests (56 tests)
+- `tests/vitests/suites/core/core-reload-full.test.vitest.mjs` - Full instance reload tests (56 tests)
+- `tests/vitests/suites/core/core-reload-lazy-mode.test.vitest.mjs` - Lazy-mode reload tests (68 tests, 63 passing)
+- `tests/vitests/suites/core/core-reload-path-multicache.test.vitest.mjs` - Multi-cache path reload tests (112 tests)
+- `src/slothlet.mjs` - Main orchestrator: `reload()` with operation history replay

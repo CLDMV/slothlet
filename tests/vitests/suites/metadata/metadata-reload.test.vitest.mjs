@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:39:58 -08:00 (1770266398)
+ *	@Last modified time: 2026-02-21 21:28:14 -08:00 (1771738094)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -93,7 +93,8 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			}
 		});
 
-		it("should handle reload with metadata changes", async () => {		// Before reload
+		it("should handle reload with metadata changes", async () => {
+			// Before reload
 			await materialize(api, "rootMath.add", 1, 2);
 			const meta1 = api.rootMath.add.__metadata;
 			// Reload (simulates file changes on disk)
@@ -260,7 +261,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 				}
 			});
 
-			// Reload while supplying UPDATED metadata — this is the primary way to change
+			// Reload while supplying UPDATED metadata - this is the primary way to change
 			// path-registered metadata after initialization without touching each function.
 			await api.slothlet.api.reload("updateable", {
 				metadata: {

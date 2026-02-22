@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 21:28:11 -08:00 (1771738091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -151,7 +151,7 @@ describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => 
 		await api.slothlet.api.reload("deep");
 
 		if (config.mode === "lazy") {
-			// Lazy reload intentionally resets wrappers to un-materialized state — references
+			// Lazy reload intentionally resets wrappers to un-materialized state - references
 			// from before the reload are invalidated by design.
 			// Verify the reloaded API still produces the same result from the same source.
 			expect(await api.deep?.math?.add(1, 2)).toBe(preReloadResult);

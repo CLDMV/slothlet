@@ -4,9 +4,9 @@ The metadata system provides secure, immutable function tagging and runtime intr
 
 ## Overview
 
-Every function loaded by slothlet automatically receives **system metadata** — immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
+Every function loaded by slothlet automatically receives **system metadata** - immutable fields like `filePath`, `apiPath`, and `moduleID` that are set by the lifecycle system and cannot be overridden. On top of that, user code can attach **user metadata** at load time (via `api.slothlet.api.add()`), at runtime (via `api.slothlet.metadata.*`), or globally (via `setGlobal()`).
 
-All metadata is deeply frozen and protected by Proxy traps. No code can modify an existing metadata value — modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
+All metadata is deeply frozen and protected by Proxy traps. No code can modify an existing metadata value - modifications must go through the metadata API, which creates updated internal state and merges fresh frozen objects on the next read.
 
 ## Table of Contents
 
@@ -30,7 +30,7 @@ All metadata is deeply frozen and protected by Proxy traps. No code can modify a
 
 ### System Metadata
 
-Automatically tagged by the lifecycle system when a module is loaded or reloaded. Always wins over user metadata — system fields cannot be overridden.
+Automatically tagged by the lifecycle system when a module is loaded or reloaded. Always wins over user metadata - system fields cannot be overridden.
 
 ```javascript
 {
@@ -137,7 +137,7 @@ Set metadata for all functions under an API path, without needing function refer
 // Single key
 api.slothlet.metadata.setFor("math", "category", "math");
 
-// Object merge — multiple keys at once
+// Object merge - multiple keys at once
 api.slothlet.metadata.setFor("math", { category: "math", version: "2.0.0" });
 
 // Target a specific subpath
@@ -146,7 +146,7 @@ api.slothlet.metadata.setFor("math.add", "description", "Adds two numbers");
 
 All functions whose `apiPath` starts with the given path inherit the values. Multiple calls to the same path are merged; later calls override earlier ones for conflicting keys. `setFor()` metadata survives `api.slothlet.reload()`.
 
-Also accepts a `moduleID` from a prior `api.add()` call — the ID is resolved to its registered `apiPath` automatically.
+Also accepts a `moduleID` from a prior `api.add()` call - the ID is resolved to its registered `apiPath` automatically.
 
 ### removeFor(pathOrModuleId, key?)
 
@@ -163,13 +163,13 @@ api.slothlet.metadata.removeFor("math", ["category", "version"]);
 api.slothlet.metadata.removeFor("math");
 ```
 
-Only affects metadata stored for that exact path segment — does not walk descendant paths or affect function-level (`set()`) metadata.
+Only affects metadata stored for that exact path segment - does not walk descendant paths or affect function-level (`set()`) metadata.
 
 ---
 
 ## Runtime Introspection
 
-Use `self.slothlet.metadata.*` to inspect metadata from within slothlet-loaded functions. The `self` proxy from `@cldmv/slothlet/runtime` gives access to the full running API — including `self.slothlet.metadata.*` — from any loaded module.
+Use `self.slothlet.metadata.*` to inspect metadata from within slothlet-loaded functions. The `self` proxy from `@cldmv/slothlet/runtime` gives access to the full running API - including `self.slothlet.metadata.*` - from any loaded module.
 
 > **Note:** `self.slothlet.metadata.self()` and `self.slothlet.metadata.caller()` are **synchronous**. Only `self.slothlet.metadata.get(path)` is async.
 
@@ -239,10 +239,10 @@ When `__metadata` is read, the system merges all metadata layers (lowest to high
 
 | Layer | Source |
 |---|---|
-| 1 — Global | `api.slothlet.metadata.setGlobal()` |
-| 2 — Path | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
-| 3 — Function | `api.slothlet.metadata.set()` |
-| 4 — System | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt` |
+| 1 - Global | `api.slothlet.metadata.setGlobal()` |
+| 2 - Path | `api.slothlet.metadata.setFor()`, `api.slothlet.api.add()` metadata |
+| 3 - Function | `api.slothlet.metadata.set()` |
+| 4 - System | `filePath`, `sourceFolder`, `apiPath`, `moduleID`, `taggedAt` |
 
 **System metadata always wins.** User code cannot override `filePath`, `apiPath`, `moduleID`, `sourceFolder`, or `taggedAt`.
 
@@ -269,8 +269,8 @@ const meta = api.plugins.someFunc.__metadata;
 
 // None of these mutate metadata (TypeError in strict mode, silent fail otherwise)
 meta.trusted = false;           // blocked
-meta.config.timeout = 1000;    // blocked — nested objects frozen too
-meta.permissions.push("admin"); // blocked — arrays frozen too
+meta.config.timeout = 1000;    // blocked - nested objects frozen too
+meta.permissions.push("admin"); // blocked - arrays frozen too
 delete meta.trusted;            // blocked
 
 // To update user metadata, use the explicit API:
@@ -331,7 +331,7 @@ In lazy mode, modules are not loaded until first call. Metadata is only availabl
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 await api.slothlet.api.add("plugins", "./plugins", { trusted: true });
 
-// Module not yet loaded — only proxy exists
+// Module not yet loaded - only proxy exists
 console.log(api.plugins.someFunc.__metadata); // undefined
 
 // Trigger materialization
@@ -347,7 +347,7 @@ console.log(api.plugins.someFunc.__metadata.trusted); // true
 
 ### Metadata as defense in depth
 
-Metadata-based authorization is one layer — not a complete security solution:
+Metadata-based authorization is one layer - not a complete security solution:
 
 ```javascript
 import { self, context } from "@cldmv/slothlet/runtime";
@@ -379,7 +379,7 @@ export async function protectedOp() {
 	const caller = self.slothlet.metadata.caller();
 
 	if (!caller) {
-		// No tracked caller — require explicit auth token
+		// No tracked caller - require explicit auth token
 		if (!context.explicitAuthToken) {
 			throw new Error("Authentication required");
 		}
@@ -519,7 +519,7 @@ export async function chargeCard(amount, cardId) {
 | `self.slothlet.metadata.caller()` | ~0.001 ms (context lookup) |
 | `self.slothlet.metadata.self()` | ~0.001 ms (context lookup) |
 
-Cache the results at the top of a function body — both calls are synchronous but caching keeps intent clear:
+Cache the results at the top of a function body - both calls are synchronous but caching keeps intent clear:
 
 ```javascript
 // ✅ Cache at top of function
@@ -542,42 +542,42 @@ export async function handler(data) {
 Set global metadata applied to all functions.
 
 **Parameters:**
-- `key` (string) — Metadata key
-- `value` (*) — Metadata value
+- `key` (string) - Metadata key
+- `value` (*) - Metadata value
 
 ### api.slothlet.metadata.set(fn, key, value)
 
 Set user metadata on a specific function.
 
 **Parameters:**
-- `fn` (Function) — Target function (must have system metadata)
-- `key` (string) — Metadata key
-- `value` (*) — Metadata value
+- `fn` (Function) - Target function (must have system metadata)
+- `key` (string) - Metadata key
+- `value` (*) - Metadata value
 
 ### api.slothlet.metadata.remove(fn, key?)
 
 Remove user metadata from a function.
 
 **Parameters:**
-- `fn` (Function) — Target function
-- `key` (string | string[], optional) — Key(s) to remove; omit to remove all
+- `fn` (Function) - Target function
+- `key` (string | string[], optional) - Key(s) to remove; omit to remove all
 
 ### api.slothlet.metadata.setFor(pathOrModuleId, keyOrObj, value?)
 
 Set metadata for all functions under an API path.
 
 **Parameters:**
-- `pathOrModuleId` (string) — Dot-notation path (`"math"`) or moduleID
-- `keyOrObj` (string | Object) — Key string (with `value`) or metadata object to merge
-- `value` (*) — Value when `keyOrObj` is a key string
+- `pathOrModuleId` (string) - Dot-notation path (`"math"`) or moduleID
+- `keyOrObj` (string | Object) - Key string (with `value`) or metadata object to merge
+- `value` (*) - Value when `keyOrObj` is a key string
 
 ### api.slothlet.metadata.removeFor(pathOrModuleId, key?)
 
 Remove path-level metadata.
 
 **Parameters:**
-- `pathOrModuleId` (string) — Dot-notation path or moduleID
-- `key` (string | string[], optional) — Key(s) to remove; omit to remove all
+- `pathOrModuleId` (string) - Dot-notation path or moduleID
+- `key` (string | string[], optional) - Key(s) to remove; omit to remove all
 
 ---
 
@@ -601,14 +601,14 @@ Get metadata of the currently executing function (synchronous).
 
 Get metadata of the calling function (synchronous).
 
-**Returns:** `Object | null` — Returns `null` if no tracked caller (external code, timers, event callbacks, etc.).
+**Returns:** `Object | null` - Returns `null` if no tracked caller (external code, timers, event callbacks, etc.).
 
 ### self.slothlet.metadata.get(path)
 
 Get metadata for any function by dot-notation path (async).
 
 **Parameters:**
-- `path` (string) — Dot-notation API path (e.g. `"plugins.trusted.someFunc"`)
+- `path` (string) - Dot-notation API path (e.g. `"plugins.trusted.someFunc"`)
 
 **Returns:** `Promise<Object | null>`
 
@@ -628,6 +628,6 @@ Returns combined system + user metadata as a deeply frozen object. Returns `unde
 
 ## See Also
 
-- [Context Propagation](CONTEXT-PROPAGATION.md) — `context` object available alongside metadata
-- [Hooks](HOOKS.md) — Use hooks to intercept calls based on metadata
-- [README](../README.md) — Main project documentation
+- [Context Propagation](CONTEXT-PROPAGATION.md) - `context` object available alongside metadata
+- [Hooks](HOOKS.md) - Use hooks to intercept calls based on metadata
+- [README](../README.md) - Main project documentation

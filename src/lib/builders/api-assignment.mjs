@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-20 13:20:45 -08:00 (1771622445)
+ *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -346,7 +346,7 @@ export class ApiAssignment extends ComponentBase {
 							// Replace mode: Don't copy anything from existing file
 							// Let the lazy folder materialize clean and completely replace the file
 							this.slothlet.debug("api", {
-							key: "DEBUG_MODE_COLLISION_REPLACE_NO_COPY"
+								key: "DEBUG_MODE_COLLISION_REPLACE_NO_COPY"
 							});
 						} else if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
@@ -432,8 +432,8 @@ export class ApiAssignment extends ComponentBase {
 
 						// Assign value to API (replace existing with lazy folder wrapper)
 						this.slothlet.debug("api", {
-						key: "DEBUG_MODE_COLLISION_ASSIGN_REPLACING_WITH_LAZY",
-						propKey: key,
+							key: "DEBUG_MODE_COLLISION_ASSIGN_REPLACING_WITH_LAZY",
+							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
 						targetApi[key] = value;
@@ -483,7 +483,7 @@ export class ApiAssignment extends ComponentBase {
 								configurable: true
 							});
 						} else {
-							// Merge mode, key exists — recursive merge for nested wrappers
+							// Merge mode, key exists - recursive merge for nested wrappers
 							// Example: existing math has {add, multiply, divide}, new math has {power, sqrt, modulo}
 							// → merge adds power, sqrt, modulo into existing math wrapper
 							const existingChild = existingWrapper[key];
@@ -628,7 +628,7 @@ export class ApiAssignment extends ComponentBase {
 				!this.isWrapperProxy(sourceValue)
 			) {
 				if (config?.debug?.api) {
-				this.slothlet.debug("api", {
+					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_MERGE_API_OBJECTS_RECURSING",
 						propKey: key
 					});
@@ -637,7 +637,7 @@ export class ApiAssignment extends ComponentBase {
 			} else {
 				// Use unified assignment logic
 				if (config?.debug?.api) {
-				this.slothlet.debug("api", {
+					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_MERGE_API_OBJECTS_CALLING_ASSIGN",
 						propKey: key
 					});

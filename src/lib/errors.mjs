@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 21:27:55 -08:00 (1771738075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -228,7 +228,7 @@ export class SlothletDebug {
 	 * @param {Object} context - Contextual information to display
 	 * @param {string} [context.key] - Translation key for the message (e.g. "DEBUG_MODE_FLATTENING").
 	 *   When provided, translates via i18n using the remaining context properties as interpolation
-	 *   params — no `await t()` needed at the call site. Falls back to `DEBUG_{CODE}` category key
+	 *   params - no `await t()` needed at the call site. Falls back to `DEBUG_{CODE}` category key
 	 *   if omitted, then to `context.message` for backwards compatibility.
 	 * @param {string} [context.message] - Raw message string (backwards-compat fallback).
 	 *   Prefer `context.key` for new call sites so messages are translatable.
@@ -238,12 +238,12 @@ export class SlothletDebug {
 	 * Centralized debug logging that respects debug configuration flags.
 	 * Only outputs when the specified code matches a truthy debug flag.
 	 * Translates messages using i18n system with the following key resolution order:
-	 * 1. `context.key` — explicit per-message translation key (preferred)
-	 * 2. `DEBUG_{CODE}` — category-level key (e.g. DEBUG_MODES)
-	 * 3. `context.message` — raw string fallback for backwards compatibility
+	 * 1. `context.key` - explicit per-message translation key (preferred)
+	 * 2. `DEBUG_{CODE}` - category-level key (e.g. DEBUG_MODES)
+	 * 3. `context.message` - raw string fallback for backwards compatibility
 	 *
 	 * @example
-	 * // Preferred: pass translation key directly — no await needed
+	 * // Preferred: pass translation key directly - no await needed
 	 * this.debug("modes", { key: "DEBUG_MODE_FLATTENING", mode, categoryName });
 	 *
 	 * @example
@@ -273,7 +273,7 @@ export class SlothletDebug {
 			// Backwards compat: raw message string (no key provided, no category key found)
 			console.log(`${label} ${message}`);
 		} else {
-			// No message or translation — dump raw context
+			// No message or translation - dump raw context
 			console.log(label, contextParams);
 		}
 

@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 // Full matrix for comprehensive testing
 const ALL_CONFIGS = getMatrixConfigs({});
@@ -779,14 +779,16 @@ describe("Per-Request Context Error Handling", () => {
 	});
 
 	it("should throw error for invalid merge strategy", async () => {
-		await expect(
-			slothlet({
-				dir: TEST_DIRS.API_TEST,
-				mode: "eager",
-				runtime: "async",
-				scope: { merge: "invalid" }
-			})
-		).rejects.toThrow();
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(
+				slothlet({
+					dir: TEST_DIRS.API_TEST,
+					mode: "eager",
+					runtime: "async",
+					scope: { merge: "invalid" }
+				})
+			).rejects.toThrow();
+		});
 	});
 
 	it("should throw error when .run() missing callback", async () => {

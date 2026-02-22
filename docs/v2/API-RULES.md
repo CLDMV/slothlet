@@ -807,19 +807,19 @@ if (instance.config.hotReload && options.forceOverwrite && options.moduleId) {
 
 await api.slothlet.api.add("config", "./api_smart_flatten_folder_config", {});
 
-// Without Rule 13 (double-nested — undesirable):
+// Without Rule 13 (double-nested - undesirable):
 api.config.config.getNestedConfig(); // ❌
 
-// With Rule 13 (hoisted — correct):
+// With Rule 13 (hoisted - correct):
 api.config.getNestedConfig(); // ✅ subfolder exports promoted
 api.config.setNestedConfig(); // ✅
 api.config.main.getRootInfo(); // ✅ other files unaffected
 ```
 
-**Guard — `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
+**Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
 
 ```
-// services fixture — should NOT hoist:
+// services fixture - should NOT hoist:
 // api.add("services", folder)  →  newApi has key "services"
 // but filePath = .../services/services/services.mjs
 //     dirname  = .../services/services   ≠ resolvedFolderPath/services
@@ -827,7 +827,7 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // → api.services.services.getNestedService remains properly nested ✅
 ```
 
-**Implementation**: `src/lib/handlers/api-manager.mjs` — immediately after `buildAPI` call, before `setValueAtPath`
+**Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
 
 ---
 

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 15:30:59 -08:00 (1770507059)
+ *	@Last modified time: 2026-02-21 21:27:57 -08:00 (1771738077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -373,7 +373,7 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = resolveWrapper(target) ?? target;
 
-		// Get system metadata to find moduleID — wrapper-first (same lookup order as getMetadata)
+		// Get system metadata to find moduleID - wrapper-first (same lookup order as getMetadata)
 		// so that set() and get() always resolve to the same moduleID, even after reload
 		// (the wrapper retains a stable moduleID while impl gets a new one after each reload).
 		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
@@ -428,7 +428,7 @@ export class Metadata extends ComponentBase {
 		// Normalize target: if it's a proxy, get the underlying wrapper
 		const actualTarget = resolveWrapper(target) ?? target;
 
-		// Get system metadata to find moduleID and apiPath — wrapper-first (same lookup order as getMetadata)
+		// Get system metadata to find moduleID and apiPath - wrapper-first (same lookup order as getMetadata)
 		const systemData = this.#secureMetadata.get(actualTarget) || this.#secureMetadata.get(actualTarget.____slothletInternal?.impl) || {};
 		const moduleID = systemData.moduleID;
 		const apiPath = systemData.apiPath;
@@ -631,7 +631,7 @@ export class Metadata extends ComponentBase {
 	 * Removes one specific key, multiple keys, or ALL user metadata stored under
 	 * the given `apiPath` key in the path store.
 	 * Only affects metadata set via `setForPath()` / `registerUserMetadata()` for
-	 * this exact path segment — it does not walk descendant paths.
+	 * this exact path segment - it does not walk descendant paths.
 	 *
 	 * @param {string} apiPath - Dot-notation path (e.g. `"math"`, `"math.add"`)
 	 * @param {string|string[]} [key] - Key(s) to remove. Omit to remove all metadata for the path.
@@ -725,7 +725,7 @@ export class Metadata extends ComponentBase {
 			for (const [key, savedEntry] of state.userMetadataStore) {
 				const existing = this.#userMetadataStore.get(key);
 				if (!existing) {
-					// No current entry — restore the saved one directly
+					// No current entry - restore the saved one directly
 					this.#userMetadataStore.set(key, {
 						metadata: { ...savedEntry.metadata },
 						apiPaths: new Set(savedEntry.apiPaths)

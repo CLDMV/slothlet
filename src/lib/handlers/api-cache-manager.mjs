@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-06 19:24:00 -08:00 (1770434640)
+ *	@Last modified time: 2026-02-21 21:27:55 -08:00 (1771738075)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -337,13 +337,13 @@ export class ApiCacheManager extends ComponentBase {
 		});
 
 		// Build fresh API with stored parameters using the ORIGINAL mode.
-		// Lazy mode rebuilds produce lazy wrapper shells for subdirectories — _restoreApiTree
+		// Lazy mode rebuilds produce lazy wrapper shells for subdirectories - _restoreApiTree
 		// uses ___resetLazy to swap the fresh materializeFunc onto existing wrappers, resetting
 		// them to un-materialized state. This respects lazy mode's contract: only load what's
 		// actually accessed. Root-level files are always eager in both modes.
 		// Eager mode rebuilds produce fully materialized implementations as before.
 		// CRITICAL: collisionContext must match the initial load context.
-		// For base modules (endpoint "."), use "initial" — the same context used during load().
+		// For base modules (endpoint "."), use "initial" - the same context used during load().
 		// For addApi modules, use "addApi". Using "core" would cause config.collision["core"]
 		// to be undefined, falling back to "merge" and producing different collision outcomes.
 		// CRITICAL: Pass a cacheBust timestamp so dynamic import() returns fresh module objects.

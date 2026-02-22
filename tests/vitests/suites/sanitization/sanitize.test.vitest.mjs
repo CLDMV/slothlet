@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 00:00:00 -08:00 (1740124800)
+ *	@Last modified time: 2026-02-21 21:28:11 -08:00 (1771738091)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -167,7 +167,7 @@ describe("Sanitization Tests", () => {
 			expect(sanitizePropertyName("get-XML-parser", { rules: { leave: ["XML"] } })).toBe("getXMLParser");
 		});
 
-		it('"get-xml-parser" with leave:["XML"] → "getXmlParser" (no match — case mismatch)', () => {
+		it('"get-xml-parser" with leave:["XML"] → "getXmlParser" (no match - case mismatch)', () => {
 			expect(sanitizePropertyName("get-xml-parser", { rules: { leave: ["XML"] } })).toBe("getXmlParser");
 		});
 
@@ -198,7 +198,7 @@ describe("Sanitization Tests", () => {
 		});
 	});
 
-	describe("Rule: upper — exact matches", () => {
+	describe("Rule: upper - exact matches", () => {
 		it('"get-http-status" with upper:["http"] → "getHTTPStatus"', () => {
 			expect(sanitizePropertyName("get-http-status", { rules: { upper: ["http"] } })).toBe("getHTTPStatus");
 		});
@@ -212,7 +212,7 @@ describe("Sanitization Tests", () => {
 		});
 	});
 
-	describe("Rule: upper — glob patterns", () => {
+	describe("Rule: upper - glob patterns", () => {
 		it('"auto-ip" with upper:["*-ip"] → "autoIP" (pre-split pattern)', () => {
 			expect(sanitizePropertyName("auto-ip", { rules: { upper: ["*-ip"] } })).toBe("autoIP");
 		});
@@ -225,7 +225,7 @@ describe("Sanitization Tests", () => {
 			expect(sanitizePropertyName("auto-ip", { rules: { upper: ["*ip*"] } })).toBe("autoIP");
 		});
 
-		it('"get-ip-address" with upper:["*-ip"] → "getIpAddress" (does not match — not end)', () => {
+		it('"get-ip-address" with upper:["*-ip"] → "getIpAddress" (does not match - not end)', () => {
 			expect(sanitizePropertyName("get-ip-address", { rules: { upper: ["*-ip"] } })).toBe("getIpAddress");
 		});
 
@@ -254,7 +254,7 @@ describe("Sanitization Tests", () => {
 		});
 	});
 
-	describe("Rule: upper — underscore glob patterns", () => {
+	describe("Rule: upper - underscore glob patterns", () => {
 		it('"api_helper" with upper:["api_*"] → "API_helper"', () => {
 			expect(sanitizePropertyName("api_helper", { rules: { upper: ["api_*"] } })).toBe("API_helper");
 		});
@@ -264,7 +264,7 @@ describe("Sanitization Tests", () => {
 		});
 	});
 
-	describe("Rule: upper — boundary patterns (**STRING**)", () => {
+	describe("Rule: upper - boundary patterns (**STRING**)", () => {
 		it('"buildUrlWithParams" with upper:["**url**"] → "buildURLWithParams" (surrounded)', () => {
 			expect(sanitizePropertyName("buildUrlWithParams", { rules: { upper: ["**url**"] } })).toBe("buildURLWithParams");
 		});
@@ -294,7 +294,7 @@ describe("Sanitization Tests", () => {
 		});
 	});
 
-	describe("Rule: upper — within-segment pattern transformations", () => {
+	describe("Rule: upper - within-segment pattern transformations", () => {
 		it('"buildUrlWithParams" with upper:["*URL*"] → "buildURLWithParams"', () => {
 			expect(sanitizePropertyName("buildUrlWithParams", { rules: { upper: ["*URL*"] } })).toBe("buildURLWithParams");
 		});

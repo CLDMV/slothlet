@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:29:46 -08:00 (1771716586)
+ *	@Last modified time: 2026-02-21 21:28:13 -08:00 (1771738093)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -362,11 +362,11 @@ function parseErrorThrows(content, filePath) {
 	const errors = [];
 
 	// Matches all access patterns:
-	//   new SlothletError(...)                  — direct (standalone import)
-	//   new this.SlothletError(...)             — via ComponentBase getter
-	//   new this.slothlet.SlothletError(...)    — via double-hop (handler/builder classes)
-	//   new slothlet.SlothletError(...)         — closure variable (api_builder.mjs)
-	//   new wrapper.slothlet.SlothletError(...) — via proxy wrapper (unified-wrapper.mjs)
+	//   new SlothletError(...)                  - direct (standalone import)
+	//   new this.SlothletError(...)             - via ComponentBase getter
+	//   new this.slothlet.SlothletError(...)    - via double-hop (handler/builder classes)
+	//   new slothlet.SlothletError(...)         - closure variable (api_builder.mjs)
+	//   new wrapper.slothlet.SlothletError(...) - via proxy wrapper (unified-wrapper.mjs)
 	// Same patterns for SlothletWarning.
 	const throwPattern =
 		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
@@ -583,9 +583,9 @@ for (const filePath of files) {
 const directTranslationUsage = new Set();
 for (const filePath of files) {
 	const content = await readFile(filePath, "utf-8");
-	// Match t("KEY", ...) or t('KEY', ...) — direct shorthand calls
+	// Match t("KEY", ...) or t('KEY', ...) - direct shorthand calls
 	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
-	// Match translate("KEY", ...) or translate('KEY', ...) — direct full-function calls
+	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
 	const translateCallPattern = /\btranslate\(\s*["']([A-Z_]+)["']/g;
 	let match;
 	while ((match = tCallPattern.exec(content)) !== null) {
@@ -690,7 +690,7 @@ console.log("=".repeat(80) + "\n");
 // Collect all error codes used in codebase (from SlothletError + direct t() calls)
 const usedErrorCodes = new Set([...allErrors.map((e) => e.errorCode), ...directTranslationUsage]);
 
-// Keys intentionally used via console.warn in translations.mjs itself (circular dependency —
+// Keys intentionally used via console.warn in translations.mjs itself (circular dependency -
 // SlothletWarning cannot be imported in the i18n module, so these are used as raw string lookups).
 const CIRCULAR_I18N_KEYS = new Set(["WARNING_LANGUAGE_LOAD_FAILED", "WARNING_LANGUAGE_UNAVAILABLE"]);
 for (const key of CIRCULAR_I18N_KEYS) usedErrorCodes.add(key);
@@ -930,7 +930,7 @@ if (missingTranslations.length > 0) {
 
 // Unused translations report
 // Detection coverage notes:
-//   - HINT_* keys are EXCLUDED from this check — they are resolved dynamically by the error
+//   - HINT_* keys are EXCLUDED from this check - they are resolved dynamically by the error
 //     system via `HINT_${errorCode}` convention and via hint-detector.mjs rule matching.
 //   - DEBUG_MODE_* and FLATTEN_REASON_* keys are detected via direct t("KEY") literal scan.
 //   - WARNING_LANGUAGE_LOAD_FAILED / WARNING_LANGUAGE_UNAVAILABLE are excluded because they
@@ -940,9 +940,9 @@ const hintKeyCount = Object.keys(translations).filter((k) => k.startsWith("HINT_
 
 if (unusedTranslations.length > 0) {
 	console.log(`\n⚠️  Unused Translations (${unusedTranslations.length} of ${translationKeys.length} non-HINT_ keys):\n`);
-	console.log(`  (${hintKeyCount} HINT_* keys excluded — resolved dynamically by the error system)`);
+	console.log(`  (${hintKeyCount} HINT_* keys excluded - resolved dynamically by the error system)`);
 	console.log(
-		`  (${CIRCULAR_I18N_KEYS.size} circular i18n keys excluded — used directly in translations.mjs: ${[...CIRCULAR_I18N_KEYS].join(", ")})\n`
+		`  (${CIRCULAR_I18N_KEYS.size} circular i18n keys excluded - used directly in translations.mjs: ${[...CIRCULAR_I18N_KEYS].join(", ")})\n`
 	);
 
 	// Group by prefix family for easier analysis
@@ -987,7 +987,7 @@ if (unusedTranslations.length > 0) {
 	console.log();
 } else {
 	console.log(`\n✅ All translations are used\n`);
-	console.log(`  (${hintKeyCount} HINT_* keys excluded — resolved dynamically by the error system)\n`);
+	console.log(`  (${hintKeyCount} HINT_* keys excluded - resolved dynamically by the error system)\n`);
 }
 
 // Summary
@@ -1164,7 +1164,7 @@ console.log("=".repeat(80) + "\n");
 
 /**
  * Parse hardcoded message: strings inside debug() calls that should use i18n DEBUG_MODE_ keys.
- * The correct pattern is: { key: "DEBUG_MODE_KEY", ...params } — no await t() needed.
+ * The correct pattern is: { key: "DEBUG_MODE_KEY", ...params } - no await t() needed.
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of hardcoded debug message strings
@@ -1203,7 +1203,7 @@ function parseHardcodedDebugMessages(content, filePath) {
 function parseHardcodedDebugMessagesMultiline(content, filePath) {
 	const messages = [];
 	// Match: message: "string" inside a slothlet.debug block. The correct pattern is
-	// { key: "DEBUG_MODE_KEY", ...params } — if message: is still a raw string literal, flag it.
+	// { key: "DEBUG_MODE_KEY", ...params } - if message: is still a raw string literal, flag it.
 	// Strategy: find all `message: "literal"` occurrences, then verify they're inside a debug call
 	// by checking if `.debug(` appears within the preceding ~300 chars
 	const messagePattern = /message:\s*["'`]([^"'`\n]+)["'`]/g;
@@ -1224,7 +1224,7 @@ function parseHardcodedDebugMessagesMultiline(content, filePath) {
 		const lookback = beforeMatch.slice(-300);
 		if (!lookback.includes(".debug(")) continue;
 
-		// The regex only matches string literals, so { key: "DEBUG_MODE_KEY" } won't trigger this —
+		// The regex only matches string literals, so { key: "DEBUG_MODE_KEY" } won't trigger this -
 		// 'key:' and 'message: await t(...)' are both safe and won't be flagged.
 
 		const lineNumber = beforeMatch.split("\n").length;

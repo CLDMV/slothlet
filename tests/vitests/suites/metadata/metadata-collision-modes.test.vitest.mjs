@@ -29,7 +29,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, materialize, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", ({ config }) => {
 	let api;
@@ -169,13 +169,15 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 		});
 
 		it("should handle error mode - throws on collision", async () => {
-			await expect(async () => {
-				api = await slothlet({
-					...config,
-					dir: TEST_DIRS.API_TEST_COLLISIONS,
-					api: { collision: { initial: "error" } }
-				});
-			}).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					api = await slothlet({
+						...config,
+						dir: TEST_DIRS.API_TEST_COLLISIONS,
+						api: { collision: { initial: "error" } }
+					});
+				}).rejects.toThrow();
+			});
 		});
 	});
 
@@ -334,14 +336,16 @@ describe.each(getMatrixConfigs())("Metadata Collision Modes > Config: '$name'", 
 			const originalFilePath = originalMeta.filePath;
 
 			// Try to add conflicting API (should throw)
-			await expect(async () => {
-				await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
-					metadata: {
-						conflictingMetadata: true,
-						version: "should-not-appear"
-					}
-				});
-			}).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					await api.slothlet.api.add("rootMath", TEST_DIRS.API_SMART_FLATTEN, {
+						metadata: {
+							conflictingMetadata: true,
+							version: "should-not-appear"
+						}
+					});
+				}).rejects.toThrow();
+			});
 
 			// Original should still be there unchanged
 			await materialize(api, "rootMath.add", 1, 2);

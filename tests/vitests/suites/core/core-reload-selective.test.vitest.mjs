@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const configs = getMatrixConfigs();
 
@@ -186,9 +186,11 @@ for (const { config, name } of configs) {
 
 			// Attempting to reload removed component should not throw
 			// (It might be a no-op or throw a specific error - test the actual behavior)
-			await expect(async () => {
-				await api.slothlet.api.reload("tempComp");
-			}).rejects.toThrow();
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(async () => {
+					await api.slothlet.api.reload("tempComp");
+				}).rejects.toThrow();
+			});
 		});
 
 		it("should reload nested child without affecting siblings", async () => {

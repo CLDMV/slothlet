@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-10 18:01:59 -08:00 (1770775319)
+ *	@Last modified time: 2026-02-21 21:28:10 -08:00 (1771738090)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -16,7 +16,7 @@
  *
  * These tests verify that reload respects lazy mode's contract:
  * - Previously-materialized subdirectory wrappers reset to un-materialized shells via ___resetLazy
- * - Un-accessed lazy paths remain lazy (surgical reload — don't load what wasn't used)
+ * - Un-accessed lazy paths remain lazy (surgical reload - don't load what wasn't used)
  * - Re-accessing a reset wrapper triggers fresh materialization from updated source
  * - Nested lazy children within materialized parents are properly reset via _adoptImplChildren
  * - Proxy identity preserved through lazy reset (existing references continue to work)
@@ -27,7 +27,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-// Only lazy configs — these tests are meaningless for eager mode
+// Only lazy configs - these tests are meaningless for eager mode
 const lazyConfigs = getMatrixConfigs({ mode: "lazy" });
 
 for (const { config, name } of lazyConfigs) {
@@ -87,7 +87,7 @@ for (const { config, name } of lazyConfigs) {
 				expect(stateBefore).not.toBeNull();
 				expect(stateBefore.materialized).toBe(true);
 
-				// Reload base API by path — "math" is a known subdirectory path with a cache entry
+				// Reload base API by path - "math" is a known subdirectory path with a cache entry
 				// For base module reload, use api.slothlet.reload() (full instance rebuild)
 				await api.slothlet.reload();
 
@@ -146,11 +146,11 @@ for (const { config, name } of lazyConfigs) {
 			});
 		});
 
-		// ─── 2. Surgical Reload — un-accessed paths stay lazy ───
+		// ─── 2. Surgical Reload - un-accessed paths stay lazy ───
 
 		describe("Surgical Reload (Un-accessed Paths Stay Lazy)", () => {
 			it("should leave un-accessed subdirectories un-materialized after reload", async () => {
-				// Only access api.math — leave api.advanced, api.util, api.task untouched
+				// Only access api.math - leave api.advanced, api.util, api.task untouched
 				const mathResult = await api.math.add(5, 5);
 				expect(mathResult).toBe(10); // folder math/math.mjs: add returns a+b
 
@@ -170,7 +170,7 @@ for (const { config, name } of lazyConfigs) {
 			});
 
 			it("should not materialize any subdirectory during reload itself", async () => {
-				// Don't access anything — all subdirectories should remain lazy
+				// Don't access anything - all subdirectories should remain lazy
 
 				// Collect subdirectory wrappers that are lazy before reload
 				const lazyPaths = ["advanced", "util", "task", "logger", "multi", "string", "tcp"];
@@ -202,7 +202,7 @@ for (const { config, name } of lazyConfigs) {
 				const resultBefore = await api.math.add(3, 4);
 				expect(resultBefore).toBe(7); // folder math/math.mjs: add returns a+b
 
-				// Reload — resets to un-materialized
+				// Reload - resets to un-materialized
 				await api.slothlet.api.reload(".");
 				expect(getWrapperState(api.math).materialized).toBe(false);
 
@@ -295,7 +295,7 @@ for (const { config, name } of lazyConfigs) {
 				await api.math.add(1, 1);
 				api.math.customFlag = "preserved";
 
-				// Reload — resets to lazy, custom props on impl are replaced
+				// Reload - resets to lazy, custom props on impl are replaced
 				await api.slothlet.api.reload(".");
 
 				// Materialized state should be reset
@@ -339,7 +339,7 @@ for (const { config, name } of lazyConfigs) {
 				const configResult = await api.siblings.config.settings.getPluginConfig();
 				expect(configResult).toBeDefined();
 
-				// Check sibling states — config materialized, others should be lazy
+				// Check sibling states - config materialized, others should be lazy
 				expect(getWrapperState(api.siblings.config).materialized).toBe(true);
 
 				// Reload
@@ -379,7 +379,7 @@ for (const { config, name } of lazyConfigs) {
 				// But subdirectory wrappers are lazy (un-materialized)
 				const mathState = getWrapperState(api.math);
 				if (mathState) {
-					// math is a subdirectory — should be un-materialized
+					// math is a subdirectory - should be un-materialized
 					expect(mathState.materialized).toBe(false);
 				}
 

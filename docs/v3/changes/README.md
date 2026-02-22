@@ -30,9 +30,9 @@ This directory contains documentation for new features and changes introduced in
 ### Metadata System Enhancements *(February 18, 2026)*
 
 - **[Metadata Path API & Reload-with-Metadata](./metadata-path-api-and-reload-metadata.md)** - New path-based metadata APIs and reload enhancements
-  - `api.slothlet.metadata.setFor(pathOrModuleId, key, val)` — tag all functions under a path or moduleID without needing references
-  - `api.slothlet.metadata.removeFor(pathOrModuleId, key?)` — remove path-level metadata keys
-  - `api.slothlet.api.reload(path, { metadata })` — update metadata atomically during partial reload
+  - `api.slothlet.metadata.setFor(pathOrModuleId, key, val)` - tag all functions under a path or moduleID without needing references
+  - `api.slothlet.metadata.removeFor(pathOrModuleId, key?)` - remove path-level metadata keys
+  - `api.slothlet.api.reload(path, { metadata })` - update metadata atomically during partial reload
   - `set()` and `setGlobal()` values now survive `api.slothlet.reload()` (full instance reload)
 
 ## Usage Summary

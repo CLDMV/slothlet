@@ -4,7 +4,7 @@ Slothlet supports sophisticated module organization patterns with seamless ESM/C
 
 ## Overview
 
-Slothlet's module loader automatically transforms your file structure into a clean, intuitive API. It handles mixed ESM/CJS modules, automatic flattening, smart naming, and various export patterns — with no configuration required for common cases.
+Slothlet's module loader automatically transforms your file structure into a clean, intuitive API. It handles mixed ESM/CJS modules, automatic flattening, smart naming, and various export patterns - with no configuration required for common cases.
 
 ## Table of Contents
 
@@ -47,7 +47,7 @@ const result = api.rootMath.add(2, 3); // 5
 
 ## Filename-Folder Matching Modules
 
-When a folder contains a single file whose name matches the folder name, slothlet automatically flattens the structure — the intermediate namespace is eliminated:
+When a folder contains a single file whose name matches the folder name, slothlet automatically flattens the structure - the intermediate namespace is eliminated:
 
 ```text
 api/
@@ -157,7 +157,7 @@ api.multi_func.beta(5);       // 15
 
 ## Mixed ESM/CJS Modules
 
-ESM and CJS modules coexist transparently in the same directory. CJS `module.exports` is treated equivalently to an ESM `export default` — no `.default` wrapper is introduced:
+ESM and CJS modules coexist transparently in the same directory. CJS `module.exports` is treated equivalently to an ESM `export default` - no `.default` wrapper is introduced:
 
 ```text
 api/
@@ -179,7 +179,7 @@ function cjsFunction(data) {
 }
 module.exports = { cjsFunction };
 
-// api/interop/mixed.mjs — can call both through self
+// api/interop/mixed.mjs - can call both through self
 import { self } from "@cldmv/slothlet/runtime";
 
 export function callBoth(data) {
@@ -195,7 +195,7 @@ api.interop.cjsModule.cjsFunction("test");
 api.interop.mixed.callBoth("test");
 ```
 
-> **CJS default exports**: `module.exports = { fn }` is always accessible directly as `api.module.fn` — never as `api.module.default.fn`. Slothlet normalizes the CJS `default` wrapper so CJS and ESM modules have identical access patterns.
+> **CJS default exports**: `module.exports = { fn }` is always accessible directly as `api.module.fn` - never as `api.module.default.fn`. Slothlet normalizes the CJS `default` wrapper so CJS and ESM modules have identical access patterns.
 
 ---
 
@@ -325,7 +325,7 @@ api/
 ```
 
 ```javascript
-// api/task/auto-ip.mjs — function name takes precedence over filename
+// api/task/auto-ip.mjs - function name takes precedence over filename
 export function autoIP(config) {
 	return "192.168.1.1";
 }
@@ -351,7 +351,7 @@ api.api.getHTTPStatus(200);               // not .getHttpStatus
 
 ## TypeScript Modules
 
-Slothlet supports TypeScript modules with two transpilation strategies. TypeScript is a peer dependency — install only what you need.
+Slothlet supports TypeScript modules with two transpilation strategies. TypeScript is a peer dependency - install only what you need.
 
 ### Fast Mode (esbuild)
 
@@ -399,14 +399,14 @@ const api = await slothlet({
 });
 ```
 
-TypeScript modules (`.ts`) follow all the same structural rules as ESM modules — flattening, function naming, and nesting all behave identically.
+TypeScript modules (`.ts`) follow all the same structural rules as ESM modules - flattening, function naming, and nesting all behave identically.
 
 ---
 
 ## Key Principles
 
 1. **Automatic Flattening**: When a folder name matches its single file's name, the intermediate namespace is eliminated
-2. **Transparent CJS/ESM**: ESM and CJS modules have identical access patterns — no `.default` wrapper
+2. **Transparent CJS/ESM**: ESM and CJS modules have identical access patterns - no `.default` wrapper
 3. **Smart Naming**: Exported function names (including acronyms) take precedence over filenames for the API key
 4. **Flexible Exports**: Default exports, named exports, and hybrid patterns (callable + methods) are all supported
 5. **Unlimited Depth**: No constraints on directory depth or complexity
@@ -416,6 +416,6 @@ TypeScript modules (`.ts`) follow all the same structural rules as ESM modules �
 
 ## See Also
 
-- [API Flattening Rules](API-RULES/API-FLATTENING.md) — Detailed flattening logic and all 8 patterns
-- [API Rules](API-RULES.md) — Complete 13-rule transformation catalog
-- [README](../README.md) — Main project documentation
+- [API Flattening Rules](API-RULES/API-FLATTENING.md) - Detailed flattening logic and all 8 patterns
+- [API Rules](API-RULES.md) - Complete 13-rule transformation catalog
+- [README](../README.md) - Main project documentation

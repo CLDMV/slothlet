@@ -109,8 +109,8 @@ api.math.subtract(5, 2); // 3
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C05](API-RULES/API-RULES-CONDITIONS.md#c05) — `fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0`
-- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) — `flattenToCategory: true` → category-level flattening
+- **Primary Condition**: [C05](API-RULES/API-RULES-CONDITIONS.md#c05) - `fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0`
+- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) - `flattenToCategory: true` → category-level flattening
 
 ```javascript
 // C05: Filename Matches Container (Category-Level Flatten)
@@ -128,7 +128,7 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 ```
 
 **Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)  
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` — `getFlatteningDecision()`
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()`
 
 ---
 
@@ -161,8 +161,8 @@ api.constants.messages.ERROR;     // "Operation failed"
 
 **Technical Implementation**:
 
-- **Detection**: [C15](API-RULES/API-RULES-CONDITIONS.md#c15) — `defaultExportCount === 0`
-- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) — Standard namespace preservation
+- **Detection**: [C15](API-RULES/API-RULES-CONDITIONS.md#c15) - `defaultExportCount === 0`
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Standard namespace preservation
 - **Strategy**: `processingStrategy = "named-only"` → category-level collection
 
 **Key Behavior**:
@@ -171,7 +171,7 @@ api.constants.messages.ERROR;     // "Operation failed"
 - Maintains clear namespace separation between files
 - No flattening when multiple named exports exist (prevents naming conflicts)
 
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` — `processModuleForAPI()`  
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`  
 **Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
 
 ---
@@ -183,7 +183,7 @@ api.constants.messages.ERROR;     // "Operation failed"
 **Technical**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10)
 
 **Condition**: Directory contains no loadable module files  
-**Behavior**: Graceful handling — creates empty namespace  
+**Behavior**: Graceful handling - creates empty namespace  
 **Processing Path**: Early detection in `buildCategoryDecisions()`
 
 **Mode Differences**:
@@ -193,7 +193,7 @@ api.constants.messages.ERROR;     // "Operation failed"
 
 **Technical Implementation**:
 
-- **Detection**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10) — `moduleFiles.length === 0`
+- **Detection**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10) - `moduleFiles.length === 0`
 - **Strategy**: `processingStrategy = "empty"` → graceful empty handling
 
 ```javascript
@@ -238,8 +238,8 @@ api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 
 **Technical Implementation**:
 
-- **Detection**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) — Function name availability check
-- **Processing**: [C23](API-RULES/API-RULES-CONDITIONS.md#c23) — Function name takes precedence
+- **Detection**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - Function name availability check
+- **Processing**: [C23](API-RULES/API-RULES-CONDITIONS.md#c23) - Function name takes precedence
 
 ---
 
@@ -268,8 +268,8 @@ api.validators.phone("+1234567890");      // ✅ Default function callable
 
 **Technical Implementation**:
 
-- **Detection**: [C08](API-RULES/API-RULES-CONDITIONS.md#c08) — `moduleCount > 1 && defaultExportCount > 0`
-- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) — Standard namespace preservation
+- **Detection**: [C08](API-RULES/API-RULES-CONDITIONS.md#c08) - `moduleCount > 1 && defaultExportCount > 0`
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Standard namespace preservation
 - **Strategy**: `processingStrategy = "standard"` → no flattening
 
 **Key Behavior**:
@@ -287,7 +287,7 @@ api.validators.phone("+1234567890");      // ✅ Default function callable
 **Technical**: [C14, C09d](API-RULES/API-RULES-CONDITIONS.md#c14)
 
 **Condition**: Category contains modules with mixed export types (some default, some named-only)  
-**Behavior**: Standard namespace processing — each module maintains a distinct namespace  
+**Behavior**: Standard namespace processing - each module maintains a distinct namespace  
 **Processing Path**: Conservative approach to prevent conflicts
 
 **Verified Examples**:
@@ -307,8 +307,8 @@ api.mixed.constants.E;             // ✅ Clear namespace separation
 
 **Technical Implementation**:
 
-- **Detection**: [C14](API-RULES/API-RULES-CONDITIONS.md#c14) — Mixed export types present
-- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) — Conservative namespace preservation
+- **Detection**: [C14](API-RULES/API-RULES-CONDITIONS.md#c14) - Mixed export types present
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Conservative namespace preservation
 
 ---
 
@@ -340,8 +340,8 @@ api.config.DEBUG_MODE;   // true
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C06](API-RULES/API-RULES-CONDITIONS.md#c06) — `moduleCount === 1 && !moduleHasDefault && moduleKeys.length > 0`
-- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) — `flattenToCategory: true`
+- **Primary Condition**: [C06](API-RULES/API-RULES-CONDITIONS.md#c06) - `moduleCount === 1 && !moduleHasDefault && moduleKeys.length > 0`
+- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) - `flattenToCategory: true`
 
 ---
 
@@ -383,8 +383,8 @@ This pattern applies consistently at root level and category level.
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C07](API-RULES/API-RULES-CONDITIONS.md#c07) — `moduleCount === 1 && moduleHasDefault`
-- **Processing**: [C09c](API-RULES/API-RULES-CONDITIONS.md#c09c) — `promoteToCategory: true`
+- **Primary Condition**: [C07](API-RULES/API-RULES-CONDITIONS.md#c07) - `moduleCount === 1 && moduleHasDefault`
+- **Processing**: [C09c](API-RULES/API-RULES-CONDITIONS.md#c09c) - `promoteToCategory: true`
 
 ---
 
@@ -392,7 +392,7 @@ This pattern applies consistently at root level and category level.
 
 **Category**: Special Cases  
 **Status**: ✅ Fully Verified (autoIP, parseJSON, getHTTPStatus, XMLParser)  
-**User Guide**: [API-RULES/API-FLATTENING.md — Name Preservation](API-RULES/API-FLATTENING.md)  
+**User Guide**: [API-RULES/API-FLATTENING.md - Name Preservation](API-RULES/API-FLATTENING.md)  
 **Technical**: [C16, C19](API-RULES/API-RULES-CONDITIONS.md#c16)
 
 **Condition**: Exported function has an explicit name that differs from the sanitized filename  
@@ -419,8 +419,8 @@ export function parseJSON(data) { /* ... */ }
 
 **Technical Implementation**:
 
-- **Primary Check**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) — `exportedFunctionName !== sanitizedName`
-- **Detailed Check**: [C19](API-RULES/API-RULES-CONDITIONS.md#c19) — `exportedFunction.name !== sanitizedFileName`
+- **Primary Check**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - `exportedFunctionName !== sanitizedName`
+- **Detailed Check**: [C19](API-RULES/API-RULES-CONDITIONS.md#c19) - `exportedFunction.name !== sanitizedFileName`
 - **Precedence**: Function name takes precedence over filename in API structure
 
 **Common Preserved Patterns**:
@@ -436,7 +436,7 @@ export function parseJSON(data) { /* ... */ }
 
 **Category**: Special Cases  
 **Status**: ✅ Verified (`api_tests/api_test/nest4/singlefile.mjs`)  
-**User Guide**: [API-RULES/API-FLATTENING.md — Index File Pattern](API-RULES/API-FLATTENING.md)  
+**User Guide**: [API-RULES/API-FLATTENING.md - Index File Pattern](API-RULES/API-FLATTENING.md)  
 **Technical**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17)
 
 **Condition**: File has a generic name (`index`, `main`, `default`, etc.)  
@@ -462,10 +462,10 @@ export function logout() { /* ... */ }
 
 **Technical Implementation**:
 
-- **Detection**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17) — `isGenericFilename(fileName)`
+- **Detection**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17) - `isGenericFilename(fileName)`
 - **Promotion**: Content promoted to parent namespace; generic filename becomes invisible
 
-**Note**: Promotion is guarded against name collisions — checked against existing parent namespace properties before promoting.
+**Note**: Promotion is guarded against name collisions - checked against existing parent namespace properties before promoting.
 
 ---
 
@@ -490,7 +490,7 @@ export function configure() { /* ... */ }
 
 await api.slothlet.api.add("plugins", "./plugin-folder");
 
-// addapi.mjs exports are always flattened — never nested:
+// addapi.mjs exports are always flattened - never nested:
 api.plugins.initializePlugin(); // ✅
 api.plugins.cleanup();          // ✅
 api.plugins.configure();        // ✅
@@ -557,13 +557,13 @@ await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, {
 	moduleId: "moduleB"
 });
 
-// Hot-reload Module A — ownership system allows this because moduleA owns these paths
+// Hot-reload Module A - ownership system allows this because moduleA owns these paths
 await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {}, {
 	moduleId: "moduleA",
 	forceOverwrite: true
 });
 
-// Cross-module overwrite — blocked if collision mode is "error"
+// Cross-module overwrite - blocked if collision mode is "error"
 await api.slothlet.api.add("plugins.moduleB", "./modules/other", {}, {
 	moduleId: "moduleA",        // moduleA does not own moduleB's paths
 	forceOverwrite: true        // Throws OWNERSHIP_CONFLICT in "error" mode
@@ -638,7 +638,7 @@ api.config.setNestedConfig(); // ✅
 api.config.main.getRootInfo(); // ✅ other files unaffected
 ```
 
-**Guard — `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
+**Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
 
 ```
 // Should NOT hoist (services/services/services.mjs):
@@ -649,7 +649,7 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 // → api.services.services.getNestedService remains properly nested ✅
 ```
 
-**Implementation**: `src/lib/handlers/api-manager.mjs` — immediately after `buildAPI` call, before `setValueAtPath`
+**Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
 
 ---
 

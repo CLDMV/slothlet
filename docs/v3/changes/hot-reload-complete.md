@@ -359,10 +359,10 @@ await api.slothlet.reload(); // Same reference
 
 ### Phase 3: Targeted Module Reload + Metadata Option *(Completed February 18, 2026)*
 
-- ✅ **Selective invalidation** — `api.slothlet.api.reload(path)` reloads a specific module or subtree
-- ✅ **Metadata on reload** — `api.slothlet.api.reload(path, { metadata })` atomically updates path metadata during rebuild
-- ✅ **Reload persistence** — `set()` and `setGlobal()` values survive a full `api.slothlet.reload()`
-- ✅ **Path-level metadata** — `setFor()` / `removeFor()` manage metadata by path without function references
+- ✅ **Selective invalidation** - `api.slothlet.api.reload(path)` reloads a specific module or subtree
+- ✅ **Metadata on reload** - `api.slothlet.api.reload(path, { metadata })` atomically updates path metadata during rebuild
+- ✅ **Reload persistence** - `set()` and `setGlobal()` values survive a full `api.slothlet.reload()`
+- ✅ **Path-level metadata** - `setFor()` / `removeFor()` manage metadata by path without function references
 
 ```javascript
 // Reload a module and update its metadata in one step
@@ -376,7 +376,7 @@ await api.slothlet.api.reload("plugins", {
 // Metadata set via set() now survives full reload
 api.slothlet.metadata.set(api.math.add, "category", "math");
 await api.slothlet.reload();
-console.log(api.math.add.__metadata.category); // "math" — persists
+console.log(api.math.add.__metadata.category); // "math" - persists
 
 // Tag all functions under a path without needing references
 api.slothlet.metadata.setFor("math", { category: "math", version: "2.0.0" });

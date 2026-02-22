@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 19:11:48 -08:00 (1771729908)
+ *	@Last modified time: 2026-02-21 21:27:57 -08:00 (1771738077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1253,7 +1253,7 @@ export class ApiManager extends ComponentBase {
 						}
 						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
 						if (dupWrapper) {
-							// It's a UnifiedWrapper proxy — copy child-cache keys across
+							// It's a UnifiedWrapper proxy - copy child-cache keys across
 							for (const k of Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
 								hoisted[k] = dupWrapper[k];
 							}
@@ -1949,7 +1949,7 @@ export class ApiManager extends ComponentBase {
 	}
 
 	/**
-	 * Reload by API path — find affected caches, rebuild them, update impls.
+	 * Reload by API path - find affected caches, rebuild them, update impls.
 	 *
 	 * Accepts "." for base module. For other paths, the resolution order is:
 	 * 1. Exact cache endpoint match
@@ -2107,7 +2107,7 @@ export class ApiManager extends ComponentBase {
 			if (owned.length > 0) return owned;
 		}
 
-		// 4. Parent cache — most specific cache whose scope covers this path
+		// 4. Parent cache - most specific cache whose scope covers this path
 		//    e.g., reload("math") finds the base module because math lives under ".";
 		//    reload("custom.math") finds the "custom" cache because custom.math lives under "custom"
 		let bestMatch = null;
@@ -2175,14 +2175,14 @@ export class ApiManager extends ComponentBase {
 					continue;
 				}
 
-				// At this point, val is NOT a wrapper — it's either a user-set custom property
+				// At this point, val is NOT a wrapper - it's either a user-set custom property
 				// or a user-overridden API key with a plain value
 				if (!freshKeys.has(key)) {
-					// Key is NOT in fresh API — purely custom property
+					// Key is NOT in fresh API - purely custom property
 					customProps[key] = val;
 				} else {
 					// Key IS in fresh API but value is plain (no __wrapper)
-					// User explicitly overwrote it with a plain value — preserve it.
+					// User explicitly overwrote it with a plain value - preserve it.
 					customProps[key] = val;
 				}
 			} catch {
@@ -2249,7 +2249,7 @@ export class ApiManager extends ComponentBase {
 				const freshValue = freshApi[key];
 
 				if (existingAtKey && resolveWrapper(existingAtKey) !== null) {
-					// Existing wrapper found — collect custom props before any modification
+					// Existing wrapper found - collect custom props before any modification
 					const customProps = this._collectCustomProperties(existingAtKey, freshValue);
 
 					// Check if the fresh value is an un-materialized lazy wrapper
@@ -2274,7 +2274,7 @@ export class ApiManager extends ComponentBase {
 					});
 
 					if (isLazyFresh) {
-						// LAZY RESET PATH: Fresh value is a lazy shell — reset existing wrapper
+						// LAZY RESET PATH: Fresh value is a lazy shell - reset existing wrapper
 						// to un-materialized state with the fresh materializeFunc.
 						// This frees memory from any previously-materialized children and
 						// ensures the next access triggers materialization from updated source.
@@ -2290,10 +2290,10 @@ export class ApiManager extends ComponentBase {
 						});
 					} else {
 						// EAGER PATH: Fresh value is concrete (eager mode, or root-level file
-						// which is always eager even in lazy mode) — extract impl and update.
+						// which is always eager even in lazy mode) - extract impl and update.
 
 						// Extract full impl from fresh value (which is a wrapper proxy from buildAPI).
-						// CRITICAL: freshWrapper.____slothletInternal.impl may be depleted — the constructor's
+						// CRITICAL: freshWrapper.____slothletInternal.impl may be depleted - the constructor's
 						// ___adoptImplChildren() moved children (like host, port for config) out of
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
@@ -2339,7 +2339,7 @@ export class ApiManager extends ComponentBase {
 						});
 					}
 				} else if (existingAtKey === undefined) {
-					// New key from reload — use setValueAtPath to create it
+					// New key from reload - use setValueAtPath to create it
 					const cacheManager = this.slothlet.handlers.apiCacheManager;
 					const cacheEntry = cacheManager.get(moduleID);
 					const resolvedFolderPath = cacheEntry?.folderPath || "";
@@ -2360,7 +2360,7 @@ export class ApiManager extends ComponentBase {
 						});
 					}
 				}
-				// else: existing non-wrapper value — skip (shouldn't happen in normal flow)
+				// else: existing non-wrapper value - skip (shouldn't happen in normal flow)
 			}
 		} else {
 			// Nested path - get existing wrapper and update its implementation
@@ -2457,7 +2457,7 @@ export class ApiManager extends ComponentBase {
 				const cacheEntry = cacheManager.get(moduleID);
 				const resolvedFolderPath = cacheEntry?.folderPath || "";
 
-				// Wrap fresh API — extract properties if buildAPI returned a function
+				// Wrap fresh API - extract properties if buildAPI returned a function
 				let implForContainer = freshApi;
 				if (typeof freshApi === "function") {
 					implForContainer = {};

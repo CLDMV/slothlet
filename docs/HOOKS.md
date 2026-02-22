@@ -89,7 +89,7 @@ api.slothlet.hook.on("error:**", ({ path, error }) => {
 
 const result = await api.riskyOperation();
 if (result === undefined) {
-	// Operation failed silently — error hook was called
+	// Operation failed silently - error hook was called
 }
 ```
 
@@ -125,11 +125,11 @@ Runs only if the function executes (skipped on short-circuit). Attaches to the P
 
 ### always
 
-Executes after the function completes regardless of success or failure. Receives full execution context including error information. **Return value is ignored** — read-only observer.
+Executes after the function completes regardless of success or failure. Receives full execution context including error information. **Return value is ignored** - read-only observer.
 
 ### error
 
-Executes only when an error occurs. Receives the error with detailed source tracking (where the error originated — before hook, the function itself, after hook, etc.).
+Executes only when an error occurs. Receives the error with detailed source tracking (where the error originated - before hook, the function itself, after hook, etc.).
 
 ---
 
@@ -189,10 +189,10 @@ Each hook type receives a context object:
 
 ```javascript
 api.slothlet.hook.on("before:math.*", ({ path, args, api, ctx }) => {
-	// path: string — API path being called (e.g. "math.add")
-	// args: Array — current arguments
-	// api: object — the live API object (self)
-	// ctx: object — the current context object
+	// path: string - API path being called (e.g. "math.add")
+	// args: Array - current arguments
+	// api: object - the live API object (self)
+	// ctx: object - the current context object
 });
 ```
 
@@ -205,10 +205,10 @@ api.slothlet.hook.on("before:math.*", ({ path, args, api, ctx }) => {
 
 ```javascript
 api.slothlet.hook.on("after:math.*", ({ path, args, result, api, ctx }) => {
-	// path: string — API path
-	// args: Array — original arguments
-	// result: * — current result value (may have been modified by earlier after hooks)
-	// api, ctx — as above
+	// path: string - API path
+	// args: Array - original arguments
+	// result: * - current result value (may have been modified by earlier after hooks)
+	// api, ctx - as above
 });
 ```
 
@@ -220,12 +220,12 @@ api.slothlet.hook.on("after:math.*", ({ path, args, result, api, ctx }) => {
 
 ```javascript
 api.slothlet.hook.on("always:**", ({ path, args, result, hasError, errors, api, ctx }) => {
-	// path: string — API path
-	// args: Array — original arguments
-	// result: * — final result (undefined if hasError)
-	// hasError: boolean — whether an error occurred
-	// errors: Array<Error> — array of errors that occurred
-	// api, ctx — as above
+	// path: string - API path
+	// args: Array - original arguments
+	// result: * - final result (undefined if hasError)
+	// hasError: boolean - whether an error occurred
+	// errors: Array<Error> - array of errors that occurred
+	// api, ctx - as above
 	// Return value is ignored
 });
 ```
@@ -234,19 +234,19 @@ api.slothlet.hook.on("always:**", ({ path, args, result, hasError, errors, api, 
 
 ```javascript
 api.slothlet.hook.on("error:**", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
-	// path: string — API path
-	// args: Array — function arguments
-	// error: Error — the error object
-	// errorType: string — error constructor name
-	// timestamp: Date — when the error occurred
-	// source: object — error source details
+	// path: string - API path
+	// args: Array - function arguments
+	// error: Error - the error object
+	// errorType: string - error constructor name
+	// timestamp: Date - when the error occurred
+	// source: object - error source details
 	//   source.type: "before" | "after" | "always" | "function" | "unknown"
 	//   source.subset: hook subset (if hook error)
 	//   source.hookId: hook ID (if hook error)
 	//   source.hookTag: hook tag/name (if hook error)
 	//   source.timestamp: epoch ms
 	//   source.stack: full stack trace
-	// api, ctx — as above
+	// api, ctx - as above
 });
 ```
 
@@ -259,7 +259,7 @@ Before hooks can cancel function execution entirely:
 ```javascript
 const cache = new Map();
 
-// Cache check — short-circuit on hit
+// Cache check - short-circuit on hit
 api.slothlet.hook.on(
 	"before:**",
 	({ path, args }) => {
@@ -272,7 +272,7 @@ api.slothlet.hook.on(
 	{ id: "cache-check", priority: 1000 }
 );
 
-// Cache store — save result after function runs
+// Cache store - save result after function runs
 api.slothlet.hook.on(
 	"after:**",
 	({ path, args, result }) => {
@@ -317,8 +317,8 @@ api.slothlet.hook.on("error:database.*", handler);
 | `namespace.*` | All functions in namespace | `"math.*"` |
 | `*.funcName` | Function name in any namespace | `"*.add"` |
 | `**` | All functions | `"**"` |
-| `{a,b,c}` | Brace expansion — matches "a", "b", or "c" | `"{math,utils}.*"` |
-| `!pattern` | Negation — matches anything except pattern | `"!internal.*"` |
+| `{a,b,c}` | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern` | Negation - matches anything except pattern | `"!internal.*"` |
 
 ### Pattern Examples
 
@@ -349,7 +349,7 @@ console.log(matcher("other.func")); // false
 Within each subset, hooks execute in priority order (highest first):
 
 ```javascript
-// High priority — runs first
+// High priority - runs first
 api.slothlet.hook.on(
 	"before:math.*",
 	({ args }) => {
@@ -359,14 +359,14 @@ api.slothlet.hook.on(
 	{ id: "validate", priority: 1000 }
 );
 
-// Medium priority — runs second
+// Medium priority - runs second
 api.slothlet.hook.on(
 	"before:math.*",
 	({ args }) => [args[0] * 2, args[1] * 2],
 	{ id: "double", priority: 500 }
 );
 
-// Low priority — runs last
+// Low priority - runs last
 api.slothlet.hook.on(
 	"before:math.*",
 	({ path, args }) => {
@@ -392,7 +392,7 @@ Each hook type supports three ordered execution phases (`subset`):
 Within each subset, hooks still sort by priority (highest first), then registration order.
 
 ```javascript
-// Auth (before subset) — must run before any other before-hooks
+// Auth (before subset) - must run before any other before-hooks
 api.slothlet.hook.on(
 	"before:protected.*",
 	({ ctx }) => {
@@ -401,7 +401,7 @@ api.slothlet.hook.on(
 	{ id: "auth", subset: "before", priority: 2000 }
 );
 
-// Business validation (primary subset) — default
+// Business validation (primary subset) - default
 api.slothlet.hook.on(
 	"before:math.*",
 	({ args }) => {
@@ -411,7 +411,7 @@ api.slothlet.hook.on(
 	{ id: "validate", subset: "primary", priority: 1000 }
 );
 
-// Audit log (after subset) — runs after all other before-hooks
+// Audit log (after subset) - runs after all other before-hooks
 api.slothlet.hook.on(
 	"before:**",
 	({ path, args }) => {
@@ -483,7 +483,7 @@ api.slothlet.hook.remove({ type: "before", pattern: "math.*" });
 // Remove all hooks of a type
 api.slothlet.hook.remove({ type: "error" });
 
-// off() is an alias for remove — accepts ID string or filter object
+// off() is an alias for remove - accepts ID string or filter object
 api.slothlet.hook.off(hookId);
 api.slothlet.hook.off({ pattern: "math.*" });
 
@@ -553,12 +553,12 @@ api.slothlet.hook.on(
 
 ### Source Properties
 
-- `source.type` — source type (see above)
-- `source.subset` — hook subset where error occurred (for hook errors)
-- `source.hookId` — ID of the hook that failed (for hook errors)
-- `source.hookTag` — name/tag of the hook that failed (for hook errors)
-- `source.timestamp` — epoch millisecond when error occurred
-- `source.stack` — full stack trace string
+- `source.type` - source type (see above)
+- `source.subset` - hook subset where error occurred (for hook errors)
+- `source.hookId` - ID of the hook that failed (for hook errors)
+- `source.hookTag` - name/tag of the hook that failed (for hook errors)
+- `source.timestamp` - epoch millisecond when error occurred
+- `source.stack` - full stack trace string
 
 ### Comprehensive Error Monitoring Example
 
@@ -608,7 +608,7 @@ All steps run synchronously in sequence.
 ```
 executeBeforeHooks() → fn() returns Promise → .then(executeAfterHooks, executeErrorHooks) → executeAlwaysHooks()
 ```
-After, error, and always hooks attach to the Promise chain — they do not block the event loop.
+After, error, and always hooks attach to the Promise chain - they do not block the event loop.
 
 This design ensures:
 - Synchronous functions return synchronous values (no unwanted Promise wrapping)
@@ -625,13 +625,13 @@ Register a hook.
 
 **Parameters:**
 
-- `typePattern` (string) — Combined type and pattern, format: `"type:pattern"` (e.g. `"before:math.*"`)
-- `handler` (Function) — Synchronous hook handler
-- `options.id` (string, optional) — Unique identifier (auto-generated if omitted)
-- `options.priority` (number, optional) — Execution priority; higher executes first (default: `0`)
-- `options.subset` (string, optional) — Execution phase: `"before"`, `"primary"` (default), or `"after"`
+- `typePattern` (string) - Combined type and pattern, format: `"type:pattern"` (e.g. `"before:math.*"`)
+- `handler` (Function) - Synchronous hook handler
+- `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
+- `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
+- `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
 
-**Returns:** string — The hook ID
+**Returns:** string - The hook ID
 
 ### api.slothlet.hook.remove(filter?)
 
@@ -639,11 +639,11 @@ Remove hooks matching filter criteria.
 
 **Parameters:**
 
-- `filter.id` (string) — Remove exact hook by ID
-- `filter.type` (string) — Remove all hooks of this type
-- `filter.pattern` (string) — Remove all hooks matching this pattern
+- `filter.id` (string) - Remove exact hook by ID
+- `filter.type` (string) - Remove all hooks of this type
+- `filter.pattern` (string) - Remove all hooks matching this pattern
 
-**Returns:** number — Count of hooks removed
+**Returns:** number - Count of hooks removed
 
 ### api.slothlet.hook.off(idOrFilter)
 
@@ -659,13 +659,13 @@ Enable hooks. Empty filter enables all.
 
 **Parameters:** Same filter object as `remove()`.
 
-**Returns:** number — Count of hooks enabled
+**Returns:** number - Count of hooks enabled
 
 ### api.slothlet.hook.disable(filter?)
 
 Disable hooks without unregistering them. Empty filter disables all.
 
-**Returns:** number — Count of hooks disabled
+**Returns:** number - Count of hooks disabled
 
 ### api.slothlet.hook.list(filter?)
 
@@ -673,8 +673,8 @@ List registered hooks matching filter.
 
 **Parameters:**
 
-- `filter.id`, `filter.type`, `filter.pattern` — As above
-- `filter.enabled` (boolean) — Filter by enabled state
+- `filter.id`, `filter.type`, `filter.pattern` - As above
+- `filter.enabled` (boolean) - Filter by enabled state
 
 **Returns:** Array of hook objects
 
@@ -682,5 +682,5 @@ List registered hooks matching filter.
 
 ## See Also
 
-- [Context Propagation](CONTEXT-PROPAGATION.md) — `ctx` object available in hook handlers
-- [README](../README.md) — Main project documentation
+- [Context Propagation](CONTEXT-PROPAGATION.md) - `ctx` object available in hook handlers
+- [README](../README.md) - Main project documentation

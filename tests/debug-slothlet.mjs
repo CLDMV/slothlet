@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-07 15:32:28 -08:00 (1770507148)
+ *	@Last modified time: 2026-02-21 21:28:09 -08:00 (1771738089)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -15,7 +15,7 @@ import chalk from "chalk";
 import { spawn } from "node:child_process";
 
 // Populated after ensureDevEnvFlags() confirms slothlet-dev condition is active.
-// Must NOT be a static top-level import — that fires before the respawn check and
+// Must NOT be a static top-level import - that fires before the respawn check and
 // fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
 let resolveWrapper;
 
@@ -70,7 +70,7 @@ function ensureDevEnvFlags() {
 	}
 
 	process.stderr.write(
-		`[debug-slothlet] Missing env flags detected — relaunching with: NODE_ENV=development NODE_OPTIONS="${process.env.NODE_OPTIONS}"\n` +
+		`[debug-slothlet] Missing env flags detected - relaunching with: NODE_ENV=development NODE_OPTIONS="${process.env.NODE_OPTIONS}"\n` +
 			`[debug-slothlet] All output below is from the respawned child process.\n` +
 			`[debug-slothlet] -------------------------------------------------------\n`
 	);
@@ -975,7 +975,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		return;
 	}
 
-	// Now safe to import — slothlet-dev condition is active
+	// Now safe to import - slothlet-dev condition is active
 	({ resolveWrapper } = await import("@cldmv/slothlet/handlers/unified-wrapper"));
 
 	const module = await import("@cldmv/slothlet");

@@ -1,6 +1,6 @@
 # Runtime API Mutations & Reload
 
-Slothlet supports three runtime mutation operations — `add`, `remove`, and `reload` — that let you evolve the API surface after initialization without destroying existing references. All three share a common proxy-based reference preservation system so callers never need to re-acquire the API object.
+Slothlet supports three runtime mutation operations - `add`, `remove`, and `reload` - that let you evolve the API surface after initialization without destroying existing references. All three share a common proxy-based reference preservation system so callers never need to re-acquire the API object.
 
 ---
 
@@ -67,12 +67,12 @@ await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" })
 await api.slothlet.api.remove("core-plugins");     // remove by ID
 await api.slothlet.api.reload("core-plugins");     // reload by ID
 
-// Root-level mount — exports appear directly on api.*
+// Root-level mount - exports appear directly on api.*
 await api.slothlet.api.add("", "./extra-root");
 await api.slothlet.api.add(null, "./extra-root");
 ```
 
-**Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` — not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
+**Path deduplication (Rule 13 / F08):** When the scanned directory itself produces a top-level key matching the last segment of `apiPath`, slothlet deduplicates the namespace. For example, `api.add("math", dir_containing_math.mjs)` results in `api.math.*` - not `api.math.math.*`. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f08-addapi-path-deduplication-flattening) for details.
 
 **AddApi special file (Rule 11 / F06):** A file named `addapi.mjs` inside the scanned directory always merges its exports directly into the mount namespace, never creating an intermediate `.addapi.` level. See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md#f06-addapi-special-file-pattern).
 
@@ -105,7 +105,7 @@ Removing a module emits `impl:removed` lifecycle events for each affected path, 
 
 ## `api.slothlet.api.reload()`
 
-Reloads API modules from disk, busting ESM/CJS caches so updated source files are picked up. Existing wrapper proxy references are preserved — callers holding `api.math.add` continue to work after reload.
+Reloads API modules from disk, busting ESM/CJS caches so updated source files are picked up. Existing wrapper proxy references are preserved - callers holding `api.math.add` continue to work after reload.
 
 ```javascript
 await api.slothlet.api.reload(pathOrModuleId, options);
@@ -153,16 +153,16 @@ await api.slothlet.api.reload("plugins", {
 
 ## Eager vs Lazy Reload Behavior
 
-This is the primary point where slothlet's behavior diverges between `mode: "eager"` and `mode: "lazy"`. The external API for reload is identical in both modes — the divergence is entirely internal, in how fresh module content is applied to existing wrapper proxies.
+This is the primary point where slothlet's behavior diverges between `mode: "eager"` and `mode: "lazy"`. The external API for reload is identical in both modes - the divergence is entirely internal, in how fresh module content is applied to existing wrapper proxies.
 
-### Eager Mode — Direct Impl Replacement
+### Eager Mode - Direct Impl Replacement
 
 In eager mode, every API namespace is a fully-materialized `UnifiedWrapper` whose implementation is already in memory. When reload runs:
 
 1. The cache is rebuilt from disk (fresh import of all files)
 2. `___setImpl(newImpl, moduleID)` is called on each existing wrapper
 3. The new implementation object **replaces** the old one inside the wrapper
-4. The wrapper proxy reference is unchanged — existing code keeps working
+4. The wrapper proxy reference is unchanged - existing code keeps working
 
 ```text
 Before reload:      api.math        ← wrapper proxy (unchanged ref)
@@ -174,7 +174,7 @@ After reload:       api.math        ← same proxy ref
 
 The transition is synchronous and immediate. Any call to `api.math.add` after `await reload()` returns will invoke the new implementation.
 
-### Lazy Mode — Wrapper Reset to Un-Materialized State
+### Lazy Mode - Wrapper Reset to Un-Materialized State
 
 In lazy mode, API namespaces are proxy shells backed by a `materializeFunc` that loads modules on first access. When reload runs on a lazy wrapper that has **not yet been accessed** (or has been accessed and needs to be reset):
 
@@ -197,7 +197,7 @@ On next access:     api.math.add    ← materializes fresh, returns fn_v2
 
 **Key implication for lazy mode:** In eager mode, the reload result is immediately visible to all code paths. In lazy mode, the update is visible only **after the next access** to that namespace. Code that has already read `api.math.add` into a local variable holds the old function until the wrapper re-materializes.
 
-If a lazy namespace **has already been materialized** when reload runs, the `___resetLazy` path still applies — the wrapper is reset, children are cleared, and the next access loads fresh content. The previously-materialized function objects are eligible for garbage collection once no other references hold them.
+If a lazy namespace **has already been materialized** when reload runs, the `___resetLazy` path still applies - the wrapper is reset, children are cleared, and the next access loads fresh content. The previously-materialized function objects are eligible for garbage collection once no other references hold them.
 
 **Root-level files are always eager even in lazy mode.** A `math.mjs` in the root `dir` (not inside a subdirectory) is loaded eagerly and follows the eager reload path (`___setImpl`) even when `mode: "lazy"` is configured. Only subdirectory wrappers use the lazy reset path.
 
@@ -206,7 +206,7 @@ If a lazy namespace **has already been materialized** when reload runs, the `___
 | | Eager Mode | Lazy Mode |
 |---|---|---|
 | **Before first access** | Impl already loaded | Proxy shell only (no impl) |
-| **Reload mechanism** | `___setImpl(newImpl)` — direct replacement | `___resetLazy(newMaterializeFunc)` — reset to shell |
+| **Reload mechanism** | `___setImpl(newImpl)` - direct replacement | `___resetLazy(newMaterializeFunc)` - reset to shell |
 | **Update visible** | Immediately after `await reload()` | On next access to that namespace |
 | **Memory freed** | Old impl replaced immediately | Materialized children freed on reset |
 | **Root-level files** | Eager path | Eager path (root files always eager) |
@@ -228,12 +228,12 @@ api.myProp = "custom";
 // Reload from disk
 await api.slothlet.api.reload();
 
-// api is still valid — the same reference
+// api is still valid - the same reference
 console.log(typeof api.math.add); // "function" (fresh from disk)
-console.log(api.myProp);          // undefined — runtime mutations cleared on reload
+console.log(api.myProp);          // undefined - runtime mutations cleared on reload
 ```
 
-Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload because the wrapper tree is rebuilt. Mutations to properties that belong to loaded modules (e.g. `api.math.add = customFn`) are also cleared — the reload replaces the impl inside those wrappers.
+Runtime mutations (`api.myProp = ...`) are intentionally cleared on full reload because the wrapper tree is rebuilt. Mutations to properties that belong to loaded modules (e.g. `api.math.add = customFn`) are also cleared - the reload replaces the impl inside those wrappers.
 
 ---
 
@@ -245,7 +245,7 @@ Slothlet forces fresh module loading on every rebuild rather than serving cached
 
 **ESM**: A temporary instance ID suffix is appended to the cache-busted import path, causing Node's ESM loader to treat it as a new module specifier and re-execute the file.
 
-This means `reload()` is suitable as a real hot-reload trigger in development workflows — simply editing a source file and calling `reload()` is sufficient.
+This means `reload()` is suitable as a real hot-reload trigger in development workflows - simply editing a source file and calling `reload()` is sufficient.
 
 ---
 
@@ -259,13 +259,13 @@ const api = await slothlet({ dir: "./api" });
 await api.slothlet.api.add("plugins", "./plugins", { moduleID: "core-plugins" });
 await api.slothlet.api.add("tools", "./tools");
 
-// Reload base module — replays both add() calls automatically
+// Reload base module - replays both add() calls automatically
 await api.slothlet.api.reload();
 
 // api.plugins and api.tools are still present after reload
 ```
 
-Targeted reloads (by path or moduleID) rebuild only the affected cache entries and do not replay operation history — they operate on the existing namespace tree in-place.
+Targeted reloads (by path or moduleID) rebuild only the affected cache entries and do not replay operation history - they operate on the existing namespace tree in-place.
 
 ---
 
@@ -284,7 +284,7 @@ await api.slothlet.api.add("plugins.billing", "./billing", { moduleID: "billing-
 await api.slothlet.api.reload("auth-module");
 // api.plugins.billing is unaffected
 
-// Remove billing — rolls back to previous owner of plugins.billing paths
+// Remove billing - rolls back to previous owner of plugins.billing paths
 await api.slothlet.api.remove("billing-module");
 ```
 
@@ -305,7 +305,7 @@ See [CONFIGURATION.md](CONFIGURATION.md#the-apislothletdiag-namespace) for the f
 The lifecycle system emits events for each wrapper impl change during mutations. Subscribe via `api.slothlet.lifecycle`:
 
 ```javascript
-// Subscribe from the internal system — access via diagnostics or direct handler
+// Subscribe from the internal system - access via diagnostics or direct handler
 const unsubscribe = api.slothlet.lifecycle.on("impl:changed", (data) => {
     console.log(`${data.apiPath} updated`, data.source, data.moduleID);
 });
@@ -324,10 +324,10 @@ unsubscribe(); // clean up
 | `path:collision` | Two modules write to the same path |
 
 Each event handler receives an object with:
-- `apiPath` — dot-path of the affected API member
-- `impl` — the implementation object (new impl for created/changed, old impl for removed)
-- `source` — `"initial"`, `"hot-reload"`, `"materialization"`, etc.
-- `moduleID` — the module identifier that triggered the event
-- `filePath` — source file path (when available)
+- `apiPath` - dot-path of the affected API member
+- `impl` - the implementation object (new impl for created/changed, old impl for removed)
+- `source` - `"initial"`, `"hot-reload"`, `"materialization"`, etc.
+- `moduleID` - the module identifier that triggered the event
+- `filePath` - source file path (when available)
 
 See [LIFECYCLE.md](LIFECYCLE.md) for the full lifecycle events reference.

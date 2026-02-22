@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 20:48:30 -08:00 (1771735710)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -32,7 +32,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 describe("api.slothlet.api.add Functionality", () => {
 	// api.slothlet.api.add works on all configurations, no filtering needed
@@ -105,19 +105,29 @@ describe("api.slothlet.api.add Functionality", () => {
 		 */
 		it("should throw appropriate errors for invalid inputs", async () => {
 			// Non-existent folder
-			await expect(api.slothlet.api.add("test", "/non/existent/path")).rejects.toThrow("Configuration error");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("test", "/non/existent/path")).rejects.toThrow("Configuration error");
+			});
 
 			// Consecutive dots
-			await expect(api.slothlet.api.add("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("path..test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			});
 
 			// Leading dot
-			await expect(api.slothlet.api.add(".test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add(".test", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			});
 
 			// Trailing dot
-			await expect(api.slothlet.api.add("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("test.", TEST_DIRS.API_TEST_MIXED)).rejects.toThrow("Invalid API path");
+			});
 
 			// Non-string folderPath
-			await expect(api.slothlet.api.add("test", null)).rejects.toThrow("Configuration error");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("test", null)).rejects.toThrow("Configuration error");
+			});
 		});
 
 		/**
@@ -161,7 +171,9 @@ describe("api.slothlet.api.add Functionality", () => {
 
 			// Test primitive extension rejection
 			api.test.primitive = 42;
-			await expect(api.slothlet.api.add("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("Invalid API path");
+			await withSuppressedSlothletErrorOutput(async () => {
+				await expect(api.slothlet.api.add("test.primitive.nested", TEST_DIRS.API_TEST)).rejects.toThrow("Invalid API path");
+			});
 		});
 
 		// TODO: This option isn't even tested here and is also not an option in V3...
@@ -199,7 +211,11 @@ describe("api.slothlet.api.add Functionality", () => {
 
 				if (shouldBlock) {
 					// Rule 12 should block cross-module overwrite
-					await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "hostile-module" })).rejects.toThrow("Rule 12");
+					await withSuppressedSlothletErrorOutput(async () => {
+						await expect(api.slothlet.api.add("funcTest", TEST_DIRS.API_TEST_CJS, { moduleID: "hostile-module" })).rejects.toThrow(
+							"Rule 12"
+						);
+					});
 
 					// Original preserved
 					expect(Object.keys(api.funcTest)).toEqual(originalKeys);

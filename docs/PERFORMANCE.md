@@ -298,7 +298,7 @@ This methodology reveals:
      Lazy (subsequent): 4.79μs
      Winner: Eager (1.14x faster)
 
-🌐 REALISTIC API USAGE (⭐ HIGH WEIGHT — 500 iterations, 41 unique calls):
+🌐 REALISTIC API USAGE (⭐ HIGH WEIGHT - 500 iterations, 41 unique calls):
    Eager: 8.26μs (avg)
    Lazy:  7.75μs (avg)
    Winner: Lazy (1.07x faster)

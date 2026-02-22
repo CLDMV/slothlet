@@ -48,7 +48,7 @@ api.slothlet.lifecycle.off("impl:changed", handler);
 
 ### `impl:created`
 
-Emitted when a module implementation is first loaded — during initial `slothlet()` startup or via `api.slothlet.api.add()`.
+Emitted when a module implementation is first loaded - during initial `slothlet()` startup or via `api.slothlet.api.add()`.
 
 **Event data:**
 ```javascript
@@ -64,7 +64,7 @@ Emitted when a module implementation is first loaded — during initial `slothle
 
 ### `impl:changed`
 
-Emitted when an existing module implementation is replaced — during `api.slothlet.api.reload()` or `api.slothlet.reload()`.
+Emitted when an existing module implementation is replaced - during `api.slothlet.api.reload()` or `api.slothlet.reload()`.
 
 **Event data:** Same shape as `impl:created`.
 
@@ -142,7 +142,7 @@ api.slothlet.lifecycle.on("impl:removed", (data) => {
 
 ## Module Type Inspection
 
-In eager mode, `typeof api.math` accurately reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode this is not the case** — the proxy target is always a function to make namespaces callable, so `typeof` always returns `"function"` regardless of what the module exports.
+In eager mode, `typeof api.math` accurately reflects the underlying type (`"object"` for object exports, `"function"` for function exports). In **lazy mode this is not the case** - the proxy target is always a function to make namespaces callable, so `typeof` always returns `"function"` regardless of what the module exports.
 
 Use `__type` and `api.slothlet.types` symbols to check actual module state.
 
@@ -152,7 +152,7 @@ Use `__type` and `api.slothlet.types` symbols to check actual module state.
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
 // typeof is always "function" in lazy mode (proxy target)
-console.log(typeof api.math);     // "function" — even if math module exports an object
+console.log(typeof api.math);     // "function" - even if math module exports an object
 
 // __type returns the real implementation type
 console.log(api.math.__type);     // api.slothlet.types.UNMATERIALIZED  (not loaded yet)
@@ -216,7 +216,7 @@ const api = await slothlet({
 ```javascript
 const api = await slothlet({ dir: "./api", mode: "lazy" });
 
-// Modules are proxies — not loaded
+// Modules are proxies - not loaded
 console.log(api.math.__type); // UNMATERIALIZED
 
 // First call triggers loading (slightly slower)
@@ -234,7 +234,7 @@ const api = await slothlet({
 	tracking: { materialization: true }
 });
 
-// Modules are loading in background — may already be IN_FLIGHT or loaded
+// Modules are loading in background - may already be IN_FLIGHT or loaded
 console.log(api.math.__type); // "object" (if fast enough) or IN_FLIGHT
 
 // Wait for all modules to finish loading
@@ -242,7 +242,7 @@ await api.slothlet.materialize.wait();
 
 // All modules guaranteed loaded
 console.log(api.math.__type); // "object"
-const result = await api.math.add(2, 3); // Fast — no loading delay
+const result = await api.math.add(2, 3); // Fast - no loading delay
 ```
 
 ### `api.slothlet.materialize.wait()`
@@ -310,9 +310,9 @@ api.slothlet.lifecycle.on("impl:changed", async (data) => {
 
 | Property/Method | Description |
 |---|---|
-| `wait()` | `Promise<void>` — resolves when all background materialization completes |
+| `wait()` | `Promise<void>` - resolves when all background materialization completes |
 | `get()` | Returns materialization stats (total, completed count) |
-| `materialized` | `boolean` — `true` when all modules are loaded |
+| `materialized` | `boolean` - `true` when all modules are loaded |
 
 ### api.slothlet.types
 
@@ -329,6 +329,6 @@ Direct property on any lazy-mode proxy. Returns `api.slothlet.types.UNMATERIALIZ
 
 ## See Also
 
-- [Module Structure](MODULE-STRUCTURE.md) — All structural patterns including lazy mode
-- [Hooks](HOOKS.md) — Intercept function calls with before/after/always/error hooks
-- [Performance](PERFORMANCE.md) — Eager vs. lazy mode performance characteristics
+- [Module Structure](MODULE-STRUCTURE.md) - All structural patterns including lazy mode
+- [Hooks](HOOKS.md) - Intercept function calls with before/after/always/error hooks
+- [Performance](PERFORMANCE.md) - Eager vs. lazy mode performance characteristics
