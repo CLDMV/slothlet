@@ -920,6 +920,7 @@ Key highlights:
 
 ### Technical Guides
 
+- **[TypeScript Support](https://github.com/CLDMV/slothlet/blob/master/docs/TYPESCRIPT.md)** - Native TypeScript support: fast mode (esbuild), strict mode (tsc), and `.d.ts` type generation
 - **[Hook System](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)** - Complete hook system documentation with 4 hook types, three-phase subsets, pattern matching, and examples
 - **[Context Propagation](https://github.com/CLDMV/slothlet/blob/master/docs/CONTEXT-PROPAGATION.md)** - EventEmitter and class instance context preservation
 - **[Metadata System](https://github.com/CLDMV/slothlet/blob/master/docs/METADATA.md)** - Function metadata tagging and runtime introspection for security, authorization, and auditing
