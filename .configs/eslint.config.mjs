@@ -1,10 +1,22 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /.configs/eslint.config.mjs
+ *	@Date: 2026-02-10 20:46:58 -08:00 (1770785218)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 20:37:32 -08:00 (1771735052)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+
 import js from "@eslint/js";
 import globals from "globals";
 import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 import css from "@eslint/css";
-import html from "@html-eslint/eslint-plugin";
-import htmlParser from "@html-eslint/parser";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
@@ -84,15 +96,5 @@ export default defineConfig([
 			"markdown/no-missing-label-refs": "off"
 		}
 	},
-	{ files: ["**/*.css"], plugins: { css }, language: "css/css", extends: ["css/recommended"] },
-	{
-		files: ["**/*.html"],
-		plugins: { "@html-eslint": html },
-		languageOptions: { parser: htmlParser },
-		rules: {
-			"@html-eslint/require-doctype": "error",
-			"@html-eslint/require-lang": "error",
-			"@html-eslint/require-title": "error"
-		}
-	}
+	{ files: ["**/*.css"], plugins: { css }, language: "css/css", extends: ["css/recommended"] }
 ]);
