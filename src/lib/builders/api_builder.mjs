@@ -948,31 +948,24 @@ export class ApiBuilder extends ComponentBase {
 			},
 
 			/**
-			 * Lifecycle event manager for subscribing to API events
-			 * Provides access to lifecycle events like 'materialized:complete'
+			 * Lifecycle event manager for subscribing to API events.
+			 * Exposes only `on` and `off` — emit and subscribe are internal.
 			 * @type {object}
 			 * @public
 			 *
 			 * @example
-			 * // Standard EventEmitter pattern with on/off
 			 * const handler = (data) => console.log(`${data.total} modules materialized`);
 			 * api.slothlet.lifecycle.on('materialized:complete', handler);
 			 * api.slothlet.lifecycle.off('materialized:complete', handler);
-			 *
-			 * @example
-			 * // Or use subscribe (returns unsubscribe function)
-			 * const unsubscribe = api.slothlet.lifecycle.subscribe('impl:changed', (data) => {
-			 *   console.log(`Module ${data.apiPath} was reloaded`);
-			 * });
-			 * unsubscribe(); // Remove listener
 			 */
-			lifecycle: slothlet.handlers?.lifecycle || {
-				subscribe: () => () => {},
-				on: () => () => {},
-				off: () => {},
-				unsubscribe: () => {},
-				emit: () => {}
-			}
+			lifecycle: (() => {
+				const handler = slothlet.handlers?.lifecycle;
+				if (!handler) return { on: () => {}, off: () => {} };
+				return {
+					on: handler.on.bind(handler),
+					off: handler.off.bind(handler)
+				};
+			})()
 		};
 
 		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
