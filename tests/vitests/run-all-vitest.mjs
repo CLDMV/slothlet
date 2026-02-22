@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:38:39 -08:00 (1771738719)
+ *	@Last modified time: 2026-02-22 13:16:52 -08:00 (1771795012)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -103,6 +103,9 @@ const vitestConfigPath = path.join(".configs", "vitest.config.mjs");
 // Configuration
 const WORKER_COUNT = process.env.VITEST_WORKERS ? parseInt(process.env.VITEST_WORKERS, 10) : 4;
 
+// How many files to display in the worst-coverage table (when --coverage is used). Set to 0 to disable the table.
+const WORST_COVERAGE_FILE_COUNT = 10;
+
 /**
  * Display help message
  */
@@ -117,6 +120,7 @@ ${chalk.bold("USAGE:")}
 ${chalk.bold("SPECIAL FLAGS:")}
   --baseline              Load test list from baseline-tests.json
   --no-error-details      Hide detailed error output (show only counts)
+	--coverage-quiet        Implies --coverage; show progress bar + final summaries only
   --help, -h              Show this help message
 
 ${chalk.bold("TEST PATTERNS:")}
@@ -160,6 +164,9 @@ ${chalk.bold("EXAMPLES:")}
 
   # Combine flags
   npm run vitest -- --baseline -t "LAZY" --reporter=verbose
+
+	# Coverage with quiet output and progress bar
+	npm run vitest -- --coverage --coverage-quiet
 `);
 }
 
@@ -206,11 +213,12 @@ async function discoverFilesInDir(dir) {
  * @returns {Object} Parsed arguments object
  */
 function parseArguments(args) {
-	const specialFlags = ["--baseline", "--no-error-details", "--help"];
+	const specialFlags = ["--baseline", "--no-error-details", "--coverage-quiet", "--help"];
 	const vitestPassthroughArgs = [];
 	const testPatterns = [];
 	let baseline = false;
 	let showErrorDetails = true;
+	let coverageQuiet = false;
 	let help = false;
 
 	for (let i = 0; i < args.length; i++) {
@@ -220,6 +228,8 @@ function parseArguments(args) {
 			baseline = true;
 		} else if (arg === "--no-error-details") {
 			showErrorDetails = false;
+		} else if (arg === "--coverage-quiet") {
+			coverageQuiet = true;
 		} else if (arg === "--help" || arg === "-h") {
 			help = true;
 		} else if (arg.startsWith("--") || arg.startsWith("-")) {
@@ -239,10 +249,192 @@ function parseArguments(args) {
 	return {
 		baseline,
 		showErrorDetails,
+		coverageQuiet,
 		help,
 		vitestPassthroughArgs,
 		testPatterns
 	};
+}
+
+/**
+ * Format milliseconds to human-readable m:ss or h:mm:ss.
+ * @param {number} ms - Duration in milliseconds.
+ * @returns {string} Formatted duration string.
+ * @example
+ * formatDuration(65000); // "1:05"
+ */
+function formatDuration(ms) {
+	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+
+	if (hours > 0) {
+		return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+	}
+
+	return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Create a live coverage progress tracker with TTY bar/spinner and non-TTY fallbacks.
+ * @param {number} total - Total number of files to execute.
+ * @returns {{ onStart: () => void, onComplete: (failedRun: boolean) => void, finish: () => void }} Progress tracker API.
+ * @example
+ * const progress = createCoverageProgressTracker(120);
+ * progress.onStart();
+ * progress.onComplete(false);
+ * progress.finish();
+ */
+function createCoverageProgressTracker(total) {
+	const isTTY = Boolean(process.stdout.isTTY);
+	const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+	const barWidth = 26;
+	const startTime = Date.now();
+	let completed = 0;
+	let active = 0;
+	let failed = 0;
+	let frameIndex = 0;
+	let maxLineLength = 0;
+	let lastPlainLog = 0;
+	let spinnerTimer = null;
+
+	/**
+	 * Build the current progress line text.
+	 * @returns {string} Progress line.
+	 */
+	function buildLine() {
+		const percent = total === 0 ? 100 : (completed / total) * 100;
+		const elapsedMs = Date.now() - startTime;
+		const avgPerFile = completed > 0 ? elapsedMs / completed : 0;
+		const remainingFiles = Math.max(total - completed, 0);
+		const etaMs = avgPerFile * remainingFiles;
+		const filled = Math.round((percent / 100) * barWidth);
+		const spinner = spinnerFrames[frameIndex % spinnerFrames.length];
+
+		const barType = 1;
+		let barConfig = {
+			preBar: "[",
+			postBar: "]",
+			fill: "=",
+			empty: "-"
+		};
+
+		if (barType === 2) {
+			barConfig = {
+				preBar: "|",
+				postBar: "|",
+				fill: "█",
+				empty: "░"
+			};
+		}
+
+		const bar = `${barConfig.preBar}${barConfig.fill.repeat(filled)}${barConfig.empty.repeat(Math.max(0, barWidth - filled))}${barConfig.postBar}`;
+
+		if (isTTY) {
+			return `${spinner} ${chalk.green(bar)} ${chalk.bold(percent.toFixed(1).padStart(5))}% ${completed}/${total} | active ${active} | failed ${failed} | ETA ${formatDuration(etaMs)} | elapsed ${formatDuration(elapsedMs)}`;
+		}
+
+		return `progress ${percent.toFixed(1)}% ${completed}/${total} | active ${active} | failed ${failed} | eta ${formatDuration(etaMs)} | elapsed ${formatDuration(elapsedMs)}`;
+	}
+
+	/**
+	 * Render the progress line to stdout.
+	 * @param {boolean} forcePlainLog - Force a plain line log in non-TTY mode.
+	 * @returns {void}
+	 */
+	function render(forcePlainLog = false) {
+		const line = buildLine();
+		frameIndex++;
+
+		if (isTTY) {
+			const visibleLength = stripAnsi(line).length;
+			maxLineLength = Math.max(maxLineLength, visibleLength);
+			const padded = line.padEnd(maxLineLength, " ");
+			process.stdout.write(`\r${padded}`);
+			return;
+		}
+
+		const now = Date.now();
+		if (forcePlainLog || now - lastPlainLog >= 2000) {
+			console.log(line);
+			lastPlainLog = now;
+		}
+	}
+
+	/**
+	 * Start periodic spinner redraw for TTY output.
+	 * @returns {void}
+	 */
+	function startSpinnerLoop() {
+		if (!isTTY || spinnerTimer) return;
+
+		spinnerTimer = setInterval(() => {
+			if (completed >= total && active === 0) return;
+			render();
+		}, 120);
+
+		spinnerTimer.unref?.();
+	}
+
+	/**
+	 * Stop periodic spinner redraw loop.
+	 * @returns {void}
+	 */
+	function stopSpinnerLoop() {
+		if (!spinnerTimer) return;
+		clearInterval(spinnerTimer);
+		spinnerTimer = null;
+	}
+
+	render(true);
+	startSpinnerLoop();
+
+	return {
+		onStart() {
+			active++;
+			render();
+		},
+		onComplete(failedRun) {
+			active = Math.max(0, active - 1);
+			completed++;
+			if (failedRun) failed++;
+			render(true);
+		},
+		finish() {
+			stopSpinnerLoop();
+			render(true);
+			if (isTTY) {
+				process.stdout.write("\n");
+			}
+		}
+	};
+}
+
+/**
+ * Print full verbose output for failed coverage files in quiet mode.
+ * @param {Array<{file: string, code: number, rawOutput: string}>} failedResults - Failed coverage run results.
+ * @returns {void}
+ * @example
+ * printQuietCoverageFailureDetails([{ file: "tests/vitests/suites/foo.test.vitest.mjs", code: 1, rawOutput: "..." }]);
+ */
+function printQuietCoverageFailureDetails(failedResults) {
+	if (failedResults.length === 0) return;
+
+	console.log(`\n${"=".repeat(80)}`);
+	console.log(chalk.bold.red("✖ FAILED TEST FILES (VERBOSE OUTPUT)"));
+	console.log("=".repeat(80));
+
+	for (const failedResult of failedResults) {
+		console.log(`\n${chalk.red("✖")} ${chalk.red(failedResult.file)} ${chalk.dim(`(exit ${failedResult.code})`)}`);
+		if (failedResult.rawOutput?.trim()) {
+			console.log(failedResult.rawOutput.trimEnd());
+		} else {
+			console.log(chalk.dim("(no child output captured)"));
+		}
+	}
+
+	console.log(`\n${"=".repeat(80)}`);
 }
 
 /**
@@ -431,10 +623,12 @@ function parseVitestOutput(output) {
  * @param {string} filePath - Test file path relative to project root
  * @param {number | undefined} maxOldSpaceMb - Optional heap size limit
  * @param {string[]} vitestArgs - Additional vitest arguments to pass through
+ * @param {{ streamOutput?: boolean }} options - Runtime options for child output behavior
  * @returns {Promise<Object>} Test results
  */
-async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = []) {
+async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = [], options = {}) {
 	return new Promise((resolve) => {
+		const { streamOutput = true } = options;
 		const startTime = Date.now();
 		const args = [vitestEntrypoint, "--config", vitestConfigPath, "run", ...vitestArgs, filePath];
 
@@ -462,13 +656,17 @@ async function runSingleFile(filePath, maxOldSpaceMb, vitestArgs = []) {
 		child.stdout?.on("data", (data) => {
 			const text = data.toString();
 			stdout += text;
-			process.stdout.write(data); // Stream output to console
+			if (streamOutput) {
+				process.stdout.write(data); // Stream output to console
+			}
 		});
 
 		child.stderr?.on("data", (data) => {
 			const text = data.toString();
 			stderr += text;
-			process.stderr.write(data); // Stream output to console
+			if (streamOutput) {
+				process.stderr.write(data); // Stream output to console
+			}
 		});
 
 		child.on("close", (code) => {
@@ -621,11 +819,24 @@ function deduplicateErrors(errors) {
  * @param {string} blobsDir - Directory containing blob files from individual runs
  * @param {string[]} extraCoverageArgs - Additional --coverage.* args to pass through
  * @param {number | undefined} maxOldSpaceMb - Optional heap size limit
+ * @param {{ quietOutput?: boolean }} options - Controls whether merge output is filtered.
  * @returns {Promise<number>} Process exit code
  */
-async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb) {
+async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb, options = {}) {
 	return new Promise((resolve) => {
-		const args = [vitestEntrypoint, "--config", vitestConfigPath, "--mergeReports", blobsDir, "--run", "--coverage", ...extraCoverageArgs];
+		const { quietOutput = false } = options;
+		const mergeReporterArgs = quietOutput ? ["--color"] : [];
+		const args = [
+			vitestEntrypoint,
+			"--config",
+			vitestConfigPath,
+			"--mergeReports",
+			blobsDir,
+			"--run",
+			"--coverage",
+			...mergeReporterArgs,
+			...extraCoverageArgs
+		];
 
 		const baseEnv = { ...process.env };
 		if (!baseEnv.NODE_ENV) baseEnv.NODE_ENV = "development";
@@ -641,13 +852,213 @@ async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb) 
 
 		const child = spawn(process.execPath, args, {
 			cwd: projectRoot,
-			stdio: "inherit",
+			stdio: quietOutput ? ["ignore", "pipe", "pipe"] : "inherit",
 			env: baseEnv
 		});
 
-		child.on("close", (code) => resolve(code ?? 1));
+		let stdout = "";
+		let stderr = "";
+
+		if (quietOutput) {
+			child.stdout?.on("data", (data) => {
+				stdout += data.toString();
+			});
+
+			child.stderr?.on("data", (data) => {
+				stderr += data.toString();
+			});
+		}
+
+		child.on("close", (code) => {
+			if (quietOutput) {
+				const output = `${stdout}\n${stderr}`;
+				if ((code ?? 1) === 0) {
+					const marker = "% Coverage report from v8";
+					const rawStartIndex = output.lastIndexOf(marker);
+
+					if (rawStartIndex >= 0) {
+						const lineStart = output.lastIndexOf("\n", rawStartIndex);
+						const coverageBlock = output.slice(lineStart >= 0 ? lineStart + 1 : 0).trimEnd();
+						console.log(`\n${coverageBlock}\n`);
+					} else {
+						const rawLines = output.split("\n");
+						const markerLineIndex = rawLines.findIndex((line) => stripAnsi(line).includes(marker));
+						if (markerLineIndex >= 0) {
+							const coverageBlock = rawLines.slice(markerLineIndex).join("\n").trimEnd();
+							console.log(`\n${coverageBlock}\n`);
+						}
+					}
+				} else {
+					const failedOutput = output.trimEnd();
+					if (failedOutput) {
+						console.error(failedOutput);
+					}
+				}
+			}
+
+			resolve(code ?? 1);
+		});
 		child.on("error", () => resolve(1));
 	});
+}
+
+/**
+ * Colour-code a coverage percentage value.
+ * @param {number} pct - Coverage percentage (0–100).
+ * @returns {string} Chalk-coloured string.
+ */
+function colourPct(pct) {
+	const str = pct.toFixed(2).padStart(6);
+	if (pct >= 80) return chalk.green(str);
+	if (pct >= 50) return chalk.yellow(str);
+	return chalk.red(str);
+}
+
+/**
+ * Compute a coverage-summary-style object from the raw V8/Istanbul coverage-final.json.
+ * Each file entry has statement/function/branch/line totals and covered counts.
+ * @param {Record<string, object>} finalData - Parsed coverage-final.json contents.
+ * @returns {{ total: object, [filePath: string]: object }} Summary in coverage-summary format.
+ */
+function computeSummaryFromFinal(finalData) {
+	const pct = (covered, total) => (total === 0 ? 100 : parseFloat(((covered / total) * 100).toFixed(2)));
+	const summary = {
+		total: {
+			statements: { total: 0, covered: 0, pct: 0 },
+			branches: { total: 0, covered: 0, pct: 0 },
+			functions: { total: 0, covered: 0, pct: 0 },
+			lines: { total: 0, covered: 0, pct: 0 }
+		}
+	};
+
+	for (const [filePath, data] of Object.entries(finalData)) {
+		const sKeys = Object.keys(data.s ?? {});
+		const stmtTotal = sKeys.length;
+		const stmtCovered = sKeys.filter((k) => data.s[k] > 0).length;
+
+		const fKeys = Object.keys(data.f ?? {});
+		const fnTotal = fKeys.length;
+		const fnCovered = fKeys.filter((k) => data.f[k] > 0).length;
+
+		let branchTotal = 0,
+			branchCovered = 0;
+		for (const counts of Object.values(data.b ?? {})) {
+			branchTotal += counts.length;
+			branchCovered += counts.filter((c) => c > 0).length;
+		}
+
+		// Lines: use statementMap to find unique source lines.
+		const coveredLines = new Set();
+		const totalLines = new Set();
+		for (const [sid, loc] of Object.entries(data.statementMap ?? {})) {
+			const line = loc?.start?.line;
+			if (line == null) continue;
+			totalLines.add(line);
+			if ((data.s ?? {})[sid] > 0) coveredLines.add(line);
+		}
+
+		const fileStats = {
+			statements: { total: stmtTotal, covered: stmtCovered, pct: pct(stmtCovered, stmtTotal) },
+			branches: { total: branchTotal, covered: branchCovered, pct: pct(branchCovered, branchTotal) },
+			functions: { total: fnTotal, covered: fnCovered, pct: pct(fnCovered, fnTotal) },
+			lines: { total: totalLines.size, covered: coveredLines.size, pct: pct(coveredLines.size, totalLines.size) }
+		};
+		summary[filePath] = fileStats;
+
+		for (const key of ["statements", "branches", "functions", "lines"]) {
+			summary.total[key].total += fileStats[key].total;
+			summary.total[key].covered += fileStats[key].covered;
+		}
+	}
+
+	for (const key of ["statements", "branches", "functions", "lines"]) {
+		const { total, covered } = summary.total[key];
+		summary.total[key].pct = pct(covered, total);
+	}
+	return summary;
+}
+
+/**
+ * Resolve coverage output directory from CLI coverage arguments.
+ * @param {string[]} extraCoverageArgs - Any --coverage.* passthrough args.
+ * @returns {string} Absolute coverage directory path.
+ * @example
+ * resolveCoverageDirectory(["--coverage.reportsDirectory=.coverage"]);
+ */
+function resolveCoverageDirectory(extraCoverageArgs) {
+	let coverageDir = path.resolve(projectRoot, "coverage");
+	const repoDirArg = extraCoverageArgs.find((a) => a.startsWith("--coverage.reportsDirectory="));
+	if (repoDirArg) {
+		const raw = repoDirArg.split("=").slice(1).join("=");
+		coverageDir = path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
+	}
+
+	return coverageDir;
+}
+
+/**
+ * Parse the V8/istanbul coverage-summary.json (or fall back to coverage-final.json) produced
+ * by Vitest after a mergeReports run, then print a worst-offenders table and overall-coverage footer.
+ * @param {string[]} extraCoverageArgs - Any --coverage.* passthrough args (used to detect reportsDirectory).
+ * @returns {Promise<void>}
+ */
+async function printCoverageSummary(extraCoverageArgs) {
+	const coverageDir = resolveCoverageDirectory(extraCoverageArgs);
+
+	let summary;
+
+	// Primary: try coverage-summary.json (generated by "json-summary" reporter).
+	const summaryPath = path.join(coverageDir, "coverage-summary.json");
+	try {
+		const content = await fs.readFile(summaryPath, "utf8");
+		summary = JSON.parse(content);
+	} catch {
+		// Fallback: compute from coverage-final.json (generated by "json" reporter / V8 default).
+		const finalPath = path.join(coverageDir, "coverage-final.json");
+		try {
+			const content = await fs.readFile(finalPath, "utf8");
+			summary = computeSummaryFromFinal(JSON.parse(content));
+		} catch {
+			console.log(chalk.dim("  (no coverage JSON found — skipping summary)"));
+			return;
+		}
+	}
+
+	const { total, ...fileSummaries } = summary;
+
+	if (WORST_COVERAGE_FILE_COUNT > 0) {
+		// Build sorted list: worst line-coverage first.
+		const fileRows = Object.entries(fileSummaries)
+			.map(([absFile, data]) => ({
+				file: path.relative(projectRoot, absFile),
+				lines: data.lines?.pct ?? 0,
+				stmts: data.statements?.pct ?? 0,
+				fns: data.functions?.pct ?? 0,
+				branches: data.branches?.pct ?? 0
+			}))
+			.sort((a, b) => a.lines - b.lines);
+
+		console.log("\n" + chalk.bold("📉 WORST COVERAGE FILES (lines)"));
+		console.log("-".repeat(80));
+		fileRows.slice(0, WORST_COVERAGE_FILE_COUNT).forEach(({ file, lines, stmts, fns, branches }) => {
+			const pctCol = colourPct(lines);
+			const extras = chalk.dim(`stmts ${stmts.toFixed(0)}% | fns ${fns.toFixed(0)}% | branches ${branches.toFixed(0)}%`);
+			console.log(`  ${pctCol}%  ${chalk.dim(file)}  ${extras}`);
+		});
+
+		if (fileRows.length > WORST_COVERAGE_FILE_COUNT) {
+			console.log(chalk.dim(`  ... and ${fileRows.length - WORST_COVERAGE_FILE_COUNT} more files`));
+		}
+	}
+
+	// Overall totals footer — matches the Vitest-style summary line format.
+	const tl = total.lines?.pct ?? 0;
+	const ts = total.statements?.pct ?? 0;
+	const tf = total.functions?.pct ?? 0;
+	const tb = total.branches?.pct ?? 0;
+	console.log(
+		`\n  ${chalk.bold("Coverage")}  ${colourPct(tl)}% lines ${chalk.dim("|")} ${colourPct(ts)}% statements ${chalk.dim("|")} ${colourPct(tf)}% functions ${chalk.dim("|")} ${colourPct(tb)}% branches`
+	);
 }
 
 /**
@@ -656,7 +1067,20 @@ async function runMergeReports(blobsDir, extraCoverageArgs = [], maxOldSpaceMb) 
 async function runAllFiles() {
 	// Parse CLI arguments - everything after script name
 	const rawArgs = process.argv.slice(2);
-	const { baseline, showErrorDetails, help, vitestPassthroughArgs, testPatterns } = parseArguments(rawArgs);
+	const {
+		baseline,
+		showErrorDetails,
+		coverageQuiet,
+		help,
+		vitestPassthroughArgs: parsedVitestArgs,
+		testPatterns
+	} = parseArguments(rawArgs);
+	const vitestPassthroughArgs = [...parsedVitestArgs];
+
+	if (coverageQuiet && !vitestPassthroughArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."))) {
+		vitestPassthroughArgs.unshift("--coverage");
+	}
+
 	const maxOldSpaceMb = process.env.VITEST_HEAP_MB ? parseInt(process.env.VITEST_HEAP_MB, 10) : undefined;
 	const hasCoverage = vitestPassthroughArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
 
@@ -675,10 +1099,7 @@ async function runAllFiles() {
 		const coverageTmpBase = path.resolve(projectRoot, ".vitest-coverage-tmp");
 
 		// Clean both dirs from any previous run
-		await Promise.all([
-			fs.rm(blobsDir, { recursive: true, force: true }),
-			fs.rm(coverageTmpBase, { recursive: true, force: true })
-		]);
+		await Promise.all([fs.rm(blobsDir, { recursive: true, force: true }), fs.rm(coverageTmpBase, { recursive: true, force: true })]);
 		await Promise.all([fs.mkdir(blobsDir, { recursive: true }), fs.mkdir(coverageTmpBase, { recursive: true })]);
 
 		const coverageTestFiles = await discoverVitestFiles(testPatterns, baseline);
@@ -695,10 +1116,20 @@ async function runAllFiles() {
 		const extraCoverageArgs = vitestPassthroughArgs.filter((a) => a !== "--coverage" && a.startsWith("--coverage."));
 		const nonCoveragePassthrough = vitestPassthroughArgs.filter((a) => a !== "--coverage" && !a.startsWith("--coverage."));
 
-		console.log(`\n🧪 Running ${coverageTestFiles.length} test files for coverage (blob + merge mode)`);
-		console.log(`⚙️  Workers: ${WORKER_COUNT}`);
-		if (maxOldSpaceMb) console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
-		console.log("");
+		if (!coverageQuiet) {
+			console.log(`\n🧪 Running ${coverageTestFiles.length} test files for coverage (blob + merge mode)`);
+			console.log(`⚙️  Workers: ${WORKER_COUNT}`);
+			if (maxOldSpaceMb) console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
+			console.log("");
+		}
+
+		const coverageProgress = coverageQuiet
+			? createCoverageProgressTracker(coverageTestFiles.length)
+			: {
+					onStart() {},
+					onComplete() {},
+					finish() {}
+				};
 
 		const coverageResults = [];
 		let blobIndex = 0;
@@ -712,9 +1143,13 @@ async function runAllFiles() {
 				coverageFileIndex++;
 				blobIndex++;
 
-				console.log(`\n${"=".repeat(80)}`);
-				console.log(`▶️  ${filePath}`);
-				console.log("=".repeat(80));
+				if (!coverageQuiet) {
+					console.log(`\n${"=".repeat(80)}`);
+					console.log(`▶️  ${filePath}`);
+					console.log("=".repeat(80));
+				}
+
+				coverageProgress.onStart();
 
 				// Each run gets its own temp coverage dir (outside blobsDir) to avoid
 				// concurrent write conflicts and keep --mergeReports happy.
@@ -728,20 +1163,25 @@ async function runAllFiles() {
 					`--outputFile=${blobPath}`
 				];
 
-				const promise = runSingleFile(filePath, maxOldSpaceMb, blobArgs)
+				const promise = runSingleFile(filePath, maxOldSpaceMb, blobArgs, { streamOutput: !coverageQuiet })
 					.then((result) => {
 						coverageResults.push(result);
-						if (result.code === 0) {
-							const durationSec = (result.duration / 1000).toFixed(2);
-							const heapInfo = result.heapMb ? ` | ${result.heapMb} MB heap` : "";
-							console.log(`\n✅ PASSED (${durationSec}s${heapInfo})\n`);
-						} else {
-							const durationSec = (result.duration / 1000).toFixed(2);
-							console.log(`\n❌ FAILED (exit code ${result.code}, ${durationSec}s)\n`);
+						coverageProgress.onComplete(result.code !== 0);
+
+						if (!coverageQuiet) {
+							if (result.code === 0) {
+								const durationSec = (result.duration / 1000).toFixed(2);
+								const heapInfo = result.heapMb ? ` | ${result.heapMb} MB heap` : "";
+								console.log(`\n✅ PASSED (${durationSec}s${heapInfo})\n`);
+							} else {
+								const durationSec = (result.duration / 1000).toFixed(2);
+								console.log(`\n❌ FAILED (exit code ${result.code}, ${durationSec}s)\n`);
+							}
 						}
 						coverageActivePromises.delete(promise);
 					})
 					.catch((err) => {
+						coverageProgress.onComplete(true);
 						console.error(`Error running ${filePath}:`, err);
 						coverageActivePromises.delete(promise);
 					});
@@ -754,6 +1194,8 @@ async function runAllFiles() {
 			}
 		}
 
+		coverageProgress.finish();
+
 		// Verify blobs were produced
 		const blobFiles = (await fs.readdir(blobsDir).catch(() => [])).filter((f) => f.endsWith(".blob"));
 		if (blobFiles.length === 0) {
@@ -762,19 +1204,27 @@ async function runAllFiles() {
 		}
 
 		// Merge all blobs into the final coverage report
-		console.log(`\n${"=".repeat(80)}`);
-		console.log(`📊 Merging ${blobFiles.length} coverage blobs into final report...`);
-		console.log("=".repeat(80));
+		if (!coverageQuiet) {
+			console.log(`\n${"=".repeat(80)}`);
+			console.log(`📊 Merging ${blobFiles.length} coverage blobs into final report...`);
+			console.log("=".repeat(80));
+		}
 
-		const mergeExitCode = await runMergeReports(blobsDir, extraCoverageArgs, maxOldSpaceMb);
+		const mergeExitCode = await runMergeReports(blobsDir, extraCoverageArgs, maxOldSpaceMb, { quietOutput: coverageQuiet });
 
-// Clean up blobs and tmp coverage dirs
-			await Promise.all([
-				fs.rm(blobsDir, { recursive: true, force: true }).catch(() => {}),
-				fs.rm(coverageTmpBase, { recursive: true, force: true }).catch(() => {})
-			]);
+		// Print coverage summary table (reads coverage-summary.json before cleanup)
+		await printCoverageSummary(extraCoverageArgs);
+
+		// Clean up blobs and tmp coverage dirs
+		await Promise.all([
+			fs.rm(blobsDir, { recursive: true, force: true }).catch(() => {}),
+			fs.rm(coverageTmpBase, { recursive: true, force: true }).catch(() => {})
+		]);
 
 		const coverageFailed = coverageResults.filter((r) => r.code !== 0);
+		if (coverageQuiet) {
+			printQuietCoverageFailureDetails(coverageFailed);
+		}
 		process.exit(coverageFailed.length > 0 ? 1 : mergeExitCode);
 	}
 
