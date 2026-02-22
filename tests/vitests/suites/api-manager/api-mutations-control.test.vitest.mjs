@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-21 19:13:35 -08:00 (1771730015)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -311,7 +311,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
 			expect(error.context?.operation).toBe("api.add");
-			expect(error.context?.hint).toBeTruthy();
+			expect(error.hint).toBeTruthy();
 		}
 
 		// Check remove error
@@ -320,7 +320,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
 			expect(error.context?.operation).toBe("api.remove");
-			expect(error.context?.hint).toBeTruthy();
+			expect(error.hint).toBeTruthy();
 		}
 
 		// Check reload error
@@ -329,7 +329,7 @@ describe.each(MATRIX_CONFIGS)("API mutations control - $name", ({ config }) => {
 		} catch (error) {
 			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
 			expect(error.context?.operation).toBe("reload");
-			expect(error.context?.hint).toBeTruthy();
+			expect(error.hint).toBeTruthy();
 		}
 	});
 });

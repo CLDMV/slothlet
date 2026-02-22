@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-20 16:22:47 -08:00 (1771633367)
+ *	@Last modified time: 2026-02-21 19:11:48 -08:00 (1771729908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -633,7 +633,7 @@ export class ApiManager extends ComponentBase {
 		if (this.isWrapperProxy(existingValue) && this.isWrapperProxy(nextValue)) {
 			if (config?.debug?.api) {
 				this.slothlet.debug("api", {
-					key: "DEBUG_MODE_MUTATE_API_VALUE_SYNC_WRAPPERS",
+					key: "DEBUG_MODE_MUTATE_API_VALUE_SYNC_WRAPPERS"
 				});
 			}
 			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleID);
@@ -650,7 +650,7 @@ export class ApiManager extends ComponentBase {
 			if (nextHasKeys) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
-						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_INTO_WRAPPER",
+						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_INTO_WRAPPER"
 					});
 					this.slothlet.debug("api", {
 						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_KEYS",
@@ -674,7 +674,7 @@ export class ApiManager extends ComponentBase {
 			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
-						key: "DEBUG_MODE_MUTATE_API_VALUE_SETIMPL_FALLBACK",
+						key: "DEBUG_MODE_MUTATE_API_VALUE_SETIMPL_FALLBACK"
 					});
 				}
 				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue);
