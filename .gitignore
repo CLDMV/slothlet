@@ -1,5 +1,6 @@
 # custom
 .vitest-coverage-blobs/
+.vitest-coverage-tmp/
 trash/
 other_drivers/
 dist
