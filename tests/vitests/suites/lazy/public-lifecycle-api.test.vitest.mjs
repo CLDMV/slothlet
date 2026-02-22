@@ -45,7 +45,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 			});
 
 			// External code subscribing via public API
-			api.slothlet.lifecycle.subscribe("materialized:complete", (data) => {
+			api.slothlet.lifecycle.on("materialized:complete", (data) => {
 				eventReceived = true;
 				eventData = data;
 			});
@@ -65,13 +65,13 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 				dir: TEST_DIRS.API_TEST
 			});
 
-			// Verify public API structure (standard EventEmitter pattern)
+			// Verify public API structure (on/off only — emit/subscribe are internal)
 			expect(api.slothlet.lifecycle).toBeDefined();
 			expect(typeof api.slothlet.lifecycle.on).toBe("function");
 			expect(typeof api.slothlet.lifecycle.off).toBe("function");
-			expect(typeof api.slothlet.lifecycle.subscribe).toBe("function");
-			expect(typeof api.slothlet.lifecycle.unsubscribe).toBe("function");
-			expect(typeof api.slothlet.lifecycle.emit).toBe("function");
+			expect(api.slothlet.lifecycle.emit).toBeUndefined();
+			expect(api.slothlet.lifecycle.subscribe).toBeUndefined();
+			expect(api.slothlet.lifecycle.unsubscribe).toBeUndefined();
 		});
 
 		it("should allow unsubscribing using standard off() method", async () => {
@@ -109,7 +109,7 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 
 			// This is how external code should subscribe (no internal access)
 			let publicAPIWorks = false;
-			api.slothlet.lifecycle.subscribe("materialized:complete", () => {
+			api.slothlet.lifecycle.on("materialized:complete", () => {
 				publicAPIWorks = true;
 			});
 

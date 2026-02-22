@@ -119,7 +119,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 			});
 
 			// Subscribe to lifecycle event via public API
-			api.slothlet.lifecycle.subscribe("materialized:complete", (data) => {
+			api.slothlet.lifecycle.on("materialized:complete", (data) => {
 				eventEmitted = true;
 				eventData = data;
 			});
@@ -145,7 +145,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				tracking: { materialization: false }
 			});
 
-			api.slothlet.lifecycle.subscribe("materialized:complete", () => {
+			api.slothlet.lifecycle.on("materialized:complete", () => {
 				eventEmitted = true;
 			});
 
@@ -173,7 +173,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				tracking: { materialization: true }
 			});
 
-			api.slothlet.lifecycle.subscribe("materialized:complete", () => {
+			api.slothlet.lifecycle.on("materialized:complete", () => {
 				eventCount++;
 			});
 
