@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/database/pool.mjs
+ *	@Date: 2026-02-17T02:53:10-08:00 (1771325590)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 15:36:30 -08:00 (1771716990)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * Simulates a database connection pool for testing EventEmitter cleanup.
  * Creates REAL Node.js EventEmitters within the slothlet API context.
  * These should be tracked and cleaned up when slothlet shuts down.

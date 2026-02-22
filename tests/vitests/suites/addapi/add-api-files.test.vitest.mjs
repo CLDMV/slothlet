@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/addapi/add-api-files.test.vitest.mjs
+ *	@Date: 2026-02-13T16:27:51-08:00 (1771028871)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 15:36:26 -08:00 (1771716986)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Test file-based api.add() functionality
  * @module tests/vitests/suites/addapi/add-api-files
  */

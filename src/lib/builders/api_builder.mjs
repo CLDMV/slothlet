@@ -223,7 +223,6 @@ export class ApiBuilder extends ComponentBase {
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
 							operation: "api.add",
-							hint: "API mutation 'add' is disabled by configuration. Set api.mutations.add: true to enable.",
 							validationError: true
 						});
 					}
@@ -256,7 +255,6 @@ export class ApiBuilder extends ComponentBase {
 					if (!config.api?.mutations?.remove) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
 							operation: "api.remove",
-							hint: "API mutation 'remove' is disabled by configuration. Set api.mutations.remove: true to enable.",
 							validationError: true
 						});
 					}
@@ -310,7 +308,6 @@ export class ApiBuilder extends ComponentBase {
 					if (!config.api?.mutations?.reload) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
 							operation: "api.reload",
-							hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
 							validationError: true
 						});
 					}
@@ -344,7 +341,6 @@ export class ApiBuilder extends ComponentBase {
 						if (!current || (typeof current !== "object" && typeof current !== "function")) {
 							throw new slothlet.SlothletError("INVALID_API_PATH", {
 								apiPath: pathOrModuleId,
-								hint: `API path '${pathOrModuleId}' does not exist`,
 								validationError: true
 							});
 						}
@@ -354,7 +350,6 @@ export class ApiBuilder extends ComponentBase {
 					if (current === undefined) {
 						throw new slothlet.SlothletError("INVALID_API_PATH", {
 							apiPath: pathOrModuleId,
-							hint: `API path '${pathOrModuleId}' does not exist`,
 							validationError: true
 						});
 					}
@@ -565,9 +560,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				on: function slothlet_hook_on(typePattern, handler, options = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
-							hint: "Hook manager not initialized"
-						});
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					return slothlet.handlers.hookManager.on(typePattern, handler, options);
 				},
@@ -587,9 +580,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				remove: function slothlet_hook_remove(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
-							hint: "Hook manager not initialized"
-						});
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					return slothlet.handlers.hookManager.remove(filter);
 				},
@@ -616,7 +607,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				off: function slothlet_hook_off(idOrFilter) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { message: "Hook manager not initialized" });
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					// If string, treat as ID
 					const filter = typeof idOrFilter === "string" ? { id: idOrFilter } : idOrFilter;
@@ -638,9 +629,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				enable: function slothlet_hook_enable(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
-							hint: "Hook manager not initialized"
-						});
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					return slothlet.handlers.hookManager.enable(filter);
 				},
@@ -660,9 +649,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				disable: function slothlet_hook_disable(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
-							hint: "Hook manager not initialized"
-						});
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					return slothlet.handlers.hookManager.disable(filter);
 				},
@@ -683,9 +670,7 @@ export class ApiBuilder extends ComponentBase {
 				 */
 				list: function slothlet_hook_list(filter = {}) {
 					if (!slothlet.handlers?.hookManager) {
-						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", {
-							hint: "Hook manager not initialized"
-						});
+						throw new slothlet.SlothletError("HOOKS_NOT_INITIALIZED", { validationError: true });
 					}
 					return slothlet.handlers.hookManager.list(filter);
 				}
@@ -714,7 +699,8 @@ export class ApiBuilder extends ComponentBase {
 				setGlobal: function slothlet_metadata_setGlobal(key, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							hint: "Metadata handler not initialized - this is a bug"
+							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							validationError: true
 						});
 					}
 					return slothlet.handlers.metadata.setGlobalMetadata(key, value);
@@ -747,8 +733,8 @@ export class ApiBuilder extends ComponentBase {
 				set: function slothlet_metadata_set(fn, key, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							hint: "Metadata handler not initialized - this is a bug",
-							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers) : "handlers undefined"
+							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							validationError: true
 						});
 					}
 					return slothlet.handlers.metadata.setUserMetadata(fn, key, value);
@@ -814,7 +800,8 @@ export class ApiBuilder extends ComponentBase {
 				setFor: function slothlet_metadata_setFor(pathOrModuleId, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							hint: "Metadata handler not initialized - this is a bug"
+							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							validationError: true
 						});
 					}
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
@@ -876,7 +863,6 @@ export class ApiBuilder extends ComponentBase {
 				if (!config.api?.mutations?.reload) {
 					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
 						operation: "reload",
-						hint: "API mutation 'reload' is disabled by configuration. Set api.mutations.reload: true to enable.",
 						validationError: true
 					});
 				}
@@ -1224,7 +1210,7 @@ export class ApiBuilder extends ComponentBase {
 				// Get current context manager
 				const contextManager = slothlet.contextManager;
 				if (!contextManager) {
-					throw new slothlet.SlothletError("NO_CONTEXT_MANAGER", {}, null, { validationError: true });
+					throw new slothlet.SlothletError("NO_CONTEXT_MANAGER", { validationError: true });
 				}
 
 				// Helper for deep merge
@@ -1293,7 +1279,11 @@ export class ApiBuilder extends ComponentBase {
 					}
 
 					if (!currentStore) {
-						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
+						throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
+							instanceID: slothlet.instanceID,
+							availableInstances: [...contextManager.instances.keys()].join(", ") || "none",
+							validationError: true
+						});
 					}
 
 					// Create merged context with deep clone to prevent mutation leakage
@@ -1360,7 +1350,11 @@ export class ApiBuilder extends ComponentBase {
 					if (!currentStore) {
 						const baseStore = contextManager.instances.get(slothlet.instanceID);
 						if (!baseStore) {
-							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", { instanceID: slothlet.instanceID });
+							throw new slothlet.SlothletError("CONTEXT_NOT_FOUND", {
+								instanceID: slothlet.instanceID,
+								availableInstances: [...contextManager.instances.keys()].join(", ") || "none",
+								validationError: true
+							});
 						}
 						currentStore = baseStore;
 					}
@@ -1404,7 +1398,8 @@ export class ApiBuilder extends ComponentBase {
 					}
 				}
 
-				throw new slothlet.SlothletError("UNSUPPORTED_CONTEXT_MANAGER", { manager: contextManager.constructor.name }, null, {
+				throw new slothlet.SlothletError("UNSUPPORTED_CONTEXT_MANAGER", {
+					manager: contextManager.constructor.name,
 					validationError: true
 				});
 			}

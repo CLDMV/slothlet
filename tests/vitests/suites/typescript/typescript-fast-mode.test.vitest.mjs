@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/typescript/typescript-fast-mode.test.vitest.mjs
+ *	@Date: 2026-02-14T15:25:01-08:00 (1771111501)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 15:36:29 -08:00 (1771716989)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview TypeScript Fast Mode Tests
  * Tests TypeScript file loading and transformation with esbuild
  */

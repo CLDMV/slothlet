@@ -138,7 +138,8 @@ export class HookManager extends ComponentBase {
 		// Validate handler
 		if (typeof handler !== "function") {
 			throw new this.slothlet.SlothletError("INVALID_HOOK_HANDLER", {
-				receivedType: typeof handler
+				receivedType: typeof handler,
+				validationError: true
 			});
 		}
 
@@ -147,7 +148,7 @@ export class HookManager extends ComponentBase {
 
 		// Check for duplicate ID
 		if (this.#byId.has(id)) {
-			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id });
+			throw new this.slothlet.SlothletError("DUPLICATE_HOOK_ID", { id, validationError: true });
 		}
 
 		// Get subset (default: primary)

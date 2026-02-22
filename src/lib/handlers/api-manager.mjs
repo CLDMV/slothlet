@@ -44,6 +44,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { translate } from "@cldmv/slothlet/i18n";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
@@ -124,7 +125,7 @@ export class ApiManager extends ComponentBase {
 						apiPath,
 						segment: apiPath[i],
 						index: i,
-						reason: "array elements must be strings",
+						reason: translate("API_PATH_REASON_ARRAY_ELEMENTS"),
 						validationError: true
 					});
 				}
@@ -133,7 +134,7 @@ export class ApiManager extends ComponentBase {
 						apiPath,
 						segment: apiPath[i],
 						index: i,
-						reason: "array contains empty string segments",
+						reason: translate("API_PATH_REASON_ARRAY_EMPTY_SEGMENTS"),
 						validationError: true
 					});
 				}
@@ -143,7 +144,7 @@ export class ApiManager extends ComponentBase {
 			if (apiPath[0] === "slothlet" || (apiPath.length === 1 && (apiPath[0] === "shutdown" || apiPath[0] === "destroy"))) {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath,
-					reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
+					reason: translate("API_PATH_REASON_RESERVED_NAME"),
 					index: undefined,
 					segment: undefined,
 					validationError: true
@@ -156,7 +157,7 @@ export class ApiManager extends ComponentBase {
 		if (typeof apiPath !== "string") {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
-				reason: "must be a string, array of strings, empty string (root), or null/undefined (root)",
+				reason: translate("API_PATH_REASON_INVALID_TYPE"),
 				index: undefined,
 				segment: undefined,
 				validationError: true
@@ -174,7 +175,7 @@ export class ApiManager extends ComponentBase {
 		if (parts.length === 0 || parts.some((part) => part.trim() === "")) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
-				reason: "contains empty path segments",
+				reason: translate("API_PATH_REASON_EMPTY_SEGMENTS"),
 				index: undefined,
 				segment: undefined,
 				validationError: true
@@ -184,7 +185,7 @@ export class ApiManager extends ComponentBase {
 		if (parts[0] === "slothlet" || normalized === "shutdown" || normalized === "destroy") {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: normalized,
-				reason: "conflicts with reserved names (slothlet, shutdown, destroy)",
+				reason: translate("API_PATH_REASON_RESERVED_NAME"),
 				index: undefined,
 				segment: undefined,
 				validationError: true
@@ -366,7 +367,7 @@ export class ApiManager extends ComponentBase {
 			}
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath: parts.slice(0, i + 1).join("."),
-				reason: "path segment does not exist or is not traversable",
+				reason: translate("API_PATH_REASON_NOT_TRAVERSABLE"),
 				index: undefined,
 				segment: undefined,
 				validationError: true
@@ -751,7 +752,7 @@ export class ApiManager extends ComponentBase {
 			if (collisionMode === "error") {
 				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 					apiPath: parts.join("."),
-					reason: "path already exists and collision mode is 'error'",
+					reason: translate("API_PATH_REASON_COLLISION_ERROR"),
 					index: undefined,
 					segment: undefined,
 					validationError: true
@@ -1093,7 +1094,6 @@ export class ApiManager extends ComponentBase {
 		if (!isDirectory && !isFile) {
 			throw new this.SlothletError("INVALID_CONFIG_PATH_TYPE", {
 				path: resolvedPath,
-				message: "Path must be a directory or a file",
 				validationError: true
 			});
 		}
@@ -1105,7 +1105,6 @@ export class ApiManager extends ComponentBase {
 				throw new this.SlothletError("INVALID_CONFIG_FILE_TYPE", {
 					path: resolvedPath,
 					extension: ext,
-					message: "File must have .mjs, .cjs, or .js extension",
 					validationError: true
 				});
 			}
@@ -1737,7 +1736,7 @@ export class ApiManager extends ComponentBase {
 		if (!apiPath) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
-				reason: "apiPath is required for removeApi operation",
+				reason: translate("API_PATH_REASON_REQUIRED"),
 				index: undefined,
 				segment: undefined,
 				validationError: true
