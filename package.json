@@ -130,6 +130,7 @@
 		"precommit": "node tools/precommit-validation.mjs",
 		"publish:manual": "npm publish --access public",
 		"debug": "node tests/debug-slothlet.mjs",
+		"i18n:check": "node tools/check-i18n-languages.mjs",
 		"baseline": "npm run vitest -- --baseline",
 		"vitest": "node tests/vitests/run-all-vitest.mjs",
 		"test": "node tests/test-conditional.mjs",
