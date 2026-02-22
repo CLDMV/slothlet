@@ -105,8 +105,8 @@ export class SlothletError extends Error {
 		let output = `\n[${this.code}] ${this.name}\n`;
 
 		// Show hint prominently if available
-		if (this.context.hint) {
-			output += `\n💡 ${this.context.hint}\n`;
+		if (this.hint) {
+			output += `\n💡 ${this.hint}\n`;
 		}
 
 		// Add only critical details

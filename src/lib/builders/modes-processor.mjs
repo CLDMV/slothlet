@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-20 16:22:47 -08:00 (1771633367)
+ *	@Last modified time: 2026-02-21 19:11:48 -08:00 (1771729908)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1178,11 +1178,11 @@ export class ModesProcessor extends ComponentBase {
 
 					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
 					if (config.debug?.modes) {
-					this.slothlet.debug("modes", {
-						key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
-						apiPath,
-						fileCount: subDir.children.files.length
-					});
+						this.slothlet.debug("modes", {
+							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
+							apiPath,
+							fileCount: subDir.children.files.length
+						});
 					}
 
 					// CRITICAL: File-folder collision within same module directory.
@@ -1341,11 +1341,11 @@ export class ModesProcessor extends ComponentBase {
 		 */
 		const lazy_materializeFunc = this.slothlet.helpers.modesUtils.createNamedMaterializeFunc(apiPath, async () => {
 			if (config.debug?.modes) {
-			this.slothlet.debug("modes", {
-				key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
-				dir: dir.name,
-				fileCount: dir.children.files?.length || 0
-			});
+				this.slothlet.debug("modes", {
+					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
+					dir: dir.name,
+					fileCount: dir.children.files?.length || 0
+				});
 			}
 			const categoryName = this.slothlet.helpers.sanitize.sanitizePropertyName(dir.name);
 			const materialized = {};
@@ -1522,11 +1522,11 @@ export class ModesProcessor extends ComponentBase {
 				collisionMode // Pass collision mode to child wrappers
 			);
 			if (config.debug?.modes) {
-			this.slothlet.debug("modes", {
-				key: "DEBUG_MODE_MATERIALIZE_FUNCTION_RETURNING_IMPL",
-				dir: dir.name,
-				keys: Object.keys(materialized)
-			});
+				this.slothlet.debug("modes", {
+					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_RETURNING_IMPL",
+					dir: dir.name,
+					keys: Object.keys(materialized)
+				});
 			}
 
 			// Debug for math folder

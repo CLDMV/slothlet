@@ -1,7 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/check-i18n-languages.mjs
- *	@Date: 2026-02-22
+ *	@Date: 2026-02-21T17:52:07-08:00 (1771725127)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-21 19:14:47 -08:00 (1771730087)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import { readdirSync, readFileSync } from "fs";

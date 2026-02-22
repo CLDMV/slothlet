@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/fix-headers.mjs
@@ -7,10 +6,11 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04T16:53:27-08:00 (1770252807)
+ *	@Last modified time: 2026-02-21 19:15:16 -08:00 (1771730116)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
+
 /**
  * @fileoverview Fix file headers across the codebase
  * - Validates header format against expected standard
