@@ -26,6 +26,7 @@
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { getLanguage, initI18n, setLanguage, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
  * Resolve a pathOrModuleId string to a dot-notation apiPath.
@@ -86,7 +87,7 @@ export class ApiBuilder extends ComponentBase {
 	 */
 	async buildFinalAPI(userApi) {
 		this.slothlet.debug("api", {
-			message: "buildFinalAPI called",
+			key: "DEBUG_MODE_BUILD_FINAL_API_CALLED",
 			diagnostics: this.____config.diagnostics,
 			userApiKeys: Object.keys(userApi)
 		});
@@ -111,7 +112,7 @@ export class ApiBuilder extends ComponentBase {
 		const slothletNamespace = await this.createSlothletNamespace(userApi);
 
 		this.slothlet.debug("api", {
-			message: "Slothlet namespace created",
+			key: "DEBUG_MODE_SLOTHLET_NAMESPACE_CREATED",
 			namespaceKeys: Object.keys(slothletNamespace),
 			hasDiag: !!slothletNamespace.diag
 		});
@@ -127,7 +128,7 @@ export class ApiBuilder extends ComponentBase {
 		});
 
 		this.slothlet.debug("api", {
-			message: "Built-ins attached",
+			key: "DEBUG_MODE_BUILT_INS_ATTACHED",
 			userApiKeys: Object.keys(userApi),
 			hasSlothlet: !!userApi.slothlet,
 			hasDiag: !!userApi.slothlet?.diag
@@ -174,6 +175,31 @@ export class ApiBuilder extends ComponentBase {
 		}
 
 		const namespace = {
+			/**
+			 * i18n translation helpers.
+			 *
+			 * @description
+			 * Dev-facing convenience alias for the process-global Slothlet translation system.
+			 * The i18n state is shared across all Slothlet instances in the current Node.js
+			 * process (not per-instance). Prefer this for ergonomic access when you already
+			 * have an API instance.
+			 *
+			 * @type {{
+			 *  setLanguage: (lang: string) => void,
+			 *  getLanguage: () => string,
+			 *  translate: (errorCode: string, params?: object) => string,
+			 *  t: (errorCode: string, params?: object) => string,
+			 *  initI18n: (options?: { language?: string }) => void
+			 * }}
+			 */
+			i18n: {
+				setLanguage,
+				getLanguage,
+				translate,
+				t,
+				initI18n
+			},
+
 			/**
 			 * Slothlet version from package.json
 			 * @type {string}

@@ -41,6 +41,9 @@ const api = await slothlet({
 	tracking: false,
 	backgroundMaterialize: false,
 
+	// i18n (dev-facing; process-global)
+	i18n: { language: "en-us" },
+
 	// TypeScript
 	typescript: false      // see MODULE-STRUCTURE.md
 });

@@ -60,7 +60,7 @@ export async function buildLazyAPI({
 	fileFilter = null
 }) {
 	slothlet.debug("modes", {
-		message: "buildLazyAPI called",
+		key: "DEBUG_MODE_BUILD_LAZY_API_CALLED",
 		apiPathPrefix,
 		collisionMode,
 		collisionContext
@@ -124,7 +124,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 	// Create materialization function (POC pattern: accepts setter for synchronous impl updates)
 	const materializeFunc = createNamedMaterializeFunc(apiPath, async (lazy_setImpl) => {
 		slothlet.debug("modes", {
-			message: "Lazy materializeFunc started",
+			key: "DEBUG_MODE_LAZY_MATERIALIZEFUNC_STARTED",
 			apiPath,
 			dirName: dir.name
 		});
@@ -136,7 +136,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 		for (const file of dir.children.files) {
 			try {
 				slothlet.debug("modes", {
-					message: "Loading file",
+					key: "DEBUG_MODE_LOADING_FILE",
 					fileName: file.name,
 					filePath: file.path
 				});
@@ -144,12 +144,12 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 				const effectiveModuleId = moduleIDOverride || file.moduleID;
 				const mod = await slothlet.processors.loader.loadModule(file.path, slothlet.instanceID, effectiveModuleId);
 				slothlet.debug("modes", {
-					message: "File loaded, extracting exports",
+					key: "DEBUG_MODE_FILE_LOADED_EXTRACTING_EXPORTS",
 					fileName: file.name
 				});
 				const exports = slothlet.processors.loader.extractExports(mod);
 				slothlet.debug("modes", {
-					message: "Exports extracted",
+					key: "DEBUG_MODE_EXPORTS_EXTRACTED",
 					fileName: file.name,
 					exportKeys: Object.keys(exports)
 				});
@@ -171,7 +171,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 
 				// Merge exports into materialized object
 				slothlet.debug("modes", {
-					message: "Merging exports",
+					key: "DEBUG_MODE_MERGING_EXPORTS",
 					fileName: file.name
 				});
 				slothlet.processors.loader.mergeExportsIntoAPI(materialized, exports, moduleName);
@@ -205,13 +205,13 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 					}
 				}
 				slothlet.debug("modes", {
-					message: "Exports merged",
+					key: "DEBUG_MODE_EXPORTS_MERGED",
 					fileName: file.name,
 					materializedKeys: Object.keys(materialized)
 				});
 			} catch (error) {
 				slothlet.debug("modes", {
-					message: "Error loading file",
+					key: "DEBUG_MODE_ERROR_LOADING_FILE",
 					fileName: file.name,
 					error: error.message
 				});
@@ -234,14 +234,14 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 		});
 
 		slothlet.debug("modes", {
-			message: "Lazy materializeFunc complete",
+			key: "DEBUG_MODE_LAZY_MATERIALIZEFUNC_COMPLETE",
 			apiPath,
 			keys: Object.keys(materialized)
 		});
 		// Log what's in materialized for "math" in collision scenarios
 		if (apiPath === "math") {
 			slothlet.debug("modes", {
-				message: "MATERIALIZE-COMPLETE: apiPath=math materialized keys",
+				key: "DEBUG_MODE_MATERIALIZE_COMPLETE_MATH_KEYS",
 				keys: Object.keys(materialized).join(", ")
 			});
 		}
@@ -271,7 +271,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 	if (collisionModeOverride) {
 		wrapper.____slothletInternal.state.collisionMode = collisionModeOverride;
 		slothlet.debug("modes", {
-			message: "LAZY-CREATE: Set collision mode from api.add config",
+			key: "DEBUG_MODE_LAZY_CREATE_SET_COLLISION",
 			apiPath,
 			collisionMode: collisionModeOverride
 		});
@@ -280,7 +280,7 @@ function createLazyWrapper(dir, apiPath, slothlet, moduleIDOverride, collisionMo
 	// Store directory structure for later access (e.g., replace mode pre-population)
 	wrapper._directoryStructure = dir;
 	slothlet.debug("modes", {
-		message: "LAZY-CREATE: stored _directoryStructure",
+		key: "DEBUG_MODE_LAZY_CREATE_STORED_DIR_STRUCTURE",
 		apiPath,
 		fileCount: dir?.children?.files?.length || 0
 	});

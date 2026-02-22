@@ -325,6 +325,14 @@ export class Config extends ComponentBase {
 			trackingConfig.materialization = config.tracking.materialization === true;
 		}
 
+		// Parse i18n configuration (dev-facing; process-global)
+		let i18nConfig = null;
+		if (config.i18n && typeof config.i18n === "object") {
+			i18nConfig = {
+				language: typeof config.i18n.language === "string" ? config.i18n.language : undefined
+			};
+		}
+
 		// Build normalized config
 		return {
 			...config,
@@ -334,6 +342,7 @@ export class Config extends ComponentBase {
 			apiDepth: config.apiDepth !== undefined ? config.apiDepth : Infinity,
 			reference: config.reference || null,
 			context: config.context || null,
+			i18n: i18nConfig,
 			debug: this.normalizeDebug(config.debug),
 			diagnostics: config.diagnostics === true,
 			hook: hookConfig,

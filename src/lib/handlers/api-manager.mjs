@@ -412,11 +412,11 @@ export class ApiManager extends ComponentBase {
 	async syncWrapper(existingProxy, nextProxy, config, collisionMode = "replace", moduleID = null) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "syncWrapper entry - existingProxy",
+				key: "DEBUG_MODE_SYNC_WRAPPER_ENTRY_EXISTING",
 				apiPath: resolveWrapper(existingProxy)?.apiPath
 			});
 			this.slothlet.debug("api", {
-				message: "syncWrapper entry - nextProxy",
+				key: "DEBUG_MODE_SYNC_WRAPPER_ENTRY_NEXT",
 				apiPath: resolveWrapper(nextProxy)?.apiPath
 			});
 		}
@@ -430,11 +430,11 @@ export class ApiManager extends ComponentBase {
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "syncWrapper existingWrapper",
+				key: "DEBUG_MODE_SYNC_WRAPPER_EXISTING",
 				apiPath: existingWrapper.apiPath
 			});
 			this.slothlet.debug("api", {
-				message: "syncWrapper nextWrapper",
+				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT",
 				apiPath: nextWrapper.apiPath
 			});
 		}
@@ -454,16 +454,16 @@ export class ApiManager extends ComponentBase {
 
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "syncWrapper before merge",
+				key: "DEBUG_MODE_SYNC_WRAPPER_BEFORE_MERGE",
 				existingCacheSize: existingChildKeys.length,
 				nextCacheSize: nextChildKeys.length
 			});
 			this.slothlet.debug("api", {
-				message: "syncWrapper next wrapper impl keys",
+				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_IMPL_KEYS",
 				implKeys: Object.keys(nextWrapper.____slothletInternal.impl || {})
 			});
 			this.slothlet.debug("api", {
-				message: "syncWrapper next wrapper childCache keys",
+				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_CHILDCACHE_KEYS",
 				childCacheKeys: nextChildKeys
 			});
 		}
@@ -606,21 +606,21 @@ export class ApiManager extends ComponentBase {
 	async mutateApiValue(existingValue, nextValue, options, config) {
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "mutateApiValue called",
+				key: "DEBUG_MODE_MUTATE_API_VALUE_CALLED",
 				existingType: typeof existingValue,
 				nextType: typeof nextValue
 			});
 			this.slothlet.debug("api", {
-				message: "mutateApiValue wrapper status",
+				key: "DEBUG_MODE_MUTATE_API_VALUE_WRAPPER_STATUS",
 				existingIsWrapper: this.isWrapperProxy(existingValue),
 				nextIsWrapper: this.isWrapperProxy(nextValue)
 			});
 			this.slothlet.debug("api", {
-				message: "mutateApiValue nextValue",
+				key: "DEBUG_MODE_MUTATE_API_VALUE_NEXT_VALUE",
 				nextValue
 			});
 			this.slothlet.debug("api", {
-				message: "mutateApiValue nextValue keys",
+				key: "DEBUG_MODE_MUTATE_API_VALUE_NEXT_VALUE_KEYS",
 				nextValueKeys: nextValue ? Object.keys(nextValue) : []
 			});
 		}
@@ -633,7 +633,7 @@ export class ApiManager extends ComponentBase {
 		if (this.isWrapperProxy(existingValue) && this.isWrapperProxy(nextValue)) {
 			if (config?.debug?.api) {
 				this.slothlet.debug("api", {
-					message: "mutateApiValue - both are wrappers, calling syncWrapper"
+					key: "DEBUG_MODE_MUTATE_API_VALUE_SYNC_WRAPPERS",
 				});
 			}
 			await this.syncWrapper(existingValue, nextValue, config, options.collisionMode, options.moduleID);
@@ -650,10 +650,10 @@ export class ApiManager extends ComponentBase {
 			if (nextHasKeys) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
-						message: "mutateApiValue - merging properties into existing wrapper"
+						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_INTO_WRAPPER",
 					});
 					this.slothlet.debug("api", {
-						message: "mutateApiValue nextValue keys to merge",
+						key: "DEBUG_MODE_MUTATE_API_VALUE_MERGE_KEYS",
 						keys: Object.keys(nextValue)
 					});
 				}
@@ -674,7 +674,7 @@ export class ApiManager extends ComponentBase {
 			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
-						message: "mutateApiValue - using ___setImpl fallback"
+						key: "DEBUG_MODE_MUTATE_API_VALUE_SETIMPL_FALLBACK",
 					});
 				}
 				existingValueRaw.___setImpl(resolveWrapper(nextValue)?.__impl ?? nextValue);
@@ -739,7 +739,7 @@ export class ApiManager extends ComponentBase {
 		const moduleID = options.moduleID; // Extract moduleID for lifecycle events
 
 		this.slothlet.debug("api", {
-			message: "setValueAtPath",
+			key: "DEBUG_MODE_SET_VALUE_AT_PATH",
 			finalKey,
 			existingType: typeof existing,
 			valueType: typeof value,
@@ -761,7 +761,7 @@ export class ApiManager extends ComponentBase {
 
 			if (collisionMode === "skip") {
 				this.slothlet.debug("api", {
-					message: "setValueAtPath - skipping collision",
+					key: "DEBUG_MODE_SET_VALUE_AT_PATH_SKIP_COLLISION",
 					path: parts.join("."),
 					mode: "skip"
 				});
@@ -783,7 +783,7 @@ export class ApiManager extends ComponentBase {
 
 				if (existingIsObject && valueIsObject) {
 					this.slothlet.debug("api", {
-						message: "setValueAtPath - replacing with merge (preserves wrapper)",
+						key: "DEBUG_MODE_SET_VALUE_AT_PATH_REPLACE_MERGE",
 						path: parts.join("."),
 						mode: "replace"
 					});
@@ -808,7 +808,7 @@ export class ApiManager extends ComponentBase {
 
 				if (existingIsObject && valueIsObject) {
 					this.slothlet.debug("api", {
-						message: "setValueAtPath - merging properties",
+						key: "DEBUG_MODE_SET_VALUE_AT_PATH_MERGE_PROPS",
 						mode: collisionMode
 					});
 					await this.mutateApiValue(existing, value, { removeMissing: false, allowOverwrite: true, collisionMode }, this.____config);
@@ -827,7 +827,7 @@ export class ApiManager extends ComponentBase {
 
 		// No collision - simple assignment
 		this.slothlet.debug("api", {
-			message: "setValueAtPath - no collision, assigning",
+			key: "DEBUG_MODE_SET_VALUE_AT_PATH_ASSIGN",
 			finalKey
 		});
 		parent[finalKey] = value;
@@ -1175,7 +1175,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		this.slothlet.debug("api", {
-			message: "addApiComponent buildAPI return structure",
+			key: "DEBUG_MODE_ADD_API_COMPONENT_BUILD_RETURN",
 			topLevelKeys: Object.keys(newApi),
 			dottedKeys: Object.keys(newApi).filter((k) => k.includes(".")),
 			wrappers: Object.keys(newApi)
@@ -1264,7 +1264,7 @@ export class ApiManager extends ComponentBase {
 						}
 						apiToMerge = hoisted;
 						this.slothlet.debug("api", {
-							message: "Rule 13 C34: AddApi path deduplication - hoisted duplicate key",
+							key: "DEBUG_MODE_RULE_13_DEDUP_HOISTED_KEY",
 							lastPart,
 							newKeys: Object.keys(apiToMerge)
 						});
@@ -1275,7 +1275,7 @@ export class ApiManager extends ComponentBase {
 
 		if (this.____config.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "addApiComponent apiToMerge keys",
+				key: "DEBUG_MODE_ADD_API_COMPONENT_MERGE_KEYS",
 				keys: Object.keys(apiToMerge),
 				isRootLevel: parts.length === 0
 			});
@@ -1420,7 +1420,8 @@ export class ApiManager extends ComponentBase {
 			if (pendingMaterializations.length > 0) {
 				if (this.____config.debug?.api) {
 					this.slothlet.debug("api", {
-						message: `Awaiting ${pendingMaterializations.length} pending materialization(s) before completing add`,
+						key: "DEBUG_MODE_AWAITING_PENDING_MATERIALIZATIONS",
+						count: pendingMaterializations.length,
 						apiPath: normalizedPath
 					});
 				}
@@ -1713,7 +1714,7 @@ export class ApiManager extends ComponentBase {
 				const deleted = this.slothlet.handlers.apiCacheManager.delete(moduleIDKey);
 				if (deleted) {
 					this.slothlet.debug("cache", {
-						message: "Cache deleted for removed module",
+						key: "DEBUG_MODE_CACHE_DELETED_MODULE_REMOVED",
 						moduleID: moduleIDKey
 					});
 				}
@@ -1906,7 +1907,7 @@ export class ApiManager extends ComponentBase {
 		const oldEntry = cacheManager.get(moduleID);
 
 		this.slothlet.debug("reload", {
-			message: "Reloading module by ID",
+			key: "DEBUG_MODE_RELOADING_MODULE_BY_ID",
 			moduleID,
 			endpoint: oldEntry.endpoint,
 			folderPath: oldEntry.folderPath
@@ -1924,7 +1925,7 @@ export class ApiManager extends ComponentBase {
 
 		// DEBUG: Log freshApi keys before restore
 		this.slothlet.debug("reload", {
-			message: "Fresh API keys before restore",
+			key: "DEBUG_MODE_FRESH_API_KEYS_BEFORE_RESTORE",
 			moduleID,
 			endpoint: oldEntry.endpoint,
 			freshApiKeys: Object.keys(freshApi || {})
@@ -1935,14 +1936,14 @@ export class ApiManager extends ComponentBase {
 
 		// DEBUG: Check if freshApi was mutated
 		this.slothlet.debug("reload", {
-			message: "Fresh API keys after restore",
+			key: "DEBUG_MODE_FRESH_API_KEYS_AFTER_RESTORE",
 			moduleID,
 			endpoint: oldEntry.endpoint,
 			freshApiKeys: Object.keys(freshApi || {})
 		});
 
 		this.slothlet.debug("reload", {
-			message: "Module reload complete",
+			key: "DEBUG_MODE_MODULE_RELOAD_COMPLETE",
 			moduleID
 		});
 	}
@@ -1964,7 +1965,7 @@ export class ApiManager extends ComponentBase {
 	 */
 	async _reloadByApiPath(apiPath, options = {}) {
 		this.slothlet.debug("reload", {
-			message: "Reloading by API path",
+			key: "DEBUG_MODE_RELOADING_BY_API_PATH",
 			apiPath
 		});
 
@@ -1973,7 +1974,7 @@ export class ApiManager extends ComponentBase {
 
 		if (moduleIDsToReload.length === 0) {
 			this.slothlet.debug("reload", {
-				message: "No caches found for path, attempting base restore",
+				key: "DEBUG_MODE_NO_CACHES_ATTEMPTING_RESTORE",
 				apiPath
 			});
 			// Fallback: try restoring from existing data for non-base paths
@@ -2033,7 +2034,7 @@ export class ApiManager extends ComponentBase {
 		}
 
 		this.slothlet.debug("reload", {
-			message: "API path reload complete",
+			key: "DEBUG_MODE_API_PATH_RELOAD_COMPLETE",
 			apiPath,
 			reloadedModules: moduleIDsToReload.length,
 			loadOrder: moduleIDsToReload
@@ -2262,7 +2263,7 @@ export class ApiManager extends ComponentBase {
 
 					// DEBUG: Trace lazy detection for every root key
 					this.slothlet.debug("reload", {
-						message: "RESTORE-ROOT-KEY-INSPECT",
+						key: "DEBUG_MODE_RESTORE_ROOT_KEY_INSPECT",
 						key,
 						hasFreshWrapper: !!freshWrapper,
 						freshMode: freshWrapper?.____slothletInternal.mode,
@@ -2283,7 +2284,7 @@ export class ApiManager extends ComponentBase {
 						this._restoreCustomProperties(existingAtKey, customProps);
 
 						this.slothlet.debug("reload", {
-							message: "Root key reset to lazy via ___resetLazy",
+							key: "DEBUG_MODE_ROOT_KEY_RESET_LAZY",
 							key,
 							restoredCustomProps: Object.keys(customProps)
 						});
@@ -2332,7 +2333,7 @@ export class ApiManager extends ComponentBase {
 						this._restoreCustomProperties(existingAtKey, customProps);
 
 						this.slothlet.debug("reload", {
-							message: "Root key updated via ___setImpl",
+							key: "DEBUG_MODE_ROOT_KEY_UPDATED_SETIMPL",
 							key,
 							restoredCustomProps: Object.keys(customProps)
 						});
@@ -2367,7 +2368,7 @@ export class ApiManager extends ComponentBase {
 			const existing = this.getValueAtPath(this.slothlet.api, parts);
 
 			this.slothlet.debug("reload", {
-				message: "RESTORE: nested path",
+				key: "DEBUG_MODE_RESTORE_NESTED_PATH",
 				endpoint,
 				moduleID,
 				partsPath: parts.join("."),
@@ -2389,7 +2390,7 @@ export class ApiManager extends ComponentBase {
 				if (forceReplace && wrapper) {
 					wrapper.____slothletInternal.state.collisionMode = "replace";
 					this.slothlet.debug("reload", {
-						message: "RESTORE: forcing replace mode",
+						key: "DEBUG_MODE_RESTORE_FORCING_REPLACE",
 						endpoint,
 						originalCollisionMode,
 						wrapperApiPath: wrapper.____slothletInternal.apiPath
@@ -2443,7 +2444,7 @@ export class ApiManager extends ComponentBase {
 				this._restoreCustomProperties(existing, customProps);
 
 				this.slothlet.debug("reload", {
-					message: "Updated existing wrapper implementation",
+					key: "DEBUG_MODE_UPDATED_WRAPPER_IMPL",
 					endpoint,
 					moduleID,
 					forcedReplaceMode: true,
@@ -2492,7 +2493,7 @@ export class ApiManager extends ComponentBase {
 				}
 
 				this.slothlet.debug("reload", {
-					message: "Created new wrapper (unexpected in reload)",
+					key: "DEBUG_MODE_CREATED_NEW_WRAPPER_UNEXPECTED",
 					endpoint,
 					moduleID
 				});

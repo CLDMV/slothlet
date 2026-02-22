@@ -107,8 +107,8 @@ export class ApiAssignment extends ComponentBase {
 		const valueIsWrapper = this.isWrapperProxy(value);
 		const valueId = valueIsWrapper ? (resolveWrapper(value)?.____slothletInternal?.id ?? "no-id") : "not-wrapper";
 		this.slothlet.debug("api", {
-			message: "ASSIGN-TO-API",
-			key,
+			key: "DEBUG_MODE_ASSIGN_TO_API",
+			propKey: key,
 			valueId,
 			typeOf: typeof value
 		});
@@ -138,8 +138,8 @@ export class ApiAssignment extends ComponentBase {
 
 		// Case 2: Collision detection with config
 		this.slothlet.debug("api", {
-			message: "COLLISION-CHECK",
-			key,
+			key: "DEBUG_MODE_COLLISION_CHECK",
+			propKey: key,
 			useCollisionDetection,
 			hasConfig: !!config,
 			hasExisting: existing !== undefined,
@@ -147,8 +147,8 @@ export class ApiAssignment extends ComponentBase {
 		});
 		if (useCollisionDetection && config && existing !== undefined) {
 			this.slothlet.debug("api", {
-				message: "COLLISION-DETECT",
-				key,
+				key: "DEBUG_MODE_COLLISION_DETECT",
+				propKey: key,
 				context: collisionContext,
 				existingType: typeof existing,
 				valueType: typeof value
@@ -186,8 +186,8 @@ export class ApiAssignment extends ComponentBase {
 			const valueIsWrapper = this.isWrapperProxy(value);
 
 			this.slothlet.debug("api", {
-				message: "COLLISION: wrapper detection",
-				key,
+				key: "DEBUG_MODE_COLLISION_WRAPPER_DETECTION",
+				propKey: key,
 				existingIsWrapper,
 				valueIsWrapper,
 				hasExistingWrapper: resolveWrapper(existing) ? "yes" : "no",
@@ -203,8 +203,8 @@ export class ApiAssignment extends ComponentBase {
 					valueWrapper.____slothletInternal.mode === "lazy" && !valueWrapper.____slothletInternal.state.materialized;
 
 				this.slothlet.debug("api", {
-					message: "COLLISION: lazy detection",
-					key,
+					key: "DEBUG_MODE_COLLISION_LAZY_DETECTION",
+					propKey: key,
 					effectiveMode,
 					existingLazy: existingIsLazyUnmaterialized,
 					valueLazy: valueIsLazyUnmaterialized
@@ -215,25 +215,25 @@ export class ApiAssignment extends ComponentBase {
 				// CRITICAL: Store in _state object so it persists across proxy boundaries
 				if (existingIsLazyUnmaterialized) {
 					this.slothlet.debug("api", {
-						message: "COLLISION: Setting collision mode on EXISTING wrapper",
+						key: "DEBUG_MODE_COLLISION_SET_MODE_EXISTING_WRAPPER",
 						effectiveMode,
 						apiPath: existingWrapper.____slothletInternal.apiPath
 					});
 					existingWrapper.____slothletInternal.state.collisionMode = effectiveMode;
 					this.slothlet.debug("api", {
-						message: "COLLISION: Verified existing wrapper collision mode",
+						key: "DEBUG_MODE_COLLISION_VERIFIED_EXISTING_WRAPPER_MODE",
 						collisionMode: existingWrapper.____slothletInternal.state.collisionMode
 					});
 				}
 				if (valueIsLazyUnmaterialized) {
 					this.slothlet.debug("api", {
-						message: "COLLISION: Setting collision mode on VALUE wrapper",
+						key: "DEBUG_MODE_COLLISION_SET_MODE_VALUE_WRAPPER",
 						effectiveMode,
 						apiPath: valueWrapper.____slothletInternal.apiPath
 					});
 					valueWrapper.____slothletInternal.state.collisionMode = effectiveMode;
 					this.slothlet.debug("api", {
-						message: "COLLISION: Verified value wrapper collision mode",
+						key: "DEBUG_MODE_COLLISION_VERIFIED_VALUE_WRAPPER_MODE",
 						collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 					});
 
@@ -241,7 +241,7 @@ export class ApiAssignment extends ComponentBase {
 					// This ensures _impl is populated as soon as possible
 					if (effectiveMode === "replace") {
 						this.slothlet.debug("api", {
-							message: "COLLISION-REPLACE-MATERIALIZE: Triggering immediate materialization",
+							key: "DEBUG_MODE_COLLISION_REPLACE_MATERIALIZE",
 							apiPath: valueWrapper.____slothletInternal.apiPath
 						});
 						valueWrapper._materialize(); // Fire-and-forget - will populate _impl asynchronously
@@ -262,26 +262,26 @@ export class ApiAssignment extends ComponentBase {
 					// For lazy folder replacing eager file: Just assign the lazy folder, don't copy anything
 					if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
 						this.slothlet.debug("api", {
-							message: "COLLISION-REPLACE: Not copying file properties - replace mode will clear everything on materialization"
+							key: "DEBUG_MODE_COLLISION_REPLACE_NO_COPY"
 						});
 						this.slothlet.debug("api", {
-							message: "COLLISION-REPLACE: BEFORE assignment",
-							key,
+							key: "DEBUG_MODE_COLLISION_REPLACE_BEFORE",
+							propKey: key,
 							currentWrapperId: resolveWrapper(existing)?.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
-							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
-							key,
+							key: "DEBUG_MODE_COLLISION_ASSIGN_REPLACING_WITH_LAZY",
+							propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
 						targetApi[key] = value;
 						this.slothlet.debug("api", {
-							message: "COLLISION-REPLACE: AFTER assignment",
-							key,
+							key: "DEBUG_MODE_COLLISION_REPLACE_AFTER",
+							propKey: key,
 							newWrapperId: resolveWrapper(targetApi[key])?.____slothletInternal.id
 						});
 						this.slothlet.debug("api", {
-							message: "COLLISION-REPLACE: Verification",
+							key: "DEBUG_MODE_COLLISION_REPLACE_VERIFY",
 							expectedId: valueWrapper.____slothletInternal.id,
 							actualId: resolveWrapper(targetApi[key])?.____slothletInternal.id
 						});
@@ -346,7 +346,7 @@ export class ApiAssignment extends ComponentBase {
 							// Replace mode: Don't copy anything from existing file
 							// Let the lazy folder materialize clean and completely replace the file
 							this.slothlet.debug("api", {
-								message: "COLLISION-REPLACE: Not copying file properties - replace mode will clear everything on materialization"
+							key: "DEBUG_MODE_COLLISION_REPLACE_NO_COPY"
 							});
 						} else if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
@@ -363,7 +363,7 @@ export class ApiAssignment extends ComponentBase {
 
 							const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 							this.slothlet.debug("api", {
-								message: "COLLISION-COPY: Copying existing child keys",
+								key: "DEBUG_MODE_COLLISION_COPY_CHILD_KEYS",
 								existingChildKeys: existingChildKeys.join(","),
 								fromApiPath: existingWrapper.____slothletInternal.apiPath,
 								toApiPath: valueWrapper.____slothletInternal.apiPath,
@@ -378,8 +378,8 @@ export class ApiAssignment extends ComponentBase {
 							for (const key of existingChildKeys) {
 								const child = existingWrapper[key];
 								this.slothlet.debug("api", {
-									message: "COLLISION-COPY: Copying individual key",
-									key,
+									key: "DEBUG_MODE_COLLISION_COPY_INDIVIDUAL_KEY",
+									propKey: key,
 									childName: child?.name,
 									typeOf: typeof child,
 									valueWrapperId: valueWrapper.____slothletInternal.id || "no-id"
@@ -403,7 +403,7 @@ export class ApiAssignment extends ComponentBase {
 							// Fire-and-forget: We don't await because collision handling must remain synchronous
 							// The folder children will be added to wrapper during materialization
 							this.slothlet.debug("api", {
-								message: "COLLISION-TRIGGER-MAT: Triggering early materialization (fire-and-forget)",
+								key: "DEBUG_MODE_COLLISION_TRIGGER_EARLY_MAT",
 								apiPath: valueWrapper.____slothletInternal.apiPath
 							});
 							valueWrapper.____slothletInternal.needsImmediateChildAdoption = true;
@@ -432,8 +432,8 @@ export class ApiAssignment extends ComponentBase {
 
 						// Assign value to API (replace existing with lazy folder wrapper)
 						this.slothlet.debug("api", {
-							message: "COLLISION-ASSIGN: Replacing existing with lazy folder",
-							key,
+						key: "DEBUG_MODE_COLLISION_ASSIGN_REPLACING_WITH_LAZY",
+						propKey: key,
 							collisionMode: valueWrapper.____slothletInternal.state.collisionMode
 						});
 						targetApi[key] = value;
@@ -581,12 +581,12 @@ export class ApiAssignment extends ComponentBase {
 		const config = options.config;
 		if (config?.debug?.api) {
 			this.slothlet.debug("api", {
-				message: "mergeApiObjects entry",
+				key: "DEBUG_MODE_MERGE_API_OBJECTS_ENTRY",
 				targetApiType: typeof targetApi,
 				sourceApiType: typeof sourceApi
 			});
 			this.slothlet.debug("api", {
-				message: "mergeApiObjects sourceApi keys",
+				key: "DEBUG_MODE_MERGE_API_OBJECTS_SOURCE_KEYS",
 				sourceApiKeys: sourceApi ? Object.keys(sourceApi) : []
 			});
 		}
@@ -595,7 +595,7 @@ export class ApiAssignment extends ComponentBase {
 		if (!sourceApi || (typeof sourceApi !== "object" && typeof sourceApi !== "function")) {
 			if (config?.debug?.api) {
 				this.slothlet.debug("api", {
-					message: "mergeApiObjects exit - sourceApi not object/function"
+					key: "DEBUG_MODE_MERGE_API_OBJECTS_EXIT_INVALID_SOURCE"
 				});
 			}
 			return;
@@ -611,8 +611,8 @@ export class ApiAssignment extends ComponentBase {
 
 			if (config?.debug?.api) {
 				this.slothlet.debug("api", {
-					message: "mergeApiObjects processing key",
-					key,
+					key: "DEBUG_MODE_MERGE_API_OBJECTS_PROCESSING_KEY",
+					propKey: key,
 					targetValueType: typeof targetValue,
 					sourceValueType: typeof sourceValue
 				});
@@ -628,18 +628,18 @@ export class ApiAssignment extends ComponentBase {
 				!this.isWrapperProxy(sourceValue)
 			) {
 				if (config?.debug?.api) {
-					this.slothlet.debug("api", {
-						message: "mergeApiObjects - both plain objects, recursing",
-						key
+				this.slothlet.debug("api", {
+						key: "DEBUG_MODE_MERGE_API_OBJECTS_RECURSING",
+						propKey: key
 					});
 				}
 				await this.mergeApiObjects(targetValue, sourceValue, options);
 			} else {
 				// Use unified assignment logic
 				if (config?.debug?.api) {
-					this.slothlet.debug("api", {
-						message: "mergeApiObjects calling assignToApiPath",
-						key
+				this.slothlet.debug("api", {
+						key: "DEBUG_MODE_MERGE_API_OBJECTS_CALLING_ASSIGN",
+						propKey: key
 					});
 				}
 				this.assignToApiPath(targetApi, key, sourceValue, { ...assignOptions, moduleID });
