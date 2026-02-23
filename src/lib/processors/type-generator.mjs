@@ -171,7 +171,7 @@ async function extractTypesFromFile(filePath, ts) {
 
 		// Visit all nodes to find exports
 		function visit(node) {
-			// Export declarations
+			// export function foo(...): ...
 			if (ts.isFunctionDeclaration(node) && node.name) {
 				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
 				if (hasExport) {
@@ -180,6 +180,25 @@ async function extractTypesFromFile(filePath, ts) {
 						type: "function",
 						signature: extractFunctionSignature(node, source, ts)
 					});
+				}
+			}
+
+			// export const foo = (...) => ... OR export const foo = function(...) { ... }
+			if (ts.isVariableStatement(node)) {
+				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+				if (hasExport) {
+					for (const decl of node.declarationList.declarations) {
+						if (!decl.name || !ts.isIdentifier(decl.name)) continue;
+						const init = decl.initializer;
+						if (!init) continue;
+						if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+							exports.push({
+								name: decl.name.text,
+								type: "function",
+								signature: extractFunctionSignature(init, source, ts)
+							});
+						}
+					}
 				}
 			}
 
@@ -238,12 +257,16 @@ function generateDeclaration(nodes, options) {
 	const structure = {};
 
 	for (const node of nodes) {
-		if (node.type === "function" && node.typeInfo?.exports?.length > 0) {
-			const exportInfo = node.typeInfo.exports[0];
-			setNestedProperty(structure, node.path, {
-				type: "function",
-				signature: exportInfo.signature
-			});
+		if (node.type === "function") {
+			// Match by the function's own name (last path segment) so that when multiple
+			// functions share the same source file, each gets its own signature rather
+			// than an unrelated export's signature.
+			const fnName = node.path[node.path.length - 1];
+			const exportInfo = node.typeInfo?.exports?.find((e) => e.name === fnName);
+			// If no matching export found (renamed key, no filePath, or parse failure)
+			// use a safe generic signature rather than borrowing a wrong one.
+			const signature = exportInfo?.signature ?? "(...args: any[]): any";
+			setNestedProperty(structure, node.path, { type: "function", signature });
 		}
 		// Skip intermediate "object" nodes - they're just containers for nested properties
 		// The structure will be built implicitly as we set nested function properties
@@ -295,20 +318,13 @@ function generateInterfaceContent(structure, lines, indent) {
 	const indentation = "\t".repeat(indent);
 
 	for (const [key, value] of Object.entries(structure)) {
-		// Check if this is a leaf node (has a 'type' property)
 		if (value.type === "function") {
 			lines.push(`${indentation}${key}${value.signature};`);
-		} else if (value.type === "object") {
-			// This is a leaf object node, just mark it as any for now
-			lines.push(`${indentation}${key}: any;`);
 		} else if (typeof value === "object" && value !== null) {
-			// This is an intermediate container object, recurse into it
+			// Intermediate container object — recurse into it
 			lines.push(`${indentation}${key}: {`);
 			generateInterfaceContent(value, lines, indent + 1);
 			lines.push(`${indentation}};`);
-		} else {
-			// Fallback for unknown types
-			lines.push(`${indentation}${key}: any;`);
 		}
 	}
 }
