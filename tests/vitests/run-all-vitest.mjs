@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 13:16:52 -08:00 (1771795012)
+ *	@Last modified time: 2026-02-22 20:18:22 -08:00 (1771820302)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -79,6 +79,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +98,35 @@ try {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");
+
+// Mirror all output (except progress bar lines) to coverage/coverage-run.log when running in coverage-quiet mode (cross-platform)
+if (process.argv.includes("--coverage-quiet")) {
+	const logStream = createWriteStream(path.join(projectRoot, "coverage", "coverage-run.log"));
+	const origStdoutWrite = process.stdout.write.bind(process.stdout);
+	const origStderrWrite = process.stderr.write.bind(process.stderr);
+
+	/**
+	 * Determine if a chunk is a progress bar write that should be excluded from the log file.
+	 * TTY mode uses \r to overwrite in place; non-TTY mode prints "progress N.N% ..." lines.
+	 * @param {Buffer|string} chunk - The data being written.
+	 * @returns {boolean} True if the chunk is a progress line and should be skipped in the log.
+	 */
+	function isProgressChunk(chunk) {
+		const str = chunk.toString();
+		return str.startsWith("\r") || /^progress \d+\.\d+%/.test(str);
+	}
+
+	process.stdout.write = (chunk, enc, cb) => {
+		if (!isProgressChunk(chunk)) logStream.write(chunk);
+		return origStdoutWrite(chunk, enc, cb);
+	};
+	process.stderr.write = (chunk, enc, cb) => {
+		if (!isProgressChunk(chunk)) logStream.write(chunk);
+		return origStderrWrite(chunk, enc, cb);
+	};
+	process.on("exit", () => logStream.end());
+}
+
 const vitestEntrypoint = path.resolve(projectRoot, "node_modules", "vitest", "vitest.mjs");
 const vitestConfigPath = path.join(".configs", "vitest.config.mjs");
 
@@ -329,10 +359,21 @@ function createCoverageProgressTracker(total) {
 			};
 		}
 
+		let _percent = percent.toFixed(1).padStart(5);
+		if (percent < 30) {
+			_percent = chalk.red(_percent + "%");
+		} else if (percent < 70) {
+			_percent = chalk.rgb(255, 136, 0)(_percent + "%");
+		} else if (percent > 99) {
+			_percent = chalk.green(_percent + "%");
+		} else {
+			_percent = chalk.yellow(_percent + "%");
+		}
+
 		const bar = `${barConfig.preBar}${barConfig.fill.repeat(filled)}${barConfig.empty.repeat(Math.max(0, barWidth - filled))}${barConfig.postBar}`;
 
 		if (isTTY) {
-			return `${spinner} ${chalk.green(bar)} ${chalk.bold(percent.toFixed(1).padStart(5))}% ${completed}/${total} | active ${active} | failed ${failed} | ETA ${formatDuration(etaMs)} | elapsed ${formatDuration(elapsedMs)}`;
+			return `${chalk.green(spinner)} ${chalk.green(bar)} ${chalk.bold(_percent)} ${completed}/${total} | active ${active} | failed ${failed} | ETA ${formatDuration(etaMs)} | elapsed ${formatDuration(elapsedMs)}`;
 		}
 
 		return `progress ${percent.toFixed(1)}% ${completed}/${total} | active ${active} | failed ${failed} | eta ${formatDuration(etaMs)} | elapsed ${formatDuration(elapsedMs)}`;
