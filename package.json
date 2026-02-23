@@ -132,7 +132,7 @@
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/check-i18n-languages.mjs",
 		"baseline": "npm run vitest -- --baseline",
-		"vitest": "node tests/vitests/run-all-vitest.mjs",
+		"vitest": "NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev node tests/vitests/run-all-vitest.mjs",
 		"coverage": "NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run vitest -- --coverage-quiet",
 		"test": "node tests/test-conditional.mjs",
 		"test:pre-build": "node tests/test-conditional.mjs",

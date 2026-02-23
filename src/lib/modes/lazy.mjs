@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 00:00:00 -08:00 (1771737600)
+ *	@Last modified time: 2026-02-22 19:47:47 -08:00 (1771818467)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -124,6 +124,6 @@ export class LazyMode extends ComponentBase {
 			collisionMode
 		);
 
-		return modesProcessor.applyRootContributor(api, rootDefaultFunction, this.slothlet.config, "lazy");
+		return modesProcessor.applyRootContributor(api, rootDefaultFunction, "lazy");
 	}
 }

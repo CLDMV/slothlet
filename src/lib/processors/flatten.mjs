@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 18:31:00 -08:00 (1771727460)
+ *	@Last modified time: 2026-02-22 19:58:24 -08:00 (1771819104)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -197,109 +197,153 @@ export class Flatten extends ComponentBase {
 	}
 
 	/**
-	 * Process module for API assignment.
-	 * Implements conditions C08-C09b from processModuleForAPI().
-	 * @param {object} options - Processing options
-	 * @param {object} options.mod - Module exports
-	 * @param {object} options.decision - Flattening decision from getFlatteningDecision
-	 * @param {string} options.apiPathKey - API path key
-	 * @param {array} options.moduleKeys - Module export keys
-	 * @param {boolean} options.isSelfReferential - Whether module is self-referential
-	 * @returns {object} API assignments and metadata
+	 * Build module content for API assignment.
+	 *
+	 * Canonical implementation of the C08-C09b content-building rules, including
+	 * AddApi detection and collision handling. Previously this logic was inlined
+	 * inside modes-processor.mjs; it now lives here so the processor stays focused
+	 * on wrapping and assignment concerns only.
+	 *
+	 * Collision config, modesUtils helpers, and SlothletWarning are accessed
+	 * directly through {@link this.slothlet} / {@link this.slothlet.config} — no caller
+	 * plumbing required.
+	 *
+	 * @param {object}   options                              - Processing options.
+	 * @param {object}   options.mod                         - Module exports.
+	 * @param {object}   options.decision                    - Flattening decision from getFlatteningDecision.
+	 * @param {string}   options.moduleName                  - Sanitized module name (used for C08 auto-flatten key lookup).
+	 * @param {string}   options.propertyName                - Resolved preferred name (decision.preferredName || moduleName).
+	 * @param {string[]} options.moduleKeys                  - Named export keys (excluding "default").
+	 * @param {object}   options.analysis                    - { hasDefault, hasNamed, defaultExportType }.
+	 * @param {object}   [options.file=null]                 - File descriptor for AddApi detection via file.name / file.fullName.
+	 * @param {string}   [options.collisionContext="initial"] - Collision context ("initial" | "api").
+	 * @param {string}   [options.apiPathPrefix=""]          - API path prefix for collision error messages.
+	 * @returns {{ moduleContent: object|Function }} Built module content ready for wrapping/assignment.
 	 * @public
 	 */
 	processModuleForAPI(options) {
-		const { mod, decision, apiPathKey, moduleKeys, isSelfReferential } = options;
+		const {
+			mod,
+			decision,
+			moduleName,
+			propertyName,
+			moduleKeys,
+			analysis,
+			file = null,
+			collisionContext = "initial",
+			apiPathPrefix = "",
+			isSelfReferential = false
+		} = options;
 
-		const result = {
-			apiAssignments: {},
-			flattened: false,
-			namespaced: false
-		};
+		// Rule 11 (F06) - C33: AddApi Special File Pattern
+		// When addapi.{mjs,cjs,js,ts} has a default export + named exports,
+		// use the default as the namespace base and merge named exports onto it.
+		const isAddapiFile =
+			moduleName === "addapi" ||
+			(file && file.name === "addapi") ||
+			(file && file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
+		if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
+			const moduleContent = mod.default;
+			for (const key of moduleKeys) {
+				moduleContent[key] = mod[key];
+			}
+			return { moduleContent };
+		}
 
-		// Rule 7 (F02, F03) - C08: Auto-flattening
+		// Rule 7 (F02, F03) - C08: Auto-flattening (single named export matching module name)
 		if (decision.useAutoFlattening) {
-			result.apiAssignments[apiPathKey] = mod[moduleKeys[0]];
-			result.flattened = true;
-			return result;
+			return { moduleContent: mod[moduleName] };
 		}
 
-		// Rule 1 (F01) - C09: Flatten to root/category
+		// Rule 1 (F01) - C09: Flatten to root/category — merge all exports into one flat content object for caller to assign
 		if (decision.flattenToRoot || decision.flattenToCategory) {
-			// If there's a default export with no named exports, use the default
 			if (mod.default && moduleKeys.length === 0) {
-				result.apiAssignments[apiPathKey] = mod.default;
-				result.flattened = true;
-				return result;
+				return { moduleContent: mod.default };
 			}
-
-			// If there's both default and named exports, merge named onto default
 			if (mod.default && moduleKeys.length > 0) {
-				const target = typeof mod.default === "function" ? mod.default : { ...mod.default };
+				const moduleContent = typeof mod.default === "function" ? mod.default : { ...mod.default };
 				for (const key of moduleKeys) {
-					target[key] = mod[key];
+					moduleContent[key] = mod[key];
 				}
-				result.apiAssignments[apiPathKey] = target;
-				result.flattened = true;
-				return result;
+				return { moduleContent };
 			}
-
-			// Only named exports - merge them
+			// Only named exports: expose each directly (caller merges to parent)
+			const moduleContent = {};
 			for (const key of moduleKeys) {
-				result.apiAssignments[key] = mod[key];
+				moduleContent[key] = mod[key];
 			}
-			result.flattened = true;
-			return result;
+			return { moduleContent };
 		}
 
-		// Rule 6 - C09a: Self-referential non-function
+		// Rule 6 - C09a: Self-referential non-function — use the named export that is itself (or full mod)
 		if (isSelfReferential) {
-			result.apiAssignments[apiPathKey] = mod[apiPathKey] || mod;
-			result.namespaced = true;
-			return result;
+			return { moduleContent: mod[moduleName] || mod };
 		}
 
-		// Check for single named export matching module name (flatten it)
-		if (moduleKeys.length === 1 && moduleKeys[0] === apiPathKey && !mod.default) {
-			result.apiAssignments[apiPathKey] = mod[moduleKeys[0]];
-			result.flattened = true;
-			return result;
-		}
-
-		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation (default)
-		// For modules with default export only, use the default
-		if (mod.default && moduleKeys.length === 0) {
-			result.apiAssignments[apiPathKey] = mod.default;
-			result.namespaced = true;
-			return result;
-		}
-
-		// For modules with only named exports, create namespace
-		if (!mod.default && moduleKeys.length > 0) {
-			const namespace = {};
-			for (const key of moduleKeys) {
-				namespace[key] = mod[key];
-			}
-			result.apiAssignments[apiPathKey] = namespace;
-			result.namespaced = true;
-			return result;
-		}
-
-		// Mixed exports: merge named onto default
+		// Hybrid pattern: default + named exports
 		if (mod.default && moduleKeys.length > 0) {
-			const target = mod.default;
-			for (const key of moduleKeys) {
-				target[key] = mod[key];
+			if (typeof mod.default === "function") {
+				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
+				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
+				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
+				const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
+				for (const key of moduleKeys) {
+					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+						continue;
+					}
+					const hasExisting = Object.prototype.hasOwnProperty.call(moduleContent, key);
+					if (hasExisting) {
+						if (collisionMode === "merge" || collisionMode === "skip") {
+							// Keep the existing property from the default export
+							continue;
+						} else if (collisionMode === "error") {
+							throw new Error(`Collision detected: property "${key}" already exists on default export at ${apiPathPrefix}.${propertyName}`);
+						} else if (collisionMode === "warn") {
+							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
+								key,
+								apiPath: `${apiPathPrefix}.${propertyName}`
+							});
+						}
+						// collisionMode "replace" / "merge-replace" — fall through to assignment
+					}
+					moduleContent[key] = mod[key];
+				}
+				return { moduleContent };
 			}
-			result.apiAssignments[apiPathKey] = target;
-			result.namespaced = true;
-			return result;
+			if (typeof mod.default === "object" && mod.default !== null) {
+				// Default is an object: use it directly and add named exports not already present
+				const moduleContent = mod.default;
+				for (const key of moduleKeys) {
+					if (key in mod.default) {
+						continue;
+					}
+					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
+						continue;
+					}
+					moduleContent[key] = mod[key];
+				}
+				return { moduleContent };
+			}
+			// Default is a primitive: wrap in a namespace object
+			const moduleContent = { default: mod.default };
+			for (const key of moduleKeys) {
+				moduleContent[key] = mod[key];
+			}
+			return { moduleContent };
 		}
 
-		// Fallback
-		result.apiAssignments[apiPathKey] = mod;
-		result.namespaced = true;
-		return result;
+		// Rule 1 (F01), Rule 2 - C09b: Traditional namespace preservation — only default export, use it directly
+		if (mod.default && moduleKeys.length === 0) {
+			return { moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName) };
+		}
+
+		// Fallback: named-only or mixed (non-function) default + named
+		const moduleContent = {};
+		if (mod.default) moduleContent.default = mod.default;
+		for (const key of moduleKeys) {
+			moduleContent[key] = mod[key];
+		}
+		return { moduleContent };
 	}
 
 	/**

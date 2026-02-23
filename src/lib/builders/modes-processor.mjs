@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
+ *	@Last modified time: 2026-02-22 19:53:00 -08:00 (1771818780)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -21,7 +21,7 @@
  *
  * @example
  * const processor = new ModesProcessor(slothlet);
- * await processor.processFiles(api, files, directory, ownership, contextManager, instanceID, config, 0, "lazy", true, false);
+ * await processor.processFiles(api, files, directory, ownership, contextManager, config, 0, "lazy", true, false);
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
@@ -59,10 +59,6 @@ export class ModesProcessor extends ComponentBase {
 		cacheBust = null,
 		collisionModeOverride = null
 	) {
-		// Access components and data via slothlet instance
-		const { ownership, metadata } = this.slothlet.handlers;
-		const { loader, flatten } = this.slothlet.processors;
-		const { contextManager, instanceID, config } = this.slothlet;
 		// Helper to build full apiPath with prefix
 		const buildApiPath = (path) => {
 			if (!apiPathPrefix) return path;
@@ -89,7 +85,7 @@ export class ModesProcessor extends ComponentBase {
 		if (!isRoot && shouldWrap && !populateDirectly) {
 			const existingTarget = api[categoryName];
 			if (existingTarget && resolveWrapper(existingTarget)) {
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_REUSE_EXISTING_WRAPPER",
 						categoryName,
@@ -103,7 +99,7 @@ export class ModesProcessor extends ComponentBase {
 				const initialImpl = resolveWrapper(existingTarget)
 					? {}
 					: this.slothlet.helpers.modesUtils.cloneWrapperImpl(existingTarget || {}, mode);
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_WRAPPER_CREATED",
 						categoryName,
@@ -134,14 +130,14 @@ export class ModesProcessor extends ComponentBase {
 					);
 				}
 
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_WRAPPER_ASSIGNED",
 						categoryName
 					});
 				}
 				targetApi = api[categoryName];
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_CATEGORY_CREATED",
 						categoryName,
@@ -155,7 +151,7 @@ export class ModesProcessor extends ComponentBase {
 				}
 			}
 		}
-		if (!isRoot && config.debug?.modes) {
+		if (!isRoot && this.slothlet.config.debug?.modes) {
 			this.slothlet.debug("modes", {
 				message: await t("DEBUG_MODE_PROCESSING_DIRECTORY", { mode, categoryName, currentDepth })
 			});
@@ -163,7 +159,7 @@ export class ModesProcessor extends ComponentBase {
 		// Load all modules
 		const loadedModules = [];
 		for (const file of files) {
-			if (config.debug?.modes && categoryName === "string") {
+			if (this.slothlet.config.debug?.modes && categoryName === "string") {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_PROCESSING_FILE",
 					categoryName,
@@ -174,8 +170,8 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 			try {
-				const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
-				const exports = loader.extractExports(mod);
+				const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+				const exports = this.slothlet.processors.loader.extractExports(mod);
 				const moduleName = this.slothlet.helpers.sanitize.sanitizePropertyName(file.name);
 				const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 				const analysis = {
@@ -193,7 +189,7 @@ export class ModesProcessor extends ComponentBase {
 		const hasMultipleDefaults = loadedModules.filter((m) => m.analysis.hasDefault).length > 1;
 		// Process each module
 		for (const { file, mod, moduleName, moduleKeys, analysis } of loadedModules) {
-			if (config.debug?.modes && categoryName === "logger") {
+			if (this.slothlet.config.debug?.modes && categoryName === "logger") {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_PROCESSING_MODULE",
 					categoryName,
@@ -215,7 +211,7 @@ export class ModesProcessor extends ComponentBase {
 			const isAddapiObjectDefault = isAddapiFile && analysis.hasDefault && typeof mod.default !== "function";
 			const isRootContributor = isRoot && analysis.hasDefault && typeof mod.default === "function" && !isAddapiObjectDefault;
 			if (moduleName === "config" || moduleKeys.some((k) => k.includes("Config") || k.includes("config"))) {
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FILE_PROCESSING",
 						module: moduleName,
@@ -240,7 +236,7 @@ export class ModesProcessor extends ComponentBase {
 				continue; // Skip normal processing for root contributors
 			} else {
 				// Regular module - apply flattening decisions
-				const decision = await flatten.getFlatteningDecision({
+				const decision = await this.slothlet.processors.flatten.getFlatteningDecision({
 					mod,
 					moduleName,
 					categoryName: categoryName || moduleName,
@@ -249,7 +245,7 @@ export class ModesProcessor extends ComponentBase {
 					moduleKeys,
 					t
 				});
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: await t("DEBUG_MODE_MODULE_DECISION", { mode, moduleName, reason: decision.reason })
 					});
@@ -261,90 +257,18 @@ export class ModesProcessor extends ComponentBase {
 				// Use moduleName as fallback for API path assignment
 				const effectiveCategoryName = categoryName || moduleName;
 
-				// Build module content based on decision
-				let moduleContent = {};
-
-				// Rule 11 (F06) - C33: AddApi Special File Pattern
-				// When addapi.{mjs,cjs,js,ts} has default export + named exports,
-				// use default export as namespace base and merge named exports onto it
-				const isAddapiFile =
-					moduleName === "addapi" ||
-					file.name === "addapi" ||
-					(file.fullName && ["addapi.mjs", "addapi.cjs", "addapi.js", "addapi.ts"].includes(file.fullName.toLowerCase()));
-				if (isAddapiFile && analysis.hasDefault && moduleKeys.length > 0) {
-					// Default export becomes the namespace, named exports merge onto it
-					moduleContent = mod.default;
-					for (const key of moduleKeys) {
-						moduleContent[key] = mod[key];
-					}
-				} else if (decision.useAutoFlattening) {
-					// C04: Single named export matches module name
-					moduleContent = mod[moduleName];
-				} else if (mod.default && moduleKeys.length > 0) {
-					// Hybrid pattern: default + named exports
-					if (typeof mod.default === "function") {
-						// Default is function: attach named exports as properties (like logger(), logger.info())
-						moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
-						const collisionConfig = config.api?.collision || config.collision;
-						const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
-						for (const key of moduleKeys) {
-							if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
-								continue;
-							}
-							// Respect collision mode when attaching named exports
-							const hasExisting = Object.prototype.hasOwnProperty.call(moduleContent, key);
-							if (hasExisting) {
-								if (collisionMode === "merge" || collisionMode === "skip") {
-									// Keep existing property from default export
-									continue;
-								} else if (collisionMode === "error") {
-									throw new Error(
-										`Collision detected: property "${key}" already exists on default export at ${apiPathPrefix}.${propertyName}`
-									);
-								} else if (collisionMode === "warn") {
-									new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
-										key,
-										apiPath: `${apiPathPrefix}.${propertyName}`
-									});
-								}
-								// collisionMode === "replace" or "merge-replace" falls through to assignment
-							}
-							moduleContent[key] = mod[key];
-						}
-					} else if (typeof mod.default === "object" && mod.default !== null) {
-						// Default is object: treat like ESM default export with named exports
-						// CJS pattern: module.exports = { default: obj, namedExport: fn }
-						// Result: api.property = obj (with named exports as properties)
-						// Don't clone for now - use the default object directly
-						moduleContent = mod.default;
-						// Add named exports that aren't already in the default object
-						for (const key of moduleKeys) {
-							if (key in mod.default) {
-								// Skip if already exists in default object
-								continue;
-							}
-							if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
-								continue;
-							}
-							moduleContent[key] = mod[key];
-						}
-					} else {
-						// Default is primitive: create namespace
-						moduleContent.default = mod.default;
-						for (const key of moduleKeys) {
-							moduleContent[key] = mod[key];
-						}
-					}
-				} else if (mod.default && moduleKeys.length === 0) {
-					// Only default export - use it directly (no need to wrap in object)
-					moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
-				} else {
-					// Multiple named exports or mixed default (non-function) + named
-					if (mod.default) moduleContent.default = mod.default;
-					for (const key of moduleKeys) {
-						moduleContent[key] = mod[key];
-					}
-				}
+				// Build module content based on decision (C08-C09b + AddApi + collision handling)
+				let { moduleContent } = this.slothlet.processors.flatten.processModuleForAPI({
+					mod,
+					decision,
+					moduleName,
+					propertyName,
+					moduleKeys,
+					analysis,
+					file,
+					collisionContext,
+					apiPathPrefix: apiPathPrefix || ""
+				});
 				// Special case: folder/folder.mjs pattern (only for nested, not root)
 				// When apiPathPrefix is set, we're building a sub-API that should act like root (no flattening)
 				if (!isRoot && !apiPathPrefix && moduleName === categoryName) {
@@ -352,7 +276,7 @@ export class ModesProcessor extends ComponentBase {
 						// Case 1: export const folder = {...} - wrap and use as category
 						const exportedValue = mod[moduleName];
 						if (typeof exportedValue === "object" && exportedValue !== null) {
-							if (config.debug?.modes && categoryName === "string") {
+							if (this.slothlet.config.debug?.modes && categoryName === "string") {
 								this.slothlet.debug("modes", {
 									key: "DEBUG_MODE_SINGLE_FILE_FOLDER_DETECTED",
 									categoryName,
@@ -368,7 +292,7 @@ export class ModesProcessor extends ComponentBase {
 									mode: effectiveMode,
 									apiPath: buildApiPath(categoryName),
 									initialImpl: exportedValue,
-									materializeOnCreate: config.backgroundMaterialize,
+									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
@@ -385,12 +309,12 @@ export class ModesProcessor extends ComponentBase {
 							}
 							// Register each property for ownership tracking
 							for (const key of Object.keys(exportedValue)) {
-								if (ownership) {
-									ownership.register({
+								if (this.slothlet.handlers.ownership) {
+									this.slothlet.handlers.ownership.register({
 										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -427,7 +351,7 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: buildApiPath(categoryName),
 								initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(callableModule, mode),
-								materializeOnCreate: config.backgroundMaterialize,
+								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: moduleID || file.moduleID,
 								sourceFolder
@@ -453,40 +377,40 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: mod[key],
-										materializeOnCreate: config.backgroundMaterialize,
+										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 										filePath: file.path,
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, namedWrapper.createProxy(), {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 								}
-								if (ownership) {
-									ownership.register({
+								if (this.slothlet.handlers.ownership) {
+									this.slothlet.handlers.ownership.register({
 										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
 									});
 								}
 							}
 						}
-						if (ownership) {
-							ownership.register({
+						if (this.slothlet.handlers.ownership) {
+							this.slothlet.handlers.ownership.register({
 								moduleID: moduleID || file.moduleID,
 								apiPath: categoryName,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 								filePath: file.path
 							});
 						}
@@ -511,29 +435,29 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${propKey}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(propValue, mode),
-										materializeOnCreate: config.backgroundMaterialize,
+										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 										filePath: file.path,
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, wrapper.createProxy(), {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propKey, propValue, {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 								}
-								if (ownership) {
-									ownership.register({
+								if (this.slothlet.handlers.ownership) {
+									this.slothlet.handlers.ownership.register({
 										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${propKey}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -546,29 +470,29 @@ export class ModesProcessor extends ComponentBase {
 											mode: effectiveMode,
 											apiPath: buildApiPath(`${categoryName}.${key}`),
 											initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-											materializeOnCreate: config.backgroundMaterialize,
+											materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 											filePath: file.path,
 											moduleID: moduleID || file.moduleID,
 											sourceFolder
 										});
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 											useCollisionDetection: true,
-											config,
+											config: this.slothlet.config,
 											collisionContext
 										});
 									} else {
 										this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 											useCollisionDetection: true,
-											config,
+											config: this.slothlet.config,
 											collisionContext
 										});
 									}
-									if (ownership) {
-										ownership.register({
+									if (this.slothlet.handlers.ownership) {
+										this.slothlet.handlers.ownership.register({
 											moduleID: moduleID || file.moduleID,
 											apiPath: `${categoryName}.${key}`,
 											source: "core",
-											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+											collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 											filePath: file.path
 										});
 									}
@@ -576,7 +500,7 @@ export class ModesProcessor extends ComponentBase {
 							}
 						} else {
 							// Regular multi-export file (no matching object)
-							if (config.debug?.modes) {
+							if (this.slothlet.config.debug?.modes) {
 								this.slothlet.debug("modes", {
 									key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_FILE",
 									moduleName,
@@ -590,7 +514,7 @@ export class ModesProcessor extends ComponentBase {
 								});
 							}
 							for (const key of moduleKeys) {
-								if (config.debug?.modes) {
+								if (this.slothlet.config.debug?.modes) {
 									this.slothlet.debug("modes", {
 										key: "DEBUG_MODE_FLATTEN_MULTI_EXPORT_ASSIGNING",
 										propKey: key
@@ -601,14 +525,14 @@ export class ModesProcessor extends ComponentBase {
 										mode: effectiveMode,
 										apiPath: buildApiPath(`${categoryName}.${key}`),
 										initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-										materializeOnCreate: config.backgroundMaterialize,
+										materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 										filePath: file.path,
 										moduleID: moduleID || file.moduleID,
 										sourceFolder
 									});
 									const assigned = this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 									if (assigned) {
@@ -626,16 +550,16 @@ export class ModesProcessor extends ComponentBase {
 								} else {
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
-										config,
+										config: this.slothlet.config,
 										collisionContext
 									});
 								}
-								if (ownership) {
-									ownership.register({
+								if (this.slothlet.handlers.ownership) {
+									this.slothlet.handlers.ownership.register({
 										moduleID: moduleID || file.moduleID,
 										apiPath: `${categoryName}.${key}`,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 										filePath: file.path
 									});
 								}
@@ -666,29 +590,29 @@ export class ModesProcessor extends ComponentBase {
 									mode: effectiveMode,
 									apiPath: buildApiPath(`${categoryName}.${preferredName}`),
 									initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(mod[key], mode),
-									materializeOnCreate: config.backgroundMaterialize,
+									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
+									config: this.slothlet.config,
 									collisionContext
 								});
 							} else {
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, preferredName, mod[key], {
 									useCollisionDetection: true,
-									config,
+									config: this.slothlet.config,
 									collisionContext
 								});
 							}
-							if (ownership) {
-								ownership.register({
+							if (this.slothlet.handlers.ownership) {
+								this.slothlet.handlers.ownership.register({
 									moduleID: moduleID || file.moduleID,
 									apiPath: `${categoryName}.${preferredName}`,
 									source: "core",
-									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 									filePath: file.path
 								});
 							}
@@ -715,35 +639,35 @@ export class ModesProcessor extends ComponentBase {
 									mode: effectiveMode,
 									apiPath: buildApiPath(keyPath),
 									initialImpl: value,
-									materializeOnCreate: config.backgroundMaterialize,
+									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
+									config: this.slothlet.config,
 									collisionContext
 								});
 							} else {
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, value, {
 									useCollisionDetection: true,
-									config,
+									config: this.slothlet.config,
 									collisionContext
 								});
 							}
 						}
 
 						// Register ownership for each merged property
-						if (ownership) {
+						if (this.slothlet.handlers.ownership) {
 							for (const key of Object.keys(moduleContent)) {
 								const apiPath = isRoot ? key : apiPathPrefix ? `${apiPathPrefix}.${key}` : key;
-								ownership.register({
+								this.slothlet.handlers.ownership.register({
 									moduleID: moduleID || file.moduleID,
 									apiPath,
 									source: "core",
-									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-									config
+									collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+									config: this.slothlet.config
 								});
 							}
 						}
@@ -756,7 +680,7 @@ export class ModesProcessor extends ComponentBase {
 								mode: effectiveMode,
 								apiPath: buildApiPath(localPath),
 								initialImpl: moduleContent,
-								materializeOnCreate: config.backgroundMaterialize,
+								materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 								filePath: file.path,
 								moduleID: moduleID || file.moduleID,
 								sourceFolder,
@@ -764,30 +688,30 @@ export class ModesProcessor extends ComponentBase {
 							});
 							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, wrapper.createProxy(), {
 								useCollisionDetection: true,
-								config,
+								config: this.slothlet.config,
 								collisionContext
 							});
 						} else {
 							this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, effectiveCategoryName, moduleContent, {
 								useCollisionDetection: true,
-								config,
+								config: this.slothlet.config,
 								collisionContext
 							});
 						}
 
 						// Register ownership
-						if (ownership) {
+						if (this.slothlet.handlers.ownership) {
 							const apiPath = isRoot
 								? effectiveCategoryName
 								: apiPathPrefix
 									? `${apiPathPrefix}.${effectiveCategoryName}`
 									: effectiveCategoryName;
-							ownership.register({
+							this.slothlet.handlers.ownership.register({
 								moduleID: moduleID || file.moduleID,
 								apiPath,
 								source: "core",
-								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-								config
+								collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+								config: this.slothlet.config
 							});
 						}
 					}
@@ -802,7 +726,7 @@ export class ModesProcessor extends ComponentBase {
 						mode: effectiveMode,
 						apiPath: buildApiPath(localPath),
 						initialImpl: moduleContent, // Use moduleContent directly, don't clone (preserves added properties)
-						materializeOnCreate: config.backgroundMaterialize,
+						materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 						filePath: file.path,
 						moduleID: moduleID || file.moduleID,
 						sourceFolder
@@ -815,17 +739,17 @@ export class ModesProcessor extends ComponentBase {
 					});
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, wrapper.createProxy(), {
 						useCollisionDetection: true,
-						config,
+						config: this.slothlet.config,
 						collisionContext
 					});
 				} else {
 					this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, propertyName, moduleContent, {
 						useCollisionDetection: true,
-						config,
+						config: this.slothlet.config,
 						collisionContext
 					});
 				}
-				if (config.debug?.modes && categoryName === "logger") {
+				if (this.slothlet.config.debug?.modes && categoryName === "logger") {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_AFTER_ASSIGNMENT_STATUS",
 						targetApiType: typeof targetApi,
@@ -835,20 +759,20 @@ export class ModesProcessor extends ComponentBase {
 						implHasProperty: !!resolveWrapper(targetApi)?.____slothletInternal.impl?.utils
 					});
 				}
-				if (ownership) {
+				if (this.slothlet.handlers.ownership) {
 					const apiPath = isRoot ? propertyName : `${categoryName}.${propertyName}`;
-					ownership.register({
+					this.slothlet.handlers.ownership.register({
 						moduleID: moduleID || file.moduleID,
 						apiPath,
 						source: "core",
-						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-						config
+						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+						config: this.slothlet.config
 					});
 				}
 			}
 		}
 		// Handle subdirectories based on mode
-		if (config.debug?.modes) {
+		if (this.slothlet.config.debug?.modes) {
 			this.slothlet.debug("modes", {
 				key: "DEBUG_MODE_SUBDIRECTORY_CHECK",
 				isRoot,
@@ -869,7 +793,7 @@ export class ModesProcessor extends ComponentBase {
 				key: "DEBUG_MODE_DIRECTORY_CHECK_PASSED",
 				recursive
 			});
-			if (config.debug?.modes) {
+			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_SUBDIRECTORIES_FOUND",
 					subdirectoryCount: directory.children.directories.length,
@@ -909,8 +833,8 @@ export class ModesProcessor extends ComponentBase {
 								isGeneric,
 								filenameMatches: filenameMatchesFolder
 							});
-							const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
-							const exports = loader.extractExports(mod);
+							const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+							const exports = this.slothlet.processors.loader.extractExports(mod);
 							const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 							const analysis = {
 								hasDefault: exports.default !== undefined,
@@ -918,7 +842,7 @@ export class ModesProcessor extends ComponentBase {
 								defaultExportType: exports.default ? typeof exports.default : null
 							};
 							const modContent = exports.default !== undefined ? exports.default : exports;
-							const categoryDecision = await flatten.buildCategoryDecisions({
+							const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 								categoryName: subDirName,
 								mod: modContent,
 								moduleName,
@@ -962,7 +886,7 @@ export class ModesProcessor extends ComponentBase {
 										// Add named exports to the default (function or object)
 										if (typeof implToWrap === "function") {
 											// Function default: attach named exports as properties
-											const collisionConfig = config.api?.collision || config.collision;
+											const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 											const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
 											for (const key of moduleKeys) {
 												if (key !== "default") {
@@ -1011,7 +935,7 @@ export class ModesProcessor extends ComponentBase {
 								// - error: Should have thrown earlier during assignToApiPath.
 								// - merge/warn: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
 								// - merge-replace: Merge file exports into folder impl (folder wins conflicts via !(k in implToWrap)).
-								const modes_eagerCollisionConfig = config.api?.collision || config.collision;
+								const modes_eagerCollisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
 								const modes_eagerCollisionMode =
 									(collisionContext === "initial" ? modes_eagerCollisionConfig?.initial : modes_eagerCollisionConfig?.api) || "merge";
 								const modes_existingAtKey = targetApi[subDirName];
@@ -1073,26 +997,24 @@ export class ModesProcessor extends ComponentBase {
 									mode: effectiveMode,
 									apiPath: buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName),
 									initialImpl: implToWrap, // Use implToWrap directly, don't clone (preserves added properties)
-									materializeOnCreate: config.backgroundMaterialize,
+									materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 									filePath: file.path,
 									moduleID: moduleID || file.moduleID,
 									sourceFolder
 								});
 								this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, subDirName, wrapper.createProxy(), {
 									useCollisionDetection: true,
-									config,
+									config: this.slothlet.config,
 									collisionContext
 								});
-								if (ownership) {
+								if (this.slothlet.handlers.ownership) {
 									const apiPath = buildApiPath(categoryName ? `${categoryName}.${subDirName}` : subDirName);
-									const collisionMode = config.collision?.[collisionContext] || "merge";
-									ownership.register({
+									this.slothlet.handlers.ownership.register({
 										moduleID: moduleID || file.moduleID,
 										apiPath,
 										source: "core",
-										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
-										collisionMode,
-										config
+										collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
+										config: this.slothlet.config
 									});
 								}
 								continue;
@@ -1177,7 +1099,7 @@ export class ModesProcessor extends ComponentBase {
 					}
 
 					const apiPath = categoryName ? `${categoryName}.${subDirName}` : apiPathPrefix ? `${apiPathPrefix}.${subDirName}` : subDirName;
-					if (config.debug?.modes) {
+					if (this.slothlet.config.debug?.modes) {
 						this.slothlet.debug("modes", {
 							key: "DEBUG_MODE_CREATING_LAZY_SUBDIRECTORY",
 							apiPath,
@@ -1192,7 +1114,7 @@ export class ModesProcessor extends ComponentBase {
 					// IMPORTANT: Only extract for merge/merge-replace modes. In replace mode,
 					// the folder completely replaces the file - no file exports should persist.
 					// The replace mode collision in api-assignment.mjs handles materialization.
-					const collisionConfig = config.api?.collision;
+					const collisionConfig = this.slothlet.config.api?.collision;
 					const modes_initialCollisionMode =
 						collisionModeOverride || (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "replace";
 					let modes_fileFolderImpl = null;
@@ -1219,14 +1141,7 @@ export class ModesProcessor extends ComponentBase {
 						subDirName,
 						this.createLazySubdirectoryWrapper(
 							subDir,
-							ownership,
-							contextManager,
-							instanceID,
 							apiPath,
-							config,
-							loader,
-							flatten,
-							apiPathPrefix,
 							moduleID,
 							sourceFolder,
 							cacheBust,
@@ -1235,7 +1150,7 @@ export class ModesProcessor extends ComponentBase {
 						),
 						{
 							useCollisionDetection: true,
-							config,
+							config: this.slothlet.config,
 							collisionContext
 						}
 					);
@@ -1248,17 +1163,17 @@ export class ModesProcessor extends ComponentBase {
 				// Single root contributor: make it the root callable (don't namespace)
 				const { moduleName, file, defaultFunc } = rootContributors[0];
 				rootDefaultFunction = defaultFunc;
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR", { mode, functionName: defaultFunc.name || "anonymous" })
 					});
 				}
-				if (ownership) {
-					ownership.register({
+				if (this.slothlet.handlers.ownership) {
+					this.slothlet.handlers.ownership.register({
 						moduleID: moduleID || file.moduleID,
 						apiPath: moduleName,
 						source: "core",
-						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+						collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 						filePath: file.path
 					});
 				}
@@ -1275,29 +1190,29 @@ export class ModesProcessor extends ComponentBase {
 							mode: effectiveMode,
 							apiPath: buildApiPath(moduleName),
 							initialImpl: this.slothlet.helpers.modesUtils.cloneWrapperImpl(defaultFunc, mode),
-							materializeOnCreate: config.backgroundMaterialize,
+							materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 							filePath: file.path,
 							moduleID: moduleID || file.moduleID,
 							sourceFolder
 						});
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, wrapper.createProxy(), {
 							useCollisionDetection: true,
-							config,
+							config: this.slothlet.config,
 							collisionContext
 						});
 					} else {
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 							useCollisionDetection: true,
-							config,
+							config: this.slothlet.config,
 							collisionContext
 						});
 					}
-					if (ownership) {
-						ownership.register({
+					if (this.slothlet.handlers.ownership) {
+						this.slothlet.handlers.ownership.register({
 							moduleID: moduleID || file.moduleID,
 							apiPath: moduleName,
 							source: "core",
-							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(config, collisionContext),
+							collisionMode: this.slothlet.helpers.modesUtils.getOwnershipCollisionMode(this.slothlet.config, collisionContext),
 							filePath: file.path
 						});
 					}
@@ -1309,9 +1224,6 @@ export class ModesProcessor extends ComponentBase {
 	/**
 	 * Create lazy wrapper for subdirectory (lazy mode only)
 	 * @param {Object} dir - Directory structure
-	 * @param {Object} ownership - Ownership manager
-	 * @param {Object} contextManager - Context manager
-	 * @param {string} instanceID - Instance ID
 	 * @param {string} apiPath - Current API path
 	 * @param {Object} config - Configuration
 	 * @returns {Proxy} Lazy unified wrapper
@@ -1319,14 +1231,7 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	createLazySubdirectoryWrapper(
 		dir,
-		ownership,
-		contextManager,
-		instanceID,
 		apiPath,
-		config,
-		loader,
-		flatten,
-		parentApiPathPrefix = "",
 		moduleID = null,
 		sourceFolder = null,
 		cacheBust = null,
@@ -1340,7 +1245,7 @@ export class ModesProcessor extends ComponentBase {
 		 * @private
 		 */
 		const lazy_materializeFunc = this.slothlet.modes.lazy.createNamedMaterializeFunc(apiPath, async () => {
-			if (config.debug?.modes) {
+			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_STARTING",
 					dir: dir.name,
@@ -1370,8 +1275,8 @@ export class ModesProcessor extends ComponentBase {
 				const isGeneric = genericFilenames.includes(moduleName.toLowerCase());
 				const filenameMatchesFolder = moduleName === categoryName;
 				if (isGeneric || filenameMatchesFolder) {
-					const mod = await loader.loadModule(file.path, instanceID, moduleID, cacheBust);
-					const exports = loader.extractExports(mod);
+					const mod = await this.slothlet.processors.loader.loadModule(file.path, this.slothlet.instanceID, moduleID, cacheBust);
+					const exports = this.slothlet.processors.loader.extractExports(mod);
 					const moduleKeys = Object.keys(exports).filter((k) => k !== "default");
 					const analysis = {
 						hasDefault: exports.default !== undefined,
@@ -1379,7 +1284,7 @@ export class ModesProcessor extends ComponentBase {
 						defaultExportType: exports.default ? typeof exports.default : null
 					};
 					const modContent = exports.default !== undefined ? exports.default : exports;
-					const categoryDecision = await flatten.buildCategoryDecisions({
+					const categoryDecision = await this.slothlet.processors.flatten.buildCategoryDecisions({
 						categoryName,
 						mod: modContent,
 						moduleName,
@@ -1521,7 +1426,7 @@ export class ModesProcessor extends ComponentBase {
 				cacheBust,
 				collisionMode // Pass collision mode to child wrappers
 			);
-			if (config.debug?.modes) {
+			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					key: "DEBUG_MODE_MATERIALIZE_FUNCTION_RETURNING_IMPL",
 					dir: dir.name,
@@ -1552,7 +1457,7 @@ export class ModesProcessor extends ComponentBase {
 			// the hoist, turning the folder wrapper into just that subdirectory wrapper.
 			const _hasCategoryFile = dir.children.files.some((f) => this.slothlet.helpers.sanitize.sanitizePropertyName(f.name) === categoryName);
 			if (_hasCategoryFile && materializedKeys.includes(categoryName) && materializedKeys.length > 1) {
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_MATCH",
 						dir: dir.name,
@@ -1564,7 +1469,7 @@ export class ModesProcessor extends ComponentBase {
 				// Attach all other properties to the main value
 				for (const key of materializedKeys) {
 					if (key !== categoryName) {
-						if (config.debug?.modes) {
+						if (this.slothlet.config.debug?.modes) {
 							this.slothlet.debug("modes", {
 								key: "DEBUG_MODE_FOLDER_PATTERN_ATTACH_PROPERTY",
 								categoryName,
@@ -1575,7 +1480,7 @@ export class ModesProcessor extends ComponentBase {
 						mainValue[key] = materialized[key];
 					}
 				}
-				if (config.debug?.modes) {
+				if (this.slothlet.config.debug?.modes) {
 					this.slothlet.debug("modes", {
 						key: "DEBUG_MODE_FOLDER_PATTERN_RETURN",
 						categoryName,
@@ -1603,7 +1508,7 @@ export class ModesProcessor extends ComponentBase {
 			mode: "lazy",
 			apiPath,
 			materializeFunc: lazy_materializeFunc,
-			materializeOnCreate: config.backgroundMaterialize,
+			materializeOnCreate: this.slothlet.config.backgroundMaterialize,
 			filePath: dir.path, // Use directory path so lifecycle events can tag system metadata
 			moduleID: moduleID, // Use parent moduleID
 			sourceFolder
@@ -1648,11 +1553,11 @@ export class ModesProcessor extends ComponentBase {
 	 * @returns {Promise<Object|Function>} Final API (function if root contributor, object otherwise)
 	 * @public
 	 */
-	async applyRootContributor(api, rootFunction, config, mode) {
+	async applyRootContributor(api, rootFunction, mode) {
 		if (rootFunction) {
 			// Merge all other API properties onto the root function
 			Object.assign(rootFunction, api);
-			if (config.debug?.modes) {
+			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length })
 				});
