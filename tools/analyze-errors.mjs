@@ -338,6 +338,138 @@ function parseConsoleLogs(content, filePath) {
 }
 
 /**
+ * Parse console.error calls from file content.
+ * These are always violations – errors must use SlothletError / SlothletWarning
+ * and must never be printed directly.
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of improper console.error statements
+ */
+function parseConsoleErrors(content, filePath) {
+	const errors = [];
+
+	const errorPattern = /console\.error\s*\(/g;
+
+	let match;
+	while ((match = errorPattern.exec(content)) !== null) {
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+
+		// Skip line comments
+		if (currentLine.trim().startsWith("//")) continue;
+
+		// Skip block comments
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) continue;
+
+		const startIndex = match.index;
+		const parenStart = content.indexOf("(", startIndex);
+		if (parenStart === -1) continue;
+
+		let depth = 0;
+		let parenEnd = -1;
+		for (let i = parenStart; i < content.length; i++) {
+			const char = content[i];
+			if (char === "(") depth++;
+			else if (char === ")") {
+				depth--;
+				if (depth === 0) {
+					parenEnd = i;
+					break;
+				}
+			}
+		}
+		if (parenEnd === -1) continue;
+
+		let endIndex = parenEnd + 1;
+		if (content[endIndex] === ";") endIndex++;
+
+		const fullMatch = content.substring(startIndex, endIndex);
+		const lineNumber = beforeMatch.split("\n").length;
+		const argsContent = content.substring(parenStart + 1, parenEnd);
+		const firstArg = argsContent.split(",")[0].trim();
+
+		errors.push({ filePath, lineNumber, fullMatch, firstArg });
+	}
+
+	return errors;
+}
+
+/**
+ * Parse bare `new Error(...)` calls that should use `new this.SlothletError(...)`.
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of bare new Error usages
+ */
+function parseBareNewErrors(content, filePath) {
+	const found = [];
+
+	// Skip resolve-from-caller.mjs: it uses `new Error()` specifically for V8 stack capture
+	// via Error.prepareStackTrace / Error.captureStackTrace — not as an actual thrown error.
+	if (filePath.includes("resolve-from-caller.mjs")) {
+		return found;
+	}
+
+	// Match `new Error(` that is NOT preceded by Slothlet/throw-rethrow patterns
+	// We want to catch: `new Error(`, `const x = new Error(`, `throw new Error(` – all are violations
+	// But NOT SlothletError, SlothletWarning, ErrorEvent, etc.
+	const pattern = /(?<![A-Za-z])new\s+Error\s*\(/g;
+
+	let match;
+	while ((match = pattern.exec(content)) !== null) {
+		const beforeMatch = content.substring(0, match.index);
+		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
+		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
+
+		// Skip line comments
+		if (currentLine.trim().startsWith("//")) continue;
+
+		// Skip block comments
+		const blockCommentStart = beforeMatch.lastIndexOf("/*");
+		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
+		if (blockCommentStart > blockCommentEnd) continue;
+
+		// Skip if it looks like `new ErrorEvent(` or similar subclasses
+		// (already excluded by the negative lookbehind `(?<![A-Za-z])` – but double-check)
+		const afterNew = content.substring(match.index + match[0].length - 1);
+		if (/^Error[A-Z]/.test(afterNew)) continue;
+
+		const startIndex = match.index;
+		const parenStart = content.indexOf("(", startIndex);
+		if (parenStart === -1) continue;
+
+		let depth = 0;
+		let parenEnd = -1;
+		for (let i = parenStart; i < content.length; i++) {
+			const char = content[i];
+			if (char === "(") depth++;
+			else if (char === ")") {
+				depth--;
+				if (depth === 0) {
+					parenEnd = i;
+					break;
+				}
+			}
+		}
+		if (parenEnd === -1) continue;
+
+		let endIndex = parenEnd + 1;
+		if (content[endIndex] === ";") endIndex++;
+
+		const fullMatch = content.substring(startIndex, endIndex);
+		const lineNumber = beforeMatch.split("\n").length;
+		const argsContent = content.substring(parenStart + 1, parenEnd);
+		const firstArg = argsContent.split(",")[0].trim();
+
+		found.push({ filePath, lineNumber, fullMatch, firstArg });
+	}
+
+	return found;
+}
+
+/**
  * Check if file has proper file header
  * @param {string} content - File content
  * @param {string} filePath - File path
@@ -1340,6 +1472,62 @@ if (vitestConsoleLogs.length > 0) {
 	console.log(`✅ No console.log calls found in tests/vitests folder\n`);
 }
 
+// ===== CONSOLE.ERROR DETECTION (SRC FOLDER) =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Console.error Detection (Should Use SlothletError/SlothletWarning) - src folder ===");
+console.log("=".repeat(80) + "\n");
+
+const allConsoleErrors = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	const errs = parseConsoleErrors(content, file);
+	allConsoleErrors.push(...errs);
+}
+
+if (allConsoleErrors.length > 0) {
+	console.log(`❌ Found ${allConsoleErrors.length} improper console.error calls in src folder:\n`);
+	console.log(`   All console.error must be replaced with SlothletError / SlothletWarning + proper translation keys.\n`);
+
+	allConsoleErrors.forEach((err, idx) => {
+		const relPath = relative(rootDir, err.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${err.lineNumber}`);
+		console.log(`    Code: ${err.fullMatch.substring(0, 80)}${err.fullMatch.length > 80 ? "..." : ""}`);
+		console.log(`    First Arg: ${err.firstArg.substring(0, 60)}${err.firstArg.length > 60 ? "..." : ""}`);
+		console.log(`    ❌ Should use: throw new this.SlothletError("ERROR_KEY", { context })`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No console.error calls found in src folder\n`);
+}
+
+// ===== BARE new Error() DETECTION (SRC FOLDER) =====
+console.log("\n" + "=".repeat(80));
+console.log("=== Bare `new Error()` Detection (Should Use SlothletError) - src folder ===");
+console.log("=".repeat(80) + "\n");
+
+const allBareNewErrors = [];
+for (const file of files) {
+	const content = await readFile(file, "utf-8");
+	const errs = parseBareNewErrors(content, file);
+	allBareNewErrors.push(...errs);
+}
+
+if (allBareNewErrors.length > 0) {
+	console.log(`❌ Found ${allBareNewErrors.length} bare \`new Error()\` calls in src folder:\n`);
+	console.log(`   All errors must use SlothletError with a translation key, not plain Error objects.\n`);
+
+	allBareNewErrors.forEach((err, idx) => {
+		const relPath = relative(rootDir, err.filePath);
+		console.log(`[${idx + 1}] ${relPath}:${err.lineNumber}`);
+		console.log(`    Code: ${err.fullMatch.substring(0, 80)}${err.fullMatch.length > 80 ? "..." : ""}`);
+		console.log(`    First Arg: ${err.firstArg.substring(0, 60)}${err.firstArg.length > 60 ? "..." : ""}`);
+		console.log(`    ❌ Should use: throw new this.SlothletError("ERROR_KEY", { context })`);
+		console.log();
+	});
+} else {
+	console.log(`✅ No bare \`new Error()\` calls found in src folder\n`);
+}
+
 // ===== FILE HEADER DETECTION =====
 console.log("\n" + "=".repeat(80));
 console.log("=== File Header Detection ===");
@@ -1503,6 +1691,20 @@ if (allConsoleLogs.length > 0) {
 	hasIssues = true;
 } else {
 	console.log(`✅ Improper Console.log (src):  0`);
+}
+
+if (allConsoleErrors.length > 0) {
+	console.log(`❌ Improper Console.error (src): ${allConsoleErrors.length} - MUST use SlothletError/SlothletWarning`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Improper Console.error (src): 0`);
+}
+
+if (allBareNewErrors.length > 0) {
+	console.log(`❌ Bare new Error() (src):       ${allBareNewErrors.length} - MUST use SlothletError with translation key`);
+	hasIssues = true;
+} else {
+	console.log(`✅ Bare new Error() (src):       0`);
 }
 
 if (vitestConsoleLogs.length > 0) {

@@ -345,7 +345,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Pattern Match
 				api.slothlet.hook.on(`before:${pattern}`, () => {
 					// Hook registered but may not be called
 				});
-			}).toThrow("Brace expansion exceeds maximum nesting depth of 10");
+			}).toThrow("HOOK_BRACE_EXPANSION_MAX_DEPTH");
 		});
 
 		// No need to test function call since registration throws
