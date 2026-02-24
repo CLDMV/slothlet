@@ -50,24 +50,6 @@ export class Builder extends ComponentBase {
 	}
 
 	/**
-	 * Get ownership manager from Slothlet.
-	 * @returns {object} Ownership manager instance.
-	 * @private
-	 */
-	get ownership() {
-		return this.slothlet.ownership;
-	}
-
-	/**
-	 * Get context manager from Slothlet.
-	 * @returns {object} Context manager instance.
-	 * @private
-	 */
-	get contextManager() {
-		return this.slothlet.contextManager;
-	}
-
-	/**
 	 * Build API from directory or file.
 	 * @param {Object} options - Build options
 	 * @param {string} options.dir - Directory or file to build from
@@ -155,15 +137,6 @@ export class Builder extends ComponentBase {
 				cacheBust,
 				fileFilter
 			});
-		} else {
-			throw new this.SlothletError(
-				"INVALID_CONFIG_MODE_UNKNOWN",
-				{
-					mode
-				},
-				null,
-				{ validationError: true }
-			);
 		}
 
 		return rawAPI;
