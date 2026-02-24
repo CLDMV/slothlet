@@ -555,4 +555,57 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			expect(afterReload.apiPath).toContain("metadataTestHelper");
 		});
 	});
+
+	// ─── importUserState merge branch ──────────────────────────────────────────
+	//
+	// The merge branch (existing keys win) in importUserState fires when load()
+	// has already populated #userMetadataStore for a key by the time
+	// importUserState is called. This happens for the base moduleID when the
+	// top-level slothlet config includes a `metadata` option: load() calls
+	// registerUserMetadata(baseModuleId, "", config.metadata), so pre-reload
+	// savedState and post-load store both have the same baseModuleId key.
+
+	describe("importUserState - merge branch (existing entry wins)", () => {
+		let apiWithConfigMeta;
+
+		beforeEach(async () => {
+			apiWithConfigMeta = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST,
+				metadata: {
+					fromConfig: true,
+					configVersion: "1.0.0"
+				},
+				api: {
+					mutations: {
+						reload: true
+					}
+				}
+			});
+		});
+
+		afterEach(async () => {
+			if (apiWithConfigMeta?.shutdown) {
+				await apiWithConfigMeta.shutdown();
+			}
+		});
+
+		it("config-level metadata survives reload (exercises importUserState merge branch)", async () => {
+			// Verify metadata is present before reload
+			await materialize(apiWithConfigMeta, "rootMath.add", 1, 2);
+			const before = apiWithConfigMeta.rootMath.add.__metadata;
+			expect(before.fromConfig).toBe(true);
+			expect(before.configVersion).toBe("1.0.0");
+
+			// Reload — triggers: exportUserState → load() (re-registers baseModuleId) →
+			// importUserState (existing entry found → merge branch fires) → replay
+			await apiWithConfigMeta.slothlet.reload();
+
+			// Metadata must still be present after reload
+			await materialize(apiWithConfigMeta, "rootMath.add", 1, 2);
+			const after = apiWithConfigMeta.rootMath.add.__metadata;
+			expect(after.fromConfig).toBe(true);
+			expect(after.configVersion).toBe("1.0.0");
+		});
+	});
 });

@@ -494,4 +494,42 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		expect(resolveWrapper(leaf)[INTERNAL_KEY]).not.toBeUndefined();
 		expect(resolveWrapper(ns)[INTERNAL_KEY]).not.toBeUndefined();
 	});
+
+	// ---------------------------------------------------------------------------
+	// G. Slothlet instance must not leak through ____slothlet on any user-facing surface.
+	//    ComponentBase uses a private class field (#slothlet) + prototype getter so the
+	//    JS Proxy invariant for non-configurable own properties never fires; the underscore
+	//    filter in UnifiedWrapper's getTrap blocks it instead.
+	// ---------------------------------------------------------------------------
+
+	it("G1. api.____slothlet returns undefined (root proxy blocks ComponentBase getter)", async () => {
+		// The root api object is the SlothletApi proxy created by api_builder.
+		// ____slothlet must never return the Slothlet instance through any proxy surface.
+		expect(api.____slothlet).toBeUndefined();
+		expect(api["____slothlet"]).toBeUndefined();
+	});
+
+	it("G2. api.math.____slothlet returns undefined (non-callable namespace proxy)", async () => {
+		// api.math is a non-callable UnifiedWrapper proxy. Previously, the ____slothlet
+		// own non-configurable property would bypass the underscore filter due to the JS
+		// Proxy invariant. After the ComponentBase private-field fix it is a prototype
+		// getter, not an own property, so the invariant never fires.
+		const ns = api.math;
+		expect(ns.____slothlet).toBeUndefined();
+		expect(ns["____slothlet"]).toBeUndefined();
+	});
+
+	it("G3. api.slothlet.materialize.____slothlet returns undefined (plain object projection)", async () => {
+		// api.slothlet.materialize was previously the raw MaterializeManager extends
+		// ComponentBase instance, exposing ____slothlet with no proxy in the way.
+		// It is now a plain frozen object with only the three public members projected,
+		// so ____slothlet is simply absent.
+		const mat = api.slothlet.materialize;
+		expect(mat.____slothlet).toBeUndefined();
+		expect(mat["____slothlet"]).toBeUndefined();
+		// Verify the plain object still exposes its three legitimate members
+		expect(typeof mat.materialized).toBe("boolean");
+		expect(typeof mat.get).toBe("function");
+		expect(typeof mat.wait).toBe("function");
+	});
 });

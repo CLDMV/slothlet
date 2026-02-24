@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 02:36:30 -08:00 (1771756590)
+ *	@Last modified time: 2026-02-22 23:58:22 -08:00 (1771833502)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -33,6 +33,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
+import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -40,7 +41,6 @@ import {
 	cleanupEventEmitterResources,
 	setApiContextChecker
 } from "@cldmv/slothlet/helpers/eventemitter-context";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
  * Slothlet instance - clean architecture prototype
@@ -153,7 +153,7 @@ class Slothlet {
 
 		// Subscribe metadata system to impl:created and impl:changed events
 		if (this.handlers.metadata) {
-			this.handlers.lifecycle.subscribe("impl:created", (data) => {
+			this.handlers.lifecycle.subscribe("impl:created", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
 					data.impl,
 					{
@@ -162,11 +162,11 @@ class Slothlet {
 						moduleID: data.moduleID,
 						sourceFolder: data.sourceFolder
 					},
-					{ _fromLifecycle: true }
+					token
 				);
 			});
 
-			this.handlers.lifecycle.subscribe("impl:changed", (data) => {
+			this.handlers.lifecycle.subscribe("impl:changed", (data, token) => {
 				this.handlers.metadata.tagSystemMetadata(
 					data.impl,
 					{
@@ -175,7 +175,7 @@ class Slothlet {
 						moduleID: data.moduleID,
 						sourceFolder: data.sourceFolder
 					},
-					{ _fromLifecycle: true }
+					token
 				);
 			});
 
@@ -322,6 +322,9 @@ class Slothlet {
 		// This allows config helpers to be component classes
 		await this._initializeComponents();
 
+		// Register per-instance lifecycle capability token (must be before any tagSystemMetadata calls)
+		registerInstance(this);
+
 		// Set up lifecycle event subscribers for cross-system coordination
 		this._setupLifecycleSubscribers();
 
@@ -419,7 +422,7 @@ class Slothlet {
 			}
 
 			// Register user metadata for base moduleID
-			this.handlers.metadata.registerUserMetadata(baseModuleId, "", this.config.metadata);
+			this.handlers.metadata.registerUserMetadata(baseModuleId, this.config.metadata);
 		}
 
 		// Register all API paths with ownership manager AFTER building final API
@@ -612,69 +615,19 @@ class Slothlet {
 			return;
 		}
 
-		const contextManager = this.contextManager;
 		const metadataHandler = this.handlers.metadata;
-		const apiRoot = api; // Use the api parameter passed in (apiWithBuiltins)
 
-		// Add get() - Get metadata by API path string
+		// Delegate to Metadata class methods — all logic lives in metadata.mjs
 		api.slothlet.metadata.get = async function slothlet_metadata_get_runtime(path) {
-			if (typeof path !== "string") {
-				throw new SlothletError("INVALID_ARGUMENT", {
-					argument: "path",
-					expected: "string",
-					received: typeof path
-				});
-			}
-
-			// Note: No context check needed - this function works with explicit paths
-			// and doesn't require being called from within an API function
-
-			// Traverse the path from API root (not from current module's self)
-			const parts = path.split(".");
-			let target = apiRoot;
-
-			for (const part of parts) {
-				// Allow traversal through both objects AND functions (functions can have properties)
-				if (!target || (typeof target !== "object" && typeof target !== "function")) {
-					return null;
-				}
-				target = target[part];
-			}
-
-			// If target is a lazy proxy (has _materialize), materialize it first
-			if (target && typeof target._materialize === "function") {
-				await target._materialize();
-			}
-
-			// Get metadata for the resolved function
-			if (typeof target === "function" || (target && resolveWrapper(target)?.____slothletInternal.impl)) {
-				return metadataHandler.getMetadata(target);
-			}
-
-			return null;
+			return metadataHandler.get(path);
 		};
 
-		// Add self() - Get metadata for currently executing function
 		api.slothlet.metadata.self = function slothlet_metadata_self_runtime() {
-			const ctx = contextManager.tryGetContext();
-			if (!ctx || !ctx.currentWrapper) {
-				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, {
-					validationError: true
-				});
-			}
-
-			return metadataHandler.getMetadata(ctx.currentWrapper);
+			return metadataHandler.self();
 		};
 
-		// Add caller() - Get metadata for calling function
 		api.slothlet.metadata.caller = function slothlet_metadata_caller_runtime() {
-			const ctx = contextManager.tryGetContext();
-			if (!ctx || !ctx.callerWrapper) {
-				// No caller in context (e.g., called from outside API)
-				return null;
-			}
-
-			return metadataHandler.getMetadata(ctx.callerWrapper);
+			return metadataHandler.caller();
 		};
 	}
 

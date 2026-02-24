@@ -72,6 +72,17 @@
  */
 export class ComponentBase {
 	/**
+	 * Private backing field for the Slothlet instance reference.
+	 * Using a private field instead of a non-configurable own property ensures that the
+	 * JS Proxy invariant ("a non-configurable own property's get-trap must return the actual
+	 * value") never fires for ____slothlet, so the underscore-filter in UnifiedWrapper's
+	 * getTrap can safely block it before it leaks the Slothlet instance to user-land.
+	 * @type {object}
+	 * @private
+	 */
+	#slothlet;
+
+	/**
 	 * Create a component base instance.
 	 * @param {object} slothlet - Slothlet class instance.
 	 * @package
@@ -85,8 +96,24 @@ export class ComponentBase {
 	 * super(slothlet);
 	 */
 	constructor(slothlet) {
-		// Make ____slothlet non-enumerable so it doesn't interfere with child enumeration
-		Object.defineProperty(this, "____slothlet", { value: slothlet, writable: false, enumerable: false, configurable: false });
+		this.#slothlet = slothlet;
+	}
+
+	/**
+	 * Get Slothlet instance via the canonical internal accessor name.
+	 * @returns {object} Slothlet instance.
+	 * @package
+	 *
+	 * @description
+	 * Prototype getter — NOT an own property — so the JS Proxy invariant for
+	 * non-configurable own properties never applies. UnifiedWrapper's getTrap blocks
+	 * this name via the underscore-filter before it can reach the getter.
+	 *
+	 * @example
+	 * const s = this.____slothlet;
+	 */
+	get ____slothlet() {
+		return this.#slothlet;
 	}
 
 	/**
@@ -102,7 +129,7 @@ export class ComponentBase {
 	 * this.slothlet.debug("api", { action: "assigned" });
 	 */
 	get slothlet() {
-		return this.____slothlet;
+		return this.#slothlet;
 	}
 
 	/**

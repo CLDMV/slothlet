@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:27:57 -08:00 (1771738077)
+ *	@Last modified time: 2026-02-23 15:59:31 -08:00 (1771891171)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -247,7 +247,11 @@ export class UnifiedWrapper extends ComponentBase {
 			slothlet.handlers.lifecycle.emit("impl:created", {
 				apiPath,
 				impl: this,
-				wrapper: this,
+				// wrapper is a frozen minimal object to avoid leaking the raw UnifiedWrapper
+				// (and therefore .slothlet) into user-facing lifecycle payloads.
+				// Internal subscribers that need __impl use data.wrapper.__impl; no other
+				// internal usage requires the full wrapper reference here.
+				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
 				source: "initial",
 				moduleID,
 				filePath,
@@ -260,7 +264,7 @@ export class UnifiedWrapper extends ComponentBase {
 			slothlet.handlers.lifecycle.emit("impl:created", {
 				apiPath,
 				impl: initialImpl,
-				wrapper: this,
+				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
 				source: "initial",
 				moduleID,
 				filePath,
@@ -554,7 +558,7 @@ export class UnifiedWrapper extends ComponentBase {
 			this.slothlet.handlers.lifecycle.emit("impl:changed", {
 				apiPath: this.____slothletInternal.apiPath,
 				impl: newImpl,
-				wrapper: this,
+				wrapper: Object.freeze({ __impl: this.____slothletInternal.impl }),
 				source: "hot-reload",
 				moduleID: extractedModuleId,
 				filePath: wrapperMetadata?.filePath,
@@ -1768,7 +1772,16 @@ export class UnifiedWrapper extends ComponentBase {
 						) {
 							return undefined;
 						}
-						throw new Error(`${wrapper.____slothletInternal.apiPath}.${chainLabel} - cannot access ${String(prop)} of undefined`);
+						throw new wrapper.slothlet.SlothletError(
+							"CHAIN_ACCESS_UNDEFINED",
+							{
+								apiPath: wrapper.____slothletInternal.apiPath,
+								chainLabel,
+								prop: String(prop)
+							},
+							null,
+							{ validationError: true }
+						);
 					}
 
 					const currentWrapper = resolveWrapper(current);
@@ -1781,7 +1794,16 @@ export class UnifiedWrapper extends ComponentBase {
 							while (!currentWrapper.____slothletInternal.state.materialized) {
 								const nextState = currentWrapper.____slothletInternal.state;
 								if (!nextState.inFlight && !nextState.materialized) {
-									throw new Error(`${wrapper.____slothletInternal.apiPath}.${chainLabel} failed to materialize ${String(prop)}`);
+									throw new wrapper.slothlet.SlothletError(
+										"CHAIN_MATERIALIZE_FAILED",
+										{
+											apiPath: wrapper.____slothletInternal.apiPath,
+											chainLabel,
+											prop: String(prop)
+										},
+										null,
+										{ validationError: true }
+									);
 								}
 								await new Promise((resolve) => setImmediate(resolve));
 							}
@@ -1839,10 +1861,26 @@ export class UnifiedWrapper extends ComponentBase {
 				// If current is undefined/null after traversing the chain, throw an error
 				// The property doesn't exist after materialization
 				if (current === undefined || current === null) {
-					throw new Error(`${wrapper.____slothletInternal.apiPath}.${chainLabel} is not a function or does not exist`);
+					throw new wrapper.slothlet.SlothletError(
+						"CHAIN_NOT_CALLABLE",
+						{
+							apiPath: wrapper.____slothletInternal.apiPath,
+							chainLabel
+						},
+						null,
+						{ validationError: true }
+					);
 				}
 
-				throw new Error(`${wrapper.____slothletInternal.apiPath}.${chainLabel} is not a function`);
+				throw new wrapper.slothlet.SlothletError(
+					"CHAIN_NOT_CALLABLE",
+					{
+						apiPath: wrapper.____slothletInternal.apiPath,
+						chainLabel
+					},
+					null,
+					{ validationError: true }
+				);
 			},
 			getPrototypeOf: () => null
 		});

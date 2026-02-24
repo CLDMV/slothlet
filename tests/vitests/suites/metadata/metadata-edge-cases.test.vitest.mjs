@@ -25,6 +25,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { Metadata } from "@cldmv/slothlet/handlers/metadata";
+import { SlothletError } from "@cldmv/slothlet/errors";
 import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ config }) => {
@@ -265,6 +267,55 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// metadata.get() should return null for non-existent paths (traversal fails gracefully)
 			const result = await api.slothlet.metadata.get("nonExistent.path.that.doesNotExist");
 			expect(result).toBeNull();
+		});
+	});
+
+	describe("Nested 'metadata' Key Spreading", () => {
+		it("should spread a nested 'metadata' object key to root level in getMetadata()", async () => {
+			// Lines 206-207: getMetadata() has a branch that detects when combined result
+			// has a key literally named 'metadata' that is an object, and spreads it to root.
+			// This fires when set() stores { metadata: <object> } on a function's user metadata.
+			await materialize(api, "rootMath.add", 1, 2);
+			api.slothlet.metadata.set(api.rootMath.add, "metadata", { nestedFlag: true, nestedVersion: "2" });
+			const meta = api.rootMath.add.__metadata;
+			// The nested metadata object should be spread to root level
+			expect(meta.nestedFlag).toBe(true);
+			expect(meta.nestedVersion).toBe("2");
+		});
+	});
+
+	describe("Validation Errors", () => {
+		it("should throw when set() is called with a plain function that has no system metadata", async () => {
+			// Line coverage: setUserMetadata throws METADATA_NO_MODULE_ID when target has no moduleID
+			const plainFn = () => {};
+			expect(() => api.slothlet.metadata.set(plainFn, "key", "value")).toThrow();
+		});
+
+		it("should throw when set() is called with a non-function, non-object target", async () => {
+			// Line coverage: setUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
+			expect(() => api.slothlet.metadata.set("notAFunction", "key", "value")).toThrow();
+		});
+
+		it("should throw when remove() is called with a non-function, non-object target", async () => {
+			// Line coverage: removeUserMetadata throws INVALID_METADATA_TARGET when target is a primitive
+			expect(() => api.slothlet.metadata.remove("notAFunction", "key")).toThrow();
+		});
+
+		it("should throw when remove() is called with an invalid key type", async () => {
+			// Line coverage: removeUserMetadata throws INVALID_METADATA_KEY when key is not string/array/object
+			// First set a value so a storeEntry exists, then remove with a bad key type
+			await materialize(api, "rootMath.add", 1, 2);
+			api.slothlet.metadata.set(api.rootMath.add, "tempKey", "tempVal");
+			expect(() => api.slothlet.metadata.remove(api.rootMath.add, 123)).toThrow();
+		});
+
+		it("should throw when registerUserMetadata() is called with an invalid identifier", () => {
+			// Line coverage: registerUserMetadata guard at line 386 — requires direct instantiation
+			// since no public API surface reaches it with a bad identifier
+			const mockSlothlet = { SlothletError };
+			const handler = new Metadata(mockSlothlet);
+			expect(() => handler.registerUserMetadata(null, {})).toThrow();
+			expect(() => handler.registerUserMetadata("", {})).toThrow();
 		});
 	});
 

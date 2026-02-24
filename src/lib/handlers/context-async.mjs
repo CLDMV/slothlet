@@ -106,29 +106,32 @@ export class AsyncContextManager {
 		// Create a new store with currentWrapper for this execution
 		const executionStore = { ...baseStore };
 		if (currentWrapper) {
+			executionStore.callerWrapper = baseStore.currentWrapper;
 			executionStore.currentWrapper = currentWrapper;
 		}
 
 		// Only wrap in als.run() if we're not already in the right context
 		if (isActiveOurInstance) {
-			// Already in correct context - just update currentWrapper and execute
-			try {
-				const result = fn.apply(thisArg, args);
-				// Wrap class instances to preserve context
-				if (runtime_isClassInstance(result)) {
-					const instanceCache = new WeakMap();
-					return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+			// Already in correct context - use a child ALS context so currentWrapper/callerWrapper propagate correctly
+			return this.als.run(executionStore, () => {
+				try {
+					const result = fn.apply(thisArg, args);
+					// Wrap class instances to preserve context
+					if (runtime_isClassInstance(result)) {
+						const instanceCache = new WeakMap();
+						return runtime_wrapClassInstance(result, this, instanceID, instanceCache);
+					}
+					return result;
+				} catch (error) {
+					throw new SlothletError(
+						"CONTEXT_EXECUTION_FAILED",
+						{
+							instanceID
+						},
+						error
+					);
 				}
-				return result;
-			} catch (error) {
-				throw new SlothletError(
-					"CONTEXT_EXECUTION_FAILED",
-					{
-						instanceID
-					},
-					error
-				);
-			}
+			});
 		}
 
 		// Not in context or switching instance - create new ALS context

@@ -774,7 +774,7 @@ describe("Per-Request Context Error Handling", () => {
 			await api.slothlet.context.run({ userId: 123 }, async () => {});
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("Per-request context");
+			expect(error.message).toContain("SCOPE_DISABLED");
 		}
 	});
 
@@ -802,7 +802,7 @@ describe("Per-Request Context Error Handling", () => {
 			await api.slothlet.context.run({ userId: 123 });
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("Callback must be a function");
+			expect(error.message).toContain("SCOPE_INVALID_CALLBACK");
 		}
 	});
 
@@ -819,7 +819,7 @@ describe("Per-Request Context Error Handling", () => {
 			});
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("fn must be a function");
+			expect(error.message).toContain("SCOPE_INVALID_FN");
 		}
 	});
 
@@ -836,7 +836,7 @@ describe("Per-Request Context Error Handling", () => {
 			});
 			expect.fail("Should have thrown error");
 		} catch (error) {
-			expect(error.message).toContain("context must be an object");
+			expect(error.message).toContain("SCOPE_INVALID_CONTEXT_OBJECT");
 		}
 	});
 });
