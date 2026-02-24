@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 19:53:00 -08:00 (1771818780)
+ *	@Last modified time: 2026-02-23 15:59:22 -08:00 (1771891162)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -26,6 +26,7 @@
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { t } from "@cldmv/slothlet/i18n";
 import { UnifiedWrapper, resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { getInstanceToken } from "@cldmv/slothlet/handlers/lifecycle-token";
 /**
  * ModesProcessor - Handles mode-specific file and directory processing.
  *
@@ -126,7 +127,7 @@ export class ModesProcessor extends ComponentBase {
 							moduleID: moduleID || "base",
 							sourceFolder: sourceFolder || directory.path
 						},
-						{ _fromLifecycle: true }
+						getInstanceToken(this.slothlet)
 					);
 				}
 
@@ -896,8 +897,14 @@ export class ModesProcessor extends ComponentBase {
 															// Keep existing property from default export
 															continue;
 														} else if (collisionMode === "error") {
-															throw new Error(
-																`Collision detected: property "${key}" already exists on default export at ${apiPathPrefix}.${subDirName}`
+															throw new this.slothlet.SlothletError(
+																"COLLISION_DEFAULT_EXPORT_ERROR",
+																{
+																	key,
+																	apiPath: `${apiPathPrefix}.${subDirName}`
+																},
+																null,
+																{ validationError: true }
 															);
 														} else if (collisionMode === "warn") {
 															new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
@@ -1329,7 +1336,15 @@ export class ModesProcessor extends ComponentBase {
 											// Keep existing property from default export
 											continue;
 										} else if (collisionMode === "error") {
-											throw new Error(`Collision detected: property "${key}" already exists on default export at ${apiPath}`);
+											throw new this.slothlet.SlothletError(
+												"COLLISION_DEFAULT_EXPORT_ERROR",
+												{
+													key,
+													apiPath
+												},
+												null,
+												{ validationError: true }
+											);
 										} else if (collisionMode === "warn") {
 											new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
 												key,

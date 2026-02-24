@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
+ *	@Last modified time: 2026-02-23 15:59:20 -08:00 (1771891160)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -495,6 +495,7 @@ export class ApiBuilder extends ComponentBase {
 				 * @internal
 				 */
 				diagnostics: () => {
+					if (!slothlet.config?.diagnostics) return undefined;
 					const managerType = slothlet.contextManager.constructor.name;
 					const result = {
 						instanceID: slothlet.instanceID,
@@ -941,11 +942,23 @@ export class ApiBuilder extends ComponentBase {
 			 * // Wait for full materialization
 			 * await api.slothlet.materialize.wait();
 			 */
-			materialize: slothlet.handlers?.materialize || {
-				materialized: false,
-				get: () => ({ total: 0, materialized: 0, remaining: 0, percentage: 100 }),
-				wait: async () => {}
-			},
+			materialize: (() => {
+				const mgr = slothlet.handlers?.materialize;
+				if (!mgr) {
+					return Object.freeze({
+						materialized: false,
+						get: () => ({ total: 0, materialized: 0, remaining: 0, percentage: 100 }),
+						wait: async () => {}
+					});
+				}
+				return Object.freeze({
+					get materialized() {
+						return mgr.materialized;
+					},
+					get: mgr.get.bind(mgr),
+					wait: mgr.wait.bind(mgr)
+				});
+			})(),
 
 			/**
 			 * Lifecycle event manager for subscribing to API events.
@@ -1162,15 +1175,15 @@ export class ApiBuilder extends ComponentBase {
 			run: async (contextData, callback, ...args) => {
 				// Check if per-request context is disabled
 				if (slothlet.config.scope === false) {
-					throw new Error("Per-request context isolation is disabled. Set scope: {} in config to enable.");
+					throw new slothlet.SlothletError("SCOPE_DISABLED", {}, null, { validationError: true });
 				}
 
 				// Validate parameters
 				if (!contextData || typeof contextData !== "object") {
-					throw new Error("Context data must be an object");
+					throw new slothlet.SlothletError("SCOPE_INVALID_CONTEXT", { received: typeof contextData }, null, { validationError: true });
 				}
 				if (typeof callback !== "function") {
-					throw new Error("Callback must be a function");
+					throw new slothlet.SlothletError("SCOPE_INVALID_CALLBACK", { received: typeof callback }, null, { validationError: true });
 				}
 
 				// Delegate to scope with structured options
@@ -1198,25 +1211,27 @@ export class ApiBuilder extends ComponentBase {
 			scope: async (options) => {
 				// Check if per-request context is disabled
 				if (slothlet.config.scope === false) {
-					throw new Error("Per-request context isolation is disabled. Set scope: {} in config to enable.");
+					throw new slothlet.SlothletError("SCOPE_DISABLED", {}, null, { validationError: true });
 				}
 
 				// Validate parameters
 				if (!options || typeof options !== "object") {
-					throw new Error("Options must be an object");
+					throw new slothlet.SlothletError("SCOPE_INVALID_OPTIONS", { received: typeof options }, null, { validationError: true });
 				}
 				if (!options.fn || typeof options.fn !== "function") {
-					throw new Error("fn must be a function");
+					throw new slothlet.SlothletError("SCOPE_INVALID_FN", { received: typeof options?.fn }, null, { validationError: true });
 				}
 				if (!options.context || typeof options.context !== "object") {
-					throw new Error("context must be an object");
+					throw new slothlet.SlothletError("SCOPE_INVALID_CONTEXT_OBJECT", { received: typeof options?.context }, null, {
+						validationError: true
+					});
 				}
 
 				const { context: contextData, fn, args = [], merge = "shallow", isolation } = options;
 
 				// Validate merge strategy
 				if (merge !== "shallow" && merge !== "deep") {
-					throw new Error(`Invalid merge strategy: "${merge}". Must be "shallow" or "deep".`);
+					throw new slothlet.SlothletError("SCOPE_INVALID_MERGE_STRATEGY", { merge }, null, { validationError: true });
 				}
 
 				// Get isolation mode (from options or config)
@@ -1224,7 +1239,7 @@ export class ApiBuilder extends ComponentBase {
 
 				// Validate isolation mode
 				if (isolationMode !== "partial" && isolationMode !== "full") {
-					throw new Error(`Invalid isolation mode: "${isolationMode}". Must be "partial" or "full".`);
+					throw new slothlet.SlothletError("SCOPE_INVALID_ISOLATION_MODE", { isolationMode }, null, { validationError: true });
 				}
 
 				// Get current context manager

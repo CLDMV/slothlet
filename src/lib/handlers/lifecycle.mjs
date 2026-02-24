@@ -18,6 +18,7 @@
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { getInstanceToken } from "@cldmv/slothlet/handlers/lifecycle-token";
 
 /**
  * Lifecycle event manager for impl changes
@@ -168,16 +169,17 @@ export class Lifecycle extends ComponentBase {
 			// Collect all handler promises (both sync and async)
 			const handlerPromises = [];
 
-			for (const handler of handlers) {
-				try {
-					const result = handler(data);
+				const token = getInstanceToken(this.slothlet);
+				for (const handler of handlers) {
+					try {
+						const result = handler(data, token);
 					// If handler returns a promise, track it
 					if (result && typeof result.then === "function") {
 						handlerPromises.push(
 							result.catch((error) => {
 								// Log error but don't stop other handlers
 								if (!this.____config?.silent) {
-									console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
+									new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
 								}
 							})
 						);
@@ -185,7 +187,7 @@ export class Lifecycle extends ComponentBase {
 				} catch (error) {
 					// Log synchronous errors but don't stop other handlers
 					if (!this.____config?.silent) {
-						console.error(`[slothlet] Lifecycle event handler error (${event}):`, error);
+						new this.SlothletWarning("WARNING_LIFECYCLE_HANDLER_ERROR", { event }, error);
 					}
 				}
 			}

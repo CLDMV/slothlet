@@ -589,5 +589,81 @@ describe.each(getMatrixConfigs())("External Metadata API > Config: '$name'", ({ 
 			// function-level still present after path removal
 			expect(api.rootMath.add.__metadata.tag).toBe("function");
 		});
+
+		it("should throw INVALID_METADATA_KEY when key in array is not a string", async () => {
+			// Populate the path entry first so removeFor reaches the array-key loop
+			api.slothlet.metadata.setFor("rootMath", { category: "math" });
+
+			// Passing an array with a non-string element triggers the per-element type check
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() =>
+					api.slothlet.metadata.removeFor("rootMath", ["category", 99])
+				).toThrow();
+			});
+		});
+
+		it("should throw INVALID_METADATA_KEY when key is a non-string, non-array value", async () => {
+			// Populate the path entry first so removeFor reaches the else throw
+			api.slothlet.metadata.setFor("rootMath", { category: "math" });
+
+			// Passing a number as key is not undefined, not array, not string → throws
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() =>
+					api.slothlet.metadata.removeFor("rootMath", 42)
+				).toThrow();
+			});
+		});
+	});
+
+	describe("api.slothlet.metadata.setFor() - validation errors", () => {
+		beforeEach(async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST
+			});
+		});
+
+		it("should throw INVALID_ARGUMENT when keyOrObj is an array", async () => {
+			// An array passes the `typeof keyOrObj !== "string"` check so it becomes
+			// metadataObj, but Array.isArray(metadataObj) is true → throws INVALID_ARGUMENT
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() =>
+					api.slothlet.metadata.setFor("rootMath", ["category", "math"])
+				).toThrow();
+			});
+		});
+
+		it("should throw INVALID_ARGUMENT when path is null", async () => {
+			// _resolvePathOrModuleId returns null for null input; setPathMetadata
+			// then throws because typeof null !== "string"
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() =>
+					api.slothlet.metadata.setFor(null, "key", "value")
+				).toThrow();
+			});
+		});
+
+		it("should throw INVALID_ARGUMENT when path is an empty string", async () => {
+			// setPathMetadata checks !apiPath — empty string is falsy → throws
+			withSuppressedSlothletErrorOutputSync(() => {
+				expect(() =>
+					api.slothlet.metadata.setFor("", "key", "value")
+				).toThrow();
+			});
+		});
+
+		it("should handle pre-frozen nested objects in metadata without error", async () => {
+			// #deepFreeze short-circuits on already-frozen objects (isFrozen check)
+			const frozenNested = Object.freeze({ alreadyFrozen: true });
+
+			await api.slothlet.api.add("frozenMetaTest", TEST_DIRS.API_SMART_FLATTEN, {
+				metadata: { nested: frozenNested, normal: "value" }
+			});
+
+			await materialize(api, "frozenMetaTest.config.settings.getPluginConfig");
+			const meta = api.frozenMetaTest.config.settings.getPluginConfig.__metadata;
+			expect(meta.normal).toBe("value");
+			expect(meta.nested.alreadyFrozen).toBe(true);
+		});
 	});
 });

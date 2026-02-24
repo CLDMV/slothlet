@@ -105,11 +105,12 @@ export class LiveContextManager {
 		// Set current instance (synchronous)
 		const previousInstanceID = this.currentInstanceID;
 		const previousWrapper = store.currentWrapper;
+		const previousCallerWrapper = store.callerWrapper;
 
 		this.currentInstanceID = targetInstanceID;
 		if (currentWrapper) {
+			store.callerWrapper = previousWrapper;
 			store.currentWrapper = currentWrapper;
-			// TODO: Implement caller detection
 		}
 
 		try {
@@ -126,6 +127,7 @@ export class LiveContextManager {
 			// Restore previous state
 			this.currentInstanceID = previousInstanceID;
 			store.currentWrapper = previousWrapper;
+			store.callerWrapper = previousCallerWrapper;
 		}
 	}
 

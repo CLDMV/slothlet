@@ -19,6 +19,7 @@
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { verifyToken } from "@cldmv/slothlet/handlers/lifecycle-token";
 
 /**
  * Metadata handler for introspection of function metadata
@@ -36,9 +37,6 @@ export class Metadata extends ComponentBase {
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = {}; // global user metadata (applies to all)
 
-	#runtimeModule = null;
-	#runtimeImportPromise = null;
-
 	_instanceId = null;
 
 	/**
@@ -48,61 +46,6 @@ export class Metadata extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 		this._instanceId = `metadata_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-	}
-
-	/**
-	 * Lazily import the runtime module on first access
-	 * @private
-	 * @returns {Promise<object>} Runtime module
-	 */
-	async #ensureRuntime() {
-		if (this.#runtimeModule) {
-			return this.#runtimeModule;
-		}
-
-		if (!this.#runtimeImportPromise) {
-			this.#runtimeImportPromise = import("@cldmv/slothlet/runtime")
-				.then((module) => {
-					this.#runtimeModule = module;
-					return module;
-				})
-				.catch((err) => {
-					new this.SlothletWarning("ERROR_RUNTIME_IMPORT_FAILED", {}, err);
-					this.#runtimeModule = {}; // Empty object to prevent repeated imports
-					return {};
-				});
-		}
-
-		return this.#runtimeImportPromise;
-	}
-
-	/**
-	 * Get the current API root from runtime's self binding
-	 * @private
-	 * @returns {object|null} Current API root (self binding)
-	 */
-	#getApiRoot() {
-		return this.#runtimeModule?.self || null;
-	}
-
-	/**
-	 * Parse a V8 CallSite object to extract file path and line number
-	 * @private
-	 * @param {object} callSite - V8 CallSite object
-	 * @returns {object|null} Parsed { file, line } or null
-	 */
-	#parseCallSite(callSite) {
-		try {
-			const fileName = callSite.getFileName();
-			const lineNumber = callSite.getLineNumber();
-			if (!fileName || !lineNumber) return null;
-			return {
-				file: this.slothlet.helpers.resolver.toFsPath(fileName),
-				line: lineNumber
-			};
-		} catch {
-			return null;
-		}
 	}
 
 	/**
@@ -133,90 +76,28 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Find function by API path (dot notation)
-	 * @private
-	 * @param {object} apiRoot - Root API object
-	 * @param {string} path - Dot-notation path
-	 * @returns {Function|null} Found function or null
-	 */
-	#findFunctionByPath(apiRoot, path) {
-		const parts = path.split(".");
-		let current = apiRoot;
-
-		for (const part of parts) {
-			if (!current || typeof current !== "object") return null;
-			current = current[part];
-		}
-
-		return typeof current === "function" ? current : null;
-	}
-
-	/**
-	 * Find function by file path and line number from stack trace
-	 * @private
-	 * @param {object} apiRoot - Root API object
-	 * @param {string} targetFile - File path from stack trace
-	 * @param {number} targetLine - Line number from stack trace
-	 * @param {WeakSet} [visited] - Visited objects tracker
-	 * @returns {Function|null} Found function or null
-	 */
-	#findFunctionByStack(apiRoot, targetFile, targetLine, visited = new WeakSet()) {
-		if (!apiRoot || typeof apiRoot !== "object") return null;
-		if (visited.has(apiRoot)) return null;
-		visited.add(apiRoot);
-
-		for (const key of Object.keys(apiRoot)) {
-			const value = apiRoot[key];
-
-			// Skip unmaterialized wrappers/proxies - accessing their properties creates waiting proxies
-			// that can cause "fn is not a function" errors
-			const wrapper = resolveWrapper(value);
-			if (value && wrapper) {
-				// Only traverse if materialized, otherwise skip to avoid creating waiting proxies
-				if (wrapper.____slothletInternal.state && !wrapper.____slothletInternal.state.materialized) {
-					continue;
-				}
-			}
-
-			if (typeof value === "function") {
-				const meta = value.__metadata;
-				if (meta?.sourceFile && meta?.sourceLine) {
-					const metaFile = this.slothlet.helpers.resolver.toFsPath(meta.sourceFile);
-					if (metaFile === targetFile && meta.sourceLine === targetLine) {
-						return value;
-					}
-				}
-			} else if (value && typeof value === "object") {
-				const found = this.#findFunctionByStack(value, targetFile, targetLine, visited);
-				if (found) return found;
-			}
-		}
-
-		return null;
-	}
-
-	/**
 	 * Tag system metadata (SECURE, IMMUTABLE)
 	 * Called internally during wrapper/function creation
+	 *
+	 * The `token` parameter must be the module-private `LIFECYCLE_TOKEN` Symbol exported
+	 * from `@cldmv/slothlet/handlers/lifecycle-token`. Because a Symbol is a unique,
+	 * non-forgeable value within a Node.js process, and because the token module is not
+	 * listed in the package's public `exports` map, user-land code cannot construct a
+	 * value that satisfies the `token === LIFECYCLE_TOKEN` check without modifying the
+	 * source or importing an undocumented internal path.
+	 *
 	 * @param {Function|Object} target - Wrapper or function to tag
 	 * @param {Object} systemData - System metadata (filePath, apiPath, moduleID, sourceFolder)
-	 * @param {Object} [options] - Options
-	 * @param {boolean} [options._fromLifecycle] - REQUIRED: Must be true, indicates call from lifecycle system
+	 * @param {symbol} token - Must be `LIFECYCLE_TOKEN` — the unforgeable module-private Symbol
 	 * @private
 	 */
-	tagSystemMetadata(target, systemData, options = {}) {
-		// ENFORCEMENT: All metadata tagging MUST go through lifecycle system
-		if (!options._fromLifecycle) {
-			const error = new Error(
-				"[slothlet] tagSystemMetadata() must be called through lifecycle system. " +
-					"Use lifecycle.emit('impl:created') or lifecycle.emit('impl:changed') instead of direct call."
-			);
-			if (!this.____config?.silent) {
-				console.error(error.message);
-				console.error("Stack trace:");
-				console.error(error.stack);
-			}
-			throw error;
+	tagSystemMetadata(target, systemData, token) {
+		// ENFORCEMENT: caller must supply the per-instance lifecycle capability token.
+		// The token is a Symbol created at runtime and stored in a module-private WeakMap
+		// inside lifecycle-token.mjs — it is never exported as a constant, so no static
+		// file import can yield a usable value.
+		if (!verifyToken(this.slothlet, token)) {
+			throw new this.SlothletError("METADATA_LIFECYCLE_BYPASS", {}, null, { validationError: true });
 		}
 
 		if (!target) return;
@@ -496,74 +377,46 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Register user metadata for an API path
+	 * Register user metadata keyed by an identifier (moduleID or API path)
 	 *
 	 * @description
-	 * Stores user-provided metadata keyed by BOTH moduleID and apiPath.
-	 * Each entry tracks its associated paths for cleanup purposes.
-	 * Supports both 2-param (apiPath, metadata) and 3-param (moduleID, apiPath, metadata) signatures.
+	 * Stores user-provided metadata in `#userMetadataStore` under the given
+	 * `identifier`. The identifier is treated opaquely — callers pass either a
+	 * generated moduleID (e.g. `base_slothlet`) or a dot-notation API path
+	 * (e.g. `math`). `getMetadata()` retrieves entries using the same key via
+	 * both the moduleID lookup and `collectMetadataFromParents`, so storing
+	 * under a single key is sufficient for both cases.
 	 *
-	 * @param {string} moduleIDOrApiPath - Module ID (3-param) or API path (2-param)
-	 * @param {string|Object} apiPathOrMetadata - API path (3-param) or metadata (2-param)
-	 * @param {Object} [metadata] - User metadata object (3-param only)
+	 * Multiple calls to the same identifier are merged; later calls override
+	 * earlier ones for conflicting keys.
+	 *
+	 * @param {string} identifier - Module ID or dot-notation API path
+	 * @param {Object} metadata - User metadata object to merge
 	 * @package
 	 */
-	registerUserMetadata(moduleIDOrApiPath, apiPathOrMetadata, metadata) {
-		// Handle both 2-param and 3-param signatures
-		let moduleID, apiPath, metadataObj;
-
-		if (arguments.length === 2) {
-			// 2-param signature: registerUserMetadata(apiPath, metadata)
-			apiPath = moduleIDOrApiPath;
-			metadataObj = apiPathOrMetadata;
-			moduleID = null;
-		} else {
-			// 3-param signature: registerUserMetadata(moduleID, apiPath, metadata)
-			moduleID = moduleIDOrApiPath;
-			apiPath = apiPathOrMetadata;
-			metadataObj = metadata || {};
-		}
-
-		if (!apiPath && !moduleID) {
+	registerUserMetadata(identifier, metadata) {
+		if (!identifier || typeof identifier !== "string") {
 			throw new this.SlothletError(
 				"INVALID_ARGUMENT",
 				{
-					argument: "apiPath or moduleID",
+					argument: "identifier",
 					expected: "non-empty string",
-					received: typeof apiPath
+					received: typeof identifier
 				},
 				null,
 				{ validationError: true }
 			);
 		}
 
-		// Register by apiPath if provided
-		if (apiPath && typeof apiPath === "string") {
-			let entry = this.#userMetadataStore.get(apiPath);
-			if (!entry) {
-				entry = { metadata: {}, apiPaths: new Set() };
-				this.#userMetadataStore.set(apiPath, entry);
-			}
-			// Merge new metadata with existing
-			entry.metadata = { ...entry.metadata, ...metadataObj };
-			// Track apiPath for cleanup
-			entry.apiPaths.add(apiPath);
+		let entry = this.#userMetadataStore.get(identifier);
+		if (!entry) {
+			entry = { metadata: {}, apiPaths: new Set() };
+			this.#userMetadataStore.set(identifier, entry);
 		}
-
-		// Register by moduleID if provided (for getMetadata() lookups)
-		if (moduleID && typeof moduleID === "string") {
-			let entry = this.#userMetadataStore.get(moduleID);
-			if (!entry) {
-				entry = { metadata: {}, apiPaths: new Set() };
-				this.#userMetadataStore.set(moduleID, entry);
-			}
-			// Merge new metadata with existing
-			entry.metadata = { ...entry.metadata, ...metadataObj };
-			// Track apiPath for cleanup
-			if (apiPath) {
-				entry.apiPaths.add(apiPath);
-			}
-		}
+		// Merge incoming metadata over any existing values
+		entry.metadata = { ...entry.metadata, ...metadata };
+		// Track identifier in apiPaths so cleanup via removeUserMetadataByApiPath() works
+		entry.apiPaths.add(identifier);
 	}
 
 	/**
@@ -740,146 +593,90 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
-	 * Get metadata of the function that called the current function
-	 * Includes security verification comparing stack trace to stored metadata
-	 * @returns {Promise<object|null>} Caller's metadata object or null
+	 * Get metadata of any function by API path.
+	 *
+	 * Traverses `this.slothlet.api` using the dot-notation path, materializes
+	 * lazy wrappers as needed, then returns the combined metadata for the
+	 * resolved target via `getMetadata()`.
+	 *
+	 * Called by the `api.slothlet.metadata.get()` closure injected in
+	 * `slothlet.injectRuntimeMetadataFunctions()`.
+	 *
+	 * @param {string} path - Dot-notation API path (e.g. `"math.add"`)
+	 * @returns {Promise<object|null>} Combined metadata or null
 	 * @public
 	 */
-	async caller() {
-		await this.#ensureRuntime();
-		const apiRoot = this.#getApiRoot();
-		if (!apiRoot || typeof apiRoot !== "object") return null;
-
-		const stack = this.slothlet.helpers.resolver.getStack(this.caller);
-		if (stack.length < 1) return null;
-
-		const parsed = this.#parseCallSite(stack[0]);
-		if (!parsed) return null;
-
-		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
-		if (!func) return null;
-
-		// Get metadata using new secure system
-		const metadata = this.getMetadata(func);
-
-		// SECURITY CHECK: Verify stack trace matches metadata
-		const stackFilePath = this.slothlet.helpers.resolver.toFsPath(parsed.file);
-		const metaFilePath = this.slothlet.helpers.resolver.toFsPath(metadata.filePath);
-
-		if (stackFilePath && metaFilePath && stackFilePath !== metaFilePath) {
-			// WARNING: Metadata mismatch (possible tampering or hot reload)
-			new this.SlothletWarning("WARNING_METADATA_MISMATCH", {
-				apiPath: metadata.apiPath,
-				stackFile: stackFilePath,
-				metadataFile: metaFilePath
+	async get(path) {
+		if (typeof path !== "string") {
+			throw new this.SlothletError("INVALID_ARGUMENT", {
+				argument: "path",
+				expected: "string",
+				received: typeof path
 			});
-
-			// Return metadata with security warning
-			return {
-				...metadata,
-				__securityWarning: "FILE_PATH_MISMATCH",
-				__stackFile: stackFilePath
-			};
 		}
 
-		return metadata || null;
-	}
+		const apiRoot = this.slothlet.api;
+		if (!apiRoot) return null;
 
-	/**
-	 * Get metadata of the current function
-	 * @returns {Promise<object|null>} Current function's metadata or null
-	 * @public
-	 */
-	async self() {
-		await this.#ensureRuntime();
-		const apiRoot = this.#getApiRoot();
-		if (!apiRoot || typeof apiRoot !== "object") return null;
+		const parts = path.split(".");
+		let target = apiRoot;
 
-		const stack = this.slothlet.helpers.resolver.getStack(this.self);
-		if (stack.length < 1) return null;
-
-		const parsed = this.#parseCallSite(stack[0]);
-		if (!parsed) return null;
-
-		const func = this.#findFunctionByStack(apiRoot, parsed.file, parsed.line);
-		if (!func) return null;
-
-		// Get metadata using new secure system
-		return this.getMetadata(func) || null;
-	}
-
-	/**
-	 * Get metadata of any function by API path
-	 * @param {string} path - Dot-notation API path
-	 * @param {object} [apiRoot] - Optional API root object
-	 * @returns {Promise<object|null>} Function's metadata or null
-	 * @public
-	 */
-	async get(path, apiRoot) {
-		await this.#ensureRuntime();
-		const root = apiRoot || this.#getApiRoot();
-		if (!root || (typeof root !== "object" && typeof root !== "function")) {
-			return null;
-		}
-
-		const func = this.#findFunctionByPath(root, path);
-		if (!func) return null;
-
-		return func.__metadata || null;
-	}
-
-	/**
-	 * Recursively apply metadata to API subtree
-	 * @param {object} api - API object or subtree
-	 * @param {object} metadata - Metadata object to apply
-	 * @param {WeakSet} [visited] - Visited objects (prevents circular refs)
-	 * @returns {void}
-	 * @public
-	 *
-	 * @description
-	 * Traverses API tree and applies metadata to all functions.
-	 * Used during load and api.add to tag functions with system metadata.
-	 *
-	 * @example
-	 * metadata.applyToSubtree(api, { moduleID: "base_abc123", apiPath: "math" });
-	 */
-	applyToSubtree(api, metadata, visited = new WeakSet()) {
-		if (!api || typeof api !== "object") return;
-
-		// Prevent infinite recursion on circular references
-		if (visited.has(api)) {
-			return;
-		}
-		visited.add(api);
-
-		// Apply to current level if it's a function
-		if (typeof api === "function") {
-			this.tagSystemMetadata(api, metadata, { _fromSubtreeApply: true });
-		}
-
-		// Recurse through all properties
-		for (const [key, value] of Object.entries(api)) {
-			// Skip internal properties
-			const skipProps = ["__metadata", "__type", "_materialize", "_impl", "____slothletInternal"];
-			if (skipProps.includes(key)) {
-				continue;
+		for (const part of parts) {
+			if (!target || (typeof target !== "object" && typeof target !== "function")) {
+				return null;
 			}
-
-			if (typeof value === "function") {
-				// Apply metadata to function
-				const pathMetadata = { ...metadata };
-				if (metadata.apiPath) {
-					pathMetadata.apiPath = metadata.apiPath ? `${metadata.apiPath}.${key}` : key;
-				}
-				this.tagSystemMetadata(value, pathMetadata, { _fromSubtreeApply: true });
-			} else if (value && typeof value === "object") {
-				// Recurse for objects
-				const pathMetadata = { ...metadata };
-				if (metadata.apiPath !== undefined) {
-					pathMetadata.apiPath = metadata.apiPath ? `${metadata.apiPath}.${key}` : key;
-				}
-				this.applyToSubtree(value, pathMetadata, visited);
-			}
+			target = target[part];
 		}
+
+		if (target && typeof target._materialize === "function") {
+			await target._materialize();
+		}
+
+		if (typeof target === "function" || (target && resolveWrapper(target)?.____slothletInternal?.impl)) {
+			return this.getMetadata(target);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get metadata for the currently-executing API function.
+	 *
+	 * Reads `currentWrapper` from the active context-manager store — the same
+	 * fast synchronous path used by the unified wrapper's `apply` trap.
+	 * Throws `RUNTIME_NO_ACTIVE_CONTEXT` when called outside of a slothlet
+	 * execution context.
+	 *
+	 * Called by the `api.slothlet.metadata.self()` closure injected in
+	 * `slothlet.injectRuntimeMetadataFunctions()`.
+	 *
+	 * @returns {object} Combined metadata for the current function
+	 * @public
+	 */
+	self() {
+		const ctx = this.slothlet.contextManager?.tryGetContext();
+		if (!ctx || !ctx.currentWrapper) {
+			throw new this.SlothletError("RUNTIME_NO_ACTIVE_CONTEXT", {}, null, { validationError: true });
+		}
+		return this.getMetadata(ctx.currentWrapper);
+	}
+
+	/**
+	 * Get metadata for the API function that called the current function.
+	 *
+	 * Reads `callerWrapper` from the active context-manager store.
+	 * Returns `null` when there is no caller in context (e.g. the function
+	 * was invoked directly from outside the API).
+	 *
+	 * Called by the `api.slothlet.metadata.caller()` closure injected in
+	 * `slothlet.injectRuntimeMetadataFunctions()`.
+	 *
+	 * @returns {object|null} Combined metadata for the calling function, or null
+	 * @public
+	 */
+	caller() {
+		const ctx = this.slothlet.contextManager?.tryGetContext();
+		if (!ctx || !ctx.callerWrapper) return null;
+		return this.getMetadata(ctx.callerWrapper);
 	}
 }
