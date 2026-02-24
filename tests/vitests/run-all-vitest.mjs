@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 20:18:22 -08:00 (1771820302)
+ *	@Last modified time: 2026-02-23 20:17:49 -08:00 (1771906669)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -479,6 +479,83 @@ function printQuietCoverageFailureDetails(failedResults) {
 }
 
 /**
+ * Test-file path segments that must run near the start of the suite, before the process
+ * accumulates significant heap from the heavy metadata / core reload tests. Files whose
+ * path contains any of these strings are promoted to the front (in the order listed here);
+ * all remaining files follow in normal alphabetical order.
+ *
+ * Rationale: listener-cleanup tests use LAZY_LIVE matrix which becomes extremely slow
+ * (~100s per test) once the heap exceeds ~1.5 GB. Running them first keeps them under 2s.
+ *
+ * @type {string[]}
+ */
+const EARLY_RUN_PATTERNS = ["listener-cleanup/"];
+
+/**
+ * Per-file heap overrides (MB) for test files that run many matrix configs in a single
+ * Vitest process and accumulate enough heap to trigger aggressive GC, which stalls
+ * LiveContextManager-based configs (LAZY_LIVE, etc.) far beyond their timeout.
+ *
+ * The value is the MINIMUM heap ceiling for matching files — if the caller supplies
+ * a larger global VITEST_HEAP_MB the larger value always wins.
+ *
+ * Key: substring that must appear in the normalised file path.
+ * Value: MB to pass as --max-old-space-size.
+ *
+ * @type {Array<{pattern: string, heapMb: number}>}
+ */
+const PER_FILE_HEAP_OVERRIDES = [
+	// 8-config matrix × 3 tests, heap grows to ~1.4 GB before LAZY_LIVE runs;
+	// giving V8 a 6 GB ceiling prevents GC-thrash that causes 120 s timeouts.
+	{ pattern: "listener-cleanup/", heapMb: 6144 }
+];
+
+/**
+ * Return the effective --max-old-space-size value (MB) for a given test file.
+ * Takes the maximum of the global VITEST_HEAP_MB override and any per-file override.
+ * Returns undefined when neither source provides a value.
+ * @param {string} filePath - Test file path
+ * @param {number | undefined} globalMaxMb - Global override from VITEST_HEAP_MB env var
+ * @returns {number | undefined} Heap ceiling in MB, or undefined
+ */
+function getHeapForFile(filePath, globalMaxMb) {
+	const normalized = filePath.replace(/\\/g, "/");
+	let perFileMb;
+	for (const { pattern, heapMb } of PER_FILE_HEAP_OVERRIDES) {
+		if (normalized.includes(pattern)) {
+			perFileMb = heapMb;
+			break;
+		}
+	}
+	if (perFileMb === undefined && globalMaxMb === undefined) return undefined;
+	if (perFileMb === undefined) return globalMaxMb;
+	if (globalMaxMb === undefined) return perFileMb;
+	return Math.max(perFileMb, globalMaxMb);
+}
+
+/**
+ * Sort test files alphabetically while promoting EARLY_RUN_PATTERNS files to the front.
+ * @param {string[]} files - File paths to sort
+ * @returns {string[]} Sorted file paths with priority files first
+ */
+function sortWithPriority(files) {
+	const early = [];
+	const rest = [];
+	for (const file of files) {
+		const normalized = file.replace(/\\/g, "/");
+		const priorityIndex = EARLY_RUN_PATTERNS.findIndex((pat) => normalized.includes(pat));
+		if (priorityIndex !== -1) {
+			early.push({ file, priorityIndex });
+		} else {
+			rest.push(file);
+		}
+	}
+	early.sort((a, b) => a.priorityIndex - b.priorityIndex || a.file.localeCompare(b.file));
+	rest.sort((a, b) => a.localeCompare(b));
+	return [...early.map((e) => e.file), ...rest];
+}
+
+/**
  * Discover Vitest test files based on CLI arguments or default to all processed/ files
  * @param {string[]} testPatterns - Test file patterns (file paths, folder paths, partial paths, or empty for all)
  * @param {boolean} baseline - Whether to load baseline test list
@@ -497,7 +574,7 @@ async function discoverVitestFiles(testPatterns, baseline) {
 			}
 
 			console.log(`📋 Loading baseline test list from: ${path.relative(projectRoot, baselineJsonPath)}`);
-			return testList.sort((a, b) => a.localeCompare(b));
+			return sortWithPriority(testList);
 		} catch (error) {
 			console.error(`❌ Error reading baseline test list from ${baselineJsonPath}:`, error.message);
 			process.exit(1);
@@ -508,7 +585,7 @@ async function discoverVitestFiles(testPatterns, baseline) {
 	if (testPatterns.length === 0) {
 		const suitesDir = path.resolve(__dirname, "suites");
 		const files = await discoverFilesInDir(suitesDir);
-		return files.sort((a, b) => a.localeCompare(b));
+		return sortWithPriority(files);
 	}
 
 	const files = [];
@@ -552,7 +629,7 @@ async function discoverVitestFiles(testPatterns, baseline) {
 	}
 
 	// Remove duplicates and sort
-	return [...new Set(files)].sort((a, b) => a.localeCompare(b));
+	return sortWithPriority([...new Set(files)]);
 }
 
 /**
@@ -1161,15 +1238,23 @@ async function runAllFiles() {
 		const extraCoverageArgs = vitestPassthroughArgs.filter((a) => a !== "--coverage" && a.startsWith("--coverage."));
 		const nonCoveragePassthrough = vitestPassthroughArgs.filter((a) => a !== "--coverage" && !a.startsWith("--coverage."));
 
+		// Split into solo files (run sequentially, alone) and parallel files.
+		// EARLY_RUN_PATTERNS files run one-at-a-time first so their internal matrix configs
+		// (e.g. LAZY_LIVE) start in a process with minimal system-level competition and a
+		// clean GC state — preventing the 120s timeouts seen when 3 other workers are running.
+		const coverageSoloFiles = coverageTestFiles.filter((f) => EARLY_RUN_PATTERNS.some((p) => f.replace(/\\/g, "/").includes(p)));
+		const coverageParallelFiles = coverageTestFiles.filter((f) => !EARLY_RUN_PATTERNS.some((p) => f.replace(/\\/g, "/").includes(p)));
+		const allCoverageFiles = [...coverageSoloFiles, ...coverageParallelFiles];
+
 		if (!coverageQuiet) {
-			console.log(`\n🧪 Running ${coverageTestFiles.length} test files for coverage (blob + merge mode)`);
-			console.log(`⚙️  Workers: ${WORKER_COUNT}`);
+			console.log(`\n🧪 Running ${allCoverageFiles.length} test files for coverage (blob + merge mode)`);
+			console.log(`⚙️  Workers: ${WORKER_COUNT} (${coverageSoloFiles.length} solo first, then parallel)`);
 			if (maxOldSpaceMb) console.log(`🧠 Heap limit: ${maxOldSpaceMb} MB`);
 			console.log("");
 		}
 
 		const coverageProgress = coverageQuiet
-			? createCoverageProgressTracker(coverageTestFiles.length)
+			? createCoverageProgressTracker(allCoverageFiles.length)
 			: {
 					onStart() {},
 					onComplete() {},
@@ -1178,58 +1263,68 @@ async function runAllFiles() {
 
 		const coverageResults = [];
 		let blobIndex = 0;
+
+		/**
+		 * Run a single coverage file and push its result.
+		 * @param {string} filePath
+		 */
+		const runCoverageFile = async (filePath) => {
+			const blobPath = path.join(blobsDir, `run-${blobIndex}.blob`);
+			blobIndex++;
+
+			if (!coverageQuiet) {
+				console.log(`\n${"=".repeat(80)}`);
+				console.log(`▶️  ${filePath}`);
+				console.log("=".repeat(80));
+			}
+
+			coverageProgress.onStart();
+
+			// Each run gets its own temp coverage dir (outside blobsDir) to avoid
+			// concurrent write conflicts and keep --mergeReports happy.
+			const tmpCoverageDir = path.join(coverageTmpBase, `run-${blobIndex}`);
+			const blobArgs = [
+				...nonCoveragePassthrough,
+				"--coverage",
+				`--coverage.reportsDirectory=${tmpCoverageDir}`,
+				"--reporter=default",
+				"--reporter=blob",
+				`--outputFile=${blobPath}`
+			];
+
+			const result = await runSingleFile(filePath, getHeapForFile(filePath, maxOldSpaceMb), blobArgs, { streamOutput: !coverageQuiet });
+			coverageResults.push(result);
+			coverageProgress.onComplete(result.code !== 0);
+
+			if (!coverageQuiet) {
+				if (result.code === 0) {
+					const durationSec = (result.duration / 1000).toFixed(2);
+					const heapInfo = result.heapMb ? ` | ${result.heapMb} MB heap` : "";
+					console.log(`\n✅ PASSED (${durationSec}s${heapInfo})\n`);
+				} else {
+					const durationSec = (result.duration / 1000).toFixed(2);
+					console.log(`\n❌ FAILED (exit code ${result.code}, ${durationSec}s)\n`);
+				}
+			}
+		};
+
+		// Phase 1: Run solo files one at a time (no parallel competition)
+		for (const filePath of coverageSoloFiles) {
+			await runCoverageFile(filePath).catch((err) => console.error(`Error running ${filePath}:`, err));
+		}
+
+		// Phase 2: Run remaining files with full worker pool
 		let coverageFileIndex = 0;
 		const coverageActivePromises = new Set();
 
-		while (coverageFileIndex < coverageTestFiles.length || coverageActivePromises.size > 0) {
-			while (coverageFileIndex < coverageTestFiles.length && coverageActivePromises.size < WORKER_COUNT) {
-				const filePath = coverageTestFiles[coverageFileIndex];
-				const blobPath = path.join(blobsDir, `run-${blobIndex}.blob`);
+		while (coverageFileIndex < coverageParallelFiles.length || coverageActivePromises.size > 0) {
+			while (coverageFileIndex < coverageParallelFiles.length && coverageActivePromises.size < WORKER_COUNT) {
+				const filePath = coverageParallelFiles[coverageFileIndex];
 				coverageFileIndex++;
-				blobIndex++;
 
-				if (!coverageQuiet) {
-					console.log(`\n${"=".repeat(80)}`);
-					console.log(`▶️  ${filePath}`);
-					console.log("=".repeat(80));
-				}
-
-				coverageProgress.onStart();
-
-				// Each run gets its own temp coverage dir (outside blobsDir) to avoid
-				// concurrent write conflicts and keep --mergeReports happy.
-				const tmpCoverageDir = path.join(coverageTmpBase, `run-${blobIndex}`);
-				const blobArgs = [
-					...nonCoveragePassthrough,
-					"--coverage",
-					`--coverage.reportsDirectory=${tmpCoverageDir}`,
-					"--reporter=default",
-					"--reporter=blob",
-					`--outputFile=${blobPath}`
-				];
-
-				const promise = runSingleFile(filePath, maxOldSpaceMb, blobArgs, { streamOutput: !coverageQuiet })
-					.then((result) => {
-						coverageResults.push(result);
-						coverageProgress.onComplete(result.code !== 0);
-
-						if (!coverageQuiet) {
-							if (result.code === 0) {
-								const durationSec = (result.duration / 1000).toFixed(2);
-								const heapInfo = result.heapMb ? ` | ${result.heapMb} MB heap` : "";
-								console.log(`\n✅ PASSED (${durationSec}s${heapInfo})\n`);
-							} else {
-								const durationSec = (result.duration / 1000).toFixed(2);
-								console.log(`\n❌ FAILED (exit code ${result.code}, ${durationSec}s)\n`);
-							}
-						}
-						coverageActivePromises.delete(promise);
-					})
-					.catch((err) => {
-						coverageProgress.onComplete(true);
-						console.error(`Error running ${filePath}:`, err);
-						coverageActivePromises.delete(promise);
-					});
+				const promise = runCoverageFile(filePath)
+					.catch((err) => console.error(`Error running ${filePath}:`, err))
+					.finally(() => coverageActivePromises.delete(promise));
 
 				coverageActivePromises.add(promise);
 			}
@@ -1283,6 +1378,12 @@ async function runAllFiles() {
 		return;
 	}
 
+	// Split into solo files (run sequentially, alone) and parallel files.
+	// EARLY_RUN_PATTERNS files run one-at-a-time first so their internal matrix configs
+	// (e.g. LAZY_LIVE) start in a process with minimal competition and a clean GC state.
+	const soloFiles = testFiles.filter((f) => EARLY_RUN_PATTERNS.some((p) => f.replace(/\\/g, "/").includes(p)));
+	const parallelFiles = testFiles.filter((f) => !EARLY_RUN_PATTERNS.some((p) => f.replace(/\\/g, "/").includes(p)));
+
 	const results = [];
 	const scriptStartTime = Date.now();
 	const scriptStartTimeFormatted = new Date().toLocaleTimeString("en-US", { hour12: false });
@@ -1290,7 +1391,7 @@ async function runAllFiles() {
 	if (testPatterns.length > 0) {
 		console.log(`\n🧪 Running ${testFiles.length} test files matching: ${testPatterns.join(", ")}`);
 	} else {
-		console.log(`\n🧪 Running ${testFiles.length} test files in parallel`);
+		console.log(`\n🧪 Running ${testFiles.length} test files (${soloFiles.length} solo first, then parallel)`);
 	}
 	console.log(`⚙️  Workers: ${WORKER_COUNT}`);
 	if (maxOldSpaceMb) {
@@ -1307,7 +1408,7 @@ async function runAllFiles() {
 		console.log(`▶️  ${filePath}`);
 		console.log("=".repeat(80));
 
-		const result = await runSingleFile(filePath, maxOldSpaceMb, vitestPassthroughArgs);
+		const result = await runSingleFile(filePath, getHeapForFile(filePath, maxOldSpaceMb), vitestPassthroughArgs);
 
 		if (result.code === 0) {
 			const durationSec = (result.duration / 1000).toFixed(2);
@@ -1321,14 +1422,23 @@ async function runAllFiles() {
 		return result;
 	};
 
-	// Worker pool: Run up to WORKER_COUNT tests concurrently, start new one when slot opens
+	// Phase 1: Solo files — run completely alone, one at a time
+	for (const filePath of soloFiles) {
+		const result = await runTestFile(filePath).catch((err) => {
+			console.error(`Error running ${filePath}:`, err);
+			return null;
+		});
+		if (result) results.push(result);
+	}
+
+	// Phase 2: Remaining files with full worker pool
 	let index = 0;
 	const activePromises = new Set();
 
-	while (index < testFiles.length || activePromises.size > 0) {
+	while (index < parallelFiles.length || activePromises.size > 0) {
 		// Fill worker slots
-		while (index < testFiles.length && activePromises.size < WORKER_COUNT) {
-			const filePath = testFiles[index];
+		while (index < parallelFiles.length && activePromises.size < WORKER_COUNT) {
+			const filePath = parallelFiles[index];
 			index++;
 
 			const promise = runTestFile(filePath)
