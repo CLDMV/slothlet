@@ -316,4 +316,25 @@ describe("Loader processor (real slothlet integration)", () => {
 			).rejects.toThrow();
 		});
 	});
+
+	it("surfaces strict-mode worker startup failure from invalid root path", async () => {
+		await writeModule(join(fixtureRoot, "worker-root-fail.ts"), "export const value: number = 42;");
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(
+				slothlet({
+					dir: fixtureRoot,
+					root: "/definitely/not/a/real/slothlet/root",
+					mode: "eager",
+					typescript: {
+						mode: "strict",
+						types: {
+							output: join(fixtureRoot, "generated", "worker-root-fail.d.ts"),
+							interfaceName: "WorkerRootFail"
+						}
+					}
+				})
+			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
+		});
+	});
 });
