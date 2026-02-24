@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:28:01 -08:00 (1771738081)
+ *	@Last modified time: 2026-02-23 15:59:19 -08:00 (1771891159)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -413,8 +413,11 @@ export class ApiAssignment extends ComponentBase {
 								!valueWrapper.____slothletInternal.state?.inFlight
 							) {
 								valueWrapper._materialize().catch((err) => {
-									console.error(
-										`[COLLISION-TRIGGER-MAT-ERROR] Early materialization failed for apiPath="${valueWrapper.____slothletInternal.apiPath}":`,
+									new this.slothlet.SlothletWarning(
+										"WARNING_COLLISION_TRIGGER_MATERIALIZE_ERROR",
+										{
+											apiPath: valueWrapper.____slothletInternal.apiPath
+										},
 										err
 									);
 								});

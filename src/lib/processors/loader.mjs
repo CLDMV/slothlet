@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified time: 2026-02-23 15:59:27 -08:00 (1771891167)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -53,19 +53,19 @@ export class Loader extends ComponentBase {
 			// Check if TypeScript transformation is needed
 			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
 			const typescriptConfig = this.slothlet.config?.typescript;
-			
+
 			let moduleUrl;
-			
+
 			if (isTypeScript && typescriptConfig?.enabled) {
 				const mode = typescriptConfig.mode || "fast";
-				
+
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
-						throw new Error("TypeScript strict mode requires 'types.output' to be configured");
+						throw new this.SlothletError("TS_STRICT_REQUIRES_OUTPUT", {}, null, { validationError: true });
 					}
 					if (!typescriptConfig.types?.interfaceName) {
-						throw new Error("TypeScript strict mode requires 'types.interfaceName' to be configured");
+						throw new this.SlothletError("TS_STRICT_REQUIRES_INTERFACE_NAME", {}, null, { validationError: true });
 					}
 
 					// Generate types if not already generated for this instance
@@ -73,52 +73,60 @@ export class Loader extends ComponentBase {
 						const { fork } = await import("child_process");
 						const path = await import("path");
 						const { fileURLToPath } = await import("url");
-						
+
 						// Get the path to the type generation script (in tools/ not src/tools/)
 						const __dirname = path.dirname(fileURLToPath(import.meta.url));
 						const scriptPath = path.resolve(__dirname, "../../../tools/generate-types-worker.mjs");
-						
+
 						// Prepare config for child process
 						// Note: Child process needs 'dir' not 'root', and should use eager mode
 						const childConfig = JSON.stringify({
 							dir: this.slothlet.config.root || this.slothlet.config.dir,
 							mode: "eager",
-							typescript: { 
-								enabled: true, 
-								mode: "fast" 
+							typescript: {
+								enabled: true,
+								mode: "fast"
 							},
 							types: typescriptConfig.types
 						});
-						
+
 						// Fork child process to generate types
 						await new Promise((resolve, reject) => {
 							const child = fork(scriptPath, [], {
-								stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+								stdio: ["pipe", "pipe", "pipe", "ipc"],
 								env: { ...process.env, SLOTHLET_CONFIG: childConfig }
 							});
-							
-							let output = '';
-							let errorOutput = '';
-							
-							child.stdout?.on('data', (data) => { output += data.toString(); });
-							child.stderr?.on('data', (data) => { errorOutput += data.toString(); });
-							
-							child.on('message', (msg) => {
-								if (msg.type === 'success') {
+
+							let output = "";
+							let errorOutput = "";
+
+							child.stdout?.on("data", (data) => {
+								output += data.toString();
+							});
+							child.stderr?.on("data", (data) => {
+								errorOutput += data.toString();
+							});
+
+							child.on("message", (msg) => {
+								if (msg.type === "success") {
 									this.slothlet._typesGenerated = true;
 									resolve();
-								} else if (msg.type === 'error') {
-									reject(new Error(`Type generation failed: ${msg.error}`));
+								} else if (msg.type === "error") {
+									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", { error: msg.error }, null, { validationError: true }));
 								}
 							});
-							
-							child.on('error', (error) => {
-								reject(new Error(`Failed to fork type generation process: ${error.message}`));
+
+							child.on("error", (error) => {
+								reject(new this.SlothletError("TS_TYPE_GENERATION_FORK_FAILED", { error: error.message }, null, { validationError: true }));
 							});
-							
-							child.on('exit', (code) => {
+
+							child.on("exit", (code) => {
 								if (code !== 0 && !this.slothlet._typesGenerated) {
-									reject(new Error(`Type generation process exited with code ${code}\n${errorOutput}`));
+									reject(
+										new this.SlothletError("TS_TYPE_GENERATION_PROCESS_EXITED", { code, output: errorOutput }, null, {
+											validationError: true
+										})
+									);
 								}
 							});
 						});
@@ -126,7 +134,7 @@ export class Loader extends ComponentBase {
 
 					// Lazy load TypeScript strict mode processor
 					const { transformTypeScriptStrict, createDataUrl, formatDiagnostics } = await import("@cldmv/slothlet/processors/typescript");
-					
+
 					// Transform TypeScript with type checking
 					const result = await transformTypeScriptStrict(filePath, {
 						target: typescriptConfig.target,
@@ -135,32 +143,33 @@ export class Loader extends ComponentBase {
 						typeDefinitionPath: typescriptConfig.types.output,
 						compilerOptions: typescriptConfig.compilerOptions
 					});
-					
+
 					// Check for type errors
 					if (result.diagnostics && result.diagnostics.length > 0) {
 						// Get TypeScript module to format diagnostics
 						const ts = await import("typescript");
 						const errors = formatDiagnostics(result.diagnostics, ts.default || ts);
-						
+
 						// Throw error with formatted diagnostics
-						const error = new Error(`TypeScript type errors in ${filePath}:\n${errors.join("\n")}`);
-						error.code = "TYPESCRIPT_TYPE_ERROR";
+						const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath, errors: errors.join("\n") }, null, {
+							validationError: true
+						});
 						error.diagnostics = result.diagnostics;
 						throw error;
 					}
-					
+
 					// Create data URL for dynamic import
 					moduleUrl = createDataUrl(result.code);
 				} else {
 					// Fast mode: Use esbuild
 					const { transformTypeScript, createDataUrl } = await import("@cldmv/slothlet/processors/typescript");
-					
+
 					// Transform TypeScript to JavaScript
 					const transformedCode = await transformTypeScript(filePath, {
 						target: typescriptConfig.target,
 						sourcemap: typescriptConfig.sourcemap
 					});
-					
+
 					// Create data URL for dynamic import
 					moduleUrl = createDataUrl(transformedCode);
 				}
@@ -181,7 +190,7 @@ export class Loader extends ComponentBase {
 					moduleUrl += `&_reload=${cacheBust}`;
 				}
 			}
-			
+
 			const module = await import(moduleUrl);
 			return module;
 		} catch (error) {
@@ -212,8 +221,15 @@ export class Loader extends ComponentBase {
 		const defaultExtensions = [".mjs", ".cjs", ".js"];
 		const typescriptExtensions = typescriptConfig?.enabled ? [".ts", ".mts"] : [];
 		const allExtensions = [...defaultExtensions, ...typescriptExtensions];
-		
-		const { recursive = true, extensions = allExtensions, isRootScan = true, currentDepth = 0, maxDepth = Infinity, fileFilter = null } = options;
+
+		const {
+			recursive = true,
+			extensions = allExtensions,
+			isRootScan = true,
+			currentDepth = 0,
+			maxDepth = Infinity,
+			fileFilter = null
+		} = options;
 
 		try {
 			await stat(dir);
@@ -243,7 +259,7 @@ export class Loader extends ComponentBase {
 				if (fileFilter) {
 					continue;
 				}
-				
+
 				// Only recurse if within depth limit
 				if (recursive && currentDepth < maxDepth) {
 					const subStructure = await this.scanDirectory(fullPath, { ...options, isRootScan: false, currentDepth: currentDepth + 1 });

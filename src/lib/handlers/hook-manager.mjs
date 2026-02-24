@@ -442,7 +442,7 @@ export class HookManager extends ComponentBase {
 
 				// Before hooks must be synchronous - reject Promises
 				if (result && typeof result === "object" && typeof result.then === "function") {
-					throw new Error(`Before hook "${hook.id}" for path "${path}" returned a Promise. Before hooks must be synchronous.`);
+					throw new this.SlothletError("HOOK_BEFORE_RETURNED_PROMISE", { id: hook.id, path }, null, { validationError: true });
 				}
 
 				// Check for short-circuit (hook returns value directly)
@@ -706,7 +706,7 @@ export class HookManager extends ComponentBase {
 	#expandBraces(pattern, depth = 0, maxDepth = 10) {
 		// Check depth limit (>=depth allows 0-9, i.e. 10 levels)
 		if (depth >= maxDepth) {
-			throw new Error(`Brace expansion exceeds maximum nesting depth of ${maxDepth}`);
+			throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
 		}
 
 		// Find first brace group

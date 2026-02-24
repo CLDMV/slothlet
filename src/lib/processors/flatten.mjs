@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 19:58:24 -08:00 (1771819104)
+ *	@Last modified time: 2026-02-23 15:59:25 -08:00 (1771891165)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -297,7 +297,15 @@ export class Flatten extends ComponentBase {
 							// Keep the existing property from the default export
 							continue;
 						} else if (collisionMode === "error") {
-							throw new Error(`Collision detected: property "${key}" already exists on default export at ${apiPathPrefix}.${propertyName}`);
+							throw new this.slothlet.SlothletError(
+								"COLLISION_DEFAULT_EXPORT_ERROR",
+								{
+									key,
+									apiPath: `${apiPathPrefix}.${propertyName}`
+								},
+								null,
+								{ validationError: true }
+							);
 						} else if (collisionMode === "warn") {
 							new this.slothlet.SlothletWarning("WARNING_COLLISION_DEFAULT_EXPORT_OVERWRITE", {
 								key,
