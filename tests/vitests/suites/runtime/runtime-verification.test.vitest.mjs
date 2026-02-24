@@ -220,4 +220,45 @@ describe("Runtime Implementation Verification", () => {
 		// Verify different instanceIds
 		expect(asyncApi.slothlet.instanceID).not.toBe(liveApi.slothlet.instanceID);
 	});
+
+	it("should exercise context dispatcher proxy traps via live runtime", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "eager",
+			runtime: "live",
+			context: { userId: 99, role: "admin" }
+		});
+		instances.push(api);
+
+		// exerciseContextDispatcherTraps calls Reflect.ownKeys, has, getOwnPropertyDescriptor,
+		// and set on the @cldmv/slothlet/runtime context dispatcher proxy — covering lines 99-112
+		const result = api.runtimeTest.exerciseContextDispatcherTraps();
+
+		expect(Array.isArray(result.keys)).toBe(true);
+		expect(result.keys).toContain("userId");
+		expect(result.hasUserId).toBe(true);
+		expect(result.hasMissing).toBe(false);
+		expect(result.descriptor).toBeDefined();
+		expect(result.descriptor.value).toBe(99);
+		expect(result.setWorked).toBe(true);
+	});
+
+	it("should exercise instanceID dispatcher proxy traps via live runtime", async () => {
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "eager",
+			runtime: "live",
+			context: { userId: 1 }
+		});
+		instances.push(api);
+
+		// exerciseInstanceIDDispatcherTraps accesses instanceID from @cldmv/slothlet/runtime
+		// dispatcher, covering the get and has traps at lines 128-133.
+		// Live runtime has no instanceID export so the falsy branch fires (returns undefined/false).
+		const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
+
+		expect(result.id).toBeUndefined();
+		expect(result.hasProp).toBe(false);
+		expect(result.hasMissing).toBe(false);
+	});
 });

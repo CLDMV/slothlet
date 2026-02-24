@@ -11,7 +11,7 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { self, context } from "@cldmv/slothlet/runtime";
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 import { instanceID as asyncInstanceID } from "@cldmv/slothlet/runtime/async";
 
 /**
@@ -340,4 +340,57 @@ export function getAsyncInstanceID() {
 	const missingProp = "__nonexistent__" in asyncInstanceID;
 
 	return { id, coerced, length, hasProp, missingProp };
+}
+
+/**
+ * Exercise the context proxy traps on the dispatcher (runtime.mjs) that are only
+ * hit via the live runtime path: ownKeys, has, getOwnPropertyDescriptor, and set.
+ * Must be called while a live-runtime context is active (runtime: "live" instance,
+ * called directly — no async scope wrapping).
+ * @function exerciseContextDispatcherTraps
+ * @returns {{ keys: string[], hasUserId: boolean, hasMissing: boolean, descriptor: object|undefined, setWorked: boolean }} Results of each trap
+ * @example
+ * const result = api.runtimeTest.exerciseContextDispatcherTraps();
+ * expect(result.hasUserId).toBe(true);
+ */
+export function exerciseContextDispatcherTraps() {
+	// ownKeys trap (lines 99-101 in runtime.mjs)
+	const keys = Reflect.ownKeys(context);
+
+	// has trap (lines 102-104)
+	const hasUserId = "userId" in context;
+	const hasMissing = "__definitely_absent__" in context;
+
+	// getOwnPropertyDescriptor trap (lines 105-108)
+	const descriptor = Object.getOwnPropertyDescriptor(context, "userId");
+
+	// set trap (lines 109-112)
+	context.__dispatcherTestKey = "dispatcher-set-trap";
+	const setWorked = context.__dispatcherTestKey === "dispatcher-set-trap";
+
+	return { keys, hasUserId, hasMissing, descriptor, setWorked };
+}
+
+/**
+ * Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
+ * Must be called while a live-runtime context is active so getCurrentRuntime()
+ * resolves to liveRuntimeModule and instanceID is a non-null string.
+ * @function exerciseInstanceIDDispatcherTraps
+ * @returns {{ id: string|undefined, hasProp: boolean, hasMissing: boolean }} Trap results
+ * @example
+ * const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
+ * expect(result.id).toBeTruthy();
+ */
+export function exerciseInstanceIDDispatcherTraps() {
+	// get trap (lines 128-130 in runtime.mjs): instanceID[prop]
+	// When live runtime is active, liveRuntimeModule.instanceID is undefined,
+	// so the trap returns undefined for any prop access.
+	const id = instanceID.toString;
+
+	// has trap (lines 131-133): prop in instanceID
+	// When liveRuntimeModule.instanceID is undefined, the trap returns false.
+	const hasProp = "length" in instanceID;
+	const hasMissing = "__nonexistent__" in instanceID;
+
+	return { id, hasProp, hasMissing };
 }
