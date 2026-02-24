@@ -38,15 +38,14 @@
  *    A13. Waiting proxy (lazy pre-materialization) - must also block ____slothletInternal
  *
  * B. ___getState / __state - now blocked (removed from allowedInternals)
- *    B1.  ___getState returns undefined through the proxy (internal access uses resolveWrapper)
+ *    B1.  ___getState returns undefined through the proxy
  *    B2.  __state returns undefined through the proxy
  *
  * C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
- *    C1.  These are BLOCKED through proxy - access via resolveWrapper internally
- *    C2.  resolveWrapper gives internal framework access to these methods
+ *    C1.  These are BLOCKED through proxy
  *
  * D. Implementation / server-path info (__impl, _impl, __filePath, __sourceFolder, __moduleID)
- *    D1.  __impl / _impl blocked through proxy - access via resolveWrapper().__impl internally
+ *    D1.  __impl / _impl blocked through proxy
  *    D2.  __filePath / __sourceFolder / __moduleID are exposed read-only through proxy (informational)
  *
  * E. Read-only informational properties - cannot be overwritten from outside
@@ -54,17 +53,14 @@
  *    E2.  Writing to read-only props on a waiting proxy (lazy pre-materialization) is also absorbed
  *    E3.  Deleting a read-only prop is silently absorbed - read still returns original value
  *
- * F. resolveWrapper as the safe internal access path
- *    F1.  resolveWrapper(proxy) returns the UnifiedWrapper
- *    F2.  resolveWrapper(waitingProxy) returns the UnifiedWrapper in lazy mode
- *    F3.  resolveWrapper returns null for non-proxy values
- *    F4.  Raw wrapper via resolveWrapper CAN read ____slothletInternal (framework use)
- *    F5.  The proxy itself still blocks ____slothletInternal
+ * F. Slothlet instance must not leak through ____slothlet
+ *    F1.  api.____slothlet returns undefined
+ *    F2.  api.math.____slothlet returns undefined
+ *    F3.  api.slothlet.materialize.____slothlet returns undefined
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -75,21 +71,14 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
  */
 const BLOCKED_KEYS = [
 	{ key: "____slothletInternal", desc: "private state bag backed by #internal field" },
-	{ key: "___getState", desc: "state accessor - removed from allowedInternals, use resolveWrapper internally" },
+	{ key: "___getState", desc: "state accessor - removed from allowedInternals" },
 	{ key: "__state", desc: "state alias - removed from allowedInternals" },
-	{ key: "___setImpl", desc: "implementation replacement API - blocked, use resolveWrapper(proxy).___setImpl internally" },
-	{ key: "___resetLazy", desc: "lazy reset API - blocked, use resolveWrapper(proxy).___resetLazy internally" },
-	{ key: "___invalidate", desc: "invalidation API - blocked, use resolveWrapper(proxy).___invalidate internally" },
-	{ key: "__impl", desc: "raw implementation - blocked, use resolveWrapper(proxy).__impl internally" },
-	{ key: "_impl", desc: "raw implementation alias - blocked, use resolveWrapper(proxy).__impl internally" }
+	{ key: "___setImpl", desc: "implementation replacement API - blocked" },
+	{ key: "___resetLazy", desc: "lazy reset API - blocked" },
+	{ key: "___invalidate", desc: "invalidation API - blocked" },
+	{ key: "__impl", desc: "raw implementation - blocked" },
+	{ key: "_impl", desc: "raw implementation alias - blocked" }
 ];
-
-/**
- * The key used by framework code to access the state bag on a raw UnifiedWrapper instance
- * (i.e. via resolveWrapper). This is intentionally accessible on the raw wrapper - never
- * through a user-facing proxy.
- */
-const INTERNAL_KEY = "____slothletInternal";
 
 describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({ config }) => {
 	/** @type {object} */
@@ -260,9 +249,11 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 			expect(leaf[key], `leaf["${key}"] after set`).toBeUndefined();
 			expect(ns[key], `ns["${key}"] after set`).toBeUndefined();
 		}
-		// Proxy must remain fully functional after all mutation attempts
-		expect(resolveWrapper(leaf)).not.toBeNull();
-		expect(resolveWrapper(ns)).not.toBeNull();
+		// Proxy must remain fully functional after all mutation attempts.
+		expect(typeof leaf).toBe("function");
+		expect(typeof ns.add).toBe("function");
+		const result = await ns.add(1, 1);
+		expect(result).toBe(1002);
 	});
 
 	it("A11. Object.defineProperty cannot install any blocked key on proxy", async () => {
@@ -284,7 +275,9 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 				delete ns[key];
 			}, `delete ns["${key}"]`).not.toThrow();
 		}
-		expect(resolveWrapper(ns)).not.toBeNull();
+		expect(typeof ns.add).toBe("function");
+		const result = await ns.add(2, 3);
+		expect(result).toBe(1005);
 	});
 
 	it("A13. All proxy states (pre- and post-materialization) block all blocked keys", async () => {
@@ -304,7 +297,6 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 
 	// ---------------------------------------------------------------------------
 	// B. ___getState / __state - blocked (removed from allowedInternals)
-	//    Internal state reads go via resolveWrapper(...).____slothletInternal.state
 	// ---------------------------------------------------------------------------
 
 	it("B1. ___getState is blocked - returns undefined through the proxy", async () => {
@@ -320,7 +312,6 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	// ---------------------------------------------------------------------------
 	// C. Framework mutation/disruption APIs (___setImpl, ___resetLazy, ___invalidate)
 	// The A1–A13 loop above already validates all three are blocked in every attack vector.
-	// These tests confirm the internal framework can still access them via resolveWrapper.
 	// ---------------------------------------------------------------------------
 
 	it("C1. ___setImpl / ___resetLazy / ___invalidate are blocked through the proxy", async () => {
@@ -330,27 +321,15 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		expect(ns.___invalidate).toBeUndefined();
 	});
 
-	it("C2. Internal framework can still call these via resolveWrapper", async () => {
-		const { ns } = await getMaterializedProxies();
-		const wrapper = resolveWrapper(ns);
-		expect(typeof wrapper.___setImpl).toBe("function");
-		expect(typeof wrapper.___resetLazy).toBe("function");
-		expect(typeof wrapper.___invalidate).toBe("function");
-	});
-
 	// ---------------------------------------------------------------------------
 	// D. Implementation / server-path info leaks
 	// The A1–A13 loop already validates __impl and _impl are blocked in every attack vector.
-	// These tests additionally confirm the path props and that resolveWrapper still works.
 	// ---------------------------------------------------------------------------
 
-	it("D1. __impl / _impl are blocked through the proxy - access via resolveWrapper().__impl internally", async () => {
+	it("D1. __impl / _impl are blocked through the proxy", async () => {
 		const { leaf } = await getMaterializedProxies();
 		expect(leaf.__impl).toBeUndefined();
 		expect(leaf._impl).toBeUndefined();
-		// Raw wrapper can still access impl:
-		const wrapper = resolveWrapper(leaf);
-		expect(["function", "object"].includes(typeof wrapper.__impl)).toBe(true);
 	});
 
 	it("D2. __filePath / __sourceFolder / __moduleID are exposed as read-only informational props through the proxy", async () => {
@@ -362,11 +341,9 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		if (leaf.__moduleID !== undefined) {
 			expect(typeof leaf.__moduleID).toBe("string");
 		}
-		// Values visible through proxy match the raw wrapper internals:
-		const wrapper = resolveWrapper(leaf);
-		expect(leaf.__filePath).toBe(wrapper.____slothletInternal.filePath ?? undefined);
-		expect(leaf.__sourceFolder).toBe(wrapper.____slothletInternal.sourceFolder ?? undefined);
-		expect(leaf.__moduleID).toBe(wrapper.____slothletInternal.moduleID ?? undefined);
+		if (leaf.__sourceFolder !== undefined) {
+			expect(typeof leaf.__sourceFolder).toBe("string");
+		}
 	});
 
 	// ---------------------------------------------------------------------------
@@ -450,66 +427,20 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	});
 
 	// ---------------------------------------------------------------------------
-	// F. resolveWrapper as the correct internal access path
-	// ---------------------------------------------------------------------------
-
-	it("F1. resolveWrapper(proxy) returns the UnifiedWrapper - not null", async () => {
-		const { leaf, ns } = await getMaterializedProxies();
-		expect(resolveWrapper(leaf)).not.toBeNull();
-		expect(resolveWrapper(ns)).not.toBeNull();
-	});
-
-	it("F2. resolveWrapper on any proxy state returns the UnifiedWrapper", () => {
-		// In lazy mode api.math is a waiting proxy at this point; in eager it is already resolved.
-		// resolveWrapper must never return null for a valid slothlet proxy.
-		const nsPre = api.math;
-		expect(resolveWrapper(nsPre)).not.toBeNull();
-	});
-
-	it("F3. resolveWrapper returns null for non-proxy values", () => {
-		expect(resolveWrapper(null)).toBeNull();
-		expect(resolveWrapper(undefined)).toBeNull();
-		expect(resolveWrapper(42)).toBeNull();
-		expect(resolveWrapper("string")).toBeNull();
-		expect(resolveWrapper({})).toBeNull();
-		expect(resolveWrapper(() => {})).toBeNull();
-	});
-
-	it("F4. Raw wrapper via resolveWrapper CAN access ____slothletInternal (framework use)", async () => {
-		const { leaf, ns } = await getMaterializedProxies();
-		const leafWrapper = resolveWrapper(leaf);
-		const nsWrapper = resolveWrapper(ns);
-		expect(leafWrapper[INTERNAL_KEY]).not.toBeUndefined();
-		expect(nsWrapper[INTERNAL_KEY]).not.toBeUndefined();
-		expect(leafWrapper[INTERNAL_KEY]).not.toBeNull();
-		expect(nsWrapper[INTERNAL_KEY]).not.toBeNull();
-	});
-
-	it("F5. The proxy blocks ____slothletInternal while resolveWrapper can access it", async () => {
-		const { leaf, ns } = await getMaterializedProxies();
-		// Proxy: blocked
-		expect(leaf[INTERNAL_KEY]).toBeUndefined();
-		expect(ns[INTERNAL_KEY]).toBeUndefined();
-		// Raw wrapper: accessible for framework use
-		expect(resolveWrapper(leaf)[INTERNAL_KEY]).not.toBeUndefined();
-		expect(resolveWrapper(ns)[INTERNAL_KEY]).not.toBeUndefined();
-	});
-
-	// ---------------------------------------------------------------------------
-	// G. Slothlet instance must not leak through ____slothlet on any user-facing surface.
+	// F. Slothlet instance must not leak through ____slothlet on any user-facing surface.
 	//    ComponentBase uses a private class field (#slothlet) + prototype getter so the
 	//    JS Proxy invariant for non-configurable own properties never fires; the underscore
 	//    filter in UnifiedWrapper's getTrap blocks it instead.
 	// ---------------------------------------------------------------------------
 
-	it("G1. api.____slothlet returns undefined (root proxy blocks ComponentBase getter)", async () => {
+	it("F1. api.____slothlet returns undefined (root proxy blocks ComponentBase getter)", async () => {
 		// The root api object is the SlothletApi proxy created by api_builder.
 		// ____slothlet must never return the Slothlet instance through any proxy surface.
 		expect(api.____slothlet).toBeUndefined();
 		expect(api["____slothlet"]).toBeUndefined();
 	});
 
-	it("G2. api.math.____slothlet returns undefined (non-callable namespace proxy)", async () => {
+	it("F2. api.math.____slothlet returns undefined (non-callable namespace proxy)", async () => {
 		// api.math is a non-callable UnifiedWrapper proxy. Previously, the ____slothlet
 		// own non-configurable property would bypass the underscore filter due to the JS
 		// Proxy invariant. After the ComponentBase private-field fix it is a prototype
@@ -519,7 +450,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 		expect(ns["____slothlet"]).toBeUndefined();
 	});
 
-	it("G3. api.slothlet.materialize.____slothlet returns undefined (plain object projection)", async () => {
+	it("F3. api.slothlet.materialize.____slothlet returns undefined (plain object projection)", async () => {
 		// api.slothlet.materialize was previously the raw MaterializeManager extends
 		// ComponentBase instance, exposing ____slothlet with no proxy in the way.
 		// It is now a plain frozen object with only the three public members projected,
