@@ -117,5 +117,21 @@ describe("Public Lifecycle API (api.slothlet.lifecycle)", () => {
 
 			expect(publicAPIWorks).toBe(true);
 		});
+
+		it("should silently swallow a rejection from an async lifecycle handler", async () => {
+			api = await slothlet({
+				...config,
+				dir: TEST_DIRS.API_TEST,
+				tracking: { materialization: true }
+			});
+
+			// Register an async handler that rejects — emit() must not propagate the rejection
+			api.slothlet.lifecycle.on("materialized:complete", async () => {
+				throw new Error("intentional rejection from async lifecycle handler");
+			});
+
+			// Trigger the event by waiting for background materialization
+			await expect(api.slothlet.materialize.wait()).resolves.not.toThrow();
+		});
 	});
 });
