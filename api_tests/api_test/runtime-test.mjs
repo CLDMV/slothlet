@@ -12,7 +12,6 @@
  */
 
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
-import { instanceID as asyncInstanceID, context as asyncContext } from "@cldmv/slothlet/runtime/async";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -324,20 +323,20 @@ export function testSelfAndReference() {
  */
 export function getAsyncInstanceID() {
 	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
-	const toStringFn = asyncInstanceID.toString;
+	const toStringFn = instanceID.toString;
 	const id = typeof toStringFn === "function" ? toStringFn() : "";
 
 	// get trap — Symbol.toPrimitive branch: String() coercion
-	const coerced = String(asyncInstanceID);
+	const coerced = String(instanceID);
 
 	// get trap — ctx.instanceID[prop] fallback: normal string property
-	const length = asyncInstanceID.length;
+	const length = instanceID.length;
 
 	// has trap — "length" exists on any string (via Object wrapping in the proxy)
-	const hasProp = "length" in asyncInstanceID;
+	const hasProp = "length" in instanceID;
 
 	// has trap — undefined prop should be false
-	const missingProp = "__nonexistent__" in asyncInstanceID;
+	const missingProp = "__nonexistent__" in instanceID;
 
 	return { id, coerced, length, hasProp, missingProp };
 }
@@ -408,22 +407,22 @@ export function exerciseInstanceIDDispatcherTraps() {
  * });
  */
 export function exerciseAsyncContextWriteTraps() {
-	// set trap — asyncContext.prop = value within active ALS context
+	// set trap — context.prop = value within active ALS context
 	// Covers runtime-asynclocalstorage.mjs lines 141-146
 	let setWorked = false;
 	let setError = null;
 	try {
-		asyncContext.__asyncWriteTest = "set-trap-covered";
+		context.__asyncWriteTest = "set-trap-covered";
 		setWorked = true;
 	} catch (err) {
 		setError = err.message;
 	}
 
-	// getOwnPropertyDescriptor trap — Object.getOwnPropertyDescriptor(asyncContext, prop) within ALS
+	// getOwnPropertyDescriptor trap — Object.getOwnPropertyDescriptor(context, prop) within ALS
 	// Covers runtime-asynclocalstorage.mjs lines 154-156
 	let descriptor = null;
 	try {
-		descriptor = Object.getOwnPropertyDescriptor(asyncContext, "userId");
+		descriptor = Object.getOwnPropertyDescriptor(context, "userId");
 	} catch (_) {
 		// trap returned undefined which is fine
 	}
