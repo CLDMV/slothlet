@@ -261,4 +261,29 @@ describe("Runtime Implementation Verification", () => {
 		expect(result.hasProp).toBe(false);
 		expect(result.hasMissing).toBe(false);
 	});
+
+	it("should exercise async context set and getOwnPropertyDescriptor traps within context.run", async () => {
+		// Use async runtime so the ALS context is active during context.run()
+		const api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "eager",
+			runtime: "async",
+			context: { userId: 99 }
+		});
+		instances.push(api);
+
+		let result;
+		// exerciseAsyncContextWriteTraps writes to asyncContext and calls
+		// getOwnPropertyDescriptor — covering runtime-asynclocalstorage.mjs lines 141-146 and 154-156.
+		// MUST be called inside context.run() so the ALS store is active.
+		await api.slothlet.context.run({ userId: 99 }, async () => {
+			result = api.runtimeTest.exerciseAsyncContextWriteTraps();
+		});
+
+		expect(result.setWorked).toBe(true);
+		expect(result.setError).toBeNull();
+		// Descriptor for userId should be the plain-object own-property descriptor
+		expect(result.descriptor).toBeDefined();
+		expect(result.descriptor.value).toBe(99);
+	});
 });

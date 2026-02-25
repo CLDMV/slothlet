@@ -149,36 +149,6 @@ export class ComponentBase {
 	}
 
 	/**
-	 * Get debug configuration.
-	 * @returns {object|undefined} Debug configuration or undefined.
-	 * @package
-	 *
-	 * @description
-	 * Shorthand for accessing debug settings from the Slothlet configuration.
-	 *
-	 * @example
-	 * if (this.debugConfig?.api) { console.log("API debug enabled"); }
-	 */
-	get debugConfig() {
-		return this.____slothlet.config?.debug;
-	}
-
-	/**
-	 * Get Slothlet debug function.
-	 * @returns {function} Slothlet debug function.
-	 * @package
-	 *
-	 * @description
-	 * Provides access to the debug logging function.
-	 *
-	 * @example
-	 * this.slothletDebug("api", { action: "assigned", path: "math.add" });
-	 */
-	get slothletDebug() {
-		return this.____slothlet.debug.bind(this.____slothlet);
-	}
-
-	/**
 	 * Get Slothlet instance ID.
 	 * @returns {string} Slothlet instance identifier.
 	 * @package
@@ -209,21 +179,6 @@ export class ComponentBase {
 	}
 
 	/**
-	 * Get Slothlet bound API object.
-	 * @returns {function|object} Slothlet bound API root.
-	 * @package
-	 *
-	 * @description
-	 * Provides direct access to the Slothlet's context-bound API object.
-	 *
-	 * @example
-	 * const boundValue = this.boundApi.plugins;
-	 */
-	get boundApi() {
-		return this.____slothlet.boundApi;
-	}
-
-	/**
 	 * Get Slothlet helpers object.
 	 * @returns {object} Slothlet helpers.
 	 * @package
@@ -236,21 +191,6 @@ export class ComponentBase {
 	 */
 	get helpers() {
 		return this.____slothlet.helpers;
-	}
-
-	/**
-	 * Get Slothlet handlers object.
-	 * @returns {object} Slothlet handlers.
-	 * @package
-	 *
-	 * @description
-	 * Provides access to internal handlers (metadata, lifecycle, apiManager, etc.).
-	 *
-	 * @example
-	 * const meta = this.handlers.metadata.getMetadata(target);
-	 */
-	get handlers() {
-		return this.____slothlet.handlers;
 	}
 
 	/**
