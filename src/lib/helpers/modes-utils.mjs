@@ -26,19 +26,6 @@ export class ModesUtils extends ComponentBase {
 	static slothletProperty = "modesUtils";
 
 	/**
-	 * Build a safe function name for debug output from an API path or module name.
-	 * @param {string} name - Name hint to sanitize.
-	 * @param {string} fallback - Fallback name if the hint is unusable.
-	 * @returns {string} Safe function name.
-	 * @public
-	 */
-	getSafeFunctionName(name, fallback) {
-		const safeBase = String(name || "").replace(/[^A-Za-z0-9_$]/g, "_");
-		const normalized = safeBase && /^[A-Za-z_$]/.test(safeBase[0]) ? safeBase : safeBase ? `_${safeBase}` : "";
-		return normalized || fallback;
-	}
-
-	/**
 	 * Create a named wrapper for default export functions when they are anonymous.
 	 * NOTE: This function is now a pass-through since UnifiedWrapper handles name/length/toString
 	 * through its proxy get trap. Wrapping is no longer needed and causes toString mismatches.

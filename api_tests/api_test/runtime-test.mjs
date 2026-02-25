@@ -12,7 +12,7 @@
  */
 
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
-import { instanceID as asyncInstanceID } from "@cldmv/slothlet/runtime/async";
+import { context as asyncContext, instanceID as asyncInstanceID } from "@cldmv/slothlet/runtime/async";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
@@ -393,4 +393,40 @@ export function exerciseInstanceIDDispatcherTraps() {
 	const hasMissing = "__nonexistent__" in instanceID;
 
 	return { id, hasProp, hasMissing };
+}
+
+/**
+ * Exercise the async runtime context proxy traps that require an active ALS context:
+ * `set` (write to context) and `getOwnPropertyDescriptor`.
+ * MUST be called within `api.slothlet.context.run()` so ALS is active — otherwise
+ * the set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT.
+ * @function exerciseAsyncContextWriteTraps
+ * @returns {{ setWorked: boolean, setError: string|null, descriptor: PropertyDescriptor|null }} Trap exercise results
+ * @example
+ * await api.slothlet.context.run({ userId: 99 }, async () => {
+ *   return api.runtimeTest.exerciseAsyncContextWriteTraps();
+ * });
+ */
+export function exerciseAsyncContextWriteTraps() {
+	// set trap — asyncContext.prop = value within active ALS context
+	// Covers runtime-asynclocalstorage.mjs lines 141-146
+	let setWorked = false;
+	let setError = null;
+	try {
+		asyncContext.__asyncWriteTest = "set-trap-covered";
+		setWorked = true;
+	} catch (err) {
+		setError = err.message;
+	}
+
+	// getOwnPropertyDescriptor trap — Object.getOwnPropertyDescriptor(asyncContext, prop) within ALS
+	// Covers runtime-asynclocalstorage.mjs lines 154-156
+	let descriptor = null;
+	try {
+		descriptor = Object.getOwnPropertyDescriptor(asyncContext, "userId");
+	} catch (_) {
+		// trap returned undefined which is fine
+	}
+
+	return { setWorked, setError, descriptor };
 }
