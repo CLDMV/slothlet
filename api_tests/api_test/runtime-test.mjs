@@ -12,7 +12,7 @@
  */
 
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
-import { context as asyncContext, instanceID as asyncInstanceID } from "@cldmv/slothlet/runtime/async";
+import { instanceID as asyncInstanceID, context as asyncContext } from "@cldmv/slothlet/runtime/async";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
