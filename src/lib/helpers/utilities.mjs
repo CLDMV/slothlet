@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 12:10:10 -08:00 (1771791010)
+ *	@Last modified time: 2026-02-24 18:51:12 -08:00 (1771987872)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -124,18 +124,5 @@ export class Utilities extends ComponentBase {
 	 */
 	generateId() {
 		return `slothlet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-	}
-
-	/**
-	 * Check if path is absolute
-	 * @param {string} path - Path to check
-	 * @returns {boolean} True if absolute path
-	 * @public
-	 */
-	isAbsolutePath(path) {
-		if (typeof path !== "string") return false;
-		// Windows: C:\ or \\
-		// Unix: /
-		return /^([a-zA-Z]:\\|\\\\|\/)/i.test(path);
 	}
 }
