@@ -21,7 +21,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
@@ -198,18 +198,4 @@ export class Resolver extends ComponentBase {
 		return resolved;
 	}
 
-	/**
-	 * Resolve relative path from caller's context to file:// URL.
-	 * @param {string} rel - Relative path to resolve
-	 * @returns {string} Absolute file:// URL
-	 * @public
-	 */
-	resolveUrlFromCaller(rel) {
-		// Short-circuit: already a file:// URL
-		if (rel.startsWith?.("file://")) return rel;
-
-		// Resolve to path first, then convert to URL
-		const absolutePath = this.resolvePathFromCaller(rel);
-		return pathToFileURL(absolutePath).href;
-	}
 }

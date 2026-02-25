@@ -199,30 +199,4 @@ export class Lifecycle extends ComponentBase {
 		}
 	}
 
-	/**
-	 * Get event log (for debugging)
-	 * @returns {Array} Event log entries
-	 * @public
-	 */
-	getEventLog() {
-		return [...this.eventLog];
-	}
-
-	/**
-	 * Clear event log
-	 * @public
-	 */
-	clearEventLog() {
-		this.eventLog = [];
-	}
-
-	/**
-	 * Get subscriber count for event
-	 * @param {string} event - Event name
-	 * @returns {number} Number of subscribers
-	 * @public
-	 */
-	getSubscriberCount(event) {
-		return this.subscribers.get(event)?.size || 0;
-	}
 }
