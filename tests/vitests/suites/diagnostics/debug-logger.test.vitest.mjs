@@ -1,7 +1,7 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/diagnostics/debug-logger.test.vitest.mjs
- *	@Date: 2026-02-25 00:00:00 -08:00
+ *	@Date: 2026-02-26 00:00:00 -08:00
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
@@ -164,5 +164,37 @@ describe("SlothletWarning - unsuppressed console output (lines 181-185) and toSt
 		const str = w.toString();
 		expect(str).toContain("V2_CONFIG_UNSUPPORTED");
 		expect(str).toContain("SlothletWarning");
+	});
+});
+
+describe("SlothletError - inspect.custom and toJSON (lines 130-144)", () => {
+	it("nodejs.util.inspect.custom() returns toString() plus the stack trace (line 131)", () => {
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing.mjs" });
+		// Directly invoke the custom inspect method
+		const inspectResult = err[Symbol.for("nodejs.util.inspect.custom")]();
+		expect(typeof inspectResult).toBe("string");
+		// Should contain both the human-readable message and the stack
+		expect(inspectResult).toContain("MODULE_NOT_FOUND");
+		expect(inspectResult).toContain("at ");
+	});
+
+	it("toJSON() returns a plain object with name, code, message, hint (lines 138-144)", () => {
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing.mjs", hint: "Check path" });
+		const json = err.toJSON();
+		expect(json).toBeTypeOf("object");
+		expect(json.name).toBe("SlothletError");
+		expect(json.code).toBe("MODULE_NOT_FOUND");
+		expect(typeof json.message).toBe("string");
+		// hint is derived from translated HINT_ key (may be undefined if none exists)
+		expect("hint" in json).toBe(true);
+	});
+
+	it("JSON.stringify(err) uses toJSON() and produces valid JSON (lines 138-144)", () => {
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing.mjs" });
+		const serialized = JSON.stringify(err);
+		expect(typeof serialized).toBe("string");
+		const parsed = JSON.parse(serialized);
+		expect(parsed.name).toBe("SlothletError");
+		expect(parsed.code).toBe("MODULE_NOT_FOUND");
 	});
 });
