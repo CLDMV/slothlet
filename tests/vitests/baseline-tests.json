@@ -57,6 +57,8 @@
 	"suites/hooks/hooks-patterns.test.vitest.mjs",
 	"suites/hooks/hooks-short-circuit.test.vitest.mjs",
 	"suites/hooks/hooks-suppress-errors.test.vitest.mjs",
+	"suites/i18n/public-i18n-api.test.vitest.mjs",
+	"suites/i18n/translations-edge-cases.test.vitest.mjs",
 	"suites/isolation/multi-instance-isolation.test.vitest.mjs",
 	"suites/isolation/tv-config-isolation.test.vitest.mjs",
 	"suites/lazy/lazy-background-materialization.test.vitest.mjs",
