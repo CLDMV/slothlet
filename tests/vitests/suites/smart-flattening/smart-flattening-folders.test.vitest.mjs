@@ -318,4 +318,38 @@ describe.each(FULL_MATRIX)("Smart Flattening Folders - $name", ({ name: ___name,
 
 		await api.shutdown();
 	});
+
+	test("Folder with same-name file AND same-name subfolder triggers wrapped-keys path in lazy mode", async () => {
+		// This test targets lazy_materializeFunc (modes-processor.mjs ~line 1512) which only
+		// runs in lazy mode. In eager mode the same-name file collision resolves differently
+		// (no pre-population on the subfolder wrapper), so the assertions don't apply.
+		if (config.mode !== "lazy") return;
+
+		// Fixture: services/ contains both services.mjs (file) and services/ (subfolder).
+		// In lazy mode this exercises the `attachedKeys.length > 0` branch in
+		// lazy_materializeFunc (modes-processor.mjs ~line 1512): the same-name subdir lazy
+		// wrapper is pre-populated with the file's exports as direct own keys, so it is
+		// returned directly as nestedValue (rather than unwrapping __impl).
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add(
+			"svc",
+			path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_file_folder_lazy`),
+			{}
+		);
+
+		// services/ should be accessible as a folder-like value in both modes
+		expect(isValidFolderType(api.svc.services, config.mode)).toBe(true);
+
+		// getService comes from services/services.mjs (pre-populated as attached key)
+		expect(typeof api.svc.services.getService).toBe("function");
+		await materialize(api.svc.services.getService);
+		const serviceResult = await api.svc.services.getService();
+		expect(serviceResult).toBe("service-file-impl");
+
+		await api.shutdown();
+	});
 });
