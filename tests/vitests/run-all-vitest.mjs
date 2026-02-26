@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-23 20:17:49 -08:00 (1771906669)
+ *	@Last modified time: 2026-02-24 21:05:51 -08:00 (1771995951)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -78,12 +78,15 @@
  * node tests/vitests/run-all-vitest.mjs --no-error-details --baseline
  */
 
+import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
+
+const require = createRequire(import.meta.url);
 
 // eslint-disable-next-line no-useless-catch
 try {
@@ -117,18 +120,41 @@ if (process.argv.includes("--coverage-quiet")) {
 	}
 
 	process.stdout.write = (chunk, enc, cb) => {
-		if (!isProgressChunk(chunk)) logStream.write(chunk);
+		if (!isProgressChunk(chunk)) logStream.write(stripAnsi(typeof chunk === "string" ? chunk : chunk.toString()));
 		return origStdoutWrite(chunk, enc, cb);
 	};
 	process.stderr.write = (chunk, enc, cb) => {
-		if (!isProgressChunk(chunk)) logStream.write(chunk);
+		if (!isProgressChunk(chunk)) logStream.write(stripAnsi(typeof chunk === "string" ? chunk : chunk.toString()));
 		return origStderrWrite(chunk, enc, cb);
 	};
 	process.on("exit", () => logStream.end());
 }
 
-const vitestEntrypoint = path.resolve(projectRoot, "node_modules", "vitest", "vitest.mjs");
+function resolveBin(pkgName, binName = pkgName) {
+	const pkgJsonPath = require.resolve(`${pkgName}/package.json`);
+	const pkg = require(pkgJsonPath);
+
+	// console.log("pkgJsonPath:" + pkgJsonPath);
+	// console.log("pkg: " + pkg);
+
+	let rel = pkg.bin?.[binName] ?? pkg.bin;
+	if (!rel) throw new Error(`No bin "${binName}" found in ${pkgName}/package.json`);
+
+	const abs = path.join(path.dirname(pkgJsonPath), rel);
+
+	// console.log("abs", abs);
+
+	return abs;
+}
+
+// const vitestEntrypoint = new URL(import.meta.resolve("vitest.mjs")).pathname;
+// const vitestUrl = await import.meta.resolve("vitest");
+// const vitestEntrypoint = fileURLToPath(vitestUrl);
+const vitestEntrypoint = resolveBin("vitest", "vitest");
 const vitestConfigPath = path.join(".configs", "vitest.config.mjs");
+// console.log(vitestUrl);
+// console.log(vitestEntrypoint);
+// process.exit(0);
 
 // Configuration
 const WORKER_COUNT = process.env.VITEST_WORKERS ? parseInt(process.env.VITEST_WORKERS, 10) : 4;

@@ -55,7 +55,8 @@ export const TEST_DIRS = {
 	API_TEST_COLLISIONS: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_collisions`),
 	API_TEST_ROOT_ISSUE: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_root_issue`),
 	API_TV_TEST: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_tv_test`),
-	SMART_FLATTEN: path.resolve(__dirname, `../../../${API_TEST_BASE}/smart_flatten`)
+	SMART_FLATTEN: path.resolve(__dirname, `../../../${API_TEST_BASE}/smart_flatten`),
+	API_TEST_PRIMITIVES: path.resolve(__dirname, `../../../${API_TEST_BASE}/api_test_primitives`)
 };
 
 /**
