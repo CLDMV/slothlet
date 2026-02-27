@@ -98,10 +98,7 @@ describe("Lifecycle.emit - debug.lifecycle logging (lines 146–157)", () => {
 
 		await lc.emit("impl:changed", { apiPath: "math.mul", source: "test", moduleID: "mod2" });
 
-		expect(mock.debug).toHaveBeenCalledWith(
-			"lifecycle",
-			expect.objectContaining({ key: "DEBUG_MODE_LIFECYCLE_EVENT" })
-		);
+		expect(mock.debug).toHaveBeenCalledWith("lifecycle", expect.objectContaining({ key: "DEBUG_MODE_LIFECYCLE_EVENT" }));
 	});
 
 	it("should shift eventLog when length exceeds maxLogSize (lines 153–155)", async () => {
