@@ -86,7 +86,7 @@ export class HookManager extends ComponentBase {
 	constructor(slothlet) {
 		super(slothlet);
 
-		// Read hook configuration from slothlet.config.hooks
+		// Read hook configuration from slothlet.config.hook
 		const hookConfig = slothlet.config?.hook || { enabled: false, pattern: "**", suppressErrors: false };
 
 		this.enabled = hookConfig.enabled;
@@ -372,8 +372,8 @@ export class HookManager extends ComponentBase {
 	 * @public
 	 */
 	getHooksForPath(type, apiPath) {
-		// Fast path: globally disabled (check config)
-		if (this.slothlet.config?.hooks?.enabled === false) {
+		// Fast path: globally disabled (check live enabled state)
+		if (this.enabled === false) {
 			return [];
 		}
 
