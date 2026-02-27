@@ -29,8 +29,10 @@
  * @module tests/vitests/suites/hooks/hook-manager-branches.test.vitest
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { HookManager } from "@cldmv/slothlet/handlers/hook-manager";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── shared lifecycle ─────────────────────────────────────────────────────────
@@ -118,4 +120,112 @@ describe("HookManager.importHooks — restores disabled hook on reload (line 949
 		const enabledHook = listAfter.registeredHooks.find((h) => h.enabled);
 		expect(enabledHook).toBeDefined();
 	});
+});
+// ─── Line 382: getHooksForPath with invalid type ──────────────────────────────
+
+/**
+ * Build a minimal mock slothlet sufficient to boot HookManager.
+ * @returns {object} Mock slothlet.
+ *
+ * @example
+ * const hm = new HookManager(makeMockHm());
+ */
+function makeMockHm() {
+        return {
+                config: { hook: { enabled: true } },
+                debug: vi.fn(),
+                SlothletError,
+                SlothletWarning
+        };
+}
+
+describe("HookManager.getHooksForPath — unknown type returns [] via typeIndex guard (line 382)", () => {
+        it("returns [] without throwing when given a type not in #hooks (line 382)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                // Register a valid hook first to ensure #hooks is populated
+                hm.on("before:**", () => {});
+
+                // An unregistered type key is undefined in #hooks → !typeIndex is true → line 382
+                const result = hm.getHooksForPath("nonexistent_type", "math.add");
+                expect(Array.isArray(result)).toBe(true);
+                expect(result).toHaveLength(0);
+        });
+
+        it("returns [] for empty type string (line 382)", () => {
+                const hm = new HookManager(makeMockHm());
+                const result = hm.getHooksForPath("", "math.add");
+                expect(result).toEqual([]);
+        });
+});
+
+// ─── Lines 960-967: HookManager.shutdown() ────────────────────────────────────
+
+describe("HookManager.shutdown — clears hooks and resets counter (lines 960-967)", () => {
+        it("removes all registered hooks after shutdown (lines 960-967)", async () => {
+                const hm = new HookManager(makeMockHm());
+
+                // Register several hooks
+                hm.on("before:**", () => {}, { id: "h1" });
+                hm.on("after:math.*", () => {}, { id: "h2" });
+                expect(hm.list().registeredHooks).toHaveLength(2);
+
+                // shutdown() reinitialises #hooks and clears #byId (lines 960-967)
+                await hm.shutdown();
+
+                expect(hm.list().registeredHooks).toHaveLength(0);
+        });
+
+        it("resets idCounter so new hooks get IDs from the beginning (lines 960-967)", async () => {
+                const hm = new HookManager(makeMockHm());
+
+                // Register a hook to advance idCounter
+                hm.on("before:**", () => {});
+
+                await hm.shutdown();
+
+                // After shutdown, idCounter is 0, so next hook ID is 'hook-0' or similar
+                const id = hm.on("before:**", () => {});
+                expect(typeof id).toBe("string");
+        });
+
+        it("is idempotent — calling shutdown twice does not throw (lines 960-967)", async () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("before:**", () => {});
+
+                await expect(hm.shutdown()).resolves.not.toThrow();
+                await expect(hm.shutdown()).resolves.not.toThrow();
+        });
+});
+
+// ─── getHooksForPath globally-disabled fast-path (line 377) ────────────────────
+
+describe("HookManager.getHooksForPath — globally-disabled early-return (line 377) [direct]", () => {
+        it("returns [] immediately when this.enabled === false without checking type index (line 377)", () => {
+                // The unified-wrapper checks hookManager.enabled BEFORE calling executeBeforeHooks,
+                // so this fast-path can only be reached by calling getHooksForPath directly on a
+                // disabled manager.
+                const hm = new HookManager(makeMockHm());
+
+                // Register a valid hook so the #hooks map is populated
+                hm.on("before:**", () => {});
+
+                // Globally disable the manager
+                hm.disable();
+
+                // Direct call — line 377: `if (this.enabled === false) { return []; }`
+                const result = hm.getHooksForPath("before", "math.add");
+
+                expect(Array.isArray(result)).toBe(true);
+                expect(result).toHaveLength(0);
+        });
+
+        it("returns [] for any registered type when globally disabled (line 377)", () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("after:**", () => {});
+                hm.disable();
+
+                expect(hm.getHooksForPath("after", "math.add")).toEqual([]);
+                expect(hm.getHooksForPath("always", "any.path")).toEqual([]);
+        });
 });

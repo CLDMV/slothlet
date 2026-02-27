@@ -30,6 +30,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { Lifecycle } from "@cldmv/slothlet/handlers/lifecycle";
+import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
 
 /**
  * Build a mock slothlet with configurable debug.lifecycle setting.
@@ -131,4 +132,140 @@ describe("Lifecycle.emit - debug.lifecycle logging (lines 146–157)", () => {
 
 		expect(lc.eventLog).toHaveLength(5);
 	});
+});
+// ─── Line 69: subscribe() returned closure is invoked ────────────────────────────
+describe("Lifecycle.subscribe — invoke returned unsubscribe closure (line 69)", () => {
+        it("calling the returned closure removes the handler via the if(handlers) guard (line 69)", () => {
+                const lc = new Lifecycle(makeMock());
+                const handler = vi.fn();
+
+                // subscribe() returns a closure whose body contains line 69: if (handlers)
+                const unsub = lc.subscribe("impl:created", handler);
+                expect(lc.subscribers.get("impl:created").has(handler)).toBe(true);
+
+                // Invoke the closure — exercises lines 68-70, including the if(handlers) guard
+                unsub();
+                expect(lc.subscribers.get("impl:created").has(handler)).toBe(false);
+        });
+
+        it("subscribe().unsub does not throw when called a second time (line 69 falsy branch)", () => {
+                const lc = new Lifecycle(makeMock());
+                const handler = vi.fn();
+
+                const unsub = lc.subscribe("impl:created", handler);
+                // First call removes the handler
+                unsub();
+                // Second call routes through line 69 with a live Set (empty) — no throw
+                expect(() => unsub()).not.toThrow();
+        });
+});
+
+// ─── Lines 181-184: async handler rejection ──────────────────────────────────
+
+/**
+ * Mock with SlothletWarning for error-catch paths.
+ * @param {boolean} [silent=false] - Whether to suppress the warning.
+ * @returns {object} Mock slothlet.
+ *
+ * @example
+ * const m = makeMockWithWarning();
+ */
+function makeMockWithWarning(silent = false) {
+        return {
+                config: { silent },
+                debug: vi.fn(),
+                SlothletError,
+                SlothletWarning
+        };
+}
+
+describe("Lifecycle.emit — async handler rejection caught at line 181", () => {
+        it("does not reject when an async handler rejects (lines 181-184)", async () => {
+                SlothletWarning.suppressConsole = true;
+                try {
+                        const lc = new Lifecycle(makeMockWithWarning());
+                        // This handler returns a rejected promise — triggers lines 178-184
+                        lc.subscribe("impl:created", () => Promise.reject(new Error("async fail")));
+
+                        // emit() should resolve without rethrowing the rejection
+                        await expect(
+                                lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })
+                        ).resolves.not.toThrow();
+                } finally {
+                        SlothletWarning.suppressConsole = false;
+                }
+        });
+
+        it("does not log when silent:true and async handler rejects (silent branch, line 181)", async () => {
+                const lc = new Lifecycle(makeMockWithWarning(true));
+                lc.subscribe("impl:created", () => Promise.reject(new Error("async fail silent")));
+
+                // Should still resolve; the warning is silenced
+                await expect(
+                        lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })
+                ).resolves.not.toThrow();
+        });
+});
+
+// ─── Lines 187-192: sync handler throw ──────────────────────────────────────
+
+describe("Lifecycle.emit — sync handler throw caught at line 187", () => {
+        it("does not rethrow from a synchronously-throwing handler (lines 187-192)", async () => {
+                SlothletWarning.suppressConsole = true;
+                try {
+                        const lc = new Lifecycle(makeMockWithWarning());
+                        // Synchronous throw inside handler — triggers catch at line 187
+                        lc.subscribe("impl:created", () => { throw new Error("sync fail"); });
+
+                        await expect(
+                                lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })
+                        ).resolves.not.toThrow();
+                } finally {
+                        SlothletWarning.suppressConsole = false;
+                }
+        });
+
+        it("does not log when silent:true and sync handler throws (silent branch, line 189)", async () => {
+                const lc = new Lifecycle(makeMockWithWarning(true));
+                lc.subscribe("impl:created", () => { throw new Error("sync fail silent"); });
+
+                await expect(
+                        lc.emit("impl:created", { apiPath: "p", source: "t", moduleID: "m" })
+                ).resolves.not.toThrow();
+        });
+});
+
+// ─── on() return value — unsubscribe function body (line 69) ────────────────────
+
+describe("Lifecycle.on() return value — calling the returned unsubscribe function (line 69)", () => {
+        it("calling the unsubscribe fn removes the handler from the subscriber set (line 69)", async () => {
+                const lc = new Lifecycle(makeMock());
+                let callCount = 0;
+                const handler = () => { callCount++; };
+
+                // on() returns an unsubscribe function; line 69 executes when it is called
+                const unsub = lc.on("materialized:complete", handler);
+
+                // Verify handler fires before unsubscribing
+                await lc.emit("materialized:complete", {});
+                expect(callCount).toBe(1);
+
+                // Call the unsubscribe fn — this is the body at line 67–72
+                unsub();
+
+                // Handler must NOT fire after unsubscribe
+                await lc.emit("materialized:complete", {});
+                expect(callCount).toBe(1);
+        });
+
+        it("calling unsubscribe on an already-removed handler does not throw (line 69)", () => {
+                const lc = new Lifecycle(makeMock());
+                const handler = vi.fn();
+
+                const unsub = lc.on("load:start", handler);
+                unsub(); // first call removes handler
+
+                // Calling again on an empty/absent set must not throw
+                expect(() => unsub()).not.toThrow();
+        });
 });

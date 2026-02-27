@@ -277,3 +277,156 @@ describe("Flatten.buildCategoryDecisions — C14 parent-level-flatten (generic f
 		expect(result.flattenType).toBe("parent-level-flatten");
 	});
 });
+// ─── helpers for processModuleForAPI tests ────────────────────────────────────
+
+/**
+ * Minimal mock slothlet that also provides helpers.modesUtils for processModuleForAPI.
+ * @param {string} [collisionMode="merge"] - Collision mode to use in config.
+ * @returns {object} Mock slothlet.
+ *
+ * @example
+ * const flatten = new Flatten(makeMockWithHelpers("error"));
+ */
+function makeMockWithHelpers(collisionMode = "merge") {
+        return {
+                config: {
+                        collision: { initial: collisionMode, api: collisionMode }
+                },
+                debug: vi.fn(),
+                SlothletError,
+                SlothletWarning,
+                helpers: {
+                        modesUtils: {
+                                /**
+                                 * Identity — returns original function unchanged.
+                                 * @param {Function} fn - Input function.
+                                 * @returns {Function} Same function.
+                                 */
+                                ensureNamedExportFunction: (fn) => fn
+                        }
+                }
+        };
+}
+
+// ─── Line 140: getFlatteningDecision — self-referential preserveAsNamespace ───
+
+describe("Flatten.getFlatteningDecision — self-referential module preserves namespace (line 140)", () => {
+        it("returns preserveAsNamespace:true when mod[moduleName] === mod (line 140)", async () => {
+                const flatten = new Flatten(makeMock());
+
+                // Self-referential: the module has a key equal to moduleName pointing to itself
+                const mod = {};
+                mod.math = mod;
+
+                const result = await flatten.getFlatteningDecision({
+                        mod,
+                        moduleName: "math",
+                        categoryName: "ns",
+                        analysis: { hasDefault: false, defaultExportType: null },
+                        hasMultipleDefaults: false,
+                        moduleKeys: ["math"],
+                        t
+                });
+
+                expect(result.preserveAsNamespace).toBe(true);
+                expect(result.reason).toBe("FLATTEN_REASON_SELF_REFERENTIAL");
+        });
+});
+
+// ─── Line 280: processModuleForAPI — self-referential non-function content ────
+
+describe("Flatten.processModuleForAPI — self-referential uses mod[moduleName] (line 280)", () => {
+        it("returns mod[moduleName] as moduleContent when isSelfReferential=true (line 280)", () => {
+                const flatten = new Flatten(makeMockWithHelpers());
+
+                const mod = {};
+                mod.math = mod;
+
+                const result = flatten.processModuleForAPI({
+                        mod,
+                        decision: {},
+                        moduleName: "math",
+                        propertyName: "math",
+                        moduleKeys: [],
+                        analysis: { hasDefault: false },
+                        isSelfReferential: true
+                });
+
+                // mod["math"] === mod → moduleContent should be mod itself
+                expect(result.moduleContent).toBe(mod);
+        });
+
+        it("falls back to mod when mod[moduleName] is falsy (line 280)", () => {
+                const flatten = new Flatten(makeMockWithHelpers());
+                // mod.other is undefined → mod[moduleName] is falsy → fallback is mod
+                const mod = { unrelated: () => {} };
+
+                const result = flatten.processModuleForAPI({
+                        mod,
+                        decision: {},
+                        moduleName: "missing",
+                        propertyName: "missing",
+                        moduleKeys: [],
+                        analysis: { hasDefault: false },
+                        isSelfReferential: true
+                });
+
+                expect(result.moduleContent).toBe(mod);
+        });
+});
+
+// ─── Lines 299-310: processModuleForAPI — hybrid collision "error" / "warn" ──
+
+describe("Flatten.processModuleForAPI — hybrid default+named collision modes (lines 299-310)", () => {
+        it("throws COLLISION_DEFAULT_EXPORT_ERROR when collisionMode='error' and named export collides (line 300-308)", () => {
+                const flatten = new Flatten(makeMockWithHelpers("error"));
+
+                // Default function that already owns property "version"
+                function logger() {}
+                logger.version = "original";
+
+                const mod = { default: logger, version: "named-overwrite" };
+
+                expect(() =>
+                        flatten.processModuleForAPI({
+                                mod,
+                                decision: {},
+                                moduleName: "logger",
+                                propertyName: "logger",
+                                moduleKeys: ["version"],
+                                analysis: { hasDefault: true },
+                                collisionContext: "initial",
+                                apiPathPrefix: "tools"
+                        })
+                ).toThrow(/COLLISION_DEFAULT_EXPORT_ERROR/);
+        });
+
+        it("emits warning and overwrites when collisionMode='warn' and named export collides (lines 309-314)", () => {
+                SlothletWarning.suppressConsole = true;
+                try {
+                        const flatten = new Flatten(makeMockWithHelpers("warn"));
+
+                        function logger() {}
+                        logger.version = "original";
+
+                        const mod = { default: logger, version: "named-overwrite" };
+
+                        const result = flatten.processModuleForAPI({
+                                mod,
+                                decision: {},
+                                moduleName: "logger",
+                                propertyName: "logger",
+                                moduleKeys: ["version"],
+                                analysis: { hasDefault: true },
+                                collisionContext: "initial",
+                                apiPathPrefix: "tools"
+                        });
+
+                        // Should NOT throw; named export is assigned after warning
+                        expect(result.moduleContent).toBeDefined();
+                        expect(result.moduleContent.version).toBe("named-overwrite");
+                } finally {
+                        SlothletWarning.suppressConsole = false;
+                }
+        });
+});

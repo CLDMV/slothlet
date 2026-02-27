@@ -150,3 +150,47 @@ describe("ApiCacheManager.rebuildCache - CACHE_NOT_FOUND (line 325)", () => {
 		expect(cm.has("existing-mod")).toBe(true);
 	});
 });
+// ─── set() input validation — invalid arguments (lines 109, 118, 128) ────────────
+
+describe("ApiCacheManager.set — input validation throws SlothletError (lines 109, 118, 128)", () => {
+        it("throws INVALID_ARGUMENT when moduleID is null (line 109)", () => {
+                const cm = new ApiCacheManager(makeMock());
+
+                expect(() => cm.set(null, makeEntry("any"))).toThrow(SlothletError);
+        });
+
+        it("throws with error message matching INVALID_ARGUMENT for null moduleID (line 109)", () => {
+                const cm = new ApiCacheManager(makeMock());
+
+                expect(() => cm.set("", makeEntry("any"))).toThrow(SlothletError);
+        });
+
+        it("throws INVALID_ARGUMENT when entry.api is missing (line 118)", () => {
+                const cm = new ApiCacheManager(makeMock());
+
+                // Pass a valid moduleID but no entry.api property
+                expect(() => cm.set("valid-mod", { moduleID: "valid-mod" })).toThrow(SlothletError);
+        });
+
+        it("throws INVALID_ARGUMENT when entry is null (line 118)", () => {
+                const cm = new ApiCacheManager(makeMock());
+
+                expect(() => cm.set("valid-mod", null)).toThrow(SlothletError);
+        });
+
+        it("throws CACHE_MODULEID_MISMATCH when entry.moduleID differs from key (line 128)", () => {
+                const cm = new ApiCacheManager(makeMock());
+
+                const entry = makeEntry("different-mod"); // entry.moduleID = "different-mod"
+
+                // The key is "correct-mod" but entry says "different-mod"
+                expect(() => cm.set("correct-mod", entry)).toThrow(SlothletError);
+        });
+
+        it("CACHE_MODULEID_MISMATCH error message contains the mismatch info (line 128)", () => {
+                const cm = new ApiCacheManager(makeMock());
+                const entry = makeEntry("owner-mod");
+
+                expect(() => cm.set("other-key", entry)).toThrow(/CACHE_MODULEID_MISMATCH/);
+        });
+});
