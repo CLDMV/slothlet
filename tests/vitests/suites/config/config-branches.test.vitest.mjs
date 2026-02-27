@@ -143,3 +143,42 @@ describe("Config.transformConfig — hook as string (lines 309-310)", () => {
 		expect(result.hook.enabled).toBe(false);
 	});
 });
+
+// ─── transformConfig — missing dir throws (line 241) ─────────────────────────
+
+describe("Config.transformConfig — missing dir throws (line 241)", () => {
+	it("throws INVALID_CONFIG_DIR_MISSING when dir is absent (line 241)", () => {
+		const cfg = new Config(makeMock());
+
+		// Calling transformConfig without a dir must throw at line 241.
+		expect(() => cfg.transformConfig({})).toThrow();
+	});
+
+	it("throws INVALID_CONFIG_DIR_MISSING when dir is an empty string (line 241)", () => {
+		const cfg = new Config(makeMock());
+
+		expect(() => cfg.transformConfig({ dir: "" })).toThrow();
+	});
+});
+
+// ─── transformConfig — hook boolean branches (lines 305-306) ─────────────────
+
+describe("Config.transformConfig — hook boolean (lines 305-306)", () => {
+	it("sets hookConfig.enabled=true and pattern='**' when hook:true (line 305-306)", () => {
+		const cfg = new Config(makeMock());
+
+		const result = cfg.transformConfig({ dir: "/tmp/test-api", hook: true });
+
+		expect(result.hook.enabled).toBe(true);
+		expect(result.hook.pattern).toBe("**");
+	});
+
+	it("sets hookConfig.enabled=false and pattern=null when hook:false (line 305-306)", () => {
+		const cfg = new Config(makeMock());
+
+		const result = cfg.transformConfig({ dir: "/tmp/test-api", hook: false });
+
+		expect(result.hook.enabled).toBe(false);
+		expect(result.hook.pattern).toBeNull();
+	});
+});

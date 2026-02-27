@@ -27,8 +27,8 @@ import slothlet from "@cldmv/slothlet";
 async function debugHookPaths() {
 	// console.log("=== DEBUGGING HOOK PATHS ===\n");
 
-	// Use the full hook-enabled matrix (all combinations with hooks=true)
-	const configs = getMatrixConfigs({ hooks: true });
+	// Use the full hook-enabled matrix (all combinations with hook.enabled=true)
+	const configs = getMatrixConfigs({ hook: { enabled: true } });
 	// console.log(`Testing ${configs.length} configs`);
 
 	for (const config of configs) {
@@ -39,36 +39,21 @@ async function debugHookPaths() {
 		const capturedPaths = [];
 
 		// Register a hook to capture all paths with detailed debugging
-		api.hooks.on(
-			"before",
-			({ path }) => {
-				const pathType = typeof path;
-				const pathValue = pathType === "function" ? path.toString() : path;
+		// typePattern format: "type:globPattern" (e.g. "before:**")
+		api.slothlet.hook.on("before:**", ({ apiPath }) => {
+			const pathType = typeof apiPath;
+			const pathValue = pathType === "function" ? apiPath.toString() : apiPath;
 
-				capturedPaths.push({
-					value: path,
-					type: pathType,
-					stringified: pathValue
-				});
+			capturedPaths.push({
+				value: apiPath,
+				type: pathType,
+				stringified: pathValue
+			});
 
-				// console.log(`🎯 Hook fired:`);
-				// console.log(`  - Path: ${pathValue}`);
-				// console.log(`  - Type: ${pathType}`);
-
-				if (pathType === "function") {
-					// console.log(`  - Function name: ${path.name}`);
-					// console.log(`  - Function toString: ${path.toString()}`);
-					// console.log(`  - Function constructor: ${path.constructor.name}`);
-					// console.log(`  - Is native function: ${path.toString().includes("[native code]")}`);
-					// console.log(`  - Function prototype: ${path.prototype}`);
-					// console.log(`  - Function length: ${path.length}`);
-					// console.log(`  - Is proxy: ${typeof path === "function" && path.toString() === "function () { [native code] }" && path.name}`);
-					// console.log(`  - Stack trace:`);
-					// console.trace();
-				}
-			},
-			{ pattern: "**" }
-		);
+			// console.log(`🎯 Hook fired:`);
+			// console.log(`  - Path: ${pathValue}`);
+			// console.log(`  - Type: ${pathType}`);
+		});
 
 		// console.log("\nCalling api.advanced.selfObject.addViaSelf(2, 3):");
 		try {
