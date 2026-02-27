@@ -102,10 +102,7 @@ describe("ApiCacheManager.clear (lines 300–302)", () => {
 
 		cm.clear();
 
-		expect(mock.debug).toHaveBeenCalledWith(
-			"cache",
-			expect.objectContaining({ key: "DEBUG_MODE_ALL_CACHES_CLEARED" })
-		);
+		expect(mock.debug).toHaveBeenCalledWith("cache", expect.objectContaining({ key: "DEBUG_MODE_ALL_CACHES_CLEARED" }));
 	});
 
 	it("should not throw when clear() is called on an already-empty manager", () => {
