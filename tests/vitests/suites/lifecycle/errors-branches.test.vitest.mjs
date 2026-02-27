@@ -1,115 +1,111 @@
 /**
- *      @Project: @cldmv/slothlet
- *      @Filename: /tests/vitests/suites/lifecycle/errors-branches.test.vitest.mjs
- *      @Date: 2026-02-27T00:00:00-08:00 (1772169600)
- *      @Author: Nate Hyson <CLDMV>
- *      @Email: <Shinrai@users.noreply.github.com>
- *      -----
- *      @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *      @Last modified time: 2026-02-27 00:00:00 -08:00 (1772169600)
- *      -----
- *      @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *@Project: @cldmv/slothlet
+ *@Filename: /tests/vitests/suites/lifecycle/errors-branches.test.vitest.mjs
+ *@Date: 2026-02-27T00:00:00-08:00 (1772169600)
+ *@Author: Nate Hyson <CLDMV>
+ *@Email: <Shinrai@users.noreply.github.com>
+ *-----
+ *@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *@Last modified time: 2026-02-27 00:00:00 -08:00 (1772169600)
+ *-----
+ *@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
  * @fileoverview Coverage tests for SlothletError and SlothletWarning uncovered branches
- * (errors.mjs lines 62, 184).
+ * (errors.mjs lines 62, 184), exercised entirely through the public slothlet API.
  *
  * @description
- * Covers two code paths never reached by the existing integration suite:
  *
- * - **Line 62** — `translatedHint = staticHint`: fires inside the `SlothletError`
- *   constructor when `validationError: true` AND the code has a `HINT_<CODE>` entry
- *   in the i18n translations that is a real string (not starting with "Error:").
- *   The OWNERSHIP_INVALID_MODULE_ID and OWNERSHIP_INVALID_API_PATH codes both have
- *   valid hint entries, so throwing those errors with `validationError: true` reaches
- *   line 62.
+ * **Line 62 — static HINT lookup: `translatedHint = staticHint`**
  *
- * - **Line 184** — `SlothletWarning.captured.push(this)`: fires when a `SlothletWarning`
- *   is constructed while `SlothletWarning.suppressConsole === true`.  The global vitest
- *   setup sets this to `true` before tests run, so any `new SlothletWarning(...)` call
- *   should reach line 184.  This test makes the path explicit to ensure coverage is
- *   attributed to errors.mjs.
+ *   Fires inside the `SlothletError` constructor when:
+ *   1. `validationError: true` is passed as a constructor option, AND
+ *   2. `HINT_<CODE>` is a real, non-fallback string in the i18n translations.
  *
- * @module tests/vitests/suites/lifecycle/errors-branches.test.vitest
+ *   Trigger path through slothlet:
+ *   `slothlet({ dir: null })` → config validation throws `INVALID_CONFIG_DIR_MISSING`
+ *   with `{ validationError: true }`.  `HINT_INVALID_CONFIG_DIR_MISSING` exists in
+ *   en-us.json as a genuine hint string, so the constructor takes line 62.
+ *
+ * **Line 184 — `SlothletWarning.captured.push(this)`**
+ *
+ *   Fires when a `SlothletWarning` is constructed while
+ *   `SlothletWarning.suppressConsole === true`.  The global vitest setup sets this
+ *   flag to `true` before any test runs, so any warning goes into `captured[]`
+ *   instead of printing to the console.
+ *
+ *   Trigger path through slothlet:
+ *   `slothlet({ dir, allowMutation: false })` — `allowMutation` is a v2 deprecated
+ *   config key.  `transformConfig` detects it and creates `V2_CONFIG_UNSUPPORTED` via
+ *   `new this.SlothletWarning(...)` (gated behind `if (!config.silent)`).
+ *   Because `suppressConsole` is true, line 184 fires: `captured.push(this)`.
+ *   NOTE: `silent: true` must NOT be passed here — it suppresses the warning entirely.
+ *
+ * @module tests/vitests/suites/lifecycle/errors-branches
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { SlothletError, SlothletWarning } from "@cldmv/slothlet/errors";
+import slothlet from "@cldmv/slothlet";
+import { SlothletWarning } from "@cldmv/slothlet/errors";
+import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── SlothletError static-hint path (line 62) ─────────────────────────────────
 
-describe("SlothletError constructor — static HINT_<CODE> translation path (line 62)", () => {
-	it("constructs without throwing when a validationError code has a HINT_ entry (line 62)", () => {
-		// OWNERSHIP_INVALID_MODULE_ID has HINT_OWNERSHIP_INVALID_MODULE_ID in en-us.json.
-		// With validationError:true, the constructor checks HINT_OWNERSHIP_INVALID_MODULE_ID
-		// and sets translatedHint = staticHint (line 62) when the translation is valid.
-		expect(() => {
-			new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID: null }, null, { validationError: true });
-		}).not.toThrow();
-	});
+describe("SlothletError — static HINT_<CODE> lookup via slothlet config validation (line 62)", () => {
+it("slothlet with null dir throws INVALID_CONFIG_DIR_MISSING and the error carries a hint (line 62)", async () => {
+// Config validation checks dir before loading; null triggers INVALID_CONFIG_DIR_MISSING
+// with { validationError: true }.  SlothletError constructor retrieves
+// HINT_INVALID_CONFIG_DIR_MISSING from i18n → real string → line 62 fires:
+//   translatedHint = staticHint
+const err = await slothlet({ dir: null }).catch((e) => e);
+expect(err).toBeInstanceOf(Error);
+expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+expect(err.hint).toBeDefined();
+expect(typeof err.hint).toBe("string");
+expect(err.hint.length).toBeGreaterThan(0);
+});
 
-	it("error message includes the error code for OWNERSHIP_INVALID_MODULE_ID (line 62)", () => {
-		const err = new SlothletError("OWNERSHIP_INVALID_MODULE_ID", { moduleID: "bad" }, null, { validationError: true });
-		expect(err.message).toMatch(/OWNERSHIP_INVALID_MODULE_ID/);
-	});
+it("the hint is a real translation, not a fallback 'Error:...' string (line 62)", async () => {
+const err = await slothlet({ dir: null }).catch((e) => e);
+expect(err.hint).not.toMatch(/^Error:/);
+});
 
-	it("the hint is set when HINT_<CODE> translation exists and is not an Error: fallback (line 62)", () => {
-		// OWNERSHIP_INVALID_API_PATH also has a valid HINT_ entry
-		const err = new SlothletError("OWNERSHIP_INVALID_API_PATH", { apiPath: 42 }, null, { validationError: true });
-		// hint property should be defined and contain meaningful text
-		expect(err.hint).toBeDefined();
-		expect(typeof err.hint).toBe("string");
-		expect(err.hint).not.toMatch(/^Error:/);
-	});
-
-	it("COLLISION_ERROR also has a valid HINT_ and triggers line 62 (line 62)", () => {
-		const err = new SlothletError("COLLISION_ERROR", { key: "math", apiPath: "root.math" }, null, { validationError: true });
-		expect(err.hint).toBeDefined();
-		expect(err.hint).not.toMatch(/^Error:/);
-	});
+it("slothlet with empty-string dir also throws INVALID_CONFIG_DIR_MISSING with a hint (line 62)", async () => {
+const err = await slothlet({ dir: "" }).catch((e) => e);
+expect(err.code).toBe("INVALID_CONFIG_DIR_MISSING");
+expect(err.hint).toBeDefined();
+expect(err.hint).not.toMatch(/^Error:/);
+});
 });
 
 // ─── SlothletWarning captured branch (line 184) ───────────────────────────────
 
-describe("SlothletWarning constructor — captured.push path when suppressConsole is true (line 184)", () => {
-	let originalSuppress;
-	let originalCaptured;
+describe("SlothletWarning — captured.push via deprecated-config warning through slothlet (line 184)", () => {
+let api;
 
-	afterEach(() => {
-		// Restore state to not affect other test files
-		SlothletWarning.suppressConsole = originalSuppress;
-		SlothletWarning.captured = originalCaptured;
-	});
+afterEach(async () => {
+if (api && typeof api.shutdown === "function") {
+await api.shutdown().catch(() => {});
+}
+api = null;
+// Drain any warnings captured by this describe block so they don't bleed into other tests
+SlothletWarning.captured.splice(0);
+});
 
-	it("pushes warning to captured array when suppressConsole is true (line 184)", () => {
-		originalSuppress = SlothletWarning.suppressConsole;
-		originalCaptured = [...SlothletWarning.captured];
+it("slothlet with allowMutation:false creates a V2_CONFIG_UNSUPPORTED warning captured in captured[] (line 184)", async () => {
+// allowMutation is a v2 deprecated key → transformConfig calls new SlothletWarning(...).
+// suppressConsole is true (set globally in vitest.setup.mjs).
+// The warning constructor takes the else branch → line 184: captured.push(this).
+// IMPORTANT: do NOT pass silent:true here — it gates the warning creation entirely.
+const priorLength = SlothletWarning.captured.length;
+api = await slothlet({ dir: TEST_DIRS.API_TEST, allowMutation: false });
+expect(SlothletWarning.captured.length).toBeGreaterThan(priorLength);
+});
 
-		SlothletWarning.suppressConsole = true;
-		const priorLength = SlothletWarning.captured.length;
-
-		// Creating a warning with suppressConsole=true routes to line 184 (captured.push)
-		new SlothletWarning("V2_CONFIG_UNSUPPORTED", {
-			option: "allowMutation",
-			replacement: "api.mutations",
-			hint: "test"
-		});
-
-		expect(SlothletWarning.captured.length).toBe(priorLength + 1);
-		expect(SlothletWarning.captured[SlothletWarning.captured.length - 1]).toBeInstanceOf(SlothletWarning);
-	});
-
-	it("captured item has the correct code when suppressConsole is true (line 184)", () => {
-		originalSuppress = SlothletWarning.suppressConsole;
-		originalCaptured = [...SlothletWarning.captured];
-
-		SlothletWarning.suppressConsole = true;
-		SlothletWarning.captured = [];
-
-		new SlothletWarning("V2_CONFIG_UNSUPPORTED", { option: "test", replacement: "r", hint: "h" });
-
-		expect(SlothletWarning.captured.length).toBe(1);
-		expect(SlothletWarning.captured[0].code).toBe("V2_CONFIG_UNSUPPORTED");
-	});
+it("the captured warning has code V2_CONFIG_UNSUPPORTED (line 184)", async () => {
+api = await slothlet({ dir: TEST_DIRS.API_TEST, allowMutation: false });
+const codes = SlothletWarning.captured.map((w) => w.code);
+expect(codes).toContain("V2_CONFIG_UNSUPPORTED");
+});
 });
