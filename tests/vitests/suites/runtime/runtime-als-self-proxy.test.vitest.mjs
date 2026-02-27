@@ -71,6 +71,24 @@ describe("runtime-asynclocalstorage: self proxy — has trap outside ALS context
 	});
 });
 
+// ─── self.ownKeys — no context (line 89) ─────────────────────────────────────
+
+describe("runtime-asynclocalstorage: self proxy — ownKeys trap outside ALS context (line 89)", () => {
+	it("returns empty array when no ALS context is active (line 89)", () => {
+		// Reflect.ownKeys() on the self proxy outside any context → line 89 fires.
+		expect(Reflect.ownKeys(self)).toEqual([]);
+	});
+});
+
+// ─── self.getOwnPropertyDescriptor — no context (line 99) ────────────────────
+
+describe("runtime-asynclocalstorage: self proxy — getOwnPropertyDescriptor trap outside ALS context (line 99)", () => {
+	it("returns undefined when no ALS context is active (line 99)", () => {
+		// Object.getOwnPropertyDescriptor on self without active context → line 99 fires.
+		expect(Object.getOwnPropertyDescriptor(self, "anyProp")).toBeUndefined();
+	});
+});
+
 // ─── Integration tests (require active ALS context) ──────────────────────────
 
 describe("runtime-asynclocalstorage: self/context proxy — inside active ALS context", () => {

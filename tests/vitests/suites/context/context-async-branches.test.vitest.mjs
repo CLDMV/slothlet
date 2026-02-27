@@ -99,6 +99,37 @@ describe("AsyncContextManager.cleanup — throws CONTEXT_NOT_FOUND for unknown i
 	});
 });
 
+// ─── initialize — CONTEXT_ALREADY_EXISTS (line 55) ───────────────────────────
+
+describe("AsyncContextManager.initialize — throws CONTEXT_ALREADY_EXISTS on duplicate ID (line 55)", () => {
+	it("throws when the same instanceID is initialized twice", () => {
+		// `this.instances.has(instanceID)` is true on the second call → line 55 fires.
+		const cm = new AsyncContextManager();
+		cm.initialize("dup-id");
+
+		expect(() => cm.initialize("dup-id")).toThrow();
+	});
+
+	it("does not throw for two different instanceIDs (regression guard)", () => {
+		const cm = new AsyncContextManager();
+		cm.initialize("id-a");
+
+		expect(() => cm.initialize("id-b")).not.toThrow();
+	});
+});
+
+// ─── runInContext — CONTEXT_NOT_FOUND for unregistered ID (line 99) ──────────
+
+describe("AsyncContextManager.runInContext — throws CONTEXT_NOT_FOUND for unregistered ID (line 99)", () => {
+	it("throws when calling runInContext for an instanceID that was never initialized", () => {
+		// The else-branch (line 95) runs because isActiveOurInstance is false (no ALS store).
+		// `this.instances.get(instanceID)` returns undefined → line 98 condition fires → line 99.
+		const cm = new AsyncContextManager();
+
+		expect(() => cm.runInContext("never-created", () => {}, null, [])).toThrow();
+	});
+});
+
 // ─── runInContext — class-instance wrapping in nested call (lines 121-122) ───
 
 describe("AsyncContextManager.runInContext — class-instance result in nested (isActive) call (lines 121-122)", () => {
