@@ -75,26 +75,50 @@ describe("Flatten.shouldAttachNamedExport — uncovered return false branches", 
 		// The guard `!key || key === "default"` fires immediately for a null key.
 		const flatten = new Flatten(makeMock());
 
-		expect(flatten.shouldAttachNamedExport(null, "someValue", () => {}, () => {})).toBe(false);
+		expect(
+			flatten.shouldAttachNamedExport(
+				null,
+				"someValue",
+				() => {},
+				() => {}
+			)
+		).toBe(false);
 	});
 
 	it("returns false when key is an empty string (line 532)", () => {
 		// `!key` is truthy for an empty string.
 		const flatten = new Flatten(makeMock());
 
-		expect(flatten.shouldAttachNamedExport("", "someValue", () => {}, () => {})).toBe(false);
+		expect(
+			flatten.shouldAttachNamedExport(
+				"",
+				"someValue",
+				() => {},
+				() => {}
+			)
+		).toBe(false);
 	});
 
 	it("returns false when key is 'default' (line 532)", () => {
 		// The literal string "default" is explicitly rejected.
 		const flatten = new Flatten(makeMock());
 
-		expect(flatten.shouldAttachNamedExport("default", "someValue", () => {}, () => {})).toBe(false);
+		expect(
+			flatten.shouldAttachNamedExport(
+				"default",
+				"someValue",
+				() => {},
+				() => {}
+			)
+		).toBe(false);
 	});
 
 	it("returns false when key equals defaultFunc.name (line 538)", () => {
 		// When the key matches the wrapped default function's name, re-exporting it would
 		// create a duplicate and should be skipped.
+		// IMPORTANT: value must be a DIFFERENT reference from both defaultFunc and
+		// originalDefault so the early reference-equality check (line 534) does not fire
+		// first — only then does execution reach the name-equality guard at line 537-538.
 		const flatten = new Flatten(makeMock());
 
 		/** @returns {number} */
@@ -103,24 +127,28 @@ describe("Flatten.shouldAttachNamedExport — uncovered return false branches", 
 		}
 
 		const originalDefault = function originalFn() {};
+		const differentValue = 99; // not the same reference as computeSum or originalFn
 
-		// key "computeSum" matches computeSum.name → line 538 fires.
-		expect(flatten.shouldAttachNamedExport("computeSum", computeSum, computeSum, originalDefault)).toBe(false);
+		// key "computeSum" === computeSum.name → line 538 fires.
+		expect(flatten.shouldAttachNamedExport("computeSum", differentValue, computeSum, originalDefault)).toBe(false);
 	});
 
 	it("returns false when key equals originalDefault.name (line 541)", () => {
 		// When defaultFunc.name does NOT match key but originalDefault.name does,
 		// line 541's guard fires.
+		// IMPORTANT: value must differ from both, and key must differ from defaultFunc.name,
+		// so lines 534 and 538 are skipped before reaching line 540-541.
 		const flatten = new Flatten(makeMock());
 
 		function parseJSON() {
 			return {};
 		}
 
-		// defaultFunc has a different name so line 538 skips; originalDefault.name matches.
+		// defaultFunc has a different name so line 537-538 skips; originalDefault.name matches.
 		const defaultWrapper = function wrappedFn() {};
+		const differentValue = "some-string"; // not the same reference as either function
 
-		expect(flatten.shouldAttachNamedExport("parseJSON", parseJSON, defaultWrapper, parseJSON)).toBe(false);
+		expect(flatten.shouldAttachNamedExport("parseJSON", differentValue, defaultWrapper, parseJSON)).toBe(false);
 	});
 
 	it("returns true when key is a regular export with no name collision (line 543)", () => {
@@ -129,16 +157,24 @@ describe("Flatten.shouldAttachNamedExport — uncovered return false branches", 
 
 		function helperFn() {}
 
-		expect(flatten.shouldAttachNamedExport("helper", helperFn, () => {}, () => {})).toBe(true);
+		expect(
+			flatten.shouldAttachNamedExport(
+				"helper",
+				helperFn,
+				() => {},
+				() => {}
+			)
+		).toBe(true);
 	});
 });
 
 // ─── buildCategoryDecisions — C12 object-auto-flatten (line 508) ─────────────
 
 describe("Flatten.buildCategoryDecisions — C12 object-auto-flatten path (line 508)", () => {
-	it("returns shouldFlatten=true with flattenType 'object-auto-flatten' when single key matches moduleName", async () => {
+	it("returns shouldFlatten=true via C12 when single key matches moduleName at depth > 0", async () => {
 		// Rule 7 / C12: an object module at `math/math.mjs` that exports `{ math: value }`
 		// should auto-flatten because the single named export key equals the module name.
+		// C12 fires before C18 when moduleName === categoryName && currentDepth > 0.
 		const flatten = new Flatten(makeMock());
 
 		const result = await flatten.buildCategoryDecisions({
@@ -148,7 +184,7 @@ describe("Flatten.buildCategoryDecisions — C12 object-auto-flatten path (line 
 			mod: { math: () => 1 }, // plain object, not a function — skips C10 and C16
 			analysis: { hasDefault: false, defaultExportType: null }, // skips C11
 			moduleKeys: ["math"],
-			currentDepth: 1, // > 0 required for C12
+			currentDepth: 1, // > 0 required for C12 to fire before C18
 			moduleFiles: [],
 			t
 		});
@@ -157,18 +193,21 @@ describe("Flatten.buildCategoryDecisions — C12 object-auto-flatten path (line 
 		expect(result.flattenType).toBe("object-auto-flatten");
 	});
 
-	it("returns shouldFlatten=true for any single key matching moduleName at depth > 0", async () => {
-		// Ensure the rule is not sensitive to the specific module name.
+	it("returns shouldFlatten=true via C18 (final check) when single key matches moduleName at depth=0 (line 506)", async () => {
+		// Rule 7 / C18 (final fallback check): fires when earlier conditions (C12, etc.) are skipped.
+		// With currentDepth=0, C12 does not fire (it requires depth > 0), so the final
+		// C18 check at line 504-511 becomes the first to match.
+		// This covers the specifically uncovered line 506 (`return { shouldFlatten: true... }`).
 		const flatten = new Flatten(makeMock());
 
 		const result = await flatten.buildCategoryDecisions({
-			categoryName: "utils",
-			moduleName: "utils",
-			fileBaseName: "utils.mjs",
-			mod: { utils: { greet: () => "hi" } },
+			categoryName: "math",
+			moduleName: "math",
+			fileBaseName: "math.mjs",
+			mod: { math: () => 1 },
 			analysis: { hasDefault: false, defaultExportType: null },
-			moduleKeys: ["utils"],
-			currentDepth: 2,
+			moduleKeys: ["math"],
+			currentDepth: 0, // = 0 → C12 skipped (requires > 0) → C18 fires at line 504-511
 			moduleFiles: [],
 			t
 		});
