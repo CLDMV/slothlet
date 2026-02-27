@@ -172,3 +172,86 @@ describe("LiveContextManager.cleanup — throws CONTEXT_NOT_FOUND for unknown in
 		expect(() => cm.cleanup("inst-c")).toThrow(SlothletError);
 	});
 });
+// ─── line 52: initialize() throws CONTEXT_ALREADY_EXISTS on duplicate ID ────────
+
+describe("LiveContextManager.initialize — throws on duplicate instanceID (line 52)", () => {
+        it("throws SlothletError when initialize is called twice with the same ID (line 52)", () => {
+                const cm = new LiveContextManager();
+                cm.initialize("dup-inst");
+
+                // Second call with same ID → line 52: throw CONTEXT_ALREADY_EXISTS
+                expect(() => cm.initialize("dup-inst")).toThrow(SlothletError);
+        });
+
+        it("error message includes CONTEXT_ALREADY_EXISTS code (line 52)", () => {
+                const cm = new LiveContextManager();
+                cm.initialize("dup-inst-2");
+
+                expect(() => cm.initialize("dup-inst-2")).toThrow(/CONTEXT_ALREADY_EXISTS/);
+        });
+
+        it("does NOT throw when initializing different instances (line 52 not triggered)", () => {
+                const cm = new LiveContextManager();
+                cm.initialize("a");
+
+                // Different ID — line 52 is NOT triggered
+                expect(() => cm.initialize("b")).not.toThrow();
+        });
+});
+
+// ─── line 99: runInContext() throws CONTEXT_NOT_FOUND for unknown instanceID ────
+
+describe("LiveContextManager.runInContext — throws CONTEXT_NOT_FOUND for unknown ID (line 99)", () => {
+        it("throws SlothletError when instanceID was never registered (line 99)", () => {
+                const cm = new LiveContextManager();
+
+                // No instances registered; targetInstanceID won't be in this.instances
+                expect(() => cm.runInContext("ghost-inst", () => {}, null, [])).toThrow(SlothletError);
+        });
+
+        it("error message contains CONTEXT_NOT_FOUND (line 99)", () => {
+                const cm = new LiveContextManager();
+
+                expect(() => cm.runInContext("ghost-inst-2", () => {}, null, [])).toThrow(/CONTEXT_NOT_FOUND/);
+        });
+});
+
+// ─── line 111: runInContext() store.callerWrapper set when currentWrapper provided ────
+
+describe("LiveContextManager.runInContext — callerWrapper/currentWrapper tracking when wrapper provided (line 111)", () => {
+        it("stores and restores callerWrapper/currentWrapper when a truthy wrapper is passed (line 111)", () => {
+                const cm = new LiveContextManager();
+                cm.initialize("inst-wrap");
+
+                const firstWrapper = { id: "wrapper-1" };
+                const secondWrapper = { id: "wrapper-2" };
+
+                let capturedCaller = undefined;
+                let capturedCurrent = undefined;
+
+                // Nested calls: outer sets firstWrapper as currentWrapper.
+                // Inside that callback, inner sets secondWrapper; line 111 fires because
+                // currentWrapper is truthy, so callerWrapper = previousWrapper (firstWrapper).
+                cm.runInContext("inst-wrap", () => {
+                        cm.runInContext("inst-wrap", () => {
+                                const store = cm.instances.get("inst-wrap");
+                                capturedCaller = store?.callerWrapper;
+                                capturedCurrent = store?.currentWrapper;
+                        }, null, [], secondWrapper);
+                }, null, [], firstWrapper);
+
+                expect(capturedCurrent).toBe(secondWrapper);
+                expect(capturedCaller).toBe(firstWrapper);
+        });
+
+        it("does not set callerWrapper when currentWrapper is null/undefined (line 111 not triggered)", () => {
+                const cm = new LiveContextManager();
+                cm.initialize("inst-no-wrap");
+
+                // Passing no currentWrapper (5th arg) — the if (currentWrapper) branch is skipped
+                expect(() => cm.runInContext("inst-no-wrap", () => {}, null, [])).not.toThrow();
+                const store = cm.instances.get("inst-no-wrap");
+                // currentWrapper was never set so it remains undefined (not null)
+                expect(store?.currentWrapper).toBeFalsy();
+        });
+});

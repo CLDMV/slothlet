@@ -156,15 +156,16 @@ describe("OwnershipManager.getPathOwnership — returns null for unknown path vi
 // exists to protect the traversal loop; direct instantiation is used to verify it fires
 // without corrupting state or causing an infinite loop.
 
-describe("OwnershipManager.registerSubtree — circular reference guard (line 351) [direct]", () => {
-	/**
-	 * Minimal mock slothlet sufficient for OwnershipManager.
-	 * @returns {object}
-	 */
-	function makeMock() {
-		return { config: {}, debug: () => {}, SlothletError, SlothletWarning };
-	}
+/**
+ * Minimal mock slothlet sufficient for OwnershipManager direct-instantiation tests.
+ * Defined at file scope so it is available in all describe blocks below.
+ * @returns {object}
+ */
+function makeMock() {
+	return { config: {}, debug: () => {}, SlothletError, SlothletWarning };
+}
 
+describe("OwnershipManager.registerSubtree — circular reference guard (line 351) [direct]", () => {
 	it("does not throw or infinite-loop when object has a self-reference (line 351)", () => {
 		const ownership = new OwnershipManager(makeMock());
 
@@ -197,4 +198,170 @@ describe("OwnershipManager.registerSubtree — circular reference guard (line 35
 
 		expect(() => ownership.registerSubtree(api, "mod-shared", "ns")).not.toThrow();
 	});
+});
+// ─── Line 200: removeEntry — moduleID not found in stack ─────────────────────────
+
+describe("OwnershipManager.removePath — index -1 guard (line 200)", () => {
+        it("returns action:none when the specified moduleID is not in the path stack (line 200)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                // Register a path under one module
+                ownership.register({ moduleID: "mod-a", apiPath: "math.add", value: () => {}, collisionMode: "replace" });
+
+                // Try to remove a DIFFERENT module from the same path — not in stack
+                const result = ownership.removePath("math.add", "non-existent-module");
+
+                // index === -1 → line 200 fires: return { action: "none", ... }
+                expect(result.action).toBe("none");
+                expect(result.removedModuleId).toBeNull();
+                expect(result.restoreModuleId).toBeNull();
+        });
+
+        it("returns action:none without mutating ownership when moduleID is missing (line 200)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                ownership.register({ moduleID: "mod-b", apiPath: "lib.util", value: () => {}, collisionMode: "replace" });
+
+                ownership.removePath("lib.util", "ghost-module");
+
+                // Original owner is still registered
+                const owner = ownership.getCurrentOwner("lib.util");
+                expect(owner.moduleID).toBe("mod-b");
+        });
+});
+
+// ─── Line 269: getModulePaths ───────────────────────────────────────────────
+
+describe("OwnershipManager.getModulePaths — returns list of owned paths (line 269)", () => {
+        it("returns an empty array for an unknown moduleID (line 269)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                const paths = ownership.getModulePaths("unknown-module");
+                expect(paths).toEqual([]);
+        });
+
+        it("returns all registered paths for a known moduleID (line 269)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                ownership.register({ moduleID: "my-mod", apiPath: "math.add", value: () => {}, collisionMode: "replace" });
+                ownership.register({ moduleID: "my-mod", apiPath: "math.sub", value: () => {}, collisionMode: "replace" });
+
+                const paths = ownership.getModulePaths("my-mod");
+                expect(paths).toContain("math.add");
+                expect(paths).toContain("math.sub");
+                expect(paths).toHaveLength(2);
+        });
+});
+
+// ─── Lines 290-291: ownsPath ─────────────────────────────────────────────────
+
+describe("OwnershipManager.ownsPath — true/false check (lines 290-291)", () => {
+        it("returns true when the module is the current owner of the path (lines 290-291)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                ownership.register({ moduleID: "mod-x", apiPath: "math.add", value: () => {}, collisionMode: "replace" });
+
+                expect(ownership.ownsPath("mod-x", "math.add")).toBe(true);
+        });
+
+        it("returns false when a different module owns the path (lines 290-291)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                ownership.register({ moduleID: "mod-x", apiPath: "math.add", value: () => {}, collisionMode: "replace" });
+
+                expect(ownership.ownsPath("mod-y", "math.add")).toBe(false);
+        });
+
+        it("returns falsy for an unregistered path (lines 290-291)", () => {
+                const ownership = new OwnershipManager(makeMock());
+                const result = ownership.ownsPath("any-mod", "unregistered.path");
+                expect(result).toBeFalsy();
+        });
+});
+
+// ─── register() input validation (lines 53, 57) ──────────────────────────────
+
+describe("OwnershipManager.register — input validation error paths (lines 53, 57)", () => {
+        it("throws OWNERSHIP_INVALID_MODULE_ID when moduleID is null (line 53)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                expect(() =>
+                        ownership.register({ moduleID: null, apiPath: "math.add", value: () => {} })
+                ).toThrow(SlothletError);
+        });
+
+        it("thrown error message contains OWNERSHIP_INVALID_MODULE_ID (line 53)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                expect(() =>
+                        ownership.register({ moduleID: undefined, apiPath: "math.add", value: () => {} })
+                ).toThrow(/OWNERSHIP_INVALID_MODULE_ID/);
+        });
+
+        it("throws OWNERSHIP_INVALID_API_PATH when apiPath is a number (line 57)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                // apiPath !== "" and not a string → line 57 throws
+                expect(() =>
+                        ownership.register({ moduleID: "mod-1", apiPath: 42, value: () => {} })
+                ).toThrow(SlothletError);
+        });
+
+        it("thrown error message contains OWNERSHIP_INVALID_API_PATH (line 57)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                expect(() =>
+                        ownership.register({ moduleID: "mod-1", apiPath: {}, value: () => {} })
+                ).toThrow(/OWNERSHIP_INVALID_API_PATH/);
+        });
+
+        it("does NOT throw for empty string apiPath (root-level special case)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                // Empty string is explicitly allowed for root-level registrations
+                expect(() =>
+                        ownership.register({ moduleID: "mod-root", apiPath: "", value: {} })
+                ).not.toThrow();
+        });
+});
+
+// ─── unregister() unknown moduleID (line 149) ────────────────────────────────
+
+describe("OwnershipManager.unregister — unknown moduleID returns empty result (line 149)", () => {
+        it("returns { removed: [], rolledBack: [] } when moduleID has no registered paths (line 149)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                const result = ownership.unregister("totally-unknown-mod");
+
+                expect(result).toEqual({ removed: [], rolledBack: [] });
+        });
+
+        it("does not throw when unregistering an unknown moduleID (line 149)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                expect(() => ownership.unregister("ghost-mod")).not.toThrow();
+        });
+});
+
+// ─── removePath() no matching index (line 194) ───────────────────────────────
+
+describe("OwnershipManager.removePath — no matching entry returns action:none (line 194)", () => {
+        it("returns { action: 'none', ... } when the specified moduleID is not in the path stack (line 194)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                // Register one module under math.add
+                ownership.register({ moduleID: "mod-a", apiPath: "math.add", value: () => {} });
+
+                // Try to remove a different moduleID from the same path — no match
+                const result = ownership.removePath("math.add", "mod-does-not-exist");
+
+                expect(result.action).toBe("none");
+                expect(result.removedModuleId).toBeNull();
+                expect(result.restoreModuleId).toBeNull();
+        });
+
+        it("returns { action: 'none', ... } when the path itself was never registered (line 194)", () => {
+                const ownership = new OwnershipManager(makeMock());
+
+                const result = ownership.removePath("never.registered", "any-mod");
+
+                // The outer guard `if (!stack)` returns early before reaching line 194
+                // But the path not found is still action:none
+                expect(result.action).toBe("none");
+        });
 });
