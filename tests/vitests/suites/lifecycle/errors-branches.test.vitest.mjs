@@ -1,14 +1,14 @@
 /**
- *@Project: @cldmv/slothlet
- *@Filename: /tests/vitests/suites/lifecycle/errors-branches.test.vitest.mjs
- *@Date: 2026-02-27T00:00:00-08:00 (1772169600)
- *@Author: Nate Hyson <CLDMV>
- *@Email: <Shinrai@users.noreply.github.com>
- *-----
- *@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *@Last modified time: 2026-02-27 00:00:00 -08:00 (1772169600)
- *-----
- *@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/lifecycle/errors-branches.test.vitest.mjs
+ *	@Date: 2026-02-27T08:32:05-08:00 (1772209925)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-28 13:23:04 -08:00 (1772313784)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

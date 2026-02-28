@@ -1,14 +1,14 @@
 /**
- *      @Project: @cldmv/slothlet
- *      @Filename: /tests/vitests/suites/typescript/type-generator-branches.test.vitest.mjs
- *      @Date: 2026-07-17T00:00:00-07:00 (1752739200)
- *      @Author: Nate Hyson <CLDMV>
- *      @Email: <Shinrai@users.noreply.github.com>
- *      -----
- *      @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *      @Last modified time: 2026-07-17 00:00:00 -07:00 (1752739200)
- *      -----
- *      @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/typescript/type-generator-branches.test.vitest.mjs
+ *	@Date: 2026-02-27T06:19:24-08:00 (1772201964)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-28 13:23:11 -08:00 (1772313791)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

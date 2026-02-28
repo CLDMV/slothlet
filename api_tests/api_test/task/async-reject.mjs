@@ -1,14 +1,14 @@
 /**
- *      @Project: @cldmv/slothlet
- *      @Filename: /api_tests/api_test/task/async-reject.mjs
- *      @Date: 2026-02-27T12:00:00-08:00 (1772373600)
- *      @Author: Nate Hyson <CLDMV>
- *      @Email: <Shinrai@users.noreply.github.com>
- *      -----
- *      @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *      @Last modified time: 2026-02-27 12:00:00 -08:00 (1772373600)
- *      -----
- *      @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/task/async-reject.mjs
+ *	@Date: 2026-02-27T20:33:02-08:00 (1772253182)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-28 13:23:16 -08:00 (1772313796)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
