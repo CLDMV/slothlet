@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/api-manager/api-manager-path-validation.test.vitest.mjs
- *	@Date: 2026-07-14T00:00:00-07:00 (1752566400)
+ *	@Date: 2026-02-26T06:59:00-08:00 (1772117940)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-24 22:15:42 -08:00 (1772000142)
+ *	@Last modified time: 2026-02-28 13:16:18 -08:00 (1772313378)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

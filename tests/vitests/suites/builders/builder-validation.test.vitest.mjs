@@ -1,14 +1,14 @@
 /**
- *      @Project: @cldmv/slothlet
- *      @Filename: /tests/vitests/suites/builders/builder-validation.test.vitest.mjs
- *      @Date: 2026-07-15T00:00:00-07:00 (1752652800)
- *      @Author: Nate Hyson <CLDMV>
- *      @Email: <Shinrai@users.noreply.github.com>
- *      -----
- *      @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *      @Last modified time: 2026-07-15 00:00:00 -07:00 (1752652800)
- *      -----
- *      @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/builders/builder-validation.test.vitest.mjs
+ *	@Date: 2026-02-26T17:01:34-08:00 (1772154094)
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-28 13:16:33 -08:00 (1772313393)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
