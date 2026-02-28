@@ -131,7 +131,7 @@
 		"publish:manual": "npm publish --access public",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/check-i18n-languages.mjs",
-		"vitest": "node tests/vitests/run-all-vitest2.mjs --workers 8",
+		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
 		"baseline": "npm run vitest -- --baseline",
 		"coverage": "npm run vitest -- --coverage-quiet",
 		"test": "node tests/test-conditional.mjs",

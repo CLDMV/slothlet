@@ -1,9 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/helpers/resolve-from-caller.test.vitest.mjs
- *	@Date: 2026-02-26 00:00:00 -08:00
+ *	@Date: 2026-02-26T07:05:09-08:00 (1772118309)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-02-28 13:16:46 -08:00 (1772313406)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
