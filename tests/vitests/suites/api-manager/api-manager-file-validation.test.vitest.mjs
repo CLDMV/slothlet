@@ -27,13 +27,23 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import path from "path";
 import { fileURLToPath } from "url";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS, suppressSlothletDebugOutput, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FIXTURE_TXT_FILE = path.resolve(__dirname, "../../../../api_tests/fixture-text.txt");
+let restoreDebugOutput;
+
+beforeEach(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterEach(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 /**
  * Create a slothlet API instance for a given configuration.
@@ -71,43 +81,40 @@ describe.each(getMatrixConfigs())("API Manager File Validation > Config: '$name'
 // Eager-only: lazy mode triggers background materialization that races with shutdown,
 // causing unhandled rejections. Debug logging behavior is config-agnostic.
 
-describe.each(getMatrixConfigs({ mode: "eager" }))(
-	"API Manager File Validation (debug.api) > Config: '$name'",
-	({ config }) => {
-		let api;
+describe.each(getMatrixConfigs({ mode: "eager" }))("API Manager File Validation (debug.api) > Config: '$name'", ({ config }) => {
+	let api;
 
-		afterEach(async () => {
-			if (api) {
-				await api.shutdown();
-				api = null;
-			}
-		});
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
 
-		describe("debug.api = true: syncWrapper debug blocks", () => {
-			it("should execute debug logging during API reconciliation when debug.api=true", async () => {
-				// Create with debug.api = true — covers debug blocks in syncWrapper and mutateApiValue
-				api = await createApiInstance(config, {
-					dir: TEST_DIRS.API_TEST,
-					allowMutation: true,
-					debug: { api: true }
-				});
-
-				// Adding the same directory again triggers mutateApiValue → syncWrapper,
-				// hitting the debug logging blocks at lines 413-699.
-				await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST)).resolves.toBeDefined();
+	describe("debug.api = true: syncWrapper debug blocks", () => {
+		it("should execute debug logging during API reconciliation when debug.api=true", async () => {
+			// Create with debug.api = true — covers debug blocks in syncWrapper and mutateApiValue
+			api = await createApiInstance(config, {
+				dir: TEST_DIRS.API_TEST,
+				allowMutation: true,
+				debug: { api: true }
 			});
 
-			it("should execute debug logging for addition at a nested namespace when debug.api=true", async () => {
-				api = await createApiInstance(config, {
-					dir: TEST_DIRS.API_TEST_MIXED,
-					allowMutation: true,
-					debug: { api: true }
-				});
-
-				// Reloading a path with debug.api = true triggers syncWrapper with debug logging.
-				// Uses a simple path from API_TEST_MIXED which has mathEsm, mathCjs etc.
-				await expect(api.slothlet.api.reload("mathEsm.add")).resolves.toBeUndefined();
-			});
+			// Adding the same directory again triggers mutateApiValue → syncWrapper,
+			// hitting the debug logging blocks at lines 413-699.
+			await expect(api.slothlet.api.add("", TEST_DIRS.API_TEST)).resolves.toBeDefined();
 		});
-	}
-);
+
+		it("should execute debug logging for addition at a nested namespace when debug.api=true", async () => {
+			api = await createApiInstance(config, {
+				dir: TEST_DIRS.API_TEST_MIXED,
+				allowMutation: true,
+				debug: { api: true }
+			});
+
+			// Reloading a path with debug.api = true triggers syncWrapper with debug logging.
+			// Uses a simple path from API_TEST_MIXED which has mathEsm, mathCjs etc.
+			await expect(api.slothlet.api.reload("mathEsm.add")).resolves.toBeUndefined();
+		});
+	});
+});

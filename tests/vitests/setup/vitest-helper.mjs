@@ -245,6 +245,104 @@ export async function withSuppressedSlothletErrorOutput(callback) {
 }
 
 /**
+ * Suppress noisy Slothlet debug console output during tests.
+ *
+ * This helper is intended for suites that intentionally enable `config.debug.* = true`
+ * for branch coverage but do not assert on emitted console lines.
+ *
+ * @returns {() => void} Restore callback that reverts all patched console and stream handlers.
+ */
+export function suppressSlothletDebugOutput() {
+	const originalConsoleLog = console.log;
+	const originalConsoleInfo = console.info;
+	const originalConsoleDebug = console.debug;
+	const originalConsoleWarn = console.warn;
+	const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+	const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+	/**
+	 * Determine whether a message appears to be Slothlet debug noise.
+	 * @param {string} message - Message text to inspect.
+	 * @returns {boolean} True when the message should be suppressed.
+	 */
+	function isSlothletDebugNoiseText(message) {
+		return (
+			message.includes("DEBUG_MODE_") ||
+			message.includes("[slothlet]") ||
+			message.includes("SlothletDebug") ||
+			message.includes("DEBUG [") ||
+			message.includes("DEBUG:")
+		);
+	}
+
+	/**
+	 * Convert console arguments into a single string for noise matching.
+	 * @param {any[]} args - Console arguments.
+	 * @returns {string} Normalized message text.
+	 */
+	function stringifyArgs(args) {
+		return args
+			.map((arg) => {
+				if (typeof arg === "string") return arg;
+				if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
+				try {
+					return JSON.stringify(arg);
+				} catch {
+					return String(arg);
+				}
+			})
+			.join(" ");
+	}
+
+	console.log = (...args) => {
+		const message = stringifyArgs(args);
+		if (!isSlothletDebugNoiseText(message)) originalConsoleLog(...args);
+	};
+
+	console.info = (...args) => {
+		const message = stringifyArgs(args);
+		if (!isSlothletDebugNoiseText(message)) originalConsoleInfo(...args);
+	};
+
+	console.debug = (...args) => {
+		const message = stringifyArgs(args);
+		if (!isSlothletDebugNoiseText(message)) originalConsoleDebug(...args);
+	};
+
+	console.warn = (...args) => {
+		const message = stringifyArgs(args);
+		if (!isSlothletDebugNoiseText(message)) originalConsoleWarn(...args);
+	};
+
+	process.stdout.write = (chunk, encoding, callbackArg) => {
+		const text = typeof chunk === "string" ? chunk : chunk?.toString?.(encoding || "utf8") || "";
+		if (isSlothletDebugNoiseText(text)) {
+			if (typeof callbackArg === "function") callbackArg();
+			return true;
+		}
+		return originalStdoutWrite(chunk, encoding, callbackArg);
+	};
+
+	process.stderr.write = (chunk, encoding, callbackArg) => {
+		const text = typeof chunk === "string" ? chunk : chunk?.toString?.(encoding || "utf8") || "";
+		if (isSlothletDebugNoiseText(text)) {
+			if (typeof callbackArg === "function") callbackArg();
+			return true;
+		}
+		return originalStderrWrite(chunk, encoding, callbackArg);
+	};
+
+	return () => {
+		console.log = originalConsoleLog;
+		console.info = originalConsoleInfo;
+		console.debug = originalConsoleDebug;
+		console.warn = originalConsoleWarn;
+		process.stdout.write = originalStdoutWrite;
+		process.stderr.write = originalStderrWrite;
+	};
+}
+
+/**
  * Run a sync callback while suppressing SlothletError console noise.
  *
  * @template T
