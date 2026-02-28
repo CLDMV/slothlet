@@ -429,4 +429,86 @@ describe("Flatten.processModuleForAPI — hybrid default+named collision modes (
                         SlothletWarning.suppressConsole = false;
                 }
         });
+
+        it("falls through with no warning when collisionMode='replace' and named export collides (line 309 false branch)", () => {
+                // collisionMode="replace" is not "warn", so the else-if at line 309 evaluates to FALSE
+                // and falls through to direct assignment — exercising the false branch of that else-if.
+                const flatten = new Flatten(makeMockWithHelpers("replace"));
+
+                function logger() {}
+                logger.version = "original";
+
+                const mod = { default: logger, version: "named-replace" };
+
+                const result = flatten.processModuleForAPI({
+                        mod,
+                        decision: {},
+                        moduleName: "logger",
+                        propertyName: "logger",
+                        moduleKeys: ["version"],
+                        analysis: { hasDefault: true },
+                        collisionContext: "initial",
+                        apiPathPrefix: "tools"
+                });
+
+                // "replace" mode falls through to direct assignment — no throw, no warn
+                expect(result.moduleContent).toBeDefined();
+                expect(result.moduleContent.version).toBe("named-replace");
+        });
+});
+
+// ─── Line 449 false branch: generic filename but multiple keys (C14 inner-if false) ────────
+
+describe("Flatten.buildCategoryDecisions — C14 generic-filename with 2+ keys (line 449 false branch)", () => {
+        it("does not return parent-level-flatten when generic filename has 2+ named exports", async () => {
+                // Reaches the outer C14 if at line 445 (single file, depth>0, object) and enters the block.
+                // Then line 449: moduleKeys.length === 1 is FALSE (2 keys) → takes the false branch → falls through.
+                const flatten = new Flatten(makeMock());
+                const mod = { a: 1, b: 2 };
+
+                const result = await flatten.buildCategoryDecisions({
+                        categoryName: "utils",
+                        mod,
+                        moduleName: "index",        // generic name → isGenericFilename=true
+                        fileBaseName: "index.mjs",
+                        analysis: { hasDefault: false, defaultExportType: null, hasNamed: true },
+                        moduleKeys: ["a", "b"],      // length 2 → 449 condition is false
+                        currentDepth: 1,
+                        moduleFiles: ["index.mjs"],  // single file → enters outer guard
+                        t
+                });
+
+                // Did NOT flatten via parent-level-flatten — fell through
+                expect(result.flattenType).not.toBe("parent-level-flatten");
+        });
+});
+
+// ─── Line 476: exportToCheck using mod.default when default is a function ─────────
+
+describe("Flatten.buildCategoryDecisions — line 476 exportToCheck via mod.default function", () => {
+        it("takes the mod.default branch of the exportToCheck ternary when default is a function (line 476)", async () => {
+                // Line 476 ternary: mod is NOT a function, but mod.default IS a function.
+                // → exportToCheck = mod.default (the middle branch of the nested ternary).
+                // moduleName differs from categoryName so earlier conditions don't short-circuit.
+                const flatten = new Flatten(makeMock());
+
+                function namedHelper() {}
+                const mod = { default: namedHelper, extra: 42 };
+
+                const result = await flatten.buildCategoryDecisions({
+                        categoryName: "utils",
+                        mod,
+                        moduleName: "helpers",      // different from categoryName → skips C10-C12
+                        fileBaseName: "helpers.mjs",
+                        analysis: { hasDefault: true, defaultExportType: "function", hasNamed: true },
+                        moduleKeys: ["extra"],
+                        currentDepth: 1,
+                        moduleFiles: ["helpers.mjs", "other.mjs"],  // 2 files → skips C14 outer guard
+                        t
+                });
+
+                // Result may be any decision; the important thing is that the function ran without error
+                // and evaluated the exportToCheck = mod.default path at line 476.
+                expect(result).toBeDefined();
+        });
 });

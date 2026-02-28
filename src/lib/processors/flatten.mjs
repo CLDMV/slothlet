@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-23 15:59:25 -08:00 (1771891165)
+ *	@Last modified time: 2026-02-27 16:39:11 -08:00 (1772239151)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -146,6 +146,18 @@ export class Flatten extends ComponentBase {
 		// Rule 5 - C02, C03: Multi-default context handling
 		const multiDefaultDecision = await this.#checkMultiDefault(analysis, hasMultipleDefaults, t);
 		if (multiDefaultDecision) {
+			// Rule 9 still applies even in multi-default context: if the function has an explicit
+			// name that differs in casing from the sanitized filename, preserve it as preferredName.
+			if (multiDefaultDecision.preserveAsNamespace) {
+				const exportToCheck = typeof mod === "function" ? mod : mod?.default && typeof mod.default === "function" ? mod.default : null;
+				if (exportToCheck && exportToCheck.name && exportToCheck.name !== "default") {
+					const normalizedFunctionName = exportToCheck.name.toLowerCase().replace(/[-_]/g, "");
+					const normalizedModuleName = moduleName.toLowerCase().replace(/[-_]/g, "");
+					if (normalizedFunctionName === normalizedModuleName) {
+						multiDefaultDecision.preferredName = exportToCheck.name;
+					}
+				}
+			}
 			return multiDefaultDecision;
 		}
 
