@@ -82,7 +82,7 @@ export default defineConfig({
 			provider: "v8",
 			include: ["src/**"],
 			exclude: ["**/*.json", "api_tests/**", "tests/**", "tools/**"],
-			reporter: ["text", "html", "json-summary"]
+			reporter: ["text", "html", "json-summary", "json"]
 		}
 	}
 });
