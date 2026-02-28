@@ -32,14 +32,14 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
- * Single eager config — using only one matrix entry keeps this file's heap under
- * ~120 MB so the vitest coverage-temp JSON is written before the directory is
- * cleaned up during a parallel run.  Coverage only needs one path exercised.
+ * Full eager matrix — this file is registered in SOLO_RUN_PATTERNS in run-all-vitest.mjs
+ * so it runs standalone (not in the parallel pool) to prevent ENOENT on the vitest
+ * coverage-temp JSON when heap usage is high.
  */
-const RELOAD_MATRIX = [{ name: "EAGER_HOOKS", config: { mode: "eager", runtime: "async", hook: { enabled: true } } }];
+const RELOAD_MATRIX = getMatrixConfigs({ mode: "eager" }).map(({ name, config }) => ({ name, config }));
 
 /**
  * Create a slothlet instance with the given matrix config and optional overrides.
