@@ -131,9 +131,9 @@
 		"publish:manual": "npm publish --access public",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/check-i18n-languages.mjs",
+		"vitest": "node tests/vitests/run-all-vitest2.mjs",
 		"baseline": "npm run vitest -- --baseline",
-		"vitest": "NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev node tests/vitests/run-all-vitest.mjs",
-		"coverage": "NODE_ENV=development NODE_OPTIONS=--conditions=slothlet-dev npm run vitest -- --coverage-quiet",
+		"coverage": "npm run vitest -- --coverage-quiet",
 		"test": "node tests/test-conditional.mjs",
 		"test:pre-build": "node tests/test-conditional.mjs",
 		"test:post-build": "npm run test:types",
@@ -229,6 +229,7 @@
 	},
 	"devDependencies": {
 		"@cldmv/holdmytask": "^1.6.1",
+		"@cldmv/vitest-runner": "^1.0.1",
 		"@eslint/css": "^0.10.0",
 		"@eslint/js": "^9.33.0",
 		"@eslint/json": "^0.13.1",
@@ -240,7 +241,7 @@
 		"chokidar": "^5.0.0",
 		"dmd": "^7.1.1",
 		"esbuild": "^0.27.3",
-		"eslint": "^10.0.1",
+		"eslint": "^10.0.2",
 		"jsdoc": "^4.0.4",
 		"jsdoc-to-markdown": "^9.1.2",
 		"jsdoc2md": "^1.0.0",
@@ -249,7 +250,11 @@
 		"shx": "^0.4.0",
 		"typescript": "^5.9.3",
 		"vest": "^5.4.6",
-		"vitest": "^4.0.17"
+		"vitest": "^4.0.18"
+	},
+	"overrides": {
+		"minimatch": "^10.2.3",
+		"rollup": "^4.59.0"
 	},
 	"repository": {
 		"type": "git",

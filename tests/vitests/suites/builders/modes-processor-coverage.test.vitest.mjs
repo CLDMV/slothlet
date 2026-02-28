@@ -31,15 +31,25 @@
  */
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
+let restoreDebugOutput;
+
+beforeEach(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterEach(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 // Smart-flatten fixture base directory
 const SF = TEST_DIRS.SMART_FLATTEN;

@@ -37,9 +37,20 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import path from "node:path";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+let restoreDebugOutput;
+
+beforeEach(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterEach(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 const EAGER_CONFIGS = [
 	{ name: "eager/hooks-on", config: { mode: "eager", runtime: "async", hook: { enabled: true } } },
