@@ -134,6 +134,8 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Uses a private-field brand check (`#internal in this`) so the getter is safe to
 	 * invoke with any receiver - including `UnifiedWrapper.prototype` itself during a
 	 * prototype chain walk via `Object.getPrototypeOf` - without throwing a TypeError.
+	 * Without the brand check, `Object.getPrototypeOf(proxy).____slothletInternal` would
+	 * throw because the prototype object was never constructed and has no `#internal` field.
 	 * @returns {Object|undefined} Internal state container, or undefined for non-instances
 	 */
 	get ____slothletInternal() {
