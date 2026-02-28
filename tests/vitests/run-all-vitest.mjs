@@ -41,7 +41,7 @@ const DEFAULT_TEST_DIR = "tests/vitests/suites";
 const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
-const SOLO_RUN_PATTERNS = ["listener-cleanup/", "lazy/lazy-background-materialization.test.vitest.mjs"];
+const SOLO_RUN_PATTERNS = ["listener-cleanup/", "lazy/lazy-background-materialization.test.vitest.mjs", "api-manager/api-manager-reload-coverage.test.vitest.mjs"];
 const PER_FILE_HEAP_OVERRIDES = [{ pattern: "listener-cleanup/", heapMb: 6144 }];
 
 /**
