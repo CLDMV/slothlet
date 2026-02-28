@@ -1,0 +1,21 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_modes_debug/logger/logger.mjs
+ *	@Date: 2026-02-27T00:00:00-08:00
+ *	@Author: Nate Hyson <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * Logger API module for modes-processor debug coverage testing.
+ * Uses folder/folder.mjs pattern with a default export function (Case 2).
+ * @default
+ */
+export default function logger(msg) {
+	return `[LOG] ${msg}`;
+}
+
+/** @type {string} */
+export const level = "info";
