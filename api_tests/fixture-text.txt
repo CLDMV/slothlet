@@ -1,0 +1,1 @@
+This is a text fixture used for INVALID_CONFIG_FILE_TYPE tests.

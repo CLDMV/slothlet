@@ -309,3 +309,36 @@ describe("Config.transformConfig — i18n config parsed into normalized object (
                 expect(result.i18n.language).toBeUndefined();
         });
 });
+
+// ─── transformConfig v2 warnings SUPPRESSED by silent:true (lines 253, 267) ────
+
+describe("Config.transformConfig — v2 warnings suppressed by silent:true (lines 253, 267)", () => {
+        it("emits no warning when allowMutation:false and silent:true (line 253 false branch)", () => {
+                // silent:true causes if (!config.silent) at line 253 to take the false branch,
+                // skipping the new SlothletWarning() call entirely.
+                const cfg = new Config(makeMock());
+                SlothletWarning.suppressConsole = true;
+                try {
+                        const priorLength = SlothletWarning.captured.length;
+                        cfg.transformConfig({ dir: ".", allowMutation: false, silent: true });
+                        expect(SlothletWarning.captured.length).toBe(priorLength);
+                } finally {
+                        SlothletWarning.captured.splice(0);
+                        SlothletWarning.suppressConsole = false;
+                }
+        });
+
+        it("emits no warning when root-level collision and silent:true (line 267 false branch)", () => {
+                // silent:true causes if (!config.silent) at line 267 to take the false branch.
+                const cfg = new Config(makeMock());
+                SlothletWarning.suppressConsole = true;
+                try {
+                        const priorLength = SlothletWarning.captured.length;
+                        cfg.transformConfig({ dir: ".", collision: "merge", silent: true });
+                        expect(SlothletWarning.captured.length).toBe(priorLength);
+                } finally {
+                        SlothletWarning.captured.splice(0);
+                        SlothletWarning.suppressConsole = false;
+                }
+        });
+});

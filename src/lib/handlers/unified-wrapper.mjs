@@ -323,13 +323,18 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @returns {*} The actual implementation for inspection.
 	 */
 	[util.inspect.custom](depth, options, inspect) {
+		// When proxyTarget === wrapper (non-callable), the prototype chain check in createProxy()
+		// finds this method and skips installing the closure own-property. Node then calls this
+		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
+		// Resolve the real wrapper instance via the proxy registry to handle that case.
+		const w = _proxyRegistry.get(this) ?? this;
 		// Show children from wrapper (filter internal properties starting with _ or __)
-		const childKeys = Object.keys(this).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-		if (childKeys.length > 0 && !this.____slothletInternal.isCallable) {
+		const childKeys = Object.keys(w).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+		if (childKeys.length > 0 && !w.____slothletInternal?.isCallable) {
 			const inspectObj = {};
 			for (const key of childKeys) {
 				// Return the proxy/wrapper directly - Node will recursively inspect it
-				inspectObj[key] = this[key];
+				inspectObj[key] = w[key];
 			}
 			return inspectObj;
 		}
@@ -337,14 +342,14 @@ export class UnifiedWrapper extends ComponentBase {
 		// For callables or leaf nodes - return actual _impl value if materialized
 		// For unmaterialized lazy wrappers, return the proxy to show it's a function
 		if (
-			this.____slothletInternal.mode === "lazy" &&
-			this.____slothletInternal.state &&
-			!this.____slothletInternal.state.materialized &&
-			this.____slothletInternal.proxy
+			w.____slothletInternal?.mode === "lazy" &&
+			w.____slothletInternal?.state &&
+			!w.____slothletInternal?.state.materialized &&
+			w.____slothletInternal?.proxy
 		) {
-			return this.____slothletInternal.proxy;
+			return w.____slothletInternal.proxy;
 		}
-		return this.____slothletInternal.impl;
+		return w.____slothletInternal?.impl;
 	}
 
 	/**
@@ -2650,12 +2655,12 @@ export class UnifiedWrapper extends ComponentBase {
 									timestamp: Date.now(),
 									stack: originalError.stack
 								};
-								hookManager.executeErrorHooks(wrapper.apiPath, originalError, sourceInfo, args, api, ctx);
+								hookManager.executeErrorHooks(wrapper.____slothletInternal.apiPath, originalError, sourceInfo, args, api, ctx);
 							}
 							// Always hooks execute for rejected promises
 							if (hasHooks) {
 								const originalError = unwrapError(error);
-								hookManager.executeAlwaysHooks(wrapper.apiPath, args, undefined, true, [originalError], api, ctx);
+								hookManager.executeAlwaysHooks(wrapper.____slothletInternal.apiPath, args, undefined, true, [originalError], api, ctx);
 							}
 
 							// Check if errors should be suppressed

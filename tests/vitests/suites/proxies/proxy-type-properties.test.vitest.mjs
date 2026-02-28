@@ -272,3 +272,103 @@ describe.each(getMatrixConfigs())("Proxy delete trap blocked keys > Config: '$na
 		expect(api.math.__type).toBeDefined();
 	});
 });
+
+// ─── hasTrap line 2751: prop found in function impl ───────────────────────
+
+describe("Proxy hasTrap — impl function property check (unified-wrapper.mjs line 2751)", () => {
+	let api;
+
+	beforeEach(async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.slothlet.shutdown();
+			api = null;
+		}
+	});
+
+	it("'length' in a function-impl wrapper reaches line 2751 and returns true", () => {
+		// api.funcmod has a default-function impl (funcmod/funcmod.mjs exports `export default function`).
+		// The UnifiedWrapper instance does NOT have 'length' as an own property, but the function impl does.
+		// hasTrap line 2741: isInternal('length') = false; line 2742: hasOwn(wrapper, 'length') = false.
+		// → reaches line 2746: impl exists, typeof === 'function', 'length' in impl → true → line 2751.
+		expect("length" in api.funcmod).toBe(true);
+	});
+
+	it("'call' in a function-impl wrapper returns true via impl prototype chain (line 2751)", () => {
+		// 'call' is on Function.prototype, so 'call' in fn_impl is true via proto chain.
+		expect("call" in api.funcmod).toBe(true);
+	});
+});
+
+// ─── getOwnPropertyDescriptorTrap line 2772: lazy _materialize trigger ────
+
+describe("Proxy getOwnPropertyDescriptorTrap — lazy materialize trigger (unified-wrapper.mjs line 2772)", () => {
+	let api;
+
+	beforeEach(async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", silent: true });
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.slothlet.shutdown();
+			api = null;
+		}
+	});
+
+	it("Object.getOwnPropertyDescriptor on a lazy wrapper triggers _materialize (line 2772)", async () => {
+		// In lazy mode, api.math is unmaterialized. Calling getOwnPropertyDescriptor
+		// invokes getOwnPropertyDescriptorTrap, which checks materialized/inFlight at
+		// line 2768 and calls wrapper._materialize() at line 2772.
+		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
+		// After _materialize fires, the descriptor should now be available
+		expect(desc).toBeDefined();
+	});
+
+	it("getOwnPropertyDescriptor on an already-materialized lazy wrapper does not double-materialize", async () => {
+		// Force eager materialization first
+		await api.math._materialize();
+		// Now calling getOwnPropertyDescriptor should NOT trigger _materialize again
+		const desc = Object.getOwnPropertyDescriptor(api.math, "add");
+		expect(desc).toBeDefined();
+	});
+});
+
+// ─── deletePropertyTrap line 3017: delete via impl object ─────────────────
+
+describe("Proxy deletePropertyTrap — impl object branch (unified-wrapper.mjs line 3017)", () => {
+	let api;
+
+	beforeEach(async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.slothlet.shutdown();
+			api = null;
+		}
+	});
+
+	it("deleting a prototype-chain prop from a namespace wrapper reaches line 3017 harmlessly", () => {
+		// api.math is a namespace wrapper with an object impl.
+		// 'valueOf' is not an own prop of the wrapper, but IS accessible via `prop in impl`
+		// (because `in` checks the prototype chain and all objects inherit from Object.prototype).
+		// deletePropertyTrap line 2999: !isInternal && hasOwn(wrapper, 'valueOf') = false → skips wrapper delete.
+		// Line 3012: impl exists, typeof === 'object', 'valueOf' in impl → true → line 3017 fires.
+		// delete impl['valueOf'] is a no-op (can't delete inherited prototype property).
+		const valueOfRef = Object.prototype.valueOf;
+		expect(() => delete api.math.valueOf).not.toThrow();
+		// Object.prototype is unaffected
+		expect(Object.prototype.valueOf).toBe(valueOfRef);
+	});
+
+	it("deleting 'toString' from a namespace wrapper also reaches line 3017 harmlessly", () => {
+		const toStringRef = Object.prototype.toString;
+		expect(() => delete api.math.toString).not.toThrow();
+		expect(Object.prototype.toString).toBe(toStringRef);
+	});
+});
