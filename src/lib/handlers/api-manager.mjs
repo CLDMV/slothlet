@@ -2155,14 +2155,10 @@ export class ApiManager extends ComponentBase {
 		// Get keys from fresh API to know which are "API" keys vs "custom" keys
 		const freshKeys = new Set(freshApi ? Object.keys(freshApi) : []);
 
-		// Get all enumerable own properties on the wrapper that are user-accessible
-		const ownKeys = Object.keys(wrapper).filter((k) => {
-			// Skip internal properties
-			if (k.startsWith("_") || k.startsWith("__")) return false;
-			// Skip known built-in properties
-			if (k === "slothlet" || k === "shutdown" || k === "destroy") return false;
-			return true;
-		});
+		// Get all enumerable own properties on the wrapper that are user-accessible.
+		// Use the single authoritative framework key list from ComponentBase — only skip
+		// known slothlet internals, never blanket-filter by underscore prefix.
+		const ownKeys = Object.keys(wrapper).filter((k) => !ComponentBase.INTERNAL_KEYS.has(k));
 
 		for (const key of ownKeys) {
 			try {

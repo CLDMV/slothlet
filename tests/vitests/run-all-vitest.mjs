@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28 13:16:10 -08:00 (1772313370)
+ *	@Last modified time: 2026-02-28 15:45:21 -08:00 (1772322321)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -41,7 +41,12 @@ const DEFAULT_TEST_DIR = "tests/vitests/suites";
 const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
-const SOLO_RUN_PATTERNS = ["listener-cleanup/", "lazy/lazy-background-materialization.test.vitest.mjs", "api-manager/api-manager-reload-coverage.test.vitest.mjs"];
+const SOLO_RUN_PATTERNS = [
+	"listener-cleanup/",
+	"lazy/lazy-background-materialization.test.vitest.mjs",
+	"api-manager/api-manager-reload-coverage.test.vitest.mjs",
+	"tests/vitests/suites/metadata/metadata-edge-cases.test.vitest.mjs"
+];
 const PER_FILE_HEAP_OVERRIDES = [{ pattern: "listener-cleanup/", heapMb: 6144 }];
 
 /**

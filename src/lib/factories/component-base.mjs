@@ -149,6 +149,36 @@ export class ComponentBase {
 	}
 
 	/**
+	 * Get debug configuration.
+	 * @returns {object|undefined} Debug configuration or undefined.
+	 * @package
+	 *
+	 * @description
+	 * Shorthand for accessing debug settings from the Slothlet configuration.
+	 *
+	 * @example
+	 * if (this.debugConfig?.api) { console.log("API debug enabled"); }
+	 */
+	get debugConfig() {
+		return this.____slothlet.config?.debug;
+	}
+
+	/**
+	 * Get Slothlet debug function.
+	 * @returns {function} Slothlet debug function.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to the debug logging function.
+	 *
+	 * @example
+	 * this.slothletDebug("api", { action: "assigned", path: "math.add" });
+	 */
+	get slothletDebug() {
+		return this.____slothlet.debug.bind(this.____slothlet);
+	}
+
+	/**
 	 * Get Slothlet instance ID.
 	 * @returns {string} Slothlet instance identifier.
 	 * @package
@@ -179,6 +209,21 @@ export class ComponentBase {
 	}
 
 	/**
+	 * Get Slothlet bound API object.
+	 * @returns {function|object} Slothlet bound API root.
+	 * @package
+	 *
+	 * @description
+	 * Provides direct access to the Slothlet's context-bound API object.
+	 *
+	 * @example
+	 * const boundValue = this.boundApi.plugins;
+	 */
+	get boundApi() {
+		return this.____slothlet.boundApi;
+	}
+
+	/**
 	 * Get Slothlet helpers object.
 	 * @returns {object} Slothlet helpers.
 	 * @package
@@ -191,6 +236,21 @@ export class ComponentBase {
 	 */
 	get helpers() {
 		return this.____slothlet.helpers;
+	}
+
+	/**
+	 * Get Slothlet handlers object.
+	 * @returns {object} Slothlet handlers.
+	 * @package
+	 *
+	 * @description
+	 * Provides access to internal handlers (metadata, lifecycle, apiManager, etc.).
+	 *
+	 * @example
+	 * const meta = this.handlers.metadata.getMetadata(target);
+	 */
+	get handlers() {
+		return this.____slothlet.handlers;
 	}
 
 	/**
@@ -239,4 +299,59 @@ export class ComponentBase {
 	get SlothletWarning() {
 		return this.____slothlet.SlothletWarning;
 	}
+
+	/**
+	 * Complete set of property names reserved by the slothlet framework.
+	 *
+	 * @description
+	 * These keys are either private wrapper internals, read-only info props exposed
+	 * through the proxy, write-blocked lifecycle keys, or builtin namespace keys
+	 * injected at the API root level. Used by all components to distinguish framework
+	 * internals from user-defined properties when:
+	 *   - Collecting user-set custom properties for preservation across reload
+	 *     (`_collectCustomProperties` in api-manager.mjs)
+	 *   - Extracting child keys for impl reconstruction (`_extractFullImpl`)
+	 *   - Determining whether a set(trap) write should be silently absorbed (`setTrap`)
+	 *   - Filtering what getTrap exposes externally on wrapper proxies
+	 *
+	 * Note: `_materialize` is included here (skip for collection/extraction) but
+	 * setTrap exempts it since the framework needs to write it directly.
+	 *
+	 * @type {Set<string>}
+	 * @static
+	 */
+	static INTERNAL_KEYS = new Set([
+		// 4-underscore: true private state
+		"____slothletInternal",
+		"____slothlet",
+		// 3-underscore: mutation APIs — access via resolveWrapper(proxy).___setImpl etc.
+		"___getState",
+		"___setImpl",
+		"___resetLazy",
+		"___invalidate",
+		// 2-underscore: read-only info/mode/state props exposed through proxy
+		"__state",
+		"__invalid",
+		"__mode",
+		"__apiPath",
+		"__slothletPath",
+		"__isCallable",
+		"__materializeOnCreate",
+		"__displayName",
+		"__type",
+		"__metadata",
+		"__filePath",
+		"__sourceFolder",
+		"__moduleID",
+		"__materialized",
+		"__inFlight",
+		"__impl",
+		// 1-underscore: internal method and raw impl alias
+		"_impl",
+		"_materialize",
+		// Builtin namespace/lifecycle keys injected by the framework at the API root
+		"slothlet",
+		"shutdown",
+		"destroy"
+	]);
 }
