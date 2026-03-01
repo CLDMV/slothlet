@@ -460,12 +460,10 @@ export class UnifiedWrapper extends ComponentBase {
 			extractFullImpl_result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
 		}
 
-		// Add adopted children from wrapper's own enumerable keys
-		// Skip builtin keys that should not be extracted as part of impl
-		const builtinKeys = new Set(["slothlet", "shutdown", "destroy"]);
+		// Add adopted children from wrapper's own enumerable keys.
+		// Skip all framework-reserved keys — user module properties with any prefix are fine.
 		for (const key of Object.keys(wrapper)) {
-			if (key.startsWith("_") || key.startsWith("__")) continue;
-			if (builtinKeys.has(key)) continue;
+			if (UnifiedWrapper.INTERNAL_KEYS.has(key)) continue;
 			if (key in extractFullImpl_result) continue; // Already from _impl (not depleted for this key)
 
 			const extractFullImpl_child = wrapper[key];
@@ -2017,9 +2015,9 @@ export class UnifiedWrapper extends ComponentBase {
 				}
 			}
 
-			// Filter internal properties from external access (but allow access from within)
-			// Internal properties start with _ or __
-			const isInternalProp = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			// Filter internal properties from external access (but allow access from within).
+			// Only framework-reserved keys are hidden — user properties with any prefix are visible.
+			const isInternalProp = typeof prop === "string" && UnifiedWrapper.INTERNAL_KEYS.has(prop);
 
 			// Allow access to specific internal APIs that have explicit handlers below
 			// CRITICAL: Every prop with an explicit handler in the getTrap MUST be listed here,
@@ -2344,8 +2342,9 @@ export class UnifiedWrapper extends ComponentBase {
 			}
 
 			// If lazy mode is materialized and property doesn't exist in wrapper or _impl, return undefined
-			// This prevents creating waiting proxies for properties that were deleted
-			const isInternalProp2 = typeof prop === "string" && (prop.startsWith("_") || prop.startsWith("__"));
+			// This prevents creating waiting proxies for properties that were deleted.
+			// Only framework-reserved keys bypass this check (they're handled elsewhere in getTrap).
+			const isInternalProp2 = typeof prop === "string" && UnifiedWrapper.INTERNAL_KEYS.has(prop);
 			if (
 				wrapper.____slothletInternal.mode === "lazy" &&
 				wrapper.____slothletInternal.state.materialized &&
@@ -2897,40 +2896,11 @@ export class UnifiedWrapper extends ComponentBase {
 			) {
 				wrapper._materialize();
 			}
-			// Keys that must not be settable from outside - either they shadow private state or are
-			// read-only informational accessors whose values come directly from ____slothletInternal.
+			// Keys that must not be settable from outside — they shadow private state or are
+			// read-only informational accessors whose values come from ____slothletInternal.
 			// Silently absorb the write so no TypeError leaks key existence.
-			const blockedKeys = new Set([
-				// Critical private internals
-				"____slothletInternal",
-				"___getState",
-				"__state",
-				"__invalid",
-				// Read-only mode/identity props - getTrap returns these from ____slothletInternal directly
-				"__mode",
-				"__apiPath",
-				"__slothletPath",
-				"__isCallable",
-				"__materializeOnCreate",
-				"__displayName",
-				"__type",
-				"__metadata",
-				// Read-only server-info props - exposed read-only through proxy; write/delete blocked
-				"__filePath",
-				"__sourceFolder",
-				"__moduleID",
-				// Read-only lazy-state props
-				"__materialized",
-				"__inFlight",
-				// C props - framework mutation APIs: blocked, use resolveWrapper(proxy).___setImpl / etc.
-				"___setImpl",
-				"___resetLazy",
-				"___invalidate",
-				// D props - raw implementation: blocked, use resolveWrapper(proxy).__impl internally
-				"__impl",
-				"_impl"
-			]);
-			if (blockedKeys.has(prop)) return true;
+			// _materialize is exempted: the framework writes it directly on the target.
+			if (UnifiedWrapper.INTERNAL_KEYS.has(prop) && prop !== "_materialize") return true;
 
 			const internalKeys = new Set(["_materialize"]);
 			if (!internalKeys.has(prop)) {
