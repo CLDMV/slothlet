@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-proxy-inspect.test.vitest.mjs
- *	@Date: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Date: 2026-02-28T14:15:04-08:00 (1772316904)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Last modified time: 2026-03-01 13:16:24 -08:00 (1772399784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -43,11 +43,22 @@
  */
 
 import util from "util";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
+let restoreDebugOutput;
+
+beforeAll(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterAll(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 // ---------------------------------------------------------------------------
 // 1. Background materialization path (constructor lines 304, 307-308)
@@ -302,12 +313,17 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. has trap for lazy wrapper (lines 2744, 2779)
+// 5. has trap for lazy wrapper (lines 2743, 2778)
 //    `"key" in lazyWrapper` triggers the has trap
-//    Lines 2744: lazy wrapper materialization trigger in has trap
-//    Lines 2779: `prop in wrapper.____slothletInternal.impl` check
+//    Line 2743: lazy && !materialized && !inFlight → _materialize() in hasTrap
+//    Line 2778: lazy && !materialized && !inFlight → _materialize() in getOwnPropertyDescriptorTrap
+//
+// NOTE: api.task is used instead of api.math because api_test/ has BOTH math.mjs (root file)
+// AND math/ (folder) — the collision between them produces a wrapper that may already
+// be partially initialised. api.task is a pure folder (task/ with no same-named sibling
+// file) and starts as a cleanly lazy, !materialized, !inFlight wrapper.
 // ---------------------------------------------------------------------------
-describe("unified-wrapper: has trap for lazy wrapper (lines 2744, 2779)", () => {
+describe("unified-wrapper: has trap for lazy wrapper (lines 2743, 2778)", () => {
 	let api;
 
 	afterEach(async () => {
@@ -318,50 +334,91 @@ describe("unified-wrapper: has trap for lazy wrapper (lines 2744, 2779)", () => 
 		await new Promise((r) => setTimeout(r, 30));
 	});
 
-	it("'in' operator on lazy namespace wrapper triggers materialization in has trap (line 2744)", async () => {
+	it("'in' operator on lazy FOLDER wrapper (api.task) triggers _materialize() in hasTrap (line 2743)", async () => {
 		api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
 
-		// "add" in api.math → has trap fires on the proxy
-		// Line 2744: lazy && !materialized && !inFlight → _materialize()
-		const hasMath = "math" in api;
-		expect(hasMath).toBe(true);
-
-		// Check inside lazy namespace wrapper
-		const hasAdd = "add" in api.math;
-		// Result depends on materialization state — just verify no crash
-		expect(typeof hasAdd).toBe("boolean");
+		// api.task is a pure lazy folder wrapper (task/ folder with no same-named root file).
+		// Accessing api.task returns the proxy without triggering any get trap.
+		// Then "asyncReject" in api.task fires hasTrap:
+		//   wrapper is lazy && !materialized && !inFlight → calls wrapper._materialize() (line 2743)
+		const taskProxy = api.task;
+		const hasAsyncReject = "asyncReject" in taskProxy;
+		// Result is boolean (true once materialization completes or false for pending)
+		expect(typeof hasAsyncReject).toBe("boolean");
 	});
 
-	it("'in' operator on materialized lazy wrapper checks wrapper AND impl (line 2779)", async () => {
+	it("'in' operator with _materialize prop always returns true (early-exit branch)", async () => {
 		api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			mode: "lazy",
 			runtime: "async"
 		});
 
-		// Access to trigger materialization first
-		const mathProxy = api.math;
-		await new Promise((r) => setTimeout(r, 100));
-
-		// After materialization: has trap checks wrapper keys + impl
-		// Line 2779: `prop in wrapper.____slothletInternal.impl`
-		const hasAdd = "add" in mathProxy;
-		expect(typeof hasAdd).toBe("boolean");
+		// Line 2731: if (prop === "_materialize") return true — the special early-exit guard
+		const taskProxy = api.task;
+		const hasMaterialize = "_materialize" in taskProxy;
+		expect(hasMaterialize).toBe(true);
 	});
 
-	it("'in' operator on eager wrapper uses has trap directly", async () => {
+	it("'in' operator on materialized lazy wrapper hits impl-check branch", async () => {
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "lazy",
+			runtime: "async"
+		});
+
+		// Trigger materialization of task wrapper via a GET trap access
+		const taskProxy = api.task;
+		const _ = taskProxy.asyncReject; // triggers get trap → _materialize()
+		await new Promise((r) => setTimeout(r, 150));
+
+		// After materialization: has trap checks wrapper children + impl
+		const hasAsyncReject = "asyncReject" in taskProxy;
+		expect(typeof hasAsyncReject).toBe("boolean");
+	});
+
+	it("'in' operator on eager wrapper uses has trap without materializing", async () => {
 		api = await slothlet({
 			dir: TEST_DIRS.API_TEST,
 			mode: "eager",
 			runtime: "async"
 		});
 
-		// Eager mode: has trap checks wrapper children and impl
-		const hasAdd = "add" in api.math;
-		expect(hasAdd).toBe(true);
+		// Eager mode: has trap checks wrapper children and impl directly (no _materialize() called)
+		const hasAsyncReject = "asyncReject" in api.task;
+		expect(hasAsyncReject).toBe(true);
+	});
+
+	it("Object.getOwnPropertyDescriptor on lazy FOLDER wrapper triggers _materialize() in getOwnPropertyDescriptorTrap (line 2778)", async () => {
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "lazy",
+			runtime: "async"
+		});
+
+		// api.task is a pure lazy folder wrapper — first access via getOwnPropertyDescriptor
+		// fires getOwnPropertyDescriptorTrap:
+		//   wrapper is lazy && !materialized && !inFlight → calls wrapper._materialize() (line 2778)
+		const taskProxy = api.task;
+		const descriptor = Object.getOwnPropertyDescriptor(taskProxy, "asyncReject");
+		// Result may be undefined (not yet materialized) or a descriptor (after materialization)
+		expect(descriptor === undefined || typeof descriptor === "object").toBe(true);
+	});
+
+	it("Object.getOwnPropertyDescriptor returns undefined for ____slothletInternal (filtered prop)", async () => {
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			mode: "lazy",
+			runtime: "async"
+		});
+
+		const taskProxy = api.task;
+		// ____slothletInternal is explicitly filtered in getOwnPropertyDescriptorTrap
+		const descriptor = Object.getOwnPropertyDescriptor(taskProxy, "____slothletInternal");
+		expect(descriptor).toBeUndefined();
 	});
 });

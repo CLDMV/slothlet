@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-10 18:01:59 -08:00 (1770775319)
+ *	@Last modified time: 2026-03-01 18:29:17 -08:00 (1772418557)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -21,10 +21,13 @@
  * @type {Array<{path: string, recursive: boolean}>}
  */
 export const FILE_HEADER_CHECK_FOLDERS = [
+	{ path: ".configs", recursive: true }, // .configs/ folder (recursive)
+	{ path: ".github", recursive: true }, // .github/ folder (recursive)
+	{ path: "api_tests", recursive: true }, // api_tests/ folder (recursive)
 	{ path: ".", recursive: false }, // Root folder only (non-recursive)
-	{ path: "tools", recursive: true }, // tools/ folder (recursive)
+	{ path: "src", recursive: true }, // src/ folder (recursive)
 	{ path: "tests", recursive: true }, // tests/ folder (recursive)
-	{ path: "api_tests", recursive: true } // api_tests/ folder (recursive)
+	{ path: "tools", recursive: true } // tools/ folder (recursive)
 ];
 
 /**
@@ -32,6 +35,8 @@ export const FILE_HEADER_CHECK_FOLDERS = [
  * @type {string[]}
  */
 export const FILE_HEADER_IGNORE_FOLDERS = [
-	"tests/vitests_v2", // Ignore tests/vitests_v2
+	"coverage", // Ignore coverage reports
+	"tmp", // Ignore temporary files
+	"node_modules", // Ignore node_modules
 	"tools/fix-headers.mjs" // Ignore fix-headers.mjs (self-exclusion)
 ];

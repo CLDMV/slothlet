@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-reset-lazy.test.vitest.mjs
- *	@Date: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Date: 2026-02-28T14:24:16-08:00 (1772317456)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Last modified time: 2026-03-01 13:16:24 -08:00 (1772399784)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -41,9 +41,20 @@
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+let restoreDebugOutput;
+
+beforeAll(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterAll(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

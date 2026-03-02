@@ -186,7 +186,9 @@ export class Config extends ComponentBase {
 				modes: false,
 				wrapper: false,
 				ownership: false,
-				context: false
+				context: false,
+				initialization: false,
+				materialize: false
 			};
 		}
 
@@ -199,7 +201,9 @@ export class Config extends ComponentBase {
 				modes: true,
 				wrapper: true,
 				ownership: true,
-				context: true
+				context: true,
+				initialization: true,
+				materialize: true
 			};
 		}
 
@@ -212,7 +216,9 @@ export class Config extends ComponentBase {
 				modes: debug.modes || false,
 				wrapper: debug.wrapper || false,
 				ownership: debug.ownership || false,
-				context: debug.context || false
+				context: debug.context || false,
+				initialization: debug.initialization || false,
+				materialize: debug.materialize || false
 			};
 		}
 
@@ -224,7 +230,9 @@ export class Config extends ComponentBase {
 			modes: false,
 			wrapper: false,
 			ownership: false,
-			context: false
+			context: false,
+			initialization: false,
+			materialize: false
 		};
 	}
 
