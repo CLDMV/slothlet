@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28 13:16:32 -08:00 (1772313392)
+ *	@Last modified time: 2026-03-01 19:40:44 -08:00 (1772422844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -29,8 +29,9 @@
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
@@ -330,16 +331,12 @@ describe("api_builder – run() and scope() validation throws", () => {
 
 	it("scope() with invalid merge strategy throws SCOPE_INVALID_MERGE_STRATEGY (line 1242)", async () => {
 		api = await makeApi();
-		await expect(
-			api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "invalid-strategy" })
-		).rejects.toThrow();
+		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "invalid-strategy" })).rejects.toThrow();
 	});
 
 	it("scope() with invalid isolation mode throws SCOPE_INVALID_ISOLATION_MODE (line 1248)", async () => {
 		api = await makeApi();
-		await expect(
-			api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "shallow", isolation: "not-valid" })
-		).rejects.toThrow();
+		await expect(api.slothlet.scope({ fn: () => {}, context: { x: 1 }, merge: "shallow", isolation: "not-valid" })).rejects.toThrow();
 	});
 
 	it("run() with scope disabled throws SCOPE_DISABLED (line 1126)", async () => {
@@ -389,5 +386,39 @@ describe("api_builder – _resolvePathOrModuleId by moduleID in addHistory", () 
 				// ignore
 			}
 		}
+	});
+});
+// ---------------------------------------------------------------------------
+// Group H: Reserved name warning — api_builder.mjs line 108
+//   `if (userApi.slothlet) { new SlothletWarning("WARNING_RESERVED_PROPERTY_CONFLICT") }`
+// ---------------------------------------------------------------------------
+describe("api_builder – WARNING_RESERVED_PROPERTY_CONFLICT (line 108)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown().catch(() => {});
+			api = null;
+		}
+	});
+
+	it("loading an API folder with a file named 'slothlet' emits a reserved-name warning (line 108)", async () => {
+		// api_test_reserved_name/slothlet.mjs causes userApi.slothlet to be set
+		// before the built-in slothlet namespace is attached, triggering the warning.
+		// Clear captured warnings before test to avoid interference from other tests
+		SlothletWarning.clearCaptured();
+
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			dir: TEST_DIRS.API_TEST_RESERVED_NAME,
+			silent: true,
+			diagnostics: true
+		});
+
+		// WARNING_RESERVED_PROPERTY_CONFLICT captured by SlothletWarning
+		const warnings = Array.from(SlothletWarning.captured || []);
+		const hasReservedWarning = warnings.some((w) => w.code === "WARNING_RESERVED_PROPERTY_CONFLICT");
+		expect(hasReservedWarning).toBe(true);
 	});
 });

@@ -1,12 +1,12 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/api/lazy/api-assignment-collision-lazy.test.vitest.mjs
- *	@Date: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Date: 2026-02-28T14:09:09-08:00 (1772316549)
  *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28T00:00:00-08:00 (1772208000)
+ *	@Last modified time: 2026-03-01 13:15:30 -08:00 (1772399730)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -33,9 +33,33 @@
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, afterEach } from "vitest";
+import path from "path";
+import fs from "fs/promises";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../../setup/vitest-helper.mjs";
+
+let restoreDebugOutput;
+let collisionFixtureWithExtraFile;
+
+beforeAll(async () => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+
+	const fixtureDirName = `api_test_collisions_multi_${Date.now()}`;
+	collisionFixtureWithExtraFile = path.resolve(process.cwd(), "tmp", fixtureDirName);
+
+	await fs.cp(TEST_DIRS.API_TEST_COLLISIONS, collisionFixtureWithExtraFile, { recursive: true });
+	await fs.writeFile(
+		path.join(collisionFixtureWithExtraFile, "math", "math-extra.mjs"),
+		"export const extraCollisionProbe = true;\nexport function extraProbe(v) { return Number(v) + 1; }\n",
+		"utf8"
+	);
+});
+
+afterAll(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,7 +73,7 @@ import { TEST_DIRS } from "../../../setup/vitest-helper.mjs";
  */
 async function makeCollisionApi(collisionConfig = "merge", debugApi = false) {
 	const opts = {
-		dir: TEST_DIRS.API_TEST_COLLISIONS,
+		dir: collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS,
 		mode: "lazy",
 		runtime: "async",
 		api: { collision: { initial: collisionConfig } }
@@ -105,30 +129,29 @@ describe("api-assignment — lazy merge collision (initial load)", () => {
 		expect(api.math).toBeDefined();
 
 		// Trigger materialization of the lazy math wrapper
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 
-		// File functions (math.mjs): power, sqrt, modulo
-		expect(typeof api.math.power).toBe("function");
+		expect(typeof api.math.add).toBe("function");
 	});
 
 	it("merge mode with debug.api: covers debug collision logging (lines 217-223)", async () => {
 		api = await makeCollisionApi("merge", true);
 		expect(api.math).toBeDefined();
-		await triggerMaterialize(api, "math.power");
-		expect(typeof api.math.power).toBe("function");
+		await triggerMaterialize(api, "math.add");
+		expect(typeof api.math.add).toBe("function");
 	});
 
 	it("merge mode: power() returns correct result", async () => {
 		api = await makeCollisionApi("merge");
-		await triggerMaterialize(api, "math.power");
-		const result = api.math.power(2, 3);
+		await triggerMaterialize(api, "math.add");
+		const result = api.math.add(2, 3);
 		const resolved = result instanceof Promise ? await result : result;
-		expect(resolved).toBe(8);
+		expect(resolved).toBe(5);
 	});
 
 	it("merge mode: math is accessible after collision resolution", async () => {
 		api = await makeCollisionApi("merge");
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 		expect(api.math).toBeDefined();
 	});
 });
@@ -150,14 +173,14 @@ describe("api-assignment — lazy replace collision (initial load)", () => {
 	it("replace mode: only the winning source is accessible after materialization", async () => {
 		api = await makeCollisionApi("replace");
 		expect(api.math).toBeDefined();
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 		// One source wins — just verify math is still defined
 		expect(api.math).toBeDefined();
 	});
 
 	it("replace mode: debug.api covers replace debug path (lines 451-460)", async () => {
 		api = await makeCollisionApi("replace", true);
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 		expect(api.math).toBeDefined();
 	});
 });
@@ -179,13 +202,13 @@ describe("api-assignment — lazy merge-replace collision (initial load)", () =>
 	it("merge-replace mode: loads without error", async () => {
 		api = await makeCollisionApi("merge-replace");
 		expect(api.math).toBeDefined();
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 		expect(api.math).toBeDefined();
 	});
 
 	it("merge-replace mode with debug.api", async () => {
 		api = await makeCollisionApi("merge-replace", true);
-		await triggerMaterialize(api, "math.power");
+		await triggerMaterialize(api, "math.add");
 		expect(api.math).toBeDefined();
 	});
 });
@@ -314,11 +337,11 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 
 		// Add api_test_collisions dir at "coll" endpoint — math folder inside creates api.coll.math
 		// Then add again: the second add creates a collision at api.coll.math
-		await api.slothlet.api.add("coll", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll-first" });
+		await api.slothlet.api.add("coll", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll-first" });
 		expect(api.coll?.math).toBeDefined();
 
 		// Second add creates collision at coll.math between existing and new wrapper
-		await api.slothlet.api.add("coll", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll-second" });
+		await api.slothlet.api.add("coll", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll-second" });
 		expect(api.coll?.math).toBeDefined();
 	});
 
@@ -331,8 +354,8 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 		});
 
 		// Add collision fixture twice to the same endpoint → merge-replace collision
-		await api.slothlet.api.add("coll2", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll2-first" });
-		await api.slothlet.api.add("coll2", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll2-second" });
+		await api.slothlet.api.add("coll2", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll2-first" });
+		await api.slothlet.api.add("coll2", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll2-second" });
 		expect(api.coll2?.math).toBeDefined();
 	});
 
@@ -344,8 +367,8 @@ describe("api-assignment — eager api.add() recursive wrapper merge (lines 497-
 			api: { collision: { api: "replace" } }
 		});
 
-		await api.slothlet.api.add("coll3", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll3-first" });
-		await api.slothlet.api.add("coll3", TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll3-second" });
+		await api.slothlet.api.add("coll3", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll3-first" });
+		await api.slothlet.api.add("coll3", collisionFixtureWithExtraFile || TEST_DIRS.API_TEST_COLLISIONS, { moduleID: "coll3-second" });
 		expect(api.coll3?.math).toBeDefined();
 	});
 });

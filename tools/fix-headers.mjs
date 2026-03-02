@@ -343,6 +343,41 @@ function fixDateFormat(date) {
 }
 
 /**
+ * Get the file creation date from the filesystem (birthtime, falling back to mtime).
+ * On Linux filesystems that don't expose birthtime, birthtime may equal mtime or be
+ * the unix epoch — in those cases mtime is used as the best available approximation.
+ * @param {string} filePath - Absolute file path
+ * @returns {Promise<{date: string, timestamp: number} | null>}
+ */
+async function getFilesystemDate(filePath) {
+	try {
+		const fileStat = await stat(filePath);
+
+		// birthtime is the creation time on platforms that support it;
+		// on Linux it falls back to epoch (0) when unsupported — detect that case.
+		const birthMs = fileStat.birthtimeMs;
+		const chosenDate = birthMs > 0 ? fileStat.birthtime : fileStat.mtime;
+		const timestamp = Math.floor(chosenDate.getTime() / 1000);
+
+		// Format as "YYYY-MM-DD HH:MM:SS ±HH:MM"
+		const d = chosenDate;
+		const pad = (n) => String(n).padStart(2, "0");
+		const tzOffset = -d.getTimezoneOffset();
+		const tzSign = tzOffset >= 0 ? "+" : "-";
+		const tzHH = pad(Math.floor(Math.abs(tzOffset) / 60));
+		const tzMM = pad(Math.abs(tzOffset) % 60);
+		const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${tzSign}${tzHH}:${tzMM}`;
+
+		return { date, timestamp };
+	} catch (err) {
+		if (VERBOSE) {
+			console.error(`Error getting filesystem date for ${filePath}:`, err.message);
+		}
+		return null;
+	}
+}
+
+/**
  * Generate header for file
  * @param {string} filePath - Absolute file path
  * @param {object} existingHeader - Existing header data (if any)
@@ -360,11 +395,19 @@ async function generateHeader(filePath, existingHeader) {
 	if (gitDate) {
 		creationDate = gitDate.date;
 		creationTimestamp = gitDate.timestamp;
-	} else if (!creationDate || !isValidDateFormat(creationDate) || !creationTimestamp) {
-		// Fallback to current date if git fails and no valid existing date
-		const current = getCurrentDateTime();
-		creationDate = current.date;
-		creationTimestamp = current.timestamp;
+	} else {
+		// No git history (uncommitted/untracked) — use filesystem birthtime/mtime
+		// as the best available approximation of creation date.
+		const fsDate = await getFilesystemDate(filePath);
+		if (fsDate) {
+			creationDate = fsDate.date;
+			creationTimestamp = fsDate.timestamp;
+		} else {
+			// Ultimate fallback: current time
+			const current = getCurrentDateTime();
+			creationDate = current.date;
+			creationTimestamp = current.timestamp;
+		}
 	}
 
 	// Ensure creation date has colon in timezone
@@ -498,6 +541,12 @@ async function checkAndFixHeader(filePath) {
 				);
 				stats.filesWithWrongDates++;
 				needsFixing = true;
+			} else if (!gitDate) {
+				// File has no git history (uncommitted/untracked) — stored dates cannot be verified;
+				// generateHeader will fall back to filesystem birthtime/mtime
+				issues.push("No git history — file is uncommitted/untracked, resetting dates from filesystem");
+				stats.filesWithWrongDates++;
+				needsFixing = true;
 			}
 		}
 
@@ -537,6 +586,12 @@ async function checkAndFixHeader(filePath) {
 		const expectedPath = "/" + relative(rootDir, filePath).replace(/\\/g, "/");
 		if (existingHeader.filename !== expectedPath) {
 			issues.push(`Wrong filename path: ${existingHeader.filename} (expected ${expectedPath})`);
+			needsFixing = true;
+		}
+
+		// Check header indentation style (must use tabs, not spaces)
+		if (!/\*\t@Project:/.test(firstHeader.text)) {
+			issues.push("Header uses incorrect indentation (expected tab, found spaces)");
 			needsFixing = true;
 		}
 

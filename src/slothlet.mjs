@@ -318,6 +318,11 @@ class Slothlet {
 		// Store raw config for components to access if needed
 		this.config = config;
 
+		// Early-init debug logger with raw config so that debug.initialization messages
+		// produced inside _initializeComponents() are visible even before transformConfig runs.
+		// Will be re-initialised below with the fully normalised config.
+		this.debugLogger = new SlothletDebug(config);
+
 		// Initialize all components via auto-discovery BEFORE transforming config
 		// This allows config helpers to be component classes
 		await this._initializeComponents();
@@ -336,7 +341,8 @@ class Slothlet {
 			initI18n({ language: this.config.i18n.language });
 		}
 
-		// Initialize debug logger with config
+		// Re-initialise debug logger with the fully normalised config (includes all flags).
+		// This replaces the early-init created above and ensures post-transform flags are active.
 		this.debugLogger = new SlothletDebug(this.config);
 
 		// Use preserved instance ID (from reload) or generate new one

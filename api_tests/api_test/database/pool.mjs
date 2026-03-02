@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test/database/pool.mjs
  *	@Date: 2026-02-17T02:53:10-08:00 (1771325590)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:30 -08:00 (1771716990)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:16:58 -08:00 (1772425018)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

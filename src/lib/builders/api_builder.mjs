@@ -1019,6 +1019,22 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
+				 * Get the live bound API object
+				 * @returns {Object} The bound API proxy
+				 */
+				getAPI: () => {
+					return slothlet.getAPI();
+				},
+
+				/**
+				 * Get ownership diagnostics for all registered API paths
+				 * @returns {Object|null} Ownership diagnostic data, or null if ownership tracking is disabled
+				 */
+				getOwnership: () => {
+					return slothlet.getOwnership();
+				},
+
+				/**
 				 * Ownership management namespace
 				 * @type {object}
 				 */

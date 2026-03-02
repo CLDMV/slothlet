@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test/conflicting-name-2.mjs
  *	@Date: 2026-02-16T17:50:31-08:00 (1771293031)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:30 -08:00 (1771716990)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:16:58 -08:00 (1772425018)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

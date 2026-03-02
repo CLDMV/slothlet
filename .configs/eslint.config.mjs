@@ -2,15 +2,14 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /.configs/eslint.config.mjs
  *	@Date: 2026-02-10 20:46:58 -08:00 (1770785218)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 20:37:32 -08:00 (1771735052)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:16:56 -08:00 (1772425016)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
 
 import js from "@eslint/js";
 import globals from "globals";

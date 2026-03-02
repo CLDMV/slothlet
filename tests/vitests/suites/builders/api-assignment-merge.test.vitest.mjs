@@ -234,3 +234,100 @@ describe("ApiAssignment.mergeApiObjects", () => {
 		expect(target.brand).toBeDefined();
 	});
 });
+
+// ─── ApiAssignment.assignToApiPath collision-detection paths ─────────────────────────────
+//
+// These paths require `useCollisionDetection: true` which mergeApiObjects never passes.
+// The collision if-block in assignToApiPath (lines 148-547) has several branches that are
+// only exercised when modes-processor calls assignToApiPath during initial file processing.
+//
+// Covered here by calling assignToApiPath directly with mock slothlet:
+//
+// Lines 541-543: "Both are plain objects - use Object.assign"
+//   → `existingIsWrapper=false` (plain obj), `valueIsWrapper=false` (plain obj),
+//     `collisionMode="merge"` → `Object.assign(existing, value); return true;`
+//
+// ─────────────────────────────────────────────────────────────────────────────────────────
+describe("ApiAssignment.assignToApiPath collision-detection – both-plain path (lines 541-543)", () => {
+	it("merges two plain-object values into existing via Object.assign (lines 541-543)", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = {
+			debug: () => {},
+			SlothletError: class extends Error {
+				/**
+				 * @param {string} code - Code.
+				 */
+				constructor(code) {
+					super(code);
+					this.code = code;
+				}
+			},
+			SlothletWarning: class {
+				/**
+				 * @param {string} code - Code.
+				 */
+				constructor(code) {
+					this.code = code;
+				}
+			}
+		};
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = {};
+		// Pre-populate target.config with a plain object (not a wrapper proxy)
+		target.config = { version: "1", debug: false };
+
+		// Call assignToApiPath with useCollisionDetection=true and merge mode
+		// Both existing (target.config) and value are plain objects → lines 541-543 fire
+		const result = assignment.assignToApiPath(target, "config", { env: "prod", debug: true }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "merge" } },
+			collisionContext: "initial"
+		});
+
+		// Object.assign merged value into existing in-place
+		expect(result).toBe(true);
+		expect(target.config.version).toBe("1"); // original preserved
+		expect(target.config.debug).toBe(true); // overwritten by merge
+		expect(target.config.env).toBe("prod"); // new key added
+	});
+
+	it("same-reference check: existing object is mutated in-place (not replaced) (lines 541-543)", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = {};
+		const original = { a: 1, b: 2 };
+		target.settings = original;
+
+		assignment.assignToApiPath(target, "settings", { c: 3 }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "merge" } },
+			collisionContext: "initial"
+		});
+
+		// Object.assign mutates in-place so identity is preserved
+		expect(target.settings).toBe(original);
+		expect(target.settings.a).toBe(1);
+		expect(target.settings.c).toBe(3);
+	});
+
+	it("skip mode returns false without modifying existing (collision.initial='skip') for plain-plain", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = { cfg: { x: 1 } };
+
+		const result = assignment.assignToApiPath(target, "cfg", { x: 99 }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "skip" } },
+			collisionContext: "initial"
+		});
+
+		// "skip" returns false immediately — plain-plain branch never reached
+		expect(result).toBe(false);
+		expect(target.cfg.x).toBe(1);
+	});
+});

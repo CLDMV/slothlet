@@ -37,11 +37,22 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import path from "path";
 import { fileURLToPath } from "url";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_TEST_MODES_DEBUG = path.resolve(__dirname, "../../../../api_tests/api_test_modes_debug");
+let restoreDebugOutput;
+
+beforeAll(() => {
+	restoreDebugOutput = suppressSlothletDebugOutput();
+});
+
+afterAll(() => {
+	restoreDebugOutput?.();
+	restoreDebugOutput = undefined;
+});
 
 /**
  * Create a slothlet instance with debug.modes enabled against the modes-debug fixture.

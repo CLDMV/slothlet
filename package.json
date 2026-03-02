@@ -228,7 +228,7 @@
 		}
 	},
 	"devDependencies": {
-		"@cldmv/holdmytask": "^1.6.1",
+		"@cldmv/fix-headers": "^1.1.1",
 		"@cldmv/vitest-runner": "^1.0.1",
 		"@eslint/css": "^0.10.0",
 		"@eslint/js": "^9.33.0",
