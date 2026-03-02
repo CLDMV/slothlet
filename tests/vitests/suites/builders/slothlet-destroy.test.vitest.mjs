@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/builders/slothlet-destroy.test.vitest.mjs
  *	@Date: 2026-02-27T08:32:05-08:00 (1772209925)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28 13:16:34 -08:00 (1772313394)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:45 -08:00 (1772425305)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

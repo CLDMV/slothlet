@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/smart_flatten/api_smart_flatten_folder_config/main.mjs
  *	@Date: 2026-01-04T16:31:08-08:00 (1767573068)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-04 20:40:22 -08:00 (1770266422)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:21 -08:00 (1772425281)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
