@@ -33,8 +33,12 @@
  * @module tests/vitests/suites/builders/api-assignment-merge.test.vitest
  */
 
-import { describe, it, expect, vi } from "vitest";
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
+import slothlet from "@cldmv/slothlet";
+import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 /**
  * Create an ApiAssignment instance with a minimal mock slothlet.
@@ -330,4 +334,86 @@ describe("ApiAssignment.assignToApiPath collision-detection – both-plain path 
 		expect(result).toBe(false);
 		expect(target.cfg.x).toBe(1);
 	});
+});
+// ---------------------------------------------------------------------------
+// Group K: Integration – wrapper+wrapper causes syncWrapper (lines 133-134)
+//   When both `target[key]` and `value` are UnifiedWrapper proxies,
+//   and `mutateExisting === true` and a `syncWrapper` callback is provided,
+//   lines 133-134 call syncWrapper(existing, value) and return true.
+//
+//   Triggered via: api.slothlet.api.add(path, dir, "replace") TWICE.
+//   Second call → setValueAtPath → mutateApiValue → syncWrapper(existingWrapper, newWrapper)
+//   → mergeApiObjects(existingWrapper, newWrapper, {syncWrapper})
+//   → for each child key: assignToApiPath(existingWrapper, childKey, newWrapper[childKey], {mutateExisting, syncWrapper})
+//   → if existingWrapper[childKey] AND newWrapper[childKey] are both wrappers → lines 133-134.
+// ---------------------------------------------------------------------------
+describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder re-add (lines 133-134)", () => {
+        let api;
+
+        afterEach(async () => {
+                if (api) {
+                        await api.shutdown();
+                        api = null;
+                }
+        });
+
+        it("re-adding a nested-folder dir at an existing wrapper path triggers syncWrapper on child wrappers (lines 133-134)", async () => {
+                api = await slothlet({
+                        mode: "eager",
+                        runtime: "async",
+                        hook: { enabled: false },
+                        dir: TEST_DIRS.API_TEST,
+                        silent: true
+                });
+
+                // First add: create a nested wrapper structure at 'plugins'.
+                // API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
+                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "replace",
+                        moduleID: "plugins_v1"
+                });
+
+                expect(api.plugins).toBeDefined();
+                expect(api.plugins.config).toBeDefined();
+
+                // Second add at the same 'plugins' path with 'replace' mode.
+                // setValueAtPath sees existing=wrapper, value=wrapper → mutateApiValue
+                // → syncWrapper(existingPlugins, newPlugins)
+                // → mergeApiObjects(existingPlugins, newPlugins, {syncWrapper})
+                // → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
+                // → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
+                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "replace",
+                        moduleID: "plugins_v2"
+                });
+
+                // API should remain intact after sync
+                expect(api.plugins).toBeDefined();
+                expect(api.plugins.config).toBeDefined();
+        });
+
+        it("re-adding with merge mode also triggers syncWrapper on nested child wrappers (lines 133-134)", async () => {
+                api = await slothlet({
+                        mode: "eager",
+                        runtime: "async",
+                        hook: { enabled: false },
+                        dir: TEST_DIRS.API_TEST,
+                        silent: true
+                });
+
+                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "merge",
+                        moduleID: "ns_v1"
+                });
+                expect(api.ns).toBeDefined();
+
+                // With merge mode, the second add also triggers mutateApiValue
+                // → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
+                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "merge",
+                        moduleID: "ns_v2"
+                });
+
+                expect(api.ns).toBeDefined();
+        });
 });
