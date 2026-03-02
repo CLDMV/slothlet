@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/api-manager/api-manager-test-remove-reload-isolated.test.vitest.mjs
  *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:44 -08:00 (1772425304)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

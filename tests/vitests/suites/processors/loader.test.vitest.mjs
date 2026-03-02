@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/processors/loader.test.vitest.mjs
  *	@Date: 2026-02-23T23:37:33-08:00 (1771918653)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-28 13:23:07 -08:00 (1772313787)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:54 -08:00 (1772425314)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

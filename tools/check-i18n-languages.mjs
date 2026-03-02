@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/check-i18n-languages.mjs
  *	@Date: 2026-02-21T17:52:07-08:00 (1771725127)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 19:14:47 -08:00 (1771730087)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

@@ -2,24 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/slothlet.mjs
  *	@Date: 2026-02-06 10:12:46 -08:00 (1770401566)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-22 23:58:22 -08:00 (1771833502)
- *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
- */
-
-/**
- *	@Project: @cldmv/slothlet
- *	@Filename: /src/slothlet.mjs
- *	@Date: 2026-02-03 19:50:15 -08:00 (1770177015)
- *	@Author: Nate Hyson <CLDMV>
- *	@Email: <Shinrai@users.noreply.github.com>
- *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 15:54:19 -08:00 (1770335659)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/vitests/suites/hooks/hook-subsets.test.vitest.mjs
  *	@Date: 2026-01-13T22:33:26-08:00 (1768372406)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-05 16:09:37 -08:00 (1770336577)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:49 -08:00 (1772425309)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

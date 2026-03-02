@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tools/generate-types-worker.mjs
  *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 15:36:24 -08:00 (1771716984)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:22:18 -08:00 (1772425338)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */

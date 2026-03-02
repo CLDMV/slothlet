@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/handlers/api-manager.mjs
  *	@Date: 2026-01-24 07:14:02 -08:00 (1737726842)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-02-21 21:27:57 -08:00 (1771738077)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
