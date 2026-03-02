@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:44 -08:00 (1772425304)
+ *	@Last modified time: 2026-03-02 05:00:00 -08:00 (1772510400)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -19,13 +19,15 @@
  * same API path and then remove the second one.  The ownership handler rolls back
  * to the first module's value, exercising:
  *
- *   lines 1758-1767  — removeApiComponent by apiPath+moduleID — restoreApiPath call
- *   lines 1772-1786  — ownershipResult.action === "restore" via getCurrentValue
- *   lines 1791-1797  — setValueAtPath restore for boundApi
- *   lines 1803       — track operationHistory
- *   lines 1810-1811  — final restoreApiPath fallback
- *   lines 1816-1821  — operationHistory push after restore
- *   lines 1826-1828  — final `return true`
+ *   lines 1548-1631  — removeApiComponent: apiPath + moduleID detected together
+ *   lines 1597-1610  — ownershipResult.action === "restore" (apiPath+moduleID branch)
+ *                      Triggered by remove("pathName") where moduleIDs DON'T share
+ *                      prefix with pathName → detected as apiPath, not moduleID.
+ *
+ *   lines 1683-1828  — removeApiComponent: moduleID-only unregister path
+ *   lines 1737-1748  — ownership.unregister() call + allPaths construction
+ *   lines 1758-1797  — per-path delete vs rollback classification loop
+ *   lines 1800-1828  — pathsToDelete loop, pathsToRollback loop, history + return
  *
  *   lines 956-963    — restoreApiPath: historyEntry lookup
  *   lines 975-979    — addApiComponent via historyEntry
@@ -33,8 +35,8 @@
  *   lines 997-1002   — setValueAtPath for restore
  *
  * Each of these paths is exercised through:
- *   - api.slothlet.api.add() twice on the same path with mergemode = "merge"
- *   - api.slothlet.api.remove() on the second moduleID
+ *   - api.slothlet.api.add() twice on the same path with collisionMode = "replace"
+ *   - api.slothlet.api.remove() on the second moduleID  OR  the apiPath string
  *
  * @module tests/vitests/suites/api-manager/api-manager-stacked-restore
  */
@@ -206,5 +208,67 @@ describe.each(EAGER_CONFIGS)("removeApiComponent by apiPath ownership restore �
 		const removed = await api.slothlet.api.remove("layered_mixed");
 		expect(removed).toBe(true);
 		// After removal, the ownership handler determines whether path persists (no assert on that)
+	});
+});
+
+// ---------------------------------------------------------------------------
+// apiPath + moduleID ownership-restore branch (lines 1597-1610)
+// removeApiComponent detects "uniquePath" as an apiPath (no module starts with "uniquePath_")
+// because we use completely disjoint moduleIDs ("alpha_v1" / "beta_v2").
+// With two stacked owners, ownership.removePath returns action="restore" and the
+// getCurrentValue path (lines 1597-1610) fires.
+// ---------------------------------------------------------------------------
+describe.each(EAGER_CONFIGS)("apiPath+moduleID ownership restore branch (lines 1597-1610) — $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("fires lines 1597-1610 when both owners registered and remove() by apiPath restores previous", async () => {
+		api = await makeApi(config);
+
+		// Use moduleIDs that do NOT share a prefix with the apiPath "uniquePath".
+		// This ensures the ownership detection classifies "uniquePath" as an apiPath,
+		// not as a moduleID, so the if (apiPath && moduleID) block fires.
+		await api.slothlet.api.add("uniquePath", TEST_DIRS.API_TEST, {
+			collisionMode: "replace",
+			moduleID: "alpha_v1"
+		});
+
+		await api.slothlet.api.add("uniquePath", TEST_DIRS.API_TEST_MIXED, {
+			collisionMode: "replace",
+			moduleID: "beta_v2"
+		});
+
+		expect(api.uniquePath).toBeDefined();
+
+		// remove("uniquePath"):
+		// - candidateModuleID = "uniquePath", no module === "uniquePath" or starts with "uniquePath_"
+		// - getCurrentOwner("uniquePath") returns "beta_v2" (current owner)
+		// - therefore: apiPath = "uniquePath", moduleID = "beta_v2"
+		// - ownership.removePath("uniquePath", "beta_v2") → action = "restore" (alpha_v1 remains)
+		// - getCurrentValue("uniquePath") returns alpha_v1's value (defined) → lines 1603-1610 fire
+		const removed = await api.slothlet.api.remove("uniquePath");
+		expect(removed).toBe(true);
+	});
+
+	it("fires single-owner delete via apiPath (lines 1559-1572, action=delete)", async () => {
+		api = await makeApi(config);
+
+		await api.slothlet.api.add("soloPath", TEST_DIRS.API_TEST, {
+			collisionMode: "replace",
+			moduleID: "gamma_v1"
+		});
+
+		expect(api.soloPath).toBeDefined();
+
+		// Single owner → ownership.removePath returns action = "delete" → lines 1559-1572 fire
+		const removed = await api.slothlet.api.remove("soloPath");
+		expect(removed).toBe(true);
+		expect(api.soloPath).toBeUndefined();
 	});
 });

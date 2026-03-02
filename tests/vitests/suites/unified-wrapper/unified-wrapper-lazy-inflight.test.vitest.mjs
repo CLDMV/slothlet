@@ -442,3 +442,110 @@ describe("unified-wrapper: lazy apply trap starts materialization itself (line 2
 		expect(result).toBe(42);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Group: inFlight callable proxy with null contextManager → lines 2543, 2547
+// ---------------------------------------------------------------------------
+describe("unified-wrapper: in-flight, null contextManager, impl=function (line 2543)", () => {
+let _api;
+
+afterEach(async () => {
+if (_api?.shutdown) await _api.shutdown();
+_api = null;
+});
+
+it("resolves via impl.apply when slothlet.contextManager is null during in-flight (line 2543)", async () => {
+_api = await slothlet({
+mode: "lazy",
+runtime: "async",
+hook: { enabled: false },
+dir: TEST_DIRS.API_TEST
+});
+
+const slothletInst = getSlothletInstance(_api, "task");
+
+// Create lazy wrapper with a function impl
+const callableWrapper = new UnifiedWrapper(slothletInst, {
+mode: "lazy",
+apiPath: "test.nullCM_fn",
+materializeFunc: async (setImpl) => {
+// Delay so caller can enter inFlight state
+await new Promise((r) => setImmediate(r));
+setImpl((a, b) => a + b);
+}
+});
+
+// Start materialization → inFlight=true
+callableWrapper._materialize();
+expect(callableWrapper.____slothletInternal.state.inFlight).toBe(true);
+
+// Null contextManager on the slothlet instance → forces null-CM path (line 2543)
+const origCM = slothletInst.contextManager;
+slothletInst.contextManager = null;
+
+try {
+const proxy = callableWrapper.createProxy();
+// Calling while inFlight + null contextManager → line 2543 fires
+const result = await proxy(3, 4);
+expect(result).toBe(7);
+} finally {
+slothletInst.contextManager = origCM;
+}
+});
+});
+
+describe("unified-wrapper: in-flight, wrapper.contextManager set, impl={default:fn} (line 2547)", () => {
+let _api;
+
+afterEach(async () => {
+if (_api?.shutdown) await _api.shutdown();
+_api = null;
+});
+
+it("resolves via wrapper.contextManager.runInContext when impl has default function (line 2547)", async () => {
+_api = await slothlet({
+mode: "lazy",
+runtime: "async",
+hook: { enabled: false },
+dir: TEST_DIRS.API_TEST
+});
+
+const slothletInst = getSlothletInstance(_api, "task");
+
+// impl will be { default: fn } — the impl.default branch
+const callableWrapper = new UnifiedWrapper(slothletInst, {
+mode: "lazy",
+apiPath: "test.nullCM_default",
+materializeFunc: async (setImpl) => {
+await new Promise((r) => setImmediate(r));
+const fn = (a, b) => a * b;
+// Set impl as an object with a default property (CJS-style default export)
+setImpl({ default: fn });
+}
+});
+
+// Set a wrapper-level contextManager (not slothlet-level)
+// line 2546 checks wrapper.contextManager (not wrapper.slothlet.contextManager)
+const mockContextManager = {
+runInContext: (_id, fn, thisArg, args, _wrapper) => fn.apply(thisArg, args)
+};
+callableWrapper.contextManager = mockContextManager;
+
+// Start materialization → inFlight=true
+callableWrapper._materialize();
+expect(callableWrapper.____slothletInternal.state.inFlight).toBe(true);
+
+// Null slothlet-level contextManager so we get past line 2540 check
+const origCM = slothletInst.contextManager;
+slothletInst.contextManager = null;
+
+try {
+const proxy = callableWrapper.createProxy();
+// Calling while inFlight + wrapper.contextManager set + impl.default=fn → line 2547 fires
+const result = await proxy(3, 4);
+expect(result).toBe(12);
+} finally {
+slothletInst.contextManager = origCM;
+}
+});
+});

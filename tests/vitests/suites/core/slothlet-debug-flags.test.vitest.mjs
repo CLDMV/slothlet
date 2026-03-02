@@ -106,18 +106,20 @@ describe("debug.materialize flag", () => {
 				collision: { initial: "replace", api: "replace" }
 			});
 
-			// Capture everything that fired during load. normalizeDebug now preserves
-			// `materialize: true`, and debugLogger is set before _registerLazyWrapper runs,
-			// so both "Lazy wrapper registered" (lines 245-249) and at least one
-			// "Lazy wrapper materialized" (lines 262-267) appear inside await slothlet().
+			// Root lazy wrappers are pre-materialized in a background task that resolves
+			// shortly after await slothlet(). Access a root property and settle to ensure
+			// all _onWrapperMaterialized callbacks fire within this spy window (not test 2's).
+			void api.math;
+			await new Promise((r) => setTimeout(r, 100));
+
 			const allLoadCalls = consoleSpy.mock.calls.map((c) => String(c[0]));
 
-			// Lines 245-249: _registerLazyWrapper logs "Lazy wrapper registered"
+			// Lines 245-249: _registerLazyWrapper logs "[DEBUG:MATERIALIZE] Lazy wrapper registered"
 			const registeredLogs = allLoadCalls.filter((msg) => msg.includes("Lazy wrapper registered"));
 			expect(registeredLogs.length).toBeGreaterThan(0);
 
-			// Lines 262-267: _onWrapperMaterialized logs "Lazy wrapper materialized"
-			// At least the slothlet-control wrapper materialises during load setup.
+			// Lines 262-267: _onWrapperMaterialized logs "[DEBUG:MATERIALIZE] Lazy wrapper materialized"
+			// Fires after root wrappers are pre-materialized (background task after init).
 			const materializedLogs = allLoadCalls.filter((msg) => msg.includes("Lazy wrapper materialized"));
 			expect(materializedLogs.length).toBeGreaterThan(0);
 		} finally {
