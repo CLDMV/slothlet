@@ -1395,11 +1395,6 @@ export class ModesProcessor extends ComponentBase {
 								}
 							}
 
-							// Merge with collision-merged children paths if they exist
-							if (this.__childFilePathsPreMaterialize) {
-								Object.assign(childPaths, this.__childFilePathsPreMaterialize);
-							}
-
 							implToWrap.__childFilePaths = childPaths;
 						}
 
