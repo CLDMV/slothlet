@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-02 18:03:44 -08:00 (1772503424)
+ *	@Last modified time: 2026-03-03 07:41:02 -08:00 (1772552462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -394,8 +394,7 @@ async function main() {
 		process.exit(0);
 	}
 
-	const isCoverageRun =
-		parsed.coverageQuiet || parsed.vitestArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
+	const isCoverageRun = parsed.coverageQuiet || parsed.vitestArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
 
 	if (isCoverageRun) {
 		acquireCoverageLock();
