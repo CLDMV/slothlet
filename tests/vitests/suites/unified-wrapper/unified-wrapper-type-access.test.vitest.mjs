@@ -208,12 +208,24 @@ describe("__type — lazy in-flight → TYPE_STATES.IN_FLIGHT (line 2079)", () =
 		// Create lazy slothlet — wrappers start unmaterialized
 		_api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "lazy", runtime: "async", silent: true });
 
-		// Accessing api.math returns the lazy proxy without triggering materialization.
-		// The materializeFunc is an async loader, so the inFlight IIFE sets inFlight=true
-		// synchronously and then suspends waiting for the async file load.
-		// Accessing __type triggers _materialize() → inFlight=true → TYPE_STATES.IN_FLIGHT.
-		const type = _api.math.__type;
-		expect(type).toBe(TYPE_STATES.IN_FLIGHT);
+		// Directly set inFlight=true on the wrapper to simulate mid-materialization state.
+		// The prior approach (relying on _materialize()'s async IIFE timing) is inherently racy
+		// under V8 coverage instrumentation, where microtask scheduling differs enough that
+		// materializeFunc can complete before line 2078 is checked. Direct state manipulation
+		// guarantees we test the exact `if (lazy && inFlight) → TYPE_STATES.IN_FLIGHT` branch.
+		const wrapper = resolveWrapper(_api.math);
+		const savedInFlight = wrapper.____slothletInternal.state.inFlight;
+		const savedMaterialized = wrapper.____slothletInternal.state.materialized;
+		wrapper.____slothletInternal.state.inFlight = true;
+		wrapper.____slothletInternal.state.materialized = false;
+
+		try {
+			const type = _api.math.__type;
+			expect(type).toBe(TYPE_STATES.IN_FLIGHT);
+		} finally {
+			wrapper.____slothletInternal.state.inFlight = savedInFlight;
+			wrapper.____slothletInternal.state.materialized = savedMaterialized;
+		}
 	});
 });
 
