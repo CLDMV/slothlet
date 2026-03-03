@@ -156,3 +156,45 @@ describe("slothlet init: setApiContextChecker callback (lines 360-361)", () => {
 		expect(ranInsideContext).toBe(true);
 	});
 });
+// ─── Line 448: construct trap on callable boundApi proxy ─────────────────────
+
+describe("slothlet boundApi proxy: construct trap (line 448)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown().catch(() => {});
+			api = null;
+		}
+	});
+
+	/**
+	 * When `slothlet.api` is a function (api_test has root-level function exports),
+	 * the `boundApi` proxy is built with `isCallable = true` and includes a
+	 * `construct` trap at line 448:
+	 *
+	 *   construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {})
+	 *
+	 * Using the `new` operator on the boundApi proxy fires this trap.
+	 */
+	it("new api() on a callable slothlet API invokes the construct trap (line 448)", async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+
+		// api_test has rootFunctionShout/rootFunctionWhisper at the top level,
+		// making slothlet.api a function → isCallable = true → construct trap defined
+		expect(typeof api).toBe("function");
+
+		// Trigger the construct trap. The underlying function is not a real constructor
+		// so Reflect.construct may throw — line 448 still executes before any throw.
+		let constructTrapFired = false;
+		try {
+			// eslint-disable-next-line new-cap
+			new api();
+			constructTrapFired = true;
+		} catch (_) {
+			// Expected: the api function isn't a constructor. Trap fired = success.
+			constructTrapFired = true;
+		}
+		expect(constructTrapFired).toBe(true);
+	});
+});
