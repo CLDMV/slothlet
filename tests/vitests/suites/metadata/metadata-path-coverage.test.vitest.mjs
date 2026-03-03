@@ -47,6 +47,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { withSuppressedSlothletErrorOutputSync, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────
@@ -206,5 +207,34 @@ describe("metadata removeUserMetadataByApiPath empty guard (line 433)", () => {
 		// This is the same as the test in the section above (line 494 covers removePathMetadata,
 		// line 433 covers removeUserMetadataByApiPath). Both share the same !apiPath guard logic.
 		expect(() => api.slothlet.metadata.removeFor("")).not.toThrow();
+	});
+});
+// ─── metadata.mjs line 100: METADATA_LIFECYCLE_BYPASS ────────────────────────
+
+describe("metadata.mjs tagSystemMetadata - METADATA_LIFECYCLE_BYPASS (line 100)", () => {
+	let api;
+
+	beforeEach(async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+	});
+
+	afterEach(async () => {
+		if (api?.shutdown) await api.shutdown();
+		api = null;
+	});
+
+	it("tagSystemMetadata() with invalid token throws METADATA_LIFECYCLE_BYPASS (line 100)", () => {
+		// Access the internal metadata handler and call tagSystemMetadata with a fake token.
+		// verifyToken(slothlet, fakeToken) returns false → throws METADATA_LIFECYCLE_BYPASS.
+		const sl = resolveWrapper(api.math)?.slothlet;
+		const metadataHandler = sl.handlers.metadata;
+
+		const fakeToken = Symbol("invalid-token");
+		const dummyTarget = {};
+		const dummyData = { moduleID: "test", apiPath: "test", filePath: "/tmp/test.mjs" };
+
+		withSuppressedSlothletErrorOutputSync(() => {
+			expect(() => metadataHandler.tagSystemMetadata(dummyTarget, dummyData, fakeToken)).toThrow();
+		});
 	});
 });
