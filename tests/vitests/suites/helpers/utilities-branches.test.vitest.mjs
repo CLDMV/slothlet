@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-02 18:30:00 -08:00 (1772519400)
+ *	@Last modified time: 2026-03-03 11:33:15 -08:00 (1772566395)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -138,27 +138,27 @@ describe("Utilities.deepClone — non-cloneable primitive returns original (line
 // ---------------------------------------------------------------------------
 
 describe("Utilities.deepClone — array with non-cloneable elements (line 105)", () => {
-it("deepClone with array containing functions enters Array.isArray branch in structuredClone fallback", () => {
-const utils = new Utilities(makeMock());
-// An array of functions cannot be structuredCloned, so deepClone enters the
-// catch-fallback path. There, Array.isArray(obj) is true → line 105 fires.
-const arr = [() => "fn1", () => "fn2", { x: 1 }];
-const result = utils.deepClone(arr);
-expect(Array.isArray(result)).toBe(true);
-expect(result).toHaveLength(3);
-});
+	it("deepClone with array containing functions enters Array.isArray branch in structuredClone fallback", () => {
+		const utils = new Utilities(makeMock());
+		// An array of functions cannot be structuredCloned, so deepClone enters the
+		// catch-fallback path. There, Array.isArray(obj) is true → line 105 fires.
+		const arr = [() => "fn1", () => "fn2", { x: 1 }];
+		const result = utils.deepClone(arr);
+		expect(Array.isArray(result)).toBe(true);
+		expect(result).toHaveLength(3);
+	});
 
-it("deepClone of a mixed array preserves primitive items", () => {
-const utils = new Utilities(makeMock());
-const fn = () => "test";
-const arr = [fn, 42, "str"];
-const result = utils.deepClone(arr);
-expect(Array.isArray(result)).toBe(true);
-expect(result).toHaveLength(3);
-// Primitives must survive the Array.isArray deep-map path
-expect(result[1]).toBe(42);
-expect(result[2]).toBe("str");
-});
+	it("deepClone of a mixed array preserves primitive items", () => {
+		const utils = new Utilities(makeMock());
+		const fn = () => "test";
+		const arr = [fn, 42, "str"];
+		const result = utils.deepClone(arr);
+		expect(Array.isArray(result)).toBe(true);
+		expect(result).toHaveLength(3);
+		// Primitives must survive the Array.isArray deep-map path
+		expect(result[1]).toBe(42);
+		expect(result[2]).toBe("str");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -166,39 +166,39 @@ expect(result[2]).toBe("str");
 // ---------------------------------------------------------------------------
 
 describe("Utilities.deepClone — inner catch fallback (line 113)", () => {
-it("deepClone keeps original reference when cloning a nested property throws", () => {
-const utils = new Utilities(makeMock());
-// The outer object has a function property so structuredClone(outer) throws,
-// putting us in the fallback loop. The 'bad' property holds a Proxy whose
-// GET trap throws for every key access. When the fallback calls
-// deepClone(badProxy), obj?.__type inside deepClone triggers the trap →
-// throws → inner catch fires (line 111) → line 113: cloned.bad = original proxy.
-const badProxy = new Proxy(
-{},
-{
-get(_t, k) {
-throw new Error("proxy: no access to " + String(k));
-},
-ownKeys() {
-return [];
-},
-getOwnPropertyDescriptor() {
-return undefined;
-}
-}
-);
-const outer = { fn: () => {} };
-Object.defineProperty(outer, "bad", { value: badProxy, enumerable: true, configurable: true });
+	it("deepClone keeps original reference when cloning a nested property throws", () => {
+		const utils = new Utilities(makeMock());
+		// The outer object has a function property so structuredClone(outer) throws,
+		// putting us in the fallback loop. The 'bad' property holds a Proxy whose
+		// GET trap throws for every key access. When the fallback calls
+		// deepClone(badProxy), obj?.__type inside deepClone triggers the trap →
+		// throws → inner catch fires (line 111) → line 113: cloned.bad = original proxy.
+		const badProxy = new Proxy(
+			{},
+			{
+				get(_t, k) {
+					throw new Error("proxy: no access to " + String(k));
+				},
+				ownKeys() {
+					return [];
+				},
+				getOwnPropertyDescriptor() {
+					return undefined;
+				}
+			}
+		);
+		const outer = { fn: () => {} };
+		Object.defineProperty(outer, "bad", { value: badProxy, enumerable: true, configurable: true });
 
-let result;
-expect(() => {
-result = utils.deepClone(outer);
-}).not.toThrow();
+		let result;
+		expect(() => {
+			result = utils.deepClone(outer);
+		}).not.toThrow();
 
-expect(result).toBeDefined();
-// If line 113 fired, 'bad' holds the original proxy reference
-if ("bad" in result) {
-expect(result.bad).toBe(badProxy);
-}
-});
+		expect(result).toBeDefined();
+		// If line 113 fired, 'bad' holds the original proxy reference
+		if ("bad" in result) {
+			expect(result.bad).toBe(badProxy);
+		}
+	});
 });
