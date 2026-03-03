@@ -28,6 +28,7 @@
  * node tests/vitests/run-all-vitest.mjs suites/config/background-materialize.test.vitest.mjs
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "@cldmv/vitest-runner";
@@ -37,6 +38,64 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");
 
 const DEFAULT_WORKERS = process.env.VITEST_WORKERS ? parseInt(process.env.VITEST_WORKERS, 10) : 4;
+
+/**
+ * Absolute path to the coverage run lock file.
+ * Created exclusively (`wx`) at the start of a coverage run and removed on exit.
+ * Using `tmp/` keeps it inside the project (never `os.tmpdir()`).
+ * @type {string}
+ */
+const COVERAGE_LOCK_FILE = path.join(projectRoot, "tmp", ".coverage-lock");
+
+/**
+ * Attempt to acquire the coverage run lock.
+ * Uses the `wx` (exclusive-create) flag which is atomic on all platforms — the OS
+ * guarantees that only one process can create the file when it does not exist.
+ *
+ * @returns {void}
+ * @throws {Error} Re-throws any unexpected filesystem error other than EEXIST.
+ * @example
+ * acquireCoverageLock(); // creates tmp/.coverage-lock
+ */
+function acquireCoverageLock() {
+	try {
+		fs.mkdirSync(path.dirname(COVERAGE_LOCK_FILE), { recursive: true });
+		// 'wx' = exclusive create: fails with EEXIST if the file is already there (atomic, OS-agnostic)
+		fs.writeFileSync(COVERAGE_LOCK_FILE, String(process.pid), { flag: "wx", encoding: "utf8" });
+	} catch (err) {
+		if (err.code === "EEXIST") {
+			const ownerPid = (() => {
+				try {
+					return fs.readFileSync(COVERAGE_LOCK_FILE, "utf8").trim();
+				} catch {
+					return "(unknown)";
+				}
+			})();
+			console.error(`\n❌  Coverage run already in progress (PID ${ownerPid}).`);
+			console.error(`    Only one coverage run may execute at a time.`);
+			console.error(`    Lock file: ${COVERAGE_LOCK_FILE}`);
+			console.error(`    If no run is active, delete the lock file and retry.\n`);
+			process.exit(1);
+		}
+		throw err;
+	}
+}
+
+/**
+ * Release the coverage run lock by removing the lock file.
+ * Safe to call multiple times — silently ignores missing-file errors.
+ *
+ * @returns {void}
+ * @example
+ * releaseCoverageLock(); // removes tmp/.coverage-lock
+ */
+function releaseCoverageLock() {
+	try {
+		fs.unlinkSync(COVERAGE_LOCK_FILE);
+	} catch {
+		// Already removed or never existed — both are fine
+	}
+}
 const DEFAULT_TEST_DIR = "tests/vitests/suites";
 const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
@@ -333,6 +392,25 @@ async function main() {
 	if (parsed.help) {
 		showHelp();
 		process.exit(0);
+	}
+
+	const isCoverageRun =
+		parsed.coverageQuiet || parsed.vitestArgs.some((arg) => arg === "--coverage" || arg.startsWith("--coverage."));
+
+	if (isCoverageRun) {
+		acquireCoverageLock();
+
+		// Release lock on any form of process exit (normal, signal, or uncaught error)
+		const onExit = () => releaseCoverageLock();
+		process.once("exit", onExit);
+		process.once("SIGINT", () => {
+			releaseCoverageLock();
+			process.exit(130);
+		});
+		process.once("SIGTERM", () => {
+			releaseCoverageLock();
+			process.exit(143);
+		});
 	}
 
 	const code = await run(buildRunOptions(parsed));
