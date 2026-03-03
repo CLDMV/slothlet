@@ -188,3 +188,63 @@ describe("metadata importUserState — falsy state guard (line 565)", () => {
 		expect(() => sl.handlers.metadata.importUserState(undefined)).not.toThrow();
 	});
 });
+
+// ─── removeUserMetadata — no moduleID guard (line 317) ─────────────────────
+
+describe("metadata removeUserMetadata — no moduleID early-return guard (line 317)", () => {
+	/**
+	 * `removeUserMetadata(target)` resolves the wrapper and looks up system metadata.
+	 * If the target has no `moduleID` in its system metadata (e.g. a plain object
+	 * that was never registered), line 317 `if (!moduleID) return` fires immediately.
+	 */
+	it("removeUserMetadata with a plain unregistered object returns early (line 317)", async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		const sl = getSlFromApi(api, "math");
+
+		// plainObj has no system metadata registered → moduleID = undefined → line 317 return
+		const plainObj = {};
+		expect(() => sl.handlers.metadata.removeUserMetadata(plainObj)).not.toThrow();
+	});
+
+	it("removeUserMetadata with a plain function returns early (line 317)", async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		const sl = getSlFromApi(api, "math");
+
+		// Plain function has no system metadata → moduleID = undefined → line 317 return
+		const plainFn = () => {};
+		expect(() => sl.handlers.metadata.removeUserMetadata(plainFn)).not.toThrow();
+	});
+});
+
+// ─── metadata.get — null apiRoot guard (line 619) ───────────────────────────
+
+describe("metadata.get — null apiRoot early-return guard (line 619)", () => {
+	/**
+	 * `metadata.get(path)` resolves the path against `this.slothlet.api` (line 618).
+	 * If `slothlet.api` is null, the guard at line 619 fires and returns null.
+	 *
+	 * After `api.destroy()`, `slothlet.api` is set to null (api_builder line 1458).
+	 * Saving a bound reference to `metadata.get` before destroy and calling it
+	 * afterward exercises line 619.
+	 */
+	it("metadata.get returns null after slothlet.api is cleared (line 619)", async () => {
+		api = await slothlet({ dir: TEST_DIRS.API_TEST, silent: true });
+		const sl = getSlFromApi(api, "math");
+
+		// Save a bound reference BEFORE we nullify the api
+		const getMetadataPath = sl.handlers.metadata.get.bind(sl.handlers.metadata);
+
+		// Directly set slothlet.api to null — simulates post-destroy state
+		const savedApi = sl.api;
+		sl.api = null;
+
+		try {
+			// metadata.get checks `this.slothlet.api` at line 618 → null → line 619 return null
+			const result = await getMetadataPath("math");
+			expect(result).toBeNull();
+		} finally {
+			// Restore api reference so afterEach shutdown works correctly
+			sl.api = savedApi;
+		}
+	});
+});
