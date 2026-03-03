@@ -92,3 +92,26 @@ describe("generateTypes / traverseAPI — circular reference guard (line 116)", 
 		expect(result.output).toContain("TestFlatAPI");
 	});
 });
+// ─── traverseAPI — non-object input early-return guard (line 116) ─────────────
+
+describe("generateTypes / traverseAPI — non-object api guard (line 116)", () => {
+	/**
+	 * `traverseAPI` checks `!api || typeof api !== "object"` as its first guard (line 115).
+	 * Passing `null` as the top-level api causes the guard to be true on the very first call,
+	 * executing the `return nodes` at line 116 and returning an empty declaration.
+	 */
+	it("returns gracefully when api is null — hits early-return guard (line 116)", async () => {
+		// null top-level api → traverseAPI(!api) → true → line 116 `return nodes`
+		const result = await generateTypes(null, { output: OUTPUT_PATH, interfaceName: "NullApi" });
+		expect(result).toBeDefined();
+		// Should produce a valid (possibly empty) output without throwing
+		expect(typeof result.output).toBe("string");
+	});
+
+	it("returns gracefully when api is a plain string \u2014 hits typeof guard (line 116)", async () => {
+		// typeof 'notAnObject' !== 'object' \u2192 line 116
+		const result = await generateTypes("notAnObject", { output: OUTPUT_PATH, interfaceName: "StrApi" });
+		expect(result).toBeDefined();
+		expect(typeof result.output).toBe("string");
+	});
+});
