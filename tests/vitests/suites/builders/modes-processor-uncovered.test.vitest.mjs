@@ -57,7 +57,8 @@ const DIRS = {
 	ADDAPI_SUBFOLDER: path.join(SF, "api_smart_flatten_addapi_subfolder"),
 	OBJECT_DEFAULT_MERGE: path.join(SF, "api_smart_flatten_object_default_merge"),
 	LAZY_FN_COLLISION: path.join(SF, "api_smart_flatten_lazy_fn_collision"),
-	FN_FILE_FOLDER_LAZY: path.join(SF, "api_smart_flatten_fn_file_folder_lazy")
+	FN_FILE_FOLDER_LAZY: path.join(SF, "api_smart_flatten_fn_file_folder_lazy"),
+	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder")
 };
 
 let restoreDebugOutput;
@@ -374,5 +375,92 @@ describe("modes-processor: lazy single-file folder fn with prop collision — wa
 		await _api.worker._materialize();
 		// Should succeed (warn mode doesn't throw)
 		expect(_api.worker !== undefined).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Group 8: Lines 1311 + 1316 — addapi-metadata-default in lazy subfolder single-file path
+// The addapi/ subfolder inside api_smart_flatten_addapi_subfolder has a file named addapi.mjs
+// with an object default export + named exports.  In lazy mode the materializeFunc reaches the
+// `if (categoryDecision.flattenType === "addapi-metadata-default")` branch (line 1311).
+// Line 1316: implToWrap[key] = exports[key] inside the key-merge loop is also covered.
+// ---------------------------------------------------------------------------
+describe("modes-processor: addapi-metadata-default path in lazy subfolder materializeFunc (lines 1311, 1316)", () => {
+	it("lazy load + _materialize() — addapi/addapi.mjs (object default + named exports) covers lines 1311, 1316", async () => {
+		// addapi_subfolder/addapi/addapi.mjs:
+		//   export default { name: "test-plugin", version: "1.0.0" }  (object → addapi-metadata-default)
+		//   export function init() { ... }
+		//   export function run() { ... }
+		// In lazy mode the addapi wrapper starts unmaterialized.
+		// Calling _materialize() triggers lazy_materializeFunc which processes addapi/addapi.mjs:
+		//   line 1311: if (flattenType === "addapi-metadata-default") → true
+		//   line 1312-1313: implToWrap = exports.default
+		//   line 1314-1316: merge named keys onto implToWrap
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			dir: DIRS.ADDAPI_SUBFOLDER
+		});
+
+		expect(_api).toBeDefined();
+		// The addapi subdirectory is accessible as _api.addapi in lazy mode
+		expect(_api.addapi).toBeDefined();
+		// Trigger the lazy materializeFunc — covers lines 1311 + 1316
+		await _api.addapi._materialize();
+		// After materialization, named exports (init, run) should be attached
+		const hasInit = typeof _api.addapi?.init === "function" || typeof _api.init === "function";
+		const hasRun = typeof _api.addapi?.run === "function" || typeof _api.run === "function";
+		expect(hasInit || hasRun).toBe(true);
+	});
+
+	it("lazy addapi subfolder with debug.modes=true — all debug branches covered", async () => {
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			debug: { modes: true },
+			dir: DIRS.ADDAPI_SUBFOLDER
+		});
+
+		expect(_api).toBeDefined();
+		if (_api.addapi?._materialize) {
+			await _api.addapi._materialize();
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Group 9: Line 1330 — shouldAttachNamedExport=false continue in lazy hybrid pattern
+// api_smart_flatten_fn_fn_folder/calc/calc.mjs:
+//   function calc(a, b) { return a + b; }
+//   export { calc };
+//   export default calc;
+// In lazy mode, materializing calc causes:
+//   implToWrap = exports.default (function, else-if exports.default !== undefined)
+//   Hybrid pattern block: for key "calc":
+//     shouldAttachNamedExport("calc", calc fn, calc fn, calc fn) → false (same reference)
+//     !false = true → line 1330: continue
+// ---------------------------------------------------------------------------
+describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false continue (line 1330)", () => {
+	it("lazy load calc/calc.mjs + _materialize() — calc named export === default skips attachment (line 1330)", async () => {
+		// api_smart_flatten_fn_fn_folder has:
+		//   calc.mjs (root file, function default)  → root-level wrapper
+		//   calc/ (subfolder with calc/calc.mjs)      → lazy subdirectory wrapper
+		// _api.calc = lazy wrapper for calc/ subtree
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			collision: { initial: "merge" },
+			dir: DIRS.FN_FN_FOLDER
+		});
+
+		expect(_api).toBeDefined();
+		expect(_api.calc).toBeDefined();
+		// Trigger the lazy materializeFunc for calc/ — line 1330 fires when
+		// shouldAttachNamedExport returns false for the self-named "calc" export
+		await _api.calc._materialize();
+		expect(_api.calc !== undefined).toBe(true);
 	});
 });

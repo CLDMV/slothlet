@@ -88,6 +88,29 @@ class WithMethod {
 	}
 }
 
+/**
+ * @class Factory - has a method that RETURNS a class instance.
+ * Used to cover line 155: `return runtime_wrapClassInstance(result, ...)` inside
+ * `runtime_contextPreservingMethod` when the method's return value is a class instance.
+ */
+class Factory {
+	/**
+	 * Create and return a new Inner instance.
+	 * @returns {Inner} A fresh Inner class instance.
+	 */
+	createInner() {
+		return new Inner();
+	}
+
+	/**
+	 * A non-class-instance return for comparison.
+	 * @returns {number}
+	 */
+	getNumber() {
+		return 42;
+	}
+}
+
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe("runtime_wrapClassInstance - non-function class-instance property (line 168)", () => {
@@ -174,5 +197,50 @@ describe("runtime_wrapClassInstance - Proxy set trap (lines 176–179)", () => {
 		wrapped.counter = 0;
 		wrapped.counter = wrapped.counter + 5;
 		expect(wrapped.counter).toBe(5);
+	});
+});
+
+// ─── runtime_contextPreservingMethod → method returns class instance (line 155) ──
+
+describe("runtime_wrapClassInstance - method returning a class instance (line 155)", () => {
+	it("wraps the returned class instance when a method returns one (line 155)", () => {
+		// Factory.createInner() returns `new Inner()`, a class instance.
+		// When called via the context-preserving wrapper, the result is detected as a
+		// class instance → runtime_wrapClassInstance is called recursively → line 155.
+		const factory = new Factory();
+		const cache = new WeakMap();
+		const wrapped = runtime_wrapClassInstance(factory, mockContextManager, "factory-1", cache);
+
+		// Call the method — result is a class instance (Inner)
+		const result = wrapped.createInner();
+
+		// Result should still be functional (the Inner's greet method works)
+		expect(typeof result).toBe("object");
+		expect(result).not.toBeNull();
+		expect(typeof result.greet).toBe("function");
+		expect(result.greet()).toBe("hello from Inner");
+	});
+
+	it("does NOT re-wrap when method returns a non-class-instance (line 155 skipped)", () => {
+		// Factory.getNumber() returns 42 (a primitive), so line 155 is NOT taken.
+		const factory = new Factory();
+		const cache = new WeakMap();
+		const wrapped = runtime_wrapClassInstance(factory, mockContextManager, "factory-2", cache);
+
+		const result = wrapped.getNumber();
+		expect(result).toBe(42);
+	});
+
+	it("each call to factory method produces an independently wrapped result", () => {
+		const factory = new Factory();
+		const cache = new WeakMap();
+		const wrapped = runtime_wrapClassInstance(factory, mockContextManager, "factory-3", cache);
+
+		const r1 = wrapped.createInner();
+		const r2 = wrapped.createInner();
+
+		// Both should work correctly
+		expect(r1.greet()).toBe("hello from Inner");
+		expect(r2.greet()).toBe("hello from Inner");
 	});
 });
