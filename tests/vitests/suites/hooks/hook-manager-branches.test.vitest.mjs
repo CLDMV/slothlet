@@ -229,3 +229,200 @@ describe("HookManager.getHooksForPath — globally-disabled early-return (line 3
                 expect(hm.getHooksForPath("always", "any.path")).toEqual([]);
         });
 });
+
+// ─── remove() without filter.id (L209 false branch) ──────────────────────────
+
+describe("HookManager.remove() — pattern-based removal without id (L209 false branch)", () => {
+        it("removes hooks by pattern when filter has no id (L209 false)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                hm.on("before:math.*", () => {}, { id: "hook-pattern-remove" });
+                expect(hm.list().registeredHooks).toHaveLength(1);
+
+                // remove() called WITHOUT filter.id → L209 false branch taken
+                const removed = hm.remove({ pattern: "math.*" });
+
+                expect(removed).toBe(1);
+                expect(hm.list().registeredHooks).toHaveLength(0);
+        });
+
+        it("removes all hooks when remove({}) called without id or pattern (L209 false)", () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("before:**", () => {}, { id: "h1" });
+                hm.on("after:math.*", () => {}, { id: "h2" });
+
+                const removed = hm.remove({});
+                expect(removed).toBe(2);
+                expect(hm.list().registeredHooks).toHaveLength(0);
+        });
+});
+
+// ─── remove() with non-existent id (L217 false branch) ───────────────────────
+
+describe("HookManager.remove() — non-existent id (L217 false branch: hook not found)", () => {
+        it("returns 0 when removing by id that was never registered (L217 false)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                // remove() by id that doesn't exist → this.#byId.get() returns undefined → L217 false
+                const removed = hm.remove({ id: "does-not-exist-at-all" });
+                expect(removed).toBe(0);
+        });
+
+        it("returns 0 after hook was already removed — id no longer in #byId (L217 false)", () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("before:**", () => {}, { id: "already-removed" });
+
+                // First removal succeeds
+                expect(hm.remove({ id: "already-removed" })).toBe(1);
+
+                // Second removal: id is gone from #byId → L217 false branch
+                expect(hm.remove({ id: "already-removed" })).toBe(0);
+        });
+});
+
+// ─── list() enabled filter mismatch (L321 third branch) ──────────────────────
+
+describe("HookManager.list() — enabled filter mismatch (L321 third branch)", () => {
+        it("does not include enabled hooks when list({ enabled: false }) is called (L321 third branch)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                // All hooks start as enabled (enabled: true by default)
+                hm.on("before:**", () => {}, { id: "enabled-hook-1" });
+                hm.on("after:math.*", () => {}, { id: "enabled-hook-2" });
+
+                // filter.enabled = false, hook.enabled = true → condition false → L321 third branch
+                const result = hm.list({ enabled: false });
+                expect(result.registeredHooks).toHaveLength(0);
+        });
+
+        it("includes disabled hooks when list({ enabled: false }) is called", () => {
+                const hm = new HookManager(makeMockHm());
+                const id = hm.on("before:**", () => {});
+
+                // Disable the hook
+                hm.disable({ id });
+
+                // Now filter.enabled = false, hook.enabled = false → L321 branch 1
+                const result = hm.list({ enabled: false });
+                expect(result.registeredHooks).toHaveLength(1);
+                expect(result.registeredHooks[0].enabled).toBe(false);
+        });
+});
+
+// ─── disable({ type }) without id (L861 true branch) ────────────────────────
+
+describe("HookManager.disable({ type }) — type-based disable without id (L861 true branch)", () => {
+        it("disables all hooks for a given type when called without id (L861 true)", () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("before:**", () => {}, { id: "bh1" });
+                hm.on("before:math.*", () => {}, { id: "bh2" });
+                hm.on("after:**", () => {}, { id: "ah1" });
+
+                // disable({ type: "before" }) → no filter.id → L861 executes
+                // filter.type is "before" → L861 true branch: types = ["before"]
+                const affected = hm.disable({ type: "before" });
+                expect(affected).toBe(2);
+
+                const list = hm.list();
+                const beforeHooks = list.registeredHooks.filter((h) => h.type === "before");
+                const afterHooks = list.registeredHooks.filter((h) => h.type === "after");
+                expect(beforeHooks.every((h) => !h.enabled)).toBe(true);
+                expect(afterHooks.every((h) => h.enabled)).toBe(true);
+        });
+
+        it("enable({ type }) re-enables only the specified type (L861 true)", () => {
+                const hm = new HookManager(makeMockHm());
+                hm.on("before:**", () => {}, { id: "bh-enable" });
+                hm.disable({ id: "bh-enable" });
+
+                // enable({ type: "before" }) → L861 true branch
+                hm.enable({ type: "before" });
+
+                const list = hm.list();
+                expect(list.registeredHooks[0].enabled).toBe(true);
+        });
+});
+
+// ─── executeErrorHooks() with non-object error (L591 false branch) ───────────
+
+describe("HookManager.executeErrorHooks() — non-object error (L591 false branch)", () => {
+        it("skips ERROR_HOOK_PROCESSED assignment when error is a string (L591 false)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                // No error hooks registered → loop body never runs
+                // L591: 'error && typeof error === "object"' → string → false branch
+                expect(() => hm.executeErrorHooks("math.add", "string error message", "source", [], {})).not.toThrow();
+        });
+
+        it("skips ERROR_HOOK_PROCESSED assignment when error is null (L591 false: falsy)", () => {
+                const hm = new HookManager(makeMockHm());
+                expect(() => hm.executeErrorHooks("math.add", null, "source", [], {})).not.toThrow();
+        });
+
+        it("calls error hook handler even for non-object errors (L591 false path)", () => {
+                const hm = new HookManager(makeMockHm());
+                let received = null;
+                hm.on("error:**", (ctx) => {
+                        received = ctx;
+                });
+
+                hm.executeErrorHooks("math.add", "plain-string-error", "source", [1, 2], {});
+
+                expect(received).not.toBeNull();
+                expect(received.error).toBe("plain-string-error");
+        });
+});
+
+// ─── executeErrorHooks() handler throws (L603 catch branch) ──────────────────
+
+describe("HookManager.executeErrorHooks() — handler throws (L603 catch branch)", () => {
+        it("silently swallows throw from an error hook handler (L603 catch)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                hm.on("error:**", () => {
+                        throw new Error("error hook itself threw");
+                });
+
+                // The catch block logs but does not propagate — L603 catch fires
+                expect(() =>
+                        hm.executeErrorHooks("math.add", new Error("original"), "source", [], {})
+                ).not.toThrow();
+        });
+});
+
+// ─── #splitBraceAlternatives trailing comma (L785 false branch) ──────────────
+
+describe("HookManager.on() — brace pattern with trailing comma (L785 false branch)", () => {
+        it("registers hook with trailing comma in brace alternative {a,b,} without throwing (L785 false)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                // "{a,b,}" → #splitBraceAlternatives("a,b,") → after loop: current = "" (falsy) → L785 false
+                expect(() => hm.on("before:{math,add,}", () => {}, { id: "brace-trailing-comma" })).not.toThrow();
+                expect(hm.list().registeredHooks).toHaveLength(1);
+        });
+});
+
+// ─── importHooks() with non-array (line 945 early return) ────────────────────
+
+describe("HookManager.importHooks() — non-array argument (line 945 early return)", () => {
+        it("returns immediately when passed null (line 945)", () => {
+                const hm = new HookManager(makeMockHm());
+                expect(() => hm.importHooks(null)).not.toThrow();
+                expect(hm.list().registeredHooks).toHaveLength(0);
+        });
+
+        it("returns immediately when passed a string (line 945)", () => {
+                const hm = new HookManager(makeMockHm());
+                expect(() => hm.importHooks("not an array")).not.toThrow();
+        });
+
+        it("returns immediately when passed a number (line 945)", () => {
+                const hm = new HookManager(makeMockHm());
+                expect(() => hm.importHooks(42)).not.toThrow();
+        });
+
+        it("returns immediately when passed an object (line 945)", () => {
+                const hm = new HookManager(makeMockHm());
+                expect(() => hm.importHooks({ key: "value" })).not.toThrow();
+        });
+});
