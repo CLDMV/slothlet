@@ -84,3 +84,33 @@ describe("api.destroy() — createDestroyFunction coverage (api_builder.mjs line
 		await expect(destroyFn()).resolves.not.toThrow();
 	});
 });
+
+// ─── api_builder.mjs lines 1447–1450 and 1435 ───────────────────────────────
+// api_test_impl produces an OBJECT-type api (default export is a plain object).
+// For that fixture typeof sl.api === "object", so the boundApi Proxy target is {}
+// (not a function), making typeof api === "object".  That means objectsToClear
+// is non-empty and the delete loop (lines 1447-1450) actually fires.
+// On the second destroy() call, shutdown has been deleted → the else-fallback
+// (line 1435) fires: await slothlet.shutdown().
+
+describe("api.destroy() — object-type api: delete-loop (lines 1447–1450) and shutdown fallback (line 1435)", () => {
+	it("first destroy() runs the delete loop (lines 1447–1450) on object-type api", async () => {
+		// api_test_impl/math.mjs: export default { add, subtract }
+		// → sl.api is an Object → typeof api === 'object' → objectsToClear is non-empty
+		const implDir = TEST_DIRS.API_TEST.replace(/api_test$/, "api_test_impl");
+		const api = await slothlet({ dir: implDir, silent: true });
+		// destroy() must not throw — the delete loop iterates and removes keys
+		await expect(api.destroy()).resolves.not.toThrow();
+	});
+
+	it("second destroy() hits slothlet.shutdown() fallback (line 1435) after api.shutdown was deleted", async () => {
+		// After first destroy, api properties (including shutdown) are deleted.
+		// boundApi.get('shutdown') returns undefined (slothlet.api is null after destroy).
+		// So typeof api.shutdown === "function" is false → line 1435 fires.
+		const implDir = TEST_DIRS.API_TEST.replace(/api_test$/, "api_test_impl");
+		const api = await slothlet({ dir: implDir, silent: true });
+		const destroyFn = api.destroy;
+		await destroyFn(); // first — deletes properties including shutdown
+		await expect(destroyFn()).resolves.not.toThrow(); // second — hits line 1435
+	});
+});
