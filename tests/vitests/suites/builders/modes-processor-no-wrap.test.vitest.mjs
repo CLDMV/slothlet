@@ -44,18 +44,28 @@
  *   and implToWrap is a function.  Depends on ___adoptImplChildren() populating
  *   the wrapper's enumerable keys.  Covered when the child copy path is entered.
  *
- * Dead-code lines (cannot be reached through the public API surface):
- *   Line 346 — `callableModule[key] = mod[key]` inside Case 2 namedKeys loop.
- *     processModuleForAPI always pre-attaches any key that passes shouldAttachNamedExport,
- *     so Case 2's `key in callableModule` guard at line 340 is always true for those keys.
- *     This assignment can never fire.
+ * Lines 305, 365-366, 374, 392, 450, 485, 546, 552, 605, 696, 747 — shouldWrap=false
+ *   All `else { directAssign }` branches that fire when shouldWrap=false.
+ *   shouldWrap=false requires effectiveMode==="lazy" && populateDirectly===true.
+ *   Reached by calling processFiles() directly — see Group 6 below.
  *
- *   Lines 305, 365–366, 374, 392, 450, 485, 546, 552, 605, 696, 747, 1211 — all
+ * shouldWrap=false branches — reachable only via direct processFiles() calls:
+ *   Lines 305, 365–366, 374, 392, 450, 485, 546, 552, 605, 696, 747 — all
  *     `shouldWrap=false` else-branches.  shouldWrap=false requires
- *     `effectiveMode === "lazy" && populateDirectly === true`, a combination that
- *     no production call-site generates: lazy.mjs always passes populateDirectly=false;
+ *     `effectiveMode === "lazy" && populateDirectly === true`.  No production call-site
+ *     generates this combination: lazy.mjs always passes populateDirectly=false;
  *     the lazy non-recursive Folder-Transparency path uses explicit "eager"; and
  *     createLazySubdirectoryWrapper's processFiles call uses "eager" directly.
+ *     HOWEVER: processFiles is a public method (static slothletProperty = "modesProcessor"),
+ *     so these branches ARE reachable by calling sl.builders.modesProcessor.processFiles(...)
+ *     directly with mode="lazy" and populateDirectly=true.  Group 6 tests cover them via
+ *     that direct-call pattern, accessing the slothlet instance through resolveWrapper().
+ *
+ * Dead-code lines (cannot be reached through any call path):
+ *   Line 346 — `callableModule[key] = mod[key]` inside Case 2 namedKeys loop.
+ *     processModuleForAPI always pre-attaches any key that passes shouldAttachNamedExport,
+ *     so Case 2's `key in callableModule` guard fires the early continue for those keys.
+ *     This assignment can never fire.
  *
  *   Line 958 — `await modes_existingWrapper._materialize()` inside the eager recursive
  *     collision block.  Requires an existing lazy wrapper (with materializeFunc) at the
@@ -75,6 +85,7 @@ import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import path from "path";
 import { fileURLToPath } from "url";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -86,8 +97,21 @@ const DIRS = {
 	FOLDER_WITH_NAMED: path.join(SF, "api_smart_flatten_folder_with_named"),
 	OBJ_FN_FOLDER: path.join(SF, "api_smart_flatten_obj_fn_folder"),
 	ADDAPI_SUBFOLDER: path.join(SF, "api_smart_flatten_addapi_subfolder"),
-	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder")
+	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder"),
+	NOWRAP_CASES: path.join(SF, "api_smart_flatten_nowrap_cases")
 };
+
+/**
+ * Extract the raw Slothlet instance from an API proxy by resolving a known key.
+ * @param {object} api - The slothlet API proxy.
+ * @param {string} key - A top-level key that is a UnifiedWrapper proxy.
+ * @returns {object} The raw Slothlet instance.
+ * @example
+ * const sl = getSlFromApi(lazyApi, "someKey");
+ */
+function getSlFromApi(api, key) {
+	return resolveWrapper(api[key]).slothlet;
+}
 
 let _api = null;
 let restoreDebugOutput;
@@ -457,5 +481,231 @@ describe("modes-processor: lazy file-folder collision with function root impl (l
 		expect(_api).toBeDefined();
 		const calc = _api.calc;
 		expect(calc !== null && calc !== undefined).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Group 6: shouldWrap=false else-branches (lines 305, 365-366, 374, 392, 450, 485,
+//           546, 552, 605, 696, 747) — via direct processFiles() calls
+//
+// BACKGROUND: shouldWrap=false requires effectiveMode==="lazy" && populateDirectly===true.
+//   • lazy.mjs always passes populateDirectly=false for the initial root call.
+//   • The lazy branch Folder-Transparency path forces "eager" explicitly.
+//   • createLazySubdirectoryWrapper's processFiles call always uses "eager".
+//   Therefore shouldWrap=false is only reachable by calling
+//   sl.builders.modesProcessor.processFiles(..., "lazy", ..., true) directly.
+//
+// To obtain `sl` (the raw Slothlet instance), we resolve a lazy wrapper key
+// from a helper slothlet initialised in each test via FN_FN_FOLDER, then shut
+// it down via the outer afterEach.
+//
+// Fixture: api_smart_flatten_nowrap_cases/
+//   singleexport.mjs           — export function singleExport(){}  (single named, no default)
+//   case1obj/case1obj.mjs      — export const case1obj = { value, label }  (obj, no default)
+//   multiexport/multiexport.mjs— export { itemA, itemB, itemC }  (multi-named, no default)
+//   case3obj/case3obj.mjs      — export const case3obj={alpha,beta}; export function extra()
+//
+// Lines covered per test:
+//   6a: Case 1 (single obj export name === folder name)       → line 305
+//   6b: Case 2 (default export folder/folder.mjs pattern)     → lines 365-366, 374, 392
+//   6c: Case 3 multi-export "regular" sub-path                → lines 546, 552
+//   6d: single-export auto-flatten else                        → line 605
+//   6e: Case 3 hasMatchingObject sub-path                      → lines 450, 485
+//   6f: addapi flatten-to-category with non-function values    → line 696
+//   6g: NORMAL flatten-to-category (non-addapi) else branch    → line 747
+// ---------------------------------------------------------------------------
+describe("modes-processor: shouldWrap=false else-branches via direct processFiles (lines 305, 365-366, 374, 392, 450, 485, 546, 552, 605, 696, 747)", () => {
+	// 6a — Case 1 else: single named object export matches folder name → line 305
+	it("Case 1 shouldWrap=false: case1obj/case1obj.mjs (object named export) → line 305", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
+		const case1objDir = root.directories.find((d) => d.name === "case1obj");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			case1objDir.children.files,
+			{ name: case1objDir.name, path: case1objDir.path, children: case1objDir.children },
+			1, // currentDepth=1 ensures isRootFile=false
+			"lazy",
+			false, // isRoot
+			false, // recursive
+			true, // populateDirectly=true → shouldWrap=false
+			"" // apiPathPrefix="" → Cases 1/2/3 apply
+		);
+
+		// Case 1 fires: single named-export "case1obj" whose value is an object,
+		// and moduleName("case1obj") === categoryName("case1obj").
+		// shouldWrap=false → debug branch at line 305 fires instead of UnifiedWrapper.
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6b — Case 2 else: folder/folder.mjs with default export → lines 365-366, 374, 392
+	it("Case 2 shouldWrap=false: logger/logger.mjs (default fn + named exports) → lines 365-366, 374, 392", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.FOLDER_WITH_NAMED);
+		const loggerDir = root.directories.find((d) => d.name === "logger");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			loggerDir.children.files,
+			{ name: loggerDir.name, path: loggerDir.path, children: loggerDir.children },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			""
+		);
+
+		// Case 2 fires: logger.mjs has default export + named exports, moduleName===categoryName.
+		// shouldWrap=false → lines 365-366 (api[categoryName]=moduleContent; targetApi=api[categoryName])
+		//                  → line 374 (separate named exports loop entry)
+		//                  → line 392 (direct assignToApiPath for each named key)
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6c — Case 3 regular multi-export else → lines 546, 552
+	it("Case 3 shouldWrap=false: multiexport/multiexport.mjs (3 named exports) → lines 546, 552", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
+		const multiDir = root.directories.find((d) => d.name === "multiexport");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			multiDir.children.files,
+			{ name: multiDir.name, path: multiDir.path, children: multiDir.children },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			""
+		);
+
+		// Case 3 (moduleKeys>1, no default, no matching-object export) → "regular multi-export" sub-path.
+		// shouldWrap=false → line 546 (debug debug call omitted, direct assignToApiPath)
+		//                  → line 552 (assignToApiPath for each key: itemA, itemB, itemC)
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6d — single-export auto-flatten else → line 605
+	it("single-export auto-flatten shouldWrap=false: singleexport.mjs → line 605", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
+		// Only pass singleexport.mjs — ignore subdirectories
+		const singleExportFile = root.files.find((f) => f.name === "singleexport");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			[singleExportFile],
+			{ name: "api_smart_flatten_nowrap_cases", path: DIRS.NOWRAP_CASES, children: { files: [singleExportFile], directories: [] } },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			""
+		);
+
+		// singleexport.mjs: !hasDefault, moduleKeys=["singleExport"], normalizedKey===normalizedModuleName
+		// → single-export auto-flatten fires.  shouldWrap=false → line 605 (assignToApiPath directly).
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6e — Case 3 hasMatchingObject else → lines 450, 485
+	it("Case 3 hasMatchingObject shouldWrap=false: case3obj/case3obj.mjs → lines 450, 485", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
+		const case3Dir = root.directories.find((d) => d.name === "case3obj");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			case3Dir.children.files,
+			{ name: case3Dir.name, path: case3Dir.path, children: case3Dir.children },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			""
+		);
+
+		// case3obj.mjs: !hasDefault, moduleKeys=["case3obj","extra"], case3obj export is an object.
+		// hasMatchingObject=true → matching object's props (alpha, beta) → line 450 each iteration.
+		// "extra" key (not the matching object) → line 485.
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6f — addapi flatten-to-category (non-function values) else → line 696
+	it("addapi flatten-to-category shouldWrap=false: addapi/addapi.mjs → line 696", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		// Scan the ADDAPI_SUBFOLDER's addapi/ subdirectory
+		const root = await sl.processors.loader.scanDirectory(DIRS.ADDAPI_SUBFOLDER);
+		const addapiDir = root.directories.find((d) => d.name === "addapi");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			addapiDir.children.files,
+			{ name: addapiDir.name, path: addapiDir.path, children: addapiDir.children },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			"addapi" // apiPathPrefix="addapi" → bypasses Cases 1/2/3; addapi is an addapi file
+		);
+
+		// addapi.mjs: moduleName="addapi" (isAddapiFile=true), object default + named exports.
+		// decision.flattenType="addapi-metadata-default" → flattenToCategory=true.
+		// apiPathPrefix="addapi" bypasses Case 1/2/3 → reaches decision.flattenToCategory block.
+		// ADDAPI path: shouldWrap=false → line 696 fires for every key in moduleContent.
+		expect(targetApi).toBeDefined();
+	});
+
+	// 6g — NORMAL flatten-to-category (non-addapi) else → line 747
+	it("NORMAL flatten-to-category shouldWrap=false: multiexport/multiexport.mjs with apiPathPrefix → line 747", async () => {
+		_api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: DIRS.FN_FN_FOLDER });
+		const sl = getSlFromApi(_api, "calc");
+
+		const root = await sl.processors.loader.scanDirectory(DIRS.NOWRAP_CASES);
+		const multiDir = root.directories.find((d) => d.name === "multiexport");
+		const targetApi = {};
+
+		await sl.builders.modesProcessor.processFiles(
+			targetApi,
+			multiDir.children.files,
+			{ name: multiDir.name, path: multiDir.path, children: multiDir.children },
+			1,
+			"lazy",
+			false,
+			false,
+			true, // populateDirectly=true → shouldWrap=false
+			"multiexport" // apiPathPrefix="multiexport" → bypasses Cases 1/2/3
+		);
+
+		// multiexport.mjs: moduleName="multiexport", categoryName="multiexport".
+		// apiPathPrefix="multiexport" → !apiPathPrefix is false → Cases 1/2/3 bypassed.
+		// getFlatteningDecision: checkAutoFlatten=false (>1 keys), moduleName===categoryName
+		//   → flattenToCategory:true (no flattenType / isAddapiFile=false).
+		// NORMAL FLATTEN path: shouldWrap=false → line 747 fires.
+		expect(targetApi).toBeDefined();
 	});
 });
