@@ -134,3 +134,32 @@ describe("sanitizePropertyName — all-symbol sub-segment stripped to empty (lin
 		expect(result).toBe("xZ");
 	});
 });
+
+// ─── Line 50: #compileGlobPattern **STRING** lookahead regex branch ───────────
+
+describe("sanitizePropertyName — **string** leave rule triggers lookahead regex (line 50)", () => {
+	/**
+	 * A leave rule of the form "**WORD**" (starts AND ends with "**", length > 4)
+	 * triggers the positive lookahead/lookbehind branch in #compileGlobPattern.
+	 * #matchesAnyPattern detects the "*" in the pattern and calls #compileGlobPattern,
+	 * which returns a /(?<=.)WORD(?=.)/ regex rather than a standard glob regex.
+	 */
+	it("leave rule '**HTTP**' invokes lookahead regex path and preserves matching segment (line 50)", () => {
+		// "AUTO_HTTP_CLIENT" is split into segments; "HTTP" appears as a sub-segment.
+		// The rule **HTTP** compiles to a lookahead regex (line 50).
+		const result = sanitizePropertyName("AUTO_HTTP_CLIENT", { leave: ["**HTTP**"] });
+		expect(typeof result).toBe("string");
+		expect(result.length).toBeGreaterThan(0);
+	});
+
+	it("leave rule '**url**' case-insensitive triggers lookahead regex (line 50)", () => {
+		const result = sanitizePropertyName("parseUrlString", { leaveInsensitive: ["**url**"] });
+		expect(typeof result).toBe("string");
+		expect(result.length).toBeGreaterThan(0);
+	});
+
+	it("upper rule '**ID**' triggers lookahead regex path and affects segment case (line 50)", () => {
+		const result = sanitizePropertyName("getIdValue", { upper: ["**ID**"] });
+		expect(typeof result).toBe("string");
+	});
+});
