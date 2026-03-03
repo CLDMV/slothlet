@@ -111,29 +111,28 @@ describe("prototype [util.inspect.custom] on raw wrapper (lines 310-316)", () =>
 });
 
 // ---------------------------------------------------------------------------
-// TEST GROUP 3 — Lines 2133-2163: getTrap closure for util.inspect.custom
+// TEST GROUP 3 — Line 352: [util.inspect.custom] prototype method — lazy unmaterialized branch
 // ---------------------------------------------------------------------------
+// Node.js util.inspect() bypasses the Proxy GET trap and accesses util.inspect.custom
+// directly via the prototype chain. For non-callable wrappers the UnifiedWrapper
+// prototype method fires. For an UNMATERIALIZED lazy wrapper, the condition at
+// lines 346-351 is true, and line 352 (`return w.____slothletInternal.proxy`) fires.
 
-describe("getTrap util.inspect.custom closure (lines 2133-2163)", () => {
-	it("util.inspect on eager wrapper proxy with children returns string (lines 2133-2143)", async () => {
-		const api = await makeEager();
-		const result = util.inspect(api.math);
-		expect(typeof result).toBe("string");
-	});
-
-	it("util.inspect on lazy wrapper proxy returns string (lines 2146-2160)", async () => {
-		const api = await makeLazy();
-		// api.math in lazy mode exercises the lazy branch of the inspect closure
-		const result = util.inspect(api.math);
-		expect(typeof result).toBe("string");
-	});
-
-	it("util.inspect on wrapper proxy with no children (callable leaf) returns string (line 2163)", async () => {
-		// api.math.add is a leaf wrapper with no children (impl is a function)
-		// After materialization, childKeys is empty for a leaf function
-		const api = await makeEager();
-		const mathAdd = api.math.add;
-		const result = util.inspect(mathAdd);
+describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)", () => {
+	it("util.inspect on a freshly-created lazy wrapper returns the proxy before materialization (line 352)", async () => {
+		const eagerApi = await makeEager();
+		const sl = resolveWrapper(eagerApi.math).slothlet;
+		// Create a lazy wrapper that has a proxy but is NOT yet materialized
+		const w = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "test.inspect.lazy" });
+		const proxy = w.createProxy();
+		// Verify it is genuinely unmaterialized
+		expect(w.____slothletInternal.state.materialized).toBe(false);
+		expect(w.____slothletInternal.proxy).toBeTruthy();
+		// util.inspect(w) fires the prototype [util.inspect.custom] method.
+		// w.mode === 'lazy', state.materialized === false, proxy is truthy → line 352 fires.
+		const result = util.inspect(w);
+		// Line 352 returns w.____slothletInternal.proxy; util.inspect receives it and
+		// converts to a string representation
 		expect(typeof result).toBe("string");
 	});
 });
@@ -211,16 +210,34 @@ describe("___createChildWrapper returns undefined for undefined value (line 1179
 });
 
 // ---------------------------------------------------------------------------
-// TEST GROUP 7 — Additional util.inspect variants for coverage
+// TEST GROUP 7 — Prototype [util.inspect.custom] for callable wrapper: own-property path
 // ---------------------------------------------------------------------------
+// For CALLABLE wrappers, createProxy() installs util.inspect.custom as an OWN property
+// on the named function target. Node.js util.inspect calls this own property closure
+// (defined at lines 1951-1965 in createProxy), NOT the prototype method nor the
+// getTrap closure. This covers the installed-own-property inspect path.
 
-describe("complete util.inspect proxy coverage", () => {
-	it("util.inspect on callable wrapper (api.createTestService) exercises callable branch in closure", async () => {
+describe("util.inspect via own-property closure on callable wrapper proxy", () => {
+	it("util.inspect on a callable wrapper proxy calls the own-property inspect closure", async () => {
 		// createTestService is a callable module in api_test
 		const api = await makeEager();
 		if (api.createTestService && typeof api.createTestService === "function") {
 			const result = util.inspect(api.createTestService);
 			expect(typeof result).toBe("string");
 		}
+	});
+
+	it("util.inspect on a manually-created callable lazy wrapper returns string", async () => {
+		const eagerApi = await makeEager();
+		const sl = resolveWrapper(eagerApi.math).slothlet;
+		const w = new UnifiedWrapper(sl, {
+			mode: "eager",
+			apiPath: "test.callable.inspect",
+			initialImpl: () => "result",
+			isCallable: true
+		});
+		const proxy = w.createProxy();
+		const result = util.inspect(proxy);
+		expect(typeof result).toBe("string");
 	});
 });
