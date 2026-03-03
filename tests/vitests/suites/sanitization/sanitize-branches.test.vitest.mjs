@@ -110,3 +110,27 @@ describe("Sanitize.shouldPreserveFunctionCase — preserve patterns (lines 449-4
 		expect(s.shouldPreserveFunctionCase("lowercase")).toBe(false);
 	});
 });
+// ─── Line 337: cleanSeg empty guard in sub-segment processing ────────────────
+
+describe("sanitizePropertyName — all-symbol sub-segment stripped to empty (line 337)", () => {
+	/**
+	 * When a hyphen-separated segment consists entirely of characters outside
+	 * [A-Za-z0-9_$], cleaning it produces an empty string → line 337 executes.
+	 */
+	it("ignores an all-symbol segment between hyphens: 'a-!@#-b' → 'aB' (line 337)", () => {
+		// 'a' is segment 0, '!@#' strips to '' → return '' (line 337), 'b' → camelCased
+		const result = sanitizePropertyName("a-!@#-b");
+		expect(result).toBe("aB");
+	});
+
+	it("ignores multiple consecutive symbol-only segments: 'foo-!!!-bar' → 'fooBar' (line 337)", () => {
+		const result = sanitizePropertyName("foo-!!!-bar");
+		expect(result).toBe("fooBar");
+	});
+
+	it("all-symbol input with surrounding hyphens produces a valid identifier (line 337)", () => {
+		// 'x-^%&-z' → middle segment strips to '' → contributed nothing → 'xZ'
+		const result = sanitizePropertyName("x-^%&-z");
+		expect(result).toBe("xZ");
+	});
+});
