@@ -40,6 +40,33 @@ function makeMock() {
 	return { config: {}, debug: () => {} };
 }
 
+// ─── deepMerge — recursive nested plain objects (line 72) ───────────────────
+
+describe("Utilities.deepMerge — recursive nested plain objects (line 72)", () => {
+	it("merges nested plain objects recursively (line 72 recursive call)", () => {
+		const utils = new Utilities(makeMock());
+		// Both target[a] and source[a] are plain objects → deepMerge recurses (line 72)
+		const result = utils.deepMerge({ a: { b: 1, c: 2 } }, { a: { c: 99, d: 4 } });
+		expect(result).toEqual({ a: { b: 1, c: 99, d: 4 } });
+	});
+
+	it("merges multiple nested plain object keys recursively", () => {
+		const utils = new Utilities(makeMock());
+		const target = { x: { p: 1 }, y: { q: 2 } };
+		const source = { x: { r: 3 }, y: { s: 4 } };
+		const result = utils.deepMerge(target, source);
+		expect(result).toEqual({ x: { p: 1, r: 3 }, y: { q: 2, s: 4 } });
+	});
+
+	it("source key is plain object but target key is not → recursion starts from empty target", () => {
+		const utils = new Utilities(makeMock());
+		// target["a"] does not exist (undefined, not plain object)
+		// deepMerge receives ({}, { b: 5 }) → merges correctly
+		const result = utils.deepMerge({}, { a: { b: 5 } });
+		expect(result).toEqual({ a: { b: 5 } });
+	});
+});
+
 // ─── deepMerge — non-plain-object fast path (line 62) ────────────────────────
 
 describe("Utilities.deepMerge — non-plain-object early return (line 62)", () => {
@@ -80,7 +107,32 @@ describe("Utilities.deepMerge — non-plain-object early return (line 62)", () =
 	});
 });
 // ---------------------------------------------------------------------------
-// Utilities.deepClone — Array.isArray branch in fallback (line 105)
+// Utilities.deepClone — null/primitive early-return in fallback catch (line 104)
+// ---------------------------------------------------------------------------
+
+describe("Utilities.deepClone — non-cloneable primitive returns original (line 104)", () => {
+	it("deepClone of a Symbol returns the same Symbol (line 104 true branch)", () => {
+		const utils = new Utilities(makeMock());
+		// Symbol cannot be structuredCloned → enters catch fallback.
+		// objType = "symbol" → line 104: (objType !== "object" && objType !== "function") = true → returns obj.
+		const sym = Symbol("test");
+		const result = utils.deepClone(sym);
+		expect(result).toBe(sym);
+	});
+
+	it("deepClone of a BigInt-wrapped object property returns the original", () => {
+		const utils = new Utilities(makeMock());
+		// An object containing a Symbol property cannot be structuredCloned.
+		// When the fallback loop calls deepClone(symbol), line 104 fires.
+		const sym = Symbol("key");
+		const outer = { fn: () => {}, symKey: sym };
+		const result = utils.deepClone(outer);
+		expect(result).toBeDefined();
+		// symKey was cloned via deepClone(sym) → line 104 returns sym itself
+		expect(result.symKey).toBe(sym);
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Utilities.deepClone — Array.isArray branch in fallback (line 105)
 // ---------------------------------------------------------------------------
