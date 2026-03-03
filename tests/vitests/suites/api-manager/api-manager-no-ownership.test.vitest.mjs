@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-02 00:00:00 -08:00 (1772496000)
+ *	@Last modified time: 2026-03-02 16:10:20 -08:00 (1772496620)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -137,42 +137,36 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is null (line 259)", async () => {
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.resolveFolderPath(null)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(null)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is undefined (line 259)", async () => {
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.resolveFolderPath(undefined)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(undefined)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when folderPath is a number (line 259)", async () => {
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.resolveFolderPath(42)
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath(42)).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID for a non-existent path (catch branch line 278)", async () => {
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
-		await expect(
-			sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/__does_not_exist_xyz__/")
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/__does_not_exist_xyz__/")).rejects.toMatchObject({
+			code: "INVALID_CONFIG_DIR_INVALID"
+		});
 	});
 
 	it("throws INVALID_CONFIG_DIR_INVALID when path points to a file, not a directory (line 266-269)", async () => {
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		// package.json is a real file (not a directory)
-		await expect(
-			sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/package.json")
-		).rejects.toMatchObject({ code: "INVALID_CONFIG_DIR_INVALID" });
+		await expect(sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/package.json")).rejects.toMatchObject({
+			code: "INVALID_CONFIG_DIR_INVALID"
+		});
 	});
 
 	it("returns the resolved absolute path for a valid directory (line 283)", async () => {
@@ -206,9 +200,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 		sl.handlers.apiManager.state.addHistory = [];
 		try {
 			// Should not throw — rebuilds "math" from the base config dir
-			await expect(
-				sl.handlers.apiManager.restoreApiPath("math", "base")
-			).resolves.not.toThrow();
+			await expect(sl.handlers.apiManager.restoreApiPath("math", "base")).resolves.not.toThrow();
 		} finally {
 			sl.handlers.apiManager.state.addHistory = savedHistory;
 		}
@@ -221,9 +213,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 		const savedHistory = [...sl.handlers.apiManager.state.addHistory];
 		sl.handlers.apiManager.state.addHistory = [];
 		try {
-			await expect(
-				sl.handlers.apiManager.restoreApiPath("math", "core")
-			).resolves.not.toThrow();
+			await expect(sl.handlers.apiManager.restoreApiPath("math", "core")).resolves.not.toThrow();
 		} finally {
 			sl.handlers.apiManager.state.addHistory = savedHistory;
 		}
@@ -238,9 +228,7 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 		try {
 			// "nonexistent.path.xyz" won't be in the rebuilt base API; baseValue will be undefined
 			// → triggers the deletePath(api, parts) branch (lines 992-995)
-			await expect(
-				sl.handlers.apiManager.restoreApiPath("nonexistent.path.xyz", "base")
-			).resolves.not.toThrow();
+			await expect(sl.handlers.apiManager.restoreApiPath("nonexistent.path.xyz", "base")).resolves.not.toThrow();
 		} finally {
 			sl.handlers.apiManager.state.addHistory = savedHistory;
 		}
@@ -253,8 +241,6 @@ describe("restoreApiPath — base/core moduleID branch (lines 979-1008)", () => 
 		// With history intact, a "base"-moduleID entry was recorded at initial load.
 		// The function should find it and call addApiComponent (fast path), not the base branch.
 		// We just verify it resolves without error.
-		await expect(
-			sl.handlers.apiManager.restoreApiPath("math", "base")
-		).resolves.not.toThrow();
+		await expect(sl.handlers.apiManager.restoreApiPath("math", "base")).resolves.not.toThrow();
 	});
 });

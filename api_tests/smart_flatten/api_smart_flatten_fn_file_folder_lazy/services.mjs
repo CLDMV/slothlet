@@ -5,10 +5,10 @@
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com>
- *	@Last modified time: 2026-03-02 00:00:00 -08:00 (1772467200)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-02 16:10:28 -08:00 (1772496628)
  *	-----
- *	@Copyright: Copyright (c) 2013-2026 Catalyzed Momentum Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
