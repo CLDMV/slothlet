@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	@Last modified time: 2026-03-02 18:03:44 -08:00 (1772503424)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -42,9 +42,10 @@ const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
 const SOLO_RUN_PATTERNS = [
-	"listener-cleanup/",
+	// "listener-cleanup/",
 	"lazy/lazy-background-materialization.test.vitest.mjs",
 	"api-manager/api-manager-reload-coverage.test.vitest.mjs",
+	"tests/vitests/suites/listener-cleanup/third-party-cleanup.test.vitest.mjs",
 	"tests/vitests/suites/metadata/metadata-edge-cases.test.vitest.mjs"
 ];
 const PER_FILE_HEAP_OVERRIDES = [{ pattern: "listener-cleanup/", heapMb: 6144 }];
