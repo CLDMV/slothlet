@@ -57,8 +57,7 @@ export class Loader extends ComponentBase {
 			let moduleUrl;
 
 			if (isTypeScript && typescriptConfig?.enabled) {
-				const mode = typescriptConfig.mode || "fast";
-
+                                const mode = typescriptConfig.mode;
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
