@@ -147,7 +147,7 @@ export class Loader extends ComponentBase {
 					if (result.diagnostics && result.diagnostics.length > 0) {
 						// Get TypeScript module to format diagnostics
 						const ts = await import("typescript");
-						const errors = formatDiagnostics(result.diagnostics, ts.default || ts);
+const errors = formatDiagnostics(result.diagnostics, ts.default);
 
 						// Throw error with formatted diagnostics
 						const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath, errors: errors.join("\n") }, null, {
