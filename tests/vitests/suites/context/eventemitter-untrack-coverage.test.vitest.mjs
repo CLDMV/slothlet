@@ -153,3 +153,53 @@ describe("eventemitter-context: shouldWrapListener prevents double-wrap (line 20
 		emitter.removeAllListeners();
 	});
 });
+// ─────────────────────────────────────────────────────────────────────────────
+// LINE 390: removeAllListeners(event) — `if (eventTracking)` FALSE branch
+//
+// Fires when removeAllListeners is called with a specific event name that is NOT
+// tracked (the emitter IS tracked overall, but for a different event).
+//
+// Scenario:
+//   1. emitter.on("data", fn)  → emitter tracked for "data"
+//   2. emitter.removeAllListeners("close")  → emitter IS in wrappedListeners (tracked),
+//      event !== undefined → enters the else branch, but emitterTracking.get("close")
+//      returns undefined → line 390: if (eventTracking) is FALSE → cleanup skipped
+// ─────────────────────────────────────────────────────────────────────────────
+describe("eventemitter-context: removeAllListeners(event) with untracked event skips cleanup (line 390 false)", () => {
+        it("removeAllListeners for a specific untracked event does not throw (line 390 false branch)", () => {
+                const emitter = new EventEmitter();
+                const fn = () => {};
+
+                // Track emitter for "data" event
+                emitter.on("data", fn);
+
+                // removeAllListeners("close") — "close" was never tracked
+                // emitterTracking exists (for "data") but emitterTracking.get("close") = undefined
+                // → line 390: if (eventTracking) → FALSE → cleanup body skipped
+                expect(() => emitter.removeAllListeners("close")).not.toThrow();
+
+                // "data" listener still registered (only "close" was targeted)
+                expect(emitter.listenerCount("data")).toBe(1);
+
+                emitter.removeAllListeners();
+        });
+
+        it("removeAllListeners for another untracked event with multiple tracked events (line 390 false)", () => {
+                const emitter = new EventEmitter();
+                const fn1 = () => {};
+                const fn2 = () => {};
+
+                // Track emitter for both "data" and "end"
+                emitter.on("data", fn1);
+                emitter.on("end", fn2);
+
+                // removeAllListeners("error") — "error" not tracked → line 390 false
+                expect(() => emitter.removeAllListeners("error")).not.toThrow();
+
+                // Both data and end listeners remain
+                expect(emitter.listenerCount("data")).toBe(1);
+                expect(emitter.listenerCount("end")).toBe(1);
+
+                emitter.removeAllListeners();
+        });
+});
