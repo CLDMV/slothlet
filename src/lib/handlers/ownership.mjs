@@ -200,7 +200,7 @@ export class OwnershipManager extends ComponentBase {
 			return { action: "none", removedModuleId: null, restoreModuleId: null };
 		}
 		const [removed] = stack.splice(index, 1);
-		const removedModuleId = removed?.moduleID || null;
+		const removedModuleId = removed.moduleID;
 		if (removedModuleId && this.moduleToPath.has(removedModuleId)) {
 			const pathSet = this.moduleToPath.get(removedModuleId);
 			pathSet.delete(apiPath);

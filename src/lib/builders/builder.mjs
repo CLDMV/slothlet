@@ -126,7 +126,7 @@ export class Builder extends ComponentBase {
 				cacheBust,
 				fileFilter
 			});
-		} else if (mode === "lazy") {
+		} else {
 			rawAPI = await this.slothlet.modes.lazy.buildAPI({
 				dir,
 				apiPathPrefix,

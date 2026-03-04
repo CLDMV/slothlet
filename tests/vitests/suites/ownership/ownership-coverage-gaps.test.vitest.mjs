@@ -224,3 +224,58 @@ describe("OwnershipManager.removePath — returns none when moduleID not in path
                 expect(o.getCurrentOwner("config")?.moduleID).toBe("config-mod");
         });
 });
+
+// ─── L164: else if (result.action === "restore") in unregister ───────────────
+
+describe("OwnershipManager.unregister — L164 restore action (rolledBack populated)", () => {
+        it("unregistering top module when prior owner exists returns rolledBack entry (line 164)", () => {
+                const o = new OwnershipManager(makeMock());
+                const fn = () => {};
+
+                // Stack mod-a first, then mod-b on top with replace
+                o.register({ apiPath: "tools.fmt", moduleID: "mod-a", value: fn, collisionMode: "merge", source: "initial" });
+                o.register({ apiPath: "tools.fmt", moduleID: "mod-b", value: fn, collisionMode: "replace", source: "initial" });
+
+                // Unregister mod-b (top of stack) → mod-a remains → action "restore" → line 164 fires
+                const result = o.unregister("mod-b");
+
+                expect(result.rolledBack).toHaveLength(1);
+                expect(result.rolledBack[0].apiPath).toBe("tools.fmt");
+                expect(result.rolledBack[0].restoredTo).toBe("mod-a");
+                expect(result.removed).toHaveLength(0);
+        });
+});
+
+// ─── L198: cond-expr FALSE — null moduleID uses stack[last] ──────────────────
+
+describe("OwnershipManager.removePath — L198 cond-expr FALSE (null moduleID)", () => {
+        it("passing null as moduleID removes the last stack entry (line 198 false branch)", () => {
+                const o = new OwnershipManager(makeMock());
+                const fn = () => {};
+
+                o.register({ apiPath: "data.store", moduleID: "mod-x", value: fn, collisionMode: "merge", source: "initial" });
+
+                // null moduleID → ternary FALSE → index = stack.length - 1
+                const result = o.removePath("data.store", null);
+
+                expect(result.action).toBe("delete");
+                expect(result.removedModuleId).toBe("mod-x");
+        });
+});
+
+// ─── L204: if (removedModuleId && ...) FALSE — falsy moduleID skips cleanup ──
+
+describe("OwnershipManager.removePath — L204 if FALSE (falsy removedModuleId)", () => {
+        it("entry with empty moduleID skips moduleToPath cleanup (line 204 false branch)", () => {
+                const o = new OwnershipManager(makeMock());
+
+                // Bypass register() validation to inject an entry with falsy moduleID
+                o.pathToModule.set("ghost.path", [{ moduleID: "", source: "test", timestamp: Date.now(), value: null, filePath: null }]);
+
+                // removedModuleId = "" (falsy) → line 204 if is FALSE → no moduleToPath cleanup
+                const result = o.removePath("ghost.path", "");
+
+                expect(result.action).toBe("delete");
+                expect(result.removedModuleId).toBe("");
+        });
+});
