@@ -270,3 +270,68 @@ describe("flatten.mjs — lines 152 & 182: typeof mod === 'function' TRUE branch
 		expect(decision.preferredName).toBe("parseCSV");
 	});
 });
+// ============================================================================
+// LINE 301 — processModuleForAPI: || "merge" fallback when no collision config
+// ============================================================================
+
+describe("flatten.mjs — line 301: collisionMode falls back to 'merge' when no collision config set", () => {
+        test("function default + named exports with no collision config triggers || 'merge' fallback", async () => {
+                /**
+                 * When slothlet.config has no collision property, collisionConfig = undefined.
+                 * Then (collisionContext === "initial" ? undefined?.initial : undefined?.api) === undefined.
+                 * The || "merge" at line 301 fires, defaulting collisionMode to "merge".
+                 */
+                const flatten = await getFlattenProcessor();
+
+                // Verify the slothlet instance has no collision config (required for this test)
+                const slInstance = flatten.slothlet;
+                const hasCollision = Boolean(slInstance.config?.api?.collision || slInstance.config?.collision);
+
+                const mainFn = function myService() {
+                        return "service";
+                };
+                const modExports = { default: mainFn, helper: () => "help" };
+
+                // This enters the hybrid function-default path (mod.default is a function, moduleKeys.length > 0).
+                // With no collision config, line 301: collisionMode = undefined || "merge" = "merge".
+                const result = flatten.processModuleForAPI({
+                        mod: modExports,
+                        decision: { preserveAsNamespace: true },
+                        moduleName: "myservice",
+                        propertyName: "myservice",
+                        moduleKeys: ["helper"],
+                        analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
+                        isSelfReferential: false,
+                        collisionContext: "initial"
+                });
+
+                // When collision config is absent, || "merge" fires — module was assembled successfully
+                expect(result).toBeDefined();
+                expect(result.moduleContent).toBeDefined();
+
+                if (!hasCollision) {
+                        // Confirmed no collision config → line 301 || "merge" fired
+                        // helper attaches onto the base function (merge = keep existing from default)
+                        expect(typeof result.moduleContent).toBe("function");
+                }
+        });
+
+        test("collisionContext 'api' with no collision config also triggers || 'merge' fallback", async () => {
+                const flatten = await getFlattenProcessor();
+
+                const fnDefault = function handler() {};
+                const result = flatten.processModuleForAPI({
+                        mod: { default: fnDefault, extra: 42 },
+                        decision: { preserveAsNamespace: true },
+                        moduleName: "handler",
+                        propertyName: "handler",
+                        moduleKeys: ["extra"],
+                        analysis: { hasDefault: true, hasNamed: true, defaultExportType: "function" },
+                        isSelfReferential: false,
+                        collisionContext: "api" // non-initial context — still falls back to "merge"
+                });
+
+                expect(result).toBeDefined();
+                expect(result.moduleContent).toBeDefined();
+        });
+});

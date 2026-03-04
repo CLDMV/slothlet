@@ -203,3 +203,32 @@ describe("eventemitter-context: removeAllListeners(event) with untracked event s
                 emitter.removeAllListeners();
         });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LINE 202: runtime_shouldWrapListener — `if (typeof listener !== "function") return false`
+//
+// Fires when a non-function value is passed to a patched EventEmitter method.
+// Patched methods call runtime_shouldWrapListener first; when it returns false,
+// the non-function argument is forwarded directly to the original method
+// (which will throw TypeError since Node.js requires a function listener).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("eventemitter-context: shouldWrapListener rejects non-function listeners (line 202)", () => {
+        it("passing a string as listener to on() triggers typeof!==function guard and then throws (line 202 true)", () => {
+                const emitter = new EventEmitter();
+
+                // runtime_shouldWrapListener("not-a-function") → typeof !== "function" → true → return false
+                // → patched on() fast-paths to original.call(this, event, listener)
+                // → native EventEmitter.on throws TypeError for non-function listener
+                expect(() => emitter.on("data", "not-a-function")).toThrow(TypeError);
+        });
+
+        it("passing a number as listener to once() triggers the guard (line 202 true)", () => {
+                const emitter = new EventEmitter();
+                expect(() => emitter.once("data", 42)).toThrow(TypeError);
+        });
+
+        it("passing null as listener to prependListener() triggers the guard (line 202 true)", () => {
+                const emitter = new EventEmitter();
+                expect(() => emitter.prependListener("data", null)).toThrow(TypeError);
+        });
+});
