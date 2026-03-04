@@ -357,9 +357,8 @@ export class Flatten extends ComponentBase {
 			return { moduleContent: this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName) };
 		}
 
-		// Fallback: named-only or mixed (non-function) default + named
+		// Fallback: named-only exports (no default — all truthy-default paths return above)
 		const moduleContent = {};
-		if (mod.default) moduleContent.default = mod.default;
 		for (const key of moduleKeys) {
 			moduleContent[key] = mod[key];
 		}
