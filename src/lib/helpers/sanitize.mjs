@@ -39,29 +39,25 @@ export class Sanitize extends ComponentBase {
 	 * @private
 	 * @param {string} pattern - Glob pattern
 	 * @param {boolean} caseSensitive - Case sensitivity flag
-	 * @returns {RegExp|null} Compiled regex or null if invalid
+	 * @returns {RegExp} Compiled regex
 	 */
 	#compileGlobPattern(pattern, caseSensitive = true) {
-		try {
-			// **STRING** requires surrounding characters (positive lookbehind/ahead)
-			if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
-				const innerString = pattern.slice(2, -2);
-				const escapedString = innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&");
-				const flags = caseSensitive ? "" : "i";
-				return new RegExp(`(?<=.)${escapedString}(?=.)`, flags);
-			}
-
-			// Standard glob: * → .*, ? → .
-			const regexPattern = pattern
-				.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-				.replace(/\*/g, ".*")
-				.replace(/\?/g, ".");
-
+		// **STRING** requires surrounding characters (positive lookbehind/ahead)
+		if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
+			const innerString = pattern.slice(2, -2);
+			const escapedString = innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&");
 			const flags = caseSensitive ? "" : "i";
-			return new RegExp(`^${regexPattern}$`, flags);
-		} catch (_) {
-			return null;
+			return new RegExp(`(?<=.)${escapedString}(?=.)`, flags);
 		}
+
+		// Standard glob: * → .*, ? → .
+		const regexPattern = pattern
+			.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+			.replace(/\*/g, ".*")
+			.replace(/\?/g, ".");
+
+		const flags = caseSensitive ? "" : "i";
+		return new RegExp(`^${regexPattern}$`, flags);
 	}
 
 	/**
@@ -334,7 +330,6 @@ export class Sanitize extends ComponentBase {
 
 				// Clean and process sub-segment
 				const cleanSeg = part.replace(/[^A-Za-z0-9_$]/g, "");
-				if (!cleanSeg) return "";
 
 				// Apply segment rules (without camelCase - that happens at primary level)
 				const config = { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules };
@@ -414,11 +409,6 @@ export class Sanitize extends ComponentBase {
 		// Join primary segments (no delimiter - camelCase)
 		let result = camelCasedSegments.join("");
 		result = result.replace(/[^A-Za-z0-9_$]/g, "");
-
-		// Safety: ensure valid identifier start
-		if (!result || !/^[A-Za-z_$]/.test(result[0])) {
-			result = "_" + result;
-		}
 
 		return result;
 	}

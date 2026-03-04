@@ -18,11 +18,7 @@
  * Covers:
  *   line 50    `const flags = caseSensitive ? "" : "i"` consequent branch ("" flags, caseSensitive=true)
  *              inside `#compileGlobPattern` when pattern is `**string**` and case-sensitive leave rule
- *   line 63    `return null` in `#compileGlobPattern` catch block — triggered when pattern is not
- *              a string (e.g. a Number) and `.startsWith()` throws TypeError
- *   line 420   `result = "_" + result` safety prefix — when sanitized result starts with a digit
- *              (invalid identifier start character)
- *
+   *
  * @module tests/vitests/suites/helpers/sanitize-coverage-gaps
  */
 
@@ -31,9 +27,9 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 import { describe, it, expect } from "vitest";
 import { sanitizePropertyName } from "@cldmv/slothlet/helpers/sanitize";
 
-// ─── #compileGlobPattern catch branch (line 63) ──────────────────────────────
+// ─── #compileGlobPattern — non-string rule input handling ──────────────────────
 
-describe("Sanitize.#compileGlobPattern — catch returns null for non-string pattern (line 63)", () => {
+describe("Sanitize.#compileGlobPattern — non-string rule values are tolerated (String() conversion)", () => {
 	it("does not throw and returns a valid identifier when leave rule includes a Number (not a string)", () => {
 		// rules.leave = [123] → lowerRules/leaveRules iteration → #compileGlobPattern(123, true)
 		// → (123).startsWith("**") throws TypeError → caught → return null → skip rule
@@ -68,9 +64,9 @@ describe("Sanitize.#compileGlobPattern — caseSensitive=true flags='' branch (l
 	});
 });
 
-// ─── Safety prefix (line 420) ─────────────────────────────────────────────────
+// ─── Digit/empty input → returns "_" via early-exit path ────────────────────────
 
-describe("Sanitize.sanitizePropertyName — empty result gets _ prefix (line 420)", () => {
+describe("Sanitize.sanitizePropertyName — digit-only/empty input returns '_' via early-exit", () => {
 	it("prepends _ when camelCase processing yields empty string — purely numeric input (line 420)", () => {
 		// "42" → digit-only segments → all stripped → result = "" → !result is true
 		// → line 419 condition true → result = "_" + "" = "_" (line 420)
@@ -94,9 +90,9 @@ describe("Sanitize.sanitizePropertyName — empty result gets _ prefix (line 420
 		expect(result.startsWith("_")).toBe(false);
 	});
 });
-// ─── Sub-segment stripped to empty string (line 337) ─────────────────────────
+// ─── Sub-segment between underscores containing non-identifier chars ─────────────
 
-describe("Sanitize.sanitizePropertyName — non-alphanumeric sub-segment returns '' (line 337)", () => {
+describe("Sanitize.sanitizePropertyName — separators between underscores are dropped in output", () => {
         it("sub-segment of only hyphens between underscores collapses to empty string (line 337)", () => {
                 // "abc_---_def" → primarySeg split on (_+) → parts include "---"
                 // "---".replace(/[^A-Za-z0-9_$]/g, "") = "" → !cleanSeg TRUE → return ""
