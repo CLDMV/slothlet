@@ -424,3 +424,50 @@ describe("HookManager.importHooks() — non-array argument (line 945 early retur
 		expect(() => hm.importHooks({ key: "value" })).not.toThrow();
 	});
 });
+// ─── remove() with filter.type — truthy branch of types ternary (line 217) ───
+
+describe("HookManager.remove() — filter.type truthy branch narrows types array (line 217 ternary true)", () => {
+        it("removes only hooks of the specified type when filter.type is provided (line 217 truthy)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                hm.on("before:math.*", () => {}, { id: "hook-before-1" });
+                hm.on("after:math.*", () => {}, { id: "hook-after-1" });
+                expect(hm.list().registeredHooks).toHaveLength(2);
+
+                // remove({ type: "before" }) → filter.type = "before" is truthy
+                // → line 217: types = [filter.type] = ["before"] (truthy branch taken for first time)
+                const removed = hm.remove({ type: "before" });
+
+                expect(removed).toBe(1);
+                expect(hm.list().registeredHooks).toHaveLength(1);
+                expect(hm.list().registeredHooks[0].id).toBe("hook-after-1");
+        });
+
+        it("removes all hooks under the specified type across all patterns (line 217 truthy)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                hm.on("after:math.*", () => {}, { id: "hook-after-1" });
+                hm.on("after:db.*", () => {}, { id: "hook-after-2" });
+                hm.on("always:math.*", () => {}, { id: "hook-always-1" });
+
+                // remove({ type: "after" }) → filter.type truthy → types = ["after"]
+                const removed = hm.remove({ type: "after" });
+
+                expect(removed).toBe(2);
+                const remaining = hm.list().registeredHooks;
+                expect(remaining).toHaveLength(1);
+                expect(remaining[0].id).toBe("hook-always-1");
+        });
+
+        it("returns 0 when specified type has no registered hooks (line 217 truthy, no match)", () => {
+                const hm = new HookManager(makeMockHm());
+
+                hm.on("before:math.*", () => {}, { id: "hook-before-only" });
+
+                // remove({ type: "after" }) → filter.type truthy → types = ["after"], no hooks → 0
+                const removed = hm.remove({ type: "after" });
+
+                expect(removed).toBe(0);
+                expect(hm.list().registeredHooks).toHaveLength(1);
+        });
+});
