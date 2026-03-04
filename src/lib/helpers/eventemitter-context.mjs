@@ -175,10 +175,8 @@ function runtime_untrackListener(emitter, event, originalListener) {
 
 	const wrappedListener = eventTracking.get(originalListener);
 	if (wrappedListener) {
-		// Cleanup AsyncResource reference
-		if (wrappedListener._slothletResource) {
-			wrappedListener._slothletResource = null;
-		}
+		// Cleanup AsyncResource reference (_slothletResource is always set by runtime_wrapEventListener)
+		wrappedListener._slothletResource = null;
 		eventTracking.delete(originalListener);
 	}
 
@@ -378,9 +376,8 @@ function runtime_patchRemoveAllListeners() {
 				// Remove all events
 				for (const [evt, eventTracking] of emitterTracking.entries()) {
 					for (const wrappedListener of eventTracking.values()) {
-						if (wrappedListener._slothletResource) {
-							wrappedListener._slothletResource = null;
-						}
+						// _slothletResource is always set by runtime_wrapEventListener
+						wrappedListener._slothletResource = null;
 					}
 				}
 				wrappedListeners.delete(this);
@@ -389,9 +386,8 @@ function runtime_patchRemoveAllListeners() {
 				const eventTracking = emitterTracking.get(event);
 				if (eventTracking) {
 					for (const wrappedListener of eventTracking.values()) {
-						if (wrappedListener._slothletResource) {
-							wrappedListener._slothletResource = null;
-						}
+						// _slothletResource is always set by runtime_wrapEventListener
+						wrappedListener._slothletResource = null;
 					}
 					emitterTracking.delete(event);
 					if (emitterTracking.size === 0) {

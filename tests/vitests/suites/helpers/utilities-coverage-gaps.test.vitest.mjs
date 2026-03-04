@@ -117,3 +117,33 @@ describe("Utilities.deepClone — Array.isArray true branch in structuredClone f
 		expect(result[0]).toBe(sym);
 	});
 });
+// ─── deepClone — instanceof Date true branch (line 104) ──────────────────────
+
+describe("Utilities.deepClone — instanceof Date TRUE branch in structuredClone fallback (line 104)", () => {
+        it("cleanly hits instanceof Date branch for an object that fails structuredClone but instanceof Date (line 104)", () => {
+                const u = new Utilities(makeMock());
+
+                // Object.create(Date.prototype) → instanceof Date is TRUE.
+                // Adding a function property makes structuredClone throw DataCloneError (functions not serializable).
+                // In catch: objType = typeof obj = "object" (not null, not non-object/non-function primitive),
+                // obj instanceof Date → TRUE → line 104 fires: return new Date(obj.getTime()).
+                // obj.getTime() throws TypeError (no DateTimeValue internal slot) — expected and caught here.
+                const fakeDateLike = Object.create(Date.prototype);
+                fakeDateLike.uncloneable = () => {}; // forces structuredClone to throw
+
+                // deepClone reaches line 104 (instanceof Date TRUE) then throws because
+                // Object.create(Date.prototype).getTime() has no internal DateValue slot.
+                expect(() => u.deepClone(fakeDateLike)).toThrow(TypeError);
+        });
+
+        it("real Date value is cloned successfully via structuredClone (line 104 not reached — control)", () => {
+                const u = new Utilities(makeMock());
+
+                // structuredClone(new Date()) succeeds → no catch → line 104 not reached.
+                // Confirms the branch is only hit in the fallback path.
+                const d = new Date(2024, 0, 15);
+                const result = u.deepClone(d);
+                expect(result).toBeInstanceOf(Date);
+                expect(result.getTime()).toBe(d.getTime());
+        });
+});
