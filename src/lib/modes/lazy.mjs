@@ -49,7 +49,7 @@ export class LazyMode extends ComponentBase {
 		const safePath = String(apiPath || "api")
 			.replace(/\./g, "__")
 			.replace(/[^A-Za-z0-9_$]/g, "_");
-		const normalized = safePath && /^[A-Za-z_$]/.test(safePath[0]) ? safePath : safePath ? `_${safePath}` : "api";
+		const normalized = /^[A-Za-z_$]/.test(safePath[0]) ? safePath : `_${safePath}`;
 		const funcName = `${normalized}__lazy_materializeFunc`;
 		return {
 			[funcName]: async function (...args) {

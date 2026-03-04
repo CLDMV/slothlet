@@ -2,11 +2,11 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/builders/api_builder.mjs
  *	@Date: 2026-01-20 20:25:54 -08:00 (1737432354)
- *	@Author: Nate Corcoran <CLDMV>
+ *	@Author: Nate Hyson <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	@Last modified time: 2026-03-03 20:25:14 -08:00 (1772598314)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -491,11 +491,11 @@ export class ApiBuilder extends ComponentBase {
 				/**
 				 * Get diagnostics about context retrieval (for testing/debugging).
 				 * Shows how context is retrieved by instance ID in both async and live modes.
-				 * Only available when `diagnostics: true` is set in config.
-				 * @returns {object|undefined} Diagnostic information, or undefined when diagnostics disabled
+				 * @returns {object} Diagnostic information
 				 * @internal
 				 */
 				diagnostics: () => {
+					if (!slothlet.config?.diagnostics) return undefined;
 					const managerType = slothlet.contextManager.constructor.name;
 					const result = {
 						instanceID: slothlet.instanceID,
@@ -539,6 +539,7 @@ export class ApiBuilder extends ComponentBase {
 
 					return result;
 				},
+
 				/**
 				 * Execute a callback with isolated context data.
 				 * @param {Object} contextData - Context data to merge
@@ -980,6 +981,12 @@ export class ApiBuilder extends ComponentBase {
 				};
 			})()
 		};
+
+		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)
+		// Note: Hooks are not yet implemented in v3, but the config option is ready
+		if (!config.hook?.enabled && config.diagnostics !== true) {
+			delete namespace.hooks;
+		}
 
 		// Add diagnostics if enabled
 		if (config.diagnostics === true) {

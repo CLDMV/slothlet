@@ -255,3 +255,22 @@ describe("LiveContextManager.runInContext — callerWrapper set on nested slothl
 		expect(typeof result).toBe("number");
 	});
 });
+
+// ─── line 111: if (currentWrapper) FALSE — direct call with no currentWrapper arg ───
+
+describe("LiveContextManager.runInContext — if(currentWrapper) FALSE branch (line 111) [direct]", () => {
+	it("calling runInContext with 4 args skips callerWrapper/currentWrapper update (line 111 false)", () => {
+		const cm = new LiveContextManager();
+		cm.initialize("test-111", {});
+
+		const store = cm.instances.get("test-111");
+		const prevWrapper = store.currentWrapper;
+
+		// Only 4 args — currentWrapper is undefined → if (currentWrapper) is FALSE
+		// store.callerWrapper and store.currentWrapper must NOT be modified
+		const result = cm.runInContext("test-111", () => "direct-111", null, []);
+
+		expect(result).toBe("direct-111");
+		expect(store.currentWrapper).toBe(prevWrapper);
+	});
+});

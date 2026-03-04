@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-07-10 00:00:00 -07:00 (1752134400)
+ *	@Last modified time: 2026-03-03 21:34:22 -08:00 (1772602462)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -217,5 +217,56 @@ describe("flatten.mjs — line 362: processModuleForAPI named-only fallback", ()
 		// mod.default = 0 is falsy → not added to moduleContent
 		expect(result.moduleContent.default).toBeUndefined();
 		expect(result.moduleContent.count).toBe(5);
+	});
+});
+// ============================================================================
+// LINES 152 & 182 — getFlatteningDecision: typeof mod === "function" TRUE branch
+// ============================================================================
+
+describe("flatten.mjs — lines 152 & 182: typeof mod === 'function' TRUE branch", () => {
+	test("L152: mod is a raw function inside multiDefaultDecision.preserveAsNamespace block", async () => {
+		const flatten = await getFlattenProcessor();
+
+		// hasMultipleDefaults: true + analysis.hasDefault: true →
+		// #checkMultiDefault returns { preserveAsNamespace: true }
+		// mod is a function → typeof mod === "function" is TRUE (L152 TRUE branch)
+		function myParser() {}
+		const decision = await flatten.getFlatteningDecision({
+			mod: myParser,
+			moduleName: "myparser",
+			categoryName: "parsers",
+			analysis: { hasDefault: true, hasNamed: false, defaultExportType: "function" },
+			hasMultipleDefaults: true,
+			moduleKeys: [],
+			t
+		});
+
+		expect(decision).toBeDefined();
+		expect(decision.preserveAsNamespace).toBe(true);
+	});
+
+	test("L182: mod is a raw function in the function-name-preference block", async () => {
+		const flatten = await getFlattenProcessor();
+
+		// hasMultipleDefaults: false → #checkMultiDefault returns null
+		// mod is a function → #checkSelfReferential returns false (not an object)
+		// moduleKeys.length === 0 → #checkAutoFlatten returns false
+		// moduleName !== categoryName → flattenToCategory not triggered
+		// → reaches L182: typeof mod === "function" TRUE branch
+		// function name "parseCSV" normalised "parsecsv" === moduleName "parsecsv" → preferredName set
+		function parseCSV() {}
+		const decision = await flatten.getFlatteningDecision({
+			mod: parseCSV,
+			moduleName: "parsecsv",
+			categoryName: "utils",
+			analysis: { hasDefault: false, hasNamed: false, defaultExportType: null },
+			hasMultipleDefaults: false,
+			moduleKeys: [],
+			t
+		});
+
+		expect(decision).toBeDefined();
+		expect(decision.preserveAsNamespace).toBe(true);
+		expect(decision.preferredName).toBe("parseCSV");
 	});
 });
