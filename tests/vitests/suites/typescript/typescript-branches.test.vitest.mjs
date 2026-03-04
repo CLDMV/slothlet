@@ -27,8 +27,15 @@
  * @module tests/vitests/suites/typescript/typescript-branches.test.vitest
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { formatDiagnostics } from "@cldmv/slothlet/processors/typescript";
+import slothlet from "@cldmv/slothlet";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Minimal TypeScript module mock — only flattenDiagnosticMessageText is needed.
@@ -96,4 +103,56 @@ describe("formatDiagnostics — diagnostic without .file falls through to plain 
 
 		expect(result[0]).toBe("src/app.ts:5:10 - Type error");
 	});
+});
+// ─── loader.mjs L114: fork message handler else-if (msg.type === "error") ────
+
+describe("loader.mjs L114 — fork message handler: else-if (msg.type === 'error') branch", () => {
+        /** @type {import("@cldmv/slothlet").SlothletInstance|null} */
+        let api = null;
+
+        afterEach(async () => {
+                if (api) {
+                        await api.slothlet.shutdown();
+                        api = null;
+                }
+        });
+
+        it("fork sends error message when output path is a file (not a dir), triggering else-if at L114", async () => {
+                // Create a regular file at the path that will be used as the output DIRECTORY.
+                // When the fork's generateTypes calls:
+                //   outputDir = path.dirname("/path/to/blockfile/types.d.ts") → "/path/to/blockfile"
+                //   fs.existsSync(outputDir) → true (it's a file)
+                //   fs.writeFileSync("/path/to/blockfile/types.d.ts", ...) → throws ENOTDIR
+                // The fork's inner catch fires → process.send({ type: 'error', error: msg })
+                // Back in the parent: message handler else-if (msg.type === 'error') at L114 fires.
+                const blockFile = path.resolve("tmp", `slothlet-fork-block-${Date.now()}`);
+
+                if (!fs.existsSync("tmp")) {
+                        fs.mkdirSync("tmp", { recursive: true });
+                }
+                fs.writeFileSync(blockFile, "block");
+
+                try {
+                        await withSuppressedSlothletErrorOutput(async () => {
+                                await expect(async () => {
+                                        api = await slothlet({
+                                                dir: path.resolve(__dirname, "../../../../api_tests/api_test_typescript"),
+                                                typescript: {
+                                                        mode: "strict",
+                                                        types: {
+                                                                // blockFile is a regular FILE → outputDir exists but is not a dir
+                                                                // → fork's writeFileSync throws ENOTDIR
+                                                                output: path.join(blockFile, "types.d.ts"),
+                                                                interfaceName: "TestAPI"
+                                                        }
+                                                }
+                                        });
+                                }).rejects.toThrow();
+                        });
+                } finally {
+                        if (fs.existsSync(blockFile)) {
+                                fs.unlinkSync(blockFile);
+                        }
+                }
+        });
 });
