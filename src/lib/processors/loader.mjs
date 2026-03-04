@@ -177,7 +177,7 @@ const errors = formatDiagnostics(result.diagnostics, ts.default);
 				const fileUrl = pathToFileURL(filePath).href;
 				// Cache bust using instanceID to prevent cross-instance pollution
 				// Add moduleID for api.slothlet.api.add calls to prevent cache reuse between different API paths
-				moduleUrl = instanceID ? `${fileUrl}?slothlet_instance=${instanceID}` : fileUrl;
+				moduleUrl = `${fileUrl}?slothlet_instance=${instanceID}`;
 				if (moduleID) {
 					moduleUrl += `&module=${moduleID}`;
 				}
