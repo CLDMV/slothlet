@@ -273,5 +273,16 @@ describe("File-based api.add() Functionality", () => {
 			expect(typeof api.nested.deep.path.add).toBe("function");
 			expect(api.nested.deep.path.add(10, 20)).toBe(30);
 		});
-	});
+
+                it("fileFilter rejects sibling files: adding one file from a multi-file dir triggers loader.mjs L272 continue", async () => {
+                        // api_test/ contains 17 .mjs files. Adding only config.mjs causes
+                        // scanDirectory to encounter 16 siblings, fileFilter returns false
+                        // for each → loader.mjs L272: if (fileFilter && !fileFilter(entry.name)) continue
+                        const configPath = join(TEST_DIRS.API_TEST, "config.mjs");
+                        await api.slothlet.api.add("loader.filter.test", configPath);
+
+                        // config.mjs was loaded — no sibling files were included
+                        expect(api.loader.filter.test).toBeDefined();
+                });
+        });
 });
