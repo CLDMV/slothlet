@@ -182,3 +182,31 @@ describe("HookManager.executeErrorHooks — error?.constructor?.name || 'Error' 
 		expect(capturedErrorType).toBe("TypeError");
 	});
 });
+
+// ─── #removeHook — cleanup empty pattern array (L824-826) ────────────────────
+
+describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after last hook removed (L824)", () => {
+        it("removing the only hook in a pattern bucket triggers empty-array cleanup at L824-826", async () => {
+                api = await slothlet({
+                        mode: "eager",
+                        runtime: "async",
+                        hook: true,
+                        dir: TEST_DIRS.API_TEST,
+                        api: { collision: { initial: "replace", api: "replace" } }
+                });
+
+                // Register a single hook with a completely unique pattern so this bucket has exactly 1 entry.
+                // "before:hook.l824.cleanup.unique" → type="before", pattern="hook.l824.cleanup.unique"
+                // patternHooks = [this hook] (length 1)
+                const hookId = api.slothlet.hook.on("before:hook.l824.cleanup.unique", () => {}, { id: "l824-cleanup-test" });
+
+                // Remove the only hook → patternHooks.splice(0, 1) → length becomes 0
+                // → L824: if (patternHooks.length === 0) → TRUE
+                // → L826: delete subsetIndex[hook.pattern]  (cleanup fires)
+                api.slothlet.hook.off("l824-cleanup-test");
+
+                // Verify the hook is gone by listing all hooks for this pattern
+                const remaining = api.slothlet.hook.list({ pattern: "hook.l824.cleanup.unique" });
+                expect(remaining.registeredHooks).toHaveLength(0);
+        });
+});
