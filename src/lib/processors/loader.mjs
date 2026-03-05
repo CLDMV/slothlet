@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-03-04 16:33:40 -08:00 (1772670820)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -57,7 +57,7 @@ export class Loader extends ComponentBase {
 			let moduleUrl;
 
 			if (isTypeScript && typescriptConfig?.enabled) {
-                                const mode = typescriptConfig.mode;
+				const mode = typescriptConfig.mode;
 				if (mode === "strict") {
 					// Validate strict mode config
 					if (!typescriptConfig.types?.output) {
@@ -96,12 +96,8 @@ export class Loader extends ComponentBase {
 								env: { ...process.env, SLOTHLET_CONFIG: childConfig }
 							});
 
-							let output = "";
 							let errorOutput = "";
 
-							child.stdout?.on("data", (data) => {
-								output += data.toString();
-							});
 							child.stderr?.on("data", (data) => {
 								errorOutput += data.toString();
 							});
@@ -147,7 +143,7 @@ export class Loader extends ComponentBase {
 					if (result.diagnostics && result.diagnostics.length > 0) {
 						// Get TypeScript module to format diagnostics
 						const ts = await import("typescript");
-const errors = formatDiagnostics(result.diagnostics, ts.default);
+						const errors = formatDiagnostics(result.diagnostics, ts.default);
 
 						// Throw error with formatted diagnostics
 						const error = new this.SlothletError("TS_TYPE_CHECK_ERRORS", { filePath, errors: errors.join("\n") }, null, {
