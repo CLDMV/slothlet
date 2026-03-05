@@ -200,11 +200,9 @@ export class Sanitize extends ComponentBase {
 				// Extract the literal part (remove asterisks)
 				const literalParts = pattern.split("*").filter(Boolean);
 				for (const literal of literalParts) {
-					if (literal) {
-						const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
-						const replacement = toUpper ? literal.toUpperCase() : literal.toLowerCase();
-						result = result.replace(literalRegex, replacement);
-					}
+					const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
+					const replacement = toUpper ? literal.toUpperCase() : literal.toLowerCase();
+					result = result.replace(literalRegex, replacement);
 				}
 			}
 		};
