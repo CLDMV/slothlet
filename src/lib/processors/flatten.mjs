@@ -298,7 +298,7 @@ export class Flatten extends ComponentBase {
 				// Default is a function: attach named exports as properties (e.g. logger(), logger.info())
 				const moduleContent = this.slothlet.helpers.modesUtils.ensureNamedExportFunction(mod.default, propertyName);
 				const collisionConfig = this.slothlet.config.api?.collision || this.slothlet.config.collision;
-				const collisionMode = (collisionContext === "initial" ? collisionConfig?.initial : collisionConfig?.api) || "merge";
+				const collisionMode = collisionContext === "initial" ? collisionConfig.initial : collisionConfig.api;
 				for (const key of moduleKeys) {
 					if (!this.shouldAttachNamedExport(key, mod[key], moduleContent, mod.default)) {
 						continue;
