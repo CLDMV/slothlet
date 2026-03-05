@@ -821,8 +821,14 @@ export class HookManager extends ComponentBase {
 		const subsetIndex = typeIndex[hook.subset];
 		const patternHooks = subsetIndex[hook.pattern];
 
+		// istanbul ignore next — patternHooks is always defined when called via the public remove()
+		// path, because on() writes to both #byId and #hooks[type][subset][pattern] atomically.
+		// A missing pattern key would require #byId and #hooks to desync, which no code path causes.
 		if (patternHooks) {
 			const index = patternHooks.indexOf(hook);
+			// istanbul ignore next — indexOf always finds the hook because on() pushes the same
+			// object reference into patternHooks that it stores in #byId; nobody removes it from
+			// the array without also removing it from #byId first.
 			if (index !== -1) {
 				patternHooks.splice(index, 1);
 			}
