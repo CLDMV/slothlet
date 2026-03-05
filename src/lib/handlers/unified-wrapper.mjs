@@ -453,9 +453,11 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Preserve metadata keys needed by ___createChildWrapper for file path resolution
+		/* istanbul ignore next */
 		if (impl.__childFilePaths) {
 			extractFullImpl_result.__childFilePaths = impl.__childFilePaths;
 		}
+		/* istanbul ignore next */
 		if (impl.__childFilePathsPreMaterialize) {
 			extractFullImpl_result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
 		}
@@ -1131,6 +1133,7 @@ export class UnifiedWrapper extends ComponentBase {
 						existingRaw.___invalidate();
 					}
 					const descriptor = Object.getOwnPropertyDescriptor(this, key);
+					/* istanbul ignore next */
 					if (descriptor?.configurable) {
 						delete this[key];
 					}

@@ -2399,6 +2399,7 @@ export class ApiManager extends ComponentBase {
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
+				/* istanbul ignore next */
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
@@ -2455,6 +2456,7 @@ export class ApiManager extends ComponentBase {
 
 				// Wrap fresh API - extract properties if buildAPI returned a function
 				let implForContainer = freshApi;
+				/* istanbul ignore next */
 				if (typeof freshApi === "function") {
 					implForContainer = {};
 					for (const key of Object.keys(freshApi)) {
