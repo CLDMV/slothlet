@@ -146,3 +146,17 @@ describe("Sanitize.#applyWithinSegmentPatterns — plain pattern (no *) skips bo
                 expect(typeof result).toBe("string");
         });
 });
+// ─── matchesLower — cleanLiteral empty after stripping (L343 false branch) ────
+
+describe("Sanitize matchesLower — cleanLiteral becomes empty after stripping non-alphanumeric (L343 false)", () => {
+        it("lower rule *---* has only special chars between wildcards so cleanLiteral is empty, taking L343 false branch", () => {
+                // extractPatternLiterals("*---*") → ["---"]
+                // cleanLiteral = "---".replace(/[^A-Za-z0-9_$]/g, "") → ""  (empty, falsy)
+                // if (cleanLiteral && ...) → false branch taken → segment not matched → matchesLower = false
+                // The input "abc---def" contains "---" so regex.test(originalString) is true,
+                // exercising the branch up to the cleanLiteral check.
+                const result = sanitizePropertyName("abc---def", { rules: { lower: ["*---*"] } });
+                expect(typeof result).toBe("string");
+                expect(result.length).toBeGreaterThan(0);
+        });
+});
