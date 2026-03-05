@@ -117,7 +117,9 @@ class Slothlet {
 					}
 				} catch (error) {
 					// Component file failed to import - this is fatal
-					// istanbul ignore next — unreachable via tests (2026-03-05): framework component files are always present in the installed package; this guard exists for corrupt installs
+					// unreachable via tests (2026-03-05): framework component files are always
+					// present in the installed package; this guard exists for corrupt installs.
+					/* istanbul ignore next */
 					throw new this.SlothletError(
 						"MODULE_IMPORT_FAILED",
 						{

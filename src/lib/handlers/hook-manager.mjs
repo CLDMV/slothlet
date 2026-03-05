@@ -824,9 +824,10 @@ export class HookManager extends ComponentBase {
 		// Invariant: patternHooks must always exist — on() writes to both #byId and
 		// #hooks[type][subset][pattern] atomically. A missing key means #byId and
 		// #hooks are desynced, which indicates a bug in this class.
-		// istanbul ignore next — unreachable via tests (2026-03-04): #private fields
-		// prevent external mutation of #hooks; on() always creates the array before
-		// writing to #byId so no public path can produce a missing patternHooks key.
+		// unreachable via tests (2026-03-04): #private fields prevent external
+		// mutation; on() creates the array before writing to #byId so no public
+		// path can produce a missing patternHooks key.
+		/* istanbul ignore next */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				hookId: hook.id,
@@ -841,10 +842,10 @@ export class HookManager extends ComponentBase {
 
 		// Invariant: hook object must be in patternHooks — on() pushes the exact object
 		// reference that it stores in #byId. If not found, internal state is corrupt.
-		// istanbul ignore next — unreachable via tests (2026-03-04): on() pushes the
-		// identical object reference into patternHooks that it stores in #byId; no
-		// public path splices the array without also clearing #byId, so indexOf always
-		// finds the hook and index === -1 is never true.
+		// unreachable via tests (2026-03-04): on() pushes the identical object
+		// reference; no public path splices the array without clearing #byId,
+		// so indexOf always finds the hook and index === -1 is never true.
+		/* istanbul ignore next */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				hookId: hook.id,

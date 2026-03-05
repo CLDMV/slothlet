@@ -479,8 +479,9 @@ export class ApiBuilder extends ComponentBase {
 
 						// Fallback to base instance
 						const store = slothlet.contextManager.instances.get(slothlet.instanceID);
-						// istanbul ignore next — unreachable via tests (2026-03-05): instances map always
-						// contains the base instanceID after initialization; only fires if store was externally deleted.
+						// unreachable via tests (2026-03-05): instances map always contains the base
+						// instanceID after initialization; only fires if store was externally deleted.
+						/* istanbul ignore next */
 						if (!store) {
 							const baseContext = slothlet.context || {};
 							return key ? baseContext[key] : { ...baseContext };
@@ -561,8 +562,9 @@ export class ApiBuilder extends ComponentBase {
 										parentInstanceID: currentCtx.parentInstanceID
 									}
 								: null;
-						// istanbul ignore next — unreachable via tests (2026-03-05): tryGetContext() does
-						// not throw under normal conditions; defensive guard only.
+						// unreachable via tests (2026-03-05): tryGetContext() does not throw under
+						// normal conditions; this is a defensive guard only.
+/* istanbul ignore next */
 						} catch (error) {
 							result.currentALSContext = null;
 						}
