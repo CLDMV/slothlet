@@ -542,3 +542,57 @@ describe("generateTypes – direct unit tests", () => {
 		});
 	});
 });
+
+// ─── traverseAPI — primitive value (L141 arm1: else-if skipped) ──────────────
+
+describe("traverseAPI — primitive value in API skipped by both branches (L141 arm1)", () => {
+	it("does not include primitive values (number) in generated output", async () => {
+		// traverseAPI: `typeof value === "function"` → false, `typeof value === "object"` → false
+		// → neither branch fires for the primitive → arm1 of L141 else-if is hit
+		const apiWithPrimitive = {
+			count: 42,
+			label: "hello",
+			flag: true
+		};
+
+		const outputPath = nextOutputPath();
+		const { output } = await generateTypes(apiWithPrimitive, {
+			output: outputPath,
+			interfaceName: "PrimitiveAPI"
+		});
+
+		// Primitives are silently skipped — they don't appear in the interface
+		expect(output).toContain("export interface PrimitiveAPI");
+		expect(output).not.toContain("count");
+		expect(output).not.toContain("label");
+	});
+});
+
+// ─── extractTypesFromFile — mixed-export fixture (L189/L191/L193/L194 branches) ──
+
+describe("extractTypesFromFile — mixed-exports.ts fixture exercises visit() branches", () => {
+	const mixedFilePath = path.resolve("api_tests/api_test_typescript_typegen/mixed-exports.ts");
+
+	it("handles non-exported var (L189 arm1), destructuring (L191 arm0), non-fn const (L194 arm1), ambient (L193 arm0)", async () => {
+		// handler is the only arrow-fn export in the fixture — it gets a typed signature.
+		// count/strLen/ambient trigger the non-function init / no-init / destructuring paths.
+		function handler(x) {
+			return x * 2;
+		}
+		handler.__metadata = { filePath: mixedFilePath };
+
+		const outputPath = nextOutputPath();
+		const { output } = await generateTypes(
+			{ handler },
+			{
+				output: outputPath,
+				interfaceName: "MixedAPI"
+			}
+		);
+
+		// The fixture file is successfully parsed — generation completes without error
+		expect(output).toContain("export interface MixedAPI");
+		// The arrow-function export "handler" should appear
+		expect(output).toContain("handler");
+	});
+});

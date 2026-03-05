@@ -28,7 +28,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { formatDiagnostics } from "@cldmv/slothlet/processors/typescript";
+import { formatDiagnostics, transformTypeScriptStrict } from "@cldmv/slothlet/processors/typescript";
 import slothlet from "@cldmv/slothlet";
 import fs from "node:fs";
 import path from "node:path";
@@ -154,5 +154,58 @@ describe("loader.mjs L114 — fork message handler: else-if (msg.type === 'error
 				fs.unlinkSync(blockFile);
 			}
 		}
+	});
+});
+
+// ─── transformTypeScriptStrict — unknown target/module keys (L162/163 || fallback) ───
+
+describe("transformTypeScriptStrict — unknown target/module keys fall back to defaults (L162/163)", () => {
+	const mathTs = path.resolve(__dirname, "../../../../api_tests/api_test_typescript/math.ts");
+
+	it("uses ScriptTarget.ES2020 fallback when target key is not in targetMap (L162 arm1)", async () => {
+		// "unknown_target_xyz" is not in targetMap → targetMap[key] is undefined → || fires
+		const result = await transformTypeScriptStrict(mathTs, {
+			target: "unknown_target_xyz",
+			module: "esnext",
+			skipTypeCheck: true
+		});
+		expect(typeof result.code).toBe("string");
+		expect(result.code.length).toBeGreaterThan(0);
+	});
+
+	it("uses ModuleKind.ESNext fallback when module key is not in moduleMap (L163 arm1)", async () => {
+		// "unknown_module_xyz" is not in moduleMap → moduleMap[key] is undefined → || fires
+		const result = await transformTypeScriptStrict(mathTs, {
+			target: "es2020",
+			module: "unknown_module_xyz",
+			skipTypeCheck: true
+		});
+		expect(typeof result.code).toBe("string");
+		expect(result.code.length).toBeGreaterThan(0);
+	});
+});
+
+// ─── transformTypeScriptStrict — skipTypeCheck: true (L177 false branch) ────
+
+describe("transformTypeScriptStrict — skipTypeCheck: true skips the diagnostic block (L177 false)", () => {
+	const mathTs = path.resolve(__dirname, "../../../../api_tests/api_test_typescript/math.ts");
+
+	it("returns empty diagnostics when skipTypeCheck is true (L177 arm1 — if block skipped)", async () => {
+		// skipTypeCheck: true → `if (!options.skipTypeCheck)` evaluates to false → block skipped
+		const result = await transformTypeScriptStrict(mathTs, { skipTypeCheck: true });
+		expect(result.diagnostics).toEqual([]);
+		expect(typeof result.code).toBe("string");
+	});
+});
+
+// ─── transformTypeScriptStrict — no target option (L158 || "es2020" default) ─
+
+describe("transformTypeScriptStrict — omitted options.target triggers || es2020 fallback (L158 arm1)", () => {
+	const mathTs = path.resolve(__dirname, "../../../../api_tests/api_test_typescript/math.ts");
+
+	it("succeeds with default target when options.target is undefined (L158 arm1)", async () => {
+		// options.target is undefined → `options.target || "es2020"` takes the RHS (arm1 of binary-expr)
+		const result = await transformTypeScriptStrict(mathTs, { skipTypeCheck: true });
+		expect(typeof result.code).toBe("string");
 	});
 });

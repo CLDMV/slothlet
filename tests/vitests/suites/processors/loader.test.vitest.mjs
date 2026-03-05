@@ -337,4 +337,22 @@ describe("Loader processor (real slothlet integration)", () => {
 			).rejects.toThrow("TS_TYPE_GENERATION_FAILED");
 		});
 	});
+
+	it("silently ignores symlinks during directory scan (L267 arm1 — neither dir nor file)", async () => {
+		// readdir({ withFileTypes: true }) returns a Dirent for symlinks where
+		// isDirectory()===false AND isFile()===false → hits the implicit else after
+		// `else if (entry.isFile())` at L267 (arm1 of the else-if).
+		await writeModule(join(fixtureRoot, "real.mjs"), 'export function real() { return 1; }');
+
+		// Create a symlink inside the fixture root pointing to the real module
+		const { symlink } = await import("node:fs/promises");
+		const symlinkPath = join(fixtureRoot, "link-to-real.mjs");
+		await symlink(join(fixtureRoot, "real.mjs"), symlinkPath);
+
+		const api = await slothlet({ dir: fixtureRoot, mode: "eager" });
+		activeApis.push(api);
+
+		// The real module is loaded; the symlink is silently skipped
+		expect(api.real).toBeDefined();
+	});
 });
