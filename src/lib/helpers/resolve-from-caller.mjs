@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-03-04 17:43:11 -08:00 (1772674991)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -195,5 +195,4 @@ export class Resolver extends ComponentBase {
 		// (let the actual loader handle the error)
 		return resolved;
 	}
-
 }

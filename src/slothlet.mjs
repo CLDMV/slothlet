@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	@Last modified time: 2026-03-04 19:53:14 -08:00 (1772682794)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -486,11 +486,24 @@ class Slothlet {
 	 * Preserves instance ID (so context is maintained), hooks, and API reference.
 	 * Replays all add/remove operations in chronological order.
 	 *
+	 * @param {Object} [options={}] - Reload options.
+	 * @param {boolean} [options.keepInstanceID=false] - When true the existing instanceID is
+	 *   reused instead of generating a new `_reload_` ID. This causes
+	 *   `contextManager.instances.has(preservedInstanceID)` to be TRUE inside `load()`,
+	 *   triggering the cleanup-then-reinitialise branch. Useful for testing and for callers
+	 *   that need the context store reset in place rather than migrated to a new ID.
+	 *
 	 * @example
-	 * // Reload all modules to pick up code changes
+	 * // Normal hot-reload (new instanceID each time)
 	 * await api.slothlet.reload();
+	 *
+	 * @example
+	 * // Reload while resetting the context store in place (same instanceID)
+	 * await api.slothlet.reload({ keepInstanceID: true });
 	 */
-	async reload() {
+	async reload(options = {}) {
+		const { keepInstanceID = false } = options;
+
 		// Allow reload from shutdown state as long as config was previously loaded.
 		// Reject only if the instance was never loaded at all (no config.dir).
 		if (!this.config?.dir) {
@@ -506,10 +519,14 @@ class Slothlet {
 		// 2. Clear CommonJS module caches to force re-import
 		await this._clearModuleCaches();
 
-		// 3. Create a NEW permanent instanceID (busts internal caches; the old ID is
-		//    cleaned up after load so stale ALS/context entries don't accumulate).
+		// 3. Determine the instanceID to pass to load().
+		//    Normal reload: create a fresh ID (busts internal caches; old ID cleaned up below).
+		//    keepInstanceID: reuse the current ID so instances.has() is TRUE inside load(),
+		//    which triggers the cleanup-then-reinitialise branch of the context store.
 		const oldInstanceID = this.instanceID;
-		this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+		if (!keepInstanceID) {
+			this.instanceID = `${oldInstanceID}_reload_${Date.now()}`;
+		}
 
 		// 3b. Save user-managed metadata state before load() destroys the current
 		//     Metadata instance. This preserves setGlobal() and set() values across reload.

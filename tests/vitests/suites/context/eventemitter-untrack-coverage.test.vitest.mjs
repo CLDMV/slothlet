@@ -232,3 +232,85 @@ describe("eventemitter-context: shouldWrapListener rejects non-function listener
                 expect(() => emitter.prependListener("data", null)).toThrow(TypeError);
         });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LINE 174: runtime_untrackListener — `if (!eventTracking) return`
+//
+// TRUE branch fires when the emitter IS tracked overall (has entries in emitterTracking)
+// but the specific event's eventTracking was removed BEFORE runtime_untrackListener is
+// called. This happens when a `once` auto-cleanup fires and the listener itself calls
+// removeAllListeners(event) inline — deleting the eventTracking entry — before the
+// once-wrapper's own runtime_untrackListener runs at the end of the wrapper body.
+//
+// Scenario:
+//   1. emitter.on("other", fn2) → emitter tracked (emitterTracking has "other")
+//   2. emitter.once("evt", fn) where fn calls emitter.removeAllListeners("evt") internally
+//   3. emitter.emit("evt"):
+//        a. runtime_onceWrapper fires
+//        b. wrapped.apply calls fn:
+//             fn() → emitter.removeAllListeners("evt")
+//             → runtime_patchRemoveAllListeners deletes emitterTracking["evt"]
+//        c. runtime_untrackListener(emitter, "evt", fn) runs
+//             → emitterTracking["evt"] = undefined → line 174 TRUE → return early
+// ─────────────────────────────────────────────────────────────────────────────
+describe("eventemitter-context: runtime_untrackListener returns early when eventTracking gone (line 174 true)", () => {
+	it("once listener that calls removeAllListeners(event) inside itself hits line 174 early-return", () => {
+		const emitter = new EventEmitter();
+		const fn2 = () => {};
+
+		// Keep emitter tracked via "other" so emitterTracking persists after evt cleanup
+		emitter.on("other", fn2);
+
+		let executed = false;
+
+		// fn removes "evt" tracking inline before the once-auto-cleanup can run
+		emitter.once("evt", function innerFn() {
+			executed = true;
+			// Removes emitterTracking["evt"] → next runtime_untrackListener for "evt" hits L174
+			emitter.removeAllListeners("evt");
+		});
+
+		expect(() => emitter.emit("evt")).not.toThrow();
+		expect(executed).toBe(true);
+
+		emitter.removeAllListeners();
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LINE 177: runtime_untrackListener — `if (wrappedListener)` FALSE branch
+//
+// Fires when eventTracking IS found for the event but eventTracking.get(originalListener)
+// returns undefined (the specific listener is no longer in the tracking map).
+//
+// Triggered by registering the same fn with `once` TWICE on the same event:
+//   - eventTracking maps fn → onceWrapper2 (second call overwrites)
+//   - Both onceWrapper1 and onceWrapper2 are registered on EventEmitter
+//   - When emit fires:
+//     · onceWrapper1 runs → runtime_untrackListener: finds fn→onceWrapper2 (truthy) → deletes fn
+//     · onceWrapper2 runs → runtime_untrackListener: fn is gone from eventTracking
+//       → wrappedListener = undefined → L177 FALSE ARM fires
+//   A third regular `on("evt", fn2)` keeps eventTracking["evt"] non-empty so the second
+//   untrack call reaches L177 rather than returning at L174.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("eventemitter-context: runtime_untrackListener wrappedListener missing fires false branch (line 177 false)", () => {
+	it("registering same fn twice with once causes second auto-cleanup to miss wrappedListener (line 177 false)", () => {
+		const emitter = new EventEmitter();
+		const fn = () => {};
+		const fn2 = () => {};
+
+		// Keep eventTracking["evt"] alive after fn is deleted so second untrack reaches L177
+		emitter.on("evt", fn2);
+
+		// Register fn twice — eventTracking["evt"] ends up mapping fn → onceWrapper2 only.
+		// EventEmitter holds [onceWrapper1, onceWrapper2, wrapper_fn2].
+		emitter.once("evt", fn); // fn → onceWrapper1 in tracking
+		emitter.once("evt", fn); // fn → onceWrapper2 overwrites in tracking
+
+		// emit fires onceWrapper1 → deletes fn from tracking (TRUE arm)
+		// then fires onceWrapper2 → fn already gone → FALSE arm at L177
+		expect(() => emitter.emit("evt")).not.toThrow();
+
+		emitter.removeAllListeners();
+	});
+});

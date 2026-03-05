@@ -96,6 +96,23 @@ export class ApiBuilder extends ComponentBase {
 		// Mode builders return wrapped APIs where each wrapper has its own _impl storage
 		// Mutating userApi in place to add builtins is safe and eliminates unnecessary object allocation
 
+		// Strip any previously-attached sloshlet builtins from userApi before checking for user hooks.
+		// When the API root is a function module (e.g. a root-function.mjs default export), the mode
+		// builder may return the SAME function object on successive calls if the ESM module cache is
+		// not busted (e.g. keepInstanceID reload keeps the same instanceID query param, so Node's ESM
+		// loader serves the cached module). That function still carries shutdown/sloshlet/destroy from
+		// the previous buildFinalAPI invocation. Without stripping them we'd mistake our own builtins
+		// for user-provided lifecycle hooks, creating infinite recursion in createShutdownFunction.
+		for (const builtinKey of ["shutdown", "sloshlet", "destroy"]) {
+			if (Object.prototype.hasOwnProperty.call(userApi, builtinKey)) {
+				try {
+					delete userApi[builtinKey];
+				} catch (_) {
+					// Non-configurable (shouldn't happen since attachBuiltins uses configurable:true, but guard anyway)
+				}
+			}
+		}
+
 		// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
 		// Store these on the instance so they can be updated during add/remove API operations
 		this.slothlet.userHooks = {
@@ -883,9 +900,11 @@ export class ApiBuilder extends ComponentBase {
 
 			/**
 			 * Reload entire instance (creates new references)
+			 * @param {Object} [options={}] - Reload options forwarded to Slothlet#reload.
+			 * @param {boolean} [options.keepInstanceID=false] - Keep the same instanceID (resets context store in place).
 			 * @returns {Promise<void>}
 			 */
-			reload: async () => {
+			reload: async (options = {}) => {
 				// Check if reload mutation is allowed
 				if (!config.api?.mutations?.reload) {
 					throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -893,7 +912,7 @@ export class ApiBuilder extends ComponentBase {
 						validationError: true
 					});
 				}
-				return slothlet.reload();
+				return slothlet.reload(options);
 			},
 
 			/**
