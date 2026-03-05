@@ -55,7 +55,7 @@ export class Resolver extends ComponentBase {
 			Error.prepareStackTrace = (_, s) => s; // V8 CallSite[]
 			const e = new Error("Stack trace");
 			if (skipFn) Error.captureStackTrace(e, skipFn);
-			return e.stack || [];
+			return e.stack;
 		} finally {
 			Error.prepareStackTrace = orig;
 		}
@@ -71,7 +71,7 @@ export class Resolver extends ComponentBase {
 		Error.prepareStackTrace = (___, stack) => stack;
 		const stack = new Error().stack;
 		Error.prepareStackTrace = originalPrepare;
-		return stack || [];
+		return stack;
 	}
 
 	/**
@@ -93,8 +93,6 @@ export class Resolver extends ComponentBase {
 	 * @private
 	 */
 	#isSlothletInternal(filePath) {
-		if (!filePath) return true;
-
 		// Normalize path for comparison
 		const normalized = path.normalize(filePath);
 		const normalizedLibRoot = path.normalize(SLOTHLET_LIB_ROOT);
