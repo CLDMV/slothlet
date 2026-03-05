@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:54 -08:00 (1772425314)
+ *	@Last modified time: 2026-03-04 23:06:55 -08:00 (1772694415)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -342,7 +342,7 @@ describe("Loader processor (real slothlet integration)", () => {
 		// readdir({ withFileTypes: true }) returns a Dirent for symlinks where
 		// isDirectory()===false AND isFile()===false → hits the implicit else after
 		// `else if (entry.isFile())` at L267 (arm1 of the else-if).
-		await writeModule(join(fixtureRoot, "real.mjs"), 'export function real() { return 1; }');
+		await writeModule(join(fixtureRoot, "real.mjs"), "export function real() { return 1; }");
 
 		// Create a symlink inside the fixture root pointing to the real module
 		const { symlink } = await import("node:fs/promises");

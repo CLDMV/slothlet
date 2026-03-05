@@ -1168,18 +1168,9 @@ export class ApiBuilder extends ComponentBase {
 							},
 
 							/**
-							 * Expand brace patterns in a glob pattern
-							 * @param {string} pattern - Pattern with braces
-							 * @returns {string[]} Array of expanded patterns
-							 */
-							compilePattern: (pattern) => {
-								return slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern);
-							},
-
-							/**
-							 * Convert a glob pattern to a RegExp
+							 * Compile a glob pattern into a matcher function for diagnostic use.
 							 * @param {string} pattern - Glob pattern
-							 * @returns {RegExp} Compiled regular expression
+							 * @returns {Function} Compiled matcher function
 							 */
 							compilePattern: (pattern) => {
 								return slothlet.handlers.hookManager.getCompilePatternForDiagnostics()(pattern);

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-03 22:48:07 -08:00 (1772606887)
+ *	@Last modified time: 2026-03-04 22:09:25 -08:00 (1772690965)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -283,25 +283,25 @@ describe("OwnershipManager.removePath — L204 if FALSE (falsy removedModuleId)"
 // ─── unregister — else if (result.action === "restore") at L164 ──────────────
 
 describe("OwnershipManager.unregister — L164 else-if restore branch", () => {
-        it("rolledBack is populated when unregistering a module that had a previous owner in the stack", () => {
-                const o = new OwnershipManager(makeMock());
-                const fn = function testFn() {};
+	it("rolledBack is populated when unregistering a module that had a previous owner in the stack", () => {
+		const o = new OwnershipManager(makeMock());
+		const fn = function testFn() {};
 
-                // Register path "api.math" with module A first
-                o.register({ apiPath: "api.math", moduleID: "mod-a", value: fn, collisionMode: "replace", source: "initial" });
-                // Register same path with module B — B goes on top, A is pushed down in the stack
-                o.register({ apiPath: "api.math", moduleID: "mod-b", value: fn, collisionMode: "replace", source: "api" });
+		// Register path "api.math" with module A first
+		o.register({ apiPath: "api.math", moduleID: "mod-a", value: fn, collisionMode: "replace", source: "initial" });
+		// Register same path with module B — B goes on top, A is pushed down in the stack
+		o.register({ apiPath: "api.math", moduleID: "mod-b", value: fn, collisionMode: "replace", source: "api" });
 
-                // Unregister B: removePath("api.math", "mod-b") → stack still has A → action: "restore"
-                // → else if (result.action === "restore") at L164 fires
-                const result = o.unregister("mod-b");
+		// Unregister B: removePath("api.math", "mod-b") → stack still has A → action: "restore"
+		// → else if (result.action === "restore") at L164 fires
+		const result = o.unregister("mod-b");
 
-                expect(Array.isArray(result.rolledBack)).toBe(true);
-                expect(result.rolledBack.length).toBeGreaterThan(0);
-                expect(result.rolledBack[0].apiPath).toBe("api.math");
-                expect(result.rolledBack[0].restoredTo).toBe("mod-a");
-                expect(result.removed).toHaveLength(0);
-        });
+		expect(Array.isArray(result.rolledBack)).toBe(true);
+		expect(result.rolledBack.length).toBeGreaterThan(0);
+		expect(result.rolledBack[0].apiPath).toBe("api.math");
+		expect(result.rolledBack[0].restoredTo).toBe("mod-a");
+		expect(result.removed).toHaveLength(0);
+	});
 });
 
 // ─── L164 else-if FALSE arm: result.action === "none" (neither delete nor restore) ──

@@ -32,6 +32,9 @@ async function getTypeScript() {
 	if (!typescriptInstance) {
 		try {
 			typescriptInstance = await import("typescript");
+		// istanbul ignore next — unreachable via tests (2026-03-04): `typescript` is a
+		// devDependency of this package and is always installed; the catch only fires
+		// when the package is absent, which cannot occur in a normal install.
 		} catch (error) {
 			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}
