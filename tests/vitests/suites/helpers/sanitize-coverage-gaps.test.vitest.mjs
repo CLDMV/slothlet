@@ -149,14 +149,35 @@ describe("Sanitize.#applyWithinSegmentPatterns — plain pattern (no *) skips bo
 // ─── matchesLower — cleanLiteral empty after stripping (L343 false branch) ────
 
 describe("Sanitize matchesLower — cleanLiteral becomes empty after stripping non-alphanumeric (L343 false)", () => {
-        it("lower rule *---* has only special chars between wildcards so cleanLiteral is empty, taking L343 false branch", () => {
-                // extractPatternLiterals("*---*") → ["---"]
-                // cleanLiteral = "---".replace(/[^A-Za-z0-9_$]/g, "") → ""  (empty, falsy)
-                // if (cleanLiteral && ...) → false branch taken → segment not matched → matchesLower = false
-                // The input "abc---def" contains "---" so regex.test(originalString) is true,
-                // exercising the branch up to the cleanLiteral check.
-                const result = sanitizePropertyName("abc---def", { rules: { lower: ["*---*"] } });
-                expect(typeof result).toBe("string");
-                expect(result.length).toBeGreaterThan(0);
-        });
+	it("lower rule *---* has only special chars between wildcards so cleanLiteral is empty, taking L343 false branch", () => {
+		// extractPatternLiterals("*---*") → ["---"]
+		// cleanLiteral = "---".replace(/[^A-Za-z0-9_$]/g, "") → ""  (empty, falsy)
+		// if (cleanLiteral && ...) → false branch taken → segment not matched → matchesLower = false
+		// The input "abc---def" contains "---" so regex.test(originalString) is true,
+		// exercising the branch up to the cleanLiteral check.
+		const result = sanitizePropertyName("abc---def", { rules: { lower: ["*---*"] } });
+		expect(typeof result).toBe("string");
+		expect(result.length).toBeGreaterThan(0);
+	});
+});
+
+// ─── matchesLower — regex.test(originalString) FALSE (L341 false branch) ──────
+
+describe("Sanitize matchesLower — glob lower rule does not match input (L341 false branch)", () => {
+	it("glob lower rule 'xyz*' does not match input 'abcDef' so regex.test returns false (L341 false)", () => {
+		// pattern "xyz*" → has "*" → glob branch → #compileGlobPattern returns regex
+		// regex.test("abcDef") → false → if (regex && false) → FALSE branch at L341
+		// → no literals checked → return false → matchesLower = false
+		const result = sanitizePropertyName("abcDef", { rules: { lower: ["xyz*"] } });
+		expect(typeof result).toBe("string");
+		// "abcDef" sanitizes normally since the lower rule didn't match
+		expect(result.length).toBeGreaterThan(0);
+	});
+
+	it("glob lower rule '*xyz*' does not match input 'abcDef' (L341 false branch, no substring)", () => {
+		// "*xyz*" glob would only match strings containing "xyz"
+		// "abcDef" has no "xyz" → regex.test returns false → L341 false
+		const result = sanitizePropertyName("abcDef", { rules: { lower: ["*xyz*"] } });
+		expect(typeof result).toBe("string");
+	});
 });
