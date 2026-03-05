@@ -55,10 +55,6 @@ export class Metadata extends ComponentBase {
 	 * @returns {any} Frozen object
 	 */
 	#deepFreeze(obj) {
-		// Base cases: null, undefined, primitives
-		if (obj === null || obj === undefined) return obj;
-		if (typeof obj !== "object") return obj;
-
 		// Already frozen
 		if (Object.isFrozen(obj)) return obj;
 
@@ -181,8 +177,6 @@ export class Metadata extends ComponentBase {
 		//   - "mixed.config"
 		//   - "mixed"
 		const collectMetadataFromParents = (path) => {
-			if (!path) return {};
-
 			const parts = path.split(".");
 			const collected = {};
 
