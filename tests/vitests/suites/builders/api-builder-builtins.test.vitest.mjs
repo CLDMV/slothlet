@@ -465,3 +465,42 @@ describe("api_builder – diag.hook.compilePattern (line 1135)", () => {
                 expect(typeof matcher).toBe("function");
         });
 });
+// ---------------------------------------------------------------------------
+// Group J: context.diagnostics() returns undefined when diagnostics not configured
+//   api_builder.mjs L530: `if (!slothlet.config?.diagnostics) return undefined`
+// ---------------------------------------------------------------------------
+describe("api_builder – context.diagnostics() returns undefined without diagnostics config (L530)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown().catch(() => {});
+			api = null;
+		}
+	});
+
+	it("returns undefined when diagnostics option is absent (line 530)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			dir: TEST_DIRS.API_TEST
+			// no diagnostics: true
+		});
+
+		// context.diagnostics() hits L530 early-return because config.diagnostics is falsy
+		const result = api.slothlet.context.diagnostics();
+		expect(result).toBeUndefined();
+	});
+
+	it("returns undefined when diagnostics option is explicitly false (line 530)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			diagnostics: false,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		const result = api.slothlet.context.diagnostics();
+		expect(result).toBeUndefined();
+	});
+});
