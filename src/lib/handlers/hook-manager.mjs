@@ -821,22 +821,38 @@ export class HookManager extends ComponentBase {
 		const subsetIndex = typeIndex[hook.subset];
 		const patternHooks = subsetIndex[hook.pattern];
 
-		// istanbul ignore next — patternHooks is always defined when called via the public remove()
-		// path, because on() writes to both #byId and #hooks[type][subset][pattern] atomically.
-		// A missing pattern key would require #byId and #hooks to desync, which no code path causes.
-		if (patternHooks) {
-			const index = patternHooks.indexOf(hook);
-			// istanbul ignore next — indexOf always finds the hook because on() pushes the same
-			// object reference into patternHooks that it stores in #byId; nobody removes it from
-			// the array without also removing it from #byId first.
-			if (index !== -1) {
-				patternHooks.splice(index, 1);
-			}
+		// Invariant: patternHooks must always exist — on() writes to both #byId and
+		// #hooks[type][subset][pattern] atomically. A missing key means #byId and
+		// #hooks are desynced, which indicates a bug in this class.
+		if (!patternHooks) {
+			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
+				hookId: hook.id,
+				type: hook.type,
+				subset: hook.subset,
+				pattern: hook.pattern,
+				detail: "patternHooks array missing from subsetIndex — #byId and #hooks are desynced"
+			});
+		}
 
-			// Clean up empty pattern arrays
-			if (patternHooks.length === 0) {
-				delete subsetIndex[hook.pattern];
-			}
+		const index = patternHooks.indexOf(hook);
+
+		// Invariant: hook object must be in patternHooks — on() pushes the exact object
+		// reference that it stores in #byId. If not found, internal state is corrupt.
+		if (index === -1) {
+			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
+				hookId: hook.id,
+				type: hook.type,
+				subset: hook.subset,
+				pattern: hook.pattern,
+				detail: "hook object not found in patternHooks array — #byId and #hooks are desynced"
+			});
+		}
+
+		patternHooks.splice(index, 1);
+
+		// Clean up empty pattern arrays
+		if (patternHooks.length === 0) {
+			delete subsetIndex[hook.pattern];
 		}
 
 		this.#byId.delete(hook.id);
