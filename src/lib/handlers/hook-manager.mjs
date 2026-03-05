@@ -827,7 +827,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): #private fields prevent external
 		// mutation; on() creates the array before writing to #byId so no public
 		// path can produce a missing patternHooks key.
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		if (!patternHooks) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				hookId: hook.id,
@@ -845,7 +845,7 @@ export class HookManager extends ComponentBase {
 		// unreachable via tests (2026-03-04): on() pushes the identical object
 		// reference; no public path splices the array without clearing #byId,
 		// so indexOf always finds the hook and index === -1 is never true.
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		if (index === -1) {
 			throw new this.slothlet.SlothletError("INTERNAL_HOOK_STATE_CORRUPT", {
 				hookId: hook.id,

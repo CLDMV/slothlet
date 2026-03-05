@@ -2404,7 +2404,7 @@ export class ApiManager extends ComponentBase {
 				// is therefore always null, so this branch never executes. The guard
 				// exists to safely handle any future code path that hands a pre-wrapped
 				// value to the reload pipeline.
-				/* istanbul ignore next */
+				/* v8 ignore next */
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
 					implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshApi;
@@ -2466,7 +2466,7 @@ export class ApiManager extends ComponentBase {
 				// plain object. Even if it did return a function, Object.keys on a
 				// typical module function yields zero keys, so the loop body would be a
 				// no-op anyway. The guard is defensive for hypothetical future callers.
-				/* istanbul ignore next */
+				/* v8 ignore next */
 				if (typeof freshApi === "function") {
 					implForContainer = {};
 					for (const key of Object.keys(freshApi)) {

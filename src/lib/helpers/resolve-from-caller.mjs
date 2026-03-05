@@ -108,7 +108,7 @@ export class Resolver extends ComponentBase {
 		// a V8 stack that contains the slothlet lib root, so the lib-root path.startsWith
 		// guard above already returns true for index.mjs/index.cjs found inside the
 		// package. A bare index file outside the lib root never appears on the test stack.
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		if (basename === "index.mjs" || basename === "index.cjs") {
 			return true;
 		}
@@ -139,7 +139,7 @@ export class Resolver extends ComponentBase {
 			// stack and is non-internal, so the loop above always finds a candidate and
 			// returns before reaching here. Null would only occur if every frame were a
 			// slothlet-internal path — impossible during test execution.
-			/* istanbul ignore next */
+			/* v8 ignore next */
 			return null;
 		}
 
@@ -162,7 +162,7 @@ export class Resolver extends ComponentBase {
 		// tests, so slothletIndex is never -1, and the loop above (after slothlet.mjs)
 		// always finds the test file as user code. This fallback only fires if ALL
 		// frames after slothlet.mjs are internal — impossible during test execution.
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		for (const file of files) {
 			if (!this.#isSlothletInternal(file)) {
 				return file;
@@ -172,7 +172,7 @@ export class Resolver extends ComponentBase {
 		// Unreachable in practice: the fallback loop above always finds the test file
 		// (a non-internal frame), so null is never returned. Null would require every
 		// file on the entire stack to be a slothlet-internal path.
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		return null;
 	}
 
@@ -195,7 +195,7 @@ export class Resolver extends ComponentBase {
 			// Unreachable in practice: #findCallerBase always resolves to the test
 			// file's path because the test runner is always on the V8 stack. callerFile
 			// is only null if the entire stack is slothlet-internal — never in tests.
-			/* istanbul ignore next */
+			/* v8 ignore next */
 			return path.resolve(process.cwd(), rel);
 		}
 

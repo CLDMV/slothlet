@@ -33,7 +33,7 @@ async function getTypeScript() {
 		try {
 			typescriptInstance = await import("typescript");
 		// unreachable via tests (2026-03-04): typescript devDependency, always installed
-		/* istanbul ignore next */
+		/* v8 ignore next */
 		} catch (error) {
 			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}

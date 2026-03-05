@@ -971,7 +971,7 @@ export class ModesProcessor extends ComponentBase {
 													// Unreachable in practice: ___adoptImplChildren() pre-merges all
 													// existing impl keys into implToWrap before this loop runs, so
 													// every key from modes_existingImpl is already present in implToWrap.
-													/* istanbul ignore next */
+													/* v8 ignore next */
 													if (!(k in implToWrap)) {
 														implToWrap[k] = v;
 													}
@@ -979,7 +979,7 @@ export class ModesProcessor extends ComponentBase {
 											// Unreachable in practice: implToWrap is derived from a module default export,
 											// which is always an object in every test fixture. The object-branch above fires
 											// first, so a function-typed implToWrap is never observed here.
-											/* istanbul ignore next */
+											/* v8 ignore next */
 											} else if (typeof implToWrap === "function") {
 												for (const [k, v] of Object.entries(modes_existingImpl)) {
 													if (implToWrap[k] === undefined) {
@@ -1149,7 +1149,7 @@ export class ModesProcessor extends ComponentBase {
 							// (even in lazy mode), so __impl is always a non-null object by the time
 							// we reach this loop. The null-init guard is a defensive belt-and-suspenders
 							// safety net for future edge cases where impl may not yet exist.
-							/* istanbul ignore next */
+							/* v8 ignore next */
 							if (!modes_fileFolderImpl) modes_fileFolderImpl = {};
 							if (!(ck in modes_fileFolderImpl)) {
 								modes_fileFolderImpl[ck] = modes_lazyExistingW[ck];
@@ -1344,7 +1344,7 @@ export class ModesProcessor extends ComponentBase {
 									// for every key in every test fixture (exported keys are never "default"
 									// and always pass the filter). The guard exists so users can block
 									// specific named exports in future without changing this loop.
-									/* istanbul ignore next */
+									/* v8 ignore next */
 									if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
 										continue;
 									}
