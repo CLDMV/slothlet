@@ -119,7 +119,7 @@ class Slothlet {
 					// Component file failed to import - this is fatal
 					// unreachable via tests (2026-03-05): framework component files are always
 					// present in the installed package; this guard exists for corrupt installs.
-					/* istanbul ignore next */
+					/* v8 ignore next */
 					throw new this.SlothletError(
 						"MODULE_IMPORT_FAILED",
 						{
