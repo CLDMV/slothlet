@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-07 00:00:00 -08:00 (1773072000)
+ *	@Last modified time: 2026-03-04 22:09:25 -08:00 (1772690965)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -166,42 +166,42 @@ describe("eventemitter-context: shouldWrapListener prevents double-wrap (line 20
 //      returns undefined → line 390: if (eventTracking) is FALSE → cleanup skipped
 // ─────────────────────────────────────────────────────────────────────────────
 describe("eventemitter-context: removeAllListeners(event) with untracked event skips cleanup (line 390 false)", () => {
-        it("removeAllListeners for a specific untracked event does not throw (line 390 false branch)", () => {
-                const emitter = new EventEmitter();
-                const fn = () => {};
+	it("removeAllListeners for a specific untracked event does not throw (line 390 false branch)", () => {
+		const emitter = new EventEmitter();
+		const fn = () => {};
 
-                // Track emitter for "data" event
-                emitter.on("data", fn);
+		// Track emitter for "data" event
+		emitter.on("data", fn);
 
-                // removeAllListeners("close") — "close" was never tracked
-                // emitterTracking exists (for "data") but emitterTracking.get("close") = undefined
-                // → line 390: if (eventTracking) → FALSE → cleanup body skipped
-                expect(() => emitter.removeAllListeners("close")).not.toThrow();
+		// removeAllListeners("close") — "close" was never tracked
+		// emitterTracking exists (for "data") but emitterTracking.get("close") = undefined
+		// → line 390: if (eventTracking) → FALSE → cleanup body skipped
+		expect(() => emitter.removeAllListeners("close")).not.toThrow();
 
-                // "data" listener still registered (only "close" was targeted)
-                expect(emitter.listenerCount("data")).toBe(1);
+		// "data" listener still registered (only "close" was targeted)
+		expect(emitter.listenerCount("data")).toBe(1);
 
-                emitter.removeAllListeners();
-        });
+		emitter.removeAllListeners();
+	});
 
-        it("removeAllListeners for another untracked event with multiple tracked events (line 390 false)", () => {
-                const emitter = new EventEmitter();
-                const fn1 = () => {};
-                const fn2 = () => {};
+	it("removeAllListeners for another untracked event with multiple tracked events (line 390 false)", () => {
+		const emitter = new EventEmitter();
+		const fn1 = () => {};
+		const fn2 = () => {};
 
-                // Track emitter for both "data" and "end"
-                emitter.on("data", fn1);
-                emitter.on("end", fn2);
+		// Track emitter for both "data" and "end"
+		emitter.on("data", fn1);
+		emitter.on("end", fn2);
 
-                // removeAllListeners("error") — "error" not tracked → line 390 false
-                expect(() => emitter.removeAllListeners("error")).not.toThrow();
+		// removeAllListeners("error") — "error" not tracked → line 390 false
+		expect(() => emitter.removeAllListeners("error")).not.toThrow();
 
-                // Both data and end listeners remain
-                expect(emitter.listenerCount("data")).toBe(1);
-                expect(emitter.listenerCount("end")).toBe(1);
+		// Both data and end listeners remain
+		expect(emitter.listenerCount("data")).toBe(1);
+		expect(emitter.listenerCount("end")).toBe(1);
 
-                emitter.removeAllListeners();
-        });
+		emitter.removeAllListeners();
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -213,24 +213,24 @@ describe("eventemitter-context: removeAllListeners(event) with untracked event s
 // (which will throw TypeError since Node.js requires a function listener).
 // ─────────────────────────────────────────────────────────────────────────────
 describe("eventemitter-context: shouldWrapListener rejects non-function listeners (line 202)", () => {
-        it("passing a string as listener to on() triggers typeof!==function guard and then throws (line 202 true)", () => {
-                const emitter = new EventEmitter();
+	it("passing a string as listener to on() triggers typeof!==function guard and then throws (line 202 true)", () => {
+		const emitter = new EventEmitter();
 
-                // runtime_shouldWrapListener("not-a-function") → typeof !== "function" → true → return false
-                // → patched on() fast-paths to original.call(this, event, listener)
-                // → native EventEmitter.on throws TypeError for non-function listener
-                expect(() => emitter.on("data", "not-a-function")).toThrow(TypeError);
-        });
+		// runtime_shouldWrapListener("not-a-function") → typeof !== "function" → true → return false
+		// → patched on() fast-paths to original.call(this, event, listener)
+		// → native EventEmitter.on throws TypeError for non-function listener
+		expect(() => emitter.on("data", "not-a-function")).toThrow(TypeError);
+	});
 
-        it("passing a number as listener to once() triggers the guard (line 202 true)", () => {
-                const emitter = new EventEmitter();
-                expect(() => emitter.once("data", 42)).toThrow(TypeError);
-        });
+	it("passing a number as listener to once() triggers the guard (line 202 true)", () => {
+		const emitter = new EventEmitter();
+		expect(() => emitter.once("data", 42)).toThrow(TypeError);
+	});
 
-        it("passing null as listener to prependListener() triggers the guard (line 202 true)", () => {
-                const emitter = new EventEmitter();
-                expect(() => emitter.prependListener("data", null)).toThrow(TypeError);
-        });
+	it("passing null as listener to prependListener() triggers the guard (line 202 true)", () => {
+		const emitter = new EventEmitter();
+		expect(() => emitter.prependListener("data", null)).toThrow(TypeError);
+	});
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

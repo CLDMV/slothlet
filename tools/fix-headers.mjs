@@ -1,19 +1,19 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/fix-headers2.mjs
+ *	@Filename: /tools/fix-headers.mjs
  *	@Date: 2026-03-01T00:00:00-08:00 (1740819600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:37:27 -08:00 (1772426247)
+ *	@Last modified time: 2026-03-04 20:49:56 -08:00 (1772686196)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
  * @fileoverview Compatibility wrapper that delegates header fixing to @cldmv/fix-headers.
- * @module tools/fix-headers2
+ * @module tools/fix-headers
  * @internal
  *
  * @description
@@ -21,10 +21,10 @@
  * `--help`), while offloading all header logic to the shared @cldmv/fix-headers package.
  *
  * @example
- * node tools/fix-headers2.mjs --dry-run
+ * node tools/fix-headers.mjs --dry-run
  *
  * @example
- * node tools/fix-headers2.mjs --verbose
+ * node tools/fix-headers.mjs --verbose
  */
 
 import { fixHeaders } from "@cldmv/fix-headers";
@@ -48,7 +48,7 @@ Slothlet File Header Fixer (v2)
 Delegates execution to @cldmv/fix-headers while preserving legacy flags.
 
 USAGE:
-  node tools/fix-headers2.mjs [OPTIONS]
+  node tools/fix-headers.mjs [OPTIONS]
 
 OPTIONS:
   --dry-run     Compute changes without writing files (also enables --diff)
