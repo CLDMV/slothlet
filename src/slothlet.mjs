@@ -350,14 +350,9 @@ class Slothlet {
 
 		// Initialize context (or reuse existing if preservedInstanceID provided)
 		let store;
-		if (preservedInstanceID && this.contextManager.instances.has(preservedInstanceID)) {
-			// Reload: DONT reuse store, delete old and create fresh
-			this.contextManager.cleanup(preservedInstanceID);
-			store = this.contextManager.initialize(this.instanceID, this.config);
-		} else {
-			// Fresh load: initialize new store
-			store = this.contextManager.initialize(this.instanceID, this.config);
-		}
+		// contextManager is always freshly created above (line 343), so instances is always
+		// empty here regardless of preservedInstanceID — always do a fresh initialize.
+		store = this.contextManager.initialize(this.instanceID, this.config);
 
 		// Enable EventEmitter context patching (once globally, safe to call multiple times)
 		// This ensures EventEmitter callbacks preserve AsyncLocalStorage context
