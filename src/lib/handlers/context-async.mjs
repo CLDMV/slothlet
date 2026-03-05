@@ -86,8 +86,7 @@ export class AsyncContextManager {
 		const isActiveOurInstance =
 			activeStore &&
 			(activeStore.instanceID === instanceID ||
-				activeStore.parentInstanceID === instanceID ||
-				activeStore.instanceID.startsWith(instanceID + "__run_"));
+				activeStore.parentInstanceID === instanceID);
 
 		if (isActiveOurInstance) {
 			// Already in context for this instance (base or child) - use active store to preserve modifications
