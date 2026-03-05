@@ -96,19 +96,26 @@ export class ApiBuilder extends ComponentBase {
 		// Mode builders return wrapped APIs where each wrapper has its own _impl storage
 		// Mutating userApi in place to add builtins is safe and eliminates unnecessary object allocation
 
-		// Strip any previously-attached sloshlet builtins from userApi before checking for user hooks.
+		// Strip any previously-attached slothlet builtins from userApi before checking for user hooks.
 		// When the API root is a function module (e.g. a root-function.mjs default export), the mode
 		// builder may return the SAME function object on successive calls if the ESM module cache is
 		// not busted (e.g. keepInstanceID reload keeps the same instanceID query param, so Node's ESM
-		// loader serves the cached module). That function still carries shutdown/sloshlet/destroy from
+		// loader serves the cached module). That function still carries shutdown/slothlet/destroy from
 		// the previous buildFinalAPI invocation. Without stripping them we'd mistake our own builtins
 		// for user-provided lifecycle hooks, creating infinite recursion in createShutdownFunction.
-		for (const builtinKey of ["shutdown", "sloshlet", "destroy"]) {
-			if (Object.prototype.hasOwnProperty.call(userApi, builtinKey)) {
-				try {
-					delete userApi[builtinKey];
-				} catch (_) {
-					// Non-configurable (shouldn't happen since attachBuiltins uses configurable:true, but guard anyway)
+		//
+		// IMPORTANT: Only strip the property if its current value IS the exact function reference we
+		// previously attached (saved on this.slothlet._ownBuiltins). This prevents incorrectly
+		// discarding a user-exported shutdown/destroy function that was fresh-assigned by
+		// applyRootContributor's Object.assign() just before buildFinalAPI was called.
+		if (this.slothlet._ownBuiltins) {
+			for (const [key, ref] of Object.entries(this.slothlet._ownBuiltins)) {
+				if (ref && Object.prototype.hasOwnProperty.call(userApi, key) && userApi[key] === ref) {
+					try {
+						delete userApi[key];
+					} catch (_) {
+						// Non-configurable - shouldn't happen since attachBuiltins uses configurable:true
+					}
 				}
 			}
 		}
@@ -159,6 +166,14 @@ export class ApiBuilder extends ComponentBase {
 			writable: false,
 			configurable: true
 		});
+
+		// Save references to our own builtin functions so the next buildFinalAPI call
+		// (e.g. on a keepInstanceID reload) can distinguish them from user-exported functions.
+		this.slothlet._ownBuiltins = {
+			shutdown: shutdownFn,
+			slothlet: slothletNamespace,
+			destroy: destroyWithApi
+		};
 
 		return userApi;
 	}
