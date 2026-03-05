@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-03-04 16:57:04 -08:00 (1772672224)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -332,10 +332,10 @@ export class Sanitize extends ComponentBase {
 				// Apply segment rules (without camelCase - that happens at primary level)
 				const config = { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules };
 				const result = this.#applySegmentRules(cleanSeg, 0, originalString, config);
-				
+
 				// Track if a lower rule was applied
 				// Check if any lower rule pattern matches the original string
-				const matchesLower = lowerRules.some(pattern => {
+				const matchesLower = lowerRules.some((pattern) => {
 					if (pattern.includes("*") || pattern.includes("?")) {
 						const regex = this.#compileGlobPattern(pattern, false);
 						if (regex && regex.test(originalString)) {
@@ -356,11 +356,11 @@ export class Sanitize extends ComponentBase {
 					}
 					return false;
 				});
-				
+
 				if (matchesLower && result === cleanSeg.toLowerCase()) {
 					lowerRuleApplied[primaryIdx] = true;
 				}
-				
+
 				return result;
 			});
 

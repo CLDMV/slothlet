@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:37 -08:00 (1772425297)
+ *	@Last modified time: 2026-03-04 16:57:04 -08:00 (1772672224)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -83,10 +83,7 @@ export class AsyncContextManager {
 		let baseStore;
 
 		// CHILD INSTANCE APPROACH: Check if active store is this instance OR a child of this instance
-		const isActiveOurInstance =
-			activeStore &&
-			(activeStore.instanceID === instanceID ||
-				activeStore.parentInstanceID === instanceID);
+		const isActiveOurInstance = activeStore && (activeStore.instanceID === instanceID || activeStore.parentInstanceID === instanceID);
 
 		if (isActiveOurInstance) {
 			// Already in context for this instance (base or child) - use active store to preserve modifications
