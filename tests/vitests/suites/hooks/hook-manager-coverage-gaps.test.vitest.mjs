@@ -210,3 +210,32 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
                 expect(remaining.registeredHooks).toHaveLength(0);
         });
 });
+
+// ─── #removeHook — patternHooks.length > 0 after splice (L826 false branch) ─────
+
+describe("HookManager.#removeHook — patternHooks still has items after removal: L826 false branch skips delete", () => {
+	it("removing one of two hooks in the same pattern bucket leaves bucket non-empty (L826 false)", async () => {
+		api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: true,
+			dir: TEST_DIRS.API_TEST,
+			api: { collision: { initial: "replace", api: "replace" } }
+		});
+
+		// Register TWO hooks with the exact same type + pattern (same bucket).
+		// Both go into: this.#hooks["before"]["primary"]["hook.l826.two.hooks.unique"]
+		api.slothlet.hook.on("before:hook.l826.two.hooks.unique", () => {}, { id: "l826-hook-one" });
+		api.slothlet.hook.on("before:hook.l826.two.hooks.unique", () => {}, { id: "l826-hook-two" });
+
+		// Remove only the first hook.
+		// After splice: patternHooks = [hook2] → length === 1 (not 0)
+		// → L826: if (patternHooks.length === 0) → FALSE → delete is NOT called → false branch taken
+		api.slothlet.hook.off("l826-hook-one");
+
+		// Bucket should still have the second hook
+		const remaining = api.slothlet.hook.list({ pattern: "hook.l826.two.hooks.unique" });
+		expect(remaining.registeredHooks).toHaveLength(1);
+		expect(remaining.registeredHooks[0].id).toBe("l826-hook-two");
+	});
+});

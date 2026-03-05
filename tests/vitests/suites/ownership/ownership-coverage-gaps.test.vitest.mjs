@@ -303,3 +303,33 @@ describe("OwnershipManager.unregister — L164 else-if restore branch", () => {
                 expect(result.removed).toHaveLength(0);
         });
 });
+
+// ─── L164 else-if FALSE arm: result.action === "none" (neither delete nor restore) ──
+
+describe("OwnershipManager.unregister — L164 else-if FALSE branch (action is neither delete nor restore)", () => {
+	it("unregister returns empty removed/rolledBack when removePath returns 'none' for a corrupted path (L164 false)", () => {
+		const o = new OwnershipManager(makeMock());
+		const fn = () => {};
+
+		// Register mod-a on "math" so moduleToPath maps mod-a → {"math"}
+		o.register({ apiPath: "math", moduleID: "mod-a", value: fn, collisionMode: "merge", source: "initial" });
+
+		// Manually remove mod-a from the pathToModule stack WITHOUT updating moduleToPath.
+		// This creates an inconsistency: moduleToPath still says mod-a owns "math",
+		// but pathToModule["math"]'s stack no longer contains mod-a.
+		const stack = o.pathToModule.get("math");
+		const idx = stack.findIndex((e) => e.moduleID === "mod-a");
+		stack.splice(idx, 1); // Empties the stack but keeps the empty array entry
+
+		// unregister("mod-a"):
+		//   paths = moduleToPath.get("mod-a") → {"math"} (non-null, loop runs)
+		//   removePath("math", "mod-a") → stack exists but mod-a not in it → action: "none"
+		//   → if (action === "delete") FALSE
+		//   → else if (action === "restore") FALSE ← L164 FALSE ARM TAKEN
+		//   neither removed nor rolledBack is populated
+		const result = o.unregister("mod-a");
+
+		expect(result.removed).toHaveLength(0);
+		expect(result.rolledBack).toHaveLength(0);
+	});
+});
