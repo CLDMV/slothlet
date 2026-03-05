@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:46 -08:00 (1772425306)
+ *	@Last modified time: 2026-03-03 22:48:07 -08:00 (1772606887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -177,45 +177,45 @@ describe("LiveContextManager.cleanup — throws CONTEXT_NOT_FOUND for unknown in
 // ─── line 52: initialize() throws CONTEXT_ALREADY_EXISTS on duplicate ID ────────
 
 describe("LiveContextManager.initialize — throws on duplicate instanceID (line 52)", () => {
-        it("throws SlothletError when initialize is called twice with the same ID (line 52)", () => {
-                const cm = new LiveContextManager();
-                cm.initialize("dup-inst");
+	it("throws SlothletError when initialize is called twice with the same ID (line 52)", () => {
+		const cm = new LiveContextManager();
+		cm.initialize("dup-inst");
 
-                // Second call with same ID → line 52: throw CONTEXT_ALREADY_EXISTS
-                expect(() => cm.initialize("dup-inst")).toThrow(SlothletError);
-        });
+		// Second call with same ID → line 52: throw CONTEXT_ALREADY_EXISTS
+		expect(() => cm.initialize("dup-inst")).toThrow(SlothletError);
+	});
 
-        it("error message includes CONTEXT_ALREADY_EXISTS code (line 52)", () => {
-                const cm = new LiveContextManager();
-                cm.initialize("dup-inst-2");
+	it("error message includes CONTEXT_ALREADY_EXISTS code (line 52)", () => {
+		const cm = new LiveContextManager();
+		cm.initialize("dup-inst-2");
 
-                expect(() => cm.initialize("dup-inst-2")).toThrow(/CONTEXT_ALREADY_EXISTS/);
-        });
+		expect(() => cm.initialize("dup-inst-2")).toThrow(/CONTEXT_ALREADY_EXISTS/);
+	});
 
-        it("does NOT throw when initializing different instances (line 52 not triggered)", () => {
-                const cm = new LiveContextManager();
-                cm.initialize("a");
+	it("does NOT throw when initializing different instances (line 52 not triggered)", () => {
+		const cm = new LiveContextManager();
+		cm.initialize("a");
 
-                // Different ID — line 52 is NOT triggered
-                expect(() => cm.initialize("b")).not.toThrow();
-        });
+		// Different ID — line 52 is NOT triggered
+		expect(() => cm.initialize("b")).not.toThrow();
+	});
 });
 
 // ─── line 99: runInContext() throws CONTEXT_NOT_FOUND for unknown instanceID ────
 
 describe("LiveContextManager.runInContext — throws CONTEXT_NOT_FOUND for unknown ID (line 99)", () => {
-        it("throws SlothletError when instanceID was never registered (line 99)", () => {
-                const cm = new LiveContextManager();
+	it("throws SlothletError when instanceID was never registered (line 99)", () => {
+		const cm = new LiveContextManager();
 
-                // No instances registered; targetInstanceID won't be in this.instances
-                expect(() => cm.runInContext("ghost-inst", () => {}, null, [])).toThrow(SlothletError);
-        });
+		// No instances registered; targetInstanceID won't be in this.instances
+		expect(() => cm.runInContext("ghost-inst", () => {}, null, [])).toThrow(SlothletError);
+	});
 
-        it("error message contains CONTEXT_NOT_FOUND (line 99)", () => {
-                const cm = new LiveContextManager();
+	it("error message contains CONTEXT_NOT_FOUND (line 99)", () => {
+		const cm = new LiveContextManager();
 
-                expect(() => cm.runInContext("ghost-inst-2", () => {}, null, [])).toThrow(/CONTEXT_NOT_FOUND/);
-        });
+		expect(() => cm.runInContext("ghost-inst-2", () => {}, null, [])).toThrow(/CONTEXT_NOT_FOUND/);
+	});
 });
 
 // ─── line 111: runInContext() store.callerWrapper set when currentWrapper provided ────
