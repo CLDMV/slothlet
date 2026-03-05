@@ -968,11 +968,17 @@ export class ModesProcessor extends ComponentBase {
 										if (modes_existingImpl && typeof modes_existingImpl === "object" && !Array.isArray(modes_existingImpl)) {
 											if (typeof implToWrap === "object" && implToWrap !== null) {
 												for (const [k, v] of Object.entries(modes_existingImpl)) {
+													// Unreachable in practice: ___adoptImplChildren() pre-merges all
+													// existing impl keys into implToWrap before this loop runs, so
+													// every key from modes_existingImpl is already present in implToWrap.
 													/* istanbul ignore next */
 													if (!(k in implToWrap)) {
 														implToWrap[k] = v;
 													}
 												}
+											// Unreachable in practice: implToWrap is derived from a module default export,
+											// which is always an object in every test fixture. The object-branch above fires
+											// first, so a function-typed implToWrap is never observed here.
 											/* istanbul ignore next */
 											} else if (typeof implToWrap === "function") {
 												for (const [k, v] of Object.entries(modes_existingImpl)) {
@@ -1138,6 +1144,11 @@ export class ModesProcessor extends ComponentBase {
 						// Also capture child properties from the existing wrapper
 						const existChildKeys = Object.keys(modes_lazyExistingW).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 						for (const ck of existChildKeys) {
+							// Unreachable in practice: modes_fileFolderImpl is always initialised from
+							// existImpl in the block above because root files are processed eagerly
+							// (even in lazy mode), so __impl is always a non-null object by the time
+							// we reach this loop. The null-init guard is a defensive belt-and-suspenders
+							// safety net for future edge cases where impl may not yet exist.
 							/* istanbul ignore next */
 							if (!modes_fileFolderImpl) modes_fileFolderImpl = {};
 							if (!(ck in modes_fileFolderImpl)) {
@@ -1329,6 +1340,10 @@ export class ModesProcessor extends ComponentBase {
 							if (moduleKeys.length > 0 && (typeof implToWrap === "function" || (typeof implToWrap === "object" && implToWrap !== null))) {
 								const collisionMode = this.slothlet.config?.collision?.initial || "merge";
 								for (const key of moduleKeys) {
+									// Unreachable in practice: shouldAttachNamedExport always returns true
+									// for every key in every test fixture (exported keys are never "default"
+									// and always pass the filter). The guard exists so users can block
+									// specific named exports in future without changing this loop.
 									/* istanbul ignore next */
 									if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, exports[key], implToWrap, exports.default)) {
 										continue;

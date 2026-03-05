@@ -2399,6 +2399,11 @@ export class ApiManager extends ComponentBase {
 				// adopted to own properties). Reconstruct the complete impl from the wrapper tree
 				// so ___setImpl → ___adoptImplChildren receives the full key set.
 				let implForReload;
+				// Unreachable in practice: buildAPI() always returns a plain function or
+				// plain object — never a UnifiedWrapper proxy. resolveWrapper(freshApi)
+				// is therefore always null, so this branch never executes. The guard
+				// exists to safely handle any future code path that hands a pre-wrapped
+				// value to the reload pipeline.
 				/* istanbul ignore next */
 				if (resolveWrapper(freshApi) !== null) {
 					const freshWrapper = resolveWrapper(freshApi);
@@ -2456,6 +2461,11 @@ export class ApiManager extends ComponentBase {
 
 				// Wrap fresh API - extract properties if buildAPI returned a function
 				let implForContainer = freshApi;
+				// Unreachable in practice: buildAPI() never returns a bare function in
+				// the container (no-existing-wrapper) reload path — it always returns a
+				// plain object. Even if it did return a function, Object.keys on a
+				// typical module function yields zero keys, so the loop body would be a
+				// no-op anyway. The guard is defensive for hypothetical future callers.
 				/* istanbul ignore next */
 				if (typeof freshApi === "function") {
 					implForContainer = {};

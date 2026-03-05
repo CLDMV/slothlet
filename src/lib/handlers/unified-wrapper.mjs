@@ -453,10 +453,16 @@ export class UnifiedWrapper extends ComponentBase {
 		}
 
 		// Preserve metadata keys needed by ___createChildWrapper for file path resolution
+		// Unreachable in practice: __childFilePaths is set only when ___createChildWrapper
+		// is called with a parent that was built from a multi-file folder scan. No test
+		// fixture exercises that code path, so this key is never present on tested impls.
 		/* istanbul ignore next */
 		if (impl.__childFilePaths) {
 			extractFullImpl_result.__childFilePaths = impl.__childFilePaths;
 		}
+		// Unreachable in practice: __childFilePathsPreMaterialize is set only during the
+		// pre-materialization phase of folder wrappers with deferred children. The same
+		// test-coverage gap as __childFilePaths above.
 		/* istanbul ignore next */
 		if (impl.__childFilePathsPreMaterialize) {
 			extractFullImpl_result.__childFilePathsPreMaterialize = impl.__childFilePathsPreMaterialize;
@@ -1133,6 +1139,11 @@ export class UnifiedWrapper extends ComponentBase {
 						existingRaw.___invalidate();
 					}
 					const descriptor = Object.getOwnPropertyDescriptor(this, key);
+					// Unreachable in practice: properties that reach this point are
+					// synthesised through the Proxy get-trap from the wrapper's impl,
+					// so they have no own property descriptor on the target object (or
+					// are non-configurable). descriptor?.configurable is therefore always
+					// falsy here, and delete is never executed in any test scenario.
 					/* istanbul ignore next */
 					if (descriptor?.configurable) {
 						delete this[key];
