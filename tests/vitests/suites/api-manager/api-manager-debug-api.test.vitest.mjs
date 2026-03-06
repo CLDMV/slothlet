@@ -41,7 +41,24 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+/**
+ * Extract the raw Slothlet instance from an API proxy via a wrapper on any prop.
+ * @param {object} api - Slothlet API proxy.
+ * @param {string} [prop="math"] - A property known to carry a wrapper.
+ * @returns {import("@cldmv/slothlet").SlothletInstance} Internal Slothlet instance.
+ */
+function getSlInstance(api, prop = "math") {
+	const wrapper = resolveWrapper(api[prop]);
+	if (!wrapper) throw new Error(`resolveWrapper(api.${prop}) returned null`);
+	return wrapper.slothlet;
+}
+
+// This suite intentionally enables config.debug.api=true for branch coverage.
+// Suppress the resulting console noise — we don't assert on emitted debug lines.
+suppressSlothletDebugOutput();
 
 /**
  * Create an eager slothlet instance with `debug.api` enabled.
@@ -301,5 +318,81 @@ describe("api-manager addApiComponent array folderPath", () => {
 		expect(Array.isArray(result)).toBe(true);
 		expect(result.length).toBe(2);
 		expect(api.arrExt).toBeDefined();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 6. mutateApiValue: wrapper-existing + plain-object-next debug paths
+//    L652-655: merge-into-wrapper path fires when existing is a wrapper but next is a
+//              plain object with keys, with debug.api=true.
+//    L676:     setimpl-fallback path fires when existing is a wrapper but next is a
+//              plain object with NO keys (empty), with debug.api=true.
+//    Tested by directly calling apiManager.mutateApiValue via the internal handler.
+// ---------------------------------------------------------------------------
+describe("api-manager mutateApiValue direct: wrapper+plain-object debug paths", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+		await new Promise((r) => setTimeout(r, 30));
+	});
+
+	it("fires merge-into-wrapper debug (L652-655): wrapper existing + plain object with keys", async () => {
+		api = await makeDebugApiInstance();
+		// api.math is an eager wrapper proxy. A plain object with keys as nextValue
+		// triggers the isWrapperProxy(existing) && !isWrapperProxy(next) && nextHasKeys path.
+		const mgr = getSlInstance(api).handlers.apiManager;
+		const existingWrapper = api.math;
+		const plainNext = { add: () => 1, subtract: () => 2 };
+		// Should not throw - merges keys from plainNext into the existing wrapper
+		await expect(
+			mgr.mutateApiValue(existingWrapper, plainNext, { removeMissing: false, allowOverwrite: true }, { debug: { api: true } })
+		).resolves.not.toThrow();
+	});
+
+	it("fires setimpl-fallback debug (L676): wrapper existing + empty plain object next", async () => {
+		api = await makeDebugApiInstance();
+		// Empty plain object has no keys → nextHasKeys=false → setimpl-fallback branch fires.
+		const mgr = getSlInstance(api).handlers.apiManager;
+		const existingWrapper = api.math;
+		await expect(
+			mgr.mutateApiValue(existingWrapper, {}, { removeMissing: false, allowOverwrite: true }, { debug: { api: true } })
+		).resolves.not.toThrow();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 7. setValueAtPath replace mode with primitives (L800-801)
+//    When collisionMode="replace" and neither existing nor new value is an
+//    object/function, the else-branch simply does parent[finalKey] = value.
+//    Triggered by calling setValueAtPath directly with a plain-object root.
+// ---------------------------------------------------------------------------
+describe("api-manager setValueAtPath replace-mode primitives (L800-801)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+		await new Promise((r) => setTimeout(r, 30));
+	});
+
+	it("replaces a primitive with a primitive via replace collision mode", async () => {
+		api = await makeDebugApiInstance();
+		const mgr = getSlInstance(api).handlers.apiManager;
+		// Use a plain object as the root so we can set primitives freely.
+		const testRoot = {};
+		// First assignment (no collision) — sets testRoot.primKey = 123.
+		await mgr.setValueAtPath(testRoot, ["primKey"], 123, { collisionMode: "merge" });
+		expect(testRoot.primKey).toBe(123);
+		// Second assignment: existing=123 (not object), value=456 (not object),
+		// collisionMode="replace" → hits the else branch at L800-801.
+		const result = await mgr.setValueAtPath(testRoot, ["primKey"], 456, { collisionMode: "replace" });
+		expect(result).toBe(true);
+		expect(testRoot.primKey).toBe(456);
 	});
 });

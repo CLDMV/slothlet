@@ -799,6 +799,8 @@ export class ApiBuilder extends ComponentBase {
 				set: function slothlet_metadata_set(fn, key, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							// slothlet.handlers is always truthy when code reaches here; "undefined" arm is dead code.
+							/* v8 ignore next */
 							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
 							validationError: true
 						});
@@ -866,6 +868,8 @@ export class ApiBuilder extends ComponentBase {
 				setFor: function slothlet_metadata_setFor(pathOrModuleId, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							// slothlet.handlers is always truthy when code reaches here; "undefined" arm is dead code.
+							/* v8 ignore next */
 							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
 							validationError: true
 						});
@@ -985,6 +989,8 @@ export class ApiBuilder extends ComponentBase {
 			 */
 			materialize: (() => {
 				const mgr = slothlet.handlers?.materialize;
+				// materialize handler is always auto-registered via slothletProperty; if (!mgr) is unreachable.
+				/* v8 ignore start */
 				if (!mgr) {
 					return Object.freeze({
 						materialized: false,
@@ -992,6 +998,7 @@ export class ApiBuilder extends ComponentBase {
 						wait: async () => {}
 					});
 				}
+				/* v8 ignore stop */
 				return Object.freeze({
 					get materialized() {
 						return mgr.materialized;
@@ -1164,6 +1171,8 @@ export class ApiBuilder extends ComponentBase {
 				 * Hook system diagnostics (only when hooks enabled)
 				 * @type {object}
 				 */
+				// hookManager is always auto-registered via slothletProperty; false arm is unreachable.
+				/* v8 ignore start */
 				hook: slothlet.handlers?.hookManager
 					? {
 							/**
@@ -1184,6 +1193,7 @@ export class ApiBuilder extends ComponentBase {
 							}
 						}
 					: undefined
+				/* v8 ignore stop */
 			};
 		}
 

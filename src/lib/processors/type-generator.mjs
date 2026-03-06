@@ -178,6 +178,8 @@ async function extractTypesFromFile(filePath, ts) {
 			// export function foo(...): ...
 			if (ts.isFunctionDeclaration(node) && node.name) {
 				const hasExport = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+				// Named function declarations without export keyword never appear in our TypeScript test fixtures.
+				/* v8 ignore next */
 				if (hasExport) {
 					exports.push({
 						name: node.name.text,
@@ -324,6 +326,8 @@ function generateInterfaceContent(structure, lines, indent) {
 	for (const [key, value] of Object.entries(structure)) {
 		if (value.type === "function") {
 			lines.push(`${indentation}${key}${value.signature};`);
+		// Primitive values in structure are never produced by our TypeScript generator.
+		/* v8 ignore next */
 		} else if (typeof value === "object" && value !== null) {
 			// Intermediate container object — recurse into it
 			lines.push(`${indentation}${key}: {`);

@@ -289,3 +289,82 @@ describe("slothlet.getOwnership() — no ownership handler guard (line 711)", ()
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+// line 721 – getDiagnostics() — covers the function itself + null arms of
+//            contextManager?.getDiagnostics() and handlers.ownership?.getDiagnostics()
+// ---------------------------------------------------------------------------
+
+describe("slothlet.getDiagnostics() — branch coverage (lines 721-728)", () => {
+	it("returns a diagnostics snapshot with all fields when everything is present", () => {
+		const result = engine.getDiagnostics();
+		expect(result).toBeDefined();
+		expect(result).toHaveProperty("instanceID");
+		expect(result).toHaveProperty("isLoaded");
+		expect(result).toHaveProperty("config");
+		expect(result).toHaveProperty("context");
+		expect(result).toHaveProperty("ownership");
+	});
+
+	it("returns null for context when contextManager is null (L726 || null branch)", () => {
+		const saved = engine.contextManager;
+		engine.contextManager = null;
+		try {
+			const result = engine.getDiagnostics();
+			expect(result.context).toBeNull();
+		} finally {
+			engine.contextManager = saved;
+		}
+	});
+
+	it("returns null for ownership when handlers.ownership is null (L727 || null branch)", () => {
+		const saved = engine.handlers.ownership;
+		engine.handlers.ownership = null;
+		try {
+			const result = engine.getDiagnostics();
+			expect(result.ownership).toBeNull();
+		} finally {
+			engine.handlers.ownership = saved;
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// line 692 – debug() no-op when debugLogger is null (false branch of if(this.debugLogger))
+// ---------------------------------------------------------------------------
+
+describe("slothlet.debug() — no-op when debugLogger is null (line 692 false branch)", () => {
+	it("does not throw when debug() is called with no debugLogger configured", () => {
+		const saved = engine.debugLogger;
+		engine.debugLogger = null;
+		try {
+			// Should silently no-op — the false branch of if(this.debugLogger)
+			expect(() => engine.debug("test-code", { key: "TEST" })).not.toThrow();
+		} finally {
+			engine.debugLogger = saved;
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// line 668 – shutdown() contextManager && instanceID guard (false branch)
+//            The && short-circuit fires when instanceID is falsy.
+// ---------------------------------------------------------------------------
+
+describe("slothlet.shutdown() — contextManager/instanceID guard false branch (line 668)", () => {
+	it("does not throw when instanceID is null during shutdown (L668 false branch)", async () => {
+		// Use a dedicated instance so we don't interfere with the shared engine.
+		const localApi = await makeApi();
+		const localEngine = getEngine(localApi);
+
+		const savedID = localEngine.instanceID;
+		localEngine.instanceID = null;
+		try {
+			// With instanceID null the if(this.instanceID && this.contextManager) fires false
+			// and contextManager.cleanup is skipped — no throw expected.
+			await expect(localApi.shutdown()).resolves.not.toThrow();
+		} finally {
+			localEngine.instanceID = savedID;
+		}
+	});
+});

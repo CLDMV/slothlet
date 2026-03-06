@@ -227,9 +227,14 @@ export class ApiManager extends ComponentBase {
 				isFile: stats.isFile()
 			};
 		} catch (error) {
+			// fs.stat only throws native Node.js errors (ENOENT, EACCES, etc.),
+			// never a SlothletError — this guard is a defensive re-throw that
+			// cannot be reached in practice.
+			/* v8 ignore start */
 			if (error instanceof this.SlothletError) {
 				throw error;
 			}
+			/* v8 ignore stop */
 			// Use same error code as before for consistency with existing tests
 			throw new this.SlothletError("INVALID_CONFIG_DIR_INVALID", {
 				dir: resolvedPath,
@@ -477,10 +482,18 @@ export class ApiManager extends ComponentBase {
 				// Pass moduleID for correct ownership tracking in lifecycle events
 				existingWrapper.___setImpl(nextWrapper.____slothletInternal.impl, moduleID);
 			} else if (nextWrapper.____slothletInternal.impl === undefined) {
+				// Unreachable in practice: UnifiedWrapper always initializes impl to null (never
+				// undefined) via _cloneImpl(initialImpl) in the constructor. A nextWrapper reaching
+				// this point would need impl explicitly set to undefined after construction.
+				// Guard kept for future-proofing non-UnifiedWrapper adapters.
+				/* v8 ignore start */
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
 				existingWrapper.____slothletInternal.impl = null;
 			} else {
+				// Unreachable in practice: requires existingWrapper to have no ___setImpl method,
+				// but every object that passes isWrapperProxy() is a UnifiedWrapper proxy, which
+				// always has ___setImpl. This is a defensive fallback for hypothetical adapters.
 				// Fallback for non-unified wrappers
 				if (nextWrapper.____slothletInternal.impl !== undefined) {
 					existingWrapper.____slothletInternal.impl = nextWrapper.____slothletInternal.impl;
@@ -492,6 +505,7 @@ export class ApiManager extends ComponentBase {
 						existingWrapper.isCallable = true;
 					}
 				}
+				/* v8 ignore stop */
 			}
 
 			// Clear existing children by deleting properties
@@ -1126,12 +1140,17 @@ export class ApiManager extends ComponentBase {
 		const mutateExisting = !!(restOptions.mutateExisting || collisionMode === "merge");
 
 		const moduleID = restOptions.moduleID ? String(restOptions.moduleID) : this.buildDefaultModuleId(normalizedPath, resolvedFolderPath);
+		// buildDefaultModuleId always returns a non-empty "<prefix>_<random>" string (randomSuffix is
+		// always 6 chars), and String(truthy-moduleID) always produces a non-empty string.
+		// So !moduleID is never true — this guard is a defensive belt-and-suspenders check.
+		/* v8 ignore start */
 		if (restOptions.forceOverwrite && !moduleID) {
 			throw new this.SlothletError("INVALID_CONFIG_FORCE_OVERWRITE_REQUIRES_MODULE_ID", {
 				apiPath: normalizedPath,
 				validationError: true
 			});
 		}
+		/* v8 ignore stop */
 
 		// For single files, we need to pass the parent directory to buildAPI
 		// along with a file filter to load only that specific file
@@ -1258,9 +1277,14 @@ export class ApiManager extends ComponentBase {
 								hoisted[k] = dupWrapper[k];
 							}
 						} else {
+							// dupValue is the result of buildAPI which always creates UnifiedWrapper proxies.
+							// resolveWrapper therefore always returns non-null for any value in apiToMerge,
+							// making this else branch unreachable in practice.
+							/* v8 ignore start */
 							for (const k of Object.keys(dupValue)) {
 								hoisted[k] = dupValue[k];
 							}
+							/* v8 ignore stop */
 						}
 						apiToMerge = hoisted;
 						this.slothlet.debug("api", {

@@ -344,9 +344,12 @@ export class ModesProcessor extends ComponentBase {
 								if (key in callableModule) {
 									continue;
 								}
+								// All namedKeys reaching here are already in callableModule (L344's `continue` always fires first).
+								/* v8 ignore start */
 								if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
 									continue;
 								}
+								/* v8 ignore stop */
 								// Unreachable in practice: any key that passes shouldAttachNamedExport=true was
 								// already attached to mod.default by processModuleForAPI's hybrid loop above,
 								// so it is always already in callableModule (caught by the earlier `continue`).
@@ -371,8 +374,16 @@ export class ModesProcessor extends ComponentBase {
 							// Update targetApi reference to point to the new function so other files can attach properties
 							targetApi = api[categoryName];
 						} else {
+							// shouldWrap=false requires (effectiveMode==="lazy" && populateDirectly===true).
+							// The only populateDirectly=true call-sites are:
+							//   L1065 (eager-mode transparent folder) — guarded by if(mode!=="lazy")
+							//   L1115 (lazy transparent folder) — hardcodes mode="eager"
+							//   L1469 (lazy materializer) — hardcodes mode="eager"
+							// So effectiveMode can never be "lazy" when populateDirectly is true.
+							/* v8 ignore start */
 							api[categoryName] = moduleContent;
 							targetApi = api[categoryName];
+							/* v8 ignore stop */
 						}
 						// Only process named exports separately if the default was a function
 						// (For object defaults, named exports are already in callableModule)
@@ -395,11 +406,16 @@ export class ModesProcessor extends ComponentBase {
 										collisionContext
 									});
 								} else {
+									// Same unreachable reason as the outer else: shouldWrap=false only
+									// when effectiveMode="lazy" && populateDirectly=true, but all populateDirectly=true
+									// call-sites use mode="eager" or are gated by if(mode!=="lazy").
+									/* v8 ignore start */
 									this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, key, mod[key], {
 										useCollisionDetection: true,
 										config: this.slothlet.config,
 										collisionContext
 									});
+									/* v8 ignore stop */
 								}
 								if (this.slothlet.handlers.ownership) {
 									this.slothlet.handlers.ownership.register({
