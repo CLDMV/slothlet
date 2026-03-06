@@ -978,7 +978,7 @@ export class ModesProcessor extends ComponentBase {
 												// Unreachable in practice: implToWrap is derived from a module default export,
 												// which is always an object in every test fixture. The object-branch above fires
 												// first, so a function-typed implToWrap is never observed here.
-												/* v8 ignore next 7 */
+												/* v8 ignore start */
 											} else if (typeof implToWrap === "function") {
 												for (const [k, v] of Object.entries(modes_existingImpl)) {
 													if (implToWrap[k] === undefined) {
@@ -986,6 +986,7 @@ export class ModesProcessor extends ComponentBase {
 													}
 												}
 											}
+											/* v8 ignore stop */
 										}
 										// Also absorb any child properties from existing wrapper
 										const modes_existingChildKeys = Object.keys(modes_existingWrapper).filter(

@@ -106,10 +106,11 @@ export class Loader extends ComponentBase {
 								if (msg.type === "success") {
 									this.slothlet._typesGenerated = true;
 									resolve();
-									/* v8 ignore next 2 */
+									/* v8 ignore start */
 								} else if (msg.type === "error") {
 									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", { error: msg.error }, null, { validationError: true }));
 								}
+								/* v8 ignore stop */
 							});
 
 							child.on("error", (error) => {
