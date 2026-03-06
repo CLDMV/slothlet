@@ -34,10 +34,11 @@ async function getTypeScript() {
 			typescriptInstance = await import("typescript");
 			// unreachable via tests: typescript is a devDependency always present during testing.
 			// The catch only fires in end-user environments where typescript is not installed.
-			/* v8 ignore next 3 */
+				/* v8 ignore start */
 		} catch (error) {
-			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
+				throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}
+		/* v8 ignore stop */
 	}
 	return typescriptInstance;
 }
