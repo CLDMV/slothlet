@@ -340,15 +340,12 @@ export class ApiAssignment extends ComponentBase {
 					} else if (valueIsLazyUnmaterialized && !existingIsLazyUnmaterialized) {
 						// Case 2: File processed first, lazy folder processed second
 						// Copy existing's childCache (file exports) into value (lazy folder)
-						// BUT: In replace or merge-replace mode, DON'T copy keys
+						// BUT: In merge-replace mode, DON'T copy keys (the folder replaces the file)
+						// Note: effectiveMode === "replace" never reaches here — the outer
+						// if (merge || merge-replace) guard means replace-mode collisions
+						// are resolved before this block is ever entered.
 
-						if (effectiveMode === "replace") {
-							// Replace mode: Don't copy anything from existing file
-							// Let the lazy folder materialize clean and completely replace the file
-							this.slothlet.debug("api", {
-								key: "DEBUG_MODE_COLLISION_REPLACE_NO_COPY"
-							});
-						} else if (!isMergeReplace) {
+						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
 
