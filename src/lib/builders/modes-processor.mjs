@@ -183,6 +183,10 @@ export class ModesProcessor extends ComponentBase {
 				loadedModules.push({ file, mod: exports, moduleName, moduleKeys, analysis });
 			} catch (error) {
 				if (error.name === "SlothletError") throw error;
+				// Unreachable in practice: loader.loadModule() wraps every import failure in
+				// SlothletError("MODULE_IMPORT_FAILED"), so the only errors arriving here are
+				// already SlothletErrors (caught and re-thrown above). Guard kept for safety.
+				/* v8 ignore next */
 				throw new this.SlothletError("MODULE_LOAD_FAILED", { modulePath: file.path, moduleID: moduleID || file.moduleID }, error);
 			}
 		}
@@ -343,6 +347,11 @@ export class ModesProcessor extends ComponentBase {
 								if (!this.slothlet.processors.flatten.shouldAttachNamedExport(key, mod[key], callableModule, mod.default)) {
 									continue;
 								}
+								// Unreachable in practice: any key that passes shouldAttachNamedExport=true was
+								// already attached to mod.default by processModuleForAPI's hybrid loop above,
+								// so it is always already in callableModule (caught by the earlier `continue`).
+								// Guard kept for safety in case processModuleForAPI skips a key it shouldn't.
+								/* v8 ignore next */
 								callableModule[key] = mod[key];
 							}
 						}
@@ -1221,6 +1230,10 @@ export class ModesProcessor extends ComponentBase {
 							config: this.slothlet.config,
 							collisionContext
 						});
+						// Unreachable in practice: this block only runs when isRoot=true (root contributors
+						// post-processing). At root level, populateDirectly is always false, so
+						// shouldWrap = !(effectiveMode==="lazy" && false) = true. The else branch
+						// (shouldWrap=false) can never fire here.
 						/* v8 ignore start */
 					} else {
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
