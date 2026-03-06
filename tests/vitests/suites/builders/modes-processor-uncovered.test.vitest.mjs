@@ -58,7 +58,8 @@ const DIRS = {
 	OBJECT_DEFAULT_MERGE: path.join(SF, "api_smart_flatten_object_default_merge"),
 	LAZY_FN_COLLISION: path.join(SF, "api_smart_flatten_lazy_fn_collision"),
 	FN_FILE_FOLDER_LAZY: path.join(SF, "api_smart_flatten_fn_file_folder_lazy"),
-	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder")
+	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder"),
+	MULTI_EXPORT_SKIP: path.join(SF, "api_smart_flatten_multi_export_skip")
 };
 
 let restoreDebugOutput;
@@ -462,5 +463,53 @@ describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false cont
 		// shouldAttachNamedExport returns false for the self-named "calc" export
 		await _api.calc._materialize();
 		expect(_api.calc !== undefined).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Group 10: Line 546 — DEBUG_MODE_FLATTEN_MULTI_EXPORT_BLOCKED when assignToApiPath
+//           returns false (collision.initial = "skip" blocks the second file's export)
+//
+// Fixture: api_smart_flatten_multi_export_skip/
+//   utils.mjs (root)        → export const sharedKey = () => "root-shared"
+//                           → flatten-to-category → api.utils = wrapper({ sharedKey })
+//   utils/utils.mjs         → export const sharedKey, uniqueKey
+//     moduleName=utils ===  categoryName=utils → L499 "Regular multi-export" path
+//     Tries to assign api.utils.sharedKey → already exists → skip → false → L543-546
+//   utils/helper.mjs        → default export (makes it a multi-file subdir)
+// ---------------------------------------------------------------------------
+describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip blocks assignment (line 546)", () => {
+	it("eager skip collision on duplicate named export via L499 path triggers blocked debug log (line 546)", async () => {
+		// Root utils.mjs pre-populates api.utils.sharedKey via flatten-to-category.
+		// utils/utils.mjs (moduleName=categoryName="utils") then goes through L499 and
+		// tries to re-assign sharedKey → collision.initial=skip → returns false → L543-546.
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			dir: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(_api).toBeDefined();
+		// api.utils.sharedKey should be root version (first registered, skip keeps existing)
+		expect(typeof _api.utils).toBe("object");
+		expect(typeof _api.utils?.sharedKey).toBe("function");
+		// api.utils.uniqueKey from utils/utils.mjs was assigned without collision
+		expect(typeof _api.utils?.uniqueKey).toBe("function");
+	});
+
+	it("eager skip collision with debug.modes=true also covers all debug branches (line 546)", async () => {
+		_api = await slothlet({
+			mode: "eager",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "skip" } },
+			debug: { modes: true },
+			dir: DIRS.MULTI_EXPORT_SKIP
+		});
+
+		expect(_api).toBeDefined();
+		expect(typeof _api.utils?.sharedKey).toBe("function");
 	});
 });
