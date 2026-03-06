@@ -34,8 +34,9 @@ async function getEsbuild() {
 	if (!esbuildInstance) {
 		try {
 			esbuildInstance = await import("esbuild");
-		// unreachable via tests (2026-03-04): esbuild devDependency, always installed
-		/* v8 ignore next */
+		// unreachable via tests: esbuild is a devDependency always present during testing.
+		// The catch only fires in end-user environments where esbuild is not installed.
+		/* v8 ignore next 7 */
 		} catch (error) {
 			throw new SlothletError(
 				"TYPESCRIPT_ESBUILD_NOT_INSTALLED",
@@ -57,8 +58,9 @@ async function getTypeScript() {
 	if (!typescriptInstance) {
 		try {
 			typescriptInstance = await import("typescript");
-		// unreachable via tests (2026-03-04): typescript devDependency, always installed
-		/* v8 ignore next */
+		// unreachable via tests: typescript is a devDependency always present during testing.
+		// The catch only fires in end-user environments where typescript is not installed.
+		/* v8 ignore next 7 */
 		} catch (error) {
 			throw new SlothletError(
 				"TYPESCRIPT_TSC_NOT_INSTALLED",
