@@ -168,6 +168,9 @@ function runtime_getWrappedListener(emitter, event, originalListener) {
  */
 function runtime_untrackListener(emitter, event, originalListener) {
 	const emitterTracking = wrappedListeners.get(emitter);
+	// Defensive: emitter is always registered before untrack is called.
+	// A missing emitter entry would require untracking a listener that was never tracked.
+	/* v8 ignore next */
 	if (!emitterTracking) return;
 
 	const eventTracking = emitterTracking.get(event);
