@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	@Last modified time: 2026-03-05 17:08:03 -08:00 (1772759283)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -34,15 +34,11 @@ async function getEsbuild() {
 	if (!esbuildInstance) {
 		try {
 			esbuildInstance = await import("esbuild");
-		// unreachable via tests: esbuild is a devDependency always present during testing.
-		// The catch only fires in end-user environments where esbuild is not installed.
-		/* v8 ignore next 7 */
+			// unreachable via tests: esbuild is a devDependency always present during testing.
+			// The catch only fires in end-user environments where esbuild is not installed.
+			/* v8 ignore next 7 */
 		} catch (error) {
-			throw new SlothletError(
-				"TYPESCRIPT_ESBUILD_NOT_INSTALLED",
-				{ mode: "fast" },
-				error
-			);
+			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, error);
 		}
 	}
 	return esbuildInstance;
@@ -58,15 +54,11 @@ async function getTypeScript() {
 	if (!typescriptInstance) {
 		try {
 			typescriptInstance = await import("typescript");
-		// unreachable via tests: typescript is a devDependency always present during testing.
-		// The catch only fires in end-user environments where typescript is not installed.
-		/* v8 ignore next 7 */
+			// unreachable via tests: typescript is a devDependency always present during testing.
+			// The catch only fires in end-user environments where typescript is not installed.
+			/* v8 ignore next 7 */
 		} catch (error) {
-			throw new SlothletError(
-				"TYPESCRIPT_TSC_NOT_INSTALLED",
-				{ mode: "strict" },
-				error
-			);
+			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
 		}
 	}
 	return typescriptInstance;
@@ -86,7 +78,7 @@ async function getTypeScript() {
 export async function transformTypeScript(filePath, options = {}) {
 	const esbuild = await getEsbuild(); // Lazy load - only when actually needed
 	const code = fs.readFileSync(filePath, "utf8");
-	
+
 	const result = await esbuild.transform(code, {
 		loader: "ts",
 		format: options.format || "esm",
@@ -94,7 +86,7 @@ export async function transformTypeScript(filePath, options = {}) {
 		sourcemap: options.sourcemap || false,
 		...options
 	});
-	
+
 	return result.code;
 }
 
@@ -127,7 +119,7 @@ export function createDataUrl(code) {
 export async function transformTypeScriptStrict(filePath, options = {}) {
 	const ts = await getTypeScript(); // Lazy load - only when actually needed
 	const code = fs.readFileSync(filePath, "utf8");
-	
+
 	// Map target string to ScriptTarget enum
 	const targetMap = {
 		es3: ts.ScriptTarget.ES3,
@@ -144,7 +136,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		esnext: ts.ScriptTarget.ESNext,
 		latest: ts.ScriptTarget.Latest
 	};
-	
+
 	// Map module string to ModuleKind enum
 	const moduleMap = {
 		none: ts.ModuleKind.None,
@@ -160,10 +152,10 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		node16: ts.ModuleKind.Node16,
 		nodenext: ts.ModuleKind.NodeNext
 	};
-	
+
 	const targetKey = (options.target || "es2020").toLowerCase();
 	const moduleKey = (options.module || "esnext").toLowerCase();
-	
+
 	const compilerOptions = {
 		target: targetMap[targetKey] || ts.ScriptTarget.ES2020,
 		module: moduleMap[moduleKey] || ts.ModuleKind.ESNext,
@@ -173,17 +165,17 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 		noEmit: false, // We need emit for transformation
 		...(options.typeDefinitionPath && {
 			typeRoots: [path.dirname(options.typeDefinitionPath)],
-			types: [path.basename(options.typeDefinitionPath, '.d.ts')]
+			types: [path.basename(options.typeDefinitionPath, ".d.ts")]
 		}),
 		...options.compilerOptions
 	};
-	
+
 	// Perform type checking using Program API if not skipped
 	let diagnostics = [];
 	if (!options.skipTypeCheck) {
 		// Create a temporary in-memory compiler host
 		const host = ts.createCompilerHost(compilerOptions);
-		
+
 		// Override readFile to provide our code
 		const originalReadFile = host.readFile;
 		host.readFile = (fileName) => {
@@ -192,26 +184,23 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
 			}
 			return originalReadFile.call(host, fileName);
 		};
-		
+
 		// Create program with single file
 		const program = ts.createProgram([filePath], compilerOptions, host);
-		
+
 		// Get all diagnostics (semantic + syntactic)
-		const allDiagnostics = [
-			...program.getSemanticDiagnostics(),
-			...program.getSyntacticDiagnostics()
-		];
-		
+		const allDiagnostics = [...program.getSemanticDiagnostics(), ...program.getSyntacticDiagnostics()];
+
 		// Filter to only this file's diagnostics
-		diagnostics = allDiagnostics.filter(d => d.file && d.file.fileName === filePath);
+		diagnostics = allDiagnostics.filter((d) => d.file && d.file.fileName === filePath);
 	}
-	
+
 	// Transform using transpileModule (fast, doesn't require full type checking)
 	const result = ts.transpileModule(code, {
 		compilerOptions,
 		fileName: filePath
 	});
-	
+
 	return {
 		code: result.outputText,
 		diagnostics
@@ -226,7 +215,7 @@ export async function transformTypeScriptStrict(filePath, options = {}) {
  * @private
  */
 export function formatDiagnostics(diagnostics, ts) {
-	return diagnostics.map(diagnostic => {
+	return diagnostics.map((diagnostic) => {
 		const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 		if (diagnostic.file && diagnostic.start !== undefined) {
 			const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-03 20:25:14 -08:00 (1772598314)
+ *	@Last modified time: 2026-03-05 17:08:02 -08:00 (1772759282)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -562,9 +562,9 @@ export class ApiBuilder extends ComponentBase {
 										parentInstanceID: currentCtx.parentInstanceID
 									}
 								: null;
-						// unreachable via tests (2026-03-05): tryGetContext() does not throw under
-						// normal conditions; this is a defensive guard only.
-/* v8 ignore next 3 */
+							// unreachable via tests (2026-03-05): tryGetContext() does not throw under
+							// normal conditions; this is a defensive guard only.
+							/* v8 ignore next 3 */
 						} catch (error) {
 							result.currentALSContext = null;
 						}

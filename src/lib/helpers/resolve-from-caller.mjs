@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-04 17:43:11 -08:00 (1772674991)
+ *	@Last modified time: 2026-03-05 16:19:48 -08:00 (1772756388)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -190,12 +190,12 @@ export class Resolver extends ComponentBase {
 		// Find caller's base directory
 		const callerFile = this.#findCallerBase();
 
+		// Unreachable in practice: #findCallerBase always resolves to the test
+		// file's path because the test runner is always on the V8 stack. callerFile
+		// is only null if the entire stack is slothlet-internal — never in tests.
+		/* v8 ignore next */
 		if (!callerFile) {
 			// Fallback: resolve from current working directory
-			// Unreachable in practice: #findCallerBase always resolves to the test
-			// file's path because the test runner is always on the V8 stack. callerFile
-			// is only null if the entire stack is slothlet-internal — never in tests.
-			/* v8 ignore next */
 			return path.resolve(process.cwd(), rel);
 		}
 
