@@ -38,5 +38,5 @@ function logger(message) {
 	return message;
 }
 
-export { logger };
-export default logger;
+/** Version string for the logger module. */
+export const version = "1.0.0";
