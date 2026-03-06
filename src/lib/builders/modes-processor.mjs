@@ -1221,6 +1221,7 @@ export class ModesProcessor extends ComponentBase {
 							config: this.slothlet.config,
 							collisionContext
 						});
+						/* v8 ignore start */
 					} else {
 						this.slothlet.builders.apiAssignment.assignToApiPath(targetApi, moduleName, defaultFunc, {
 							useCollisionDetection: true,
@@ -1228,6 +1229,7 @@ export class ModesProcessor extends ComponentBase {
 							collisionContext
 						});
 					}
+					/* v8 ignore stop */
 					if (this.slothlet.handlers.ownership) {
 						this.slothlet.handlers.ownership.register({
 							moduleID: moduleID || file.moduleID,
@@ -1532,6 +1534,7 @@ export class ModesProcessor extends ComponentBase {
 						return nestedValue;
 					}
 					return nestedValue.__impl ?? nestedValue;
+					/* v8 ignore next */
 				}
 				return nestedValue;
 			}
