@@ -949,12 +949,14 @@ export class ModesProcessor extends ComponentBase {
 								if (modes_existingAtKey !== undefined && modes_eagerCollisionMode !== "replace" && modes_eagerCollisionMode !== "skip") {
 									const modes_existingWrapper = resolveWrapper(modes_existingAtKey);
 									if (modes_existingWrapper) {
-										// In lazy mode, the file wrapper hasn't materialized yet.
-										// Force materialization so we can access its exports.
+										// This block only runs when recursive=true (eager mode). In eager mode,
+										// files are fully materialized before the subDir loop, so materializeFunc
+										// is never set on an eager wrapper. Guard kept as a future-proof fallback.
 										if (
 											modes_existingWrapper.____slothletInternal?.materializeFunc &&
 											!modes_existingWrapper.____slothletInternal?.state?.materialized
 										) {
+											/* v8 ignore next */
 											await modes_existingWrapper._materialize();
 										}
 										// Ensure children are adopted from impl
