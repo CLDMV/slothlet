@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	@Last modified time: 2026-03-05 16:31:14 -08:00 (1772757074)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -976,10 +976,10 @@ export class ModesProcessor extends ComponentBase {
 														implToWrap[k] = v;
 													}
 												}
-											// Unreachable in practice: implToWrap is derived from a module default export,
-											// which is always an object in every test fixture. The object-branch above fires
-											// first, so a function-typed implToWrap is never observed here.
-											/* v8 ignore next */
+												// Unreachable in practice: implToWrap is derived from a module default export,
+												// which is always an object in every test fixture. The object-branch above fires
+												// first, so a function-typed implToWrap is never observed here.
+												/* v8 ignore next 7 */
 											} else if (typeof implToWrap === "function") {
 												for (const [k, v] of Object.entries(modes_existingImpl)) {
 													if (implToWrap[k] === undefined) {
@@ -1413,6 +1413,12 @@ export class ModesProcessor extends ComponentBase {
 									childPaths[key] = file.path;
 								}
 							}
+
+							// May or may not be needed... so far removing it hasn't caused an issue.
+							// Merge with collision-merged children paths if they exist
+							// if (this.__childFilePathsPreMaterialize) {
+							// 	Object.assign(childPaths, this.__childFilePathsPreMaterialize);
+							// }
 
 							implToWrap.__childFilePaths = childPaths;
 						}
