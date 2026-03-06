@@ -59,7 +59,8 @@ const DIRS = {
 	LAZY_FN_COLLISION: path.join(SF, "api_smart_flatten_lazy_fn_collision"),
 	FN_FILE_FOLDER_LAZY: path.join(SF, "api_smart_flatten_fn_file_folder_lazy"),
 	FN_FN_FOLDER: path.join(SF, "api_smart_flatten_fn_fn_folder"),
-	MULTI_EXPORT_SKIP: path.join(SF, "api_smart_flatten_multi_export_skip")
+	MULTI_EXPORT_SKIP: path.join(SF, "api_smart_flatten_multi_export_skip"),
+	LAZY_NESTED_FILE_FOLDER: path.join(SF, "api_smart_flatten_lazy_nested_file_folder")
 };
 
 let restoreDebugOutput;
@@ -477,6 +478,56 @@ describe("modes-processor: lazy calc/calc.mjs shouldAttachNamedExport=false cont
 //     moduleName=utils ===  categoryName=utils → L499 "Regular multi-export" path
 //     Tries to assign api.utils.sharedKey → already exists → skip → false → L543-546
 //   utils/helper.mjs        → default export (makes it a multi-file subdir)
+// ---------------------------------------------------------------------------
+// Group 11: Lines 1526-1531 — lazy_materializeFunc returns nestedValue (with attachedKeys > 0)
+// When materializedKeys.length === 1 && key === categoryName AND the nested value is a
+// wrapper with pre-populated attached child keys (from file-folder collision), L1530 TRUE fires.
+// Fixture: pipe/ contains pipe.mjs (default fn + doWork named) AND pipe/ inner subdir.
+// Files loop: pipe.mjs → materialized["pipe"] = eager fn wrapper with doWork child.
+// Subdirs loop: modes_fileFolderImpl = { doWork } → lazy inner wrapper pre-populated with doWork.
+// merge collision: materialized["pipe"] stays as eager fn wrapper (doWork attached).
+// L1526 fires (1 key = categoryName), L1528-1529 fire, L1530 TRUE → return nestedValue.
+// ---------------------------------------------------------------------------
+describe("modes-processor: lazy materialize returns wrapper when nestedValue has attachedKeys (lines 1526-1531)", () => {
+	it("lazy mode materializes nested file-folder collision → attachedKeys > 0 → L1530 TRUE → returns wrapper (line 1531)", async () => {
+		// pipe/ contains both pipe.mjs (default fn + doWork named) and pipe/ inner subfolder.
+		// materializedKeys = ['pipe'] (1 key = categoryName 'pipe') → L1526 fires.
+		// The eager pipe.mjs wrapper has doWork pre-attached → attachedKeys.length > 0 → L1530 TRUE.
+		// L1531: returns nestedValue (the eager wrapper) → materializer resolves via pipe fn chain.
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "merge" } },
+			dir: DIRS.LAZY_NESTED_FILE_FOLDER
+		});
+
+		expect(_api).toBeDefined();
+		// api.pipe exists as lazy wrapper before materialization
+		expect(_api.pipe).toBeDefined();
+		// Trigger materialize: resolves through L1530 TRUE → returns pipe fn or wrapper
+		const result = await _api.pipe;
+		expect(result).toBeDefined();
+		// The doWork named export should be accessible (pre-populated during file-folder collision setup)
+		expect(typeof _api.pipe.doWork).not.toBe("undefined");
+	});
+
+	it("lazy mode with debug.modes=true also covers debug path through L1526-1531", async () => {
+		_api = await slothlet({
+			mode: "lazy",
+			runtime: "async",
+			hook: { enabled: false },
+			api: { collision: { initial: "merge" } },
+			debug: { modes: true },
+			dir: DIRS.LAZY_NESTED_FILE_FOLDER
+		});
+
+		expect(_api).toBeDefined();
+		const result = await _api.pipe;
+		expect(result).toBeDefined();
+	});
+});
+
 // ---------------------------------------------------------------------------
 describe("modes-processor: FLATTEN_MULTI_EXPORT_BLOCKED debug log when skip blocks assignment (line 546)", () => {
 	it("eager skip collision on duplicate named export via L499 path triggers blocked debug log (line 546)", async () => {
