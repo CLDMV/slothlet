@@ -1534,8 +1534,11 @@ export class ModesProcessor extends ComponentBase {
 						return nestedValue;
 					}
 					return nestedValue.__impl ?? nestedValue;
-					/* v8 ignore next */
 				}
+				// Unreachable in practice: materializedKeys[0] === categoryName means materialized[categoryName]
+				// is a lazy subdirectory wrapper, which always passes resolveWrapper() !== null above.
+				// Guard kept for theoretical edge cases (e.g., null/undefined in materialized).
+				/* v8 ignore next */
 				return nestedValue;
 			}
 			// POC pattern: return the materialized implementation
