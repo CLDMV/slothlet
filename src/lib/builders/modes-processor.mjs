@@ -370,9 +370,6 @@ export class ModesProcessor extends ComponentBase {
 						const needsSeparateNamedExports = typeof mod.default === "function";
 						if (needsSeparateNamedExports && namedKeys.length > 0) {
 							for (const key of namedKeys) {
-								if (key === "default") {
-									continue;
-								}
 								if (shouldWrap) {
 									const namedWrapper = new UnifiedWrapper(this.slothlet, {
 										mode: effectiveMode,
