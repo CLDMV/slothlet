@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-05 17:08:03 -08:00 (1772759283)
+ *	@Last modified time: 2026-03-06 09:22:30 -08:00 (1772817750)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -34,9 +34,9 @@ async function getTypeScript() {
 			typescriptInstance = await import("typescript");
 			// unreachable via tests: typescript is a devDependency always present during testing.
 			// The catch only fires in end-user environments where typescript is not installed.
-				/* v8 ignore start */
+			/* v8 ignore start */
 		} catch (error) {
-				throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
+			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}
 		/* v8 ignore stop */
 	}
@@ -326,8 +326,8 @@ function generateInterfaceContent(structure, lines, indent) {
 	for (const [key, value] of Object.entries(structure)) {
 		if (value.type === "function") {
 			lines.push(`${indentation}${key}${value.signature};`);
-		// Primitive values in structure are never produced by our TypeScript generator.
-		/* v8 ignore next */
+			// Primitive values in structure are never produced by our TypeScript generator.
+			/* v8 ignore next */
 		} else if (typeof value === "object" && value !== null) {
 			// Intermediate container object — recurse into it
 			lines.push(`${indentation}${key}: {`);

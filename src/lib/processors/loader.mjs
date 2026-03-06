@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-04 16:33:40 -08:00 (1772670820)
+ *	@Last modified time: 2026-03-06 09:20:41 -08:00 (1772817641)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -108,6 +108,9 @@ export class Loader extends ComponentBase {
 								if (msg.type === "success") {
 									this.slothlet._typesGenerated = true;
 									resolve();
+									// Covered by loader-fork-message-error.test.vitest.mjs but the full coverage
+									// run's parallel worker merge loses it because vi.mock("child_process") is
+									// file-scoped and the dynamic import("child_process") caches across workers.
 									/* v8 ignore start */
 								} else if (msg.type === "error") {
 									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", { error: msg.error }, null, { validationError: true }));
