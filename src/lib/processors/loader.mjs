@@ -103,6 +103,8 @@ export class Loader extends ComponentBase {
 							});
 
 							child.on("message", (msg) => {
+								// The false arm (msg.type === "error") is covered in isolation but lost in full-suite coverage merge (fork I/O module caching).
+								/* v8 ignore next */
 								if (msg.type === "success") {
 									this.slothlet._typesGenerated = true;
 									resolve();

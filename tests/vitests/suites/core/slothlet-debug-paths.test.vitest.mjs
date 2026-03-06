@@ -35,7 +35,11 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+// This suite intentionally enables config.debug.initialization=true for branch coverage.
+// Suppress the resulting console noise — we don't assert on emitted debug lines.
+suppressSlothletDebugOutput();
 
 // ─── debug.initialization path (line 120) ────────────────────────────────────
 

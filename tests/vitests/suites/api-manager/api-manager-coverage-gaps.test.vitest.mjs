@@ -46,7 +46,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+// Some tests in this suite enable config.debug.api=true for branch coverage.
+// Suppress the resulting console noise — we don't assert on emitted debug lines.
+suppressSlothletDebugOutput();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

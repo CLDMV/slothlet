@@ -50,7 +50,11 @@ process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
-import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+// This suite intentionally enables config.debug.wrapper=true for branch coverage.
+// Suppress the resulting console noise — we don't assert on emitted debug lines.
+suppressSlothletDebugOutput();
 
 let api;
 
