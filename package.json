@@ -229,7 +229,7 @@
 	},
 	"devDependencies": {
 		"@cldmv/fix-headers": "^1.2.0",
-		"@cldmv/vitest-runner": "^1.0.1",
+		"@cldmv/vitest-runner": "^1.0.2",
 		"@eslint/css": "^0.10.0",
 		"@eslint/js": "^9.33.0",
 		"@eslint/json": "^0.13.1",
