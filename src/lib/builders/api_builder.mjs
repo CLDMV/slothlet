@@ -564,10 +564,11 @@ export class ApiBuilder extends ComponentBase {
 								: null;
 							// unreachable via tests (2026-03-05): tryGetContext() does not throw under
 							// normal conditions; this is a defensive guard only.
-							/* v8 ignore next 3 */
+							/* v8 ignore start */
 						} catch (error) {
 							result.currentALSContext = null;
 						}
+						/* v8 ignore stop */
 					}
 
 					// For live mode, show currentInstanceID tracking
@@ -1527,7 +1528,7 @@ export class ApiBuilder extends ComponentBase {
 		// Object.defineProperty directly (needs api reference for createDestroyFunction).
 		// The only current call site passes destroy: null, so this block is never reached.
 		// Kept as a fallback for any future caller that pre-builds the destroy fn.
-		/* v8 ignore next 7 */
+		/* v8 ignore start */
 		if (builtins.destroy !== null) {
 			Object.defineProperty(userApi, "destroy", {
 				value: builtins.destroy,
@@ -1536,5 +1537,6 @@ export class ApiBuilder extends ComponentBase {
 				configurable: true
 			});
 		}
+		/* v8 ignore stop */
 	}
 }

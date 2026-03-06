@@ -36,10 +36,11 @@ async function getEsbuild() {
 			esbuildInstance = await import("esbuild");
 			// unreachable via tests: esbuild is a devDependency always present during testing.
 			// The catch only fires in end-user environments where esbuild is not installed.
-			/* v8 ignore next 7 */
+			/* v8 ignore start */
 		} catch (error) {
 			throw new SlothletError("TYPESCRIPT_ESBUILD_NOT_INSTALLED", { mode: "fast" }, error);
 		}
+		/* v8 ignore stop */
 	}
 	return esbuildInstance;
 }
@@ -56,10 +57,11 @@ async function getTypeScript() {
 			typescriptInstance = await import("typescript");
 			// unreachable via tests: typescript is a devDependency always present during testing.
 			// The catch only fires in end-user environments where typescript is not installed.
-			/* v8 ignore next 7 */
+			/* v8 ignore start */
 		} catch (error) {
 			throw new SlothletError("TYPESCRIPT_TSC_NOT_INSTALLED", { mode: "strict" }, error);
 		}
+		/* v8 ignore stop */
 	}
 	return typescriptInstance;
 }
