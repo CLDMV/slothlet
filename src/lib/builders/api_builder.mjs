@@ -564,7 +564,7 @@ export class ApiBuilder extends ComponentBase {
 								: null;
 						// unreachable via tests (2026-03-05): tryGetContext() does not throw under
 						// normal conditions; this is a defensive guard only.
-/* v8 ignore next */
+/* v8 ignore next 3 */
 						} catch (error) {
 							result.currentALSContext = null;
 						}
@@ -1523,8 +1523,11 @@ export class ApiBuilder extends ComponentBase {
 			configurable: true
 		});
 
-		// Note: destroy will be attached separately after api is built
-		// (it needs api reference to call api.shutdown())
+		// Note: destroy is always attached separately after api is built via
+		// Object.defineProperty directly (needs api reference for createDestroyFunction).
+		// The only current call site passes destroy: null, so this block is never reached.
+		// Kept as a fallback for any future caller that pre-builds the destroy fn.
+		/* v8 ignore next 7 */
 		if (builtins.destroy !== null) {
 			Object.defineProperty(userApi, "destroy", {
 				value: builtins.destroy,
