@@ -1556,6 +1556,11 @@ export class UnifiedWrapper extends ComponentBase {
 					// For waiting proxies, we can't access impl yet, so use target
 					return Function.prototype.valueOf.bind(waitingTarget);
 				}
+				if (prop === "toJSON") {
+					// Called by JSON.stringify / util.inspect / pretty-format to serialize objects.
+					// Waiting proxies don't have an impl yet, so return undefined (treated as non-serializable).
+					return () => undefined;
+				}
 				if (prop === "__slothletPath") return wrapper.____slothletInternal.apiPath;
 
 				// CRITICAL: Check if wrapper.____slothletInternal.impl is already set
@@ -1779,11 +1784,13 @@ export class UnifiedWrapper extends ComponentBase {
 						) {
 							return undefined;
 						}
-						// PRIORITY 3: If we're trying to access hasAttribute (or other inspect properties) on undefined,
-						// return undefined instead of throwing - this happens when Node.js inspects non-existent properties
+						// PRIORITY 3: If we're trying to access hasAttribute, toJSON, or other inspect/serialization
+						// properties on undefined, return undefined instead of throwing - this happens when
+						// Node.js util.inspect, JSON.stringify, or Vitest's pretty-format probes every object property.
 						const finalProp = propChain[propChain.length - 1];
 						if (
 							finalProp === "hasAttribute" ||
+							finalProp === "toJSON" ||
 							finalProp === Symbol.toStringTag ||
 							finalProp === "constructor" ||
 							typeof finalProp === "symbol" ||
@@ -1870,10 +1877,12 @@ export class UnifiedWrapper extends ComponentBase {
 					return Reflect.apply(current, lastObject, args);
 				}
 
-				// Handle util.inspect checking for hasAttribute on primitives
-				// When Node.js inspects an object, it checks for hasAttribute on all properties
-				// If we're checking hasAttribute on a primitive value, just return undefined
-				if (propChain[propChain.length - 1] === "hasAttribute") {
+				// Handle serialization/inspection sentinel properties on non-function chain ends.
+				// util.inspect, JSON.stringify, and Vitest's pretty-format call these on every object;
+				// returning undefined rather than throwing avoids unhandled rejections when wrappers
+				// don't implement these methods (e.g., lazy interop subdirectory after reload).
+				const _finalChainProp = propChain[propChain.length - 1];
+				if (_finalChainProp === "hasAttribute" || _finalChainProp === "toJSON") {
 					return undefined;
 				}
 
@@ -2237,6 +2246,16 @@ export class UnifiedWrapper extends ComponentBase {
 					return impl.default.valueOf.bind(impl.default);
 				}
 				return Function.prototype.valueOf.bind(target);
+			}
+			if (prop === "toJSON") {
+				// Called by JSON.stringify / util.inspect / pretty-format during serialization.
+				// Delegate to impl.toJSON if available; otherwise return a function that yields undefined
+				// so serialization silently skips this wrapper rather than triggering CHAIN_NOT_CALLABLE.
+				const impl = wrapper.____slothletInternal.impl;
+				if (impl && typeof impl.toJSON === "function") {
+					return impl.toJSON.bind(impl);
+				}
+				return () => undefined;
 			}
 
 			if (wrapper.____slothletInternal.invalid) {
