@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-04 22:09:25 -08:00 (1772690965)
+ *	@Last modified time: 2026-03-05 17:08:02 -08:00 (1772759282)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -331,35 +331,35 @@ describe("eventemitter-context: runtime_untrackListener wrappedListener missing 
 //      → line 171 fires: wrappedListener._slothletResource = null
 // ─────────────────────────────────────────────────────────────────────────────
 describe("eventemitter-context: untrackListener cleans up _slothletResource for tracked listener (line 171)", () => {
-        it("removeListener on a tracked listener nulls _slothletResource (line 171)", () => {
-                const emitter = new EventEmitter();
-                const fn = () => {};
+	it("removeListener on a tracked listener nulls _slothletResource (line 171)", () => {
+		const emitter = new EventEmitter();
+		const fn = () => {};
 
-                // on() → runtime_wrapEventListener → stores fn in wrappedListeners map.
-                emitter.on("data", fn);
+		// on() → runtime_wrapEventListener → stores fn in wrappedListeners map.
+		emitter.on("data", fn);
 
-                // off() with the same event+fn → runtime_untrackListener → wrappedListener found
-                // → line 171: wrappedListener._slothletResource = null fires.
-                expect(() => emitter.removeListener("data", fn)).not.toThrow();
+		// off() with the same event+fn → runtime_untrackListener → wrappedListener found
+		// → line 171: wrappedListener._slothletResource = null fires.
+		expect(() => emitter.removeListener("data", fn)).not.toThrow();
 
-                // The emitter should have no listeners remaining.
-                expect(emitter.listenerCount("data")).toBe(0);
-        });
+		// The emitter should have no listeners remaining.
+		expect(emitter.listenerCount("data")).toBe(0);
+	});
 
-        it("emitter.off() on a tracked listener triggers the same cleanup path (line 171)", () => {
-                const emitter = new EventEmitter();
-                const fn1 = () => {};
-                const fn2 = () => {};
+	it("emitter.off() on a tracked listener triggers the same cleanup path (line 171)", () => {
+		const emitter = new EventEmitter();
+		const fn1 = () => {};
+		const fn2 = () => {};
 
-                emitter.on("end", fn1);
-                emitter.on("end", fn2);
+		emitter.on("end", fn1);
+		emitter.on("end", fn2);
 
-                // Remove fn1 — tracked → line 171 fires for fn1.
-                expect(() => emitter.off("end", fn1)).not.toThrow();
-                expect(emitter.listenerCount("end")).toBe(1);
+		// Remove fn1 — tracked → line 171 fires for fn1.
+		expect(() => emitter.off("end", fn1)).not.toThrow();
+		expect(emitter.listenerCount("end")).toBe(1);
 
-                // Remove fn2 — tracked → line 171 fires for fn2.
-                expect(() => emitter.off("end", fn2)).not.toThrow();
-                expect(emitter.listenerCount("end")).toBe(0);
-        });
+		// Remove fn2 — tracked → line 171 fires for fn2.
+		expect(() => emitter.off("end", fn2)).not.toThrow();
+		expect(emitter.listenerCount("end")).toBe(0);
+	});
 });

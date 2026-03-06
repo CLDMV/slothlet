@@ -345,8 +345,14 @@ class Slothlet {
 		// Get appropriate context manager based on runtime
 		this.contextManager = getContextManager(this.config.runtime);
 
-		// Set up EventEmitter tracking to use the correct runtime context
+		// Set up a generic fallback EventEmitter context checker. This callback body is
+		// dead code in practice: both AsyncContextManager and LiveContextManager define
+		// registerEventEmitterContextChecker(), which is called a few lines below and
+		// immediately overwrites this checker via a second setApiContextChecker() call.
+		// The callback is registered then discarded synchronously — no EventEmitter
+		// activity occurs between these two calls, so lines below can never execute.
 		setApiContextChecker(() => {
+			/* v8 ignore next 2 */
 			const ctx = this.contextManager.tryGetContext();
 			return !!(ctx && ctx.self);
 		});

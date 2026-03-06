@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-03-05 17:08:03 -08:00 (1772759283)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -32,9 +32,9 @@ async function getTypeScript() {
 	if (!typescriptInstance) {
 		try {
 			typescriptInstance = await import("typescript");
-		// unreachable via tests: typescript is a devDependency always present during testing.
-		// The catch only fires in end-user environments where typescript is not installed.
-		/* v8 ignore next 3 */
+			// unreachable via tests: typescript is a devDependency always present during testing.
+			// The catch only fires in end-user environments where typescript is not installed.
+			/* v8 ignore next 3 */
 		} catch (error) {
 			throw new SlothletError("TYPESCRIPT_NOT_INSTALLED", { feature: "type-generation" }, error);
 		}

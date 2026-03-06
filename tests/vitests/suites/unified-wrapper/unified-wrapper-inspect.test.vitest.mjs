@@ -1,14 +1,14 @@
 /**
- *      @Project: @cldmv/slothlet
- *      @Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-inspect.test.vitest.mjs
- *      @Date: 2026-03-03T12:00:00-08:00 (1741032000)
- *      @Author: Nate Corcoran <CLDMV>
- *      @Email: <Shinrai@users.noreply.github.com>
- *      -----
- *      @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *      @Last modified time: 2026-03-03T12:00:00-08:00 (1741032000)
- *      -----
- *      @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/unified-wrapper/unified-wrapper-inspect.test.vitest.mjs
+ *	@Date: 2026-03-03T12:00:00-08:00 (1741032000)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-05 00:32:13 -08:00 (1772699533)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
