@@ -1836,14 +1836,35 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	async applyRootContributor(api, rootFunction, mode) {
 		if (rootFunction) {
-			// Merge all other API properties onto the root function
-			Object.assign(rootFunction, api);
+			// Create a fresh function wrapper per Slothlet instance to avoid mutating the shared
+			// cached module export. CJS modules are always shared across instances (Node require
+			// cache never expires). ESM modules are also re-used when reload is called with
+			// keepInstanceID (same query-param → Node ESM cache hit). Mutating the raw export
+			// directly would allow a second instance's Object.assign to overwrite the first
+			// instance's sub-namespace wrappers and management namespace, causing context
+			// cross-contamination. A delegating wrapper function is cheap and keeps each
+			// Slothlet instance fully isolated.
+			const freshRoot = function (...args) {
+				return rootFunction.apply(this, args);
+			};
+			try {
+				Object.defineProperty(freshRoot, "name", { value: rootFunction.name, configurable: true });
+			} catch (_) {
+				// v8 ignore next — non-configurable name; never occurs with normal functions
+			}
+			try {
+				Object.defineProperty(freshRoot, "length", { value: rootFunction.length, configurable: true });
+			} catch (_) {
+				// v8 ignore next — non-configurable length; never occurs with normal functions
+			}
+			// Merge all other API properties onto the fresh per-instance wrapper
+			Object.assign(freshRoot, api);
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length })
 				});
 			}
-			return rootFunction;
+			return freshRoot;
 		}
 		return api;
 	}
