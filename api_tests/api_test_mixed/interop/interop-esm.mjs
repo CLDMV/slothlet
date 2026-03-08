@@ -6,10 +6,12 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:14 -08:00 (1772425274)
+ *	@Last modified time: 2026-03-08 15:55:43 -07:00 (1773010543)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
+
+import { self, context } from "@cldmv/slothlet/runtime";
 
 export const interopEsm =
 	/** @lends interopEsm */
@@ -69,4 +71,3 @@ export const interopEsm =
 			}
 		}
 	};
-

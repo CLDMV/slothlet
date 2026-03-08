@@ -6,12 +6,11 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	@Last modified time: 2026-03-08 15:56:39 -07:00 (1773010599)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-// TODO: UPDATE FOR V3
 /**
  * @fileoverview Comprehensive CJS runner covering pure CJS, mixed CJS/ESM, context isolation,
  * and explicit default export handling for api_test_cjs assets. Internal file (not exported in
@@ -34,7 +33,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const slothlet = require("../../index2.cjs");
+const slothlet = require("../../index.cjs");
 
 const CJS_API_DIR = "../../api_tests/api_test_cjs";
 const MIXED_API_DIR = "../../api_tests/api_test_mixed";
@@ -50,45 +49,32 @@ const NON_API_KEYS = new Set([
 	"context",
 	"reference",
 	"hooks",
-	"describe"
+	"describe",
+	"slothlet"
 ]);
-
-/**
- * @function getApiContext
- * @private
- * @param {object} api - Slothlet API instance.
- * @returns {Record<string, unknown>} - The bound context object.
- *
- * @description
- * Context is not exposed as api.context on bound APIs; it lives on the non-enumerable __ctx
- * object that slothlet attaches during binding. This helper retrieves it for assertions.
- *
- * @example
- * const ctx = getApiContext(api);
- */
-function getApiContext(api) {
-	const ctx = api?.__ctx?.context;
-	assert.ok(ctx, "api.__ctx.context should be available on bound API instances");
-	return ctx;
-}
 
 /**
  * @function assertContextFields
  * @private
+ * @async
  * @param {object} api - Slothlet API instance.
- * @param {Record<string, unknown>} expectedContext - Keys that must be present on api.context.
- * @returns {void}
+ * @param {Record<string, unknown>} expectedContext - Keys that must be present on the context.
+ * @returns {Promise<void>}
  *
  * @description
- * Ensures api.context exists and contains the expected key/value pairs without requiring a
- * deep match against all runtime-provided metadata.
+ * Retrieves the current context via api.slothlet.context.get() (v3 API) and asserts that all
+ * expected key/value pairs are present without requiring a deep match against all runtime metadata.
  *
  * @example
- * assertContextFields(api, { user: "alice" });
+ * await assertContextFields(api, { user: "alice" });
  */
-function assertContextFields(api, expectedContext) {
+async function assertContextFields(api, expectedContext) {
 	assert.ok(api, "API instance should exist");
-	const ctx = getApiContext(api);
+	assert.ok(api.slothlet, "api.slothlet management object should exist");
+	assert.strictEqual(typeof api.slothlet.context.get, "function", "api.slothlet.context.get should be a function");
+
+	const ctx = await api.slothlet.context.get();
+	assert.ok(ctx, "api.slothlet.context.get() should return a context object");
 
 	for (const [key, value] of Object.entries(expectedContext)) {
 		assert.strictEqual(ctx[key], value, `Expected context[${key}] to equal ${String(value)} for this instance`);
@@ -129,7 +115,7 @@ function listApiMethods(api) {
  */
 async function createApiInstance(dir, context) {
 	const api = await slothlet({ dir, context });
-	assertContextFields(api, context);
+	await assertContextFields(api, context);
 	return api;
 }
 
@@ -165,8 +151,8 @@ async function testCjsOnly() {
 		assert.strictEqual(api1.math.multiply(4, 3), 12, "api1 math.multiply should multiply");
 		assert.strictEqual(api2.math.multiply(6, 2), 12, "api2 math.multiply should multiply");
 
-		assertContextFields(api1, { user: "alice" });
-		assertContextFields(api2, { user: "bob" });
+		await assertContextFields(api1, { user: "alice" });
+		await assertContextFields(api2, { user: "bob" });
 
 		const selfResult1 = await api1.advanced.selfObject.addViaSelf(10, 20);
 		const selfResult2 = await api2.advanced.selfObject.addViaSelf(15, 25);
@@ -217,8 +203,8 @@ async function testMixed() {
 		assert.strictEqual(interopResult1, 56, "api1 ESM->CJS cross-call should multiply inputs");
 		assert.strictEqual(interopResult2, 20, "api2 CJS->ESM cross-call should sum inputs");
 
-		assertContextFields(api1, { user: "charlie" });
-		assertContextFields(api2, { user: "diana" });
+		await assertContextFields(api1, { user: "charlie" });
+		await assertContextFields(api2, { user: "diana" });
 	} finally {
 		if (api1?.shutdown) await api1.shutdown();
 		if (api2?.shutdown) await api2.shutdown();
@@ -261,8 +247,8 @@ async function testContextIsolation() {
 		assert.strictEqual(await api1.advanced.selfObject.addViaSelf(1, 1), 2);
 		assert.strictEqual(await api2.advanced.selfObject.addViaSelf(2, 2), 4);
 
-		assertContextFields(api1, { user: "isolation_test_1", environment: "test1" });
-		assertContextFields(api2, { user: "isolation_test_2", environment: "test2" });
+		await assertContextFields(api1, { user: "isolation_test_1", environment: "test1" });
+		await assertContextFields(api2, { user: "isolation_test_2", environment: "test2" });
 	} finally {
 		if (api1?.shutdown) await api1.shutdown();
 		if (api2?.shutdown) await api2.shutdown();
@@ -305,7 +291,7 @@ async function testExplicitDefaults() {
 		assert.strictEqual(api.explicitDefault.divide(20, 4), 5);
 		assert.strictEqual(api.explicitDefault.getCalculatorName(), "Hyphenated Default Calculator");
 
-		assertContextFields(api, { user: "explicit_test" });
+		await assertContextFields(api, { user: "explicit_test" });
 	} finally {
 		if (api?.shutdown) await api.shutdown();
 	}

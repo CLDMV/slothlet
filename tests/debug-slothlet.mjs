@@ -13,6 +13,9 @@
 
 import chalk from "chalk";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 // Populated after ensureDevEnvFlags() confirms slothlet-dev condition is active.
 // Must NOT be a static top-level import - that fires before the respawn check and
@@ -26,6 +29,11 @@ const verbose =
 	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
 
 function ensureDevEnvFlags() {
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition

@@ -45,11 +45,18 @@ async function runCjsEntrypointTest() {
 
 	let api;
 	try {
-		api = await slothlet({ dir: TEST_DIR, context: { user: "entrypoint-cjs" } });
+		api = await slothlet({
+			dir: TEST_DIR,
+			context: { user: "entrypoint-cjs" },
+			api: { collision: { initial: "replace" } }
+		});
 		assertApi(api);
+		assert.ok(api.slothlet, "api.slothlet management object should exist");
+		assert.strictEqual(typeof api.slothlet.shutdown, "function", "api.slothlet.shutdown should be a function");
 		console.log("✅ CJS entrypoint loaded and API responded correctly");
 	} catch (error) {
 		console.error("❌ CJS entrypoint test failed:", error.message);
+		console.error(error);
 		process.exit(1);
 	} finally {
 		if (api?.shutdown) {

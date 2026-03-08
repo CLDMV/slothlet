@@ -22,12 +22,84 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nodeDir = path.join(__dirname, "node");
+
+/**
+ * Ensure slothlet dev conditions are set when running against src/ (no dist/ present).
+ * Respawns the current process with the required NODE_OPTIONS flags if needed.
+ * @returns {boolean} True if a child process was spawned (caller should return immediately).
+ * @example
+ * if (ensureDevEnvFlags()) process.exit();
+ */
+function ensureDevEnvFlags() {
+	const distPath = path.join(__dirname, "../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
+	/**
+	 * @param {string[]} args
+	 * @param {string} condition
+	 * @returns {boolean}
+	 */
+	const hasCondition = (args, condition) =>
+		args.some((arg) => arg.startsWith("--conditions=") && arg.slice("--conditions=".length).split(/[|,]/u).includes(condition));
+
+	process.env.NODE_ENV = "development";
+
+	const requiredConditions = ["slothlet-dev"];
+	const nextExecArgv = [...process.execArgv];
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production");
+
+	let needsRespawn = false;
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		// Check both command-line execArgv AND NODE_OPTIONS env var — NODE_OPTIONS flags are active
+		// but never appear in process.execArgv, so checking only execArgv causes a needless respawn.
+		const inExecArgv = hasCondition(nextExecArgv, condition);
+		const inNodeOptions = envConditions.some((token) => token === flag);
+		if (!inExecArgv && !inNodeOptions) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
+
+if (ensureDevEnvFlags()) process.exit();
 
 /**
  * Run a single test file and return the result.

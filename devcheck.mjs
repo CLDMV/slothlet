@@ -18,7 +18,7 @@ import path from "node:path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const srcPath = path.join(__dirname, "src");
-// const distPath = path.join(__dirname, "dist");
+const distPath = path.join(__dirname, "dist");
 
 // Detect if we're running in a CI environment
 const isCI = !!(
@@ -32,8 +32,7 @@ const isCI = !!(
 	process.env.TF_BUILD // Azure DevOps
 );
 
-if (existsSync(srcPath) && !isCI) {
-	// if (existsSync(srcPath) && !existsSync(distPath)) {
+if (existsSync(srcPath) && !existsSync(distPath) && !isCI) {
 	const nodeEnv = process.env.NODE_ENV?.toLowerCase();
 	const nodeOptions = process.env.NODE_OPTIONS || "";
 

@@ -27,6 +27,7 @@ import { spawn } from "node:child_process";
 import { performance } from "perf_hooks";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { existsSync } from "node:fs";
 import { readFile } from "fs/promises";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -225,6 +226,11 @@ function hasCondition(args, condition) {
  * if (ensureDevEnvFlags()) return;
  */
 function ensureDevEnvFlags() {
+	const distPath = join(__dirname, "../../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
 	process.env.NODE_ENV = "development";
 
 	const allExecArgv = [...process.execArgv];
