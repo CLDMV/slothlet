@@ -24,6 +24,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join, extname, basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
@@ -50,6 +51,12 @@ export class Loader extends ComponentBase {
 	 */
 	async loadModule(filePath, instanceID, moduleID, cacheBust = null) {
 		try {
+			// CJS files must bypass the shared require() cache; query-param cache-busting
+			// has no effect on require() because it keys on the resolved file path only.
+			if (filePath.endsWith(".cjs")) {
+				return this.#loadCJSIsolated(filePath);
+			}
+
 			// Check if TypeScript transformation is needed
 			const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".mts");
 			const typescriptConfig = this.slothlet.config?.typescript;
@@ -204,6 +211,43 @@ export class Loader extends ComponentBase {
 				error
 			);
 		}
+	}
+
+	/**
+	 * Load a CJS module with a fresh module.exports on every call by clearing
+	 * its entry from require.cache before loading.
+	 * Node's require() cache is keyed on the resolved file path and ignores URL
+	 * query parameters, so two Slothlet instances loading the same .cjs file
+	 * would otherwise share the exact same module.exports object.
+	 * @param {string} filePath - Absolute path to the .cjs file
+	 * @returns {Promise<Object>} Synthetic ESM namespace: { default, ...namedExports }
+	 * @example
+	 * const ns = await this.#loadCJSIsolated("/path/to/module.cjs");
+	 * ns.default; // module.exports
+	 * @private
+	 */
+	#loadCJSIsolated(filePath) {
+		const requireFn = createRequire(filePath);
+		const resolved = requireFn.resolve(filePath);
+
+		// Clear from require.cache so each call gets a fresh module.exports.
+		delete requireFn.cache[resolved];
+		const exports = requireFn(resolved);
+		// Remove after loading so the cache doesn't grow unboundedly across instances.
+		delete requireFn.cache[resolved];
+
+		// Build a synthetic ESM namespace that mirrors what import() returns for CJS:
+		//   - default = module.exports
+		//   - each own key of module.exports becomes a named export
+		const namespace = { default: exports };
+		if (exports !== null && typeof exports === "object") {
+			for (const key of Object.keys(exports)) {
+				if (key !== "default") {
+					namespace[key] = exports[key];
+				}
+			}
+		}
+		return namespace;
 	}
 
 	/**
