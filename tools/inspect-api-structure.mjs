@@ -13,7 +13,9 @@
 
 import chalk from "chalk";
 import { spawn } from "node:child_process";
-import { pathToFileURL } from "url";
+import { pathToFileURL, fileURLToPath } from "url";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import util from "node:util";
 import slothlet from "@cldmv/slothlet";
 
@@ -22,6 +24,11 @@ import slothlet from "@cldmv/slothlet";
  * @returns {boolean} True if a child process was spawned.
  */
 function ensureDevEnvFlags() {
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
 	/**
 	 * @param {string[]} args
 	 * @param {string} condition

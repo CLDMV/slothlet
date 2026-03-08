@@ -11,6 +11,10 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
 /**
  * @fileoverview Global setup for vitest - triggers devcheck validation
  *
@@ -29,6 +33,11 @@
  * ensureDevEnvFlags();
  */
 function ensureDevEnvFlags() {
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../dist");
+	if (existsSync(distPath)) {
+		return;
+	}
+
 	if (!process.env.NODE_ENV) {
 		process.env.NODE_ENV = "development";
 	}
