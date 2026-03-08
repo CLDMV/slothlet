@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:49 -08:00 (1772425309)
+ *	@Last modified time: 2026-03-06 15:25:23 -08:00 (1772839523)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -111,5 +111,14 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hooks After Chaini
 
 		const result = await api.math.add(2, 3);
 		expect(result).toBe(160);
+	});
+
+	test("should modify result from an async function via after hook (covers afterResult.modified true branch)", async () => {
+		// task.autoIP is an async function; its after hook must explicitly return a new value
+		// so that afterResult.modified=true in the promise resolution handler.
+		api.slothlet.hook.on("after:task.autoIP", () => "modified-by-after-hook", { id: "async-result-modifier" });
+
+		const result = await api.task.autoIP();
+		expect(result).toBe("modified-by-after-hook");
 	});
 });

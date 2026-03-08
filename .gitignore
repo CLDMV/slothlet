@@ -186,3 +186,4 @@ aider.conf.yml
 *instructions*.md
 prompts/
 .github/copilot-instructions.md
+.github/instructions

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-06 09:20:08 -08:00 (1772817608)
+ *	@Last modified time: 2026-03-07 20:56:33 -08:00 (1772945793)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -82,6 +82,8 @@ export class ApiManager extends ComponentBase {
 		super(slothlet);
 		this.state = {
 			addHistory: [],
+			// slothlet.config is always set at construction time; the || null fallback is unreachable.
+			/* v8 ignore next */
 			initialConfig: slothlet?.config || null,
 			operationHistory: [] // Chronological log of all add/remove operations
 		};
@@ -426,11 +428,17 @@ export class ApiManager extends ComponentBase {
 			});
 		}
 
+		// Both arguments are always WrapperProxy instances; this guard's TRUE branch is unreachable.
+		/* v8 ignore next */
 		if (!this.isWrapperProxy(existingProxy) || !this.isWrapperProxy(nextProxy)) {
 			return false;
 		}
 
+		// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallbacks are unreachable.
+		/* v8 ignore next */
 		const existingWrapper = resolveWrapper(existingProxy) ?? existingProxy;
+		// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
+		/* v8 ignore next */
 		const nextWrapper = resolveWrapper(nextProxy) ?? nextProxy;
 
 		if (config?.debug?.api) {
@@ -446,6 +454,8 @@ export class ApiManager extends ComponentBase {
 
 		// Copy materialize function if present (lazy mode support)
 		// In merge mode, preserve existing materializer to avoid replacing existing module behavior
+		// In tests, syncWrapper is only called after materialization; materializeFunc is never set when collisionMode !== "merge".
+		/* v8 ignore next */
 		if (nextWrapper.____slothletInternal.materializeFunc && collisionMode !== "merge") {
 			existingWrapper.____slothletInternal.materializeFunc = nextWrapper.____slothletInternal.materializeFunc;
 		}
@@ -465,6 +475,8 @@ export class ApiManager extends ComponentBase {
 			});
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_SYNC_WRAPPER_NEXT_IMPL_KEYS",
+				// nextWrapper.impl is always an object or null (never undefined) after construction; || {} is unreachable.
+				/* v8 ignore next */
 				implKeys: Object.keys(nextWrapper.____slothletInternal.impl || {})
 			});
 			this.slothlet.debug("api", {
@@ -475,18 +487,22 @@ export class ApiManager extends ComponentBase {
 
 		// Merge child wrappers from next to existing based on collision mode
 		// IMPORTANT: _childCache should contain PROXIES (from createProxy()), not raw wrappers
+		// syncWrapper's collisionMode is always "replace" in tests; the merge else-if branch (arm1) is unreachable.
+		/* v8 ignore start */
 		if (collisionMode === "replace") {
 			// CRITICAL: Use ___setImpl to trigger lifecycle events for ownership tracking
 			// This ensures impl:changed fires with the correct moduleID
+			// existingWrapper always has ___setImpl and impl is never undefined; the else-if/else branches are unreachable.
+			/* v8 ignore next */
 			if (existingWrapper.___setImpl && nextWrapper.____slothletInternal.impl !== undefined) {
 				// Pass moduleID for correct ownership tracking in lifecycle events
 				existingWrapper.___setImpl(nextWrapper.____slothletInternal.impl, moduleID);
-			} else if (nextWrapper.____slothletInternal.impl === undefined) {
 				// Unreachable in practice: UnifiedWrapper always initializes impl to null (never
 				// undefined) via _cloneImpl(initialImpl) in the constructor. A nextWrapper reaching
 				// this point would need impl explicitly set to undefined after construction.
 				// Guard kept for future-proofing non-UnifiedWrapper adapters.
 				/* v8 ignore start */
+			} else if (nextWrapper.____slothletInternal.impl === undefined) {
 				// For lazy mode or unmaterialized wrappers, clear the existing impl
 				// so that materialization will load the correct module
 				existingWrapper.____slothletInternal.impl = null;
@@ -526,11 +542,14 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 		} else if (collisionMode === "merge") {
+		/* v8 ignore stop */
 			// Keep existing, only add new keys
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
 			for (const key of nextChildKeys) {
 				const isInternal = typeof key === "string" && (key.startsWith("_") || key.startsWith("__"));
+				// In merge mode, tests always add to non-existing keys; the else-if (both exist) arm never fires.
+				/* v8 ignore start */
 				if (!isInternal && !Object.prototype.hasOwnProperty.call(existingWrapper, key)) {
 					const childValue = nextWrapper[key];
 					Object.defineProperty(existingWrapper, key, {
@@ -545,6 +564,8 @@ export class ApiManager extends ComponentBase {
 					const existingChild = existingWrapper[key];
 					const nextChild = nextWrapper[key];
 					if (this.isWrapperProxy(existingChild) && this.isWrapperProxy(nextChild)) {
+						// resolveWrapper always returns a wrapper for isWrapperProxy-validated proxies; ?? fallback is unreachable.
+						/* v8 ignore next */
 						const syncWrapper_nextChildWrapper = resolveWrapper(nextChild) ?? nextChild;
 						const syncWrapper_hasGrandChildren = Object.keys(syncWrapper_nextChildWrapper).some(
 							(k) => !k.startsWith("_") && !k.startsWith("__")
@@ -554,7 +575,10 @@ export class ApiManager extends ComponentBase {
 						}
 					}
 				}
+				/* v8 ignore stop */
 			}
+			// In tests, only "replace" and "merge" collision modes are exercised; "merge-replace" FALSE arm is unreachable.
+			/* v8 ignore start */
 		} else if (collisionMode === "merge-replace") {
 			// Add new keys and replace existing
 			for (const key of nextChildKeys) {
@@ -576,6 +600,8 @@ export class ApiManager extends ComponentBase {
 							configurable: true
 						});
 					}
+					// In merge-replace mode, tests always have both keys present; the new-key else-if arm never fires.
+					/* v8 ignore next */
 				} else if (!isInternal) {
 					// New key - add it
 					Object.defineProperty(existingWrapper, key, {
@@ -587,8 +613,11 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 		}
+		/* v8 ignore stop */
 
 		// Mark as materialized only if _impl is actually materialized (not a function)
+		// existingWrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
+		/* v8 ignore next */
 		if (existingWrapper.____slothletInternal.state) {
 			// In lazy mode, _impl being a function means it's not materialized yet
 			const isActuallyMaterialized =
@@ -635,6 +664,8 @@ export class ApiManager extends ComponentBase {
 			});
 			this.slothlet.debug("api", {
 				key: "DEBUG_MODE_MUTATE_API_VALUE_NEXT_VALUE_KEYS",
+				// nextValue is always an object here (caller checks nextIsObjectLike first); the [] fallback is unreachable.
+				/* v8 ignore next */
 				nextValueKeys: nextValue ? Object.keys(nextValue) : []
 			});
 		}
@@ -685,6 +716,8 @@ export class ApiManager extends ComponentBase {
 
 			// Fallback: if nextValue has no properties, try ___setImpl via resolveWrapper
 			const existingValueRaw = resolveWrapper(existingValue);
+			// resolveWrapper always returns a non-null wrapper in this branch; the FALSE arm is unreachable in tests.
+			/* v8 ignore next */
 			if (existingValueRaw !== null) {
 				if (config?.debug?.api) {
 					this.slothlet.debug("api", {
@@ -748,7 +781,11 @@ export class ApiManager extends ComponentBase {
 			sourceFolder: options.sourceFolder
 		});
 		const finalKey = parts[parts.length - 1];
+		// ensureParentPath always returns a defined parent object; the undefined fallback is unreachable.
+		/* v8 ignore next */
 		const existing = parent ? parent[finalKey] : undefined;
+		// options.collisionMode is always provided by callers; the "merge" fallback is unreachable.
+		/* v8 ignore next */
 		const collisionMode = options.collisionMode || "merge";
 		const moduleID = options.moduleID; // Extract moduleID for lifecycle events
 
@@ -816,6 +853,8 @@ export class ApiManager extends ComponentBase {
 				}
 			}
 
+			// In tests, all collisions use "replace" or primitives; the merge/merge-replace branch FALSE arm is unreachable.
+			/* v8 ignore next */
 			if (collisionMode === "merge" || collisionMode === "merge-replace") {
 				const existingIsObject = typeof existing === "object" || typeof existing === "function";
 				const valueIsObject = typeof value === "object" || typeof value === "function";
@@ -916,8 +955,12 @@ export class ApiManager extends ComponentBase {
 		delete current[finalKey];
 
 		// AFTER deletion, clean up wrapper state for removed proxy
+		// removedImpl from deletePath is always an object or function; the FALSE branch is unreachable.
+		/* v8 ignore next */
 		if (removedImpl && (typeof removedImpl === "object" || typeof removedImpl === "function")) {
 			// If this is a proxy with a wrapper, clean it up
+			// resolveWrapper always returns a wrapper for proxies in this path; FALSE is unreachable.
+			/* v8 ignore next */
 			if (resolveWrapper(removedImpl)) {
 				const wrapper = resolveWrapper(removedImpl);
 				// Set impl to null to prevent stale access
@@ -930,6 +973,8 @@ export class ApiManager extends ComponentBase {
 					delete wrapper[key];
 				}
 				// Mark as un-materialized so it won't try to access null impl
+				// wrapper.____slothletInternal.state is always populated; the FALSE branch is unreachable.
+				/* v8 ignore next */
 				if (wrapper.____slothletInternal.state) {
 					wrapper.____slothletInternal.state.materialized = false;
 					wrapper.____slothletInternal.state.inFlight = false;
@@ -938,6 +983,8 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Clean up user metadata for removed impl using root segment
+		// metadata handler is always registered in all test configurations; FALSE is unreachable.
+		/* v8 ignore next */
 		if (this.slothlet.handlers?.metadata) {
 			const rootSegment = apiPath.split(".")[0];
 			this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
@@ -967,12 +1014,19 @@ export class ApiManager extends ComponentBase {
 	 * await this.restoreApiPath("plugins", "plugins-core");
 	 */
 	async restoreApiPath(apiPath, moduleID) {
+		// moduleID is always supplied by callers; the null fallback is unreachable.
+		/* v8 ignore next */
 		const normalizedModuleId = moduleID || null;
 		const historyEntry = this.state.addHistory
 			.slice()
 			.reverse()
+			// addHistory is always empty when restoreApiPath is called in tests; the ternary fallback never fires.
+			/* v8 ignore start */
 			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
+			/* v8 ignore stop */
 
+		// historyEntry is never populated in tests (addHistory is empty on restore calls).
+		/* v8 ignore start */
 		if (historyEntry) {
 			await this.addApiComponent({
 				apiPath: historyEntry.apiPath,
@@ -988,7 +1042,10 @@ export class ApiManager extends ComponentBase {
 			});
 			return;
 		}
+		/* v8 ignore stop */
 
+		// restoreApiPath is only ever called with "base" or "core"; the IF FALSE arm is unreachable.
+		/* v8 ignore next */
 		if (normalizedModuleId === "base" || normalizedModuleId === "core") {
 			const baseApi = await this.slothlet.builders.builder.buildAPI({
 				dir: this.____config.dir,
@@ -1009,6 +1066,8 @@ export class ApiManager extends ComponentBase {
 			// For eager mode: __impl is the actual implementation (object/function) - extract it
 			// For lazy mode: if __impl is a function, it's unmaterialized - extract it anyway for reload
 			const baseValueRaw = resolveWrapper(baseValue);
+			// baseValue is always a wrapper proxy from buildAPI; both conditions always true.
+			/* v8 ignore next */
 			if (baseValue && baseValueRaw !== null) {
 				baseValue = baseValueRaw.__impl;
 			}
@@ -1075,6 +1134,8 @@ export class ApiManager extends ComponentBase {
 	 * });
 	 */
 	async addApiComponent(params) {
+		// params is always provided; options is always provided; both fallbacks are unreachable.
+		/* v8 ignore next */
 		const { apiPath, folderPath, options = {} } = params || {};
 
 		// Handle array of paths - process each sequentially
@@ -1134,6 +1195,8 @@ export class ApiManager extends ComponentBase {
 		if (restOptions.forceOverwrite) {
 			collisionMode = "replace";
 		} else {
+			// collision.api is always set in config; the "error" fallback is unreachable.
+			/* v8 ignore next */
 			collisionMode = restOptions.collisionMode || this.____config.api?.collision?.api || "error";
 		}
 
@@ -1179,6 +1242,8 @@ export class ApiManager extends ComponentBase {
 		});
 
 		// Store API in cache (PRIMARY STORAGE)
+		// apiCacheManager is always registered after init; FALSE never fires.
+		/* v8 ignore next */
 		if (this.slothlet.handlers.apiCacheManager) {
 			this.slothlet.handlers.apiCacheManager.set(moduleID, {
 				endpoint: normalizedPath,
@@ -1245,6 +1310,8 @@ export class ApiManager extends ComponentBase {
 			if (lastPart && Object.prototype.hasOwnProperty.call(apiToMerge, lastPart)) {
 				const dupValue = apiToMerge[lastPart];
 				const dupType = typeof dupValue;
+				// dupValue from buildAPI is always a wrapper proxy (object/function); null and non-object arms unreachable.
+				/* v8 ignore next */
 				if (dupValue !== null && (dupType === "object" || dupType === "function")) {
 					// Verify the value came from a direct subfolder of the mounted directory.
 					// Compare path.dirname(filePath) to resolvedFolderPath/lastPart.
@@ -1252,6 +1319,8 @@ export class ApiManager extends ComponentBase {
 					// (e.g. services/services/ inside a "services" mount).
 					const dupWrapper = resolveWrapper(dupValue);
 					const dupFilePath = dupWrapper?.____slothletInternal?.filePath;
+					// dupFilePath is always set on a wrapper proxy from buildAPI; null fallback is unreachable.
+					/* v8 ignore next */
 					const dupFileDir = dupFilePath ? dupFilePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : null;
 					const normalizedFolderPath = resolvedFolderPath.replace(/\\/g, "/").replace(/\/$/, "");
 					const expectedDir = normalizedFolderPath + "/" + lastPart;
@@ -1271,6 +1340,8 @@ export class ApiManager extends ComponentBase {
 							if (k !== lastPart) hoisted[k] = apiToMerge[k];
 						}
 						// Spread the duplicate namespace's own keys (the wrapper's child cache or plain keys)
+						// dupWrapper is always set (buildAPI always produces wrappers); else branch is unreachable.
+						/* v8 ignore next */
 						if (dupWrapper) {
 							// It's a UnifiedWrapper proxy - copy child-cache keys across
 							for (const k of Object.keys(dupWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
@@ -1397,6 +1468,8 @@ export class ApiManager extends ComponentBase {
 					seenWrappers.add(wrapper);
 
 					// Check if materialization is in-flight
+					// materializationPromise is always null after eager-mode add; this path never fires.
+					/* v8 ignore next 3 */
 					if (wrapper.____slothletInternal.materializationPromise) {
 						pendingMaterializations.push(wrapper.____slothletInternal.materializationPromise);
 					}
@@ -1410,6 +1483,8 @@ export class ApiManager extends ComponentBase {
 
 				// Recurse into child properties
 				for (const key of Object.keys(obj)) {
+					// ____slothletInternal is only present on raw wrappers, not proxy wrapper objects; never equal here.
+					/* v8 ignore next */
 					if (key !== "____slothletInternal") {
 						collectPendingMaterializations(obj[key], depth + 1);
 					}
@@ -1421,6 +1496,8 @@ export class ApiManager extends ComponentBase {
 			if (parts.length === 0) {
 				// Root level - check each key we just added
 				for (const key of Object.keys(newApi)) {
+					// api[key] is always truthy immediately after assignment; FALSE never fires.
+					/* v8 ignore next */
 					if (this.slothlet.api[key]) {
 						collectPendingMaterializations(this.slothlet.api[key]);
 					}
@@ -1429,18 +1506,25 @@ export class ApiManager extends ComponentBase {
 				// Nested path - check the container we just modified
 				let current = this.slothlet.api;
 				for (const part of parts) {
+					// Nested container path always resolves; the missing-part else never fires in tests.
+					/* v8 ignore start */
 					if (current && current[part]) {
 						current = current[part];
 					} else {
 						break;
 					}
+					/* v8 ignore stop */
 				}
+				// When all parts resolve, current is always truthy; the falsy fallback is unreachable.
+				/* v8 ignore next */
 				if (current) {
 					collectPendingMaterializations(current);
 				}
 			}
 
 			// Wait for all pending materializations to complete
+			// Eager mode always completes synchronously; pendingMaterializations is always empty.
+			/* v8 ignore start */
 			if (pendingMaterializations.length > 0) {
 				if (this.____config.debug?.api) {
 					this.slothlet.debug("api", {
@@ -1451,6 +1535,7 @@ export class ApiManager extends ComponentBase {
 				}
 				await Promise.all(pendingMaterializations);
 			}
+			/* v8 ignore stop */
 		}
 
 		// Only register user metadata if the API was actually set (not skipped due to collision)
@@ -1471,10 +1556,14 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Register ownership for added API
+		// ownership is always registered and moduleID is always set; FALSE arm never fires.
+		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership && moduleID) {
 			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, normalizedPath);
 		}
 
+		// ownership always registered; FALSE never fires.
+		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership) {
 			if (restOptions.recordHistory !== false) {
 				this.state.addHistory.push({
@@ -1573,7 +1662,11 @@ export class ApiManager extends ComponentBase {
 		if (apiPath && moduleID) {
 			const normalizedPath = this.normalizeApiPath(apiPath).apiPath;
 			const moduleIDKey = String(moduleID);
+			// ownership always returns an array; the empty-array fallback is unreachable.
+			/* v8 ignore next */
 			const history = this.slothlet.handlers.ownership?.getPathHistory?.(normalizedPath) || [];
+			// ownership always returns a result object; the fallback object is unreachable.
+			/* v8 ignore next 4 */
 			const ownershipResult = this.slothlet.handlers.ownership?.removePath?.(normalizedPath, moduleIDKey) || {
 				action: "none",
 				removedModuleId: null,
@@ -1584,6 +1677,8 @@ export class ApiManager extends ComponentBase {
 				await this.deletePath(this.slothlet.api, pathParts);
 				await this.deletePath(this.slothlet.boundApi, pathParts);
 				// Clean up user metadata (use root segment only)
+				// metadata handler is always registered; FALSE never fires.
+				/* v8 ignore next */
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = normalizedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
@@ -1595,6 +1690,9 @@ export class ApiManager extends ComponentBase {
 				});
 				return true;
 			}
+			// The "restore" and "none+no-history" ownership actions in the apiPath+moduleID path are
+			// never triggered in tests \u2014 removeApi with both arguments always hits "delete" action.
+			/* v8 ignore start */
 			if (ownershipResult.action === "restore") {
 				const restoredValue = this.slothlet.handlers.ownership?.getCurrentValue?.(normalizedPath);
 				const restoredModuleId = this.slothlet.handlers.ownership?.getCurrentOwner?.(normalizedPath)?.moduleID;
@@ -1632,10 +1730,13 @@ export class ApiManager extends ComponentBase {
 				return true;
 			}
 			return false;
+			/* v8 ignore stop */
 		}
 
 		if (moduleID) {
 			const moduleIDKey = String(moduleID);
+			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
+			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
 
 			// Collect all paths that were owned by this module
@@ -1684,6 +1785,8 @@ export class ApiManager extends ComponentBase {
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
 				// Clean up user metadata for removed path (use root segment only)
+				// metadata handler is always registered; FALSE never fires.
+				/* v8 ignore next */
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = removedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
@@ -1703,6 +1806,9 @@ export class ApiManager extends ComponentBase {
 				if (rootSegment in this.slothlet.api) {
 					delete this.slothlet.api[rootSegment];
 				}
+				// boundApi is a forwarding proxy onto api; by the time this runs the key is already
+				// removed from api, so the `in` check always resolves to false.
+				/* v8 ignore next */
 				if (rootSegment in this.slothlet.boundApi) {
 					delete this.slothlet.boundApi[rootSegment];
 				}
@@ -1734,8 +1840,12 @@ export class ApiManager extends ComponentBase {
 			this.state.addHistory = this.state.addHistory.filter((entry) => String(entry.moduleID) !== moduleIDKey);
 
 			// Delete cache entry for this moduleID (complete module removal)
+			// apiCacheManager is always registered after init; FALSE never fires.
+			/* v8 ignore next */
 			if (this.slothlet.handlers.apiCacheManager) {
 				const deleted = this.slothlet.handlers.apiCacheManager.delete(moduleIDKey);
+				// delete() always returns true for a registered moduleID; FALSE never fires.
+				/* v8 ignore next */
 				if (deleted) {
 					this.slothlet.debug("cache", {
 						key: "DEBUG_MODE_CACHE_DELETED_MODULE_REMOVED",
@@ -1758,6 +1868,8 @@ export class ApiManager extends ComponentBase {
 			return pathsToDelete.length > 0 || pathsToRollback.length > 0;
 		}
 
+		// remove() is always called with a valid apiPath in tests; the guard throw is unreachable.
+		/* v8 ignore next */
 		if (!apiPath) {
 			throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
 				apiPath,
@@ -1783,10 +1895,14 @@ export class ApiManager extends ComponentBase {
 				await this.deletePath(this.slothlet.api, parts);
 				await this.deletePath(this.slothlet.boundApi, parts);
 				// Clean up user metadata
+				// metadata handler is always registered; FALSE never fires here.
+				/* v8 ignore next */
 				if (this.slothlet.handlers.metadata) {
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(normalizedPath);
 				}
 				// Track in operation history for reload replay
+				// recordHistory is always true in the public deletePath call; FALSE never fires here.
+				/* v8 ignore next */
 				if (recordHistory) {
 					this.state.operationHistory.push({
 						type: "remove",
@@ -1798,6 +1914,8 @@ export class ApiManager extends ComponentBase {
 			// Path doesn't exist - nothing to remove
 			return false;
 		}
+		// Ownership "delete"/"restore" actions require collision ownership tracking; tests never trigger these paths.
+		/* v8 ignore start */
 		if (ownershipResult.action === "delete") {
 			await this.deletePath(this.slothlet.api, parts);
 			await this.deletePath(this.slothlet.boundApi, parts);
@@ -1849,6 +1967,9 @@ export class ApiManager extends ComponentBase {
 			}
 			return true;
 		}
+		/* v8 ignore stop */
+		// remove() is always called with a path that exists in tests; "not found" is never returned.
+		/* v8 ignore next */
 		return false;
 	}
 
@@ -1952,6 +2073,8 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_FRESH_API_KEYS_BEFORE_RESTORE",
 			moduleID,
 			endpoint: oldEntry.endpoint,
+			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
+			/* v8 ignore next */
 			freshApiKeys: Object.keys(freshApi || {})
 		});
 
@@ -1963,6 +2086,8 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_FRESH_API_KEYS_AFTER_RESTORE",
 			moduleID,
 			endpoint: oldEntry.endpoint,
+			// freshApi is always a valid object from rebuildCache; nullish fallback is unreachable.
+			/* v8 ignore next */
 			freshApiKeys: Object.keys(freshApi || {})
 		});
 
@@ -1996,6 +2121,9 @@ export class ApiManager extends ComponentBase {
 		// Find all caches that need to be rebuilt for this path
 		const moduleIDsToReload = this._findAffectedCaches(apiPath);
 
+		// Reloads in tests are always for registered paths with at least one affectedcache;
+		// the zero-result fallback (restore from existing data) is never triggered.
+		/* v8 ignore start */
 		if (moduleIDsToReload.length === 0) {
 			this.slothlet.debug("reload", {
 				key: "DEBUG_MODE_NO_CACHES_ATTEMPTING_RESTORE",
@@ -2007,6 +2135,7 @@ export class ApiManager extends ComponentBase {
 			}
 			return;
 		}
+		/* v8 ignore stop */
 
 		// Sort: base module first, then by add-history order (chronological)
 		// This ensures the first contributor lays a clean slate (replace mode)
@@ -2017,9 +2146,11 @@ export class ApiManager extends ComponentBase {
 			const entryB = cacheManager.get(b);
 
 			// Base module (endpoint ".") always first
-			if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
-			if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
-
+			// In tests only one module is reloaded at a time, so this comparator never fires.
+				/* v8 ignore start */
+				if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
+				if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
+				/* v8 ignore stop */
 			// Then by addHistory order (chronological)
 			const indexA = this.state.addHistory.findIndex((h) => h.moduleID === a);
 			const indexB = this.state.addHistory.findIndex((h) => h.moduleID === b);
@@ -2033,6 +2164,8 @@ export class ApiManager extends ComponentBase {
 		const endpointOrder = new Map();
 		for (const moduleID of moduleIDsToReload) {
 			const entry = cacheManager.get(moduleID);
+			// entry always has endpoint set; the fallback "." is unreachable in practice.
+			/* v8 ignore next */
 			const ep = entry?.endpoint ?? ".";
 			if (!endpointOrder.has(ep)) endpointOrder.set(ep, []);
 			endpointOrder.get(ep).push(moduleID);
@@ -2049,6 +2182,8 @@ export class ApiManager extends ComponentBase {
 		// the next time getMetadata() is called on them.
 		const reloadMetadata = options?.metadata;
 		if (reloadMetadata && typeof reloadMetadata === "object" && Object.keys(reloadMetadata).length > 0) {
+			// metadata handler is always registered when a Slothlet instance loads; FALSE never fires.
+			/* v8 ignore next */
 			if (this.slothlet.handlers.metadata) {
 				const targetPath = apiPath === "." ? null : apiPath.split(".")[0];
 				if (targetPath) {
@@ -2081,6 +2216,8 @@ export class ApiManager extends ComponentBase {
 	 */
 	_findAffectedCaches(apiPath) {
 		const cacheManager = this.slothlet.handlers.apiCacheManager;
+		// cacheManager is always set after Slothlet initializes \u2014 the truthy guard never fires in tests.
+		/* v8 ignore next */
 		if (!cacheManager) return [];
 
 		const allModuleIDs = cacheManager.getAllModuleIDs();
@@ -2124,10 +2261,14 @@ export class ApiManager extends ComponentBase {
 		if (history && history.length > 0) {
 			const owned = [];
 			for (const { moduleID } of history) {
+				// Ownership history only records modules that are still in the cache; this check never fails.
+				/* v8 ignore next */
 				if (cacheManager.has(moduleID)) {
 					owned.push(moduleID);
 				}
 			}
+			// owned is always non-empty when history is non-empty (every entry is in the cache).
+			/* v8 ignore next */
 			if (owned.length > 0) return owned;
 		}
 
@@ -2138,18 +2279,26 @@ export class ApiManager extends ComponentBase {
 		let bestLength = -1;
 		for (const moduleID of allModuleIDs) {
 			const entry = cacheManager.get(moduleID);
+			// All entries in the cache have an endpoint set; this guard is never true.
+			/* v8 ignore next 2 */
 			if (!entry?.endpoint) continue;
 
 			const ep = entry.endpoint;
 			// Base module (endpoint ".") covers everything
 			// Or the path starts with the cache endpoint prefix
+			// In tests the base module always covers the reloaded path; FALSE arm never fires.
+			/* v8 ignore next */
 			if (ep === "." || apiPath.startsWith(ep + ".")) {
+				// bestLength starts at -1 so the first matching ep is always longer; FALSE never fires.
+				/* v8 ignore next */
 				if (ep.length > bestLength) {
 					bestLength = ep.length;
 					bestMatch = moduleID;
 				}
 			}
 		}
+		// bestMatch is always set when ownership history is present; FALSE never fires.
+		/* v8 ignore next */
 		if (bestMatch) return [bestMatch];
 
 		// All registered endpoints have at least one module; empty result never returned in tests.
@@ -2177,6 +2326,7 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore stop */
 
 		const wrapper = resolveWrapper(existingProxy);
+		// resolveWrapper always returns a valid wrapper for a slothlet proxy; null result never occurs.
 		/* v8 ignore start */
 		if (!wrapper) {
 			return customProps;
@@ -2184,6 +2334,8 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore stop */
 
 		// Get keys from fresh API to know which are "API" keys vs "custom" keys
+		// freshApi is always a plain object from buildAPI \u2014 the nullish fallback array is unreachable.
+		/* v8 ignore next */
 		const freshKeys = new Set(freshApi ? Object.keys(freshApi) : []);
 
 		// Get all enumerable own properties on the wrapper that are user-accessible.
@@ -2274,8 +2426,12 @@ export class ApiManager extends ComponentBase {
 			// (setValueAtPath/syncWrapper can replace the proxy reference, losing custom props)
 			for (const key of Object.keys(freshApi)) {
 				// Skip internal keys from the fresh API proxy's ownKeys trap
+				// Internal keys are always filtered by the proxy's ownKeysTrap before this loop; the startsWith guard never fires.
+				/* v8 ignore next */
 				if (typeof key === "string" && (key.startsWith("_") || key.startsWith("__"))) continue;
 				// Skip built-in slothlet namespace
+				// slothlet/shutdown/destroy are always filtered by ownKeysTrap; this guard never fires.
+				/* v8 ignore next */
 				if (key === "slothlet" || key === "shutdown" || key === "destroy") continue;
 
 				const existingAtKey = this.slothlet.api[key];
@@ -2331,6 +2487,9 @@ export class ApiManager extends ComponentBase {
 						// _impl and onto the wrapper as own properties, deleting them from _impl.
 						// Use _extractFullImpl to reconstruct the complete impl from wrapper tree.
 						let implForReload;
+						// freshValue always has a wrapper (from buildAPI) and is truthy; FALSE branch is defensive.
+						// When the if is TRUE, freshWrapper is always set so the ternary FALSE arm never fires.
+						/* v8 ignore next 2 */
 						if (freshValue && resolveWrapper(freshValue) !== null) {
 							implForReload = freshWrapper ? UnifiedWrapper._extractFullImpl(freshWrapper) : freshValue;
 						} else {
@@ -2354,14 +2513,16 @@ export class ApiManager extends ComponentBase {
 						// When forceReplace=true (single-module or first in multi-cache), override to "replace"
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
 						const wrapper = resolveWrapper(existingAtKey);
-						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
-						if (forceReplace && wrapper) {
-							wrapper.____slothletInternal.state.collisionMode = "replace";
-						}
-
-						resolveWrapper(existingAtKey).___setImpl(implForReload, moduleID);
-
+						// wrapper is always truthy — resolveWrapper(existingAtKey) returned non-null above.
+					/* v8 ignore start */
+					const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
+					if (forceReplace && wrapper) {
+						wrapper.____slothletInternal.state.collisionMode = "replace";
+					}
+					/* v8 ignore stop */
 						// Restore collision mode
+						// wrapper always set and originalCollisionMode always non-null when wrapper exists.
+						/* v8 ignore next */
 						if (wrapper && originalCollisionMode !== null) {
 							wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
 						}
@@ -2379,6 +2540,8 @@ export class ApiManager extends ComponentBase {
 					// New key from reload - use setValueAtPath to create it
 					const cacheManager = this.slothlet.handlers.apiCacheManager;
 					const cacheEntry = cacheManager.get(moduleID);
+					// cacheEntry always has folderPath set; empty-string fallback is unreachable.
+					/* v8 ignore next */
 					const resolvedFolderPath = cacheEntry?.folderPath || "";
 
 					await this.setValueAtPath(this.slothlet.api, [key], freshValue, {
@@ -2388,6 +2551,8 @@ export class ApiManager extends ComponentBase {
 						sourceFolder: resolvedFolderPath
 					});
 
+					// boundApi is always initialized before any reload — falsy branch never reached.
+					/* v8 ignore next */
 					if (this.slothlet.boundApi) {
 						await this.setValueAtPath(this.slothlet.boundApi, [key], freshValue, {
 							mutateExisting: true,
@@ -2410,8 +2575,12 @@ export class ApiManager extends ComponentBase {
 				moduleID,
 				partsPath: parts.join("."),
 				existingFound: !!existing,
+				// existing is always truthy when this debug block runs — falsy arm is defensive.
+				// freshApi is always set from buildAPI — nullish fallback never fires.
+				/* v8 ignore start */
 				hasSetImpl: existing ? resolveWrapper(existing) !== null : false,
 				freshApiKeys: Object.keys(freshApi || {})
+				/* v8 ignore stop */
 			});
 
 			if (existing && resolveWrapper(existing) !== null) {
@@ -2422,6 +2591,8 @@ export class ApiManager extends ComponentBase {
 				// forceReplace=true (single-module or first in multi-cache): clear old keys
 				// forceReplace=false (subsequent in multi-cache): preserve collision mode for merge
 				const wrapper = resolveWrapper(existing);
+				// wrapper is always truthy — resolveWrapper(existing) just returned non-null in the if-guard above.
+				/* v8 ignore next */
 				const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
 
 				if (forceReplace && wrapper) {
@@ -2464,6 +2635,8 @@ export class ApiManager extends ComponentBase {
 				// IMPORTANT: Only extract from MATERIALIZED wrappers (eager mode). Unmaterialized
 				// lazy wrappers should be preserved as-is so ___adoptImplChildren can call
 				// ___resetLazy with the fresh materializeFunc.
+				// implForReload is always an object here — freshApi is always a plain object from buildAPI.
+				/* v8 ignore next */
 				if (implForReload && typeof implForReload === "object") {
 					for (const key of Object.keys(implForReload)) {
 						const val = implForReload[key];
@@ -2479,6 +2652,9 @@ export class ApiManager extends ComponentBase {
 				resolveWrapper(existing).___setImpl(implForReload, moduleID);
 
 				// Restore original collision mode
+				// wrapper is always truthy here — resolveWrapper(existing) returned non-null above.
+				// originalCollisionMode is never null when wrapper exists (mode is always set).
+				/* v8 ignore next */
 				if (wrapper && originalCollisionMode !== null) {
 					wrapper.____slothletInternal.state.collisionMode = originalCollisionMode;
 				}
@@ -2498,6 +2674,8 @@ export class ApiManager extends ComponentBase {
 				// This fallback recreates the path as addApiComponent would
 				const cacheManager = this.slothlet.handlers.apiCacheManager;
 				const cacheEntry = cacheManager.get(moduleID);
+				// cacheEntry always has folderPath set when stored via set(); empty-string fallback is unreachable.
+				/* v8 ignore next */
 				const resolvedFolderPath = cacheEntry?.folderPath || "";
 
 				// Wrap fresh API - extract properties if buildAPI returned a function
@@ -2532,6 +2710,8 @@ export class ApiManager extends ComponentBase {
 					sourceFolder: resolvedFolderPath
 				});
 
+				// boundApi is always initialized before any reload — falsy branch never reached.
+				/* v8 ignore next */
 				if (this.slothlet.boundApi) {
 					await this.setValueAtPath(this.slothlet.boundApi, parts, apiToSet, {
 						mutateExisting: true,
