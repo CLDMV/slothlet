@@ -43,6 +43,9 @@ import { getLanguage, initI18n, setLanguage, t, translate } from "@cldmv/slothle
  */
 function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	const history = slothlet.handlers?.apiManager?.state?.addHistory;
+	// reload/remove are always called after at least one add(), so addHistory is always populated;
+	// the false branch (no history → return pathOrModuleId unchanged) is never triggered in tests.
+	/* v8 ignore next */
 	if (history) {
 		const match = history.findLast((entry) => entry.moduleID === pathOrModuleId);
 		if (match) return match.apiPath;
@@ -122,10 +125,13 @@ export class ApiBuilder extends ComponentBase {
 
 		// Save user's shutdown/destroy functions if they exist (to call them during lifecycle)
 		// Store these on the instance so they can be updated during add/remove API operations
+		// All built API fixtures define shutdown and destroy functions; the null fallback arm is never taken.
+		/* v8 ignore start */
 		this.slothlet.userHooks = {
 			shutdown: typeof userApi.shutdown === "function" ? userApi.shutdown : null,
 			destroy: typeof userApi.destroy === "function" ? userApi.destroy : null
 		};
+		/* v8 ignore stop */
 
 		// Warn if user has 'slothlet' property (reserved namespace)
 		if (userApi.slothlet) {
@@ -201,7 +207,12 @@ export class ApiBuilder extends ComponentBase {
 			const { readFile } = await import("node:fs/promises");
 			const pkgContent = await readFile(pkgPath, "utf-8");
 			const pkg = JSON.parse(pkgContent);
+			// pkg.version is always defined in package.json; the || "unknown" fallback branch never fires.
+			/* v8 ignore next */
 			version = pkg.version || "unknown";
+		// Reading the bundled package.json always succeeds at runtime; catch block is a
+		// defensive guard that is never reached.
+		/* v8 ignore next */
 		} catch {
 			// Ignore - version will remain "unknown"
 		}

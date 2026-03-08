@@ -226,3 +226,32 @@ describe.each(configs)("Hooks Async Error Paths > Config: '$name'", ({ config })
 		});
 	});
 });
+
+/**
+ * Covers the false branch of `if (hasHooks)` in the async rejection handler:
+ * when hooks are globally disabled, the always-hook block is skipped entirely.
+ * hasHooks = hookManager && hookManager.enabled && ... → false when enabled=false.
+ */
+describe("Hooks Async Error Paths > Hooks disabled (no-hook branch)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("should propagate async rejection when hooks are globally disabled", async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		const slothlet = slothletModule.default;
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			collision: { initial: "replace", api: "replace" },
+			hook: { enabled: false }
+		});
+
+		// No hooks → hasHooks=false in rejection handler; always-hook block is skipped.
+		await expect(api.task.asyncReject()).rejects.toThrow("async-rejected");
+	});
+});
