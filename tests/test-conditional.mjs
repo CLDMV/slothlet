@@ -39,7 +39,7 @@ async function runConditionalTests() {
 	try {
 		if (nodeMajorVersion >= 18) {
 			console.log("✅ Node.js >= 18: Running full test suite including Vitest");
-			execSync("npm run test:unit", { stdio: "inherit" });
+			execSync("npm run vitest", { stdio: "inherit" });
 		} else {
 			console.log("⚠️  Node.js < 18: Skipping Vitest tests due to compatibility issues");
 			console.log("   (Vitest requires Node.js >= 18 for proper operation)");

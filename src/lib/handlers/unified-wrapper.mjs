@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-07 21:59:23 -08:00 (1772949563)
+ *	@Last modified time: 2026-03-08 19:46:36 -07:00 (1773024396)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -17,7 +17,7 @@
  */
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
-const COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
+const ___COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import util from "node:util";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
@@ -334,7 +334,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Custom inspect output for Node.js util.inspect.
 	 * @returns {*} The actual implementation for inspection.
 	 */
-	[util.inspect.custom](depth, options, inspect) {
+	[util.inspect.custom](___depth, ___options, ___inspect) {
 		// When proxyTarget === wrapper (non-callable), the prototype chain check in createProxy()
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
@@ -991,7 +991,7 @@ export class UnifiedWrapper extends ComponentBase {
 					this.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_ADOPT_CHECK",
 						apiPath: this.____slothletInternal.apiPath,
-						key,
+						propKey: key,
 						has__collisionMergedKeys: !!this.____slothletInternal.collisionMergedKeys,
 						inSet: this.____slothletInternal.collisionMergedKeys?.has(key)
 					});
@@ -1128,7 +1128,7 @@ export class UnifiedWrapper extends ComponentBase {
 					this.slothlet.debug("wrapper", {
 						key: "DEBUG_MODE_ADOPT_WRAP",
 						apiPath: this.____slothletInternal.apiPath,
-						key,
+						propKey: key,
 						wrapped: wrapped ? "YES" : wrapped === null ? "NULL" : "NO"
 					});
 				}
@@ -1245,7 +1245,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Handle merge-after-materialize for lazy wrappers in merge-replace mode
 		if (this._mergeAfterMaterialize) {
-			const { existingWrapper, isMergeReplace } = this._mergeAfterMaterialize;
+			const { existingWrapper, isMergeReplace: _ } = this._mergeAfterMaterialize;
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
@@ -1332,7 +1332,7 @@ export class UnifiedWrapper extends ComponentBase {
 			this.slothlet.debug("wrapper", {
 				key: "DEBUG_MODE_WRAP_CHILD_PATH_CHECK",
 				apiPath: this.apiPath,
-				key: keyStr,
+				propKey: keyStr,
 				has_impl: !!this.____slothletInternal.impl,
 				has__childFilePaths: !!(this.____slothletInternal.impl && this.____slothletInternal.impl.__childFilePaths),
 				has__childFilePathsPreMaterialize: !!this.____slothletInternal.childFilePathsPreMaterialize,
@@ -1342,7 +1342,7 @@ export class UnifiedWrapper extends ComponentBase {
 				this.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WRAP_CHILD_PATH_AVAILABLE",
 					keys: Object.keys(this.____slothletInternal.impl.__childFilePaths).join(","),
-					key: keyStr,
+					propKey: keyStr,
 					found: !!this.____slothletInternal.impl.__childFilePaths[key]
 				});
 			}
@@ -2188,7 +2188,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Resolves properties from wrapper properties (children), impl values, or target properties.
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
-		const getTrap = (target, prop, receiver) => {
+		const getTrap = (target, prop, _) => {
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {

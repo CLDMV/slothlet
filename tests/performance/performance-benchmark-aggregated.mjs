@@ -233,13 +233,9 @@ function ensureDevEnvFlags() {
 
 	process.env.NODE_ENV = "development";
 
-	const allExecArgv = [...process.execArgv];
-	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
-	const allConditions = [...allExecArgv, ...envOptions];
-
 	const slothletCondition = "slothlet-dev";
 
-	const requiredConditions = [slothletCondition, "development"];
+	const requiredConditions = [slothletCondition];
 	const nextExecArgv = [...process.execArgv];
 	const envConditions = (process.env.NODE_OPTIONS ?? "")
 		.split(/\s+/u)
@@ -250,7 +246,9 @@ function ensureDevEnvFlags() {
 
 	for (const condition of requiredConditions) {
 		const flag = `--conditions=${condition}`;
-		if (!hasCondition(nextExecArgv, condition)) {
+		const inExecArgv = hasCondition(nextExecArgv, condition);
+		const inNodeOptions = envConditions.some((token) => token === flag);
+		if (!inExecArgv && !inNodeOptions) {
 			nextExecArgv.push(flag);
 			needsRespawn = true;
 		}

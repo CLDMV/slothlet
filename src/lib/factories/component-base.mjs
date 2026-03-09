@@ -159,7 +159,7 @@ export class ComponentBase {
 
 	/**
 	 * Get SlothletError class.
-	 * @returns {class} SlothletError constructor.
+	 * @returns {Function} SlothletError constructor.
 	 * @package
 	 *
 	 * @description
@@ -175,7 +175,7 @@ export class ComponentBase {
 
 	/**
 	 * Get SlothletWarning class.
-	 * @returns {class} SlothletWarning constructor.
+	 * @returns {Function} SlothletWarning constructor.
 	 * @package
 	 *
 	 * @description

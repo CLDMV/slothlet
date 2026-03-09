@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-05 17:08:02 -08:00 (1772759282)
+ *	@Last modified time: 2026-03-08 19:46:31 -07:00 (1773024391)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -300,7 +300,7 @@ export class ApiBuilder extends ComponentBase {
 					// - collisionMode: must be set at initialization for security (prevents bypassing collision config)
 					// - mutateExisting: internal flag set automatically based on collision mode
 					// User-controllable options: moduleID, forceOverwrite, metadata
-					const { recordHistory, collisionMode, mutateExisting, ...filteredOptions } = options;
+					const { recordHistory: ___recordHistory, collisionMode: ___collisionMode, mutateExisting: ___mutateExisting, ...filteredOptions } = options;
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
@@ -595,7 +595,7 @@ export class ApiBuilder extends ComponentBase {
 							// unreachable via tests (2026-03-05): tryGetContext() does not throw under
 							// normal conditions; this is a defensive guard only.
 							/* v8 ignore start */
-						} catch (error) {
+						} catch (_) {
 							result.currentALSContext = null;
 						}
 						/* v8 ignore stop */
@@ -834,9 +834,11 @@ export class ApiBuilder extends ComponentBase {
 				set: function slothlet_metadata_set(fn, key, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							// slothlet.handlers is always truthy when code reaches here; "undefined" arm is dead code.
-							/* v8 ignore next */
-							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers
+								? Object.keys(slothlet.handlers).join(", ")
+								// slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+								/* v8 ignore next */
+								: "undefined",
 							validationError: true
 						});
 					}
@@ -903,9 +905,11 @@ export class ApiBuilder extends ComponentBase {
 				setFor: function slothlet_metadata_setFor(pathOrModuleId, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							// slothlet.handlers is always truthy when code reaches here; "undefined" arm is dead code.
-							/* v8 ignore next */
-							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
+							handlersKeys: slothlet.handlers
+								? Object.keys(slothlet.handlers).join(", ")
+								// slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+								/* v8 ignore next */
+								: "undefined",
 							validationError: true
 						});
 					}

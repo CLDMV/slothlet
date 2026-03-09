@@ -377,7 +377,7 @@ function runtime_patchRemoveAllListeners() {
 		if (emitterTracking) {
 			if (event === undefined) {
 				// Remove all events
-				for (const [evt, eventTracking] of emitterTracking.entries()) {
+				for (const [_, eventTracking] of emitterTracking.entries()) {
 					for (const wrappedListener of eventTracking.values()) {
 						// _slothletResource is always set by runtime_wrapEventListener
 						wrappedListener._slothletResource = null;
@@ -468,7 +468,7 @@ export function cleanupEventEmitterResources() {
 		try {
 			// Remove all listeners from this emitter
 			emitter.removeAllListeners();
-		} catch (error) {
+		} catch (_) {
 			// Silently ignore errors (emitter may already be destroyed)
 		}
 	}
