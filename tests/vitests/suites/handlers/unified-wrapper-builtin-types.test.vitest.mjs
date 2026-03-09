@@ -29,7 +29,6 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs } from "../../setup/vitest-helper.mjs";
-import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import path from "path";
 

@@ -644,20 +644,20 @@ await api.slothlet.api.add("config", "./api_smart_flatten_folder_config");
 ### By Rule Number
 
 - **Rule 1**: [C05](#c05-filename-matches-container--category-level-flatten), [C09](#c09-flatten-to-rootcategory), [C13](#c13-filename--folder-exact-match-flattening)
-- **Rule 2**: [C10](#c10-single-file-function--folder-match), [C13](#c13-filename--folder-exact-match-flattening)
+- **Rule 2**: [C10](#c10-single-file-function---folder-match), [C13](#c13-filename--folder-exact-match-flattening)
 - **Rule 4**: [C11](#c11-default-export-flattening), [C17](#c17-default-function-export-flattening)
 - **Rule 5**: [C02](#c02-multi-default-context-with-default-export), [C03](#c03-multi-default-context-without-default-export)
 - **Rule 6**: [C01](#c01-self-referential-check), [C09a](#c09a-self-referential-non-function)
-- **Rule 7**: [C04](#c04-auto-flatten-single-named-export-matching-filename), [C08](#c08-auto-flattening), [C12](#c12-object-auto-flatten), [C18](#c18-object-auto-flatten--final-check)
+- **Rule 7**: [C04](#c04-auto-flatten-single-named-export-matching-filename), [C08](#c08-auto-flattening), [C12](#c12-object-auto-flatten), [C18](#c18-object-auto-flatten---final-check)
 - **Rule 9**: [C15](#c15-function-name-matches-folder), [C16](#c16-function-name-preference)
-- **Rule 10**: [C14](#c14-parent-level-flattening--generic-filenames)
+- **Rule 10**: [C14](#c14-parent-level-flattening---generic-filenames)
 - **Rule 11**: [C33](#c33-addapi-special-file-detection)
 - **Rule 13**: [C34](#c34-addapi-path-deduplication)
 
 ### By Flattening Pattern
 
-- **F01**: [C01](#c01-self-referential-check), [C05](#c05-filename-matches-container--category-level-flatten), [C07](#c07-default-fallback--preserve-as-namespace)
-- **F02**: [C10](#c10-single-file-function--folder-match), [C15](#c15-function-name-matches-folder)
+- **F01**: [C01](#c01-self-referential-check), [C05](#c05-filename-matches-container--category-level-flatten), [C07](#c07-default-fallback---preserve-as-namespace)
+- **F02**: [C10](#c10-single-file-function---folder-match), [C15](#c15-function-name-matches-folder)
 - **F03**: [C04](#c04-auto-flatten-single-named-export-matching-filename), [C08](#c08-auto-flattening)
 - **F04**: [C11](#c11-default-export-flattening), [C12](#c12-object-auto-flatten)
 - **F05**: [C08](#c08-auto-flattening), [C09](#c09-flatten-to-rootcategory), [C09b](#c09b-traditional-namespace-preservation)

@@ -145,7 +145,7 @@ describe("prototype [util.inspect.custom] unmaterialized lazy branch (line 352)"
 		const sl = resolveWrapper(eagerApi.math).slothlet;
 		// Create a lazy wrapper that has a proxy but is NOT yet materialized
 		const w = new UnifiedWrapper(sl, { mode: "lazy", apiPath: "test.inspect.lazy" });
-		const proxy = w.createProxy();
+		const ____proxy = w.createProxy();
 		// Verify it is genuinely unmaterialized
 		expect(w.____slothletInternal.state.materialized).toBe(false);
 		expect(w.____slothletInternal.proxy).toBeTruthy();

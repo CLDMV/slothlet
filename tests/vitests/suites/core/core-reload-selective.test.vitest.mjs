@@ -143,7 +143,7 @@ for (const { config, name } of configs) {
 			expect(firstResult).toBe(1020); // 10+10+1000
 
 			// Add second module to same path (with collision replace mode)
-			const moduleID2 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
+			const ____moduleID2 = await api.slothlet.api.add("stackTest", TEST_DIRS.API_TEST);
 
 			// Both modules should be in ownership stack
 			// Reload by specific moduleID (not path) to update buried implementation

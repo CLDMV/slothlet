@@ -10,7 +10,7 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+import { self, context } from "@cldmv/slothlet/runtime";
 export async function sleep() {
 	await self.connection.ensureConnected();
 

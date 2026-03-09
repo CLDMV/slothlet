@@ -237,7 +237,7 @@ describe("File-based api.add() Functionality", () => {
 
 		it("should allow removal of file-based additions", async () => {
 			const mathPath = join(TEST_DIRS.API_TEST, "math/math.mjs");
-			const moduleID = await api.slothlet.api.add("removable", mathPath);
+			const ____moduleID = await api.slothlet.api.add("removable", mathPath);
 
 			expect(api.removable).toBeDefined();
 

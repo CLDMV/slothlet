@@ -62,7 +62,6 @@
  * @module tests/vitests/suites/unified-wrapper/unified-wrapper-lazy-gettrap
  */
 
-import util from "node:util";
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";

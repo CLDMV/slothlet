@@ -117,12 +117,12 @@ describe.each(getMatrixConfigs())("Metadata API Manager > Config: '$name'", ({ c
 			});
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
-			const metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
+			const ____metaBefore = api.keep.config.settings.getPluginConfig.__metadata;
 
 			await api.slothlet.api.remove("remove");
 
 			await materialize(api, "keep.config.settings.getPluginConfig");
-			const metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
+			const ____metaAfter = api.keep.config.settings.getPluginConfig.__metadata;
 		});
 	});
 

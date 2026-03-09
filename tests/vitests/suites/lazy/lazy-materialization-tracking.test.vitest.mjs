@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:51 -08:00 (1772425311)
+ *	@Last modified time: 2026-03-08 20:15:07 -07:00 (1773026107)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -98,14 +98,14 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			if (api.math && typeof api.math.add === "function") {
 				try {
 					api.math.add(1, 2);
-				} catch (err) {
+				} catch (____error) {
 					// Errors are ok - we just want to trigger materialization
 				}
 			}
 			if (api.math && typeof api.math.multiply === "function") {
 				try {
 					api.math.multiply(2, 3);
-				} catch (err) {
+				} catch (____error) {
 					// Errors are ok
 				}
 			}
@@ -121,13 +121,13 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 		});
 
 		it("should update statistics after module access", async () => {
-			const initialStats = api.slothlet.materialize.get();
+			const ____initialStats = api.slothlet.materialize.get();
 
 			// Access a module if available
 			if (api.math && typeof api.math.multiply === "function") {
 				try {
 					api.math.multiply(2, 3);
-				} catch (err) {
+				} catch (____error) {
 					// Errors are ok - we just want to trigger materialization
 				}
 			}
@@ -166,11 +166,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 
 			// If no lazy wrappers, wait should resolve immediately
 			if (stats.total === 0) {
-				const promises = [
-					api.slothlet.materialize.wait(),
-					api.slothlet.materialize.wait(),
-					api.slothlet.materialize.wait()
-				];
+				const promises = [api.slothlet.materialize.wait(), api.slothlet.materialize.wait(), api.slothlet.materialize.wait()];
 
 				await Promise.all(promises);
 				expect(true).toBe(true);
@@ -178,11 +174,7 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			}
 
 			// If there are lazy wrappers, access modules to trigger materialization
-			const promises = [
-				api.slothlet.materialize.wait(),
-				api.slothlet.materialize.wait(),
-				api.slothlet.materialize.wait()
-			];
+			const promises = [api.slothlet.materialize.wait(), api.slothlet.materialize.wait(), api.slothlet.materialize.wait()];
 
 			// Access some modules to trigger materialization
 			if (api.math && typeof api.math.add === "function") {
@@ -213,10 +205,18 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 			// Access multiple modules
 			if (api.math) {
 				if (typeof api.math.add === "function") {
-					try { api.math.add(1, 2); } catch (err) {}
+					try {
+						api.math.add(1, 2);
+					} catch (____error) {
+						/* intentional */
+					}
 				}
 				if (typeof api.math.subtract === "function") {
-					try { api.math.subtract(5, 3); } catch (err) {}
+					try {
+						api.math.subtract(5, 3);
+					} catch (____error) {
+						/* intentional */
+					}
 				}
 			}
 
@@ -319,9 +319,21 @@ describe.each(matrixConfigs)("Lazy Materialization Tracking > Config: $name", ({
 
 			// Access modules multiple times
 			if (freshApi.math && typeof freshApi.math.add === "function") {
-				try { freshApi.math.add(1, 2); } catch (err) {}
-				try { freshApi.math.add(2, 3); } catch (err) {}
-				try { freshApi.math.add(3, 4); } catch (err) {}
+				try {
+					freshApi.math.add(1, 2);
+				} catch (____error) {
+					/* intentional */
+				}
+				try {
+					freshApi.math.add(2, 3);
+				} catch (____error) {
+					/* intentional */
+				}
+				try {
+					freshApi.math.add(3, 4);
+				} catch (____error) {
+					/* intentional */
+				}
 			}
 
 			await new Promise((resolve) => setTimeout(resolve, 100));

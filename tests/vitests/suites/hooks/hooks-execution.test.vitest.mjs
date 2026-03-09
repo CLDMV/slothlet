@@ -488,7 +488,7 @@ describe.each(getMatrixConfigs({ hook: { enabled: true } }))("Hook Execution Beh
 		// This test verifies hooks can be called while processing another hook
 		api.slothlet.hook.on(
 			"before:**",
-			({ path }) => {
+			({ ____path }) => {
 				execution.push("outer-before");
 				// Just track execution, don't call nested functions from hooks
 			},

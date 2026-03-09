@@ -58,31 +58,31 @@ async function debugHookPaths() {
 		// console.log("\nCalling api.advanced.selfObject.addViaSelf(2, 3):");
 		try {
 			await api.advanced.selfObject.addViaSelf(2, 3);
-		} catch (error) {
-			// console.log(`❌ Error: ${error.message}`);
+		} catch (____error) {
+			// console.log(`❌ Error: ${____error.message}`);
 		}
 
 		// console.log("\nCalling api.math.add(2, 3):");
 		try {
 			await api.math.add(2, 3);
-		} catch (error) {
-			// console.log(`❌ Error: ${error.message}`);
+		} catch (____error) {
+			// console.log(`❌ Error: ${____error.message}`);
 		}
 
 		// console.log("\nCalling api.string.upper('test'):");
 		try {
 			await api.string.upper("test");
-		} catch (error) {
-			// console.log(`❌ Error: ${error.message}`);
+		} catch (____error) {
+			// console.log(`❌ Error: ${____error.message}`);
 		}
 
 		// console.log(`\nAll captured paths for ${config.name}:`);
-		capturedPaths.forEach((pathInfo, i) => {
+		capturedPaths.forEach((____pathInfo, ____i) => {
 			// console.log(`  ${i + 1}. "${pathInfo.stringified}" (${pathInfo.type})`);
 		});
 
-		const stringPaths = capturedPaths.filter((p) => p.type === "string");
-		const functionPaths = capturedPaths.filter((p) => p.type === "function");
+		const ____stringPaths = capturedPaths.filter((p) => p.type === "string");
+		const ____functionPaths = capturedPaths.filter((p) => p.type === "function");
 
 		// console.log(`\nPath Analysis:`);
 		// console.log(`  - String paths: ${stringPaths.length}/${capturedPaths.length}`);

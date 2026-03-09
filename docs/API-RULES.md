@@ -640,7 +640,7 @@ api.config.main.getRootInfo(); // ✅ other files unaffected
 
 **Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
 
-```
+```javascript
 // Should NOT hoist (services/services/services.mjs):
 // api.add("services", folder)  →  newApi has key "services"
 // but filePath = .../services/services/services.mjs

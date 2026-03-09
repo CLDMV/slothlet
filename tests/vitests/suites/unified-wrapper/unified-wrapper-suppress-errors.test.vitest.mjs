@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
+ *	@Last modified time: 2026-03-08 20:16:05 -07:00 (1773026165)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -130,7 +130,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 		api = await makeSuppressApi();
 
 		let errorHookFired = false;
-		let alwaysHookFired = false;
+		let ____alwaysHookFired = false;
 
 		api.slothlet.hook.on(
 			"error:task.syncThrow",
@@ -142,7 +142,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 		api.slothlet.hook.on(
 			"always:task.syncThrow",
 			() => {
-				alwaysHookFired = true;
+				____alwaysHookFired = true;
 			},
 			{ id: "sync-always-capture" }
 		);
@@ -188,11 +188,7 @@ describe("apply trap — sync throw with suppressErrors=true (with hooks)", () =
 
 		// Register before hook that short-circuits by returning a value directly
 		// (returning a non-undefined, non-array value from a before hook triggers the short-circuit path)
-		api.slothlet.hook.on(
-			"before:task.syncThrow",
-			() => "before-prevented",
-			{ id: "before-short-circuit" }
-		);
+		api.slothlet.hook.on("before:task.syncThrow", () => "before-prevented", { id: "before-short-circuit" });
 
 		// syncThrow is never called because before hook short-circuits with the returned value
 		const result = api.task.syncThrow();

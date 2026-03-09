@@ -198,7 +198,7 @@ describe("HookManager.#removeHook — cleanup: patternHooks becomes empty after 
 		// Register a single hook with a completely unique pattern so this bucket has exactly 1 entry.
 		// "before:hook.l824.cleanup.unique" → type="before", pattern="hook.l824.cleanup.unique"
 		// patternHooks = [this hook] (length 1)
-		const hookId = api.slothlet.hook.on("before:hook.l824.cleanup.unique", () => {}, { id: "l824-cleanup-test" });
+		const ____hookId = api.slothlet.hook.on("before:hook.l824.cleanup.unique", () => {}, { id: "l824-cleanup-test" });
 
 		// Remove the only hook → patternHooks.splice(0, 1) → length becomes 0
 		// → L824: if (patternHooks.length === 0) → TRUE

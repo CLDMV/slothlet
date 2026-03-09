@@ -38,7 +38,7 @@ import slothlet from "@cldmv/slothlet";
 import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ____dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Extract the real Slothlet instance from an API proxy by resolving the wrapper on

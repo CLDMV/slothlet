@@ -35,7 +35,6 @@
  */
 
 import path from "node:path";
-import process from "node:process";
 import { describe, it, expect } from "vitest";
 import { Resolver } from "@cldmv/slothlet/helpers/resolve-from-caller";
 

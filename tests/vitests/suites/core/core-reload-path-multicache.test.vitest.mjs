@@ -72,14 +72,14 @@ for (const { config, name } of configs) {
 
 			it("should rebuild both caches when two modules share the same endpoint", async () => {
 				// Add first module at "shared" endpoint
-				const moduleID1 = await api.slothlet.api.add("shared", TEST_DIRS.API_TEST);
+				const ____moduleID1 = await api.slothlet.api.add("shared", TEST_DIRS.API_TEST);
 
 				// Verify first module's math works
 				const math1 = await api.shared.math.add(2, 3);
 				expect(math1).toBeDefined();
 
 				// Add second module at same "shared" endpoint (merge mode)
-				const moduleID2 = await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_COLLISIONS);
+				const ____moduleID2 = await api.slothlet.api.add("shared", TEST_DIRS.API_TEST_COLLISIONS);
 
 				// API_TEST_COLLISIONS exports merge into existing structure:
 				// - collections: NEW top-level key → merges in
@@ -168,10 +168,10 @@ for (const { config, name } of configs) {
 
 			it("should rebuild caches in add-history order", async () => {
 				// Add first module - provides math.add, config, etc.
-				const moduleID1 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST);
+				const ____moduleID1 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST);
 
 				// Add second module - provides collections (new top-level) and power/sqrt/modulo (merge into math)
-				const moduleID2 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST_COLLISIONS);
+				const ____moduleID2 = await api.slothlet.api.add("ordered", TEST_DIRS.API_TEST_COLLISIONS);
 
 				// Merged keys from COLLISIONS present before reload
 				expect(api.ordered.collections).toBeDefined();

@@ -61,7 +61,7 @@ async function callMathAdd(api, a, b) {
 	if (typeof mathFn === "function") {
 		try {
 			return await mathFn(a, b);
-		} catch (error) {
+		} catch (____error) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
@@ -73,7 +73,7 @@ async function callMathAdd(api, a, b) {
 	if (typeof mathFn === "function") {
 		try {
 			return await mathFn(a, b);
-		} catch (error) {
+		} catch (____error) {
 			// Fallback to rootMath when math.add still fails.
 		}
 	}
@@ -88,7 +88,7 @@ async function callMathAdd(api, a, b) {
 	if (typeof rootFn !== "function") {
 		try {
 			return await executeApiCall(api, { path: ["rootMath", "add"], args: [a, b] });
-		} catch (error) {
+		} catch (____error) {
 			throw new Error("math.add is not a function");
 		}
 	}
@@ -111,7 +111,7 @@ async function callNestedDateToday(api) {
 	if (typeof fn === "function") {
 		try {
 			return await fn();
-		} catch (error) {
+		} catch (____error) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
@@ -147,7 +147,7 @@ async function callStringUpper(api, value) {
 	if (typeof fn === "function") {
 		try {
 			return await fn(value);
-		} catch (error) {
+		} catch (____error) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}
@@ -180,7 +180,7 @@ async function callFuncmod(api, a, b) {
 	if (typeof fn === "function") {
 		try {
 			return await fn(a, b);
-		} catch (error) {
+		} catch (____error) {
 			// Retry after materialization when lazy proxy throws.
 		}
 	}

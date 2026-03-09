@@ -122,7 +122,7 @@ export function verifyRuntime() {
 					results.runtimeType = "async";
 				}
 			}
-		} catch (error) {
+		} catch (____error) {
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {

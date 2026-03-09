@@ -49,7 +49,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ____dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const EAGER_CONFIGS = [
 	{ name: "eager/hooks-on", config: { mode: "eager", runtime: "async", hook: { enabled: true } } },

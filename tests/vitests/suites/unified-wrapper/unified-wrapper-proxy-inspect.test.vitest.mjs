@@ -254,7 +254,7 @@ describe("unified-wrapper: debug.wrapper=true access to power/add (lines 2314, 2
 		});
 
 		// Trigger materialization by accessing power
-		const powerFn = api.math?.power;
+		const ____powerFn = api.math?.power;
 		await new Promise((r) => setTimeout(r, 100));
 		expect(api.math).toBeDefined();
 	});
@@ -289,7 +289,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 		const taskProxy = api.task;
 		// Access taskProxy to start inFlight materialization
 		// Accessing a child prop triggers the in-flight waiting proxy creation
-		const promised = taskProxy?.asyncReject; // triggers lazy get trap
+		const ____promised = taskProxy?.asyncReject; // triggers lazy get trap
 		await new Promise((r) => setTimeout(r, 100));
 		expect(api.task).toBeDefined();
 	});
@@ -306,7 +306,7 @@ describe("unified-wrapper: in-flight lazy get trap (lines 2362-2389)", () => {
 		// Background materialization starts immediately → task wrapper goes inFlight
 		// Then accessing taskProxy triggers the inFlight branch in get trap
 		const taskProxy = api.task;
-		const childRef = taskProxy?.parseJson;
+		const ____childRef = taskProxy?.parseJson;
 		await new Promise((r) => setTimeout(r, 100));
 		expect(api.task).toBeDefined();
 	});

@@ -26,7 +26,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe("Class Instance Context Propagation", () => {
-	describe.each(getMatrixConfigs({}))("Config: '$name'", ({ name, config }) => {
+	describe.each(getMatrixConfigs({}))("Config: '$name'", ({ ____name, config }) => {
 		let api;
 
 		beforeEach(async () => {

@@ -228,7 +228,7 @@ describe("lazy waiting proxy – `then` chain traversal", () => {
 		api = await makeLazyApi();
 
 		// Concurrent: one awaits the property ref, one calls it
-		const [propRef, callResult] = await Promise.allSettled([
+		const [____propRef, callResult] = await Promise.allSettled([
 			api.math.add, // thenable waiting proxy – triggers then chain
 			api.math.add(1, 1) // calling the waiting proxy – triggers apply chain
 		]);

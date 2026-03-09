@@ -67,7 +67,7 @@ Neither dependency is needed if you are not using TypeScript files.
 
 Given an API directory with TypeScript modules:
 
-```
+```text
 api/
   math.ts
   string.ts
@@ -266,7 +266,7 @@ if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
 
 You can freely mix `.ts` and `.mjs`/`.js` files in the same API directory. Slothlet transpiles `.ts` files and loads `.mjs`/`.js` files directly. No special config is needed:
 
-```
+```text
 api/
   math.ts         <- transpiled by Slothlet
   string.ts       <- transpiled by Slothlet
@@ -286,7 +286,7 @@ All files are merged into the same unified API surface as usual.
 
 If esbuild is not installed and you enable `typescript: true` or `typescript: "fast"`:
 
-```
+```text
 [TYPESCRIPT_ESBUILD_NOT_INSTALLED] SlothletError
 TypeScript fast mode requires 'esbuild' to be installed.
 Hint: Install it with: npm install esbuild
@@ -294,7 +294,7 @@ Hint: Install it with: npm install esbuild
 
 If TypeScript is not installed and you use `typescript: "strict"`:
 
-```
+```text
 [TYPESCRIPT_TSC_NOT_INSTALLED] SlothletError
 TypeScript strict mode requires 'typescript' to be installed.
 Hint: Install it with: npm install typescript
@@ -304,7 +304,7 @@ Hint: Install it with: npm install typescript
 
 When strict mode catches type errors in your source files, `slothlet()` throws with the full TypeScript diagnostic output:
 
-```
+```text
 [TYPESCRIPT_COMPILATION_ERROR] SlothletError
 TypeScript compilation failed with 2 error(s) in api/math.ts:
   api/math.ts(5,10): error TS2322: Type 'string' is not assignable to type 'number'.
@@ -315,7 +315,7 @@ TypeScript compilation failed with 2 error(s) in api/math.ts:
 
 If `mode: "strict"` is set with a `types` object but `output` or `interfaceName` is missing:
 
-```
+```text
 SlothletError: types.output is required when using TypeScript strict mode with type generation
 SlothletError: types.interfaceName is required when using TypeScript strict mode with type generation
 ```

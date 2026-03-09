@@ -447,7 +447,7 @@ describe("waiting proxy — apply trap (lines 1700-1880)", () => {
 		const { api, teardown } = await makeLazy();
 		try {
 			// Trigger in-flight state first
-			const _ignored = api.advanced.nonExistentProp; // starts materialization, inFlight=true
+			const ____ignored = api.advanced.nonExistentProp; // starts materialization, inFlight=true
 			// Now call a different waiting proxy while advanced is in-flight
 			const waiting2 = api.advanced.anotherNonExistentFn;
 			await expect(waiting2()).rejects.toThrow();

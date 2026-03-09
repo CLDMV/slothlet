@@ -26,7 +26,7 @@ let watcher = null;
  * Helper function to get listener count
  * @private
  */
-function getListenerCount() {
+function ____getListenerCount() {
 	if (!watcher) return 0;
 
 	return (

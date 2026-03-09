@@ -326,13 +326,13 @@ describe("modes-processor: multiple root contributors (lines ~1401-1480)", () =>
 		// api_test_multi_root_fn has do-a.mjs and do-b.mjs, both with function defaults
 		// → rootContributors.length > 1 → WARNING_MULTIPLE_ROOT_CONTRIBUTORS
 		// → each gets its own namespace (lines 1401-1480)
-		let warned = false;
+		let ____warned = false;
 		_api = await slothlet({
 			...makeConfig(),
 			dir: DIRS.MULTI_ROOT_FN,
 			// Capture warnings instead of logging
 			onWarning: () => {
-				warned = true;
+				____warned = true;
 			}
 		});
 
