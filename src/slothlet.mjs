@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-05 19:19:24 -08:00 (1772767164)
+ *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -484,7 +484,7 @@ class Slothlet {
 					return true;
 				},
 				has: (target, prop) => (this.api ? prop in this.api : false),
-				ownKeys: (_) => (this.api ? Reflect.ownKeys(this.api) : []),
+				ownKeys: (____target) => (this.api ? Reflect.ownKeys(this.api) : []),
 				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
 				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
 				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),
@@ -502,7 +502,7 @@ class Slothlet {
 					return undefined;
 				}
 			});
-		/* v8 ignore stop */
+			/* v8 ignore stop */
 		}
 
 		// Set self and context in store
@@ -625,8 +625,8 @@ class Slothlet {
 					options: { ...(operation.options || {}), recordHistory: false },
 					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleID for replay
 				});
-			// All operations are "add" or "remove"; no third type exists — false arm is dead code.
-			/* v8 ignore next */
+				// All operations are "add" or "remove"; no third type exists — false arm is dead code.
+				/* v8 ignore next */
 			} else if (operation.type === "remove") {
 				// During replay, operation.apiPath is the root path (e.g., "path1").
 				// Use deletePath directly to remove the entire subtree.

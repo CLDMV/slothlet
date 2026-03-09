@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	@Last modified time: 2026-03-08 19:49:49 -07:00 (1773024589)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -362,8 +362,8 @@ export class ApiAssignment extends ComponentBase {
 						// if (merge || merge-replace) guard means replace-mode collisions
 						// are resolved before this block is ever entered.
 
-					// Pure-merge lazy-folder-second path not exercised by tests (merge-replace is).
-					/* v8 ignore start */
+						// Pure-merge lazy-folder-second path not exercised by tests (merge-replace is).
+						/* v8 ignore start */
 						if (!isMergeReplace) {
 							// Merge mode: Copy all existing keys into lazy folder
 							// When folder materializes, ___adoptImplChildren will preserve these (merge scenario)
@@ -378,10 +378,10 @@ export class ApiAssignment extends ComponentBase {
 							}
 
 							const existingChildKeys = Object.keys(existingWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-						// Debug logging inside the lazy-replace collision copy-children path.
-						// Only reached when debug.api=true AND a lazy-unmaterialized folder replaces an
-						// already-materialized wrapper — a combination not exercised by current tests.
-												this.slothlet.debug("api", {
+							// Debug logging inside the lazy-replace collision copy-children path.
+							// Only reached when debug.api=true AND a lazy-unmaterialized folder replaces an
+							// already-materialized wrapper — a combination not exercised by current tests.
+							this.slothlet.debug("api", {
 								key: "DEBUG_MODE_COLLISION_COPY_CHILD_KEYS",
 								existingChildKeys: existingChildKeys.join(","),
 								fromApiPath: existingWrapper.____slothletInternal.apiPath,
@@ -441,7 +441,7 @@ export class ApiAssignment extends ComponentBase {
 									);
 								});
 							}
-						/* v8 ignore stop */
+							/* v8 ignore stop */
 						} else {
 							// Merge-replace mode: Don't copy anything
 							// Let the lazy folder materialize clean, its keys will be the "new" values
@@ -525,7 +525,7 @@ export class ApiAssignment extends ComponentBase {
 									newChildWrapper.___adoptImplChildren();
 								}
 								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-								const ___existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+								const ____existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 								for (const childKey of newChildKeys) {
 									const childKeyExists = Object.prototype.hasOwnProperty.call(existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).

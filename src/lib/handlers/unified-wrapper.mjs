@@ -17,7 +17,7 @@
  */
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)
-const ___COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
+const ____COLLISION_MERGED_PROPERTY = Symbol("collisionMergedProperty");
 import util from "node:util";
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
@@ -334,7 +334,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * Custom inspect output for Node.js util.inspect.
 	 * @returns {*} The actual implementation for inspection.
 	 */
-	[util.inspect.custom](___depth, ___options, ___inspect) {
+	[util.inspect.custom](____depth, ____options, ____inspect) {
 		// When proxyTarget === wrapper (non-callable), the prototype chain check in createProxy()
 		// finds this method and skips installing the closure own-property. Node then calls this
 		// prototype method with `this` = proxy, where ____slothletInternal is blocked by getTrap.
@@ -1245,7 +1245,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 		// Handle merge-after-materialize for lazy wrappers in merge-replace mode
 		if (this._mergeAfterMaterialize) {
-			const { existingWrapper, isMergeReplace: _ } = this._mergeAfterMaterialize;
+			const { existingWrapper, isMergeReplace: ____isMergeReplace } = this._mergeAfterMaterialize;
 
 			// Now that this wrapper has materialized with its own keys,
 			// add non-conflicting keys from the existing wrapper
@@ -2188,7 +2188,7 @@ export class UnifiedWrapper extends ComponentBase {
 		 * Resolves properties from wrapper properties (children), impl values, or target properties.
 		 * Filters internal properties (starting with _ or __) from external access.
 		 */
-		const getTrap = (target, prop, _) => {
+		const getTrap = (target, prop, ____receiver) => {
 			// CRITICAL: For non-configurable properties on target, must return actual value
 			// This satisfies proxy invariants when target has __mode, __apiPath, etc.
 			if (target !== wrapper && prop in target) {

@@ -303,7 +303,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * const moduleID = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
 	 */
-	buildDefaultModuleId(apiPath, _) {
+	buildDefaultModuleId(apiPath, ____resolvedFolderPath) {
 		const randomSuffix = Math.random().toString(36).substring(2, 8);
 		const prefix = apiPath || "auto";
 		return `${prefix}_${randomSuffix}`;

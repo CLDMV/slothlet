@@ -214,7 +214,7 @@ async function extractTypesFromFile(filePath, ts) {
 		visit(sourceFile);
 
 		return { exports, sourceFile };
-	} catch (_) {
+	} catch (____error) {
 		// If we can't parse the file, return empty type info
 		return { exports: [] };
 	}
@@ -228,7 +228,7 @@ async function extractTypesFromFile(filePath, ts) {
  * @returns {string} Function signature
  * @private
  */
-function extractFunctionSignature(node, ___source, ___ts) {
+function extractFunctionSignature(node, ____source, ____ts) {
 	const params = node.parameters
 		.map((p) => {
 			const name = p.name.getText(node.getSourceFile());

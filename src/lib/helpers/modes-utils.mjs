@@ -34,7 +34,7 @@ export class ModesUtils extends ComponentBase {
 	 * @returns {Function} Original function unmodified.
 	 * @public
 	 */
-	ensureNamedExportFunction(fn, ___nameHint) {
+	ensureNamedExportFunction(fn, ____nameHint) {
 		// UnifiedWrapper now handles name, length, and toString through proxy get trap
 		// No wrapping needed - return original function as-is
 		return fn;

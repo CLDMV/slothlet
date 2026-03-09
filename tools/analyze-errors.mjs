@@ -115,7 +115,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 					}
 				}
 			}
-		} catch (_) {
+		} catch (____err) {
 			// Folder doesn't exist, skip it
 			if (VERBOSE) {
 				console.log(`⚠️  Folder not found: ${config.path}`);
@@ -475,7 +475,7 @@ function parseBareNewErrors(content, filePath) {
  * @param {string} filePath - File path
  * @returns {boolean} True if file has proper header
  */
-function hasProperFileHeader(content, ___filePath) {
+function hasProperFileHeader(content, ____filePath) {
 	// Expected header format (first 12 lines)
 	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, or root level (/)
 	const headerPattern =
@@ -1295,6 +1295,14 @@ console.log("=== Hardcoded 'message:' Strings in debug() Calls Detection ===");
 console.log("=".repeat(80) + "\n");
 
 // Also find multi-line debug() calls where message: is on its own line
+/**
+ * Parse hardcoded message: strings inside debug() calls that should use i18n DEBUG_MODE_ keys.
+ * Handles multi-line debug() call patterns where `message:` appears on its own line.
+ * The correct pattern is: { key: "DEBUG_MODE_KEY", ...params } - no await t() needed.
+ * @param {string} content - File content
+ * @param {string} filePath - File path
+ * @returns {Array} Array of hardcoded debug message strings
+ */
 function parseHardcodedDebugMessagesMultiline(content, filePath) {
 	const messages = [];
 	// Match: message: "string" inside a slothlet.debug block. The correct pattern is
