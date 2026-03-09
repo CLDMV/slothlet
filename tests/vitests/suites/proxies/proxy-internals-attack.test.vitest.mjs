@@ -130,9 +130,7 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	it("A2. Bracket notation read returns undefined for all blocked keys", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		for (const { key } of BLOCKED_KEYS) {
-			// eslint-disable-next-line dot-notation
 			expect(leaf[key], `leaf["${key}"]`).toBeUndefined();
-			// eslint-disable-next-line dot-notation
 			expect(ns[key], `ns["${key}"]`).toBeUndefined();
 		}
 	});
@@ -186,10 +184,8 @@ describe.each(getMatrixConfigs({}))("Proxy Internals Attack Vectors - $name", ({
 	it("A6. for..in loop does not expose any blocked key", async () => {
 		const { leaf, ns } = await getMaterializedProxies();
 		const leafForIn = [];
-		// eslint-disable-next-line guard-for-in
 		for (const k in leaf) leafForIn.push(k);
 		const nsForIn = [];
-		// eslint-disable-next-line guard-for-in
 		for (const k in ns) nsForIn.push(k);
 		for (const { key } of BLOCKED_KEYS) {
 			expect(leafForIn, `for..in(leaf) must not contain "${key}"`).not.toContain(key);

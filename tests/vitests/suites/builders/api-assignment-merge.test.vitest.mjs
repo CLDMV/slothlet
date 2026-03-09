@@ -35,7 +35,7 @@
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";

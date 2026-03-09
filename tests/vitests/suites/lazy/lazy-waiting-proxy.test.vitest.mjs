@@ -178,7 +178,7 @@ describe("Waiting proxy — special property fast-paths (lines 1410–1695)", ()
 	});
 
 	it("_materialize returns a bound function that materialises the wrapper", async () => {
-		const { wp, api, teardown } = await getWaitingProxy();
+		const { wp, ____api, teardown } = await getWaitingProxy();
 		try {
 			const materializeFn = wp._materialize;
 			expect(typeof materializeFn).toBe("function");

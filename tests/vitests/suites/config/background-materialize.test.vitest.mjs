@@ -30,7 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LAZY_MATRIX = getMatrixConfigs({ mode: "lazy" });
-describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ name, config }) => {
+describe.each(LAZY_MATRIX)("Background Materialize - %s", ({ ____name, config }) => {
 	test("backgroundMaterialize: false - modules not materialized until accessed", async () => {
 		const api = await slothlet({
 			...config,

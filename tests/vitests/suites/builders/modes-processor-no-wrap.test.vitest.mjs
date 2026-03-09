@@ -89,7 +89,7 @@ import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const ____dirname = path.dirname(__filename);
 
 const SF = TEST_DIRS.SMART_FLATTEN;
 

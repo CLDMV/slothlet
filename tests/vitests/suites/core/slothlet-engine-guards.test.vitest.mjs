@@ -200,7 +200,7 @@ describe("slothlet._clearModuleCaches — CJS require.cache cleanup (line 592)",
 
 			// Record cache size before reload
 			// createRequire gives access to require.cache in this ESM test environment
-			const beforeKeys = Object.keys(_require.cache).filter((k) => k.includes("api_test_cjs"));
+			const ____beforeKeys = Object.keys(_require.cache).filter((k) => k.includes("api_test_cjs"));
 
 			// Reload — this calls _clearModuleCaches() which hits line 592 in the delete loop
 			await cjsEngine.reload();

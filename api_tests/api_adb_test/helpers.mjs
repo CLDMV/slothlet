@@ -184,7 +184,7 @@ export async function fetchNetworkDetails() {
  */
 export async function fetchAudioInfo() {
 	try {
-		const output = await self.connection.shell("dumpsys audio | grep -E '(volume|mute)'");
+		const ____output = await self.connection.shell("dumpsys audio | grep -E '(volume|mute)'");
 		// Simplified parsing - can be expanded for more detailed audio info
 		return {
 			master: {
@@ -192,7 +192,7 @@ export async function fetchAudioInfo() {
 				mute: null
 			}
 		};
-	} catch (error) {
+	} catch (____error) {
 		return {
 			master: {
 				volume: null,
@@ -224,7 +224,7 @@ export async function resolveDefaultActivity(packageName) {
 		}
 
 		return component.includes("/") ? component : `${packageName}/${component}`;
-	} catch (error) {
+	} catch (____error) {
 		return null;
 	}
 }
@@ -241,7 +241,7 @@ export async function resolveDefaultActivity(packageName) {
  * // Force emit event
  * await api.helpers.refreshCurrentAppInfo("user_action", { forceEmit: true });
  */
-export async function refreshCurrentAppInfo(reason = "manual", options = {}) {
+export async function refreshCurrentAppInfo(____reason = "manual", options = {}) {
 	const { forceEmit = false } = options;
 	const newAppInfo = await fetchCurrentAppInfo();
 

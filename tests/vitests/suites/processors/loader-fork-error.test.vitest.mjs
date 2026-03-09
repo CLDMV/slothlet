@@ -31,7 +31,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
 import { mkdir, writeFile, rm } from "node:fs/promises";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve } from "node:path";
 import { withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
 
 // ─── Mock child_process so fork() returns a fake child that immediately errors ──

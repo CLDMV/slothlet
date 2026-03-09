@@ -247,11 +247,11 @@ describe("TypeScript Fast Mode", () => {
 				}
 			});
 
-			api.slothlet.hook.on("before:math.add", (context) => {
+			api.slothlet.hook.on("before:math.add", (____context) => {
 				callLog.push("before");
 			});
 
-			api.slothlet.hook.on("after:math.add", (context) => {
+			api.slothlet.hook.on("after:math.add", (____context) => {
 				callLog.push("after");
 			});
 

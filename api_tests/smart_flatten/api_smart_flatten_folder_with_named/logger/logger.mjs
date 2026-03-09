@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-02 19:00:00 -08:00 (1772514000)
+ *	@Last modified time: 2026-03-08 20:16:54 -07:00 (1773026214)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -34,7 +34,7 @@
  * @example
  * logger("hello"); // "hello"
  */
-function logger(message) {
+export function logger(message) {
 	return message;
 }
 

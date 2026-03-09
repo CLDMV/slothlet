@@ -78,7 +78,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "persistent.config.settings.getPluginConfig");
-			const metaBefore = api.persistent.config.settings.getPluginConfig.__metadata;
+			const ____metaBefore = api.persistent.config.settings.getPluginConfig.__metadata;
 
 			await api.slothlet.reload();
 
@@ -187,7 +187,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			});
 
 			await materialize(api, "nested.config.settings.getPluginConfig");
-			const metaBefore = api.nested.config.settings.getPluginConfig.__metadata;
+			const ____metaBefore = api.nested.config.settings.getPluginConfig.__metadata;
 
 			// Reload nested path
 			await api.slothlet.api.reload("nested.config");
@@ -293,7 +293,7 @@ describe.each(getMatrixConfigs())("Metadata Hot Reload > Config: '$name'", ({ co
 			// Try to reload (may fail if files have issues)
 			try {
 				await api.slothlet.reload();
-			} catch (error) {
+			} catch (____error) {
 				// Reload failed - metadata should still be accessible
 				await materialize(api, "rootMath.add", 1, 2);
 				const metaAfter = api.rootMath.add.__metadata;

@@ -29,7 +29,7 @@
 
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { SlothletWarning } from "@cldmv/slothlet/errors";
 import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
@@ -53,7 +53,7 @@ async function makeApi(extra = {}) {
  * Create an API with hooks DISABLED.
  * @returns {Promise<object>} API proxy.
  */
-async function makeApiNoHooks() {
+async function ____makeApiNoHooks() {
 	return slothlet({
 		mode: "eager",
 		runtime: "async",

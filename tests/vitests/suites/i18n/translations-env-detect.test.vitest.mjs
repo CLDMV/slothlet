@@ -32,7 +32,7 @@
  * @module tests/vitests/suites/i18n/translations-env-detect
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { setLanguage, getLanguage, initI18n } from "@cldmv/slothlet/i18n";
 
 // ─── env variable save/restore helpers ───────────────────────────────────────

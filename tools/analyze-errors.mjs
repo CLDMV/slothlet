@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
+ *	@Last modified time: 2026-03-08 20:15:07 -07:00 (1773026107)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -115,7 +115,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 					}
 				}
 			}
-		} catch (____err) {
+		} catch (____error) {
 			// Folder doesn't exist, skip it
 			if (VERBOSE) {
 				console.log(`⚠️  Folder not found: ${config.path}`);

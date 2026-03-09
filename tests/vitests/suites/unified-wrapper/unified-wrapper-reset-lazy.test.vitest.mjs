@@ -144,7 +144,7 @@ describe("unified-wrapper: ___resetLazy via lazy mode reload (lines 595-640)", (
 
 		// Fully materialize the math wrapper
 		await triggerMat(api, "math");
-		const keysBeforeReload = Object.keys(api.math || {});
+		const ____keysBeforeReload = Object.keys(api.math || {});
 
 		// Reload triggers ___resetLazy → clears all children → re-materializes
 		await api.slothlet.api.reload(".");
@@ -207,7 +207,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 		});
 
 		// Add a module, access it, then remove → ___invalidate fires on child wrappers
-		const modID = await api.slothlet.api.add("toRemove", TEST_DIRS.API_TEST_MIXED, {
+		const ____modID = await api.slothlet.api.add("toRemove", TEST_DIRS.API_TEST_MIXED, {
 			moduleID: "remove-test"
 		});
 		expect(api.toRemove).toBeDefined();
@@ -220,7 +220,7 @@ describe("unified-wrapper: ___invalidate via api.remove (lines 760-773)", () => 
 	it("remove lazy module after materialization invalidates children recursively", async () => {
 		api = await makeLazyApi();
 
-		const modID = await api.slothlet.api.add("toRemoveLazy", TEST_DIRS.API_TEST_MIXED, {
+		const ____modID = await api.slothlet.api.add("toRemoveLazy", TEST_DIRS.API_TEST_MIXED, {
 			moduleID: "remove-lazy-test"
 		});
 
@@ -256,8 +256,8 @@ describe("unified-wrapper: concurrent materialization deduplication (lines 661-6
 		// Access the lazy math wrapper to put it in inFlight
 		// Then access again concurrently - should reuse existing promise
 		const mathProxy = api.math;
-		const addProxy = mathProxy?.add; // First access - starts materialization
-		const multiplyProxy = mathProxy?.multiply; // Second access - reuses inFlight
+		const ____addProxy = mathProxy?.add; // First access - starts materialization
+		const ____multiplyProxy = mathProxy?.multiply; // Second access - reuses inFlight
 
 		// Wait for full materialization
 		await new Promise((r) => setTimeout(r, 100));

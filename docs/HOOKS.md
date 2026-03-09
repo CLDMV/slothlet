@@ -424,7 +424,7 @@ api.slothlet.hook.on(
 
 **Complete execution order** for a function call:
 
-```
+```text
 before hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
 ↓ function executes
 after hooks:   [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
@@ -598,14 +598,14 @@ The hook system intelligently handles both sync and async *target functions*:
 
 **For synchronous functions:**
 
-```
+```text
 executeBeforeHooks() → fn() → executeAfterHooks() → executeAlwaysHooks()
 ```
 All steps run synchronously in sequence.
 
 **For async functions:**
 
-```
+```text
 executeBeforeHooks() → fn() returns Promise → .then(executeAfterHooks, executeErrorHooks) → executeAlwaysHooks()
 ```
 After, error, and always hooks attach to the Promise chain - they do not block the event loop.

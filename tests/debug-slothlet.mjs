@@ -47,7 +47,7 @@ function ensureDevEnvFlags() {
 	// Use V3 slothlet-dev condition
 	const allExecArgv = [...process.execArgv];
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
-	const allConditions = [...allExecArgv, ...envOptions];
+const ____allConditions = [...allExecArgv, ...envOptions];
 
 	const slothletCondition = "slothlet-dev";
 
@@ -280,7 +280,7 @@ export function compareApiShapes(
 	 * @param {unknown} obj - Object or function containing the key.
 	 * @returns {boolean} True when the key should be ignored.
 	 */
-	const shouldSkipKey = (key, obj) => {
+	const shouldSkipKey = (key, ____obj) => {
 		// Always skip internal path properties - these may differ between modes
 		// but don't affect user-facing API behavior
 		if (key === "____slothletInternal") {
@@ -465,7 +465,7 @@ async function materializeLazyWrappers(root) {
 			}
 			try {
 				queue.push(current[key]);
-			} catch (error) {
+			} catch (____error) {
 				// Ignore getter errors during traversal
 			}
 		}

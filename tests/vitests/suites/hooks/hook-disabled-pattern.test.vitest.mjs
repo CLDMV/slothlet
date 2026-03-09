@@ -145,7 +145,7 @@ describe("HookManager.getHooksForPath — disabled pattern hook (line 404)", () 
 		const spy2 = vi.fn();
 
 		const id1 = api.slothlet.hook.on("before:**", spy1);
-		const id2 = api.slothlet.hook.on("before:**", spy2);
+		const ____id2 = api.slothlet.hook.on("before:**", spy2);
 
 		// Disable only the first hook
 		api.slothlet.hook.disable({ id: id1 });

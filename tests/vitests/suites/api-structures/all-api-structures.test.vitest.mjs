@@ -11,7 +11,7 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-﻿/**
+/**
  * @fileoverview Comprehensive API structure validation for all test folders
  *
  * @description
@@ -60,7 +60,7 @@ describe("All API Structures Validation", () => {
 		}
 
 		// Create pairs from groups that have both modes
-		for (const [key, group] of configGroups) {
+		for (const [____key, group] of configGroups) {
 			if (group.eager && group.lazy) {
 				const baseName = `${group.eager.config.runtime}_${group.eager.config.allowApiOverwrite ? "overwrite" : "nooverwrite"}_depth${group.eager.config.apiDepth}_${group.eager.config.hook?.enabled ? "hooks" : "nohooks"}`;
 

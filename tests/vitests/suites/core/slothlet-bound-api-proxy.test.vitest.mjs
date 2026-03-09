@@ -188,7 +188,6 @@ describe("slothlet boundApi proxy: construct trap (line 448)", () => {
 		// so Reflect.construct may throw — line 448 still executes before any throw.
 		let constructTrapFired = false;
 		try {
-			// eslint-disable-next-line new-cap
 			new api();
 			constructTrapFired = true;
 		} catch (_) {

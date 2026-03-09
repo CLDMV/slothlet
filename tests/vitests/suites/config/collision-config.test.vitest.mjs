@@ -459,7 +459,7 @@ describe.each(MATRIX_CONFIGS)("Collision Config - $name", ({ config }) => {
 			});
 
 			const math = getMath(api, config.dir);
-			const originalAdd = math.add;
+			const ____originalAdd = math.add;
 
 			// Try to add collision content to math path (should warn and skip)
 			await api.slothlet.api.add("", TEST_DIRS.API_TEST_COLLECTIONS, {

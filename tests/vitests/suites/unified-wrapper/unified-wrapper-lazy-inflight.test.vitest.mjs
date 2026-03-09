@@ -527,7 +527,7 @@ setImpl({ default: fn });
 // Set a wrapper-level contextManager (not slothlet-level)
 // line 2546 checks wrapper.contextManager (not wrapper.slothlet.contextManager)
 const mockContextManager = {
-runInContext: (_id, fn, thisArg, args, _wrapper) => fn.apply(thisArg, args)
+runInContext: (_id, fn, thisArg, args, ____wrapper) => fn.apply(thisArg, args)
 };
 callableWrapper.contextManager = mockContextManager;
 

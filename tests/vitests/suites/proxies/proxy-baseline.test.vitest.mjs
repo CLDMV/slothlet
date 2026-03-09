@@ -25,8 +25,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getMatrixConfigs, TEST_DIRS, materialize } from "../../setup/vitest-helper.mjs";
-import util from "node:util";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 describe.each(getMatrixConfigs())("Proxy Baseline Behavior > Config: '$name'", ({ config }) => {
 	let slothlet;

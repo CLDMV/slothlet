@@ -83,7 +83,7 @@ describe.each(getMatrixConfigs())("Metadata Edge Cases > Config: '$name'", ({ co
 			// Navigate 5+ levels if structure exists
 			// veryDeep.config.settings.getPluginConfig
 			if (api.veryDeep?.config?.settings?.getPluginConfig) {
-				const result = await materialize(api, "veryDeep.config.settings.getPluginConfig");
+				const ____result = await materialize(api, "veryDeep.config.settings.getPluginConfig");
 				const meta = api.veryDeep.config.settings.getPluginConfig.__metadata;
 
 				expect(meta.depth).toBe("extreme");

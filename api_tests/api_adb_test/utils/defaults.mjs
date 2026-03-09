@@ -128,6 +128,7 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 
 			keysArray.forEach((key) => {
 				if (Object.prototype.hasOwnProperty.call(systemDefaults, key)) {
+					// Key exists in systemDefaults; restoration skipped (no-op)
 				}
 			});
 

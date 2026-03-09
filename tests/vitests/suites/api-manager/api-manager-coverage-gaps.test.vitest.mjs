@@ -52,7 +52,7 @@ import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helpe
 // Suppress the resulting console noise — we don't assert on emitted debug lines.
 suppressSlothletDebugOutput();
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ____dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Create a basic eager slothlet instance loaded from API_TEST.

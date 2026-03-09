@@ -112,7 +112,7 @@ describe("HookManager.importHooks — restores disabled hook on reload (line 949
 
 	it("enabled hook survives reload and remains enabled (no line 949 branch taken)", async () => {
 		// Contrast case: enabled hook should not trigger the disable branch
-		const hookId = api.slothlet.hook.on("before:**", () => {});
+		const ____hookId = api.slothlet.hook.on("before:**", () => {});
 
 		await api.slothlet.reload();
 

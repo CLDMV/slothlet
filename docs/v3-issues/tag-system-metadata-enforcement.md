@@ -57,7 +57,7 @@ that the call originated from the lifecycle system.
 `api.slothlet` is the user-facing namespace constructed in `api_builder.mjs`. It exposes a
 **curated subset** of the internal `slothlet` object:
 
-```
+```text
 api.slothlet.metadata   → { get, set, remove, setForPath, removeForPath, self, caller, global }
 api.slothlet.lifecycle  → { on, off }          ← emit is NOT exposed
 api.slothlet.context    → { run, get, ... }
@@ -158,7 +158,7 @@ or using an internal import path not in `package.json`'s `exports` map.
 `metadata.mjs` importing into `lifecycle.mjs` and `lifecycle.mjs` importing from `metadata.mjs`
 creates a circular dependency. This can be resolved by extracting the token into a third file:
 
-```
+```text
 src/lib/handlers/lifecycle-token.mjs  ← exports LIFECYCLE_TOKEN only
 ```
 
