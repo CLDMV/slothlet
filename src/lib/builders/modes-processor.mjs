@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-07 23:03:04 -08:00 (1772953384)
+ *	@Last modified time: 2026-03-08 17:18:48 -07:00 (1773015528)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -297,7 +297,7 @@ export class ModesProcessor extends ComponentBase {
 					// In tests, moduleName===categoryName always satisfies the single-key-no-default condition; the FALSE arm is unreachable.
 					/* v8 ignore start */
 					if (moduleKeys.length === 1 && moduleKeys[0] === moduleName && !analysis.hasDefault) {
-					/* v8 ignore stop */
+						/* v8 ignore stop */
 						// Case 1: export const folder = {...} - wrap and use as category
 						const exportedValue = mod[moduleName];
 						// exportedValue is always a non-null object in test fixtures; the FALSE branch is unreachable.
@@ -356,10 +356,10 @@ export class ModesProcessor extends ComponentBase {
 							}
 							continue;
 						}
-					// analysis.hasDefault is not always true in this code path; FALSE arm (neither single-named-export nor has-default) is unreachable in test fixtures.
-					/* v8 ignore start */
+						// analysis.hasDefault is not always true in this code path; FALSE arm (neither single-named-export nor has-default) is unreachable in test fixtures.
+						/* v8 ignore start */
 					} else if (analysis.hasDefault) {
-					/* v8 ignore stop */
+						/* v8 ignore stop */
 						// Case 2: folder/folder.mjs with default export
 						// Make the category callable by replacing it with wrapped function
 						// But DON'T continue - allow other files to attach properties later
@@ -1836,35 +1836,19 @@ export class ModesProcessor extends ComponentBase {
 	 */
 	async applyRootContributor(api, rootFunction, mode) {
 		if (rootFunction) {
-			// Create a fresh function wrapper per Slothlet instance to avoid mutating the shared
-			// cached module export. CJS modules are always shared across instances (Node require
-			// cache never expires). ESM modules are also re-used when reload is called with
-			// keepInstanceID (same query-param → Node ESM cache hit). Mutating the raw export
-			// directly would allow a second instance's Object.assign to overwrite the first
-			// instance's sub-namespace wrappers and management namespace, causing context
-			// cross-contamination. A delegating wrapper function is cheap and keeps each
-			// Slothlet instance fully isolated.
-			const freshRoot = function (...args) {
-				return rootFunction.apply(this, args);
-			};
-			try {
-				Object.defineProperty(freshRoot, "name", { value: rootFunction.name, configurable: true });
-			} catch (_) {
-				// v8 ignore next — non-configurable name; never occurs with normal functions
-			}
-			try {
-				Object.defineProperty(freshRoot, "length", { value: rootFunction.length, configurable: true });
-			} catch (_) {
-				// v8 ignore next — non-configurable length; never occurs with normal functions
-			}
-			// Merge all other API properties onto the fresh per-instance wrapper
-			Object.assign(freshRoot, api);
+			// Merge all other API properties onto the root function.
+			// Safe to mutate directly: Loader.#loadCJSIsolated() clears require.cache before
+			// every .cjs load, so each Slothlet instance receives a fresh module.exports
+			// function object. ESM root contributors are always unique per instance because
+			// loadModule() appends ?slothlet_instance=<instanceID> to the import URL.
+			// No cross-instance contamination is possible.
+			Object.assign(rootFunction, api);
 			if (this.slothlet.config.debug?.modes) {
 				this.slothlet.debug("modes", {
 					message: await t("DEBUG_MODE_ROOT_CONTRIBUTOR_APPLIED", { mode, properties: Object.keys(api).length })
 				});
 			}
-			return freshRoot;
+			return rootFunction;
 		}
 		return api;
 	}
