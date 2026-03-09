@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:46:31 -07:00 (1773024391)
+ *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -210,9 +210,9 @@ export class ApiBuilder extends ComponentBase {
 			// pkg.version is always defined in package.json; the || "unknown" fallback branch never fires.
 			/* v8 ignore next */
 			version = pkg.version || "unknown";
-		// Reading the bundled package.json always succeeds at runtime; catch block is a
-		// defensive guard that is never reached.
-		/* v8 ignore next */
+			// Reading the bundled package.json always succeeds at runtime; catch block is a
+			// defensive guard that is never reached.
+			/* v8 ignore next */
 		} catch {
 			// Ignore - version will remain "unknown"
 		}
@@ -300,7 +300,12 @@ export class ApiBuilder extends ComponentBase {
 					// - collisionMode: must be set at initialization for security (prevents bypassing collision config)
 					// - mutateExisting: internal flag set automatically based on collision mode
 					// User-controllable options: moduleID, forceOverwrite, metadata
-					const { recordHistory: ___recordHistory, collisionMode: ___collisionMode, mutateExisting: ___mutateExisting, ...filteredOptions } = options;
+					const {
+						recordHistory: ____recordHistory,
+						collisionMode: ____collisionMode,
+						mutateExisting: ____mutateExisting,
+						...filteredOptions
+					} = options;
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
@@ -498,8 +503,8 @@ export class ApiBuilder extends ComponentBase {
 							return key ? baseContext[key] : { ...baseContext };
 						}
 						// live-mode context; spread (no-key) form never requested in tests.
-					/* v8 ignore next */
-					return key ? store.context[key] : { ...store.context };
+						/* v8 ignore next */
+						return key ? store.context[key] : { ...store.context };
 					}
 
 					// For async mode, get current store from ALS and lookup by its instanceID
@@ -595,7 +600,7 @@ export class ApiBuilder extends ComponentBase {
 							// unreachable via tests (2026-03-05): tryGetContext() does not throw under
 							// normal conditions; this is a defensive guard only.
 							/* v8 ignore start */
-						} catch (_) {
+						} catch (____error) {
 							result.currentALSContext = null;
 						}
 						/* v8 ignore stop */
@@ -836,9 +841,9 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
 								? Object.keys(slothlet.handlers).join(", ")
-								// slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
-								/* v8 ignore next */
-								: "undefined",
+								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+									/* v8 ignore next */
+									"undefined",
 							validationError: true
 						});
 					}
@@ -907,9 +912,9 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
 								? Object.keys(slothlet.handlers).join(", ")
-								// slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
-								/* v8 ignore next */
-								: "undefined",
+								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+									/* v8 ignore next */
+									"undefined",
 							validationError: true
 						});
 					}
