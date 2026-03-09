@@ -1695,10 +1695,6 @@ export class ModesProcessor extends ComponentBase {
 				});
 			}
 
-			// Debug for math folder
-			if (dir.name === "math") {
-			}
-
 			// Merge file-folder collision exports into materialized result
 			// Applies when the processFiles path is used (non-flatten)
 			if (fileFolderCollisionImpl) {

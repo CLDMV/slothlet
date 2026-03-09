@@ -128,7 +128,6 @@
 	"types": "./types/index.d.mts",
 	"scripts": {
 		"precommit": "node tools/precommit-validation.mjs",
-		"publish:manual": "npm publish --access public",
 		"debug": "node tests/debug-slothlet.mjs",
 		"i18n:check": "node tools/check-i18n-languages.mjs",
 		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
@@ -164,7 +163,8 @@
 		"docs:build:api-test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test/**/*.mjs\" > docs/generated/api_tests/api_test.md",
 		"docs:build:api-test-cjs": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_cjs/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_cjs.md",
 		"docs:build:api-test-mixed": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_mixed/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_mixed.md",
-		"docs:build:tools": "shx mkdir -p docs/tools && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"tools/**/*.mjs\" > docs/tools/build-tools.md"
+		"docs:build:tools": "shx mkdir -p docs/tools && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"tools/**/*.mjs\" > docs/tools/build-tools.md",
+		"publish:manual": "npm publish --access public"
 	},
 	"keywords": [
 		"api",
@@ -241,6 +241,7 @@
 		"dmd": "^7.1.1",
 		"esbuild": "^0.27.3",
 		"eslint": "^10.0.2",
+		"globals": "^17.4.0",
 		"jsdoc": "^4.0.4",
 		"jsdoc-to-markdown": "^9.1.2",
 		"jsdoc2md": "^1.0.0",

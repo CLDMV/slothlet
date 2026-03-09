@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-07 20:56:33 -08:00 (1772945793)
+ *	@Last modified time: 2026-03-08 19:46:21 -07:00 (1773024381)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -303,7 +303,7 @@ export class ApiManager extends ComponentBase {
 	 * @example
 	 * const moduleID = this.buildDefaultModuleId("plugins", "/abs/path/plugins");
 	 */
-	buildDefaultModuleId(apiPath, resolvedFolderPath) {
+	buildDefaultModuleId(apiPath, _) {
 		const randomSuffix = Math.random().toString(36).substring(2, 8);
 		const prefix = apiPath || "auto";
 		return `${prefix}_${randomSuffix}`;
@@ -542,7 +542,7 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 		} else if (collisionMode === "merge") {
-		/* v8 ignore stop */
+			/* v8 ignore stop */
 			// Keep existing, only add new keys
 			// CRITICAL: Use hasOwnProperty instead of 'in' to avoid matching ComponentBase
 			// prototype getters (e.g., 'config', 'debug') which would prevent child adoption
@@ -1023,7 +1023,7 @@ export class ApiManager extends ComponentBase {
 			// addHistory is always empty when restoreApiPath is called in tests; the ternary fallback never fires.
 			/* v8 ignore start */
 			.find((entry) => entry.apiPath === apiPath && (normalizedModuleId ? entry.moduleID === normalizedModuleId : true));
-			/* v8 ignore stop */
+		/* v8 ignore stop */
 
 		// historyEntry is never populated in tests (addHistory is empty on restore calls).
 		/* v8 ignore start */
@@ -2147,10 +2147,10 @@ export class ApiManager extends ComponentBase {
 
 			// Base module (endpoint ".") always first
 			// In tests only one module is reloaded at a time, so this comparator never fires.
-				/* v8 ignore start */
-				if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
-				if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
-				/* v8 ignore stop */
+			/* v8 ignore start */
+			if (entryA?.endpoint === "." && entryB?.endpoint !== ".") return -1;
+			if (entryB?.endpoint === "." && entryA?.endpoint !== ".") return 1;
+			/* v8 ignore stop */
 			// Then by addHistory order (chronological)
 			const indexA = this.state.addHistory.findIndex((h) => h.moduleID === a);
 			const indexB = this.state.addHistory.findIndex((h) => h.moduleID === b);
@@ -2164,7 +2164,7 @@ export class ApiManager extends ComponentBase {
 		const endpointOrder = new Map();
 		for (const moduleID of moduleIDsToReload) {
 			const entry = cacheManager.get(moduleID);
-			// entry always has endpoint set; the fallback "." is unreachable in practice.
+			// entry always has endpoint set; the fallback "." is unreachable in practice.
 			/* v8 ignore next */
 			const ep = entry?.endpoint ?? ".";
 			if (!endpointOrder.has(ep)) endpointOrder.set(ep, []);
@@ -2453,7 +2453,7 @@ export class ApiManager extends ComponentBase {
 					// DEBUG: Trace lazy detection for every root key
 					this.slothlet.debug("reload", {
 						key: "DEBUG_MODE_RESTORE_ROOT_KEY_INSPECT",
-						key,
+						rootKey: key,
 						hasFreshWrapper: !!freshWrapper,
 						freshMode: freshWrapper?.____slothletInternal.mode,
 						freshMaterialized: freshWrapper?.____slothletInternal.state?.materialized,
@@ -2474,7 +2474,7 @@ export class ApiManager extends ComponentBase {
 
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_RESET_LAZY",
-							key,
+							rootKey: key,
 							restoredCustomProps: Object.keys(customProps)
 						});
 					} else {
@@ -2514,12 +2514,12 @@ export class ApiManager extends ComponentBase {
 						// When forceReplace=false (subsequent modules in multi-cache), keep original collision mode
 						const wrapper = resolveWrapper(existingAtKey);
 						// wrapper is always truthy — resolveWrapper(existingAtKey) returned non-null above.
-					/* v8 ignore start */
-					const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
-					if (forceReplace && wrapper) {
-						wrapper.____slothletInternal.state.collisionMode = "replace";
-					}
-					/* v8 ignore stop */
+						/* v8 ignore start */
+						const originalCollisionMode = wrapper ? wrapper.____slothletInternal.state.collisionMode : null;
+						if (forceReplace && wrapper) {
+							wrapper.____slothletInternal.state.collisionMode = "replace";
+						}
+						/* v8 ignore stop */
 						// Restore collision mode
 						// wrapper always set and originalCollisionMode always non-null when wrapper exists.
 						/* v8 ignore next */
@@ -2532,7 +2532,7 @@ export class ApiManager extends ComponentBase {
 
 						this.slothlet.debug("reload", {
 							key: "DEBUG_MODE_ROOT_KEY_UPDATED_SETIMPL",
-							key,
+							rootKey: key,
 							restoredCustomProps: Object.keys(customProps)
 						});
 					}

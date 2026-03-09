@@ -682,9 +682,9 @@ export class HookManager extends ComponentBase {
 		// Escape special regex characters except *, ?, and .
 		let regexPattern = pattern
 			.replace(/[+^$()|[\]\\]/g, "\\$&") // Don't escape {} - already expanded
-			.replace(/\*\*/g, "\x00") // Placeholder for **
+			.replace(/\*\*/g, "__DOUBLESTAR__") // Placeholder for **
 			.replace(/\*/g, "[^.]*") // * matches any chars except .
-			.replace(/\x00/g, ".*") // ** matches any chars including .
+			.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .
 			.replace(/\?/g, "."); // ? matches single char
 
 		regexPattern = `^${regexPattern}$`;

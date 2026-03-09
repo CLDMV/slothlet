@@ -484,7 +484,7 @@ class Slothlet {
 					return true;
 				},
 				has: (target, prop) => (this.api ? prop in this.api : false),
-				ownKeys: (target) => (this.api ? Reflect.ownKeys(this.api) : []),
+				ownKeys: (_) => (this.api ? Reflect.ownKeys(this.api) : []),
 				deleteProperty: (target, prop) => (this.api ? delete this.api[prop] : true),
 				apply: (target, thisArg, args) => (this.api ? Reflect.apply(this.api, thisArg, args) : undefined),
 				construct: (target, args) => (this.api ? Reflect.construct(this.api, args) : {}),

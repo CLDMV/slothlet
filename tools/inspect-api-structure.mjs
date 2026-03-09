@@ -17,7 +17,9 @@ import { pathToFileURL, fileURLToPath } from "url";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import util from "node:util";
-import slothlet from "@cldmv/slothlet";
+// Must NOT be a static top-level import — that triggers the devcheckPromise IIFE
+// in index.mjs before ensureDevEnvFlags() can respawn with the correct conditions.
+let slothlet;
 
 /**
  * Ensure slothlet dev conditions are set for V3.
@@ -41,10 +43,6 @@ function ensureDevEnvFlags() {
 
 	const desiredCondition = "slothlet-dev";
 	const requiredConditions = [desiredCondition, "development"];
-
-	const allExecArgv = [...process.execArgv];
-	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
-	const allConditions = [...allExecArgv, ...envOptions];
 
 	const nextExecArgv = [...process.execArgv];
 	const envConditions = (process.env.NODE_OPTIONS ?? "")
@@ -303,6 +301,12 @@ async function inspectApi(apiName, options = {}) {
 		return;
 	}
 
+	// Dynamic import after the dev-env gate so the devcheckPromise
+	// in index.mjs only fires once slothlet-dev conditions are active.
+	if (!slothlet) {
+		slothlet = (await import("@cldmv/slothlet")).default;
+	}
+
 	const mode = lazy ? "lazy" : "eager";
 	if (!raw) {
 		console.log(chalk.cyan("Using v3 (src/)"));
@@ -347,8 +351,6 @@ async function inspectApi(apiName, options = {}) {
 			console.log(util.inspect(api, { depth: inspectDepth, colors: true }));
 			if (typeof api.shutdown === "function") {
 				await api.shutdown();
-			} else if (typeof api.slothlet?.shutdown === "function") {
-				await api.slothlet.shutdown();
 			}
 			return;
 		}
@@ -392,9 +394,6 @@ async function inspectApi(apiName, options = {}) {
 		if (typeof api.shutdown === "function") {
 			await api.shutdown();
 			console.log(chalk.green("✅ API instance shutdown cleanly"));
-		} else if (typeof api.slothlet?.shutdown === "function") {
-			await api.slothlet.shutdown();
-			console.log(chalk.green("✅ API instance shutdown cleanly (v3)"));
 		}
 	} catch (error) {
 		console.error(chalk.red("❌ Error loading API:"), error.message);

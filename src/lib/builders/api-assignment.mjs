@@ -525,7 +525,7 @@ export class ApiAssignment extends ComponentBase {
 									newChildWrapper.___adoptImplChildren();
 								}
 								const newChildKeys = Object.keys(newChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
-								const existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+								const ___existingChildKeys = Object.keys(existingChildWrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
 								for (const childKey of newChildKeys) {
 									const childKeyExists = Object.prototype.hasOwnProperty.call(existingChildWrapper, childKey);
 									// childKeyExists is always false during initial merge (keys are new).

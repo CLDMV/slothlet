@@ -115,7 +115,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 					}
 				}
 			}
-		} catch (err) {
+		} catch (_) {
 			// Folder doesn't exist, skip it
 			if (VERBOSE) {
 				console.log(`⚠️  Folder not found: ${config.path}`);
@@ -475,7 +475,7 @@ function parseBareNewErrors(content, filePath) {
  * @param {string} filePath - File path
  * @returns {boolean} True if file has proper header
  */
-function hasProperFileHeader(content, filePath) {
+function hasProperFileHeader(content, ___filePath) {
 	// Expected header format (first 12 lines)
 	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, or root level (/)
 	const headerPattern =
@@ -686,7 +686,7 @@ function analyzeError(error) {
  * Check if translation exists for error code
  */
 function checkTranslationExists(errorCode) {
-	return translations.hasOwnProperty(errorCode);
+	return Object.prototype.hasOwnProperty.call(translations, errorCode);
 }
 
 /**
@@ -1149,7 +1149,7 @@ for (const key of translationKeys) {
 		// Check in direct t() calls
 		if (directTranslationUsage.has(key)) {
 			// Find which files use this key in t() calls
-			for (const file of allFiles) {
+			for (const file of files) {
 				const content = await readFile(file, "utf-8");
 				const tCallPattern = new RegExp(`\\bt\\(\\s*["']${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`, "g");
 				let match;
@@ -1293,43 +1293,6 @@ if (allHardcodedReasons.length > 0) {
 console.log("\n" + "=".repeat(80));
 console.log("=== Hardcoded 'message:' Strings in debug() Calls Detection ===");
 console.log("=".repeat(80) + "\n");
-
-/**
- * Parse hardcoded message: strings inside debug() calls that should use i18n DEBUG_MODE_ keys.
- * The correct pattern is: { key: "DEBUG_MODE_KEY", ...params } - no await t() needed.
- * @param {string} content - File content
- * @param {string} filePath - File path
- * @returns {Array} Array of hardcoded debug message strings
- */
-function parseHardcodedDebugMessages(content, filePath) {
-	const messages = [];
-	// Only look inside debug("modes", { message: ... }) blocks
-	// Match: message: "string" or message: 'string' (not using await t())
-	// We look for `debug(` calls specifically containing a hardcoded `message:` string
-	const debugCallPattern = /\.debug\([^)]*message:\s*["'`]([^"'`]+)["'`]/g;
-
-	let match;
-	while ((match = debugCallPattern.exec(content)) !== null) {
-		// Check if this match is inside a comment
-		const beforeMatch = content.substring(0, match.index);
-		const lastLineStart = beforeMatch.lastIndexOf("\n") + 1;
-		const currentLine = content.substring(lastLineStart, match.index + match[0].length);
-
-		if (currentLine.trim().startsWith("//")) continue;
-		const blockCommentStart = beforeMatch.lastIndexOf("/*");
-		const blockCommentEnd = beforeMatch.lastIndexOf("*/");
-		if (blockCommentStart > blockCommentEnd) continue;
-
-		const lineNumber = beforeMatch.split("\n").length;
-		messages.push({
-			filePath,
-			lineNumber,
-			messageText: match[1],
-			fullMatch: match[0]
-		});
-	}
-	return messages;
-}
 
 // Also find multi-line debug() calls where message: is on its own line
 function parseHardcodedDebugMessagesMultiline(content, filePath) {
