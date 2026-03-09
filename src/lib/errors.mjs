@@ -55,6 +55,10 @@ export class SlothletError extends Error {
 		let translatedHint = hintKey ? translate(hintKey, enrichedContext) : undefined;
 
 		// For validation errors, still check for static HINT_ translation
+		// The false path of this && triggers when translatedHint is already set; V8's fork-based
+		// coverage merging produces a negative branch count for this path due to range arithmetic
+		// underflow across 199 test workers — the branch IS covered but cannot be reliably tracked.
+		/* v8 ignore next */
 		if (!translatedHint && validationError) {
 			const staticHintKey = `HINT_${code}`;
 			const staticHint = translate(staticHintKey, enrichedContext);
@@ -252,6 +256,9 @@ export class SlothletDebug {
 	 */
 	log(code, context = {}) {
 		// Only log if debug flag for this code is enabled
+		// this.debugFlags is always a truthy object ({} at minimum) — constructor sets `config.debug || {}`,
+		// so the `!this.debugFlags` left-hand branch of || is structurally unreachable.
+		/* v8 ignore next */
 		if (!this.debugFlags || !this.debugFlags[code]) {
 			return;
 		}

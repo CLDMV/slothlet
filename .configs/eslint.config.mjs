@@ -31,6 +31,7 @@ export default defineConfig([
 			".configs/**",
 			".vscode/**",
 			"coverage/**",
+			".vitest-coverage-tmp/**",
 			"*.min.js",
 			"*.min.css",
 			"**/package-lock.json",

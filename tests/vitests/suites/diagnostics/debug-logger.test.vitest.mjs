@@ -120,6 +120,18 @@ describe("SlothletDebug", () => {
 });
 
 describe("SlothletError - originalError enrichment (line 39)", () => {
+	it("sets hint via detectHint when originalError matches a pattern, short-circuiting the static-hint &&", () => {
+		// When originalError matches a HINT_RULES pattern (e.g. 'Cannot find module'),
+		// detectHint() returns a key and translatedHint is set to a truthy string.
+		// At line 58: !translatedHint evaluates to false, so the && short-circuits
+		// (validationError is never evaluated) — covering the && false-path branch.
+		const original = new Error("Cannot find module './missing-module.mjs'");
+		const err = new SlothletError("MODULE_NOT_FOUND", { modulePath: "./missing-module.mjs" }, original);
+		// translatedHint IS set because detectHint matched; hint property reflects this
+		expect(err).toBeInstanceOf(SlothletError);
+		expect(err.hint).toBeDefined();
+	});
+
 	it("enriches context with originalError.message when originalError is provided", () => {
 		const original = new Error("underlying io failure");
 		// Line 39: enrichedContext = originalError ? { ...contextData, error: originalError.message } : contextData
