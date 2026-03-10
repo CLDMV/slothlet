@@ -6,7 +6,6 @@
  */
 export class OwnershipManager extends ComponentBase {
     static slothletProperty: string;
-    constructor(slothlet: any);
     moduleToPath: Map<any, any>;
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;

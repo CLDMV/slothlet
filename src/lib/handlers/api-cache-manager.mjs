@@ -34,6 +34,20 @@
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
+ * Cache entry structure for API tree storage and rebuild parameters.
+ * @typedef {Object} CacheEntry
+ * @property {string} endpoint - API path endpoint (e.g., ".", "plugins")
+ * @property {string} moduleID - Module identifier
+ * @property {Object} api - Complete buildAPI result tree (primary storage)
+ * @property {string} folderPath - Source folder path
+ * @property {string} mode - Loading mode: 'lazy' or 'eager'
+ * @property {Object} sanitizeOptions - Sanitization configuration
+ * @property {string} collisionMode - Collision handling mode
+ * @property {Object} config - Config snapshot at add time
+ * @property {number} timestamp - Cache creation time (Unix ms)
+ */
+
+/**
  * Manages API caches - complete buildAPI results per moduleID
  * @class ApiCacheManager
  * @extends ComponentBase

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	@Last modified time: 2026-03-09 17:17:19 -07:00 (1773101839)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -48,7 +48,7 @@ async function main() {
 	try {
 		// Create temporary directory in project root
 		const randomSuffix = randomBytes(4).toString("hex"); // 8 character random string
-		tempDir = join(process.cwd(), `ts-validate-${randomSuffix}`);
+		tempDir = join(process.cwd(), 'tmp', `ts-validate-${randomSuffix}`);
 		mkdirSync(tempDir, { recursive: true });
 		console.log(`📁 Using temp directory: ${tempDir}`);
 

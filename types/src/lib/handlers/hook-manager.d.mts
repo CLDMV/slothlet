@@ -12,6 +12,11 @@ export class HookManager extends ComponentBase {
      * @static
      */
     static slothletProperty: string;
+    /**
+     * Creates a new HookManager instance.
+     * @param {object} slothlet - Parent slothlet instance
+     */
+    constructor(slothlet: object);
     enabled: any;
     defaultPattern: any;
     suppressErrors: any;
@@ -133,26 +138,26 @@ export class HookManager extends ComponentBase {
      *
      * @param {string} path - API path being called
      * @param {Array} args - Function arguments
-     * @param {*} [resultOrError] - Function result or error
-     * @param {boolean} [hasError=false] - Whether an error occurred
-     * @param {Array<Error>} [errors=[]] - Array of errors that occurred
+     * @param {*} resultOrError - Function result or error
+     * @param {boolean} hasError - Whether an error occurred
+     * @param {Array<Error>} errors - Array of errors that occurred
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
      * @public
      */
-    public executeAlwaysHooks(path: string, args: any[], resultOrError?: any, hasError?: boolean, errors?: Array<Error>, api: object, ctx: object): void;
+    public executeAlwaysHooks(path: string, args: any[], resultOrError: any, hasError: boolean, errors: Array<Error>, api: object, ctx: object): void;
     /**
      * Execute error hooks for an API path.
      *
      * @param {string} path - API path being called
      * @param {Error} error - The error that occurred
      * @param {object} source - Error source info with type, hookTag, hookId, timestamp, stack
-     * @param {Array} [args] - Function arguments
+     * @param {Array} args - Function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
      * @public
      */
-    public executeErrorHooks(path: string, error: Error, source: object, args?: any[], api: object, ctx: object): void;
+    public executeErrorHooks(path: string, error: Error, source: object, args: any[], api: object, ctx: object): void;
     /**
      * Get the pattern compilation function for diagnostic purposes.
      * Only exposed when diagnostics mode is enabled.

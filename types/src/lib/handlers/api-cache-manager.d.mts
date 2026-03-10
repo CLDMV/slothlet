@@ -1,4 +1,17 @@
 /**
+ * Cache entry structure for API tree storage and rebuild parameters.
+ * @typedef {Object} CacheEntry
+ * @property {string} endpoint - API path endpoint (e.g., ".", "plugins")
+ * @property {string} moduleID - Module identifier
+ * @property {Object} api - Complete buildAPI result tree (primary storage)
+ * @property {string} folderPath - Source folder path
+ * @property {string} mode - Loading mode: 'lazy' or 'eager'
+ * @property {Object} sanitizeOptions - Sanitization configuration
+ * @property {string} collisionMode - Collision handling mode
+ * @property {Object} config - Config snapshot at add time
+ * @property {number} timestamp - Cache creation time (Unix ms)
+ */
+/**
  * Manages API caches - complete buildAPI results per moduleID
  * @class ApiCacheManager
  * @extends ComponentBase
@@ -15,6 +28,12 @@
  */
 export class ApiCacheManager extends ComponentBase {
     static slothletProperty: string;
+    /**
+     * Create ApiCacheManager instance
+     * @param {object} slothlet - Slothlet instance
+     * @public
+     */
+    constructor(slothlet: object);
     /**
      * Cache storage - moduleID → CacheEntry
      * @type {Map<string, CacheEntry>}
@@ -163,5 +182,46 @@ export class ApiCacheManager extends ComponentBase {
      */
     public rebuildCache(moduleID: string): Promise<object>;
 }
+/**
+ * Cache entry structure for API tree storage and rebuild parameters.
+ */
+export type CacheEntry = {
+    /**
+     * - API path endpoint (e.g., ".", "plugins")
+     */
+    endpoint: string;
+    /**
+     * - Module identifier
+     */
+    moduleID: string;
+    /**
+     * - Complete buildAPI result tree (primary storage)
+     */
+    api: any;
+    /**
+     * - Source folder path
+     */
+    folderPath: string;
+    /**
+     * - Loading mode: 'lazy' or 'eager'
+     */
+    mode: string;
+    /**
+     * - Sanitization configuration
+     */
+    sanitizeOptions: any;
+    /**
+     * - Collision handling mode
+     */
+    collisionMode: string;
+    /**
+     * - Config snapshot at add time
+     */
+    config: any;
+    /**
+     * - Cache creation time (Unix ms)
+     */
+    timestamp: number;
+};
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api-cache-manager.d.mts.map

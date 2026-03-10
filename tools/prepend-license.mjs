@@ -296,8 +296,9 @@ async function prependLicenseToFile(file, banner) {
 					inString = false;
 					stringChar = null;
 					result += char;
-				} else if (!inString && char === "/" && nextChar === "/") {
+				} else if (!inString && char === "/" && nextChar === "/" && line[i - 1] !== "\\") {
 					// Found a line comment outside of strings, remove rest of line
+					// Guard: skip if the preceding char is \ (e.g. inside /^\// regex literal)
 					break;
 				} else {
 					result += char;
