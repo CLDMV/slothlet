@@ -6,10 +6,11 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:16:57 -08:00 (1772425017)
+ *	@Last modified time: 2026-03-08 22:06:50 -07:00 (1773032810)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
+
 import { self, context } from "@cldmv/slothlet/runtime";
 export async function sleep() {
 	await self.connection.ensureConnected();

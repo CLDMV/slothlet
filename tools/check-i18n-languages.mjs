@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
+ *	@Last modified time: 2026-03-09 16:36:50 -07:00 (1773099410)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -98,10 +98,16 @@ const baseLocale = "en-us";
 const basePath = join(languagesDir, `${baseLocale}.json`);
 
 let hasFailures = false;
+const report = {
+	base: baseLocale,
+	totalKeys: 0,
+	locales: {}
+};
 
 try {
 	const baseJson = parseJsonFile(basePath);
 	const baseKeys = getTranslationKeys(baseJson, baseLocale);
+	report.totalKeys = baseKeys.size;
 
 	const files = readdirSync(languagesDir)
 		.filter((f) => extname(f) === ".json")
@@ -148,7 +154,39 @@ try {
 		const missing = difference(baseKeys, langKeys);
 		const extra = difference(langKeys, baseKeys);
 
-		if (missing.length === 0 && extra.length === 0) {
+		// build per-locale report entry
+		const localeReport = {
+			missingCount: missing.length,
+			missing: missing,
+			extraCount: extra.length,
+			extra: extra,
+			duplicates: []
+		};
+
+		// Detect duplicate translation values within this locale
+		try {
+			const translations = langJson.translations || {};
+			const valueMap = new Map();
+			for (const [k, v] of Object.entries(translations)) {
+				const keyVal = String(v ?? "");
+				const arr = valueMap.get(keyVal) || [];
+				arr.push(k);
+				valueMap.set(keyVal, arr);
+			}
+
+			for (const [val, keys] of valueMap.entries()) {
+				if (keys.length > 1) {
+					// record duplicates (including empty strings)
+					localeReport.duplicates.push({ value: val, keys });
+				}
+			}
+		} catch (err) {
+			// non-fatal
+		}
+
+		report.locales[locale] = localeReport;
+
+		if (missing.length === 0 && extra.length === 0 && localeReport.duplicates.length === 0) {
 			console.log(`${locale}: OK`);
 			console.log("-");
 			continue;
@@ -161,8 +199,18 @@ try {
 		}
 
 		if (extra.length > 0) {
+			hasFailures = true;
 			console.log(`${locale}: EXTRA ${extra.length}`);
 			for (const key of extra) console.log(`  + ${key}`);
+		}
+
+		if (localeReport.duplicates.length > 0) {
+			hasFailures = true;
+			console.log(`${locale}: DUPLICATES ${localeReport.duplicates.length}`);
+			for (const d of localeReport.duplicates) {
+				console.log(`  * ${d.keys.length} keys duplicate value: "${d.value}"`);
+				for (const k of d.keys) console.log(`    - ${k}`);
+			}
 		}
 
 		console.log("-");
@@ -170,6 +218,22 @@ try {
 } catch (error) {
 	hasFailures = true;
 	console.error(String(error?.message || error));
+}
+
+// write report file for downstream tooling
+try {
+	const outPath = join(repoRoot, "tmp", "compare-report.json");
+	// ensure tmp dir exists (best-effort)
+	try {
+		const fs = await import("fs");
+		fs.mkdirSync(dirname(outPath), { recursive: true });
+		fs.writeFileSync(outPath, JSON.stringify(report, null, 2), "utf-8");
+		console.log(`wrote ${outPath}`);
+	} catch (e) {
+		console.error(`Failed to write compare-report.json: ${String(e)}`);
+	}
+} catch (err) {
+	console.error(String(err));
 }
 
 process.exitCode = hasFailures ? 1 : 0;
