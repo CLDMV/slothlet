@@ -27,6 +27,12 @@
 export class MaterializeManager extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create MaterializeManager instance
+     * @param {object} slothlet - Slothlet orchestrator instance
+     * @package
+     */
+    constructor(slothlet: object);
+    /**
      * Get materialization state as a boolean
      * Returns true when all lazy wrappers have been materialized
      * @returns {boolean} True if fully materialized, false if any lazy folders remain

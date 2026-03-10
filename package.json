@@ -115,14 +115,6 @@
 			},
 			"types": "./types/dist/lib/i18n/translations.d.mts",
 			"import": "./dist/lib/i18n/translations.mjs"
-		},
-		"./i18n/*": {
-			"slothlet-dev": {
-				"types": "./types/src/lib/i18n/languages/*.d.mts",
-				"import": "./src/lib/i18n/languages/*.mjs"
-			},
-			"types": "./types/dist/lib/i18n/languages/*.d.mts",
-			"import": "./dist/lib/i18n/languages/*.mjs"
 		}
 	},
 	"types": "./types/index.d.mts",
@@ -140,15 +132,15 @@
 		"test:node": "node tests/run-all-tests.mjs",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",
-		"test:entry": "node tests/test-entry-points.mjs",
 		"test:performance": "node tests/performance/performance-benchmark-aggregated.mjs",
 		"test:performance-simple": "node tests/performance/performance-benchmark.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
 		"inspect": "node tools/inspect-api-structure.mjs",
 		"analyze": "node tools/analyze-errors.mjs",
 		"fix:headers": "node tools/fix-headers.mjs",
-		"build": "node tools/build-with-tests.mjs",
+		"build": "npm run build:dev",
 		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
+		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run build:cleanup",
 		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
 		"ci:cleanup-src": "node tools/ci-cleanup-src.mjs",
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",

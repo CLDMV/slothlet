@@ -13,7 +13,7 @@ export class ModesUtils extends ComponentBase {
      * @returns {Function} Original function unmodified.
      * @public
      */
-    public ensureNamedExportFunction(fn: Function, ___nameHint: any): Function;
+    public ensureNamedExportFunction(fn: Function, ____nameHint: any): Function;
     /**
      * Clone eager-mode module exports to avoid mutating import cache objects.
      * @param {unknown} value - Value to clone for wrapping

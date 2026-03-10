@@ -539,9 +539,9 @@ export class HookManager extends ComponentBase {
 	 *
 	 * @param {string} path - API path being called
 	 * @param {Array} args - Function arguments
-	 * @param {*} [resultOrError] - Function result or error
-	 * @param {boolean} [hasError=false] - Whether an error occurred
-	 * @param {Array<Error>} [errors=[]] - Array of errors that occurred
+	 * @param {*} resultOrError - Function result or error
+	 * @param {boolean} hasError - Whether an error occurred
+	 * @param {Array<Error>} errors - Array of errors that occurred
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
 	 * @public
@@ -581,7 +581,7 @@ export class HookManager extends ComponentBase {
 	 * @param {string} path - API path being called
 	 * @param {Error} error - The error that occurred
 	 * @param {object} source - Error source info with type, hookTag, hookId, timestamp, stack
-	 * @param {Array} [args] - Function arguments
+	 * @param {Array} args - Function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
 	 * @public

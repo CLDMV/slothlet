@@ -242,7 +242,7 @@ export class UnifiedWrapper extends ComponentBase {
      * Custom inspect output for Node.js util.inspect.
      * @returns {*} The actual implementation for inspection.
      */
-    [util.inspect.custom](___depth: any, ___options: any, ___inspect: any): any;
+    [util.inspect.custom](____depth: any, ____options: any, ____inspect: any): any;
     #private;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
