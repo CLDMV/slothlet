@@ -479,7 +479,7 @@ function hasProperFileHeader(content, ____filePath) {
 	// Expected header format (first 12 lines)
 	// The @Filename can be /src/, /tools/, /tests/, /api_tests/, or root level (/)
 	const headerPattern =
-		/^\/\*\*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*Nate Hyson\s*<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*Nate Hyson\s*<CLDMV>\s*\(Shinrai@users\.noreply\.github\.com\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
+		/^\/\*\*\s*\n\s*\*\s*@Project:\s*@cldmv\/slothlet\s*\n\s*\*\s*@Filename:\s*\/.+\n\s*\*\s*@Date:\s*.+\n\s*\*\s*@Author:\s*.+<CLDMV>\s*\n\s*\*\s*@Email:\s*<Shinrai@users\.noreply\.github\.com>\s*\n\s*\*\s*-----\s*\n\s*\*\s*@Last modified by:\s*.+<CLDMV>\s*\(.+\)\s*\n\s*\*\s*@Last modified time:\s*.+\n\s*\*\s*-----\s*\n\s*\*\s*@Copyright:\s*Copyright\s*\(c\)\s*2013-2026\s*Catalyzed Motivation Inc\.\s*All rights reserved\.\s*\n\s*\*\//;
 
 	// Strip shebang line (and any blank lines after it) so the header pattern can anchor to ^ correctly
 	const normalizedContent = content.startsWith("#!") ? content.replace(/^#![^\n]*\n\s*/, "") : content;
