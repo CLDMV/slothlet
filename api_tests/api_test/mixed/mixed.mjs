@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:10 -08:00 (1772425270)
+ *	@Last modified time: 2026-03-10 23:40:34 -07:00 (1773211234)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -31,27 +31,27 @@
  * @example
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.mixed('hello')); // 'Mixed default: hello'
- */function mixedDefault(message) {
+ */
+function mixedDefault(message) {
 	return `Mixed default: ${message}`;
 }
 
 /**
-	* Named function for mixed export test.
-	* @param {string} value - Value to process
-	* @returns {string} Processed value
-	*/
+ * Named function for mixed export test.
+ * @param {string} value - Value to process
+ * @returns {string} Processed value
+ */
 export function mixedNamed(value) {
 	return `Mixed named: ${value}`;
 }
 
 /**
-	* Another named function for mixed export test.
-	* @param {number} num - Number to process
-	* @returns {number} Processed number
-	*/
+ * Another named function for mixed export test.
+ * @param {number} num - Number to process
+ * @returns {number} Processed number
+ */
 export function mixedAnother(num) {
 	return num * 2;
 }
 
 export default mixedDefault;
-

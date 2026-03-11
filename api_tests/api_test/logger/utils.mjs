@@ -13,7 +13,22 @@
 /**
  * @fileoverview Debug utilities for logger namespace.
  * @module api_test.logger.utils
- * @memberof module:api_test
+ * @memberof module:api_test.logger
+ */
+/**
+ * @namespace utils
+ * @memberof module:api_test.logger
+ * @alias module:api_test.logger.utils
+ */
+
+/**
+ * Debug level logging.
+ * @function debug
+ * @memberof module:api_test.logger.utils
+ * @param {string} message - Debug message
+ * @returns {string} Formatted debug message
+ * @example
+ * utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
  */
 export function debug(message) {
 	return `[DEBUG] ${new Date().toISOString()}: ${message}`;

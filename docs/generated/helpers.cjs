@@ -838,6 +838,11 @@ const functions = {
 					topLevelDoclets.push(doclet);
 				}
 			}
+			// Root callable: function with @alias pointing exactly at the base module itself
+			// (e.g., greet @alias module:api_test makes the entire api callable as api_test(name))
+			else if (doclet.alias === baseModuleLongname) {
+				topLevelDoclets.push(doclet);
+			}
 			// Note: All other doclets (children of top level items) are preserved in allRelevantDoclets
 
 			// Extract constants that have a valid alias format <module>.<const> (not module: prefix)
@@ -956,9 +961,15 @@ const functions = {
 							newDescription.length > originalDescription.length ? newDescription : originalDescription;
 						// Use whichever summary has the highest string count
 						baseModuleContainer.doclet.summary = newSummary.length > originalSummary.length ? newSummary : originalSummary;
-						// Keep the children structure as-is
-						// baseModuleContainer.doclet.description = baseModuleContainer.doclet.description;
-						// baseModuleContainer.doclet.summary = baseModuleContainer.doclet.summary;
+						// Preserve the module's anchor and display name so the root callable links to
+						// the ## section anchor and shows the module name (e.g., "api_test(name)")
+						// rather than the internal JS function name (e.g., "greet(name)").
+						baseModuleContainer.doclet.anchor = t.doclet.anchor || baseModuleContainer.doclet.anchor;
+						baseModuleContainer.doclet.anchorSmart = t.doclet.anchorSmart || baseModuleContainer.doclet.anchorSmart;
+						// Use baseModuleName as the display name (e.g., "api_test") — the root callable
+						// function's internal JS name (e.g., "greet") is not meaningful to API consumers.
+						baseModuleContainer.doclet.simpleName = baseModuleName || t.doclet.simpleName || baseModuleContainer.doclet.simpleName;
+						baseModuleContainer.doclet.simpleNameShort = baseModuleName || t.doclet.simpleNameShort || baseModuleContainer.doclet.simpleNameShort;
 					} else {
 						// console.log(`[DIRECT] ${doclet.name} (alias: ${doclet.alias}) -> baseModule: "${baseModuleWithoutPrefix}" -> key: "${aliasPath}"`);
 						baseModuleContainer.children[aliasPath] = {
@@ -1030,7 +1041,12 @@ const functions = {
 				const item = structure[key];
 				const fullPath = path ? `${path}.${key}` : key;
 
-				if ((item.type === "direct" || item.type === "item") && item.doclet) {
+				// Also process 'child' type items (sub-namespaces like logger.utils) so their
+				// own children (debug, error) can be discovered and attached recursively.
+				// Guard: skip items whose alias IS the base module root (e.g., greet with
+				// @alias module:api_test) to prevent them from re-collecting all top-level
+				// children when they appear as a 'child' of rootFunction, which would loop.
+				if ((item.type === "direct" || item.type === "item" || item.type === "child") && item.doclet && item.doclet.alias !== baseModuleLongname) {
 					// For items with aliases, use the alias to find the module that contains the children
 					let itemModule;
 					if (item.doclet.alias) {
@@ -1204,6 +1220,16 @@ const functions = {
 		// const allNestedItems = extractItemsRecursive(nestedStructure);
 		extractRecursive(nestedStructure);
 		setSimpleNameRecursive(nestedStructure);
+
+		// Post-simpleName pass: if a root callable function (alias === baseModuleLongname) has
+		// replaced the base module container, restore the module name as the display name.
+		// applySimpleName (called inside setSimpleNameRecursive) would overwrite with the JS
+		// function's internal name (e.g., "greet"), so we re-apply the module name here.
+		const baseModItem = nestedStructure[baseModuleName];
+		if (baseModItem && baseModItem.doclet && baseModItem.doclet.alias === baseModuleLongname) {
+			baseModItem.doclet.simpleName = baseModuleName;
+			baseModItem.doclet.simpleNameShort = baseModuleName;
+		}
 
 		// Detect global typedefs that are referenced by this module's functions
 		// const globalTypedefs = [];

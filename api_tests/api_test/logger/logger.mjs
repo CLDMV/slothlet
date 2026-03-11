@@ -32,3 +32,6 @@
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
  */
+export default function log(message) {
+	return `[LOG] ${new Date().toISOString()}: ${message}`;
+}
