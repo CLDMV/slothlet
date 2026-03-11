@@ -25,6 +25,7 @@
 **Type Definitions**
 
   * [SlothletOptions](#typedef_SlothletOptions) : <code>object</code>
+  * [SlothletAPI](#typedef_SlothletAPI) : <code>object</code>
 
 
 **Example**
