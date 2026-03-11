@@ -110,7 +110,8 @@ export const self = new Proxy(
 
 /**
  * User-provided context object
- * @type {Proxy} * @public
+ * @type {Proxy}
+ * @public
  *
  * @description
  * A proxy that provides access to user-provided context data (e.g., request data, user info).

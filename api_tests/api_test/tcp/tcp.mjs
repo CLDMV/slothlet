@@ -220,5 +220,6 @@ export const tcp =
 	};
 
 /**
- * @typedef {import('node:net').Server} NetServer
+ * A Node.js TCP server instance (net.Server).
+ * @typedef {object} NetServer
  */

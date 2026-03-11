@@ -19,6 +19,13 @@
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
 /**
+ * Result returned by hook execution methods.
+ * @typedef {Object} HookExecutionResult
+ * @property {boolean} modified - Whether any hook modified the result value.
+ * @property {*} [result] - The final (possibly hook-modified) return value.
+ */
+
+/**
  * Symbol to mark errors that have already been processed by hook error handlers
  * @private
  */
@@ -485,7 +492,7 @@ export class HookManager extends ComponentBase {
 	 * @param {Array} args - Original function arguments
 	 * @param {object} api - Bound API object
 	 * @param {object} ctx - User context object
-	 * @returns {{ modified: boolean, result?: * }} Object indicating if result was modified and the final result
+	 * @returns {HookExecutionResult} Object indicating if result was modified and the final result
 	 * @public
 	 */
 	executeAfterHooks(path, result, args, api, ctx) {

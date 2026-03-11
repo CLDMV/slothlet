@@ -1,4 +1,10 @@
 /**
+ * Summary result of an unregister operation.
+ * @typedef {Object} UnregisterResult
+ * @property {string[]} removed - API paths that were removed.
+ * @property {Object[]} rolledBack - Entries that were rolled back to a previous owner.
+ */
+/**
  * Tracks which modules own which API paths for hot reload and rollback
  * @class OwnershipManager
  * @extends ComponentBase
@@ -33,7 +39,7 @@ export class OwnershipManager extends ComponentBase {
     }): any | null;
     /**
      * @param {string} moduleID - Module to unregister.
-     * @returns {{ removed: string[], rolledBack: Record<string, string>[] }} Removal summary.
+     * @returns {UnregisterResult} Removal summary.
      * @public
      *
      * @description
@@ -42,10 +48,7 @@ export class OwnershipManager extends ComponentBase {
      * @example
      * const result = ownership.unregister("module-a");
      */
-    public unregister(moduleID: string): {
-        removed: string[];
-        rolledBack: Record<string, string>[];
-    };
+    public unregister(moduleID: string): UnregisterResult;
     /**
      * @param {string} apiPath - API path to modify.
      * @param {string|null} [moduleID=null] - Module to remove (defaults to current owner).
@@ -149,5 +152,18 @@ export class OwnershipManager extends ComponentBase {
      */
     public importState(state: any): void;
 }
+/**
+ * Summary result of an unregister operation.
+ */
+export type UnregisterResult = {
+    /**
+     * - API paths that were removed.
+     */
+    removed: string[];
+    /**
+     * - Entries that were rolled back to a previous owner.
+     */
+    rolledBack: any[];
+};
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=ownership.d.mts.map

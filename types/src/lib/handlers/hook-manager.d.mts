@@ -126,13 +126,10 @@ export class HookManager extends ComponentBase {
      * @param {Array} args - Original function arguments
      * @param {object} api - Bound API object
      * @param {object} ctx - User context object
-     * @returns {{ modified: boolean, result?: * }} Object indicating if result was modified and the final result
+     * @returns {HookExecutionResult} Object indicating if result was modified and the final result
      * @public
      */
-    public executeAfterHooks(path: string, result: any, args: any[], api: object, ctx: object): {
-        modified: boolean;
-        result?: any;
-    };
+    public executeAfterHooks(path: string, result: any, args: any[], api: object, ctx: object): HookExecutionResult;
     /**
      * Execute always hooks for an API path.
      *
@@ -190,5 +187,18 @@ export class HookManager extends ComponentBase {
     public shutdown(): Promise<void>;
     #private;
 }
+/**
+ * Result returned by hook execution methods.
+ */
+export type HookExecutionResult = {
+    /**
+     * - Whether any hook modified the result value.
+     */
+    modified: boolean;
+    /**
+     * - The final (possibly hook-modified) return value.
+     */
+    result?: any;
+};
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map

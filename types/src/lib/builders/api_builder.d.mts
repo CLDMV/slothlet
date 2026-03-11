@@ -76,5 +76,30 @@ export class ApiBuilder extends ComponentBase {
      */
     private attachBuiltins;
 }
+/**
+ * i18n translation helpers exposed on every Slothlet namespace.
+ */
+export type I18nNamespace = {
+    /**
+     * - Set the active locale (e.g. "en-us").
+     */
+    setLanguage: Function;
+    /**
+     * - Return the current active locale string.
+     */
+    getLanguage: Function;
+    /**
+     * - Translate an error code with optional params.
+     */
+    translate: Function;
+    /**
+     * - Alias for translate.
+     */
+    t: Function;
+    /**
+     * - Initialise the i18n system with options.
+     */
+    initI18n: Function;
+};
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api_builder.d.mts.map

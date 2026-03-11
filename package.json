@@ -150,7 +150,7 @@
 		"build:prepend-license": "node tools/prepend-license.mjs dist",
 		"prepublish-check": "npm run build && npm pack && node tools/prepublish-check.mjs",
 		"docs:build": "npm run docs:build:slothlet && npm run docs:build:api-tests",
-		"docs:build:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"src/{slothlet.mjs,lib/{modes,helpers,runtime}/**/*.mjs}\" > docs/generated/API.md",
+		"docs:build:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"src/{slothlet.mjs,lib/**/**/*.mjs}\" > docs/generated/API.md",
 		"docs:build:api-tests": "npm run docs:build:api-test && npm run docs:build:api-test-cjs && npm run docs:build:api-test-mixed",
 		"docs:build:api-test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test/**/*.mjs\" > docs/generated/api_tests/api_test.md",
 		"docs:build:api-test-cjs": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_cjs/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_cjs.md",

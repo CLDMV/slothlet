@@ -29,6 +29,16 @@ import { TYPE_STATES } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getLanguage, initI18n, setLanguage, t, translate } from "@cldmv/slothlet/i18n";
 
 /**
+ * i18n translation helpers exposed on every Slothlet namespace.
+ * @typedef {Object} I18nNamespace
+ * @property {Function} setLanguage - Set the active locale (e.g. "en-us").
+ * @property {Function} getLanguage - Return the current active locale string.
+ * @property {Function} translate - Translate an error code with optional params.
+ * @property {Function} t - Alias for translate.
+ * @property {Function} initI18n - Initialise the i18n system with options.
+ */
+
+/**
  * Resolve a pathOrModuleId string to a dot-notation apiPath.
  *
  * @description
@@ -227,13 +237,7 @@ export class ApiBuilder extends ComponentBase {
 			 * process (not per-instance). Prefer this for ergonomic access when you already
 			 * have an API instance.
 			 *
-			 * @type {{
-			 *  setLanguage: (lang: string) => void,
-			 *  getLanguage: () => string,
-			 *  translate: (errorCode: string, params?: object) => string,
-			 *  t: (errorCode: string, params?: object) => string,
-			 *  initI18n: (options?: { language?: string }) => void
-			 * }}
+			 * @type {I18nNamespace}
 			 */
 			i18n: {
 				setLanguage,
@@ -1202,7 +1206,7 @@ export class ApiBuilder extends ComponentBase {
 
 				/**
 				 * SlothletWarning class for accessing captured warnings in tests
-				 * @type {typeof SlothletWarning}
+				 * @type {Function}
 				 * @example
 				 * // Access captured warnings in tests
 				 * api.slothlet.diag.SlothletWarning.clearCaptured();
