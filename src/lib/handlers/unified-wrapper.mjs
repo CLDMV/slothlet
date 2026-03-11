@@ -14,6 +14,7 @@
 /**
  * @fileoverview Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding
  * @module @cldmv/slothlet/handlers/unified-wrapper
+ * @internal
  */
 
 // Symbol to mark properties added during collision merge (so materialization knows to allow folder children alongside them)

@@ -14,6 +14,7 @@
 /**
  * @fileoverview i18n translation system for Slothlet errors
  * @module @cldmv/slothlet/i18n
+ * @internal
  */
 
 import { readFileSync } from "fs";

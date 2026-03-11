@@ -14,6 +14,7 @@
 /**
  * @fileoverview Materialization tracking manager for lazy mode
  * @module @cldmv/slothlet/handlers/materialize-manager
+ * @internal
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

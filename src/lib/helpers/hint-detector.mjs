@@ -14,6 +14,7 @@
 /**
  * @fileoverview Hint detection system for providing helpful error hints
  * @module @cldmv/slothlet/helpers/hint-detector
+ * @internal
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

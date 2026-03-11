@@ -14,6 +14,7 @@
 /**
  * @fileoverview Builds the final API object and attaches the slothlet built-in namespace.
  * @module @cldmv/slothlet/builders/api_builder
+ * @internal
  * @package
  *
  * @description

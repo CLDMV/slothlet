@@ -14,6 +14,7 @@
 /**
  * @fileoverview Configuration normalization utilities
  * @module @cldmv/slothlet/helpers/config
+ * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 

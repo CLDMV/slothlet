@@ -14,6 +14,7 @@
 /**
  * @fileoverview Hook manager for intercepting API function calls
  * @module @cldmv/slothlet/handlers/hook-manager
+ * @internal
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

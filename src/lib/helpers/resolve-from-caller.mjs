@@ -16,6 +16,7 @@
  * @description
  * Resolves relative paths based on where slothlet() was called from.
  * @module @cldmv/slothlet/helpers/resolve-from-caller
+ * @internal
  * @package
  */
 

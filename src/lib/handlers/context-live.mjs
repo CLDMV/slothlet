@@ -14,6 +14,7 @@
 /**
  * @fileoverview Live bindings context manager (no AsyncLocalStorage)
  * @module @cldmv/slothlet/handlers/context-live
+ * @internal
  */
 import { SlothletError } from "@cldmv/slothlet/errors";
 import { setApiContextChecker } from "@cldmv/slothlet/helpers/eventemitter-context";

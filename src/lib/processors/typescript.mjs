@@ -14,6 +14,7 @@
 /**
  * @fileoverview TypeScript file transformation using esbuild (fast mode)
  * @module @cldmv/slothlet/processors/typescript
+ * @internal
  */
 
 // NO static imports of esbuild/typescript - only dynamic imports when needed

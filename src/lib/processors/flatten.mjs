@@ -18,6 +18,7 @@
  * based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
  * API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.
  * @module @cldmv/slothlet/processors/flatten
+ * @internal
  * @package
  * @example
  * // Flatten is instantiated by Slothlet and passed to processors

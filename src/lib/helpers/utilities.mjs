@@ -14,6 +14,7 @@
 /**
  * @fileoverview General utility functions
  * @module @cldmv/slothlet/helpers/utilities
+ * @internal
  * @package
  */
 

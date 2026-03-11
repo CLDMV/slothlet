@@ -14,6 +14,7 @@
 /**
  * @fileoverview Lazy mode implementation - deferred loading with unified wrapper
  * @module @cldmv/slothlet/modes/lazy
+ * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 

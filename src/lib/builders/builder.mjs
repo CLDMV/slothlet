@@ -14,6 +14,7 @@
 /**
  * @fileoverview API building orchestration (mode-agnostic)
  * @module @cldmv/slothlet/builder
+ * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 

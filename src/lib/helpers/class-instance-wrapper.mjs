@@ -14,6 +14,7 @@
 /**
  * @fileoverview Class instance context wrapping for AsyncLocalStorage preservation
  * @module @cldmv/slothlet/helpers/class-instance-wrapper
+ * @internal
  * @package
  *
  * @description

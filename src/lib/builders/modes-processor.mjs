@@ -14,6 +14,7 @@
 /**
  * @fileoverview Mode processing orchestration - file/directory processing for eager/lazy modes
  * @module @cldmv/slothlet/builders/modes-processor
+ * @internal
  *
  * @description
  * Class-based processor for handling mode-specific file and directory transformations.

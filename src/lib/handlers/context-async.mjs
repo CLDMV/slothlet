@@ -14,6 +14,7 @@
 /**
  * @fileoverview AsyncLocalStorage-based context manager
  * @module @cldmv/slothlet/handlers/context-async
+ * @internal
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { SlothletError } from "@cldmv/slothlet/errors";

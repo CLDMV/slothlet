@@ -14,6 +14,7 @@
 /**
  * @fileoverview Metadata API handler for accessing function metadata
  * @module @cldmv/slothlet/handlers/metadata
+ * @internal
  * @package
  */
 

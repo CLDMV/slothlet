@@ -20,6 +20,7 @@
  * const loader = new Loader(slothletInstance);
  * const module = await loader.loadModule("./path/to/file.mjs", instanceID);
  * @module @cldmv/slothlet/processors/loader
+ * @internal
  */
 import { readdir, stat } from "node:fs/promises";
 import { join, extname, basename, resolve } from "node:path";

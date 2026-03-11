@@ -14,6 +14,7 @@
 /**
  * @fileoverview Eager mode implementation - loads all modules immediately with unified wrapper
  * @module @cldmv/slothlet/modes/eager
+ * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 
