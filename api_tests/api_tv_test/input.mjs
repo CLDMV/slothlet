@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Input management API module for TV Remote testing.
+ * @module api_tv_test.input
+ * @memberof module:api_tv_test
  */
 export async function setInput(inputName, _ = {}) {
 	return { success: true, input: inputName };

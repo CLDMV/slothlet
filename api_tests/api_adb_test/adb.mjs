@@ -12,9 +12,10 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview ADB API module for Android TV Remote - Dummy implementation for testing.
  * Provides direct ADB client access and common ADB operations.
- * @module adb
+ * @module api_adb_test.adb
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

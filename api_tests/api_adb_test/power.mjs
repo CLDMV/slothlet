@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Power management API module for Android TV Remote - Dummy implementation for testing.
+ * @module api_adb_test.power
+ * @memberof module:api_adb_test
+ */
+
 import { self, context } from "@cldmv/slothlet/runtime";
 export async function sleep() {
 	await self.connection.ensureConnected();

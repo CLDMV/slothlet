@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Connection API module for api_test_root_issue testing.
+ * @module api_test_root_issue.connection
+ * @memberof module:api_test_root_issue
+ */
+
 export function isConnected() {
 	// Mock implementation for testing - returns false by default
 	return false;

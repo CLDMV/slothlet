@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview AddApi fixture — object default with named exports.
+ * Exercises the addapi eager single-file folder path (modes-processor lines 874-877).
+ * @module api_smart_flatten_addapi.addapi
  */
 export function initializePlugin() {
 	return "Plugin initialized";

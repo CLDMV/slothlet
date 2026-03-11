@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Secondary logger-meta module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.logger.loggerMeta
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * Secondary file in logger/ folder.
  * Its presence forces processDirectory to recurse into logger/ instead of
  * using the single-file smart-flatten shortcut (line 819 of modes-processor.mjs),

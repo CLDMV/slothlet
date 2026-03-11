@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview LG TV device module for TV Remote testing.
+ * @module api_tv_test.devices.lg
+ * @memberof module:api_tv_test
+ */
+
 class TVController {
 	constructor(tvId) {
 		this.tvId = tvId;

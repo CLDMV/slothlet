@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Volume control API module for TV Remote testing.
+ * @module api_tv_test.volume
+ * @memberof module:api_tv_test
  */
 export async function up(_ = {}) {
 	return { success: true, volume: 55, action: "up" };

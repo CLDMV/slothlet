@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Root function module for api_test_single_root_fn testing.
+ * @module api_test_single_root_fn.root
+ * @memberof module:api_test_single_root_fn
+ */
+
+/**
  * Single root function - acts as the callable API root.
  * @param {string} [input="world"] - Input string
  * @returns {string} Greeting

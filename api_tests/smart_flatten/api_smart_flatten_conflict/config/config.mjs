@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Subfolder config/config.mjs fixture for smart-flatten conflict testing.
+ * Provides a same-name file-in-folder scenario alongside the root config.mjs.
+ * @module api_smart_flatten_conflict.config
  */
 // Subdirectory config/config.mjs file
 export function getSubConfig() {

@@ -28,6 +28,7 @@
  *   3. materializedKeys = ["pipe"] (length 1 = categoryName "pipe") → L1526 fires
  *   4. nestedValue = lazy wrapper with doWork pre-populated → attachedKeys = ["doWork"] → L1530 TRUE
  *   5. returns nestedValue (the lazy wrapper) instead of nestedValue.__impl
+ * @module api_smart_flatten_lazy_nested_file_folder.pipe
  */
 
 /**

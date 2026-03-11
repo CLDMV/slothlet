@@ -16,6 +16,7 @@
  * When two function-default files exist at root level, slothlet namespaces ALL of them
  * (instead of making one the root callable). This forces api.services to be a namespaced
  * wrapper, which is required for the file-folder collision detection at line 1119 to kick in.
+ * @module api_smart_flatten_fn_file_folder_lazy.utils
  */
 
 /**

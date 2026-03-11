@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview User API module for api_test_root_issue subfolder testing.
+ * @module api_test_root_issue.subfolder.user
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new user (default export).
  * Should be accessible as api.subfolder.user() with multi-default detection.
  * @function createUser

@@ -15,6 +15,7 @@
  * @fileoverview Second file in utils/ to make it a multi-file subfolder.
  * Without this, the single-file subfolder special handling (L819) would apply,
  * and we'd never reach the multi-file recursive call (L1066) that leads to L499.
+ * @module api_smart_flatten_multi_export_skip.utils.helper
  */
 
 /**

@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Defaults utility for TV Remote testing.
+ * @module api_tv_test.utils.defaults
+ * @memberof module:api_tv_test
+ */
+
 // import fs from "fs"; // Commented out for dummy implementation
 // import path from "path"; // Commented out for dummy implementation
 // import { fileURLToPath } from "url"; // Commented out for dummy implementation

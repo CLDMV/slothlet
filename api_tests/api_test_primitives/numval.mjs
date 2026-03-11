@@ -12,8 +12,9 @@
  */
 
 /**
- * Primitive number export for coverage testing of the __type "number" branch in unified-wrapper.
- * @module api_test_primitives/numval
+ * @fileoverview Primitive number export for coverage testing of the __type "number" branch in unified-wrapper.
+ * @module api_test_primitives.numval
+ * @memberof module:api_test_primitives
  * @example
  * // api.numval.__type === "number"
  */

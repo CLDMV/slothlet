@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Product API module for api_test_root_issue testing.
+ * @module api_test_root_issue.product
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new product (default export).
  * Should cause conflicts with multi-default detection when multiple root defaults exist.
  * @function createProduct

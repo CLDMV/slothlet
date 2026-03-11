@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Key input API module for TV Remote subfolder testing.
+ * @module api_tv_test.subfolder.key
+ * @memberof module:api_tv_test
  */
 export async function key(keyName, _ = {}) {
 	return { success: true, key: keyName };

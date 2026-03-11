@@ -29,6 +29,7 @@
  *   typeof implToWrap === "function"               (calc is a function)
  *   → else if branch at 1409 fires
  *   → loop over fileFolderCollisionImpl entries    (lines 1410-1411)
+ * @module api_smart_flatten_fn_fn_folder.calc.calc
  */
 
 /**

@@ -12,8 +12,9 @@
  */
 
 /**
- * Primitive boolean export for coverage testing of the __type "boolean" branch in unified-wrapper.
- * @module api_test_primitives/boolval
+ * @fileoverview Primitive boolean export for coverage testing of the __type "boolean" branch in unified-wrapper.
+ * @module api_test_primitives.boolval
+ * @memberof module:api_test_primitives
  * @example
  * // api.boolval.__type === "boolean"
  */

@@ -26,6 +26,7 @@
  *
  * modes_fileFolderImpl = { add: addWrapper } is then passed to createLazySubdirectoryWrapper,
  * where the nested single-file "calc/calc.mjs" has a function default → line 1409 fires.
+ * @module api_smart_flatten_fn_fn_folder.calc
  */
 
 /**

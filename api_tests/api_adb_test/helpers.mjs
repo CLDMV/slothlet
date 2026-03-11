@@ -12,9 +12,10 @@
  */
 
 /**
- * Device data fetching utilities for Android TV Remote.
+ * @fileoverview Device data fetching utilities for Android TV Remote.
  * Provides functions to fetch device properties, app info, network details, etc.
- * @module helpers
+ * @module api_adb_test.helpers
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

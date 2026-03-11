@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Math module for api_test_collisions testing.
+ * @module api_test_collisions.math
+ * @memberof module:api_test_collisions
+ */
+
 export const math =
 	/** @lends math */
 	{

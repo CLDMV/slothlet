@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Services/api subfolder fixture for api_smart_flatten_addapi_with_folders.
+ * @module api_smart_flatten_addapi_with_folders.services.api
  */
 export function getPluginApiService() {
 	return "plugin-api-service";

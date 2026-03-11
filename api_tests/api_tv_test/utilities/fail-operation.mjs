@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Fail-operation utility for TV Remote testing.
+ * @module api_tv_test.utilities.failOperation
+ * @memberof module:api_tv_test
  */
 export function failOperation(message, _ = {}) {
 	return { success: false, error: message };

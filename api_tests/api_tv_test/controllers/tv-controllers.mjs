@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview TV controllers module for TV Remote testing.
+ * @module api_tv_test.controllers.tvControllers
+ * @memberof module:api_tv_test
+ */
+
 class SubfolderTVController {
 	constructor(tvId) {
 		this.tvId = tvId;

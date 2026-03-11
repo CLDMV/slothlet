@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Channel management API module for TV Remote testing.
+ * @module api_tv_test.channel
+ * @memberof module:api_tv_test
  */
 export async function setChannel(channel, _ = {}) {
 	return { success: true, channel: channel };

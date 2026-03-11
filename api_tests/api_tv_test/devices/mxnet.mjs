@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview MXNet device module for TV Remote testing.
+ * @module api_tv_test.devices.mxnet
+ * @memberof module:api_tv_test
+ */
+
 export async function initialize(config) {
 	if (!config || !config.enabled) {
 		console.log("MXNet device disabled in configuration");

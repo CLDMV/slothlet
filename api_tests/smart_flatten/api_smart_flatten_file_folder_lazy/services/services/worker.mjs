@@ -12,8 +12,9 @@
  */
 
 /**
- * Test fixture: content of the same-name subfolder services/services/.
+ * @fileoverview Test fixture: content of the same-name subfolder services/services/.
  * This file is loaded lazily when the inner services/ wrapper materializes.
+ * @module api_smart_flatten_file_folder_lazy.services.services.worker
  */
 
 /**

@@ -16,6 +16,7 @@
  * Triggers the eager single-file folder flatten path (filenameMatchesFolder=true).
  * The modes_existingAtKey check merges the root calc.mjs impl (add, subtract)
  * into this folder's implToWrap (divide, multiply) — lines 971-978 in modes-processor.mjs.
+ * @module api_smart_flatten_object_default_merge.calc.calc
  */
 
 /**

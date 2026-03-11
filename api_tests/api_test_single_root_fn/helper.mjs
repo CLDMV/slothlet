@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Helper functions module for api_test_single_root_fn testing.
+ * @module api_test_single_root_fn.helper
+ * @memberof module:api_test_single_root_fn
+ */
+
+/**
  * Named export helper functions.
  * @param {string} value - Input value
  * @returns {string} Processed value

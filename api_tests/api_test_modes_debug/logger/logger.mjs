@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Logger module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.logger.logger
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * Logger API module for modes-processor debug coverage testing.
  * Uses folder/folder.mjs pattern with a default export function (Case 2).
  * @default

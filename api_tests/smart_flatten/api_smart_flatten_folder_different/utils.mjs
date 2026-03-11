@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Root utils module for smart-flatten folder-different testing.
+ * @module api_smart_flatten_folder_different.utils
  */
 export function getUtils() {
 	return "utility-functions";

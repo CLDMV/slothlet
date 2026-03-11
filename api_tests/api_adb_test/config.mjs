@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Configuration values API module for Android TV Remote - Dummy implementation for testing.
+ * @module api_adb_test.config
+ * @memberof module:api_adb_test
+ */
+
 // Slothlet runtime imports for live bindings
 import { self as _, context } from "@cldmv/slothlet/runtime";
 

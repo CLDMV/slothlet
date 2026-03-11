@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Power management API module for TV Remote subfolder testing.
+ * @module api_tv_test.subfolder.power
+ * @memberof module:api_tv_test
  */
 export async function on(_ = {}) {
 	return { success: true, state: "on" };

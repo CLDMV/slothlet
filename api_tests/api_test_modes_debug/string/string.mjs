@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview String utilities module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.string
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * String utilities for modes-processor debug coverage testing.
  * Uses folder/folder.mjs pattern with single named object export (Case 1).
  * This exports a single const named "string" matching the folder name "string"

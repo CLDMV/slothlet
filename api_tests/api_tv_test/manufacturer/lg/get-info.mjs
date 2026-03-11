@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Device info API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.getInfo
+ * @memberof module:api_tv_test
  */
 export async function getInfo(_ = {}) {
 	return { model: "LG TV", version: "1.0.0" };

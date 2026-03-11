@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Device state API module for TV Remote subfolder testing.
+ * @module api_tv_test.subfolder.state
+ * @memberof module:api_tv_test
  */
 export function cloneState() {
 	return { power: "on", volume: 50, channel: 5 };

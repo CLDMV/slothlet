@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Channel management API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.channel
+ * @memberof module:api_tv_test
  */
 export async function setChannel(channel, _ = {}) {
 	return { success: true, channel: channel };

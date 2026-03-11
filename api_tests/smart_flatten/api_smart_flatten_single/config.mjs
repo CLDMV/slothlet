@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Single-file fixture for smart-flatten solo config test.
+ * @module api_smart_flatten_single.config
  */
 export function getConfig() {
 	return "config-value";

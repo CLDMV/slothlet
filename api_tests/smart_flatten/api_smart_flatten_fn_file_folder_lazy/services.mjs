@@ -21,8 +21,7 @@
  * - existImpl = services function → typeof existImpl === "object" = false → modes_fileFolderImpl stays null
  * - existChildKeys includes "version" (the child wrapper)
  * - `if (!modes_fileFolderImpl) modes_fileFolderImpl = {}` ← LINE 1139 FIRES
- * - modes_fileFolderImpl gets "version" added
- */
+ * - modes_fileFolderImpl gets "version" added * @module api_smart_flatten_fn_file_folder_lazy.services */
 
 /**
  * Root-level services function.

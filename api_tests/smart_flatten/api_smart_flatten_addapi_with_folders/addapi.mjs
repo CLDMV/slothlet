@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview AddApi fixture with sibling subfolders — object default with named exports.
+ * Tests that the addapi eager path works correctly when the root dir also contains subfolders.
+ * @module api_smart_flatten_addapi_with_folders.addapi
  */
 export function initializeMainPlugin() {
 	return "Main plugin initialized from addapi.mjs";

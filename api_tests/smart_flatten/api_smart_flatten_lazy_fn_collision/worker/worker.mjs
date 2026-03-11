@@ -21,6 +21,7 @@
  * - 1330: continue on merge/skip collision (status conflict)
  * - 1339: throw on error collision (status conflict)
  * - 1349: SlothletWarning on warn collision (status conflict)
+ * @module api_smart_flatten_lazy_fn_collision.worker
  */
 
 /**

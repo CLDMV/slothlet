@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Product API module for api_test_root_issue subfolder testing.
+ * @module api_test_root_issue.subfolder.product
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new product (default export).
  * Should be accessible as api.subfolder.product() with multi-default detection.
  * @function createProduct

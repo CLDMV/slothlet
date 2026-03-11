@@ -12,9 +12,10 @@
  */
 
 /**
- * Connection management API module for Android TV Remote.
+ * @fileoverview Connection management API module for Android TV Remote.
  * Handles ADB connection, heartbeat, and connection state management.
- * @module connection
+ * @module api_adb_test.connection
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

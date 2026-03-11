@@ -14,6 +14,7 @@
 /**
  * @fileoverview inner.mjs inside the pipe/pipe/ subfolder.
  * Exists solely to give the inner pipe/ directory some content so it is a valid folder.
+ * @module api_smart_flatten_lazy_nested_file_folder.pipe.pipe.inner
  */
 
 /**

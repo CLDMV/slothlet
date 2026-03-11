@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Order API module for api_test_root_issue subfolder testing.
+ * @module api_test_root_issue.subfolder.order
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new order (default export).
  * Should be accessible as api.subfolder.order() with multi-default detection.
  * @function createOrder

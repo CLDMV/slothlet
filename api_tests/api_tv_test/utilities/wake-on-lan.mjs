@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Wake-on-LAN utility for TV Remote testing.
+ * @module api_tv_test.utilities.wakeOnLan
+ * @memberof module:api_tv_test
  */
 export async function wake(macAddress, _ = {}) {
 	return { success: true, macAddress: macAddress };

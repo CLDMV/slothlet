@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Order API module for api_test_root_issue testing.
+ * @module api_test_root_issue.order
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new order (default export).
  * With multiple root-level defaults, this creates a conflict that needs proper resolution.
  * @function createOrder

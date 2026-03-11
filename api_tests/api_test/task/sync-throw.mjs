@@ -14,7 +14,8 @@
 /**
  * @fileoverview Synchronous function that always throws.
  * Used to test the synchronous error suppression path in the apply trap.
- * @module api_test/task/sync-throw
+ * @module api_test.task.syncThrow
+ * @memberof module:api_test
  */
 
 /**

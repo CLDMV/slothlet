@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Math operations module for api_test_collections testing.
+ * @module api_test_collections.math
+ * @memberof module:api_test_collections
+ */
+
+/**
  * Add two numbers together.
  * @param {number} a - First number.
  * @param {number} b - Second number.

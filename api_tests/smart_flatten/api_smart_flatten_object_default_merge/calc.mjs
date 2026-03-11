@@ -16,6 +16,7 @@
  * Creates an eager wrapper at api.calc with impl={add, subtract}.
  * When calc/ subfolder is processed later in the eager subdir loop,
  * targetApi["calc"] is already set → triggers lines 971-978 (merge existing impl into new implToWrap).
+ * @module api_smart_flatten_object_default_merge.calc
  */
 
 /**

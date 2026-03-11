@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview User API module for api_test_root_issue testing.
+ * @module api_test_root_issue.user
+ * @memberof module:api_test_root_issue
+ */
+
+/**
  * Creates a new user (default export).
  * Should be accessible as api() at root level due to root flattening.
  * @function createUser

@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Alternative math implementation for api_test_impl collision testing.
+ * @module api_test_impl.math
+ * @memberof module:api_test_impl
+ */
+
 export function add(a, b) {
 	return a + b + 2000; // Different implementation to test collision
 }

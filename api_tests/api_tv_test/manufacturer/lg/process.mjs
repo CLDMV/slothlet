@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Data processing API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.process
+ * @memberof module:api_tv_test
  */
 export function processInboundData(data, meta = {}) {
 	return { processed: true, data: data, meta: meta };

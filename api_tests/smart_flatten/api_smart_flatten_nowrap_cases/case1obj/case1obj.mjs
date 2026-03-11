@@ -25,7 +25,7 @@
  *   typeof exportedValue === "object"  →  Case 1 fires
  *   shouldWrap=false  →  debug statement at the else-branch fires instead of UnifiedWrapper
  *
- * @module api_tests/smart_flatten/api_smart_flatten_nowrap_cases/case1obj/case1obj
+ * @module api_smart_flatten_nowrap_cases.case1obj
  * @internal
  * @private
  */

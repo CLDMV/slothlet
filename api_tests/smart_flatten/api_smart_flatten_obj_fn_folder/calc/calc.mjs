@@ -24,6 +24,7 @@
  *      - Each property of modes_existingImpl is copied onto implToWrap
  *   → modes_existingChildKeys loop (lines 987-993):
  *      - typeof implToWrap === "function" sub-branch → line 991 may fire
+ * @module api_smart_flatten_obj_fn_folder.calc.calc
  */
 
 /**

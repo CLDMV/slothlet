@@ -12,8 +12,9 @@
  */
 
 /**
- * Primitive string export for coverage testing of the __type "string" branch in unified-wrapper.
- * @module api_test_primitives/strval
+ * @fileoverview Primitive string export for coverage testing of the __type "string" branch in unified-wrapper.
+ * @module api_test_primitives.strval
+ * @memberof module:api_test_primitives
  * @example
  * // api.strval.__type === "string"
  */

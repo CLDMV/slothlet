@@ -25,6 +25,7 @@
  *
  * Both checks rely on line 343 (the `if (!shouldAttachNamedExport(...))` guard),
  * so all three lines 343, 344, and 346 are covered by loading this fixture in eager mode.
+ * @module api_smart_flatten_folder_with_named.logger
  */
 
 /**
