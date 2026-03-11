@@ -1267,16 +1267,24 @@ const functions = {
 					item.doclet.returns.forEach((returnInfo) => {
 						if (returnInfo.type && returnInfo.type.names) {
 							returnInfo.type.names.forEach((typeName) => {
-								// Find global typedef with this name
-								const typedef = allTypedefs.find(
-									(td) =>
-										td.name === typeName &&
-										// (!td.memberof || td.scope === "global") &&
-										!typedefs.find((gt) => gt.normalizedId === td.normalizedId)
-								);
-								if (typedef) {
-									typedefs.push(typedef);
-								}
+								// Extract bare names from generic wrappers like "Promise.<SlothletAPI>"
+								// so that the inner typedef ("SlothletAPI") is still matched.
+								const candidateNames = [typeName];
+								const inner = typeName.match(/\.<([^>]+)>$/);
+								if (inner) candidateNames.push(inner[1]);
+
+								candidateNames.forEach((name) => {
+									// Find global typedef with this name
+									const typedef = allTypedefs.find(
+										(td) =>
+											td.name === name &&
+											// (!td.memberof || td.scope === "global") &&
+											!typedefs.find((gt) => gt.normalizedId === td.normalizedId)
+									);
+									if (typedef) {
+										typedefs.push(typedef);
+									}
+								});
 							});
 						}
 					});
