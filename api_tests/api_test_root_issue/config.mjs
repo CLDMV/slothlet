@@ -16,6 +16,11 @@
  * @module api_test_root_issue.config
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace config
+ * @memberof module:api_test_root_issue
+ * @alias module:api_test_root_issue.config
+ */
 
 import { context } from "@cldmv/slothlet/runtime";
 

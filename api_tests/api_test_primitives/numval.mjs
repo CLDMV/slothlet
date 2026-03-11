@@ -18,4 +18,9 @@
  * @example
  * // api.numval.__type === "number"
  */
+/**
+ * @namespace numval
+ * @memberof module:api_test_primitives
+ * @alias module:api_test_primitives.numval
+ */
 export default 42;

@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.process
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace process
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.process
+ */
 export function processInboundData(data, meta = {}) {
 	return { processed: true, data: data, meta: meta };
 }

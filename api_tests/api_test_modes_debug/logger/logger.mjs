@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.logger.logger
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace logger
+ * @memberof module:api_test_modes_debug.logger
+ * @alias module:api_test_modes_debug.logger.logger
+ */
 
 /**
  * Logger API module for modes-processor debug coverage testing.

@@ -16,6 +16,11 @@
  * @module api_tv_test.proxyTest
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace proxyTest
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.proxyTest
+ */
 
 class TVController {
 	constructor(tvId) {

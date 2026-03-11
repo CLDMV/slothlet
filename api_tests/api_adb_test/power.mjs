@@ -16,6 +16,11 @@
  * @module api_adb_test.power
  * @memberof module:api_adb_test
  */
+/**
+ * @namespace power
+ * @memberof module:api_adb_test
+ * @alias module:api_adb_test.power
+ */
 
 import { self, context } from "@cldmv/slothlet/runtime";
 export async function sleep() {

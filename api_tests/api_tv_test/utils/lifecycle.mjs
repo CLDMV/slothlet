@@ -16,6 +16,11 @@
  * @module api_tv_test.utils.lifecycle
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace lifecycle
+ * @memberof module:api_tv_test.utils
+ * @alias module:api_tv_test.utils.lifecycle
+ */
 
 // Slothlet runtime imports for live bindings
 // import { self } from "@cldmv/slothlet/runtime"; // Commented out for dummy implementation

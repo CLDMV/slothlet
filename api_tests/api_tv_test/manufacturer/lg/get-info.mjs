@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.getInfo
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace getInfo
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.getInfo
+ */
 export async function getInfo(_ = {}) {
 	return { model: "LG TV", version: "1.0.0" };
 }

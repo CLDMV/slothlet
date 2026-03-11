@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.string
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace string
+ * @memberof module:api_test_modes_debug
+ * @alias module:api_test_modes_debug.string
+ */
 
 /**
  * String utilities for modes-processor debug coverage testing.

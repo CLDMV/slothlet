@@ -16,6 +16,11 @@
  * @module api_test_collisions.math
  * @memberof module:api_test_collisions
  */
+/**
+ * @namespace math
+ * @memberof module:api_test_collisions
+ * @alias module:api_test_collisions.math
+ */
 
 export const math =
 	/** @lends math */

@@ -16,6 +16,11 @@
  * @module api_tv_test.connection
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace connection
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.connection
+ */
 export async function connect(host, _ = {}) {
 	return { success: true, host: host, connected: true };
 }

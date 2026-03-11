@@ -16,6 +16,11 @@
  * @module api_adb_test.inputHelpers
  * @memberof module:api_adb_test
  */
+/**
+ * @namespace inputHelpers
+ * @memberof module:api_adb_test
+ * @alias module:api_adb_test.inputHelpers
+ */
 
 // Slothlet runtime imports for live bindings
 import { self, context } from "@cldmv/slothlet/runtime";

@@ -16,10 +16,20 @@
  * @module api_test_multi_root_fn.doB
  * @memberof module:api_test_multi_root_fn
  */
+/**
+ * @namespace doB
+ * @memberof module:api_test_multi_root_fn
+ * @alias module:api_test_multi_root_fn.doB
+ */
 
 /**
  * Returns result-b string.
- * @returns {string} "result-b"
+ * @function doB
+ * @memberof module:api_test_multi_root_fn.doB
+ * @returns {string} 'result-b'
+ * @example
+ * const api = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+ * api.doB(); // 'result-b'
  */
 export default function doB() {
 	return "result-b";

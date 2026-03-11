@@ -16,6 +16,16 @@
  * @module api_tv_test.controllers.tvControllers
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace controllers
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.controllers
+ */
+/**
+ * @namespace tvControllers
+ * @memberof module:api_tv_test.controllers
+ * @alias module:api_tv_test.controllers.tvControllers
+ */
 
 class SubfolderTVController {
 	constructor(tvId) {

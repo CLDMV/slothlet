@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.logger
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace logger
+ * @memberof module:api_test_modes_debug
+ * @alias module:api_test_modes_debug.logger
+ */
 
 /**
  * Root-level logger.mjs: exists alongside the logger/ folder to create a

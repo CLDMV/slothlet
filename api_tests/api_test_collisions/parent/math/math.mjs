@@ -16,6 +16,11 @@
  * @module api_test_collisions.parent.math
  * @memberof module:api_test_collisions
  */
+/**
+ * @namespace math
+ * @memberof module:api_test_collisions.parent
+ * @alias module:api_test_collisions.parent.math
+ */
 export function add(a, b) {
 	return a + b;
 }

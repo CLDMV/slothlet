@@ -16,6 +16,11 @@
  * @module api_test_root_issue.user
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace user
+ * @memberof module:api_test_root_issue
+ * @alias module:api_test_root_issue.user
+ */
 
 /**
  * Creates a new user (default export).

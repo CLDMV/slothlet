@@ -16,6 +16,16 @@
  * @module api_tv_test.devices.firetv
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace devices
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.devices
+ */
+/**
+ * @namespace firetv
+ * @memberof module:api_tv_test.devices
+ * @alias module:api_tv_test.devices.firetv
+ */
 
 export async function initialize(config) {
 	if (!config || !config.enabled) {

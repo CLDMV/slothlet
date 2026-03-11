@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.disconnect
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace disconnect
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.disconnect
+ */
 export async function disconnect(_ = {}) {
 	return { success: true };
 }

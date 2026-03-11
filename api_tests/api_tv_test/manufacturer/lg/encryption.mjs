@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.encryption
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace encryption
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.encryption
+ */
 export function deriveKey(keycode, _ = {}) {
 	return "derived_key_" + keycode;
 }

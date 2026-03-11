@@ -18,4 +18,9 @@
  * @example
  * // api.strval.__type === "string"
  */
+/**
+ * @namespace strval
+ * @memberof module:api_test_primitives
+ * @alias module:api_test_primitives.strval
+ */
 export default "hello";

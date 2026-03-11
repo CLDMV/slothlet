@@ -16,6 +16,11 @@
  * @module api_tv_test.input
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace input
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.input
+ */
 export async function setInput(inputName, _ = {}) {
 	return { success: true, input: inputName };
 }

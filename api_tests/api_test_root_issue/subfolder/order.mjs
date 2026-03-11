@@ -16,6 +16,11 @@
  * @module api_test_root_issue.subfolder.order
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace order
+ * @memberof module:api_test_root_issue.subfolder
+ * @alias module:api_test_root_issue.subfolder.order
+ */
 
 /**
  * Creates a new order (default export).

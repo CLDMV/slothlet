@@ -16,7 +16,18 @@
  * @module api_test_multiple_roots.overwriteTest2
  * @memberof module:api_test_multiple_roots
  */
+/**
+ * @namespace overwriteTest2
+ * @memberof module:api_test_multiple_roots
+ * @alias module:api_test_multiple_roots.overwriteTest2
+ */
 
+/**
+ * Returns the overwrite-test-2 identifier.
+ * @function overwriteTest
+ * @memberof module:api_test_multiple_roots.overwriteTest2
+ * @returns {string} 'overwrite-test-2'
+ */
 export function overwriteTest() {
 	return "overwrite-test-2";
 }

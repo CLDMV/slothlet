@@ -17,6 +17,11 @@
  * @module api_adb_test.helpers
  * @memberof module:api_adb_test
  */
+/**
+ * @namespace helpers
+ * @memberof module:api_adb_test
+ * @alias module:api_adb_test.helpers
+ */
 
 // Slothlet runtime imports for live bindings
 import { self, context } from "@cldmv/slothlet/runtime";

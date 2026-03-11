@@ -16,6 +16,16 @@
  * @module api_tv_test.subfolder.app
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace subfolder
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.subfolder
+ */
+/**
+ * @namespace app
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.app
+ */
 export async function setApp(appName, _ = {}) {
 	return { success: true, app: appName };
 }

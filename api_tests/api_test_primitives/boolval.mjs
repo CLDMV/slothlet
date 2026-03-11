@@ -18,4 +18,9 @@
  * @example
  * // api.boolval.__type === "boolean"
  */
+/**
+ * @namespace boolval
+ * @memberof module:api_test_primitives
+ * @alias module:api_test_primitives.boolval
+ */
 export default true;

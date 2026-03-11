@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.sendCommand
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace sendCommand
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.sendCommand
+ */
 export async function sendCommand(command, payload, _ = {}) {
 	return { success: true, command: command, payload: payload };
 }

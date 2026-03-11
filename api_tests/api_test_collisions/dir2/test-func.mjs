@@ -16,6 +16,16 @@
  * @module api_test_collisions.dir2.testFunc
  * @memberof module:api_test_collisions
  */
+/**
+ * @namespace dir2
+ * @memberof module:api_test_collisions
+ * @alias module:api_test_collisions.dir2
+ */
+/**
+ * @namespace testFunc
+ * @memberof module:api_test_collisions.dir2
+ * @alias module:api_test_collisions.dir2.testFunc
+ */
 
 export function testFunc() {
         return "from-dir2";

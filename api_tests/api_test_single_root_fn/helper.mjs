@@ -16,6 +16,11 @@
  * @module api_test_single_root_fn.helper
  * @memberof module:api_test_single_root_fn
  */
+/**
+ * @namespace helper
+ * @memberof module:api_test_single_root_fn
+ * @alias module:api_test_single_root_fn.helper
+ */
 
 /**
  * Named export helper functions.

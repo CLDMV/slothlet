@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:10 -08:00 (1772425270)
+ *	@Last modified time: 2026-03-11 00:31:59 -07:00 (1773214319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -35,11 +35,10 @@ export function debug(message) {
 }
 
 /**
-	* Error level logging
-	* @param {string} message - Error message
-	* @returns {string} Formatted error message
-	*/
+ * Error level logging
+ * @param {string} message - Error message
+ * @returns {string} Formatted error message
+ */
 export function error(message) {
 	return `[ERROR] ${new Date().toISOString()}: ${message}`;
 }
-
