@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Mixed export test for Rule 8 Pattern B — filename matches folder, exports mixed default+named.
+ * @module api_test.mixed
+ * @memberof module:api_test
+ */
 function mixedDefault(message) {
 	return `Mixed default: ${message}`;
 }

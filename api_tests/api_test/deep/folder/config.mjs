@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Deeply nested config module for apiDepth traversal depth testing.
+ * @module api_test.deep.folder.config
+ * @memberof module:api_test
+ */
 // Runtime imports (unused but required for API structure)
 // import { self, context, reference } from "@cldmv/slothlet/runtime";
 

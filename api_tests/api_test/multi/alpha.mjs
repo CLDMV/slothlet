@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Alpha module for multi-file API loader testing. Internal file (not exported in package.json).
+ * @module api_test.multi.alpha
+ * @memberof module:api_test
+ */
 export const alpha =
 	/** @lends alpha */
 	{

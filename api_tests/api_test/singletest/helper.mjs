@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Pattern C test — single file in folder where object name does not match filename.
+ * @module api_test.singletest.helper
+ * @memberof module:api_test
+ */
 export const utilities = {
 	/**
 	* Format a string.

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Deeply nested alternative math module for apiDepth traversal collision testing.
+ * @module api_test.deep2.folder.math
+ * @memberof module:api_test
+ */
 export function add(a, b) {
 	return a + b + 1000; // Different implementation to test collision
 }

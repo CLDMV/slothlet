@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Alpha function in multi_func for testing function flattening. Internal file (not exported in package.json).
+ * @module api_test.multi_func.alpha
+ * @memberof module:api_test
+ */
 export function alpha(name) {
 	return `alpha: ${name}`;
 }

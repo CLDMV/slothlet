@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Async function that always rejects — used to test async rejection path in the unified-wrapper apply trap.
+ * @module api_test.task.asyncReject
+ * @memberof module:api_test
+ */
 /**
  * Async function that always rejects with an error.
  * Used in tests to exercise the async rejection path in the unified-wrapper apply trap.

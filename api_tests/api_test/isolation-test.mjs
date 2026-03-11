@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Exported state object for testing context isolation between API calls.
+ * @module api_test.isolationTest
+ * @memberof module:api_test
+ */
 import { self } from "@cldmv/slothlet/runtime";
 
 /**

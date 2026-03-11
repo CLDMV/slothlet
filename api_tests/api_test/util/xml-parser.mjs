@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Function name preference test for XMLParser — verifies uppercase prefix retention.
+ * @module api_test.util.xmlParser
+ * @memberof module:api_test
+ */
 export default function XMLParser(xmlString) {
 	// Simple XML parsing for testing purposes
 	const tagPattern = /<(\w+)>(.*?)<\/\1>/g;

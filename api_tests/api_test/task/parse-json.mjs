@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Function name preference test for parseJSON — verifies camelCase name retention.
+ * @module api_test.task.parseJSON
+ * @memberof module:api_test
+ */
 function parseJSON(jsonString) {
 	try {
 		return JSON.parse(jsonString);

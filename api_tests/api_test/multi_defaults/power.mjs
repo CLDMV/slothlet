@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview ADB power control module for multi-defaults namespace testing.
+ * @module api_test.multiDefaults.power
+ * @memberof module:api_test
+ */
 /**
  * ADB API module for Android TV Remote - Dummy implementation for testing.
  */

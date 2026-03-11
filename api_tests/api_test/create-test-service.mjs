@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Factory function test — creates a TestService class instance for class-as-API testing.
+ * @module api_test.createTestService
+ * @memberof module:api_test
+ */
 import { context } from "@cldmv/slothlet/runtime";
 
 class TestService {

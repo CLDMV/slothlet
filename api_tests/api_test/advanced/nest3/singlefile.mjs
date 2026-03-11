@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Single file function for testing nest3 deeply nested auto-flattening. Internal file (not exported in package.json).
+ * @module api_test.advanced.nest3
+ * @memberof module:api_test
+ */
 export default function (name) {
 	return `Hello, ${name}!`;
 }

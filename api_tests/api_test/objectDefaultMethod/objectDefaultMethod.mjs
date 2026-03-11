@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Object with callable default method for testing mixed object/function behavior. Internal file (not exported in package.json).
+ * @module api_test.objectDefaultMethod
+ * @memberof module:api_test
+ */
 export const objectDefaultMethod =
 	/** @lends objectDefaultMethod */
 	{

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Live Bindings runtime behavior.
+ * @module api_test.runtimeTest
+ * @memberof module:api_test
+ */
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 /**

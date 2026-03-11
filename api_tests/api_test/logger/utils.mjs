@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Debug utilities for logger namespace.
+ * @module api_test.logger.utils
+ * @memberof module:api_test
+ */
 export function debug(message) {
 	return `[DEBUG] ${new Date().toISOString()}: ${message}`;
 }

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Configuration object for slothlet API testing. Internal file (not exported in package.json).
+ * @module api_test.config
+ * @memberof module:api_test
+ */
 // Runtime imports (unused but required for API structure)
 // import { self, context, reference } from "@cldmv/slothlet/runtime";
 

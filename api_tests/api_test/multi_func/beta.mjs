@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Beta object module for multi-file API testing with object flattening. Internal file (not exported in package.json).
+ * @module api_test.multi_func.beta
+ * @memberof module:api_test
+ */
 export const beta =
 	/** @lends beta */
 	{

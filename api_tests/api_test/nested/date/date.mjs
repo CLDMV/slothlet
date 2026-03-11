@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Date API module for testing deeply nested module loading. Internal file (not exported in package.json).
+ * @module api_test.nested.date
+ * @memberof module:api_test
+ */
 export const date =
 	/** @lends date */
 	{

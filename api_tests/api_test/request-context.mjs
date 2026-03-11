@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Test module for per-request context access.
+ * @module api_test.requestContext
+ * @memberof module:api_test
+ */
 import { context } from "@cldmv/slothlet/runtime";
 
 /**

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview TCP server API module for testing automatic EventEmitter context propagation. Internal file (not exported in package.json).
+ * @module api_test.tcp
+ * @memberof module:api_test
+ */
 import net from "node:net";
 import { self, context } from "@cldmv/slothlet/runtime";
 

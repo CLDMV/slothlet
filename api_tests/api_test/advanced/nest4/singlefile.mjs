@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Single beta function for testing nest4 deeply nested module structures. Internal file (not exported in package.json).
+ * @module api_test.advanced.nest4.singlefile
+ * @memberof module:api_test
+ */
 export function beta(name) {
 	return `Hello, ${name}!`;
 }
