@@ -38,19 +38,6 @@ export class ApiCacheManager extends ComponentBase {
      * Cache storage - moduleID → CacheEntry
      * @type {Map<string, CacheEntry>}
      * @private
-     *
-     * CacheEntry structure:
-     * {
-     *   endpoint: string,         // API path endpoint (e.g., ".", "plugins")
-     *   moduleID: string,          // Module identifier
-     *   api: Object,               // Complete buildAPI result tree (PRIMARY STORAGE)
-     *   folderPath: string,        // Source folder path
-     *   mode: string,              // lazy/eager
-     *   sanitizeOptions: Object,   // Sanitization config
-     *   collisionMode: string,     // Collision handling mode
-     *   config: Object,            // Config snapshot at add time
-     *   timestamp: number          // Cache creation time
-     * }
      */
     private caches;
     /**

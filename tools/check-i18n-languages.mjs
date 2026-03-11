@@ -74,9 +74,15 @@ function resolveLanguagesDir(repoRoot) {
 }
 
 /**
+ * Parsed CLI arguments for check-i18n-languages.
+ * @typedef {Object} ParsedI18nArgs
+ * @property {string} [languagesDir] - Optional custom path to the languages directory (overrides default).
+ */
+
+/**
  * Parse CLI args.
  * @param {string[]} argv - Process argv.
- * @returns {{ languagesDir?: string }} Parsed options.
+ * @returns {ParsedI18nArgs} Parsed options.
  */
 function parseArgs(argv) {
 	const out = {};

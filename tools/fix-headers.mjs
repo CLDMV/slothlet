@@ -32,6 +32,30 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
 
+/**
+ * Options accepted by the `fixHeaders` function from @cldmv/fix-headers.
+ * @typedef {Object} FixHeadersOptions
+ * @property {string} [cwd] - Working directory for the project.
+ * @property {string} [input] - Override input path.
+ * @property {boolean} [dryRun] - If true, no files are written.
+ * @property {string} [projectName] - Project name for header generation.
+ * @property {string} [companyName] - Company name for copyright line.
+ * @property {number} [copyrightStartYear] - First year of copyright range.
+ * @property {string[]} [includeFolders] - Folder paths to scan.
+ * @property {string[]} [excludeFolders] - Folder paths to skip.
+ * @property {string[]} [includeExtensions] - File extensions to process.
+ */
+
+/**
+ * Result returned by the `fixHeaders` function from @cldmv/fix-headers.
+ * @typedef {Object} FixHeadersResult
+ * @property {number} filesScanned - Total files examined.
+ * @property {number} filesUpdated - Files whose headers were changed.
+ * @property {boolean} dryRun - Whether this was a dry run.
+ * @property {object[]} changes - Per-file change details (each with `file`, `changed`, and optional `sample` fields).
+ * @property {object} metadata - Resolved project metadata used during the run.
+ */
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
@@ -90,7 +114,7 @@ function parseArguments(args) {
 /**
  * Build fixHeaders options from parsed CLI args and project header config.
  * @param {{ dryRun: boolean }} parsed - Parsed CLI arguments.
- * @returns {Parameters<typeof fixHeaders>[0]} Options for @cldmv/fix-headers.
+ * @returns {FixHeadersOptions} Options for @cldmv/fix-headers.
  * @example
  * const options = buildOptions({ dryRun: true });
  */
@@ -110,7 +134,7 @@ function buildOptions(parsed) {
 
 /**
  * Print the run result summary to stdout.
- * @param {Awaited<ReturnType<typeof fixHeaders>>} result - Result from @cldmv/fix-headers.
+ * @param {FixHeadersResult} result - Result from @cldmv/fix-headers.
  * @param {{ verbose: boolean, diff: boolean, dryRun: boolean }} opts - Display options.
  * @returns {void}
  * @example

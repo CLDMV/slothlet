@@ -19,6 +19,13 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 
 /**
+ * Summary result of an unregister operation.
+ * @typedef {Object} UnregisterResult
+ * @property {string[]} removed - API paths that were removed.
+ * @property {Object[]} rolledBack - Entries that were rolled back to a previous owner.
+ */
+
+/**
  * Tracks which modules own which API paths for hot reload and rollback
  * @class OwnershipManager
  * @extends ComponentBase
@@ -134,7 +141,7 @@ export class OwnershipManager extends ComponentBase {
 
 	/**
 	 * @param {string} moduleID - Module to unregister.
-	 * @returns {{ removed: string[], rolledBack: Record<string, string>[] }} Removal summary.
+	 * @returns {UnregisterResult} Removal summary.
 	 * @public
 	 *
 	 * @description
