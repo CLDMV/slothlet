@@ -9,46 +9,97 @@
 
 [api_test](#api_test)
   * [.advanced](#api_test_dot_advanced)
+    * [.selfObject](#api_test_dot_advanced_dot_selfObject)
       * [.addViaSelf(a, b)](#api_test_dot_advanced_dot_selfObject_dot_addViaSelf) ⇒ <code><code>number</code></code>
       * [.getCurrentInstanceId()](#api_test_dot_advanced_dot_selfObject_dot_getCurrentInstanceId) ⇒ <code><code>string</code></code>
   * [.asyncTest](#api_test_dot_asyncTest)
+    * [.asyncAdd(a, b)](#api_test_dot_asyncTest_dot_asyncAdd) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
+    * [.asyncEcho(value)](#api_test_dot_asyncTest_dot_asyncEcho) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
   * [.callerTest](#api_test_dot_callerTest)
+    * [.getCallerMeta()](#api_test_dot_callerTest_dot_getCallerMeta) ⇒ <code><code>object | null</code></code>
+  * [config](#api_test_dot_config)
   * [.conflictingName1](#api_test_dot_conflictingName1)
+    * [.conflictingName()](#api_test_dot_conflictingName1_dot_conflictingName) ⇒ <code><code>string</code></code>
   * [.conflictingName2](#api_test_dot_conflictingName2)
+    * [.conflictingName()](#api_test_dot_conflictingName2_dot_conflictingName) ⇒ <code><code>string</code></code>
   * [.createTestService](#api_test_dot_createTestService)
+    * [.createTestService()](#api_test_dot_createTestService)
   * [.exportDefault](#api_test_dot_exportDefault)
+    * [.extra()](#api_test_dot_exportDefault_dot_extra) ⇒ <code><code>string</code></code>
   * [.funcmod](#api_test_dot_funcmod)
   * [.isolationTest](#api_test_dot_isolationTest)
+    * [.isolationTestState](#api_test_dot_isolationTest_dot_isolationTestState)
+    * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code><code>string</code></code>
+    * [.isolationTest_setValue(newValue)](#api_test_dot_isolationTest_dot_isolationTest_setValue)
+    * [.isolationTest_increment()](#api_test_dot_isolationTest_dot_isolationTest_increment) ⇒ <code><code>number</code></code>
+    * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code><code>number</code></code>
+    * [.isolationTest_setFlag(flag)](#api_test_dot_isolationTest_dot_isolationTest_setFlag)
+    * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code><code>boolean</code></code>
   * [.logger](#api_test_dot_logger)
+  * [math](#api_test_dot_math)
     * [.add(a, b)](#api_test_dot_math_dot_add) ⇒ <code><code>number</code></code>
+    * [.collisionVersion](#api_test_dot_math_dot_collisionVersion)
     * [.multiply(a, b)](#api_test_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
     * [.divide(a, b)](#api_test_dot_math_dot_divide) ⇒ <code><code>number</code></code>
   * [.metadataTestHelper](#api_test_dot_metadataTestHelper)
+    * [.getMetadata(path)](#api_test_dot_metadataTestHelper_dot_getMetadata) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
+    * [.getSelfMetadata()](#api_test_dot_metadataTestHelper_dot_getSelfMetadata) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
+    * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
+    * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
+    * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
   * [.mixed](#api_test_dot_mixed)
+    * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code><code>string</code></code>
+    * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code><code>number</code></code>
+  * [multi_func](#api_test_dot_multi_func)
     * [.uniqueOne(msg)](#api_test_dot_multi_func_dot_uniqueOne) ⇒ <code><code>string</code></code>
     * [.uniqueTwo(msg)](#api_test_dot_multi_func_dot_uniqueTwo) ⇒ <code><code>string</code></code>
     * [.uniqueThree(msg)](#api_test_dot_multi_func_dot_uniqueThree) ⇒ <code><code>string</code></code>
     * [.multi_func_hello()](#api_test_dot_multi_func_dot_multi_func_hello) ⇒ <code><code>string</code></code>
   * [.objectDefaultMethod](#api_test_dot_objectDefaultMethod)
+    * [.default(message, level)](#api_test_dot_objectDefaultMethod_dot_default) ⇒ <code><code>string</code></code>
+    * [.info(message)](#api_test_dot_objectDefaultMethod_dot_info) ⇒ <code><code>string</code></code>
+    * [.warn(message)](#api_test_dot_objectDefaultMethod_dot_warn) ⇒ <code><code>string</code></code>
+    * [.error(message)](#api_test_dot_objectDefaultMethod_dot_error) ⇒ <code><code>string</code></code>
   * [.overwriteTest1](#api_test_dot_overwriteTest1)
+    * [.conflictingName()](#api_test_dot_overwriteTest1_dot_conflictingName) ⇒ <code><code>string</code></code>
   * [.overwriteTest2](#api_test_dot_overwriteTest2)
+    * [.conflictingName()](#api_test_dot_overwriteTest2_dot_conflictingName) ⇒ <code><code>string</code></code>
   * [.requestContext](#api_test_dot_requestContext)
   * [.rootFunction](#api_test_dot_rootFunction)
+    * [.greet(name)](#api_test_dot_rootFunction_dot_greet) ⇒ <code><code>string</code></code>
   * [.rootFunctionShout(name)](#api_test_dot_rootFunctionShout) ⇒ <code><code>string</code></code>
   * [.rootFunctionWhisper(name)](#api_test_dot_rootFunctionWhisper) ⇒ <code><code>string</code></code>
   * [.rootMath](#api_test_dot_rootMath)
+    * [.add(a, b)](#api_test_dot_rootMath_dot_add) ⇒ <code><code>number</code></code>
+    * [.multiply(a, b)](#api_test_dot_rootMath_dot_multiply) ⇒ <code><code>number</code></code>
+  * [rootstring](#api_test_dot_rootstring)
     * [.upper(str)](#api_test_dot_rootstring_dot_upper) ⇒ <code><code>string</code></code>
     * [.reverse(str)](#api_test_dot_rootstring_dot_reverse) ⇒ <code><code>string</code></code>
   * [.runtimeTest](#api_test_dot_runtimeTest)
+    * [.verifyRuntime()](#api_test_dot_runtimeTest_dot_verifyRuntime) ⇒ <code><code>object</code></code>
+    * [.testSelfCrossCall(a, b)](#api_test_dot_runtimeTest_dot_testSelfCrossCall) ⇒ <code><code>object</code></code>
+    * [.testContextIsolation()](#api_test_dot_runtimeTest_dot_testContextIsolation) ⇒ <code><code>object</code></code>
+    * [.testPerformance()](#api_test_dot_runtimeTest_dot_testPerformance) ⇒ <code><code>object</code></code>
+    * [.comprehensiveRuntimeTest()](#api_test_dot_runtimeTest_dot_comprehensiveRuntimeTest) ⇒ <code><code>object</code></code>
+    * [.testSelfAndReference()](#api_test_dot_runtimeTest_dot_testSelfAndReference) ⇒ <code><code>object</code></code>
+    * [.getAsyncInstanceID()](#api_test_dot_runtimeTest_dot_getAsyncInstanceID) ⇒ <code><code>Object</code></code>
+    * [.exerciseContextDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseContextDispatcherTraps) ⇒ <code><code>Object</code></code>
+    * [.exerciseInstanceIDDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseInstanceIDDispatcherTraps) ⇒ <code><code>Object</code></code>
+    * [.exerciseAsyncContextWriteTraps()](#api_test_dot_runtimeTest_dot_exerciseAsyncContextWriteTraps) ⇒ <code><code>Object</code></code>
   * [.string](#api_test_dot_string)
+    * [.upper(str)](#api_test_dot_string_dot_upper) ⇒ <code><code>string</code></code>
+    * [.reverse(str)](#api_test_dot_string_dot_reverse) ⇒ <code><code>string</code></code>
   * [.task](#api_test_dot_task)
     * [.autoIP()](#api_test_dot_task_dot_autoIP) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
+  * [tcp](#api_test_dot_tcp)
     * [.testContext()](#api_test_dot_tcp_dot_testContext) ⇒ <code><code>object</code></code>
     * [.createTestServer(port)](#api_test_dot_tcp_dot_createTestServer) ⇒ <code><code>Promise.&lt;{port: number, server: NetServer}&gt;</code></code>
   * [.util](#api_test_dot_util)
+    * [.controller](#api_test_dot_util_dot_controller)
       * [.getDefault()](#api_test_dot_util_dot_controller_dot_getDefault) ⇒ <code><code>string</code></code>
       * [.detectEndpointType()](#api_test_dot_util_dot_controller_dot_detectEndpointType) ⇒ <code><code>string</code></code>
       * [.detectDeviceType()](#api_test_dot_util_dot_controller_dot_detectDeviceType) ⇒ <code><code>string</code></code>
+    * [.extract](#api_test_dot_util_dot_extract)
       * [.data()](#api_test_dot_util_dot_extract_dot_data) ⇒ <code><code>string</code></code>
       * [.section()](#api_test_dot_util_dot_extract_dot_section) ⇒ <code><code>string</code></code>
       * [.NVRSection()](#api_test_dot_util_dot_extract_dot_NVRSection) ⇒ <code><code>string</code></code>
@@ -268,11 +319,97 @@ console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 * * *
 
+<a id="api_test_dot_asyncTest_dot_asyncAdd"></a>
+
+### api_test.asyncTest.asyncAdd(a, b) ⇒ <code>Promise.&lt;number&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Async addition — returns a resolved Promise so the unified-wrapper
+> enters the <code>result.then(...)</code> async path.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.asyncTest</code>](#api_test_dot_asyncTest)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>First operand.</p> |
+| b | <code>number</code> |  | <p>Second operand.</p> |
+
+
+**Returns**:
+
+- <code>Promise.&lt;number&gt;</code> <p>Resolved sum.</p>
+
+
+**Example**
+```js
+await asyncAdd(2, 3); // 5
+```
+
+
+
+* * *
+
+<a id="api_test_dot_asyncTest_dot_asyncEcho"></a>
+
+### api_test.asyncTest.asyncEcho(value) ⇒ <code>Promise.&lt;string&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Async string echo — supplements asyncAdd for broader async hook coverage.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.asyncTest</code>](#api_test_dot_asyncTest)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| value | <code>string</code> |  | <p>Value to echo back.</p> |
+
+
+**Returns**:
+
+- <code>Promise.&lt;string&gt;</code> <p>The same value.</p>
+
+
+**Example**
+```js
+await asyncEcho("hello"); // "hello"
+```
+
+
+
+* * *
+
 <a id="api_test_dot_callerTest"></a>
 
 ### api_test.callerTest
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_callerTest_dot_getCallerMeta"></a>
+
+### api_test.callerTest.getCallerMeta() ⇒ <code>object | null</code>
+> <p><strong style="font-size: 1.1em;"><p>Returns the metadata of the slothlet function that invoked this function.</p>
+> <p>Uses self.slothlet.metadata.caller() to read the callerWrapper from the
+> active context-manager store. Returns null when called directly from
+> outside any tracked slothlet execution (no caller in context).</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.callerTest</code>](#api_test_dot_callerTest)
+
+**Returns**:
+
+- <code>object | null</code> <p>Metadata of the calling slothlet function, or null</p>
+
+
+**Example**
+```js
+// Called directly — no tracked caller
+const result = api.callerTest.getCallerMeta(); // → null
+```
+**Example**
+```js
+// Called from another slothlet function via self
+const result = await api.metadataTestHelper.invokeCallerTest(); // → metadata object
+```
+
 
 
 * * *
@@ -333,11 +470,41 @@ console.log(api_test.config.host); // "https://slothlet"
 
 * * *
 
+<a id="api_test_dot_conflictingName1_dot_conflictingName"></a>
+
+### api_test.conflictingName1.conflictingName() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named export that will be overwritten</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.conflictingName1</code>](#api_test_dot_conflictingName1)
+
+**Returns**:
+
+- <code>string</code> <p>Version identifier</p>
+
+
+
+* * *
+
 <a id="api_test_dot_conflictingName2"></a>
 
 ### api_test.conflictingName2
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_conflictingName2_dot_conflictingName"></a>
+
+### api_test.conflictingName2.conflictingName() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named export attempting to overwrite the one from file 1</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.conflictingName2</code>](#api_test_dot_conflictingName2)
+
+**Returns**:
+
+- <code>string</code> <p>Version identifier</p>
+
 
 
 * * *
@@ -351,11 +518,72 @@ console.log(api_test.config.host); // "https://slothlet"
 
 * * *
 
+<a id="api_test_dot_createTestService"></a>
+
+### api_test.createTestService.createTestService()
+> <p><strong style="font-size: 1.1em;"><p>Factory function that returns a class instance</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.createTestService</code>](#api_test_dot_createTestService)
+
+
+* * *
+
 <a id="api_test_dot_exportDefault"></a>
 
 ### api_test.exportDefault
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_exportDefault_dot_extra"></a>
+
+### api_test.exportDefault.extra() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named export for extra method that overrides the default export's extra method.
+> This tests how slothlet handles named exports that conflict with default export properties.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.exportDefault</code>](#api_test_dot_exportDefault)
+
+**Returns**:
+
+- <code>string</code> <p>Overridden extra method message</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
+```
+
 
 
 * * *
@@ -374,6 +602,110 @@ console.log(api_test.config.host); // "https://slothlet"
 ### api_test.isolationTest
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTestState"></a>
+
+### api_test.isolationTest.isolationTestState
+> <p><strong style="font-size: 1.1em;"><p>Exported state object for testing isolation
+> In partial mode: shared reference (mutations persist)
+> In full mode: deep cloned (mutations don't persist)</p></strong></p>
+> 
+**Kind**: static constant of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_getValue"></a>
+
+### api_test.isolationTest.isolationTest_getValue() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Get current state value</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+**Returns**:
+
+- <code>string</code> <p>Current state value</p>
+
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_setValue"></a>
+
+### api_test.isolationTest.isolationTest_setValue(newValue)
+> <p><strong style="font-size: 1.1em;"><p>Set state value (mutates exported object)</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| newValue | <code>string</code> |  | <p>New value to set</p> |
+
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_increment"></a>
+
+### api_test.isolationTest.isolationTest_increment() ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Increment counter (mutates exported object)</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+**Returns**:
+
+- <code>number</code> <p>New counter value</p>
+
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_getCounter"></a>
+
+### api_test.isolationTest.isolationTest_getCounter() ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Get counter value</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+**Returns**:
+
+- <code>number</code> <p>Current counter value</p>
+
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_setFlag"></a>
+
+### api_test.isolationTest.isolationTest_setFlag(flag)
+> <p><strong style="font-size: 1.1em;"><p>Set nested flag (mutates nested object)</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| flag | <code>boolean</code> |  | <p>Flag value</p> |
+
+
+
+* * *
+
+<a id="api_test_dot_isolationTest_dot_isolationTest_getFlag"></a>
+
+### api_test.isolationTest.isolationTest_getFlag() ⇒ <code>boolean</code>
+> <p><strong style="font-size: 1.1em;"><p>Get nested flag value</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
+
+**Returns**:
+
+- <code>boolean</code> <p>Flag value</p>
+
 
 
 * * *
@@ -633,11 +965,182 @@ console.log(api_test.math.divide(10, 2)); // 5
 
 * * *
 
+<a id="api_test_dot_metadataTestHelper_dot_getMetadata"></a>
+
+### api_test.metadataTestHelper.getMetadata(path) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>This function runs inside the slothlet API context where runtime.self
+> is available, allowing self.slothlet.metadata.get() to access the API root.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| path | <code>string</code> |  | <p>Dot-notation path to function</p> |
+
+
+**Returns**:
+
+- <code>Promise.&lt;(object|null)&gt;</code> <p>Metadata object or null</p>
+
+
+**Example**
+```js
+// From test file
+const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
+```
+
+
+
+* * *
+
+<a id="api_test_dot_metadataTestHelper_dot_getSelfMetadata"></a>
+
+### api_test.metadataTestHelper.getSelfMetadata() ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Returns the metadata of this helper function itself, demonstrating
+> that self.slothlet.metadata.self() works within the slothlet context.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+**Returns**:
+
+- <code>Promise.&lt;(object|null)&gt;</code> <p>This function's metadata or null</p>
+
+
+**Example**
+```js
+// From test file
+const meta = await api.metadataTestHelper.getSelfMetadata();
+```
+
+
+
+* * *
+
+<a id="api_test_dot_metadataTestHelper_dot_testCaller"></a>
+
+### api_test.metadataTestHelper.testCaller() ⇒ <code>Promise.&lt;object&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>This function calls an inner function which checks its caller's metadata
+> using self.slothlet.metadata.caller(). Used to test the caller tracking functionality.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+**Returns**:
+
+- <code>Promise.&lt;object&gt;</code> <p>Object with caller metadata and test results</p>
+
+
+**Example**
+```js
+// From test file
+const result = await api.metadataTestHelper.testCaller();
+console.log(result.callerMeta); // Should show testCaller's metadata
+```
+
+
+
+* * *
+
+<a id="api_test_dot_metadataTestHelper_dot_verifyMetadata"></a>
+
+### api_test.metadataTestHelper.verifyMetadata(path) ⇒ <code>Promise.&lt;object&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Checks if a function exists and has the expected metadata properties.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| path | <code>string</code> |  | <p>Dot-notation path to function</p> |
+
+
+**Returns**:
+
+- <code>Promise.&lt;object&gt;</code> <p>Verification results</p>
+
+
+**Example**
+```js
+// From test file
+const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
+```
+
+
+
+* * *
+
+<a id="api_test_dot_metadataTestHelper_dot_invokeCallerTest"></a>
+
+### api_test.metadataTestHelper.invokeCallerTest() ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Invokes callerTest.getCallerMeta() via the slothlet runtime self binding.</p>
+> <p>When callerTest.getCallerMeta() executes, the context manager's callerWrapper
+> is set to this function's wrapper. So caller() inside getCallerMeta returns
+> this function's metadata (system metadata from metadata-test-helper.mjs).</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.metadataTestHelper</code>](#api_test_dot_metadataTestHelper)
+
+**Returns**:
+
+- <code>Promise.&lt;(object|null)&gt;</code> <p>Metadata of this function as seen by the callee</p>
+
+
+**Example**
+```js
+const meta = await api.metadataTestHelper.invokeCallerTest();
+console.log(meta.filePath); // → path to metadata-test-helper.mjs
+```
+
+
+
+* * *
+
 <a id="api_test_dot_mixed"></a>
 
 ### api_test.mixed
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_mixed_dot_mixedNamed"></a>
+
+### api_test.mixed.mixedNamed(value) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named function for mixed export test.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.mixed</code>](#api_test_dot_mixed)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| value | <code>string</code> |  | <p>Value to process</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Processed value</p>
+
+
+
+* * *
+
+<a id="api_test_dot_mixed_dot_mixedAnother"></a>
+
+### api_test.mixed.mixedAnother(num) ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Another named function for mixed export test.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.mixed</code>](#api_test_dot_mixed)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| num | <code>number</code> |  | <p>Number to process</p> |
+
+
+**Returns**:
+
+- <code>number</code> <p>Processed number</p>
+
 
 
 * * *
@@ -882,6 +1385,235 @@ console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
 
 * * *
 
+<a id="api_test_dot_objectDefaultMethod_dot_default"></a>
+
+### api_test.objectDefaultMethod.default(message, level) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Default method for objectDefaultMethod. Calls the named method based on level.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.objectDefaultMethod</code>](#api_test_dot_objectDefaultMethod)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to log.</p> |
+| [level] | <code>string</code> | <code>"info"</code> | <p>Level to use ('info', 'warn', 'error').</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Formatted message with appropriate level prefix</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
+console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
+  console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
+  console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod("hello")); // 'INFO: Hello'
+console.log(api_test.objectDefaultMethod('Hello', 'warn')); // 'WARN: Hello'
+```
+
+
+
+* * *
+
+<a id="api_test_dot_objectDefaultMethod_dot_info"></a>
+
+### api_test.objectDefaultMethod.info(message) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Info method for objectDefaultMethod.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.objectDefaultMethod</code>](#api_test_dot_objectDefaultMethod)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to log.</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Formatted message with INFO prefix</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.info("hello")); // 'INFO: Hello'
+```
+
+
+
+* * *
+
+<a id="api_test_dot_objectDefaultMethod_dot_warn"></a>
+
+### api_test.objectDefaultMethod.warn(message) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Warn method for objectDefaultMethod.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.objectDefaultMethod</code>](#api_test_dot_objectDefaultMethod)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to log.</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Formatted message with WARN prefix</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.warn("hello")); // 'WARN: Hello'
+```
+
+
+
+* * *
+
+<a id="api_test_dot_objectDefaultMethod_dot_error"></a>
+
+### api_test.objectDefaultMethod.error(message) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Error method for objectDefaultMethod.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.objectDefaultMethod</code>](#api_test_dot_objectDefaultMethod)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to log.</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Formatted message with ERROR prefix</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
+```
+
+
+
+* * *
+
 <a id="api_test_dot_overwriteTest1"></a>
 
 ### api_test.overwriteTest1
@@ -891,11 +1623,41 @@ console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
 
 * * *
 
+<a id="api_test_dot_overwriteTest1_dot_conflictingName"></a>
+
+### api_test.overwriteTest1.conflictingName() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named export that will be overwritten</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.overwriteTest1</code>](#api_test_dot_overwriteTest1)
+
+**Returns**:
+
+- <code>string</code> <p>Version identifier</p>
+
+
+
+* * *
+
 <a id="api_test_dot_overwriteTest2"></a>
 
 ### api_test.overwriteTest2
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_overwriteTest2_dot_conflictingName"></a>
+
+### api_test.overwriteTest2.conflictingName() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Named export attempting to overwrite the one from file 1</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.overwriteTest2</code>](#api_test_dot_overwriteTest2)
+
+**Returns**:
+
+- <code>string</code> <p>Version identifier</p>
+
 
 
 * * *
@@ -915,6 +1677,64 @@ console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
 ### api_test.rootFunction
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_rootFunction_dot_greet"></a>
+
+### api_test.rootFunction.greet(name) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Greets a name (default export).
+> This is the main callable API function.
+> Accessed as <code>api()</code> in the slothlet API.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.rootFunction</code>](#api_test_dot_rootFunction)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| name | <code>string</code> |  | <p>Name to greet</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Greeting message</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test("World")); // 'Hello, World!'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test("World")); // 'Hello, World!'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test("World")); // 'Hello, World!'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test("World")); // 'Hello, World!'
+```
+
 
 
 * * *
@@ -1038,6 +1858,120 @@ console.log(api_test.rootFunctionWhisper("World")); // 'hello, world.'
 ### api_test.rootMath
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_rootMath_dot_add"></a>
+
+### api_test.rootMath.add(a, b) ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Adds two numbers together.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.rootMath</code>](#api_test_dot_rootMath)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>First number to add</p> |
+| b | <code>number</code> |  | <p>Second number to add</p> |
+
+
+**Returns**:
+
+- <code>number</code> <p>The sum of a and b</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.rootMath.add(5, 7)); // 12
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.rootMath.add(5, 7)); // 12
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.rootMath.add(5, 7)); // 12
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.rootMath.add(5, 7)); // 12
+```
+
+
+
+* * *
+
+<a id="api_test_dot_rootMath_dot_multiply"></a>
+
+### api_test.rootMath.multiply(a, b) ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Multiplies two numbers together.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.rootMath</code>](#api_test_dot_rootMath)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>First number to multiply</p> |
+| b | <code>number</code> |  | <p>Second number to multiply</p> |
+
+
+**Returns**:
+
+- <code>number</code> <p>The product of a and b</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.rootMath.multiply(4, 6)); // 24
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.rootMath.multiply(4, 6)); // 24
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.rootMath.multiply(4, 6)); // 24
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.rootMath.multiply(4, 6)); // 24
+```
+
 
 
 * * *
@@ -1214,11 +2148,319 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 
 * * *
 
+<a id="api_test_dot_runtimeTest_dot_verifyRuntime"></a>
+
+### api_test.runtimeTest.verifyRuntime() ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Comprehensive runtime verification that tests all aspects of the runtime system.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>object</code> <p>Complete runtime verification results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_testSelfCrossCall"></a>
+
+### api_test.runtimeTest.testSelfCrossCall(a, b) ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Test self cross-calls using math operations.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>First number</p> |
+| b | <code>number</code> |  | <p>Second number</p> |
+
+
+**Returns**:
+
+- <code>object</code> <p>Cross-call test results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_testContextIsolation"></a>
+
+### api_test.runtimeTest.testContextIsolation() ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Test context isolation by checking for unique context data.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>object</code> <p>Context isolation test results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_testPerformance"></a>
+
+### api_test.runtimeTest.testPerformance() ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Performance test to help distinguish between runtime types.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>object</code> <p>Performance test results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_comprehensiveRuntimeTest"></a>
+
+### api_test.runtimeTest.comprehensiveRuntimeTest() ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Comprehensive runtime test that combines all verification methods.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>object</code> <p>Complete runtime test results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_testSelfAndReference"></a>
+
+### api_test.runtimeTest.testSelfAndReference() ⇒ <code>object</code>
+> <p><strong style="font-size: 1.1em;"><p>Test self and reference propagation through API function calls.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>object</code> <p>Self and reference test results</p>
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_getAsyncInstanceID"></a>
+
+### api_test.runtimeTest.getAsyncInstanceID() ⇒ <code>Object</code>
+> <p><strong style="font-size: 1.1em;"><p>Exercise all proxy traps on the <code>instanceID</code> export from the async runtime.
+> Must be called within an active slothlet async-runtime context so the in-context
+> branches of the get/has traps are reached.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>Object</code> <p>Proxy trap results</p>
+
+
+**Example**
+```js
+const result = api.runtimeTest.getAsyncInstanceID();
+// result.id === api.slothlet.instanceID
+```
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_exerciseContextDispatcherTraps"></a>
+
+### api_test.runtimeTest.exerciseContextDispatcherTraps() ⇒ <code>Object</code>
+> <p><strong style="font-size: 1.1em;"><p>Exercise the context proxy traps on the dispatcher (runtime.mjs) that are only
+> hit via the live runtime path: ownKeys, has, getOwnPropertyDescriptor, and set.
+> Must be called while a live-runtime context is active (runtime: &quot;live&quot; instance,
+> called directly — no async scope wrapping).</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>Object</code> <p>Results of each trap</p>
+
+
+**Example**
+```js
+const result = api.runtimeTest.exerciseContextDispatcherTraps();
+expect(result.hasUserId).toBe(true);
+```
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_exerciseInstanceIDDispatcherTraps"></a>
+
+### api_test.runtimeTest.exerciseInstanceIDDispatcherTraps() ⇒ <code>Object</code>
+> <p><strong style="font-size: 1.1em;"><p>Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
+> Must be called while a live-runtime context is active so getCurrentRuntime()
+> resolves to liveRuntimeModule and instanceID is a non-null string.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>Object</code> <p>Trap results</p>
+
+
+**Example**
+```js
+const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
+expect(result.id).toBeTruthy();
+```
+
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest_dot_exerciseAsyncContextWriteTraps"></a>
+
+### api_test.runtimeTest.exerciseAsyncContextWriteTraps() ⇒ <code>Object</code>
+> <p><strong style="font-size: 1.1em;"><p>Exercise the async runtime context proxy traps that require an active ALS context:
+> <code>set</code> (write to context) and <code>getOwnPropertyDescriptor</code>.
+> MUST be called within <code>api.slothlet.context.run()</code> so ALS is active — otherwise
+> the set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.runtimeTest</code>](#api_test_dot_runtimeTest)
+
+**Returns**:
+
+- <code>Object</code> <p>Trap exercise results</p>
+
+
+**Example**
+```js
+await api.slothlet.context.run({ userId: 99 }, async () => {
+  return api.runtimeTest.exerciseAsyncContextWriteTraps();
+});
+```
+
+
+
+* * *
+
 <a id="api_test_dot_string"></a>
 
 ### api_test.string
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_string_dot_upper"></a>
+
+### api_test.string.upper(str) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Converts a string to uppercase.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.string</code>](#api_test_dot_string)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| str | <code>string</code> |  | <p>String to convert to uppercase</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>The uppercased string</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.string.upper("World")); // 'WORLD'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.string.upper("World")); // 'WORLD'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.string.upper("World")); // 'WORLD'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.string.upper("World")); // 'WORLD'
+```
+
+
+
+* * *
+
+<a id="api_test_dot_string_dot_reverse"></a>
+
+### api_test.string.reverse(str) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Reverses a string character by character.</p></strong></p>
+> 
+**Kind**: inner method of [<code>api_test.string</code>](#api_test_dot_string)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| str | <code>string</code> |  | <p>String to reverse</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>The reversed string</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.string.reverse("World")); // 'dlrow'
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.string.reverse("World")); // 'dlrow'
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  console.log(api_test.string.reverse("World")); // 'dlrow'
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.string.reverse("World")); // 'dlrow'
+```
+
 
 
 * * *
