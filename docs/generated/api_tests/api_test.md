@@ -558,14 +558,14 @@ console.log(api_test.config.host); // "https://slothlet"
 <a id="api_test_dot_exportDefault_dot_extra"></a>
 
 ### exportDefault.extra() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Named export for extra method that overrides the default export's extra method.
-> This tests how slothlet handles named exports that conflict with default export properties.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Extra method attached to the default export function.
+> This tests how slothlet handles function properties.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test.exportDefault</code>](#api_test_dot_exportDefault)
 
 **Returns**:
 
-- <code>string</code> <p>Overridden extra method message</p>
+- <code>string</code> <p>Extra method message</p>
 
 
 **Example**
@@ -573,7 +573,6 @@ console.log(api_test.config.host); // "https://slothlet"
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 ```
 **Example**
 ```js
@@ -581,7 +580,6 @@ console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 }
 ```
 **Example**
@@ -591,7 +589,6 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 })();
 ```
 **Example**
@@ -599,7 +596,6 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 ```
 
 
@@ -848,7 +844,6 @@ utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
 console.log(api_test.math.multiply(2, 3)); // 6
 ```
 **Example**
@@ -857,7 +852,6 @@ console.log(api_test.math.multiply(2, 3)); // 6
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(2, 3)); // 1003
   console.log(api_test.math.multiply(2, 3)); // 6
 }
 ```
@@ -868,7 +862,6 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(2, 3)); // 1003
   console.log(api_test.math.multiply(2, 3)); // 6
 })();
 ```
@@ -877,7 +870,6 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
 console.log(api_test.math.multiply(2, 3)); // 6
 ```
 
@@ -888,23 +880,23 @@ console.log(api_test.math.multiply(2, 3)); // 6
 <a id="api_test_dot_math_dot_add"></a>
 
 ### math.add(a, b) ⇒ <code>number</code>
-> <p><strong style="font-size: 1.1em;"><p>Adds two numbers together.
-> This implementation returns <code>a + b</code> in isolation, but under default slothlet
-> loading the root <code>math.mjs</code> file wins the collision for <code>add</code>, returning
-> <code>a + b + 1000</code> instead. See the examples below for the effective runtime value.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Adds two numbers together with a +1000 offset.
+> This implementation is the <strong>winning</strong> side of a file-vs-folder collision that
+> tests slothlet's default collision resolution. The offset distinguishes this
+> implementation from the folder module's plain <code>a + b</code> version at runtime.</p></strong></p>
 > 
-**Kind**: inner method of [<code>api_test.math</code>](#api_test_dot_math)
+**Kind**: static method of [<code>api_test.math</code>](#api_test_dot_math)
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| a | <code>number</code> |  | <p>First number to add</p> |
-| b | <code>number</code> |  | <p>Second number to add</p> |
+| a | <code>number</code> |  | <p>First number to add.</p> |
+| b | <code>number</code> |  | <p>Second number to add.</p> |
 
 
 **Returns**:
 
-- <code>number</code> <p>The sum of a and b (+ 1000 via collision with root math.mjs)</p>
+- <code>number</code> <p>The sum of <code>a</code> and <code>b</code> plus 1000.</p>
 
 
 **Example**

@@ -762,6 +762,84 @@ const functions = {
 		// STEP 1: Sort ALL doclets by their order property to maintain JSDoc sequence
 		const sortedDoclets = [...normalizedDoclets].sort((a, b) => (a.order || 0) - (b.order || 0));
 
+		// STEP 1b: Collision resolution — mimic slothlet's default merge behaviour.
+		// When a root-level file (e.g. math.mjs) and a same-named folder module
+		// (e.g. math/math.mjs) both declare the same export name, slothlet merges
+		// them and the root-level file wins for any overlapping keys.
+		// Detect duplicates by (name + normalizedMemberof), then keep the doclet
+		// whose source file sits closest to the API root (fewest path components).
+		(function deduplicateCollisions() {
+			// Build a collision map: key → [docletIndex, ...]
+			const seen = new Map();
+			sortedDoclets.forEach((doclet, idx) => {
+				if (!doclet.name || !doclet.normalizedMemberof) return;
+				// Only deduplicate callable / value doclets; keep namespace/module bridges
+				if (doclet.kind === "module" || doclet.kind === "namespace" || doclet.kind === "typedef") return;
+				const key = `${doclet.normalizedMemberof}::${doclet.name}`;
+				if (!seen.has(key)) {
+					seen.set(key, [idx]);
+				} else {
+					seen.get(key).push(idx);
+				}
+			});
+
+			// For each collision group, identify the root-file winner (shallowest meta.path)
+			// and mark all others as superseded so they are excluded from further processing.
+			// - loserNames: Set of function names superseded by the root file
+			// - loserPaths: Set of meta.path values for the losing files
+			const loserNames = new Set();
+			const loserPaths = new Set();
+
+			seen.forEach((indices) => {
+				if (indices.length < 2) return;
+				// Sort by path depth ascending (fewer separators = closer to API root = wins)
+				indices.sort((a, b) => {
+					const pathA = sortedDoclets[a].meta?.path || "";
+					const pathB = sortedDoclets[b].meta?.path || "";
+					const depthA = (pathA.match(/[\\/]/g) || []).length;
+					const depthB = (pathB.match(/[\\/]/g) || []).length;
+					return depthA - depthB;
+				});
+				// Mark losers as superseded (keep index 0 = shallowest = winner)
+				for (let i = 1; i < indices.length; i++) {
+					sortedDoclets[indices[i]].__slothletCollisionLoser = true;
+					loserNames.add(sortedDoclets[indices[i]].name);
+					const loserPath = sortedDoclets[indices[i]].meta?.path;
+					if (loserPath) loserPaths.add(loserPath);
+				}
+			});
+
+			// Remove losers in-place
+			for (let i = sortedDoclets.length - 1; i >= 0; i--) {
+				if (sortedDoclets[i].__slothletCollisionLoser) sortedDoclets.splice(i, 1);
+			}
+
+			// Second pass: strip examples referencing collision-loser names from any module-level
+			// overview doclets (e.g. @alias constants) that came from a losing file. This prevents
+			// the overview section from showing stale values for superseded functions.
+			if (loserNames.size > 0 && loserPaths.size > 0) {
+				// Build a regex that matches any example line containing a loser function call
+				const loserPattern = new RegExp(
+					`\\.(?:${[...loserNames].join("|")})\\s*\\(`,
+					"g"
+				);
+				sortedDoclets.forEach((doclet) => {
+					if (!doclet.examples || !Array.isArray(doclet.examples)) return;
+					const docPath = doclet.meta?.path || "";
+					if (!loserPaths.has(docPath)) return;
+					// Filter out individual code lines inside examples that reference loser names.
+					// Each example is a string (a code block); we strip lines that call loser funcs.
+					doclet.examples = doclet.examples.map((example) => {
+						const lines = example.split("\n");
+						const filtered = lines.filter((line) => !loserPattern.test(line));
+						// Reset lastIndex since we used the global flag
+						loserPattern.lastIndex = 0;
+						return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+					}).filter(Boolean);
+				});
+			}
+		})();
+
 		// console.log(sortedDoclets);
 		// console.dir(sortedDoclets, { depth: 1 });
 		// console.log(baseModuleLongname);
