@@ -1791,7 +1791,9 @@ const partials = {
 						output += `| --- | --- | --- |\n`;
 						typedef.properties.forEach((prop) => {
 							const propName = prop.optional ? `[${prop.name}]` : prop.name;
-							output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${prop.description || ""} |\n`;
+							// Collapse newlines so multi-line HTML descriptions don't break table rows
+							const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+							output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${propDesc} |\n`;
 						});
 						output += "\n\n";
 					}
@@ -1823,9 +1825,9 @@ const partials = {
 				// Get default value if available
 				const defaultValue = param.defaultvalue !== undefined ? `<code>${param.defaultvalue}</code>` : "";
 
-				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${
-					param.description || ""
-				} |\n`;
+				// Collapse newlines so multi-line HTML descriptions (ul/li etc.) don't break table rows
+			const paramDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+			output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${paramDesc} |\n`;
 
 				// When the param type is a direct typedef reference (no generics), expand its
 				// properties as indented sub-rows so the full option set is visible inline.
@@ -1837,7 +1839,9 @@ const partials = {
 							const propPath = `${param.name}.${prop.name}`;
 							const propDisplay = prop.optional ? `[${propPath}]` : propPath;
 							const propDefault = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
-							output += `| ${propDisplay} | <code>${format.typeForTableWithLinks(prop.type, moduleId, availableTypedefs)}</code> | ${propDefault} | ${prop.description || ""} |\n`;
+							// Collapse newlines so multi-line HTML descriptions don't break table rows
+							const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+							output += `| ${propDisplay} | <code>${format.typeForTableWithLinks(prop.type, moduleId, availableTypedefs)}</code> | ${propDefault} | ${propDesc} |\n`;
 						});
 					}
 				}

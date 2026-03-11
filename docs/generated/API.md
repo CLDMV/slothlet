@@ -112,50 +112,23 @@ await api.slothlet.shutdown();
 | --- | --- | --- | --- |
 | config | <code>[SlothletOptions](#typedef_SlothletOptions)</code> |  | <p>Configuration options</p> |
 | config.dir | <code>string</code> |  | <p>Directory to scan for API modules. Relative paths are resolved from the calling file.</p> |
-| [config.mode] | <code>"eager" | "lazy"</code> | <code>"eager"</code> | <p>Loading strategy.</p>
-<ul>
-<li><code>&quot;eager&quot;</code> — all modules are loaded immediately at startup (default).</li>
-<li><code>&quot;lazy&quot;</code> — modules are loaded on first access via a Proxy.
-Also accepted: <code>&quot;immediate&quot;</code> / <code>&quot;preload&quot;</code> (eager aliases); <code>&quot;deferred&quot;</code> / <code>&quot;proxy&quot;</code> (lazy aliases).</li>
-</ul> |
-| [config.runtime] | <code>"async" | "live"</code> | <code>"async"</code> | <p>Context propagation runtime.</p>
-<ul>
-<li><code>&quot;async&quot;</code> — AsyncLocalStorage (Node.js built-in, recommended for production).</li>
-<li><code>&quot;live&quot;</code> — Experimental live bindings.
-Also accepted: <code>&quot;asynclocalstorage&quot;</code> / <code>&quot;als&quot;</code> / <code>&quot;node&quot;</code> as aliases for <code>&quot;async&quot;</code>.</li>
-</ul> |
+| [config.mode] | <code>"eager" | "lazy"</code> | <code>"eager"</code> | <p>Loading strategy.</p> <ul> <li><code>&quot;eager&quot;</code> — all modules are loaded immediately at startup (default).</li> <li><code>&quot;lazy&quot;</code> — modules are loaded on first access via a Proxy. Also accepted: <code>&quot;immediate&quot;</code> / <code>&quot;preload&quot;</code> (eager aliases); <code>&quot;deferred&quot;</code> / <code>&quot;proxy&quot;</code> (lazy aliases).</li> </ul> |
+| [config.runtime] | <code>"async" | "live"</code> | <code>"async"</code> | <p>Context propagation runtime.</p> <ul> <li><code>&quot;async&quot;</code> — AsyncLocalStorage (Node.js built-in, recommended for production).</li> <li><code>&quot;live&quot;</code> — Experimental live bindings. Also accepted: <code>&quot;asynclocalstorage&quot;</code> / <code>&quot;als&quot;</code> / <code>&quot;node&quot;</code> as aliases for <code>&quot;async&quot;</code>.</li> </ul> |
 | [config.apiDepth] | <code>number</code> | <code>Infinity</code> | <p>Directory traversal depth. <code>Infinity</code> scans all subdirectories (default). <code>0</code> scans only the root.</p> |
 | [config.context] | <code>object | null</code> | <code>null</code> | <p>Object merged into the per-request context accessible inside API functions via <code>import { context } from &quot;@cldmv/slothlet/runtime&quot;</code>.</p> |
 | [config.reference] | <code>object | null</code> | <code>null</code> | <p>Object whose properties are merged directly onto the root API and also available as <code>api.slothlet.reference</code>.</p> |
 | [config.scope] | <code>Object</code> |  | <p>Controls how per-request scope data is merged. <code>&quot;shallow&quot;</code> merges top-level keys; <code>&quot;deep&quot;</code> recurses into nested objects.</p> |
 | [config.api] | <code>object</code> |  | <p>API build and mutation settings.</p> |
-| [config.api.collision] | <code>string | Object</code> | <code>"merge"</code> | <p>Collision strategy when two modules export the same path.
-Modes: <code>&quot;merge&quot;</code> (default), <code>&quot;merge-replace&quot;</code>, <code>&quot;replace&quot;</code>, <code>&quot;skip&quot;</code>, <code>&quot;warn&quot;</code>, <code>&quot;error&quot;</code>.
-Pass an object to use different strategies for the initial build vs. runtime <code>api.slothlet.api.add()</code> calls.</p> |
-| [config.api.mutations] | <code>object</code> | <code>{add:true,remove:true,reload:true}</code> | <p>Enable or disable runtime mutation methods on <code>api.slothlet.api</code>.
-Object with boolean keys <code>add</code>, <code>remove</code>, <code>reload</code> (all default <code>true</code>).</p> |
-| [config.hook] | <code>boolean | string | object</code> | <code>false</code> | <p>Hook system configuration.</p>
-<ul>
-<li><code>false</code> — disabled (default).</li>
-<li><code>true</code> — enabled, all endpoints.</li>
-<li><code>string</code> — enabled with a default glob pattern.</li>
-<li><code>object</code> — full control: <code>{ enabled: boolean, pattern?: string, suppressErrors?: boolean }</code>.</li>
-</ul> |
-| [config.debug] | <code>boolean | object</code> | <code>false</code> | <p>Enable verbose internal logging. <code>true</code> enables all categories.
-Pass an object with sub-keys <code>builder</code>, <code>api</code>, <code>index</code>, <code>modes</code>, <code>wrapper</code>, <code>ownership</code>, <code>context</code> to target specific subsystems.</p> |
+| [config.api.collision] | <code>string | Object</code> | <code>"merge"</code> | <p>Collision strategy when two modules export the same path. Modes: <code>&quot;merge&quot;</code> (default), <code>&quot;merge-replace&quot;</code>, <code>&quot;replace&quot;</code>, <code>&quot;skip&quot;</code>, <code>&quot;warn&quot;</code>, <code>&quot;error&quot;</code>. Pass an object to use different strategies for the initial build vs. runtime <code>api.slothlet.api.add()</code> calls.</p> |
+| [config.api.mutations] | <code>object</code> | <code>{add:true,remove:true,reload:true}</code> | <p>Enable or disable runtime mutation methods on <code>api.slothlet.api</code>. Object with boolean keys <code>add</code>, <code>remove</code>, <code>reload</code> (all default <code>true</code>).</p> |
+| [config.hook] | <code>boolean | string | object</code> | <code>false</code> | <p>Hook system configuration.</p> <ul> <li><code>false</code> — disabled (default).</li> <li><code>true</code> — enabled, all endpoints.</li> <li><code>string</code> — enabled with a default glob pattern.</li> <li><code>object</code> — full control: <code>{ enabled: boolean, pattern?: string, suppressErrors?: boolean }</code>.</li> </ul> |
+| [config.debug] | <code>boolean | object</code> | <code>false</code> | <p>Enable verbose internal logging. <code>true</code> enables all categories. Pass an object with sub-keys <code>builder</code>, <code>api</code>, <code>index</code>, <code>modes</code>, <code>wrapper</code>, <code>ownership</code>, <code>context</code> to target specific subsystems.</p> |
 | [config.silent] | <code>boolean</code> | <code>false</code> | <p>Suppress all console output from slothlet (warnings, deprecations). Does not affect <code>debug</code>.</p> |
 | [config.diagnostics] | <code>boolean</code> | <code>false</code> | <p>Enable the <code>api.slothlet.diag.*</code> introspection namespace. Intended for testing; do not enable in production.</p> |
 | [config.tracking] | <code>boolean | object</code> | <code>false</code> | <p>Enable internal tracking. Pass <code>true</code> or <code>{ materialization: true }</code> to track lazy-mode materialization progress.</p> |
 | [config.backgroundMaterialize] | <code>boolean</code> | <code>false</code> | <p>When <code>mode: &quot;lazy&quot;</code>, immediately begins materializing all paths in the background after init.</p> |
-| [config.i18n] | <code>object</code> |  | <p>Internationalization settings (dev-facing, process-global).
-<code>{ language: string }</code> — selects the locale for framework messages (e.g. <code>&quot;en-us&quot;</code>, <code>&quot;fr-fr&quot;</code>, <code>&quot;ja-jp&quot;</code>).</p> |
-| [config.typescript] | <code>boolean | "fast" | "strict" | object</code> | <code>false</code> | <p>TypeScript support.</p>
-<ul>
-<li><code>false</code> — disabled (default).</li>
-<li><code>true</code> or <code>&quot;fast&quot;</code> — esbuild transpilation, no type checking.</li>
-<li><code>&quot;strict&quot;</code> — tsc compilation with type checking and <code>.d.ts</code> generation.
-See <a href="docs/TYPESCRIPT.md">TYPESCRIPT.md</a> for the full configuration reference.</li>
-</ul> |
+| [config.i18n] | <code>object</code> |  | <p>Internationalization settings (dev-facing, process-global). <code>{ language: string }</code> — selects the locale for framework messages (e.g. <code>&quot;en-us&quot;</code>, <code>&quot;fr-fr&quot;</code>, <code>&quot;ja-jp&quot;</code>).</p> |
+| [config.typescript] | <code>boolean | "fast" | "strict" | object</code> | <code>false</code> | <p>TypeScript support.</p> <ul> <li><code>false</code> — disabled (default).</li> <li><code>true</code> or <code>&quot;fast&quot;</code> — esbuild transpilation, no type checking.</li> <li><code>&quot;strict&quot;</code> — tsc compilation with type checking and <code>.d.ts</code> generation. See <a href="docs/TYPESCRIPT.md">TYPESCRIPT.md</a> for the full configuration reference.</li> </ul> |
 
 
 **Returns**:
