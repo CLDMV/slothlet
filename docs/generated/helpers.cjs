@@ -1774,11 +1774,29 @@ const partials = {
 			const returnsDesc = format.returnsDesc(func.returns);
 			output += `**Returns**:\n\n`;
 			output += `- <code>${format.typeForTableWithLinks(func.returns[0].type)}</code> <p>${returnsDesc || ""}</p>\n`;
-			// output += `**Returns**: ${format.returnsForTOC(func.returns)}`;
-			// if (returnsDesc) {
-			// 	output += `  \n${returnsDesc}`;
-			// }
 			output += "\n\n";
+
+			// When the return type wraps a typedef with @property entries (e.g. Promise.<SlothletAPI>),
+			// render its property tree inline so the full API surface is visible here.
+			const returnTypeNames = func.returns[0]?.type?.names || [];
+			returnTypeNames.forEach((typeName) => {
+				const candidates = [typeName];
+				const inner = typeName.match(/\.<([^>]+)>$/);
+				if (inner) candidates.push(inner[1]);
+				candidates.forEach((name) => {
+					const typedef = availableTypedefs.find((td) => td.name === name && td.properties && td.properties.length > 0);
+					if (typedef) {
+						output += `**${name} Properties**:\n\n`;
+						output += `| Property | Type | Description |\n`;
+						output += `| --- | --- | --- |\n`;
+						typedef.properties.forEach((prop) => {
+							const propName = prop.optional ? `[${prop.name}]` : prop.name;
+							output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${prop.description || ""} |\n`;
+						});
+						output += "\n\n";
+					}
+				});
+			});
 		}
 		return output;
 	},
@@ -1808,6 +1826,21 @@ const partials = {
 				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${
 					param.description || ""
 				} |\n`;
+
+				// When the param type is a direct typedef reference (no generics), expand its
+				// properties as indented sub-rows so the full option set is visible inline.
+				const typeNames = param.type?.names || [];
+				if (typeNames.length === 1 && !typeNames[0].includes("<") && availableTypedefs) {
+					const typedef = availableTypedefs.find((td) => td.name === typeNames[0]);
+					if (typedef && typedef.properties && typedef.properties.length > 0) {
+						typedef.properties.forEach((prop) => {
+							const propPath = `${param.name}.${prop.name}`;
+							const propDisplay = prop.optional ? `[${propPath}]` : propPath;
+							const propDefault = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
+							output += `| ${propDisplay} | <code>${format.typeForTableWithLinks(prop.type, moduleId, availableTypedefs)}</code> | ${propDefault} | ${prop.description || ""} |\n`;
+						});
+					}
+				}
 			});
 			output += "\n\n";
 		}
