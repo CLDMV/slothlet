@@ -2186,7 +2186,7 @@ const partials = {
 					if (!prop) return;
 					const isFunc = prop.type?.names?.some((n) => n === "Function" || n === "function");
 					const isOptional = prop.optional;
-					const displayKey = isOptional ? `[.${key}]` : `.${key}`;
+					const displayKey = isOptional ? `\\[.${key}\\]` : `.${key}`;
 					const params = isFunc ? "()" : "";
 					// For function-typed properties, the type IS the function — omit return arrow
 					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
