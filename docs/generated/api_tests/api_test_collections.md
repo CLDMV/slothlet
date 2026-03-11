@@ -8,6 +8,7 @@
 **Structure**
 
 [api_test_collections](#api_test_collections)
+  * [collections](#api_test_collections_dot_collections)
 
 
 

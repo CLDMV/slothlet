@@ -798,17 +798,21 @@ const functions = {
 						delete t?.children; // Remove children to avoid nesting issues
 						topLevelDoclets[existingIndex] = { ...t, ...doclet };
 					} else {
-						// Check if this should be added as exported constant (only for constants with specific alias format)
+						// Constants whose alias is a DIRECT child of the base module (no dots in the suffix)
+						// are module bridge doclets (e.g., module:api_test.math) and must appear in the TOC.
+						// Only nested constants (e.g., module:api_test.math.collisionVersion) go to exportedConstants.
+						const aliasSuffix = doclet.alias ? doclet.alias.slice(baseModuleLongname.length + 1) : "";
 						if (
 							doclet.kind === "constant" &&
 							doclet.isExported === true &&
 							doclet.alias &&
-							// !doclet.alias.startsWith("module:") &&
-							doclet.alias.startsWith(baseModuleLongname + ".")
+							doclet.alias.startsWith(baseModuleLongname + ".") &&
+							aliasSuffix.includes(".")
 						) {
+							// Nested constant — not a direct module entry
 							exportedConstants.push(doclet);
 						} else {
-							// Add as top level
+							// Add as top level (includes module bridge constants like math, tcp, rootstring)
 							topLevelDoclets.push(doclet);
 						}
 					}
@@ -816,6 +820,10 @@ const functions = {
 					// Skip module container doclets that don't have aliases - they are just containers
 					if (doclet.kind === "module") {
 						// console.log(`[SKIP MODULE] Skipping module container: ${doclet.name} (kind: ${doclet.kind}, no alias)`);
+					} else if (doclet.memberof && doclet.memberof !== baseModuleLongname) {
+						// This doclet's raw memberof points to a sub-module (e.g., "api_test.module:math")
+						// even though normalization collapsed it to the base module. Skip here —
+						// it will be picked up as a child during processChildrenRecursive.
 					} else {
 						// Regular top level doclet (no alias) - only add non-module items
 						topLevelDoclets.push(doclet);
@@ -1042,8 +1050,16 @@ const functions = {
 
 					// console.log(`[CHILDREN] Looking for children of ${fullPath} with memberof: module:${itemModule}`);
 
+					// Dot-notation sub-modules (e.g., math/math.mjs) have members with raw memberof
+					// like "api_test.module:math" which normalization collapses to "module:api_test".
+					// We must also match against that raw pattern to find their children.
+					const baseNameForChildren = baseModuleLongname.replace(/^module:/, "");
+					const dotNotationMemberof = item.doclet.name ? `${baseNameForChildren}.module:${item.doclet.name}` : null;
+
 					sortedDoclets.forEach((doclet) => {
-						if (doclet.normalizedMemberof === "module:" + itemModule && doclet.id !== item.doclet.id) {
+						const matchesByNormalized = doclet.normalizedMemberof === "module:" + itemModule;
+						const matchesByDotNotation = dotNotationMemberof && doclet.memberof === dotNotationMemberof;
+						if ((matchesByNormalized || matchesByDotNotation) && doclet.id !== item.doclet.id) {
 							// doclet.level = level + 1;
 							// console.log(`[CHILD] Found child ${doclet.name} (${doclet.kind}) for ${fullPath}`);
 							item.children[doclet.name] = {
@@ -1986,8 +2002,9 @@ const partials = {
 						// const anchor = item.anchor || doclet.anchor;
 						// output += `${indent}${prefix}[${key}(${format.paramsForTOC(doclet.params)})](#${anchor})${returns}\n`;
 					} else if (doclet.kind === "constant" || doclet.kind === "object") {
-						// const anchor = item.anchor || doclet.anchor;
-						// output += `${indent}${prefix}[${key}](#${anchor})\n`;
+						// Module bridge constants (e.g., math, tcp, rootstring via @alias) should
+						// appear in the TOC just like namespaces do.
+						output += partials.tocTreeOutput(doclet, item, indent, prefix, key);
 					}
 
 					// Process children

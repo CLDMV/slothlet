@@ -9,6 +9,8 @@
 
 [api_test_mixed](#api_test_mixed)
   * [.interop](#api_test_mixed_dot_interop)
+    * [.interopCjs()](#api_test_mixed_dot_interop_dot_interopCjs)
+  * [mathCjs()](#api_test_mixed_dot_mathCjs)
     * [.multiply(a, b)](#api_test_mixed_dot_mathCjs_dot_multiply) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
     * [.divide(a, b)](#api_test_mixed_dot_mathCjs_dot_divide) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
 

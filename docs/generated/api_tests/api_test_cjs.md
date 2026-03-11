@@ -9,13 +9,21 @@
 
 [api_test_cjs](#api_test_cjs)
   * [.advanced](#api_test_cjs_dot_advanced)
+    * [.selfObject()](#api_test_cjs_dot_advanced_dot_selfObject)
       * [.addViaSelf(a, b)](#api_test_cjs_dot_advanced_dot_selfObject_dot_addViaSelf) ⇒ <code><code>number</code></code>
   * [.explicitDefaults](#api_test_cjs_dot_explicitDefaults)
+    * [.explicitDefault()](#api_test_cjs_dot_explicitDefaults_dot_explicitDefault)
+      * [.multiply(a, b)](#api_test_cjs_dot_explicitDefault_dot_multiply) ⇒ <code><code>number</code></code>
+      * [.divide(a, b)](#api_test_cjs_dot_explicitDefault_dot_divide) ⇒ <code><code>number</code></code>
+      * [.getCalculatorName()](#api_test_cjs_dot_explicitDefault_dot_getCalculatorName) ⇒ <code><code>string</code></code>
+  * [math()](#api_test_cjs_dot_math)
     * [.add(a, b)](#api_test_cjs_dot_math_dot_add) ⇒ <code><code>number</code></code>
     * [.multiply(a, b)](#api_test_cjs_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
   * [.shout(name)](#api_test_cjs_dot_shout) ⇒ <code><code>string</code></code>
+  * [rootMath()](#api_test_cjs_dot_rootMath)
     * [.add(a, b)](#api_test_cjs_dot_rootMath_dot_add) ⇒ <code><code>number</code></code>
     * [.multiply(a, b)](#api_test_cjs_dot_rootMath_dot_multiply) ⇒ <code><code>number</code></code>
+  * [string()](#api_test_cjs_dot_string)
     * [.upper(str)](#api_test_cjs_dot_string_dot_upper) ⇒ <code><code>string</code></code>
     * [.reverse(str)](#api_test_cjs_dot_string_dot_reverse) ⇒ <code><code>string</code></code>
 
@@ -224,6 +232,65 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 > <p><strong style="font-size: 1.1em;"><p>Calculator object with explicit default export.</p></strong></p>
 > 
 **Kind**: static constant of [<code>api_test_cjs.explicitDefaults</code>](#api_test_cjs_dot_explicitDefaults)
+
+
+* * *
+
+<a id="api_test_cjs_dot_explicitDefault_dot_multiply"></a>
+
+### multiply(a, b) ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Multiplies two numbers using explicit CJS default pattern.</p></strong></p>
+> 
+**Kind**: inner method of [<code></code>](#undefined)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>First number to multiply</p> |
+| b | <code>number</code> |  | <p>Second number to multiply</p> |
+
+
+**Returns**:
+
+- <code>number</code> <p>The product of a and b</p>
+
+
+
+* * *
+
+<a id="api_test_cjs_dot_explicitDefault_dot_divide"></a>
+
+### divide(a, b) ⇒ <code>number</code>
+> <p><strong style="font-size: 1.1em;"><p>Divides two numbers using explicit CJS default pattern.</p></strong></p>
+> 
+**Kind**: inner method of [<code></code>](#undefined)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| a | <code>number</code> |  | <p>Dividend</p> |
+| b | <code>number</code> |  | <p>Divisor</p> |
+
+
+**Returns**:
+
+- <code>number</code> <p>The quotient of a divided by b</p>
+
+
+
+* * *
+
+<a id="api_test_cjs_dot_explicitDefault_dot_getCalculatorName"></a>
+
+### getCalculatorName() ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Gets the name of the calculator for testing named exports alongside explicit defaults.</p></strong></p>
+> 
+**Kind**: inner method of [<code></code>](#undefined)
+
+**Returns**:
+
+- <code>string</code> <p>The name identifier for this calculator instance</p>
+
 
 
 * * *
