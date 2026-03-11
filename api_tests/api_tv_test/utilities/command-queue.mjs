@@ -16,6 +16,16 @@
  * @module api_tv_test.utilities.commandQueue
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace utilities
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.utilities
+ */
+/**
+ * @namespace commandQueue
+ * @memberof module:api_tv_test.utilities
+ * @alias module:api_tv_test.utilities.commandQueue
+ */
 export async function addUserCommand(commandFunction, _ = {}) {
 	return { success: true, id: "user_cmd_1" };
 }

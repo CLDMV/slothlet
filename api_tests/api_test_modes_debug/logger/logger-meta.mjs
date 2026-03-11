@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.logger.loggerMeta
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace loggerMeta
+ * @memberof module:api_test_modes_debug.logger
+ * @alias module:api_test_modes_debug.logger.loggerMeta
+ */
 
 /**
  * Secondary file in logger/ folder.

@@ -16,6 +16,11 @@
  * @module api_tv_test.utilities.wakeOnLan
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace wakeOnLan
+ * @memberof module:api_tv_test.utilities
+ * @alias module:api_tv_test.utilities.wakeOnLan
+ */
 export async function wake(macAddress, _ = {}) {
 	return { success: true, macAddress: macAddress };
 }

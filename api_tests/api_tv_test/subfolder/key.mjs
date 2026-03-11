@@ -16,6 +16,11 @@
  * @module api_tv_test.subfolder.key
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace key
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.key
+ */
 export async function key(keyName, _ = {}) {
 	return { success: true, key: keyName };
 }

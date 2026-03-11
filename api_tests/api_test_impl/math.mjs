@@ -16,7 +16,24 @@
  * @module api_test_impl.math
  * @memberof module:api_test_impl
  */
+/**
+ * @namespace math
+ * @memberof module:api_test_impl
+ * @alias module:api_test_impl.math
+ */
 
+/**
+ * Adds two numbers together with a +2000 offset.
+ * Used to test collision resolution — this implementation co-exists with other math modules.
+ * @function add
+ * @memberof module:api_test_impl.math
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} a + b + 2000
+ * @example
+ * const api = await slothlet({ dir: './api_tests/api_test_impl' });
+ * api.math.add(1, 2); // 2003
+ */
 export function add(a, b) {
 	return a + b + 2000; // Different implementation to test collision
 }

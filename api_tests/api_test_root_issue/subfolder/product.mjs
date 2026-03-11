@@ -16,6 +16,11 @@
  * @module api_test_root_issue.subfolder.product
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace product
+ * @memberof module:api_test_root_issue.subfolder
+ * @alias module:api_test_root_issue.subfolder.product
+ */
 
 /**
  * Creates a new product (default export).

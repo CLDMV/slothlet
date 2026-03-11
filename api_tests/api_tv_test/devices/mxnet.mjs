@@ -16,6 +16,11 @@
  * @module api_tv_test.devices.mxnet
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace mxnet
+ * @memberof module:api_tv_test.devices
+ * @alias module:api_tv_test.devices.mxnet
+ */
 
 export async function initialize(config) {
 	if (!config || !config.enabled) {

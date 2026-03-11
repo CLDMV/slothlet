@@ -16,6 +16,11 @@
  * @module api_tv_test.subfolder.channel
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace channel
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.channel
+ */
 export async function setChannel(channel, _ = {}) {
 	return { success: true, channel: channel };
 }

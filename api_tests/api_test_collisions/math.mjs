@@ -16,6 +16,11 @@
  * @module api_test_collisions.mathFile
  * @memberof module:api_test_collisions
  */
+/**
+ * @namespace mathFile
+ * @memberof module:api_test_collisions
+ * @alias module:api_test_collisions.mathFile
+ */
 
 export function power(base, exponent) {
 	return Math.pow(base, exponent);

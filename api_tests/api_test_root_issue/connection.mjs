@@ -16,6 +16,11 @@
  * @module api_test_root_issue.connection
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace connection
+ * @memberof module:api_test_root_issue
+ * @alias module:api_test_root_issue.connection
+ */
 
 export function isConnected() {
 	// Mock implementation for testing - returns false by default

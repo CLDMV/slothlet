@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.utils
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace utils
+ * @memberof module:api_test_modes_debug
+ * @alias module:api_test_modes_debug.utils
+ */
 
 /**
  * General utility functions for modes-processor debug coverage testing.

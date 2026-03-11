@@ -16,6 +16,16 @@
  * @module api_tv_test.utils.defaults
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace utils
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.utils
+ */
+/**
+ * @namespace defaults
+ * @memberof module:api_tv_test.utils
+ * @alias module:api_tv_test.utils.defaults
+ */
 
 // import fs from "fs"; // Commented out for dummy implementation
 // import path from "path"; // Commented out for dummy implementation

@@ -16,6 +16,21 @@
  * @module api_tv_test.manufacturer.lg.app
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace manufacturer
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.manufacturer
+ */
+/**
+ * @namespace lg
+ * @memberof module:api_tv_test.manufacturer
+ * @alias module:api_tv_test.manufacturer.lg
+ */
+/**
+ * @namespace app
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.app
+ */
 export async function setApp(appName, _ = {}) {
 	return { success: true, app: appName };
 }

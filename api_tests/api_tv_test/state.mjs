@@ -16,6 +16,11 @@
  * @module api_tv_test.state
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace state
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.state
+ */
 export function cloneState() {
 	return { power: "on", volume: 50, channel: 5 };
 }

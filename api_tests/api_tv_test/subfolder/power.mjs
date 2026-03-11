@@ -16,6 +16,11 @@
  * @module api_tv_test.subfolder.power
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace power
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.power
+ */
 export async function on(_ = {}) {
 	return { success: true, state: "on" };
 }

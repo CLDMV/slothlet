@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.connect
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace connect
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.connect
+ */
 export async function connect(host, options = {}) {
 	return { success: true, host, options };
 }

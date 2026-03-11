@@ -16,6 +16,11 @@
  * @module api_tv_test.subfolder.input
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace input
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.input
+ */
 export async function setInput(inputName, _ = {}) {
 	return { success: true, input: inputName };
 }

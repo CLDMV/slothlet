@@ -16,7 +16,20 @@
  * @module api_test_multiple_roots.conflict2
  * @memberof module:api_test_multiple_roots
  */
+/**
+ * @namespace conflict2
+ * @memberof module:api_test_multiple_roots
+ * @alias module:api_test_multiple_roots.conflict2
+ */
 
+/**
+ * Default callable — returns the string identifier for this conflict module.
+ * @function conflictingName
+ * @memberof module:api_test_multiple_roots.conflict2
+ * @returns {string} 'from-file-2'
+ * @example
+ * api.conflict2(); // 'from-file-2'
+ */
 export default function conflictingName() {
 	return "from-file-2";
 }

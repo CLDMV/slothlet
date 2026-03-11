@@ -17,6 +17,11 @@
  * @module api_test_reserved_name.slothlet
  * @memberof module:api_test_reserved_name
  */
+/**
+ * @namespace slothlet
+ * @memberof module:api_test_reserved_name
+ * @alias module:api_test_reserved_name.slothlet
+ */
 
 /**
  * A stub function — the filename "slothlet" conflicts with the reserved namespace.

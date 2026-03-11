@@ -16,6 +16,16 @@
  * @module api_test_root_issue.subfolder.config
  * @memberof module:api_test_root_issue
  */
+/**
+ * @namespace subfolder
+ * @memberof module:api_test_root_issue
+ * @alias module:api_test_root_issue.subfolder
+ */
+/**
+ * @namespace config
+ * @memberof module:api_test_root_issue.subfolder
+ * @alias module:api_test_root_issue.subfolder.config
+ */
 
 import { context } from "@cldmv/slothlet/runtime";
 

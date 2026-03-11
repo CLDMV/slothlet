@@ -16,6 +16,11 @@
  * @module api_test_modes_debug.string.stringUtils
  * @memberof module:api_test_modes_debug
  */
+/**
+ * @namespace stringUtils
+ * @memberof module:api_test_modes_debug.string
+ * @alias module:api_test_modes_debug.string.stringUtils
+ */
 
 /**
  * Secondary file in string/ folder.

@@ -16,6 +16,11 @@
  * @module api_tv_test.devices.lg
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace lg
+ * @memberof module:api_tv_test.devices
+ * @alias module:api_tv_test.devices.lg
+ */
 
 class TVController {
 	constructor(tvId) {

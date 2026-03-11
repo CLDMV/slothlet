@@ -16,6 +16,11 @@
  * @module api_tv_test.app
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace app
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.app
+ */
 export async function setApp(appName, _ = {}) {
 	return { success: true, app: appName };
 }

@@ -16,6 +16,11 @@
  * @module api_tv_test.volume
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace volume
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.volume
+ */
 export async function up(_ = {}) {
 	return { success: true, volume: 55, action: "up" };
 }

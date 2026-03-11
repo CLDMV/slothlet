@@ -16,6 +16,11 @@
  * @module api_tv_test.utilities.failOperation
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace failOperation
+ * @memberof module:api_tv_test.utilities
+ * @alias module:api_tv_test.utilities.failOperation
+ */
 export function failOperation(message, _ = {}) {
 	return { success: false, error: message };
 }

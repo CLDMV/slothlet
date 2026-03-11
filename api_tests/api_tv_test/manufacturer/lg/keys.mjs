@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.keys
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace keys
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.keys
+ */
 export const inputs = {
 	HDMI1: "HDMI_1",
 	HDMI2: "HDMI_2",

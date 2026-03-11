@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.input
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace input
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.input
+ */
 export async function setInput(inputName, _ = {}) {
 	return { success: true, input: inputName };
 }

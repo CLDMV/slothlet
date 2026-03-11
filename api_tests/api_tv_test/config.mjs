@@ -16,6 +16,11 @@
  * @module api_tv_test.config
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace config
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.config
+ */
 
 // Create a working config object with actual state management
 const config = {

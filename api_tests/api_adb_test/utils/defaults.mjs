@@ -17,6 +17,16 @@
  * @module api_adb_test.utils.defaults
  * @memberof module:api_adb_test
  */
+/**
+ * @namespace utils
+ * @memberof module:api_adb_test
+ * @alias module:api_adb_test.utils
+ */
+/**
+ * @namespace defaults
+ * @memberof module:api_adb_test.utils
+ * @alias module:api_adb_test.utils.defaults
+ */
 
 import fs from "fs";
 import path from "path";

@@ -16,11 +16,21 @@
  * @module api_test_single_root_fn.root
  * @memberof module:api_test_single_root_fn
  */
+/**
+ * @namespace root
+ * @memberof module:api_test_single_root_fn
+ * @alias module:api_test_single_root_fn.root
+ */
 
 /**
  * Single root function - acts as the callable API root.
+ * @function rootFn
+ * @memberof module:api_test_single_root_fn.root
  * @param {string} [input="world"] - Input string
  * @returns {string} Greeting
+ * @example
+ * const api = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+ * api.root('world'); // 'root:world'
  */
 export default function rootFn(input = "world") {
 	return `root:${input}`;

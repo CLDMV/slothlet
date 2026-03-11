@@ -16,6 +16,11 @@
  * @module api_test_collisions.collections
  * @memberof module:api_test_collisions
  */
+/**
+ * @namespace collections
+ * @memberof module:api_test_collisions
+ * @alias module:api_test_collisions.collections
+ */
 
 /**
  * Collections object containing test Map and Set instances.

@@ -16,6 +16,11 @@
  * @module api_tv_test.subfolder.config
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace config
+ * @memberof module:api_tv_test.subfolder
+ * @alias module:api_tv_test.subfolder.config
+ */
 export const config = {
 	defaults: {
 		manufacturer: "lg",

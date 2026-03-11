@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.channel
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace channel
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.channel
+ */
 export async function setChannel(channel, _ = {}) {
 	return { success: true, channel: channel };
 }

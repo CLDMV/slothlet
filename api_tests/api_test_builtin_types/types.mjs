@@ -17,6 +17,11 @@
  * @module api_test_builtin_types.types
  * @memberof module:api_test_builtin_types
  */
+/**
+ * @namespace types
+ * @memberof module:api_test_builtin_types
+ * @alias module:api_test_builtin_types.types
+ */
 
 export const myMap = new Map([
 	["alpha", 1],

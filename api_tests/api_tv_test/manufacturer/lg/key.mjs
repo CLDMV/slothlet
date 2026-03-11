@@ -16,6 +16,11 @@
  * @module api_tv_test.manufacturer.lg.key
  * @memberof module:api_tv_test
  */
+/**
+ * @namespace key
+ * @memberof module:api_tv_test.manufacturer.lg
+ * @alias module:api_tv_test.manufacturer.lg.key
+ */
 export async function key(keyName, _ = {}) {
 	return { success: true, key: keyName };
 }
