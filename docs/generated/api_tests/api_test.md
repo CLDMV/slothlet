@@ -26,7 +26,7 @@
     * [.createTestService()](#api_test_dot_createTestService)
   * [.exportDefault](#api_test_dot_exportDefault)
     * [.extra()](#api_test_dot_exportDefault_dot_extra) ⇒ <code><code>string</code></code>
-  * [.funcmod](#api_test_dot_funcmod)
+  * [.funcmod(name)](#api_test~funcmod) ⇒ <code><code>string</code></code>
   * [.isolationTest](#api_test_dot_isolationTest)
     * [.isolationTestState](#api_test_dot_isolationTest_dot_isolationTestState)
     * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code><code>string</code></code>
@@ -35,7 +35,7 @@
     * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code><code>number</code></code>
     * [.isolationTest_setFlag(flag)](#api_test_dot_isolationTest_dot_isolationTest_setFlag)
     * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code><code>boolean</code></code>
-  * [.logger](#api_test_dot_logger)
+  * [.logger(message)](#api_test~logger) ⇒ <code><code>string</code></code>
   * [math](#api_test_dot_math)
     * [.add(a, b)](#api_test_dot_math_dot_add) ⇒ <code><code>number</code></code>
     * [.collisionVersion](#api_test_dot_math_dot_collisionVersion)
@@ -47,7 +47,7 @@
     * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
     * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
     * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
-  * [.mixed](#api_test_dot_mixed)
+  * [.mixed(message)](#api_test~mixed) ⇒ <code><code>string</code></code>
     * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code><code>string</code></code>
     * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code><code>number</code></code>
   * [multi_func](#api_test_dot_multi_func)
@@ -588,11 +588,31 @@ console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 
 * * *
 
-<a id="api_test_dot_funcmod"></a>
+<a id="api_test~funcmod"></a>
 
-### api_test.funcmod
+### api_test.funcmod(name) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Main callable function for the funcmod module.
+> Accessed as <code>api.funcmod(name)</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static namespace of [<code>api_test</code>](#api_test)
+**Kind**: inner method of [<code>api_test</code>](#api_test)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| name | <code>string</code> |  | <p>Name to use in greeting</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Greeting message</p>
+
+
+**Example**
+```js
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.funcmod('World')); // 'Hello, World!'
+```
+
 
 
 * * *
@@ -710,11 +730,31 @@ console.log(api_test.exportDefaultExtra()); // 'extra method overridden'
 
 * * *
 
-<a id="api_test_dot_logger"></a>
+<a id="api_test~logger"></a>
 
-### api_test.logger
+### api_test.logger(message) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Main callable log function for the logger module.
+> Accessed as <code>api.logger(message)</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static namespace of [<code>api_test</code>](#api_test)
+**Kind**: inner method of [<code>api_test</code>](#api_test)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to log</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Formatted log string with ISO timestamp</p>
+
+
+**Example**
+```js
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
+```
+
 
 
 * * *
@@ -1094,21 +1134,42 @@ console.log(meta.filePath); // → path to metadata-test-helper.mjs
 
 * * *
 
-<a id="api_test_dot_mixed"></a>
+<a id="api_test~mixed"></a>
 
-### api_test.mixed
+### api_test.mixed(message) ⇒ <code>string</code>
+> <p><strong style="font-size: 1.1em;"><p>Default callable function for the mixed module.
+> Accessed as <code>api.mixed(message)</code> in the slothlet API.
+> Demonstrates Rule 8 Pattern B: filename matches folder with mixed default+named exports.</p></strong></p>
 > 
-**Kind**: static namespace of [<code>api_test</code>](#api_test)
+**Kind**: inner method of [<code>api_test</code>](#api_test)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| message | <code>string</code> |  | <p>Message to process</p> |
+
+
+**Returns**:
+
+- <code>string</code> <p>Processed message string</p>
+
+
+**Example**
+```js
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+console.log(api_test.mixed('hello')); // 'Mixed default: hello'
+```
+
 
 
 * * *
 
 <a id="api_test_dot_mixed_dot_mixedNamed"></a>
 
-### api_test.mixed.mixedNamed(value) ⇒ <code>string</code>
+### mixedNamed(value) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Named function for mixed export test.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test.mixed</code>](#api_test_dot_mixed)
+**Kind**: static method of [<code></code>](#undefined)
 
 
 | Param | Type | Default | Description |
@@ -1126,10 +1187,10 @@ console.log(meta.filePath); // → path to metadata-test-helper.mjs
 
 <a id="api_test_dot_mixed_dot_mixedAnother"></a>
 
-### api_test.mixed.mixedAnother(num) ⇒ <code>number</code>
+### mixedAnother(num) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Another named function for mixed export test.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test.mixed</code>](#api_test_dot_mixed)
+**Kind**: static method of [<code></code>](#undefined)
 
 
 | Param | Type | Default | Description |

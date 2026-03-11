@@ -20,6 +20,18 @@
  * @memberof module:api_test
  */
 
+/**
+ * Main callable function for the funcmod module.
+ * Accessed as `api.funcmod(name)` in the slothlet API.
+ * @function funcmod
+ * @alias module:api_test.funcmod
+ * @memberof module:api_test
+ * @param {string} name - Name to use in greeting
+ * @returns {string} Greeting message
+ * @example
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * console.log(api_test.funcmod('World')); // 'Hello, World!'
+ */
 export default function (name) {
 	return `Hello, ${name}!`;
 }
