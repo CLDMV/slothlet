@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Test module for caller-based path resolution via self.slothlet.metadata.caller().
+ * @module api_test.callerTest
+ * @memberof module:api_test
+ */
 // Import runtime bindings
 import { self } from "@cldmv/slothlet/runtime";
 

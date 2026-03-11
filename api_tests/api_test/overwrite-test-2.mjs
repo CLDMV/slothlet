@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Second file in overwrite test — loaded second, tests api.mutations.reload overwrite behavior.
+ * @module api_test.overwriteTest2
+ * @memberof module:api_test
+ */
 export function overwriteTest() {
 	return "overwrite-test-2";
 }

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview String API module for testing slothlet loader with auto-flattening behavior. Internal file (not exported in package.json).
+ * @module api_test.string
+ * @memberof module:api_test
+ */
 export const string =
 	/** @lends string */
 	{

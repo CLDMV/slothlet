@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview File watcher module using chokidar EventEmitter for testing EventEmitter context cleanup.
+ * @module api_test.events.watcher
+ * @memberof module:api_test
+ */
 /**
  * Test API file using chokidar (real third-party file watcher with EventEmitter).
  * Creates file watchers within slothlet API context to test cleanup.

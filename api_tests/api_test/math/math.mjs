@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Math API module for testing slothlet loader with auto-flattening behavior. Internal file (not exported in package.json).
+ * @module api_test.math
+ * @memberof module:api_test
+ */
 // Runtime imports (unused but required for API structure)
 // import { self, context, reference } from "@cldmv/slothlet/runtime";
 

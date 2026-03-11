@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Function name preference test for getHTTPStatus — verifies uppercase acronym retention.
+ * @module api_test.util.getHTTPStatus
+ * @memberof module:api_test
+ */
 function getHTTPStatus(statusCode) {
 	const statusMessages = {
 		200: "OK",

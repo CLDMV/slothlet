@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview First file in overwrite test — loaded first alphabetically.
+ * @module api_test.overwriteTest1
+ * @memberof module:api_test
+ */
 export function overwriteTest() {
 	return "overwrite-test-1";
 }

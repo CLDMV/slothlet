@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Nested alpha function for testing deeply nested module structures. Internal file (not exported in package.json).
+ * @module api_test.advanced.nest
+ * @memberof module:api_test
+ */
 export function alpha(name) {
 	return `alpha: ${name}`;
 }

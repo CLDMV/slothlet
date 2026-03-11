@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Helper functions for testing single file context flattening (Rule 11). Internal file (not exported in package.json).
+ * @module api_test.utilities.helpers
+ * @memberof module:api_test
+ */
 export function parse(jsonString) {
 	try {
 		return JSON.parse(jsonString);

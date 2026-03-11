@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Default export module for testing mixed default and named exports. Internal file (not exported in package.json).
+ * @module api_test.exportDefault
+ * @memberof module:api_test
+ */
 function exportDefault() {
 	return "exportDefault default";
 }

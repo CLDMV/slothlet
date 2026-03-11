@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview First file in conflicting-name collision test — loaded first alphabetically.
+ * @module api_test.conflictingName1
+ * @memberof module:api_test
+ */
 /**
 	* Named export that will be overwritten
 	* @returns {string} Version identifier

@@ -10,7 +10,11 @@
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
-
+/**
+ * @fileoverview Internal test file for advanced self-object live-binding functionality (not exported in package.json).
+ * @module api_test.advanced.selfObject
+ * @memberof module:api_test
+ */
 import { self, context } from "@cldmv/slothlet/runtime";
 
 const verboseSelfObject = process.env.SLOTHLET_SELF_OBJECT_DEBUG === "1" || process.env.SLOTHLET_SELF_OBJECT_DEBUG === "true";
