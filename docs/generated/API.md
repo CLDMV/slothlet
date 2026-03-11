@@ -33,21 +33,21 @@
       * [.run()](#typedef_SlothletAPI_prop_slothlet-context-run)
       * [.scope()](#typedef_SlothletAPI_prop_slothlet-context-scope)
       * [.set()](#typedef_SlothletAPI_prop_slothlet-context-set)
-    * [[.diag]](#typedef_SlothletAPI_prop_slothlet-diag) ⇒ <code>object</code>
-      * [[.caches]](#typedef_SlothletAPI_prop_slothlet-diag-caches) ⇒ <code>object</code>
-        * [[.get]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-get)
-        * [[.getAllModuleIDs]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-getAllModuleIDs)
-        * [[.has]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-has)
-      * [[.context]](#typedef_SlothletAPI_prop_slothlet-diag-context) ⇒ <code>object</code>
-      * [[.describe]()](#typedef_SlothletAPI_prop_slothlet-diag-describe)
-      * [[.getAPI]()](#typedef_SlothletAPI_prop_slothlet-diag-getAPI)
-      * [[.getOwnership]()](#typedef_SlothletAPI_prop_slothlet-diag-getOwnership)
-      * [[.hook]](#typedef_SlothletAPI_prop_slothlet-diag-hook) ⇒ <code>object</code>
-      * [[.inspect]()](#typedef_SlothletAPI_prop_slothlet-diag-inspect)
-      * [[.owner]](#typedef_SlothletAPI_prop_slothlet-diag-owner) ⇒ <code>object</code>
-        * [[.get]()](#typedef_SlothletAPI_prop_slothlet-diag-owner-get)
-      * [[.reference]](#typedef_SlothletAPI_prop_slothlet-diag-reference) ⇒ <code>object</code>
-      * [[.SlothletWarning]()](#typedef_SlothletAPI_prop_slothlet-diag-SlothletWarning)
+    * [\[.diag\]](#typedef_SlothletAPI_prop_slothlet-diag) ⇒ <code>object</code>
+      * [\[.caches\]](#typedef_SlothletAPI_prop_slothlet-diag-caches) ⇒ <code>object</code>
+        * [\[.get\]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-get)
+        * [\[.getAllModuleIDs\]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-getAllModuleIDs)
+        * [\[.has\]()](#typedef_SlothletAPI_prop_slothlet-diag-caches-has)
+      * [\[.context\]](#typedef_SlothletAPI_prop_slothlet-diag-context) ⇒ <code>object</code>
+      * [\[.describe\]()](#typedef_SlothletAPI_prop_slothlet-diag-describe)
+      * [\[.getAPI\]()](#typedef_SlothletAPI_prop_slothlet-diag-getAPI)
+      * [\[.getOwnership\]()](#typedef_SlothletAPI_prop_slothlet-diag-getOwnership)
+      * [\[.hook\]](#typedef_SlothletAPI_prop_slothlet-diag-hook) ⇒ <code>object</code>
+      * [\[.inspect\]()](#typedef_SlothletAPI_prop_slothlet-diag-inspect)
+      * [\[.owner\]](#typedef_SlothletAPI_prop_slothlet-diag-owner) ⇒ <code>object</code>
+        * [\[.get\]()](#typedef_SlothletAPI_prop_slothlet-diag-owner-get)
+      * [\[.reference\]](#typedef_SlothletAPI_prop_slothlet-diag-reference) ⇒ <code>object</code>
+      * [\[.SlothletWarning\]()](#typedef_SlothletAPI_prop_slothlet-diag-SlothletWarning)
     * [.hook](#typedef_SlothletAPI_prop_slothlet-hook) ⇒ <code>object</code>
       * [.clear()](#typedef_SlothletAPI_prop_slothlet-hook-clear)
       * [.disable()](#typedef_SlothletAPI_prop_slothlet-hook-disable)
@@ -77,7 +77,7 @@
     * [.ownership](#typedef_SlothletAPI_prop_slothlet-ownership) ⇒ <code>object</code>
       * [.get()](#typedef_SlothletAPI_prop_slothlet-ownership-get)
       * [.unregister()](#typedef_SlothletAPI_prop_slothlet-ownership-unregister)
-    * [[.reference]](#typedef_SlothletAPI_prop_slothlet-reference) ⇒ <code>object</code>
+    * [\[.reference\]](#typedef_SlothletAPI_prop_slothlet-reference) ⇒ <code>object</code>
     * [.reload()](#typedef_SlothletAPI_prop_slothlet-reload)
     * [.run()](#typedef_SlothletAPI_prop_slothlet-run)
     * [.scope()](#typedef_SlothletAPI_prop_slothlet-scope)
