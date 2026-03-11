@@ -22,7 +22,7 @@
  *   normalizedKey("singleExport") === normalizedModuleName("singleexport")  → auto-flatten fires
  *   shouldWrap=false  →  direct assignToApiPath instead of wrapping
  *
- * @module api_tests/smart_flatten/api_smart_flatten_nowrap_cases/singleexport
+ * @module api_smart_flatten_nowrap_cases.singleexport
  * @internal
  * @private
  */

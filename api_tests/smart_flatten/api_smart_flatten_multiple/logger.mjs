@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Logger module — one of multiple root-level files in the multiple-roots fixture.
+ * @module api_smart_flatten_multiple.logger
  */
 export function debug(message) {
 	return `[DEBUG] ${message}`;

@@ -22,6 +22,7 @@
  *
  * This same-name file (pipe.mjs inside pipe/pipe/) then flattens its exports
  * directly onto the inner wrapper so they are accessible as api.solo.pipe.doWork.
+ * @module api_smart_flatten_solo_subfolder.pipe
  */
 
 /**

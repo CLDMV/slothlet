@@ -12,7 +12,9 @@
  */
 
 /**
- * TV Config API - Working config with state management for slothlet testing
+ * @fileoverview TV Config API - Working config with state management for slothlet testing.
+ * @module api_tv_test.config
+ * @memberof module:api_tv_test
  */
 
 // Create a working config object with actual state management

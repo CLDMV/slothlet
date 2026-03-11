@@ -12,9 +12,10 @@
  */
 
 /**
- * Display/Screenshot API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Display/Screenshot API module for Android TV Remote - Dummy implementation for testing.
  * Provides screenshot capture and display information functionality.
- * @module display
+ * @module api_adb_test.display
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

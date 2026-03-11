@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Nested config — single file in a same-name subfolder for smart-flatten folder-config testing.
+ * @module api_smart_flatten_folder_config.config
  */
 export function getNestedConfig() {
 	return "nested-config-value";

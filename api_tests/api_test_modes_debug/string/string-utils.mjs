@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Secondary string-utils module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.string.stringUtils
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * Secondary file in string/ folder.
  * Its presence forces processDirectory to recurse into string/ instead of
  * using the single-file smart-flatten shortcut (line 819 of modes-processor.mjs),

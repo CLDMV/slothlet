@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Command sending API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.sendCommand
+ * @memberof module:api_tv_test
  */
 export async function sendCommand(command, payload, _ = {}) {
 	return { success: true, command: command, payload: payload };

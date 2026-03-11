@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Services/api module for smart-flatten nested fixture.
+ * @module api_smart_flatten_nested.services.api
  */
 export function getApiService() {
 	return "api-service-function";

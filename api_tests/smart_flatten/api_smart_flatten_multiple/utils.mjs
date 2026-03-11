@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Utils module — one of multiple root-level files in the multiple-roots fixture.
+ * @module api_smart_flatten_multiple.utils
  */
 export function utilFunction() {
 	return "utility function";

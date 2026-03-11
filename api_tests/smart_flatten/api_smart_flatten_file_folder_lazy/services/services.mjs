@@ -12,10 +12,11 @@
  */
 
 /**
- * Test fixture: same-name file inside a folder that also has a same-name subfolder.
+ * @fileoverview Test fixture: same-name file inside a folder that also has a same-name subfolder.
  * Purpose: triggers the `attachedKeys.length > 0` branch in modes-processor.mjs
  * (lazy_materializeFunc, line ~1514), where a wrapper pre-populated with these
  * exports is returned directly as nestedValue.
+ * @module api_smart_flatten_file_folder_lazy.services
  */
 
 /**

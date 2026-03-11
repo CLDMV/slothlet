@@ -12,9 +12,10 @@
  */
 
 /**
- * Application management API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Application management API module for Android TV Remote - Dummy implementation for testing.
  * Provides app launch, management, and state tracking functionality.
- * @module app
+ * @module api_adb_test.app
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

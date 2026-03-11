@@ -13,6 +13,7 @@
 
 /**
  * @fileoverview Intentionally throws on import to test MODULE_LOAD_FAILED error path (line 186 modes-processor.mjs).
+ * @module api_smart_flatten_bad_module.bad
  */
 
 // Deliberately throw during module evaluation so loadModule() throws → SlothletError MODULE_LOAD_FAILED

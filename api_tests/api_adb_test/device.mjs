@@ -12,9 +12,10 @@
  */
 
 /**
- * Device data system API module for Android TV Remote.
+ * @fileoverview Device data system API module for Android TV Remote.
  * Provides device information management with caching and refresh capabilities.
- * @module device
+ * @module api_adb_test.device
+ * @memberof module:api_adb_test
  */
 
 // Slothlet runtime imports for live bindings

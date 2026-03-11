@@ -12,9 +12,10 @@
  */
 
 /**
- * AddApi test - function default export with named exports.
+ * @fileoverview AddApi test — function default export with named exports.
  * Tests that default function becomes the namespace and is callable,
  * with named exports as properties.
+ * @module api_smart_flatten_addapi_function.addapi
  */
 
 /**

@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Command queue utility for TV Remote testing.
+ * @module api_tv_test.utilities.commandQueue
+ * @memberof module:api_tv_test
  */
 export async function addUserCommand(commandFunction, _ = {}) {
 	return { success: true, id: "user_cmd_1" };

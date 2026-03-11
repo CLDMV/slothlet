@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Utility functions module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.utils
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * General utility functions for modes-processor debug coverage testing.
  * @param {string} name
  * @returns {string}

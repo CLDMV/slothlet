@@ -22,6 +22,7 @@
  * When services/ materializes, implToWrap = inner services function.
  * fileFolderCollisionImpl = { version: "root-v1" } (from root services.mjs).
  * typeof implToWrap === "function" → else if branch (lines 1414-1416) fires.
+ * @module api_smart_flatten_fn_file_folder_lazy.services.services
  */
 
 /**

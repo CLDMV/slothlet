@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Input management API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.input
+ * @memberof module:api_tv_test
  */
 export async function setInput(inputName, _ = {}) {
 	return { success: true, input: inputName };

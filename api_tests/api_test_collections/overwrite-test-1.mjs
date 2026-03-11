@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview First overwrite test module for api_test_collections testing.
+ * @module api_test_collections.overwriteTest1
+ * @memberof module:api_test_collections
+ */
+
 export function overwriteTest() {
 	return "overwrite-test-1";
 }

@@ -25,8 +25,7 @@
  *      - implToWrap = function calc(){} from calc/calc.mjs  (typeof === "function")
  *      → Line 975 fires  (else if branch: typeof implToWrap === "function")
  *      → Lines 976-978 fire (loop copies add/subtract into implToWrap)
- *      → Line 991 may fire (modes_existingChildKeys loop, implToWrap is function)
- */
+ *      → Line 991 may fire (modes_existingChildKeys loop, implToWrap is function) * @module api_smart_flatten_obj_fn_folder.calc */
 
 /**
  * Adds two numbers.

@@ -12,7 +12,8 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Database config module — config subfolder with filename different from folder name.
+ * @module api_smart_flatten_folder_different.config.database
  */
 export function getDbConfig() {
 	return "database-config";

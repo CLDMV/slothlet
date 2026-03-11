@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Math module for api_test_collisions parent/math testing.
+ * @module api_test_collisions.parent.math
+ * @memberof module:api_test_collisions
  */
 export function add(a, b) {
 	return a + b;

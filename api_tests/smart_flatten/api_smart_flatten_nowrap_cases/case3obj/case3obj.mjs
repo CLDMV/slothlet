@@ -27,7 +27,7 @@
  *     Line 450: assignToApiPath for each matching object property (alpha, beta)
  *     Line 485: assignToApiPath for the extra key ("extra") outside the matching object
  *
- * @module api_tests/smart_flatten/api_smart_flatten_nowrap_cases/case3obj/case3obj
+ * @module api_smart_flatten_nowrap_cases.case3obj
  * @internal
  * @private
  */

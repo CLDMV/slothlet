@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Config API module for api_test_root_issue subfolder testing.
+ * @module api_test_root_issue.subfolder.config
+ * @memberof module:api_test_root_issue
+ */
+
 import { context } from "@cldmv/slothlet/runtime";
 
 /**

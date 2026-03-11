@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Proxy test module for TV Remote testing — tests class instance wrapping.
+ * @module api_tv_test.proxyTest
+ * @memberof module:api_tv_test
+ */
+
 class TVController {
 	constructor(tvId) {
 		this.tvId = tvId;

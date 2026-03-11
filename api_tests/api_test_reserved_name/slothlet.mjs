@@ -14,6 +14,8 @@
 /**
  * @fileoverview Fixture for testing the reserved name "slothlet" warning.
  * When this file is loaded, slothlet will emit WARNING_RESERVED_PROPERTY_CONFLICT.
+ * @module api_test_reserved_name.slothlet
+ * @memberof module:api_test_reserved_name
  */
 
 /**

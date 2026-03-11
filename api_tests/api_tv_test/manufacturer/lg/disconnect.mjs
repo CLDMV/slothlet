@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Disconnect API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.disconnect
+ * @memberof module:api_tv_test
  */
 export async function disconnect(_ = {}) {
 	return { success: true };

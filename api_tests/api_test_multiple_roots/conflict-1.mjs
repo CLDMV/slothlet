@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview First conflicting default export for api_test_multiple_roots testing.
+ * @module api_test_multiple_roots.conflict1
+ * @memberof module:api_test_multiple_roots
+ */
+
 export default function conflictingName() {
 	return "from-file-1";
 }

@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Collections module for api_test_collisions testing.
+ * @module api_test_collisions.collections
+ * @memberof module:api_test_collisions
+ */
+
+/**
  * Collections object containing test Map and Set instances.
  * @alias module:api_test_collections.collections
  * @memberof module:api_test_collections

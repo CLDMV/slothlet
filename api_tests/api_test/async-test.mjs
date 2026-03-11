@@ -22,7 +22,8 @@
  *   2. An after-hook throws during the `.then()` success handler.
  *   3. `config.hook.suppressErrors === true`.
  *
- * @module api_tests/api_test/async-test
+ * @module api_test.asyncTest
+ * @memberof module:api_test
  */
 
 /**

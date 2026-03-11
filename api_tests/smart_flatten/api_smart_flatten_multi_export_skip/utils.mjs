@@ -15,6 +15,7 @@
  * @fileoverview Root-level utils.mjs that seeds api.utils.sharedKey via flatten-to-category.
  * When collision.initial = "skip", the second assignment from utils/utils.mjs is blocked,
  * exercising the DEBUG_MODE_FLATTEN_MULTI_EXPORT_BLOCKED debug path (modes-processor L543-546).
+ * @module api_smart_flatten_multi_export_skip.utils
  */
 
 /**

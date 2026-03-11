@@ -12,9 +12,10 @@
  */
 
 /**
- * Defaults utility for loading and managing system defaults from JSON files.
+ * @fileoverview Defaults utility for loading and managing system defaults from JSON files.
  * Used internally by data system modules.
- *	@module utils/defaults
+ * @module api_adb_test.utils.defaults
+ * @memberof module:api_adb_test
  */
 
 import fs from "fs";

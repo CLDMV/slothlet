@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Root-level logger module for modes-processor debug coverage testing.
+ * @module api_test_modes_debug.logger
+ * @memberof module:api_test_modes_debug
+ */
+
+/**
  * Root-level logger.mjs: exists alongside the logger/ folder to create a
  * file-folder collision. Using NAMED exports only (no default) so the flattening
  * decision creates api["logger"] = wrapper, which the logger/ subdirectory

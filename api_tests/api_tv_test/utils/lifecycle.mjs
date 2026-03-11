@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Lifecycle utility for TV Remote testing.
+ * @module api_tv_test.utils.lifecycle
+ * @memberof module:api_tv_test
+ */
+
 // Slothlet runtime imports for live bindings
 // import { self } from "@cldmv/slothlet/runtime"; // Commented out for dummy implementation
 

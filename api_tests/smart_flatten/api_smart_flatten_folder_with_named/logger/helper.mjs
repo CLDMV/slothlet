@@ -18,6 +18,7 @@
  * single-file-folder shortcut in modes-processor.mjs from firing.  The regular
  * processFiles() recursive call is used instead, which triggers Case 2 in the
  * namedKeys loop for logger/logger.mjs.
+ * @module api_smart_flatten_folder_with_named.logger.helper
  */
 
 /**

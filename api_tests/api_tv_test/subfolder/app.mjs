@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview App management API module for TV Remote subfolder testing.
+ * @module api_tv_test.subfolder.app
+ * @memberof module:api_tv_test
  */
 export async function setApp(appName, _ = {}) {
 	return { success: true, app: appName };

@@ -23,6 +23,7 @@
  * The default export is a metadata object (not the actual API).
  * Named exports are the real API functions.
  * This triggers flattenType === "addapi-metadata-default" → lines 862-877.
+ * @module api_smart_flatten_addapi_subfolder.addapi
  */
 
 /**

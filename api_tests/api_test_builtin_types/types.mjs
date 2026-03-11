@@ -13,8 +13,9 @@
 
 /**
  * @fileoverview Fixture that exports built-in object types.
- * Used to test that the unified-wrapper getTrap returns these directly
- * without wrapping them in a child proxy.
+ * Used to test that the unified-wrapper getTrap returns these directly without wrapping them in a child proxy.
+ * @module api_test_builtin_types.types
+ * @memberof module:api_test_builtin_types
  */
 
 export const myMap = new Map([

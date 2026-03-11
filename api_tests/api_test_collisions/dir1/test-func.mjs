@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Test function module for dir1 collision testing.
+ * @module api_test_collisions.dir1.testFunc
+ * @memberof module:api_test_collisions
+ */
+
 export function testFunc() {
         return "from-dir1";
 }

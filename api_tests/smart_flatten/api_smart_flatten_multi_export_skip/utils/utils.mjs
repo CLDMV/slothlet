@@ -16,6 +16,7 @@
  * in modes-processor because moduleName ("utils") === categoryName ("utils").
  * The `sharedKey` export collides with the root-level utils.mjs assignment; with
  * collision.initial = "skip" the assignment returns false, exercising L543-546.
+ * @module api_smart_flatten_multi_export_skip.utils.utils
  */
 
 /**

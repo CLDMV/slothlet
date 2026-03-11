@@ -11,6 +11,12 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview FireTV device module for TV Remote testing.
+ * @module api_tv_test.devices.firetv
+ * @memberof module:api_tv_test
+ */
+
 export async function initialize(config) {
 	if (!config || !config.enabled) {
 		console.log("Fire TV device disabled in configuration, skipping");

@@ -23,7 +23,7 @@
  *   → Case 3 ("Regular multi-export" sub-path) fires
  *   shouldWrap=false  →  direct assignToApiPath for each key instead of wrapping
  *
- * @module api_tests/smart_flatten/api_smart_flatten_nowrap_cases/multiexport/multiexport
+ * @module api_smart_flatten_nowrap_cases.multiexport
  * @internal
  * @private
  */

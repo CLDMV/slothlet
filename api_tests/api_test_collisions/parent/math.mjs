@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Root math file for api_test_collisions parent collision testing.
+ * @module api_test_collisions.parent.mathFile
+ * @memberof module:api_test_collisions
  */
 export function power(base, exponent) {
 	return Math.pow(base, exponent);

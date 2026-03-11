@@ -11,6 +11,13 @@
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview ESM interoperability module for slothlet mixed API testing.
+ * Tests cross-module calls between ESM and CJS modules using the slothlet runtime self-reference.
+ * @module api_test_mixed.interop.interopEsm
+ * @memberof module:api_test_mixed
+ */
+
 import { self, context } from "@cldmv/slothlet/runtime";
 
 export const interopEsm =

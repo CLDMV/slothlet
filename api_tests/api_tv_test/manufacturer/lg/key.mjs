@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Key input API module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.key
+ * @memberof module:api_tv_test
  */
 export async function key(keyName, _ = {}) {
 	return { success: true, key: keyName };

@@ -6,9 +6,15 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:14 -08:00 (1772425274)
+ *	@Last modified time: 2026-03-10 17:57:47 -07:00 (1773190667)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview ESM math operations for slothlet mixed API testing.
+ * @module api_test_mixed.mathEsm
+ * @memberof module:api_test_mixed
  */
 
 export const mathEsm =
@@ -86,4 +92,3 @@ export const mathEsm =
 			return a - b;
 		}
 	};
-

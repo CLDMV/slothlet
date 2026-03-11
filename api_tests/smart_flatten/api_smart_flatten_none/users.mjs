@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview User service fixture for api_smart_flatten_none — tests that smart-flatten is disabled
+ * when the flatten option is not set, verifying normal nested API structure is preserved.
+ * @module api_smart_flatten_none.users
  */
 export function getUser(id) {
 	return `User ${id}`;

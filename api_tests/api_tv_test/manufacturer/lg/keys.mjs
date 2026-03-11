@@ -12,7 +12,9 @@
  */
 
 /**
- * ADB API module for Android TV Remote - Dummy implementation for testing.
+ * @fileoverview Key constants module for LG TV manufacturer testing.
+ * @module api_tv_test.manufacturer.lg.keys
+ * @memberof module:api_tv_test
  */
 export const inputs = {
 	HDMI1: "HDMI_1",

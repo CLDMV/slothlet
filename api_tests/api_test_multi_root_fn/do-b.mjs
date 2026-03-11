@@ -12,6 +12,12 @@
  */
 
 /**
+ * @fileoverview Function do-b module for api_test_multi_root_fn testing.
+ * @module api_test_multi_root_fn.doB
+ * @memberof module:api_test_multi_root_fn
+ */
+
+/**
  * Returns result-b string.
  * @returns {string} "result-b"
  */
