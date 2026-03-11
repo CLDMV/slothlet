@@ -20,7 +20,15 @@
  * @memberof module:api_test
  */
 
-export default function log(message) {
-	return `[LOG] ${new Date().toISOString()}: ${message}`;
-}
-
+/**
+ * Main callable log function for the logger module.
+ * Accessed as `api.logger(message)` in the slothlet API.
+ * @function logger
+ * @alias module:api_test.logger
+ * @memberof module:api_test
+ * @param {string} message - Message to log
+ * @returns {string} Formatted log string with ISO timestamp
+ * @example
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
+ */

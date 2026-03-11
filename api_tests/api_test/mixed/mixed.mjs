@@ -19,8 +19,19 @@
  * @namespace mixed
  * @memberof module:api_test
  */
-
-function mixedDefault(message) {
+/**
+ * Default callable function for the mixed module.
+ * Accessed as `api.mixed(message)` in the slothlet API.
+ * Demonstrates Rule 8 Pattern B: filename matches folder with mixed default+named exports.
+ * @function mixed
+ * @alias module:api_test.mixed
+ * @memberof module:api_test
+ * @param {string} message - Message to process
+ * @returns {string} Processed message string
+ * @example
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * console.log(api_test.mixed('hello')); // 'Mixed default: hello'
+ */function mixedDefault(message) {
 	return `Mixed default: ${message}`;
 }
 
