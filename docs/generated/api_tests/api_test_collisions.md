@@ -14,22 +14,22 @@
   * [.dir2](#api_test_collisions~dir2)
     * [.testFunc](#api_test_collisions_dot_dir2~testFunc)
   * [.mathFile](#api_test_collisions~mathFile)
-    * [.sqrt(n)](#api_test_collisions_dot_mathFile_dot_sqrt) ⇒ <code><code>number</code></code>
-    * [.modulo(a, b)](#api_test_collisions_dot_mathFile_dot_modulo) ⇒ <code><code>number</code></code>
+    * [.sqrt(n)](#api_test_collisions_dot_mathFile_dot_sqrt) ⇒ <code>number</code>
+    * [.modulo(a, b)](#api_test_collisions_dot_mathFile_dot_modulo) ⇒ <code>number</code>
     * [.collisionVersion](#api_test_collisions_dot_mathFile_dot_collisionVersion)
   * [.math](#api_test_collisions~math)
-    * [.add(a, b)](#api_test_collisions_dot_math_dot_add) ⇒ <code><code>number</code></code>
-    * [.multiply(a, b)](#api_test_collisions_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
-    * [.divide(a, b)](#api_test_collisions_dot_math_dot_divide) ⇒ <code><code>number</code></code>
+    * [.add(a, b)](#api_test_collisions_dot_math_dot_add) ⇒ <code>number</code>
+    * [.multiply(a, b)](#api_test_collisions_dot_math_dot_multiply) ⇒ <code>number</code>
+    * [.divide(a, b)](#api_test_collisions_dot_math_dot_divide) ⇒ <code>number</code>
   * [.parent](#api_test_collisions~parent)
     * [.mathFile](#api_test_collisions_dot_parent~mathFile)
-      * [.sqrt(n)](#api_test_collisions_dot_mathFile_dot_sqrt) ⇒ <code><code>number</code></code>
-      * [.modulo(a, b)](#api_test_collisions_dot_mathFile_dot_modulo) ⇒ <code><code>number</code></code>
+      * [.sqrt(n)](#api_test_collisions_dot_mathFile_dot_sqrt) ⇒ <code>number</code>
+      * [.modulo(a, b)](#api_test_collisions_dot_mathFile_dot_modulo) ⇒ <code>number</code>
       * [.collisionVersion](#api_test_collisions_dot_mathFile_dot_collisionVersion)
     * [.math](#api_test_collisions_dot_parent~math)
-      * [.add(a, b)](#api_test_collisions_dot_math_dot_add) ⇒ <code><code>number</code></code>
-      * [.multiply(a, b)](#api_test_collisions_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
-      * [.divide(a, b)](#api_test_collisions_dot_math_dot_divide) ⇒ <code><code>number</code></code>
+      * [.add(a, b)](#api_test_collisions_dot_math_dot_add) ⇒ <code>number</code>
+      * [.multiply(a, b)](#api_test_collisions_dot_math_dot_multiply) ⇒ <code>number</code>
+      * [.divide(a, b)](#api_test_collisions_dot_math_dot_divide) ⇒ <code>number</code>
 
 
 **Example**

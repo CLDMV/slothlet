@@ -9,7 +9,7 @@
 
 [api_test_impl](#api_test_impl)
   * [.math](#api_test_impl~math)
-    * [.add(a, b)](#api_test_impl_dot_math_dot_add) ⇒ <code><code>number</code></code>
+    * [.add(a, b)](#api_test_impl_dot_math_dot_add) ⇒ <code>number</code>
     * [.collisionVersion](#api_test_impl_dot_math_dot_collisionVersion)
 
 

@@ -11,8 +11,8 @@
   * [.interop](#api_test_mixed_dot_interop)
     * [.interopCjs()](#api_test_mixed_dot_interop_dot_interopCjs)
   * [mathCjs()](#api_test_mixed_dot_mathCjs)
-    * [.multiply(a, b)](#api_test_mixed_dot_mathCjs_dot_multiply) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
-    * [.divide(a, b)](#api_test_mixed_dot_mathCjs_dot_divide) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
+    * [.multiply(a, b)](#api_test_mixed_dot_mathCjs_dot_multiply) ⇒ <code>Promise.&lt;number&gt;</code>
+    * [.divide(a, b)](#api_test_mixed_dot_mathCjs_dot_divide) ⇒ <code>Promise.&lt;number&gt;</code>
 
 
 **Example**
@@ -114,7 +114,6 @@ const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 ```
 **Example**
 ```js
@@ -122,7 +121,6 @@ console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // res
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-  console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 }
 ```
 **Example**
@@ -132,7 +130,6 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-  console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 })();
 ```
 **Example**
@@ -140,7 +137,6 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 ```
 
 

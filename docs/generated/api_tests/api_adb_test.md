@@ -9,146 +9,146 @@
 
 [api_adb_test](#api_adb_test)
   * [.adb](#api_adb_test~adb)
-    * [.initialize(host, port)](#api_adb_test_dot_adb_dot_initialize) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getClient()](#api_adb_test_dot_adb_dot_getClient) ⇒ <code><code>Object</code></code>
-    * [.getDevice()](#api_adb_test_dot_adb_dot_getDevice) ⇒ <code><code>Object</code></code>
-    * [.getDeviceId()](#api_adb_test_dot_adb_dot_getDeviceId) ⇒ <code><code>string</code></code>
-    * [.shell(command)](#api_adb_test_dot_adb_dot_shell) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.connect()](#api_adb_test_dot_adb_dot_connect) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.disconnect()](#api_adb_test_dot_adb_dot_disconnect) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.input(inputCommand)](#api_adb_test_dot_adb_dot_input) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-      * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-      * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-      * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-      * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-      * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code><code>Object</code></code>
-      * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code><code>Object</code></code>
-    * [.screenshot()](#api_adb_test_dot_adb_dot_screenshot) ⇒ <code><code>Promise.&lt;Buffer&gt;</code></code>
-    * [.listPackages()](#api_adb_test_dot_adb_dot_listPackages) ⇒ <code><code>Promise.&lt;Array.&lt;string&gt;&gt;</code></code>
-    * [.getProperties()](#api_adb_test_dot_adb_dot_getProperties) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+    * [.initialize(host, port)](#api_adb_test_dot_adb_dot_initialize) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getClient()](#api_adb_test_dot_adb_dot_getClient) ⇒ <code>Object</code>
+    * [.getDevice()](#api_adb_test_dot_adb_dot_getDevice) ⇒ <code>Object</code>
+    * [.getDeviceId()](#api_adb_test_dot_adb_dot_getDeviceId) ⇒ <code>string</code>
+    * [.shell(command)](#api_adb_test_dot_adb_dot_shell) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.connect()](#api_adb_test_dot_adb_dot_connect) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.disconnect()](#api_adb_test_dot_adb_dot_disconnect) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.input(inputCommand)](#api_adb_test_dot_adb_dot_input) ⇒ <code>Promise.&lt;string&gt;</code>
+      * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;void&gt;</code>
+      * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
+      * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;void&gt;</code>
+      * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;void&gt;</code>
+      * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>Object</code>
+      * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>Object</code>
+    * [.screenshot()](#api_adb_test_dot_adb_dot_screenshot) ⇒ <code>Promise.&lt;Buffer&gt;</code>
+    * [.listPackages()](#api_adb_test_dot_adb_dot_listPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
+    * [.getProperties()](#api_adb_test_dot_adb_dot_getProperties) ⇒ <code>Promise.&lt;Object&gt;</code>
   * [.app](#api_adb_test~app)
-    * [.launch(packageName, options)](#api_adb_test_dot_app_dot_launch) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.stop(packageName)](#api_adb_test_dot_app_dot_stop) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getCurrentApp(options)](#api_adb_test_dot_app_dot_getCurrentApp) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.refresh()](#api_adb_test_dot_app_dot_refresh) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getInstalledPackages(options)](#api_adb_test_dot_app_dot_getInstalledPackages) ⇒ <code><code>Promise.&lt;Array.&lt;string&gt;&gt;</code></code>
-    * [.startMonitoring(options)](#api_adb_test_dot_app_dot_startMonitoring) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.stopMonitoring()](#api_adb_test_dot_app_dot_stopMonitoring) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.clearData(packageName, options)](#api_adb_test_dot_app_dot_clearData) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.setEnabled(packageName, enabled)](#api_adb_test_dot_app_dot_setEnabled) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getPackageInfo(packageName)](#api_adb_test_dot_app_dot_getPackageInfo) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.uninstall(packageName, options)](#api_adb_test_dot_app_dot_uninstall) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getCurrentPackage()](#api_adb_test_dot_app_dot_getCurrentPackage) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.getCurrentActivity()](#api_adb_test_dot_app_dot_getCurrentActivity) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
+    * [.launch(packageName, options)](#api_adb_test_dot_app_dot_launch) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.stop(packageName)](#api_adb_test_dot_app_dot_stop) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getCurrentApp(options)](#api_adb_test_dot_app_dot_getCurrentApp) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.refresh()](#api_adb_test_dot_app_dot_refresh) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getInstalledPackages(options)](#api_adb_test_dot_app_dot_getInstalledPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
+    * [.startMonitoring(options)](#api_adb_test_dot_app_dot_startMonitoring) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.stopMonitoring()](#api_adb_test_dot_app_dot_stopMonitoring) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.clearData(packageName, options)](#api_adb_test_dot_app_dot_clearData) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.setEnabled(packageName, enabled)](#api_adb_test_dot_app_dot_setEnabled) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getPackageInfo(packageName)](#api_adb_test_dot_app_dot_getPackageInfo) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.uninstall(packageName, options)](#api_adb_test_dot_app_dot_uninstall) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getCurrentPackage()](#api_adb_test_dot_app_dot_getCurrentPackage) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.getCurrentActivity()](#api_adb_test_dot_app_dot_getCurrentActivity) ⇒ <code>Promise.&lt;string&gt;</code>
   * [.config](#api_adb_test~config)
-    * [.get(key)](#api_adb_test_dot_config_dot_get) ⇒ <code><code>any</code></code>
-    * [.set(key, value)](#api_adb_test_dot_config_dot_set) ⇒ <code><code>void</code></code>
-    * [.merge(configObject, deep)](#api_adb_test_dot_config_dot_merge) ⇒ <code><code>Object</code></code>
-    * [.reset(keys)](#api_adb_test_dot_config_dot_reset) ⇒ <code><code>Object</code></code>
-    * [.validate(configToValidate)](#api_adb_test_dot_config_dot_validate) ⇒ <code><code>Object</code></code>
-    * [.snapshot()](#api_adb_test_dot_config_dot_snapshot) ⇒ <code><code>Object</code></code>
+    * [.get(key)](#api_adb_test_dot_config_dot_get) ⇒ <code>any</code>
+    * [.set(key, value)](#api_adb_test_dot_config_dot_set) ⇒ <code>void</code>
+    * [.merge(configObject, deep)](#api_adb_test_dot_config_dot_merge) ⇒ <code>Object</code>
+    * [.reset(keys)](#api_adb_test_dot_config_dot_reset) ⇒ <code>Object</code>
+    * [.validate(configToValidate)](#api_adb_test_dot_config_dot_validate) ⇒ <code>Object</code>
+    * [.snapshot()](#api_adb_test_dot_config_dot_snapshot) ⇒ <code>Object</code>
   * [.connection](#api_adb_test~connection)
-    * [.ensureConnected()](#api_adb_test_dot_connection_dot_ensureConnected) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.disconnect(isAutoDisconnect)](#api_adb_test_dot_connection_dot_disconnect) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.isConnected()](#api_adb_test_dot_connection_dot_isConnected) ⇒ <code><code>boolean</code></code>
-    * [.isAwake()](#api_adb_test_dot_connection_dot_isAwake) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-    * [.ensureAwake()](#api_adb_test_dot_connection_dot_ensureAwake) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-    * [.startHeartbeat()](#api_adb_test_dot_connection_dot_startHeartbeat) ⇒ <code><code>void</code></code>
-    * [.stopHeartbeat()](#api_adb_test_dot_connection_dot_stopHeartbeat) ⇒ <code><code>void</code></code>
-    * [.clearTimeouts()](#api_adb_test_dot_connection_dot_clearTimeouts) ⇒ <code><code>void</code></code>
-    * [.shell(command, options)](#api_adb_test_dot_connection_dot_shell) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.getInfo()](#api_adb_test_dot_connection_dot_getInfo) ⇒ <code><code>Object</code></code>
-    * [.getEmitter()](#api_adb_test_dot_connection_dot_getEmitter) ⇒ <code><code>EventEmitter</code></code>
+    * [.ensureConnected()](#api_adb_test_dot_connection_dot_ensureConnected) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.disconnect(isAutoDisconnect)](#api_adb_test_dot_connection_dot_disconnect) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.isConnected()](#api_adb_test_dot_connection_dot_isConnected) ⇒ <code>boolean</code>
+    * [.isAwake()](#api_adb_test_dot_connection_dot_isAwake) ⇒ <code>Promise.&lt;boolean&gt;</code>
+    * [.ensureAwake()](#api_adb_test_dot_connection_dot_ensureAwake) ⇒ <code>Promise.&lt;boolean&gt;</code>
+    * [.startHeartbeat()](#api_adb_test_dot_connection_dot_startHeartbeat) ⇒ <code>void</code>
+    * [.stopHeartbeat()](#api_adb_test_dot_connection_dot_stopHeartbeat) ⇒ <code>void</code>
+    * [.clearTimeouts()](#api_adb_test_dot_connection_dot_clearTimeouts) ⇒ <code>void</code>
+    * [.shell(command, options)](#api_adb_test_dot_connection_dot_shell) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.getInfo()](#api_adb_test_dot_connection_dot_getInfo) ⇒ <code>Object</code>
+    * [.getEmitter()](#api_adb_test_dot_connection_dot_getEmitter) ⇒ <code>EventEmitter</code>
   * [.device](#api_adb_test~device)
-    * [.get(key)](#api_adb_test_dot_device_dot_get) ⇒ <code><code>Promise.&lt;any&gt;</code></code>
-    * [.set(key, value)](#api_adb_test_dot_device_dot_set) ⇒ <code><code>void</code></code>
-    * [.merge(dataObject, deep)](#api_adb_test_dot_device_dot_merge) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.refresh(keys, force)](#api_adb_test_dot_device_dot_refresh) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.clear(keys)](#api_adb_test_dot_device_dot_clear) ⇒ <code><code>void</code></code>
-    * [.withDisplay()](#api_adb_test_dot_device_dot_withDisplay) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.basic()](#api_adb_test_dot_device_dot_basic) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.snapshot(options)](#api_adb_test_dot_device_dot_snapshot) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+    * [.get(key)](#api_adb_test_dot_device_dot_get) ⇒ <code>Promise.&lt;any&gt;</code>
+    * [.set(key, value)](#api_adb_test_dot_device_dot_set) ⇒ <code>void</code>
+    * [.merge(dataObject, deep)](#api_adb_test_dot_device_dot_merge) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.refresh(keys, force)](#api_adb_test_dot_device_dot_refresh) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.clear(keys)](#api_adb_test_dot_device_dot_clear) ⇒ <code>void</code>
+    * [.withDisplay()](#api_adb_test_dot_device_dot_withDisplay) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.basic()](#api_adb_test_dot_device_dot_basic) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.snapshot(options)](#api_adb_test_dot_device_dot_snapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
   * [.display](#api_adb_test~display)
-    * [.capture(options)](#api_adb_test_dot_display_dot_capture) ⇒ <code><code>Promise.&lt;Buffer&gt;</code></code>
-    * [.getInfo()](#api_adb_test_dot_display_dot_getInfo) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getResolution()](#api_adb_test_dot_display_dot_getResolution) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.analyzeScreenshot(options)](#api_adb_test_dot_display_dot_analyzeScreenshot) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.saveScreenshot(filepath, options)](#api_adb_test_dot_display_dot_saveScreenshot) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
+    * [.capture(options)](#api_adb_test_dot_display_dot_capture) ⇒ <code>Promise.&lt;Buffer&gt;</code>
+    * [.getInfo()](#api_adb_test_dot_display_dot_getInfo) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getResolution()](#api_adb_test_dot_display_dot_getResolution) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.analyzeScreenshot(options)](#api_adb_test_dot_display_dot_analyzeScreenshot) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.saveScreenshot(filepath, options)](#api_adb_test_dot_display_dot_saveScreenshot) ⇒ <code>Promise.&lt;void&gt;</code>
   * [.helpers](#api_adb_test~helpers)
-    * [.fetchDeviceProperties(properties)](#api_adb_test_dot_helpers_dot_fetchDeviceProperties) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.fetchCurrentAppInfo()](#api_adb_test_dot_helpers_dot_fetchCurrentAppInfo) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.fetchInstalledPackages(systemApps, thirdPartyOnly)](#api_adb_test_dot_helpers_dot_fetchInstalledPackages) ⇒ <code><code>Promise.&lt;Array.&lt;string&gt;&gt;</code></code>
-    * [.fetchNetworkDetails()](#api_adb_test_dot_helpers_dot_fetchNetworkDetails) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.fetchAudioInfo()](#api_adb_test_dot_helpers_dot_fetchAudioInfo) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.resolveDefaultActivity(packageName)](#api_adb_test_dot_helpers_dot_resolveDefaultActivity) ⇒ <code><code>Promise.&lt;(string|null)&gt;</code></code>
-    * [.refreshCurrentAppInfo(reason, options)](#api_adb_test_dot_helpers_dot_refreshCurrentAppInfo) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.collectStartupMetadata(reason)](#api_adb_test_dot_helpers_dot_collectStartupMetadata) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.scheduleAppInfoRefresh(context, options)](#api_adb_test_dot_helpers_dot_scheduleAppInfoRefresh) ⇒ <code><code>void</code></code>
+    * [.fetchDeviceProperties(properties)](#api_adb_test_dot_helpers_dot_fetchDeviceProperties) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.fetchCurrentAppInfo()](#api_adb_test_dot_helpers_dot_fetchCurrentAppInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.fetchInstalledPackages(systemApps, thirdPartyOnly)](#api_adb_test_dot_helpers_dot_fetchInstalledPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
+    * [.fetchNetworkDetails()](#api_adb_test_dot_helpers_dot_fetchNetworkDetails) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.fetchAudioInfo()](#api_adb_test_dot_helpers_dot_fetchAudioInfo) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.resolveDefaultActivity(packageName)](#api_adb_test_dot_helpers_dot_resolveDefaultActivity) ⇒ <code>Promise.&lt;(string|null)&gt;</code>
+    * [.refreshCurrentAppInfo(reason, options)](#api_adb_test_dot_helpers_dot_refreshCurrentAppInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.collectStartupMetadata(reason)](#api_adb_test_dot_helpers_dot_collectStartupMetadata) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.scheduleAppInfoRefresh(context, options)](#api_adb_test_dot_helpers_dot_scheduleAppInfoRefresh) ⇒ <code>void</code>
   * [.input](#api_adb_test~input)
-    * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code><code>Object</code></code>
-    * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code><code>Object</code></code>
+    * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>Object</code>
+    * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>Object</code>
   * [.inputHelpers](#api_adb_test~inputHelpers)
-    * [.sendKeycode(keycode)](#api_adb_test_dot_inputHelpers_dot_sendKeycode) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.sendText(text)](#api_adb_test_dot_inputHelpers_dot_sendText) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.sendTap(x, y)](#api_adb_test_dot_inputHelpers_dot_sendTap) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.sendSwipe(x1, y1, x2, y2, duration)](#api_adb_test_dot_inputHelpers_dot_sendSwipe) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-    * [.sendLongPress(keycode)](#api_adb_test_dot_inputHelpers_dot_sendLongPress) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
+    * [.sendKeycode(keycode)](#api_adb_test_dot_inputHelpers_dot_sendKeycode) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.sendText(text)](#api_adb_test_dot_inputHelpers_dot_sendText) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.sendTap(x, y)](#api_adb_test_dot_inputHelpers_dot_sendTap) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.sendSwipe(x1, y1, x2, y2, duration)](#api_adb_test_dot_inputHelpers_dot_sendSwipe) ⇒ <code>Promise.&lt;string&gt;</code>
+    * [.sendLongPress(keycode)](#api_adb_test_dot_inputHelpers_dot_sendLongPress) ⇒ <code>Promise.&lt;string&gt;</code>
   * [.metadata](#api_adb_test~metadata)
-    * [.get(key)](#api_adb_test_dot_metadata_dot_get) ⇒ <code><code>Promise.&lt;any&gt;</code></code>
-    * [.set(key, value)](#api_adb_test_dot_metadata_dot_set) ⇒ <code><code>void</code></code>
-    * [.merge(metaObject, deep)](#api_adb_test_dot_metadata_dot_merge) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.refresh(reason, force)](#api_adb_test_dot_metadata_dot_refresh) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.collect(reason)](#api_adb_test_dot_metadata_dot_collect) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.clear(keys)](#api_adb_test_dot_metadata_dot_clear) ⇒ <code><code>void</code></code>
-    * [.age()](#api_adb_test_dot_metadata_dot_age) ⇒ <code><code>Object</code></code>
-    * [.startup()](#api_adb_test_dot_metadata_dot_startup) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.deviceMeta()](#api_adb_test_dot_metadata_dot_deviceMeta) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.networkMeta()](#api_adb_test_dot_metadata_dot_networkMeta) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.packages()](#api_adb_test_dot_metadata_dot_packages) ⇒ <code><code>Promise.&lt;(Array|null)&gt;</code></code>
-    * [.snapshot(includeAge)](#api_adb_test_dot_metadata_dot_snapshot) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+    * [.get(key)](#api_adb_test_dot_metadata_dot_get) ⇒ <code>Promise.&lt;any&gt;</code>
+    * [.set(key, value)](#api_adb_test_dot_metadata_dot_set) ⇒ <code>void</code>
+    * [.merge(metaObject, deep)](#api_adb_test_dot_metadata_dot_merge) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.refresh(reason, force)](#api_adb_test_dot_metadata_dot_refresh) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.collect(reason)](#api_adb_test_dot_metadata_dot_collect) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.clear(keys)](#api_adb_test_dot_metadata_dot_clear) ⇒ <code>void</code>
+    * [.age()](#api_adb_test_dot_metadata_dot_age) ⇒ <code>Object</code>
+    * [.startup()](#api_adb_test_dot_metadata_dot_startup) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.deviceMeta()](#api_adb_test_dot_metadata_dot_deviceMeta) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.networkMeta()](#api_adb_test_dot_metadata_dot_networkMeta) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.packages()](#api_adb_test_dot_metadata_dot_packages) ⇒ <code>Promise.&lt;(Array|null)&gt;</code>
+    * [.snapshot(includeAge)](#api_adb_test_dot_metadata_dot_snapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
   * [.power](#api_adb_test~power)
   * [.press](#api_adb_test~press)
-    * [.key(keyName)](#api_adb_test_dot_press_dot_key) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.power()](#api_adb_test_dot_press_dot_power) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.home()](#api_adb_test_dot_press_dot_home) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.back()](#api_adb_test_dot_press_dot_back) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.navigate(direction)](#api_adb_test_dot_press_dot_navigate) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.select()](#api_adb_test_dot_press_dot_select) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.getRemoteKeys()](#api_adb_test_dot_press_dot_getRemoteKeys) ⇒ <code><code>Object</code></code>
-    * [.getKeycodes()](#api_adb_test_dot_press_dot_getKeycodes) ⇒ <code><code>Object</code></code>
+    * [.key(keyName)](#api_adb_test_dot_press_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.power()](#api_adb_test_dot_press_dot_power) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.home()](#api_adb_test_dot_press_dot_home) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.back()](#api_adb_test_dot_press_dot_back) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.navigate(direction)](#api_adb_test_dot_press_dot_navigate) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.select()](#api_adb_test_dot_press_dot_select) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.getRemoteKeys()](#api_adb_test_dot_press_dot_getRemoteKeys) ⇒ <code>Object</code>
+    * [.getKeycodes()](#api_adb_test_dot_press_dot_getKeycodes) ⇒ <code>Object</code>
   * [.state](#api_adb_test~state)
-    * [.getConfig()](#api_adb_test_dot_state_dot_getConfig) ⇒ <code><code>Object</code></code>
-    * [.getConnectionState()](#api_adb_test_dot_state_dot_getConnectionState) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getDefaults()](#api_adb_test_dot_state_dot_getDefaults) ⇒ <code><code>Object</code></code>
-    * [.getMetadata()](#api_adb_test_dot_state_dot_getMetadata) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getDevice()](#api_adb_test_dot_state_dot_getDevice) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getDeviceWithDisplay()](#api_adb_test_dot_state_dot_getDeviceWithDisplay) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getCurrentApp()](#api_adb_test_dot_state_dot_getCurrentApp) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.getPowerState()](#api_adb_test_dot_state_dot_getPowerState) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getAudioState()](#api_adb_test_dot_state_dot_getAudioState) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.getNetworkInfo()](#api_adb_test_dot_state_dot_getNetworkInfo) ⇒ <code><code>Promise.&lt;(Object|null)&gt;</code></code>
-    * [.getInstalledPackages(options)](#api_adb_test_dot_state_dot_getInstalledPackages) ⇒ <code><code>Promise.&lt;Array.&lt;string&gt;&gt;</code></code>
-    * [.refreshDeviceInfo(options)](#api_adb_test_dot_state_dot_refreshDeviceInfo) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.refreshAppInfo()](#api_adb_test_dot_state_dot_refreshAppInfo) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.refreshNetworkInfo()](#api_adb_test_dot_state_dot_refreshNetworkInfo) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.refreshAudioInfo()](#api_adb_test_dot_state_dot_refreshAudioInfo) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.refreshAll()](#api_adb_test_dot_state_dot_refreshAll) ⇒ <code><code>Promise.&lt;void&gt;</code></code>
-    * [.createSnapshot(options)](#api_adb_test_dot_state_dot_createSnapshot) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+    * [.getConfig()](#api_adb_test_dot_state_dot_getConfig) ⇒ <code>Object</code>
+    * [.getConnectionState()](#api_adb_test_dot_state_dot_getConnectionState) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getDefaults()](#api_adb_test_dot_state_dot_getDefaults) ⇒ <code>Object</code>
+    * [.getMetadata()](#api_adb_test_dot_state_dot_getMetadata) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getDevice()](#api_adb_test_dot_state_dot_getDevice) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getDeviceWithDisplay()](#api_adb_test_dot_state_dot_getDeviceWithDisplay) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getCurrentApp()](#api_adb_test_dot_state_dot_getCurrentApp) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.getPowerState()](#api_adb_test_dot_state_dot_getPowerState) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getAudioState()](#api_adb_test_dot_state_dot_getAudioState) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.getNetworkInfo()](#api_adb_test_dot_state_dot_getNetworkInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
+    * [.getInstalledPackages(options)](#api_adb_test_dot_state_dot_getInstalledPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
+    * [.refreshDeviceInfo(options)](#api_adb_test_dot_state_dot_refreshDeviceInfo) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.refreshAppInfo()](#api_adb_test_dot_state_dot_refreshAppInfo) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.refreshNetworkInfo()](#api_adb_test_dot_state_dot_refreshNetworkInfo) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.refreshAudioInfo()](#api_adb_test_dot_state_dot_refreshAudioInfo) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.refreshAll()](#api_adb_test_dot_state_dot_refreshAll) ⇒ <code>Promise.&lt;void&gt;</code>
+    * [.createSnapshot(options)](#api_adb_test_dot_state_dot_createSnapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
   * [.utils](#api_adb_test~utils)
     * [.defaults](#api_adb_test_dot_utils~defaults)
-      * [.loadDefaultsFromFiles()](#api_adb_test_dot_utils_dot_defaults_dot_loadDefaultsFromFiles) ⇒ <code><code>Object</code></code>
-      * [.getDefaults(dataSystemName)](#api_adb_test_dot_utils_dot_defaults_dot_getDefaults) ⇒ <code><code>Object</code></code>
-      * [.getAllDefaults()](#api_adb_test_dot_utils_dot_defaults_dot_getAllDefaults) ⇒ <code><code>Object</code></code>
-      * [.reloadDefaults()](#api_adb_test_dot_utils_dot_defaults_dot_reloadDefaults) ⇒ <code><code>Object</code></code>
-      * [.createDefaultsAPI(dataSystemName, getCurrentValues, setValues)](#api_adb_test_dot_utils_dot_defaults_dot_createDefaultsAPI) ⇒ <code><code>Object</code></code>
-      * [.restore(keys)](#api_adb_test_dot_utils_dot_defaults_dot_restore) ⇒ <code><code>Object</code></code>
-      * [.isDefault(key)](#api_adb_test_dot_utils_dot_defaults_dot_isDefault) ⇒ <code><code>boolean</code></code>
-      * [.customized()](#api_adb_test_dot_utils_dot_defaults_dot_customized) ⇒ <code><code>Object</code></code>
-      * [.resetAll(exclude)](#api_adb_test_dot_utils_dot_defaults_dot_resetAll) ⇒ <code><code>Object</code></code>
+      * [.loadDefaultsFromFiles()](#api_adb_test_dot_utils_dot_defaults_dot_loadDefaultsFromFiles) ⇒ <code>Object</code>
+      * [.getDefaults(dataSystemName)](#api_adb_test_dot_utils_dot_defaults_dot_getDefaults) ⇒ <code>Object</code>
+      * [.getAllDefaults()](#api_adb_test_dot_utils_dot_defaults_dot_getAllDefaults) ⇒ <code>Object</code>
+      * [.reloadDefaults()](#api_adb_test_dot_utils_dot_defaults_dot_reloadDefaults) ⇒ <code>Object</code>
+      * [.createDefaultsAPI(dataSystemName, getCurrentValues, setValues)](#api_adb_test_dot_utils_dot_defaults_dot_createDefaultsAPI) ⇒ <code>Object</code>
+      * [.restore(keys)](#api_adb_test_dot_utils_dot_defaults_dot_restore) ⇒ <code>Object</code>
+      * [.isDefault(key)](#api_adb_test_dot_utils_dot_defaults_dot_isDefault) ⇒ <code>boolean</code>
+      * [.customized()](#api_adb_test_dot_utils_dot_defaults_dot_customized) ⇒ <code>Object</code>
+      * [.resetAll(exclude)](#api_adb_test_dot_utils_dot_defaults_dot_resetAll) ⇒ <code>Object</code>
 
 
 **Example**

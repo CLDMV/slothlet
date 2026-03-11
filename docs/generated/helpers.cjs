@@ -2039,7 +2039,10 @@ const partials = {
 						description = format.escapeForTable(prop.description);
 					}
 
-					output += `| ${name} | ${type} | ${defaultValue} | ${description} |\n`;
+					// Add a per-property anchor in the first cell so TOC sub-trees can link here
+					const rawPropName = prop.name.replace(/^\[|\]$/g, "");
+					const propAnchor = `${anchor}_prop_${format.generateAnchor(rawPropName)}`;
+					output += `| <a id="${propAnchor}"></a>${name} | ${type} | ${defaultValue} | ${description} |\n`;
 				});
 				output += "\n";
 			}
@@ -2116,7 +2119,14 @@ const partials = {
 
 		// Use the central processing function to get organized data
 		const processedData = functions.processDoclets(doclets, baseModuleLongname);
-		const { items, constants, typedefs } = processedData;
+		const { items, constants, typedefs, globalTypedefs } = processedData;
+
+		// Seed availableTypedefs so return-typedef sub-trees can be built in the TOC.
+		// partialIntegratedTOC runs before partialIntegratedModules, so we seed here too
+		// to ensure typedefs are available when buildReturnTypedefSubtree is called.
+		if (!availableTypedefs.length) {
+			availableTypedefs = [...new Set([...typedefs, ...(globalTypedefs || [])])];
+		}
 
 		// console.log(items);
 		// process.exit(0);
@@ -2130,6 +2140,66 @@ const partials = {
 		let output = "";
 
 		// Recursive function to build TOC from nested structure
+		/**
+		 * Build a nested TOC sub-tree from a typedef's flat property list.
+		 * Properties like "slothlet", "slothlet.shutdown", "slothlet.api" are grouped
+		 * into a hierarchy and rendered as indented TOC lines.
+		 * @param {object} typedef - The typedef object from availableTypedefs
+		 * @param {string} typedefAnchor - Base anchor for the typedef
+		 * @param {number} startDepth - Indent depth to start at
+		 * @returns {string} Formatted TOC subtree lines
+		 */
+		function buildReturnTypedefSubtree(typedef, typedefAnchor, startDepth) {
+			if (!typedef?.properties?.length) return "";
+			let treeOut = "";
+
+			// Build a nested tree from flat dot-notated property names
+			const tree = {};
+			typedef.properties.forEach((prop) => {
+				// Strip wrapping [] from optional names like "[slothlet.diag]"
+				const rawName = prop.name.replace(/^\[|\]$/g, "");
+				const parts = rawName.split(".");
+				let node = tree;
+				parts.forEach((part, idx) => {
+					if (!node[part]) node[part] = { _prop: null, _children: {} };
+					if (idx === parts.length - 1) node[part]._prop = prop;
+					node = node[part]._children;
+				});
+			});
+
+			/**
+			 * Recursively render the tree node.
+			 * @param {object} node - Current tree node
+			 * @param {number} depth - Current depth
+			 */
+			function renderNode(node, depth) {
+				const ind = "  ".repeat(depth);
+				Object.keys(node).forEach((key) => {
+					const entry = node[key];
+					const prop = entry._prop;
+					if (!prop) return;
+					const isFunc = prop.type?.names?.some((n) => n === "Function" || n === "function");
+					const isOptional = prop.optional;
+					const displayKey = isOptional ? `[.${key}]` : `.${key}`;
+					const params = isFunc ? "()" : "";
+					// For function-typed properties, the type IS the function — omit return arrow
+					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
+					const retTypes = !isFunc && prop.type?.names?.length ? prop.type.names : [];
+					const retStr = retTypes.length ? ` ⇒ <code>${helper.escapeHtml(retTypes.join(" | "))}</code>` : "";
+					// Anchor for this individual property (placed in the typedef table row)
+					const rawName = prop.name.replace(/^\[|\]$/g, "");
+					const propAnchor = `${typedefAnchor}_prop_${format.generateAnchor(rawName)}`;
+					treeOut += `${ind}* [${displayKey}${params}](#${propAnchor})${retStr}\n`;
+					if (Object.keys(entry._children).length > 0) {
+						renderNode(entry._children, depth + 1);
+					}
+				});
+			}
+
+			renderNode(tree, startDepth);
+			return treeOut;
+		}
+
 		function buildTOCRecursive(structure, depth = 0) {
 			const indent = depth > 0 ? "  ".repeat(depth) : "";
 			const prefix = depth > 0 ? "* " : "";
@@ -2163,9 +2233,27 @@ const partials = {
 						output += partials.tocTreeOutput(doclet, item, indent, prefix, key);
 					}
 
-					// Process children
+					// Process children — or expand the return-typedef as a nested sub-tree
 					if (item.children && Object.keys(item.children).length > 0) {
 						buildTOCRecursive(item.children, depth + 1);
+					} else if (doclet.returns?.length) {
+						// If this item has no children but returns a typedef, expand its properties
+						const returnTypeNames = doclet.returns[0]?.type?.names || [];
+						for (const typeName of returnTypeNames) {
+							const candidates = [typeName];
+							const inner = typeName.match(/\.<([^>]+)>$/);
+							if (inner) candidates.push(inner[1]);
+							for (const name of candidates) {
+								const typedef = Array.isArray(availableTypedefs)
+									? availableTypedefs.find((td) => td.name === name && td.properties?.length > 0)
+									: null;
+								if (typedef) {
+									const typedefAnchor = typedef.anchor || format.generateAnchor(typedef.id || typedef.name);
+									output += buildReturnTypedefSubtree(typedef, typedefAnchor, depth + 1);
+									break;
+								}
+							}
+						}
 					}
 				}
 				// }
