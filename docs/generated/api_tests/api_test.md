@@ -7,106 +7,106 @@
 
 **Structure**
 
-[api_test(name)](#api_test) ⇒ <code><code>string</code></code>
+[api_test(name)](#api_test) ⇒ <code>string</code>
   * [.advanced](#api_test_dot_advanced)
     * [.selfObject](#api_test_dot_advanced_dot_selfObject)
-      * [.addViaSelf(a, b)](#api_test_dot_advanced_dot_selfObject_dot_addViaSelf) ⇒ <code><code>number</code></code>
-      * [.getCurrentInstanceId()](#api_test_dot_advanced_dot_selfObject_dot_getCurrentInstanceId) ⇒ <code><code>string</code></code>
+      * [.addViaSelf(a, b)](#api_test_dot_advanced_dot_selfObject_dot_addViaSelf) ⇒ <code>number</code>
+      * [.getCurrentInstanceId()](#api_test_dot_advanced_dot_selfObject_dot_getCurrentInstanceId) ⇒ <code>string</code>
   * [.asyncTest](#api_test_dot_asyncTest)
-    * [.asyncAdd(a, b)](#api_test_dot_asyncTest_dot_asyncAdd) ⇒ <code><code>Promise.&lt;number&gt;</code></code>
-    * [.asyncEcho(value)](#api_test_dot_asyncTest_dot_asyncEcho) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
+    * [.asyncAdd(a, b)](#api_test_dot_asyncTest_dot_asyncAdd) ⇒ <code>Promise.&lt;number&gt;</code>
+    * [.asyncEcho(value)](#api_test_dot_asyncTest_dot_asyncEcho) ⇒ <code>Promise.&lt;string&gt;</code>
   * [.callerTest](#api_test_dot_callerTest)
-    * [.getCallerMeta()](#api_test_dot_callerTest_dot_getCallerMeta) ⇒ <code><code>object | null</code></code>
+    * [.getCallerMeta()](#api_test_dot_callerTest_dot_getCallerMeta) ⇒ <code>object | null</code>
   * [config](#api_test_dot_config)
   * [.conflictingName1](#api_test_dot_conflictingName1)
-    * [.conflictingName()](#api_test_dot_conflictingName1_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_dot_conflictingName1_dot_conflictingName) ⇒ <code>string</code>
   * [.conflictingName2](#api_test_dot_conflictingName2)
-    * [.conflictingName()](#api_test_dot_conflictingName2_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_dot_conflictingName2_dot_conflictingName) ⇒ <code>string</code>
   * [.createTestService](#api_test_dot_createTestService)
     * [.createTestService()](#api_test_dot_createTestService)
   * [.exportDefault](#api_test_dot_exportDefault)
-    * [.extra()](#api_test_dot_exportDefault_dot_extra) ⇒ <code><code>string</code></code>
-  * [.funcmod(name)](#api_test~funcmod) ⇒ <code><code>string</code></code>
+    * [.extra()](#api_test_dot_exportDefault_dot_extra) ⇒ <code>string</code>
+  * [.funcmod(name)](#api_test~funcmod) ⇒ <code>string</code>
   * [.isolationTest](#api_test_dot_isolationTest)
     * [.isolationTestState](#api_test_dot_isolationTest_dot_isolationTestState)
-    * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code><code>string</code></code>
+    * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code>string</code>
     * [.isolationTest_setValue(newValue)](#api_test_dot_isolationTest_dot_isolationTest_setValue)
-    * [.isolationTest_increment()](#api_test_dot_isolationTest_dot_isolationTest_increment) ⇒ <code><code>number</code></code>
-    * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code><code>number</code></code>
+    * [.isolationTest_increment()](#api_test_dot_isolationTest_dot_isolationTest_increment) ⇒ <code>number</code>
+    * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code>number</code>
     * [.isolationTest_setFlag(flag)](#api_test_dot_isolationTest_dot_isolationTest_setFlag)
-    * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code><code>boolean</code></code>
-  * [.logger(message)](#api_test~logger) ⇒ <code><code>string</code></code>
+    * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code>boolean</code>
+  * [.logger(message)](#api_test~logger) ⇒ <code>string</code>
     * [.utils](#api_test_dot_logger~utils)
-      * [.debug(message)](#api_test_dot_logger_dot_utils_dot_debug) ⇒ <code><code>string</code></code>
-      * [.error(message)](#api_test_dot_logger_dot_utils_dot_error) ⇒ <code><code>string</code></code>
+      * [.debug(message)](#api_test_dot_logger_dot_utils_dot_debug) ⇒ <code>string</code>
+      * [.error(message)](#api_test_dot_logger_dot_utils_dot_error) ⇒ <code>string</code>
   * [math](#api_test_dot_math)
-    * [.add(a, b)](#api_test_dot_math_dot_add) ⇒ <code><code>number</code></code>
+    * [.add(a, b)](#api_test_dot_math_dot_add) ⇒ <code>number</code>
     * [.collisionVersion](#api_test_dot_math_dot_collisionVersion)
-    * [.multiply(a, b)](#api_test_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
-    * [.divide(a, b)](#api_test_dot_math_dot_divide) ⇒ <code><code>number</code></code>
+    * [.multiply(a, b)](#api_test_dot_math_dot_multiply) ⇒ <code>number</code>
+    * [.divide(a, b)](#api_test_dot_math_dot_divide) ⇒ <code>number</code>
   * [.metadataTestHelper](#api_test_dot_metadataTestHelper)
-    * [.getMetadata(path)](#api_test_dot_metadataTestHelper_dot_getMetadata) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
-    * [.getSelfMetadata()](#api_test_dot_metadataTestHelper_dot_getSelfMetadata) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
-    * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
-    * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code><code>Promise.&lt;object&gt;</code></code>
-    * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code><code>Promise.&lt;(object|null)&gt;</code></code>
-  * [.mixed(message)](#api_test~mixed) ⇒ <code><code>string</code></code>
-    * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code><code>string</code></code>
-    * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code><code>number</code></code>
+    * [.getMetadata(path)](#api_test_dot_metadataTestHelper_dot_getMetadata) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+    * [.getSelfMetadata()](#api_test_dot_metadataTestHelper_dot_getSelfMetadata) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+    * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code>Promise.&lt;object&gt;</code>
+    * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code>Promise.&lt;object&gt;</code>
+    * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
+  * [.mixed(message)](#api_test~mixed) ⇒ <code>string</code>
+    * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code>string</code>
+    * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code>number</code>
   * [multi_func](#api_test_dot_multi_func)
-    * [.uniqueOne(msg)](#api_test_dot_multi_func_dot_uniqueOne) ⇒ <code><code>string</code></code>
-    * [.uniqueTwo(msg)](#api_test_dot_multi_func_dot_uniqueTwo) ⇒ <code><code>string</code></code>
-    * [.uniqueThree(msg)](#api_test_dot_multi_func_dot_uniqueThree) ⇒ <code><code>string</code></code>
-    * [.multi_func_hello()](#api_test_dot_multi_func_dot_multi_func_hello) ⇒ <code><code>string</code></code>
+    * [.uniqueOne(msg)](#api_test_dot_multi_func_dot_uniqueOne) ⇒ <code>string</code>
+    * [.uniqueTwo(msg)](#api_test_dot_multi_func_dot_uniqueTwo) ⇒ <code>string</code>
+    * [.uniqueThree(msg)](#api_test_dot_multi_func_dot_uniqueThree) ⇒ <code>string</code>
+    * [.multi_func_hello()](#api_test_dot_multi_func_dot_multi_func_hello) ⇒ <code>string</code>
   * [.objectDefaultMethod](#api_test_dot_objectDefaultMethod)
-    * [.default(message, level)](#api_test_dot_objectDefaultMethod_dot_default) ⇒ <code><code>string</code></code>
-    * [.info(message)](#api_test_dot_objectDefaultMethod_dot_info) ⇒ <code><code>string</code></code>
-    * [.warn(message)](#api_test_dot_objectDefaultMethod_dot_warn) ⇒ <code><code>string</code></code>
-    * [.error(message)](#api_test_dot_objectDefaultMethod_dot_error) ⇒ <code><code>string</code></code>
+    * [.default(message, level)](#api_test_dot_objectDefaultMethod_dot_default) ⇒ <code>string</code>
+    * [.info(message)](#api_test_dot_objectDefaultMethod_dot_info) ⇒ <code>string</code>
+    * [.warn(message)](#api_test_dot_objectDefaultMethod_dot_warn) ⇒ <code>string</code>
+    * [.error(message)](#api_test_dot_objectDefaultMethod_dot_error) ⇒ <code>string</code>
   * [.overwriteTest1](#api_test_dot_overwriteTest1)
-    * [.conflictingName()](#api_test_dot_overwriteTest1_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_dot_overwriteTest1_dot_conflictingName) ⇒ <code>string</code>
   * [.overwriteTest2](#api_test_dot_overwriteTest2)
-    * [.conflictingName()](#api_test_dot_overwriteTest2_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_dot_overwriteTest2_dot_conflictingName) ⇒ <code>string</code>
   * [.requestContext](#api_test_dot_requestContext)
   * [.rootFunction](#api_test_dot_rootFunction)
-    * [.greet(name)](#api_test_dot_rootFunction_dot_greet) ⇒ <code><code>string</code></code>
-  * [.rootFunctionShout(name)](#api_test_dot_rootFunctionShout) ⇒ <code><code>string</code></code>
-  * [.rootFunctionWhisper(name)](#api_test_dot_rootFunctionWhisper) ⇒ <code><code>string</code></code>
+    * [.greet(name)](#api_test_dot_rootFunction_dot_greet) ⇒ <code>string</code>
+  * [.rootFunctionShout(name)](#api_test_dot_rootFunctionShout) ⇒ <code>string</code>
+  * [.rootFunctionWhisper(name)](#api_test_dot_rootFunctionWhisper) ⇒ <code>string</code>
   * [.rootMath](#api_test_dot_rootMath)
-    * [.add(a, b)](#api_test_dot_rootMath_dot_add) ⇒ <code><code>number</code></code>
-    * [.multiply(a, b)](#api_test_dot_rootMath_dot_multiply) ⇒ <code><code>number</code></code>
+    * [.add(a, b)](#api_test_dot_rootMath_dot_add) ⇒ <code>number</code>
+    * [.multiply(a, b)](#api_test_dot_rootMath_dot_multiply) ⇒ <code>number</code>
   * [rootstring](#api_test_dot_rootstring)
-    * [.upper(str)](#api_test_dot_rootstring_dot_upper) ⇒ <code><code>string</code></code>
-    * [.reverse(str)](#api_test_dot_rootstring_dot_reverse) ⇒ <code><code>string</code></code>
+    * [.upper(str)](#api_test_dot_rootstring_dot_upper) ⇒ <code>string</code>
+    * [.reverse(str)](#api_test_dot_rootstring_dot_reverse) ⇒ <code>string</code>
   * [.runtimeTest](#api_test_dot_runtimeTest)
-    * [.verifyRuntime()](#api_test_dot_runtimeTest_dot_verifyRuntime) ⇒ <code><code>object</code></code>
-    * [.testSelfCrossCall(a, b)](#api_test_dot_runtimeTest_dot_testSelfCrossCall) ⇒ <code><code>object</code></code>
-    * [.testContextIsolation()](#api_test_dot_runtimeTest_dot_testContextIsolation) ⇒ <code><code>object</code></code>
-    * [.testPerformance()](#api_test_dot_runtimeTest_dot_testPerformance) ⇒ <code><code>object</code></code>
-    * [.comprehensiveRuntimeTest()](#api_test_dot_runtimeTest_dot_comprehensiveRuntimeTest) ⇒ <code><code>object</code></code>
-    * [.testSelfAndReference()](#api_test_dot_runtimeTest_dot_testSelfAndReference) ⇒ <code><code>object</code></code>
-    * [.getAsyncInstanceID()](#api_test_dot_runtimeTest_dot_getAsyncInstanceID) ⇒ <code><code>Object</code></code>
-    * [.exerciseContextDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseContextDispatcherTraps) ⇒ <code><code>Object</code></code>
-    * [.exerciseInstanceIDDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseInstanceIDDispatcherTraps) ⇒ <code><code>Object</code></code>
-    * [.exerciseAsyncContextWriteTraps()](#api_test_dot_runtimeTest_dot_exerciseAsyncContextWriteTraps) ⇒ <code><code>Object</code></code>
+    * [.verifyRuntime()](#api_test_dot_runtimeTest_dot_verifyRuntime) ⇒ <code>object</code>
+    * [.testSelfCrossCall(a, b)](#api_test_dot_runtimeTest_dot_testSelfCrossCall) ⇒ <code>object</code>
+    * [.testContextIsolation()](#api_test_dot_runtimeTest_dot_testContextIsolation) ⇒ <code>object</code>
+    * [.testPerformance()](#api_test_dot_runtimeTest_dot_testPerformance) ⇒ <code>object</code>
+    * [.comprehensiveRuntimeTest()](#api_test_dot_runtimeTest_dot_comprehensiveRuntimeTest) ⇒ <code>object</code>
+    * [.testSelfAndReference()](#api_test_dot_runtimeTest_dot_testSelfAndReference) ⇒ <code>object</code>
+    * [.getAsyncInstanceID()](#api_test_dot_runtimeTest_dot_getAsyncInstanceID) ⇒ <code>Object</code>
+    * [.exerciseContextDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseContextDispatcherTraps) ⇒ <code>Object</code>
+    * [.exerciseInstanceIDDispatcherTraps()](#api_test_dot_runtimeTest_dot_exerciseInstanceIDDispatcherTraps) ⇒ <code>Object</code>
+    * [.exerciseAsyncContextWriteTraps()](#api_test_dot_runtimeTest_dot_exerciseAsyncContextWriteTraps) ⇒ <code>Object</code>
   * [.string](#api_test_dot_string)
-    * [.upper(str)](#api_test_dot_string_dot_upper) ⇒ <code><code>string</code></code>
-    * [.reverse(str)](#api_test_dot_string_dot_reverse) ⇒ <code><code>string</code></code>
+    * [.upper(str)](#api_test_dot_string_dot_upper) ⇒ <code>string</code>
+    * [.reverse(str)](#api_test_dot_string_dot_reverse) ⇒ <code>string</code>
   * [.task](#api_test_dot_task)
-    * [.autoIP()](#api_test_dot_task_dot_autoIP) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
+    * [.autoIP()](#api_test_dot_task_dot_autoIP) ⇒ <code>Promise.&lt;string&gt;</code>
   * [tcp](#api_test_dot_tcp)
-    * [.testContext()](#api_test_dot_tcp_dot_testContext) ⇒ <code><code>object</code></code>
-    * [.createTestServer(port)](#api_test_dot_tcp_dot_createTestServer) ⇒ <code><code>Promise.&lt;{port: number, server: NetServer}&gt;</code></code>
+    * [.testContext()](#api_test_dot_tcp_dot_testContext) ⇒ <code>object</code>
+    * [.createTestServer(port)](#api_test_dot_tcp_dot_createTestServer) ⇒ <code>Promise.&lt;{port: number, server: NetServer}&gt;</code>
   * [.util](#api_test_dot_util)
     * [.controller](#api_test_dot_util_dot_controller)
-      * [.getDefault()](#api_test_dot_util_dot_controller_dot_getDefault) ⇒ <code><code>string</code></code>
-      * [.detectEndpointType()](#api_test_dot_util_dot_controller_dot_detectEndpointType) ⇒ <code><code>string</code></code>
-      * [.detectDeviceType()](#api_test_dot_util_dot_controller_dot_detectDeviceType) ⇒ <code><code>string</code></code>
+      * [.getDefault()](#api_test_dot_util_dot_controller_dot_getDefault) ⇒ <code>string</code>
+      * [.detectEndpointType()](#api_test_dot_util_dot_controller_dot_detectEndpointType) ⇒ <code>string</code>
+      * [.detectDeviceType()](#api_test_dot_util_dot_controller_dot_detectDeviceType) ⇒ <code>string</code>
     * [.extract](#api_test_dot_util_dot_extract)
-      * [.data()](#api_test_dot_util_dot_extract_dot_data) ⇒ <code><code>string</code></code>
-      * [.section()](#api_test_dot_util_dot_extract_dot_section) ⇒ <code><code>string</code></code>
-      * [.NVRSection()](#api_test_dot_util_dot_extract_dot_NVRSection) ⇒ <code><code>string</code></code>
-      * [.parseDeviceName()](#api_test_dot_util_dot_extract_dot_parseDeviceName) ⇒ <code><code>string</code></code>
+      * [.data()](#api_test_dot_util_dot_extract_dot_data) ⇒ <code>string</code>
+      * [.section()](#api_test_dot_util_dot_extract_dot_section) ⇒ <code>string</code>
+      * [.NVRSection()](#api_test_dot_util_dot_extract_dot_NVRSection) ⇒ <code>string</code>
+      * [.parseDeviceName()](#api_test_dot_util_dot_extract_dot_parseDeviceName) ⇒ <code>string</code>
 
 
 **Example**
@@ -152,8 +152,6 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 > This is the main callable API function.
 > Accessed as <code>api()</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: inner method of [<code>api_test.rootFunction</code>](#api_test_dot_rootFunction)
-
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |

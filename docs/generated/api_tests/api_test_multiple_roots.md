@@ -9,15 +9,15 @@
 
 [api_test_multiple_roots](#api_test_multiple_roots)
   * [.conflict1](#api_test_multiple_roots~conflict1)
-    * [.conflictingName()](#api_test_multiple_roots_dot_conflict1_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_multiple_roots_dot_conflict1_dot_conflictingName) ⇒ <code>string</code>
   * [.conflict2](#api_test_multiple_roots~conflict2)
-    * [.conflictingName()](#api_test_multiple_roots_dot_conflict2_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.conflictingName()](#api_test_multiple_roots_dot_conflict2_dot_conflictingName) ⇒ <code>string</code>
   * [.overwriteTest1](#api_test_multiple_roots~overwriteTest1)
-    * [.overwriteTest()](#api_test_multiple_roots_dot_overwriteTest1_dot_overwriteTest) ⇒ <code><code>string</code></code>
-    * [.conflictingName()](#api_test_multiple_roots_dot_overwriteTest1_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.overwriteTest()](#api_test_multiple_roots_dot_overwriteTest1_dot_overwriteTest) ⇒ <code>string</code>
+    * [.conflictingName()](#api_test_multiple_roots_dot_overwriteTest1_dot_conflictingName) ⇒ <code>string</code>
   * [.overwriteTest2](#api_test_multiple_roots~overwriteTest2)
-    * [.overwriteTest()](#api_test_multiple_roots_dot_overwriteTest2_dot_overwriteTest) ⇒ <code><code>string</code></code>
-    * [.conflictingName()](#api_test_multiple_roots_dot_overwriteTest2_dot_conflictingName) ⇒ <code><code>string</code></code>
+    * [.overwriteTest()](#api_test_multiple_roots_dot_overwriteTest2_dot_overwriteTest) ⇒ <code>string</code>
+    * [.conflictingName()](#api_test_multiple_roots_dot_overwriteTest2_dot_conflictingName) ⇒ <code>string</code>
 
 
 **Example**

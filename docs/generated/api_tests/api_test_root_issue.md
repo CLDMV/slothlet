@@ -11,50 +11,50 @@
   * [.config](#api_test_root_issue~config)
     * [.config](#api_test_root_issue_dot_config)
     * [.defaults](#api_test_root_issue_dot_config_dot_config_dot_defaults)
-    * [.getConfig(key)](#api_test_root_issue_dot_config_dot_config_dot_getConfig) ⇒ <code><code>*</code></code>
+    * [.getConfig(key)](#api_test_root_issue_dot_config_dot_config_dot_getConfig) ⇒ <code>*</code>
     * [.update(keyOrConfig, value)](#api_test_root_issue_dot_config_dot_config_dot_update)
     * [.set(key, value)](#api_test_root_issue_dot_config_dot_config_dot_set)
-    * [.getDefaultPort(manufacturer)](#api_test_root_issue_dot_config_dot_config_dot_getDefaultPort) ⇒ <code><code>number</code></code>
-    * [.validate(config, required)](#api_test_root_issue_dot_config_dot_config_dot_validate) ⇒ <code><code>Object</code></code>
-    * [.merge(userConfig, manufacturer)](#api_test_root_issue_dot_config_dot_config_dot_merge) ⇒ <code><code>Object</code></code>
-    * [.createManufacturerConfig(manufacturer, options)](#api_test_root_issue_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code><code>Object</code></code>
+    * [.getDefaultPort(manufacturer)](#api_test_root_issue_dot_config_dot_config_dot_getDefaultPort) ⇒ <code>number</code>
+    * [.validate(config, required)](#api_test_root_issue_dot_config_dot_config_dot_validate) ⇒ <code>Object</code>
+    * [.merge(userConfig, manufacturer)](#api_test_root_issue_dot_config_dot_config_dot_merge) ⇒ <code>Object</code>
+    * [.createManufacturerConfig(manufacturer, options)](#api_test_root_issue_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code>Object</code>
   * [.connection](#api_test_root_issue~connection)
   * [.order](#api_test_root_issue~order)
-    * [.createOrder(userId, products)](#api_test_root_issue_dot_order_dot_createOrder) ⇒ <code><code>object</code></code>
-    * [.calculateTotal(order, products)](#api_test_root_issue_dot_order_dot_calculateTotal) ⇒ <code><code>number</code></code>
-    * [.updateStatus(order, status)](#api_test_root_issue_dot_order_dot_updateStatus) ⇒ <code><code>object</code></code>
+    * [.createOrder(userId, products)](#api_test_root_issue_dot_order_dot_createOrder) ⇒ <code>object</code>
+    * [.calculateTotal(order, products)](#api_test_root_issue_dot_order_dot_calculateTotal) ⇒ <code>number</code>
+    * [.updateStatus(order, status)](#api_test_root_issue_dot_order_dot_updateStatus) ⇒ <code>object</code>
   * [.product](#api_test_root_issue~product)
-    * [.createProduct(name, price)](#api_test_root_issue_dot_product_dot_createProduct) ⇒ <code><code>object</code></code>
-    * [.calculateTax(product, rate)](#api_test_root_issue_dot_product_dot_calculateTax) ⇒ <code><code>number</code></code>
-    * [.formatProduct(product)](#api_test_root_issue_dot_product_dot_formatProduct) ⇒ <code><code>string</code></code>
+    * [.createProduct(name, price)](#api_test_root_issue_dot_product_dot_createProduct) ⇒ <code>object</code>
+    * [.calculateTax(product, rate)](#api_test_root_issue_dot_product_dot_calculateTax) ⇒ <code>number</code>
+    * [.formatProduct(product)](#api_test_root_issue_dot_product_dot_formatProduct) ⇒ <code>string</code>
   * [.subfolder](#api_test_root_issue~subfolder)
     * [.config](#api_test_root_issue_dot_subfolder~config)
       * [.config](#api_test_root_issue_dot_subfolder_dot_config)
         * [.config](#api_test_root_issue_dot_config)
       * [.defaults](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_defaults)
-      * [.getConfig(key)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_getConfig) ⇒ <code><code>*</code></code>
+      * [.getConfig(key)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_getConfig) ⇒ <code>*</code>
       * [.update(keyOrConfig, value)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_update)
       * [.set(key, value)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_set)
-      * [.getDefaultPort(manufacturer)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_getDefaultPort) ⇒ <code><code>number</code></code>
-      * [.validate(config, required)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_validate) ⇒ <code><code>Object</code></code>
-      * [.merge(userConfig, manufacturer)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_merge) ⇒ <code><code>Object</code></code>
-      * [.createManufacturerConfig(manufacturer, options)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code><code>Object</code></code>
+      * [.getDefaultPort(manufacturer)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_getDefaultPort) ⇒ <code>number</code>
+      * [.validate(config, required)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_validate) ⇒ <code>Object</code>
+      * [.merge(userConfig, manufacturer)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_merge) ⇒ <code>Object</code>
+      * [.createManufacturerConfig(manufacturer, options)](#api_test_root_issue_dot_subfolder_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code>Object</code>
     * [.order](#api_test_root_issue_dot_subfolder~order)
-      * [.createOrder(userId, products)](#api_test_root_issue_dot_subfolder_dot_order_dot_createOrder) ⇒ <code><code>object</code></code>
-      * [.calculateTotal(order, products)](#api_test_root_issue_dot_subfolder_dot_order_dot_calculateTotal) ⇒ <code><code>number</code></code>
-      * [.updateStatus(order, status)](#api_test_root_issue_dot_subfolder_dot_order_dot_updateStatus) ⇒ <code><code>object</code></code>
+      * [.createOrder(userId, products)](#api_test_root_issue_dot_subfolder_dot_order_dot_createOrder) ⇒ <code>object</code>
+      * [.calculateTotal(order, products)](#api_test_root_issue_dot_subfolder_dot_order_dot_calculateTotal) ⇒ <code>number</code>
+      * [.updateStatus(order, status)](#api_test_root_issue_dot_subfolder_dot_order_dot_updateStatus) ⇒ <code>object</code>
     * [.product](#api_test_root_issue_dot_subfolder~product)
-      * [.createProduct(name, price)](#api_test_root_issue_dot_subfolder_dot_product_dot_createProduct) ⇒ <code><code>object</code></code>
-      * [.calculateTax(product, rate)](#api_test_root_issue_dot_subfolder_dot_product_dot_calculateTax) ⇒ <code><code>number</code></code>
-      * [.formatProduct(product)](#api_test_root_issue_dot_subfolder_dot_product_dot_formatProduct) ⇒ <code><code>string</code></code>
+      * [.createProduct(name, price)](#api_test_root_issue_dot_subfolder_dot_product_dot_createProduct) ⇒ <code>object</code>
+      * [.calculateTax(product, rate)](#api_test_root_issue_dot_subfolder_dot_product_dot_calculateTax) ⇒ <code>number</code>
+      * [.formatProduct(product)](#api_test_root_issue_dot_subfolder_dot_product_dot_formatProduct) ⇒ <code>string</code>
     * [.user](#api_test_root_issue_dot_subfolder~user)
-      * [.createUser(name, email)](#api_test_root_issue_dot_user_dot_createUser) ⇒ <code><code>object</code></code>
-      * [.validateUser(user)](#api_test_root_issue_dot_user_dot_validateUser) ⇒ <code><code>boolean</code></code>
-      * [.formatUser(user)](#api_test_root_issue_dot_user_dot_formatUser) ⇒ <code><code>string</code></code>
+      * [.createUser(name, email)](#api_test_root_issue_dot_user_dot_createUser) ⇒ <code>object</code>
+      * [.validateUser(user)](#api_test_root_issue_dot_user_dot_validateUser) ⇒ <code>boolean</code>
+      * [.formatUser(user)](#api_test_root_issue_dot_user_dot_formatUser) ⇒ <code>string</code>
   * [.user](#api_test_root_issue~user)
-    * [.createUser(name, email)](#api_test_root_issue_dot_user_dot_createUser) ⇒ <code><code>object</code></code>
-    * [.validateUser(user)](#api_test_root_issue_dot_user_dot_validateUser) ⇒ <code><code>boolean</code></code>
-    * [.formatUser(user)](#api_test_root_issue_dot_user_dot_formatUser) ⇒ <code><code>string</code></code>
+    * [.createUser(name, email)](#api_test_root_issue_dot_user_dot_createUser) ⇒ <code>object</code>
+    * [.validateUser(user)](#api_test_root_issue_dot_user_dot_validateUser) ⇒ <code>boolean</code>
+    * [.formatUser(user)](#api_test_root_issue_dot_user_dot_formatUser) ⇒ <code>string</code>
 
 
 **Example**

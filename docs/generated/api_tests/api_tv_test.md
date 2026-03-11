@@ -11,39 +11,39 @@
   * [.app](#api_tv_test~app)
   * [.channel](#api_tv_test~channel)
   * [.config](#api_tv_test~config)
-    * [.get(key)](#api_tv_test_dot_config_dot_config_dot_get) ⇒ <code><code>*</code></code>
-    * [.update(keyOrConfig, value)](#api_tv_test_dot_config_dot_config_dot_update) ⇒ <code><code>object</code></code>
-    * [.set(key, value)](#api_tv_test_dot_config_dot_config_dot_set) ⇒ <code><code>object</code></code>
-    * [.getDefaultPort()](#api_tv_test_dot_config_dot_config_dot_getDefaultPort) ⇒ <code><code>number</code></code>
-    * [.validate(configToValidate, requiredKeys)](#api_tv_test_dot_config_dot_config_dot_validate) ⇒ <code><code>object</code></code>
-    * [.merge(userConfig, _)](#api_tv_test_dot_config_dot_config_dot_merge) ⇒ <code><code>object</code></code>
-    * [.createManufacturerConfig(manufacturer, options)](#api_tv_test_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code><code>object</code></code>
-    * [.getInstanceInfo()](#api_tv_test_dot_config_dot_config_dot_getInstanceInfo) ⇒ <code><code>object</code></code>
+    * [.get(key)](#api_tv_test_dot_config_dot_config_dot_get) ⇒ <code>*</code>
+    * [.update(keyOrConfig, value)](#api_tv_test_dot_config_dot_config_dot_update) ⇒ <code>object</code>
+    * [.set(key, value)](#api_tv_test_dot_config_dot_config_dot_set) ⇒ <code>object</code>
+    * [.getDefaultPort()](#api_tv_test_dot_config_dot_config_dot_getDefaultPort) ⇒ <code>number</code>
+    * [.validate(configToValidate, requiredKeys)](#api_tv_test_dot_config_dot_config_dot_validate) ⇒ <code>object</code>
+    * [.merge(userConfig, _)](#api_tv_test_dot_config_dot_config_dot_merge) ⇒ <code>object</code>
+    * [.createManufacturerConfig(manufacturer, options)](#api_tv_test_dot_config_dot_config_dot_createManufacturerConfig) ⇒ <code>object</code>
+    * [.getInstanceInfo()](#api_tv_test_dot_config_dot_config_dot_getInstanceInfo) ⇒ <code>object</code>
   * [.connection](#api_tv_test~connection)
   * [.controllers](#api_tv_test~controllers)
     * [.tvControllers](#api_tv_test_dot_controllers~tvControllers)
       * [.module.exports](#api_tv_test_dot_controllers_dot_tvControllers)
   * [.devices](#api_tv_test~devices)
     * [.firetv](#api_tv_test_dot_devices~firetv)
-      * [.powerOn(deviceId)](#api_tv_test_dot_devices_dot_firetv_dot_powerOn) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-      * [.powerOff(deviceId)](#api_tv_test_dot_devices_dot_firetv_dot_powerOff) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-      * [.sendKey(deviceId, keyCode)](#api_tv_test_dot_devices_dot_firetv_dot_sendKey) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
+      * [.powerOn(deviceId)](#api_tv_test_dot_devices_dot_firetv_dot_powerOn) ⇒ <code>Promise.&lt;boolean&gt;</code>
+      * [.powerOff(deviceId)](#api_tv_test_dot_devices_dot_firetv_dot_powerOff) ⇒ <code>Promise.&lt;boolean&gt;</code>
+      * [.sendKey(deviceId, keyCode)](#api_tv_test_dot_devices_dot_firetv_dot_sendKey) ⇒ <code>Promise.&lt;boolean&gt;</code>
       * [.REMOTE_KEYS](#api_tv_test_dot_devices_dot_firetv_dot_REMOTE_KEYS)
-      * [.isValidRemoteKey(key)](#api_tv_test_dot_devices_dot_firetv_dot_isValidRemoteKey) ⇒ <code><code>boolean</code></code>
+      * [.isValidRemoteKey(key)](#api_tv_test_dot_devices_dot_firetv_dot_isValidRemoteKey) ⇒ <code>boolean</code>
     * [.lg](#api_tv_test_dot_devices~lg)
       * [.module.exports](#api_tv_test_dot_devices_dot_lg)
     * [.mxnet](#api_tv_test_dot_devices~mxnet)
-      * [.powerOn(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_powerOn) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-      * [.powerOff(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_powerOff) ⇒ <code><code>Promise.&lt;boolean&gt;</code></code>
-      * [.sendCommand(deviceId, command)](#api_tv_test_dot_devices_dot_mxnet_dot_sendCommand) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.getStatus(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_getStatus) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+      * [.powerOn(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_powerOn) ⇒ <code>Promise.&lt;boolean&gt;</code>
+      * [.powerOff(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_powerOff) ⇒ <code>Promise.&lt;boolean&gt;</code>
+      * [.sendCommand(deviceId, command)](#api_tv_test_dot_devices_dot_mxnet_dot_sendCommand) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.getStatus(deviceId)](#api_tv_test_dot_devices_dot_mxnet_dot_getStatus) ⇒ <code>Promise.&lt;Object&gt;</code>
       * [.COMMANDS](#api_tv_test_dot_devices_dot_mxnet_dot_COMMANDS)
-      * [.isValidCommand(command)](#api_tv_test_dot_devices_dot_mxnet_dot_isValidCommand) ⇒ <code><code>boolean</code></code>
+      * [.isValidCommand(command)](#api_tv_test_dot_devices_dot_mxnet_dot_isValidCommand) ⇒ <code>boolean</code>
   * [.input](#api_tv_test~input)
   * [.key](#api_tv_test~key)
   * [.lifecycle](#api_tv_test~lifecycle)
-    * [.callAll(methodName, args, options)](#api_tv_test_dot_lifecycle_dot_callAll) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-    * [.getModules(methodName, exclude)](#api_tv_test_dot_lifecycle_dot_getModules) ⇒ <code><code>Array.&lt;string&gt;</code></code>
+    * [.callAll(methodName, args, options)](#api_tv_test_dot_lifecycle_dot_callAll) ⇒ <code>Promise.&lt;Object&gt;</code>
+    * [.getModules(methodName, exclude)](#api_tv_test_dot_lifecycle_dot_getModules) ⇒ <code>Array.&lt;string&gt;</code>
     * [.methods](#api_tv_test_dot_lifecycle_dot_methods)
   * [.manufacturer](#api_tv_test~manufacturer)
     * [.lg](#api_tv_test_dot_manufacturer~lg)
@@ -80,17 +80,17 @@
     * [.wakeOnLan](#api_tv_test_dot_utilities~wakeOnLan)
   * [.utils](#api_tv_test~utils)
     * [.defaults](#api_tv_test_dot_utils~defaults)
-      * [.getDefaults(dataSystemName)](#api_tv_test_dot_utils_dot_defaults_dot_getDefaults) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.getAllDefaults()](#api_tv_test_dot_utils_dot_defaults_dot_getAllDefaults) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.reloadDefaults()](#api_tv_test_dot_utils_dot_defaults_dot_reloadDefaults) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.createDefaultsAPI(dataSystemName, getCurrentValues, setValues)](#api_tv_test_dot_utils_dot_defaults_dot_createDefaultsAPI) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.restore(keys)](#api_tv_test_dot_utils_dot_defaults_dot_restore) ⇒ <code><code>Object</code></code>
-      * [.isDefault(key)](#api_tv_test_dot_utils_dot_defaults_dot_isDefault) ⇒ <code><code>boolean</code></code>
-      * [.customized()](#api_tv_test_dot_utils_dot_defaults_dot_customized) ⇒ <code><code>Object</code></code>
-      * [.resetAll(exclude)](#api_tv_test_dot_utils_dot_defaults_dot_resetAll) ⇒ <code><code>Object</code></code>
+      * [.getDefaults(dataSystemName)](#api_tv_test_dot_utils_dot_defaults_dot_getDefaults) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.getAllDefaults()](#api_tv_test_dot_utils_dot_defaults_dot_getAllDefaults) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.reloadDefaults()](#api_tv_test_dot_utils_dot_defaults_dot_reloadDefaults) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.createDefaultsAPI(dataSystemName, getCurrentValues, setValues)](#api_tv_test_dot_utils_dot_defaults_dot_createDefaultsAPI) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.restore(keys)](#api_tv_test_dot_utils_dot_defaults_dot_restore) ⇒ <code>Object</code>
+      * [.isDefault(key)](#api_tv_test_dot_utils_dot_defaults_dot_isDefault) ⇒ <code>boolean</code>
+      * [.customized()](#api_tv_test_dot_utils_dot_defaults_dot_customized) ⇒ <code>Object</code>
+      * [.resetAll(exclude)](#api_tv_test_dot_utils_dot_defaults_dot_resetAll) ⇒ <code>Object</code>
     * [.lifecycle](#api_tv_test_dot_utils~lifecycle)
-      * [.callAll(methodName, args, options)](#api_tv_test_dot_utils_dot_lifecycle_dot_callAll) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
-      * [.getModules(methodName, exclude)](#api_tv_test_dot_utils_dot_lifecycle_dot_getModules) ⇒ <code><code>Array.&lt;string&gt;</code></code>
+      * [.callAll(methodName, args, options)](#api_tv_test_dot_utils_dot_lifecycle_dot_callAll) ⇒ <code>Promise.&lt;Object&gt;</code>
+      * [.getModules(methodName, exclude)](#api_tv_test_dot_utils_dot_lifecycle_dot_getModules) ⇒ <code>Array.&lt;string&gt;</code>
       * [.methods](#api_tv_test_dot_utils_dot_lifecycle_dot_methods)
   * [.volume](#api_tv_test~volume)
 

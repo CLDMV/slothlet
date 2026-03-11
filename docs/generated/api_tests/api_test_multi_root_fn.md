@@ -9,9 +9,9 @@
 
 [api_test_multi_root_fn](#api_test_multi_root_fn)
   * [.doA](#api_test_multi_root_fn~doA)
-    * [.doA()](#api_test_multi_root_fn_dot_doA) ⇒ <code><code>string</code></code>
+    * [.doA()](#api_test_multi_root_fn_dot_doA) ⇒ <code>string</code>
   * [.doB](#api_test_multi_root_fn~doB)
-    * [.doB()](#api_test_multi_root_fn_dot_doB) ⇒ <code><code>string</code></code>
+    * [.doB()](#api_test_multi_root_fn_dot_doB) ⇒ <code>string</code>
 
 
 **Example**

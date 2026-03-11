@@ -9,7 +9,7 @@
 
 [api_test_reserved_name](#api_test_reserved_name)
   * [.slothlet](#api_test_reserved_name~slothlet)
-    * [.greet()](#api_test_reserved_name_dot_slothlet_dot_greet) ⇒ <code><code>string</code></code>
+    * [.greet()](#api_test_reserved_name_dot_slothlet_dot_greet) ⇒ <code>string</code>
 
 
 **Example**

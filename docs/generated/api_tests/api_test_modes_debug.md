@@ -11,9 +11,9 @@
   * [.logger](#api_test_modes_debug~logger)
     * [.loggerMeta](#api_test_modes_debug_dot_logger~loggerMeta)
     * [.logger](#api_test_modes_debug_dot_logger~logger)
-      * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code><code>string</code></code>
+      * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code>string</code>
       * [.source](#api_test_modes_debug_dot_logger_dot_source)
-    * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code><code>string</code></code>
+    * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code>string</code>
     * [.source](#api_test_modes_debug_dot_logger_dot_source)
     * [.version](#api_test_modes_debug_dot_logger)
     * [.levels](#api_test_modes_debug_dot_logger)
@@ -21,13 +21,13 @@
     * [.level](#api_test_modes_debug_dot_logger)
   * [.string](#api_test_modes_debug~string)
     * [.stringUtils](#api_test_modes_debug_dot_string~stringUtils)
-    * [.pad(s, len)](#api_test_modes_debug_dot_string) ⇒ <code><code>string</code></code>
+    * [.pad(s, len)](#api_test_modes_debug_dot_string) ⇒ <code>string</code>
     * [.string](#api_test_modes_debug_dot_string)
-    * [.format(s)](#api_test_modes_debug_dot_string_dot_string_dot_format) ⇒ <code><code>string</code></code>
-    * [.trim(s)](#api_test_modes_debug_dot_string_dot_string_dot_trim) ⇒ <code><code>string</code></code>
+    * [.format(s)](#api_test_modes_debug_dot_string_dot_string_dot_format) ⇒ <code>string</code>
+    * [.trim(s)](#api_test_modes_debug_dot_string_dot_string_dot_trim) ⇒ <code>string</code>
   * [.utils](#api_test_modes_debug~utils)
-    * [.greet(name)](#api_test_modes_debug_dot_utils_dot_greet) ⇒ <code><code>string</code></code>
-    * [.add(a, b)](#api_test_modes_debug_dot_utils_dot_add) ⇒ <code><code>number</code></code>
+    * [.greet(name)](#api_test_modes_debug_dot_utils_dot_greet) ⇒ <code>string</code>
+    * [.add(a, b)](#api_test_modes_debug_dot_utils_dot_add) ⇒ <code>number</code>
 
 
 **Example**

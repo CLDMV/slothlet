@@ -9,9 +9,9 @@
 
 [api_test_single_root_fn](#api_test_single_root_fn)
   * [.helper](#api_test_single_root_fn~helper)
-    * [.helperFn(value)](#api_test_single_root_fn_dot_helper_dot_helperFn) ⇒ <code><code>string</code></code>
+    * [.helperFn(value)](#api_test_single_root_fn_dot_helper_dot_helperFn) ⇒ <code>string</code>
   * [.root](#api_test_single_root_fn~root)
-    * [.rootFn(input)](#api_test_single_root_fn_dot_root_dot_rootFn) ⇒ <code><code>string</code></code>
+    * [.rootFn(input)](#api_test_single_root_fn_dot_root_dot_rootFn) ⇒ <code>string</code>
 
 
 **Example**
