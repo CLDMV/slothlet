@@ -15,6 +15,11 @@
  * @module api_test.runtimeTest
  * @memberof module:api_test
  */
+/**
+ * @namespace runtimeTest
+ * @memberof module:api_test
+ */
+
 import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 /**

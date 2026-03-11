@@ -16,6 +16,11 @@
  * @memberof module:api_test
  */
 /**
+ * @namespace conflictingName2
+ * @memberof module:api_test
+ */
+
+/**
 	* Named export attempting to overwrite the one from file 1
 	* @returns {string} Version identifier
 	*/

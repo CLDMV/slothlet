@@ -16,6 +16,11 @@
  * @memberof module:api_test
  */
 /**
+ * @namespace conflictingName1
+ * @memberof module:api_test
+ */
+
+/**
 	* Named export that will be overwritten
 	* @returns {string} Version identifier
 	*/

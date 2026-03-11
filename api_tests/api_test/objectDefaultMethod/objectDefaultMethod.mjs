@@ -15,6 +15,11 @@
  * @module api_test.objectDefaultMethod
  * @memberof module:api_test
  */
+/**
+ * @namespace objectDefaultMethod
+ * @memberof module:api_test
+ */
+
 export const objectDefaultMethod =
 	/** @lends objectDefaultMethod */
 	{

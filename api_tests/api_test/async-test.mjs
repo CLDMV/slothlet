@@ -25,6 +25,11 @@
  * @module api_test.asyncTest
  * @memberof module:api_test
  */
+/**
+ * @namespace asyncTest
+ * @memberof module:api_test
+ */
+
 
 /**
  * Async addition — returns a resolved Promise so the unified-wrapper

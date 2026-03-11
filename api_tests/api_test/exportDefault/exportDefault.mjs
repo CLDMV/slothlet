@@ -15,6 +15,11 @@
  * @module api_test.exportDefault
  * @memberof module:api_test
  */
+/**
+ * @namespace exportDefault
+ * @memberof module:api_test
+ */
+
 function exportDefault() {
 	return "exportDefault default";
 }

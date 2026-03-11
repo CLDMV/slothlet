@@ -15,6 +15,11 @@
  * @module api_test.callerTest
  * @memberof module:api_test
  */
+/**
+ * @namespace callerTest
+ * @memberof module:api_test
+ */
+
 // Import runtime bindings
 import { self } from "@cldmv/slothlet/runtime";
 
