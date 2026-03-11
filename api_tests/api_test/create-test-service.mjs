@@ -15,6 +15,11 @@
  * @module api_test.createTestService
  * @memberof module:api_test
  */
+/**
+ * @namespace createTestService
+ * @memberof module:api_test
+ */
+
 import { context } from "@cldmv/slothlet/runtime";
 
 class TestService {

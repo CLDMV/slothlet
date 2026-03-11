@@ -15,6 +15,11 @@
  * @module api_test.mixed
  * @memberof module:api_test
  */
+/**
+ * @namespace mixed
+ * @memberof module:api_test
+ */
+
 function mixedDefault(message) {
 	return `Mixed default: ${message}`;
 }

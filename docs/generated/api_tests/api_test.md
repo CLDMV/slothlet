@@ -11,18 +11,36 @@
   * [.advanced](#api_test_dot_advanced)
       * [.addViaSelf(a, b)](#api_test_dot_advanced_dot_selfObject_dot_addViaSelf) ⇒ <code><code>number</code></code>
       * [.getCurrentInstanceId()](#api_test_dot_advanced_dot_selfObject_dot_getCurrentInstanceId) ⇒ <code><code>string</code></code>
+  * [.asyncTest](#api_test_dot_asyncTest)
+  * [.callerTest](#api_test_dot_callerTest)
+  * [.conflictingName1](#api_test_dot_conflictingName1)
+  * [.conflictingName2](#api_test_dot_conflictingName2)
+  * [.createTestService](#api_test_dot_createTestService)
+  * [.exportDefault](#api_test_dot_exportDefault)
+  * [.funcmod](#api_test_dot_funcmod)
+  * [.isolationTest](#api_test_dot_isolationTest)
+  * [.logger](#api_test_dot_logger)
     * [.add(a, b)](#api_test_dot_math_dot_add) ⇒ <code><code>number</code></code>
     * [.multiply(a, b)](#api_test_dot_math_dot_multiply) ⇒ <code><code>number</code></code>
     * [.divide(a, b)](#api_test_dot_math_dot_divide) ⇒ <code><code>number</code></code>
+  * [.metadataTestHelper](#api_test_dot_metadataTestHelper)
+  * [.mixed](#api_test_dot_mixed)
     * [.uniqueOne(msg)](#api_test_dot_multi_func_dot_uniqueOne) ⇒ <code><code>string</code></code>
     * [.uniqueTwo(msg)](#api_test_dot_multi_func_dot_uniqueTwo) ⇒ <code><code>string</code></code>
     * [.uniqueThree(msg)](#api_test_dot_multi_func_dot_uniqueThree) ⇒ <code><code>string</code></code>
     * [.multi_func_hello()](#api_test_dot_multi_func_dot_multi_func_hello) ⇒ <code><code>string</code></code>
+  * [.objectDefaultMethod](#api_test_dot_objectDefaultMethod)
+  * [.overwriteTest1](#api_test_dot_overwriteTest1)
+  * [.overwriteTest2](#api_test_dot_overwriteTest2)
   * [.requestContext](#api_test_dot_requestContext)
+  * [.rootFunction](#api_test_dot_rootFunction)
   * [.rootFunctionShout(name)](#api_test_dot_rootFunctionShout) ⇒ <code><code>string</code></code>
   * [.rootFunctionWhisper(name)](#api_test_dot_rootFunctionWhisper) ⇒ <code><code>string</code></code>
+  * [.rootMath](#api_test_dot_rootMath)
     * [.upper(str)](#api_test_dot_rootstring_dot_upper) ⇒ <code><code>string</code></code>
     * [.reverse(str)](#api_test_dot_rootstring_dot_reverse) ⇒ <code><code>string</code></code>
+  * [.runtimeTest](#api_test_dot_runtimeTest)
+  * [.string](#api_test_dot_string)
   * [.task](#api_test_dot_task)
     * [.autoIP()](#api_test_dot_task_dot_autoIP) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
     * [.testContext()](#api_test_dot_tcp_dot_testContext) ⇒ <code><code>object</code></code>
@@ -241,6 +259,24 @@ console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 * * *
 
+<a id="api_test_dot_asyncTest"></a>
+
+### api_test.asyncTest
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_callerTest"></a>
+
+### api_test.callerTest
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
 <a id="api_test_dot_config"></a>
 
 ### api_test.config
@@ -284,6 +320,69 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.config.host); // "https://slothlet"
 ```
 
+
+
+* * *
+
+<a id="api_test_dot_conflictingName1"></a>
+
+### api_test.conflictingName1
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_conflictingName2"></a>
+
+### api_test.conflictingName2
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_createTestService"></a>
+
+### api_test.createTestService
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_exportDefault"></a>
+
+### api_test.exportDefault
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_funcmod"></a>
+
+### api_test.funcmod
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_isolationTest"></a>
+
+### api_test.isolationTest
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_logger"></a>
+
+### api_test.logger
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
 
 
 * * *
@@ -511,6 +610,24 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.math.divide(10, 2)); // 5
 ```
 
+
+
+* * *
+
+<a id="api_test_dot_metadataTestHelper"></a>
+
+### api_test.metadataTestHelper
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_mixed"></a>
+
+### api_test.mixed
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
 
 
 * * *
@@ -746,10 +863,46 @@ console.log(api_test.multi_func.multi_func_hello()); // 'beta hello'
 
 * * *
 
+<a id="api_test_dot_objectDefaultMethod"></a>
+
+### api_test.objectDefaultMethod
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_overwriteTest1"></a>
+
+### api_test.overwriteTest1
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_overwriteTest2"></a>
+
+### api_test.overwriteTest2
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
 <a id="api_test_dot_requestContext"></a>
 
 ### api_test.requestContext
 > <p><strong style="font-size: 1.1em;"><p>Request context testing utilities</p></strong></p>
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_rootFunction"></a>
+
+### api_test.rootFunction
 > 
 **Kind**: static namespace of [<code>api_test</code>](#api_test)
 
@@ -866,6 +1019,15 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.rootFunctionWhisper("World")); // 'hello, world.'
 ```
 
+
+
+* * *
+
+<a id="api_test_dot_rootMath"></a>
+
+### api_test.rootMath
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
 
 
 * * *
@@ -1029,6 +1191,24 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 ```
 
+
+
+* * *
+
+<a id="api_test_dot_runtimeTest"></a>
+
+### api_test.runtimeTest
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
+
+
+* * *
+
+<a id="api_test_dot_string"></a>
+
+### api_test.string
+> 
+**Kind**: static namespace of [<code>api_test</code>](#api_test)
 
 
 * * *

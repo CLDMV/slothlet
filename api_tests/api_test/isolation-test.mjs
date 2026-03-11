@@ -15,6 +15,11 @@
  * @module api_test.isolationTest
  * @memberof module:api_test
  */
+/**
+ * @namespace isolationTest
+ * @memberof module:api_test
+ */
+
 import { self } from "@cldmv/slothlet/runtime";
 
 /**

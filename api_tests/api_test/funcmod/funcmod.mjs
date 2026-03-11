@@ -15,6 +15,11 @@
  * @module api_test.funcmod
  * @memberof module:api_test
  */
+/**
+ * @namespace funcmod
+ * @memberof module:api_test
+ */
+
 export default function (name) {
 	return `Hello, ${name}!`;
 }

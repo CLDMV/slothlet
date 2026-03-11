@@ -15,6 +15,11 @@
  * @module api_test.rootFunction
  * @memberof module:api_test
  */
+/**
+ * @namespace rootFunction
+ * @memberof module:api_test
+ */
+
 // Runtime imports (unused but required for API structure)
 // import { self, context, reference } from "@cldmv/slothlet/runtime";
 

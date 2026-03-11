@@ -15,6 +15,11 @@
  * @module api_test.overwriteTest1
  * @memberof module:api_test
  */
+/**
+ * @namespace overwriteTest1
+ * @memberof module:api_test
+ */
+
 export function overwriteTest() {
 	return "overwrite-test-1";
 }

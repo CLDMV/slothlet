@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:20 -08:00 (1772425280)
+ *	@Last modified time: 2026-03-10 21:07:57 -07:00 (1773202077)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -22,4 +22,3 @@ export function getPluginApiService() {
 export function pluginApiMethod(action) {
 	return `plugin-api-${action}`;
 }
-

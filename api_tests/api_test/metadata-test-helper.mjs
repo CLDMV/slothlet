@@ -15,6 +15,11 @@
  * @module api_test.metadataTestHelper
  * @memberof module:api_test
  */
+/**
+ * @namespace metadataTestHelper
+ * @memberof module:api_test
+ */
+
 // Import runtime bindings
 import { self } from "@cldmv/slothlet/runtime";
 

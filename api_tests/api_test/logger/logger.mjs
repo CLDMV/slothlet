@@ -15,6 +15,11 @@
  * @module api_test.logger
  * @memberof module:api_test
  */
+/**
+ * @namespace logger
+ * @memberof module:api_test
+ */
+
 export default function log(message) {
 	return `[LOG] ${new Date().toISOString()}: ${message}`;
 }

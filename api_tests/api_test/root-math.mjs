@@ -15,6 +15,11 @@
  * @module api_test.rootMath
  * @memberof module:api_test
  */
+/**
+ * @namespace rootMath
+ * @memberof module:api_test
+ */
+
 export const rootMath =
 	/** @lends rootMath */
 	{

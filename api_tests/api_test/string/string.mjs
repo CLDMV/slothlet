@@ -15,6 +15,11 @@
  * @module api_test.string
  * @memberof module:api_test
  */
+/**
+ * @namespace string
+ * @memberof module:api_test
+ */
+
 export const string =
 	/** @lends string */
 	{
