@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	@Last modified time: 2026-03-11 00:31:59 -07:00 (1773214319)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -819,23 +819,25 @@ const functions = {
 			// the overview section from showing stale values for superseded functions.
 			if (loserNames.size > 0 && loserPaths.size > 0) {
 				// Build a regex that matches any example line containing a loser function call
-				const loserPattern = new RegExp(
-					`\\.(?:${[...loserNames].join("|")})\\s*\\(`,
-					"g"
-				);
+				const loserPattern = new RegExp(`\\.(?:${[...loserNames].join("|")})\\s*\\(`, "g");
 				sortedDoclets.forEach((doclet) => {
 					if (!doclet.examples || !Array.isArray(doclet.examples)) return;
 					const docPath = doclet.meta?.path || "";
 					if (!loserPaths.has(docPath)) return;
 					// Filter out individual code lines inside examples that reference loser names.
 					// Each example is a string (a code block); we strip lines that call loser funcs.
-					doclet.examples = doclet.examples.map((example) => {
-						const lines = example.split("\n");
-						const filtered = lines.filter((line) => !loserPattern.test(line));
-						// Reset lastIndex since we used the global flag
-						loserPattern.lastIndex = 0;
-						return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-					}).filter(Boolean);
+					doclet.examples = doclet.examples
+						.map((example) => {
+							const lines = example.split("\n");
+							const filtered = lines.filter((line) => !loserPattern.test(line));
+							// Reset lastIndex since we used the global flag
+							loserPattern.lastIndex = 0;
+							return filtered
+								.join("\n")
+								.replace(/\n{3,}/g, "\n\n")
+								.trim();
+						})
+						.filter(Boolean);
 				});
 			}
 		})();
@@ -1044,10 +1046,15 @@ const functions = {
 						// rather than the internal JS function name (e.g., "greet(name)").
 						baseModuleContainer.doclet.anchor = t.doclet.anchor || baseModuleContainer.doclet.anchor;
 						baseModuleContainer.doclet.anchorSmart = t.doclet.anchorSmart || baseModuleContainer.doclet.anchorSmart;
+						// Preserve the module's normalizedMemberof (root modules have no parent) to prevent
+						// the function's own memberof ("module:@cldmv/slothlet") from creating a
+						// self-referencing loop in simpleNameFromChain and a broken Kind parent link.
+						baseModuleContainer.doclet.normalizedMemberof = t.doclet.normalizedMemberof || "";
 						// Use baseModuleName as the display name (e.g., "api_test") — the root callable
 						// function's internal JS name (e.g., "greet") is not meaningful to API consumers.
 						baseModuleContainer.doclet.simpleName = baseModuleName || t.doclet.simpleName || baseModuleContainer.doclet.simpleName;
-						baseModuleContainer.doclet.simpleNameShort = baseModuleName || t.doclet.simpleNameShort || baseModuleContainer.doclet.simpleNameShort;
+						baseModuleContainer.doclet.simpleNameShort =
+							baseModuleName || t.doclet.simpleNameShort || baseModuleContainer.doclet.simpleNameShort;
 					} else {
 						// console.log(`[DIRECT] ${doclet.name} (alias: ${doclet.alias}) -> baseModule: "${baseModuleWithoutPrefix}" -> key: "${aliasPath}"`);
 						baseModuleContainer.children[aliasPath] = {
@@ -1124,7 +1131,11 @@ const functions = {
 				// Guard: skip items whose alias IS the base module root (e.g., greet with
 				// @alias module:api_test) to prevent them from re-collecting all top-level
 				// children when they appear as a 'child' of rootFunction, which would loop.
-				if ((item.type === "direct" || item.type === "item" || item.type === "child") && item.doclet && item.doclet.alias !== baseModuleLongname) {
+				if (
+					(item.type === "direct" || item.type === "item" || item.type === "child") &&
+					item.doclet &&
+					item.doclet.alias !== baseModuleLongname
+				) {
 					// For items with aliases, use the alias to find the module that contains the children
 					let itemModule;
 					if (item.doclet.alias) {
@@ -1934,7 +1945,7 @@ const partials = {
 		if (!params && doclet.kind === "function") {
 			params = "()";
 		}
-		const returns = doclet.returns ? ` ⇒ <code>${format.returnsForTOC(doclet.returns)}</code>` : "";
+		const returns = doclet.returns ? ` ⇒ ${format.returnsForTOC(doclet.returns)}` : "";
 		let anchor = item.anchor || doclet.anchor;
 		if (doclet.level === 0) {
 			anchor = item.anchorSmart || doclet.anchorSmart;
