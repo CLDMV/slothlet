@@ -495,6 +495,16 @@ console.log(api_test.math.add(5, 7)); // 12
 
 * * *
 
+<a id="api_test_dot_math_dot_collisionVersion"></a>
+
+### api_test.math.collisionVersion
+> <p><strong style="font-size: 1.1em;"><p>Version identifier for collision detection.</p></strong></p>
+> 
+**Kind**: static constant of [<code>api_test.math</code>](#api_test_dot_math)
+
+
+* * *
+
 <a id="api_test_dot_math_dot_multiply"></a>
 
 ### api_test.math.multiply(a, b) ⇒ <code>number</code>
@@ -1776,70 +1786,6 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.util.extract.parseDeviceName()); // 'parseDeviceName'
 ```
 
-
-
-
-<a id="api_test_slash_collision-math"></a>
-
-## api\_test/collision-math
-> <p><strong style="font-size: 1.1em;"><p>File-level collision test - collides with math/ folder.
-> This file exports at the same path as the math/ folder, creating a collision.</p></strong></p>
-> 
-
-
-**Structure**
-
-[api_test/collision-math](#api_test_slash_collision-math)
-  * [.add(a, b)](#api_test_slash_collision-math_dot_add) ⇒ <code><code>number</code></code>
-
-
-**Exported Constants**
-
-  * [api_test/collision-math.collisionVersion](#api_test_slash_collision-math_dot_collisionVersion) ⇒ <code>string</code>
-
-
-
-
-
-* * *
-
-<a id="api_test_slash_collision-math"></a>
-
-### api_test/collision-math
-> <p><strong style="font-size: 1.1em;"><p>File-level collision test - collides with math/ folder.
-> This file exports at the same path as the math/ folder, creating a collision.</p></strong></p>
-> 
-
-* * *
-
-<a id="api_test_slash_collision-math_dot_add"></a>
-
-### api_test/collision-math.add(a, b) ⇒ <code>number</code>
-> <p><strong style="font-size: 1.1em;"><p>Alternative math implementation that collides with math/ folder.</p></strong></p>
-> 
-**Kind**: static method of [<code>api_test/collision-math</code>](#api_test_slash_collision-math)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| a | <code>number</code> |  | <p>First number.</p> |
-| b | <code>number</code> |  | <p>Second number.</p> |
-
-
-**Returns**:
-
-- <code>number</code> <p>Sum of the two numbers.</p>
-
-
-
-* * *
-
-<a id="api_test_slash_collision-math_dot_collisionVersion"></a>
-
-### api_test/collision-math.collisionVersion
-> <p><strong style="font-size: 1.1em;"><p>Version identifier for collision detection.</p></strong></p>
-> 
-**Kind**: static constant of [<code>api_test/collision-math</code>](#api_test_slash_collision-math)
 
 
 

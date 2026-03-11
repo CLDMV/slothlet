@@ -13,8 +13,9 @@
 
 /**
  * @fileoverview File-level collision test - collides with math/ folder.
- * This file exports at the same path as the math/ folder, creating a collision.
- * @module api_test/collision-math
+ * Both this file and the math/ folder resolve to `api.math` and are merged.
+ * @module api_test.math
+ * @memberof module:api_test
  */
 
 /**
