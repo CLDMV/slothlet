@@ -15,6 +15,7 @@
  * @fileoverview Hot reload handlers for adding, removing, and reloading API components at
  * runtime using class-based architecture.
  * @module @cldmv/slothlet/handlers/api-manager
+ * @internal
  * @package
  *
  * @description

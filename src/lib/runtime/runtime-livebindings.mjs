@@ -14,6 +14,7 @@
 /**
  * @fileoverview Live bindings runtime - exports self, context, reference for API modules
  * @module @cldmv/slothlet/runtime/live
+ * @internal
  * @public
  *
  * @description

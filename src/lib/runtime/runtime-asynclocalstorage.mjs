@@ -14,6 +14,7 @@
 /**
  * @fileoverview AsyncLocalStorage runtime - exports self, context, reference for API modules
  * @module @cldmv/slothlet/runtime/async
+ * @internal
  * @public
  *
  * @description

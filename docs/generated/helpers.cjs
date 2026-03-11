@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 00:31:59 -07:00 (1773214319)
+ *	@Last modified time: 2026-03-11 16:00:04 -07:00 (1773270004)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -52,10 +52,12 @@ const helper = {
 		// Check if function/doclet is package-level
 		const isPackage = doclet.access === "package" || (doclet.tags && doclet.tags.some((tag) => tag.title === "package"));
 
-		// @internal is just metadata - doesn't affect visibility based on access level
-		// Public items are ALWAYS shown (even if @internal)
-		// Package items are shown with --private or --package flags
-		// Private items are shown only with --private flag
+		// @internal items are always excluded from public docs (no flag can surface them)
+		// Note: jsdoc-parse strips doclet.tags but preserves doclet.customTags
+		const isInternal =
+			(doclet.customTags && doclet.customTags.some((t) => t.tag === "internal")) ||
+			(doclet.tags && doclet.tags.some((tag) => tag.title === "internal"));
+		if (isInternal) return false;
 
 		const hasPrivateFlag = process.argv.includes("--private");
 		const hasPackageFlag = process.argv.includes("--package");
@@ -70,7 +72,7 @@ const helper = {
 			return hasPrivateFlag || hasPackageFlag;
 		}
 
-		// Public items (including public @internal): ALWAYS show
+		// Public items: ALWAYS show
 		return true;
 	},
 
@@ -176,8 +178,8 @@ const gets = {
 	orderModulesHierarchically(doclets) {
 		if (!Array.isArray(doclets)) return [];
 
-		// Filter for modules only
-		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:"));
+		// Filter for modules only (exclude @internal modules from public docs)
+		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:") && helper.shouldInclude(doclet));
 
 		// Sort by depth first, then alphabetically
 		return modules.sort((a, b) => {
@@ -1826,8 +1828,8 @@ const partials = {
 				const defaultValue = param.defaultvalue !== undefined ? `<code>${param.defaultvalue}</code>` : "";
 
 				// Collapse newlines so multi-line HTML descriptions (ul/li etc.) don't break table rows
-			const paramDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
-			output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${paramDesc} |\n`;
+				const paramDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${paramDesc} |\n`;
 
 				// When the param type is a direct typedef reference (no generics), expand its
 				// properties as indented sub-rows so the full option set is visible inline.

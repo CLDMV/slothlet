@@ -14,6 +14,7 @@
 /**
  * @fileoverview Advanced filename sanitization with rule-based transformation
  * @module @cldmv/slothlet/helpers/sanitize
+ * @internal
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

@@ -13,6 +13,8 @@
 
 /**
  * @fileoverview Centralized lifecycle event management for impl changes
+ * @module @cldmv/slothlet/handlers/lifecycle
+ * @internal
  * @description Provides event system for tracking impl creation, modification, and removal.
  *              Allows metadata, ownership, and other systems to subscribe to lifecycle events.
  */

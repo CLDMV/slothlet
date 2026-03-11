@@ -14,6 +14,7 @@
 /**
  * @fileoverview TypeScript declaration file (.d.ts) generation
  * @module @cldmv/slothlet/processors/type-generator
+ * @internal
  */
 
 import fs from "fs";

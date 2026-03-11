@@ -32,6 +32,7 @@
  * Do NOT add any token-value export to this file or to the package.json exports map.
  *
  * @module @cldmv/slothlet/handlers/lifecycle-token
+ * @internal
  * @package
  */
 

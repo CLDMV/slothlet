@@ -14,6 +14,7 @@
 /**
  * @fileoverview Custom error classes with i18n support
  * @module @cldmv/slothlet/errors
+ * @internal
  */
 import { translate } from "@cldmv/slothlet/i18n";
 import { detectHint } from "@cldmv/slothlet/helpers/hint-detector";

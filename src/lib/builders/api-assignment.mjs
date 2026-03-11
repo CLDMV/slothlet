@@ -14,6 +14,7 @@
 /**
  * @fileoverview Unified API assignment logic extracted from processFiles
  * @module @cldmv/slothlet/builders/api-assignment
+ * @internal
  * @description
  * This module provides a single source of truth for assigning values to API paths.
  * Used by both initial API build (processFiles) and hot reload (mutateApiValue).

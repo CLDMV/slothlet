@@ -14,6 +14,7 @@
 /**
  * @fileoverview Pure utility functions for mode processing
  * @module @cldmv/slothlet/helpers/modes-utils
+ * @internal
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

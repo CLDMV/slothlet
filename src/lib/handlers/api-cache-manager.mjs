@@ -14,6 +14,7 @@
 /**
  * @fileoverview API cache management for hot reload and module lifecycle
  * @module @cldmv/slothlet/handlers/api-cache-manager
+ * @internal
  * @package
  *
  * @description

@@ -23,6 +23,7 @@
  * be cleaned up on shutdown.
  *
  * @module @cldmv/slothlet/helpers/eventemitter-context
+ * @internal
  */
 import { EventEmitter } from "node:events";
 import { AsyncResource } from "node:async_hooks";
