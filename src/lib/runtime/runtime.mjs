@@ -15,6 +15,22 @@
  * @fileoverview Runtime dispatcher - proxies to async or live runtime based on configuration
  * @module @cldmv/slothlet/runtime
  * @public
+ *
+ * @description
+ * Provides live bindings for use inside API module functions. Import the exports you need:
+ *
+ * ```js
+ * import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+ * ```
+ *
+ * | Export | Type | Description |
+ * | --- | --- | --- |
+ * | `self` | `object` | Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles. |
+ * | `context` | `object` | Per-request context data set by `api.slothlet.context.run(ctx, fn)`. Readable and writable. |
+ * | `instanceID` | `string` | Unique identifier of the active Slothlet instance. |
+ *
+ * All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
+ * whether the instance uses `"async"` (AsyncLocalStorage) or `"live"` runtime mode.
  */
 
 // Import context managers
@@ -49,10 +65,15 @@ function getCurrentRuntime() {
 }
 
 /**
- * Live binding to the current API (self-reference)
- * Proxies to the appropriate runtime's self export
- * @type {Proxy}
- * @public
+ * Live binding to the current API instance. Resolves to the running Slothlet proxy,
+ * giving API modules access to all other API methods without import cycles.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {object}
+ * @example
+ * import { self } from "@cldmv/slothlet/runtime";
+ * // Inside an API function:
+ * const result = await self.math.add(1, 2);
  */
 export const self = new Proxy(
 	{},
@@ -83,10 +104,15 @@ export const self = new Proxy(
 );
 
 /**
- * User-provided context data for live bindings
- * Proxies to the appropriate runtime's context export
- * @type {Proxy}
- * @public
+ * Per-request context data provided via `api.slothlet.context.run(ctx, fn)` or
+ * `slothlet.context.run(ctx, fn)`. Readable and writable inside the current scope.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {object}
+ * @example
+ * import { context } from "@cldmv/slothlet/runtime";
+ * // Inside an API function called within a context.run() scope:
+ * const userId = context.userId;
  */
 export const context = new Proxy(
 	{},
@@ -116,10 +142,14 @@ export const context = new Proxy(
 );
 
 /**
- * Current instance ID
- * Proxies to the appropriate runtime's instanceID export
- * @type {Proxy}
- * @public
+ * Current Slothlet instance identifier. Unique per `slothlet()` call; useful when
+ * multiple Slothlet instances coexist and you need to identify which one is active.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {string}
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime";
+ * console.log(instanceID); // e.g. "slothlet-1"
  */
 export const instanceID = new Proxy(
 	{},
