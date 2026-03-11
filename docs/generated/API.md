@@ -19,7 +19,7 @@
 
 **Structure**
 
-[exports.slothlet(config)](#at_cldmv_slash_slothlet_ddash_exports_dot_slothlet) ⇒ <code><code>Promise.&lt;SlothletAPI&gt;</code></code>
+[@cldmv/slothlet(config)](#at_cldmv_slash_slothlet) ⇒ <code>Promise.&lt;SlothletAPI&gt;</code>
 
 
 **Type Definitions**
@@ -89,15 +89,13 @@ await api.slothlet.shutdown();
 
 * * *
 
-<a id="at_cldmv_slash_slothlet_ddash_exports_dot_slothlet"></a>
+<a id="at_cldmv_slash_slothlet"></a>
 
-### exports.slothlet(config) ⇒ <code>Promise.&lt;SlothletAPI&gt;</code>
+### @cldmv/slothlet(config) ⇒ <code>Promise.&lt;SlothletAPI&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Create a new Slothlet instance and load an API from a directory.
 > This is the sole public entry point for slothlet. Each call produces an independent
 > API instance with its own component graph, context store, and lifecycle.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
-
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -165,109 +163,6 @@ const api2 = await slothlet({ dir: "./other-api" });
 await api.slothlet.shutdown();
 ```
 
-
-
-
-<a id="handlers_slash_hook-manager"></a>
-
-## handlers/hook-manager
-> <p><strong style="font-size: 1.1em;"><p>Hook manager for intercepting API function calls</p></strong></p>
-> 
-
-
-**Structure**
-
-[handlers/hook-manager](#handlers_slash_hook-manager)
-
-
-**Type Definitions**
-
-  * [undefined](#)
-
-
-
-
-
-* * *
-
-<a id="handlers_slash_hook-manager"></a>
-
-### handlers/hook-manager
-> <p><strong style="font-size: 1.1em;"><p>Hook manager for intercepting API function calls</p></strong></p>
-> 
-
-* * *
-
-<a id="typedef_module_handlers_slash_hook-manager~HookExecutionResult"></a>
-
-### handlers/hook-manager.HookExecutionResult
-> <p><strong style="font-size: 1.1em;"><p>Result returned by hook execution methods.</p></strong></p>
-> 
-**Kind**: inner typedef of [<code>handlers/hook-manager</code>](#handlers_slash_hook-manager)
-
-
-* * *
-
-<a id="handlers_slash_hook-manager_dot_HookManager"></a>
-
-### handlers/hook-manager.HookManager
-> 
-**Kind**: static class of [<code>handlers/hook-manager</code>](#handlers_slash_hook-manager)
-
-
-
-<a id="processors_slash_flatten"></a>
-
-## processors/flatten
-> <p><strong style="font-size: 1.1em;"><p>Provides the Flatten class for determining when and how to flatten API structures
-> based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
-> API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.</p></strong></p>
-> 
-
-
-**Structure**
-
-[processors/flatten](#processors_slash_flatten)
-
-
-**Example**
-```js
-// Flatten is instantiated by Slothlet and passed to processors
-const flatten = new Flatten(slothlet);
-const decision = flatten.getFlatteningDecision(options);
-const categoryDecisions = flatten.buildCategoryDecisions(options);
-```
-
-
-
-
-
-* * *
-
-<a id="processors_slash_flatten"></a>
-
-### processors/flatten
-> <p><strong style="font-size: 1.1em;"><p>Provides the Flatten class for determining when and how to flatten API structures
-> based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
-> API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.</p></strong></p>
-> 
-**Example**
-```js
-// Flatten is instantiated by Slothlet and passed to processors
-const flatten = new Flatten(slothlet);
-const decision = flatten.getFlatteningDecision(options);
-const categoryDecisions = flatten.buildCategoryDecisions(options);
-```
-
-
-
-* * *
-
-<a id="processors_slash_flatten_dot_Flatten"></a>
-
-### processors/flatten.Flatten
-> 
-**Kind**: static class of [<code>processors/flatten</code>](#processors_slash_flatten)
 
 
 
@@ -426,6 +321,46 @@ const api = await builder.buildFinalAPI(userApi);
 ```js
 const builder = new ApiBuilder(slothlet);
 const api = await builder.buildFinalAPI(userApi);
+```
+
+
+
+
+<a id="at_cldmv_slash_slothlet_slash_builders_slash_api-assignment"></a>
+
+## @cldmv/slothlet/builders/api-assignment
+> <p><strong style="font-size: 1.1em;"><p>This module provides a single source of truth for assigning values to API paths.
+> Used by both initial API build (processFiles) and hot reload (mutateApiValue).</p></strong></p>
+> 
+
+
+**Structure**
+
+[@cldmv/slothlet/builders/api-assignment](#at_cldmv_slash_slothlet_slash_builders_slash_api-assignment)
+
+
+**Example**
+```js
+const assignment = new ApiAssignment(slothlet);
+assignment.assignToApiPath(api, "math", mathWrapper, {});
+```
+
+
+
+
+
+* * *
+
+<a id="at_cldmv_slash_slothlet_slash_builders_slash_api-assignment"></a>
+
+### @cldmv/slothlet/builders/api-assignment
+> <p><strong style="font-size: 1.1em;"><p>This module provides a single source of truth for assigning values to API paths.
+> Used by both initial API build (processFiles) and hot reload (mutateApiValue).</p></strong></p>
+> 
+**Example**
+```js
+const assignment = new ApiAssignment(slothlet);
+assignment.assignToApiPath(api, "math", mathWrapper, {});
 ```
 
 
@@ -750,6 +685,30 @@ await manager.addApiComponent({
 
 ### @cldmv/slothlet/handlers/context-live
 > <p><strong style="font-size: 1.1em;"><p>Live bindings context manager (no AsyncLocalStorage)</p></strong></p>
+> 
+
+
+<a id="at_cldmv_slash_slothlet_slash_handlers_slash_hook-manager"></a>
+
+## @cldmv/slothlet/handlers/hook-manager
+> <p><strong style="font-size: 1.1em;"><p>Hook manager for intercepting API function calls</p></strong></p>
+> 
+
+
+**Structure**
+
+[@cldmv/slothlet/handlers/hook-manager](#at_cldmv_slash_slothlet_slash_handlers_slash_hook-manager)
+
+
+
+
+
+* * *
+
+<a id="at_cldmv_slash_slothlet_slash_handlers_slash_hook-manager"></a>
+
+### @cldmv/slothlet/handlers/hook-manager
+> <p><strong style="font-size: 1.1em;"><p>Hook manager for intercepting API function calls</p></strong></p>
 > 
 
 
@@ -1129,6 +1088,52 @@ await manager.addApiComponent({
 > 
 
 
+<a id="at_cldmv_slash_slothlet_slash_processors_slash_flatten"></a>
+
+## @cldmv/slothlet/processors/flatten
+> <p><strong style="font-size: 1.1em;"><p>Provides the Flatten class for determining when and how to flatten API structures
+> based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
+> API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.</p></strong></p>
+> 
+
+
+**Structure**
+
+[@cldmv/slothlet/processors/flatten](#at_cldmv_slash_slothlet_slash_processors_slash_flatten)
+
+
+**Example**
+```js
+// Flatten is instantiated by Slothlet and passed to processors
+const flatten = new Flatten(slothlet);
+const decision = flatten.getFlatteningDecision(options);
+const categoryDecisions = flatten.buildCategoryDecisions(options);
+```
+
+
+
+
+
+* * *
+
+<a id="at_cldmv_slash_slothlet_slash_processors_slash_flatten"></a>
+
+### @cldmv/slothlet/processors/flatten
+> <p><strong style="font-size: 1.1em;"><p>Provides the Flatten class for determining when and how to flatten API structures
+> based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
+> API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.</p></strong></p>
+> 
+**Example**
+```js
+// Flatten is instantiated by Slothlet and passed to processors
+const flatten = new Flatten(slothlet);
+const decision = flatten.getFlatteningDecision(options);
+const categoryDecisions = flatten.buildCategoryDecisions(options);
+```
+
+
+
+
 <a id="at_cldmv_slash_slothlet_slash_processors_slash_loader"></a>
 
 ## @cldmv/slothlet/processors/loader
@@ -1350,46 +1355,6 @@ const { self, context } = require("@cldmv/slothlet/runtime/live");
 exports.myFunction = function() {
   return { api: self, data: context.userId };
 };
-```
-
-
-
-
-<a id="at_cldmv_slash_slothlet_slash_lib_slash_builders_slash_api-assignment"></a>
-
-## @cldmv/slothlet/lib/builders/api-assignment
-> <p><strong style="font-size: 1.1em;"><p>This module provides a single source of truth for assigning values to API paths.
-> Used by both initial API build (processFiles) and hot reload (mutateApiValue).</p></strong></p>
-> 
-
-
-**Structure**
-
-[@cldmv/slothlet/lib/builders/api-assignment](#at_cldmv_slash_slothlet_slash_lib_slash_builders_slash_api-assignment)
-
-
-**Example**
-```js
-const assignment = new ApiAssignment(slothlet);
-assignment.assignToApiPath(api, "math", mathWrapper, {});
-```
-
-
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_lib_slash_builders_slash_api-assignment"></a>
-
-### @cldmv/slothlet/lib/builders/api-assignment
-> <p><strong style="font-size: 1.1em;"><p>This module provides a single source of truth for assigning values to API paths.
-> Used by both initial API build (processFiles) and hot reload (mutateApiValue).</p></strong></p>
-> 
-**Example**
-```js
-const assignment = new ApiAssignment(slothlet);
-assignment.assignToApiPath(api, "math", mathWrapper, {});
 ```
 
 

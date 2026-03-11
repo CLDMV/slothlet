@@ -17,7 +17,7 @@
  * Provides the Flatten class for determining when and how to flatten API structures
  * based on comprehensive rule set. Implements 18 core conditions (C01-C18) from
  * API-RULES-CONDITIONS.md. Extends ComponentBase for access to Slothlet configuration.
- * @module processors/flatten
+ * @module @cldmv/slothlet/processors/flatten
  * @package
  * @example
  * // Flatten is instantiated by Slothlet and passed to processors
