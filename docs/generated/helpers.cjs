@@ -2045,7 +2045,9 @@ const partials = {
 
 					// Add a per-property anchor in the first cell so TOC sub-trees can link here
 					const rawPropName = prop.name.replace(/^\[|\]$/g, "");
-					const propAnchor = `${anchor}_prop_${format.generateAnchor(rawPropName)}`;
+					// Use dash-separated path (e.g. slothlet-diag-caches-get) — much shorter than
+					// the _dot_ encoding that format.generateAnchor() would produce.
+					const propAnchor = `${anchor}_prop_${rawPropName.replace(/\./g, "-")}`;
 					output += `| <a id="${propAnchor}"></a>${name} | ${type} | ${defaultValue} | ${description} |\n`;
 				});
 				output += "\n";
@@ -2190,9 +2192,9 @@ const partials = {
 					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
 					const retTypes = !isFunc && prop.type?.names?.length ? prop.type.names : [];
 					const retStr = retTypes.length ? ` ⇒ <code>${helper.escapeHtml(retTypes.join(" | "))}</code>` : "";
-					// Anchor for this individual property (placed in the typedef table row)
+					// Anchor for this individual property — dash-separated path keeps it readable.
 					const rawName = prop.name.replace(/^\[|\]$/g, "");
-					const propAnchor = `${typedefAnchor}_prop_${format.generateAnchor(rawName)}`;
+					const propAnchor = `${typedefAnchor}_prop_${rawName.replace(/\./g, "-")}`;
 					treeOut += `${ind}* [${displayKey}${params}](#${propAnchor})${retStr}\n`;
 					if (Object.keys(entry._children).length > 0) {
 						renderNode(entry._children, depth + 1);
