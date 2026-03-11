@@ -848,7 +848,7 @@ utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(2, 3)); // 5
+console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
 console.log(api_test.math.multiply(2, 3)); // 6
 ```
 **Example**
@@ -857,7 +857,7 @@ console.log(api_test.math.multiply(2, 3)); // 6
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(2, 3)); // 5
+  console.log(api_test.math.add(2, 3)); // 1003
   console.log(api_test.math.multiply(2, 3)); // 6
 }
 ```
@@ -868,7 +868,7 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(2, 3)); // 5
+  console.log(api_test.math.add(2, 3)); // 1003
   console.log(api_test.math.multiply(2, 3)); // 6
 })();
 ```
@@ -877,7 +877,7 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(2, 3)); // 5
+console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
 console.log(api_test.math.multiply(2, 3)); // 6
 ```
 
@@ -888,7 +888,10 @@ console.log(api_test.math.multiply(2, 3)); // 6
 <a id="api_test_dot_math_dot_add"></a>
 
 ### math.add(a, b) ⇒ <code>number</code>
-> <p><strong style="font-size: 1.1em;"><p>Adds two numbers together.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Adds two numbers together.
+> This implementation returns <code>a + b</code> in isolation, but under default slothlet
+> loading the root <code>math.mjs</code> file wins the collision for <code>add</code>, returning
+> <code>a + b + 1000</code> instead. See the examples below for the effective runtime value.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test.math</code>](#api_test_dot_math)
 
@@ -901,7 +904,7 @@ console.log(api_test.math.multiply(2, 3)); // 6
 
 **Returns**:
 
-- <code>number</code> <p>The sum of a and b</p>
+- <code>number</code> <p>The sum of a and b (+ 1000 via collision with root math.mjs)</p>
 
 
 **Example**
@@ -909,7 +912,7 @@ console.log(api_test.math.multiply(2, 3)); // 6
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(5, 7)); // 12
+console.log(api_test.math.add(5, 7)); // 1012  (root file wins collision → a+b+1000)
 ```
 **Example**
 ```js
@@ -917,7 +920,7 @@ console.log(api_test.math.add(5, 7)); // 12
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(5, 7)); // 12
+  console.log(api_test.math.add(5, 7)); // 1012
 }
 ```
 **Example**
@@ -927,7 +930,7 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(5, 7)); // 12
+  console.log(api_test.math.add(5, 7)); // 1012
 })();
 ```
 **Example**
@@ -935,7 +938,7 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(5, 7)); // 12
+console.log(api_test.math.add(5, 7)); // 1012
 ```
 
 
@@ -945,7 +948,8 @@ console.log(api_test.math.add(5, 7)); // 12
 <a id="api_test_dot_math_dot_collisionVersion"></a>
 
 ### math.collisionVersion
-> <p><strong style="font-size: 1.1em;"><p>Version identifier for collision detection.</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Version identifier for collision detection.
+> Merged into <code>api.math</code> alongside <code>multiply</code> and <code>divide</code> from the <code>math/</code> folder.</p></strong></p>
 > 
 **Kind**: static constant of [<code>api_test.math</code>](#api_test_dot_math)
 
