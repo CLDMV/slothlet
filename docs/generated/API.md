@@ -1,59 +1,168 @@
 <a id="at_cldmv_slash_slothlet"></a>
 
 ## @cldmv/slothlet
-> <p><strong style="font-size: 1.1em;"><p>Main Slothlet orchestrator</p></strong></p>
+> <p><strong style="font-size: 1.1em;"><p>Slothlet is a module-loading framework for Node.js (ESM-first) that scans a directory of source files
+> and assembles them into a single, cohesive API object with zero runtime dependencies.</p>
+> <p>Key Features:</p>
+> <ul>
+> <li>Eager and lazy loading strategies with configurable traversal depth</li>
+> <li>Proxy-based API object with hot-reload, dynamic add/remove, and ownership tracking</li>
+> <li>AsyncLocalStorage-based per-request context isolation (or experimental live bindings)</li>
+> <li>Declarative hook system for intercepting and modifying API calls</li>
+> <li>TypeScript file support (esbuild fast mode or tsc strict mode)</li>
+> <li>Collision handling with merge / replace / skip / warn / error modes</li>
+> <li>Rich lifecycle events, metadata annotations, and diagnostics</li>
+> <li>Full i18n support for all framework messages (11 languages)</li>
+> </ul></strong></p>
 > 
 
 
 **Structure**
 
-[@cldmv/slothlet](#at_cldmv_slash_slothlet)
-  * [.slothlet(config)](#at_cldmv_slash_slothlet_dot_slothlet) ⇒ <code><code>Promise.&lt;Object&gt;</code></code>
+[exports.slothlet(config)](#at_cldmv_slash_slothlet_ddash_exports_dot_slothlet) ⇒ <code><code>Promise.&lt;SlothletAPI&gt;</code></code>
 
 
+**Type Definitions**
 
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet"></a>
-
-### @cldmv/slothlet
-> <p><strong style="font-size: 1.1em;"><p>Main Slothlet orchestrator</p></strong></p>
-> 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_dot_slothlet"></a>
-
-### @cldmv/slothlet.slothlet(config) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Create new Slothlet instance and load API
-> Middleware function that delegates to Slothlet class</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet</code>](#at_cldmv_slash_slothlet)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| config | <code>Object</code> |  | <p>Configuration options</p> |
-
-
-**Returns**:
-
-- <code>Promise.&lt;Object&gt;</code> <p>Bound API object with control methods</p>
+  * [SlothletOptions](#typedef_SlothletOptions) : <code>object</code>
 
 
 **Example**
 ```js
-const api = await slothlet({ dir: "./api_tests/api_test" });
-// Use API
-const result = api.math.add(2, 3);
-// Hot reload
-await api.api.reload();
-// Full reload
-await api.reload();
+// ESM default import (recommended)
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({ dir: "./api" });
+await api.math.add(2, 3);  // 5
+await api.slothlet.shutdown();
+```
+**Example**
+```js
+// ESM named import
+import { slothlet } from "@cldmv/slothlet";
+```
+**Example**
+```js
+// CommonJS require
+const slothlet = require("@cldmv/slothlet");
+```
+**Example**
+```js
+// Lazy loading mode — modules loaded on first access
+const api = await slothlet({ dir: "./api", mode: "lazy" });
+```
+**Example**
+```js
+// With per-request context isolation
+const api = await slothlet({
+  dir: "./api",
+  context: { db, logger },
+  runtime: "async"
+});
+
+// Inside an API module, access context via:
+// import { context } from "@cldmv/slothlet/runtime";
+```
+**Example**
+```js
+// With hook interception
+const api = await slothlet({ dir: "./api", hook: true });
+api.slothlet.hook.on("before", "math.*", (endpoint, args) => {
+  console.log("calling:", endpoint, args);
+});
+```
+**Example**
+```js
+// Multiple independent instances
+const api1 = await slothlet({ dir: "./api" });
+const api2 = await slothlet({ dir: "./other-api" });
+```
+**Example**
+```js
 // Shutdown when done
-await api.api.shutdown();
+await api.slothlet.shutdown();
+```
+
+
+
+
+
+* * *
+
+<a id="at_cldmv_slash_slothlet_ddash_exports_dot_slothlet"></a>
+
+### exports.slothlet(config) ⇒ <code>Promise.&lt;SlothletAPI&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>Create a new Slothlet instance and load an API from a directory.
+> This is the sole public entry point for slothlet. Each call produces an independent
+> API instance with its own component graph, context store, and lifecycle.</p></strong></p>
+> 
+**Kind**: static method of [<code></code>](#undefined)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| config | <code>[SlothletOptions](#typedef_SlothletOptions)</code> |  | <p>Configuration options</p> |
+
+
+**Returns**:
+
+- <code>Promise.&lt;SlothletAPI&gt;</code> <p>Fully loaded, proxy-based API object</p>
+
+
+**Example**
+```js
+// ESM default import (recommended)
+import slothlet from "@cldmv/slothlet";
+
+const api = await slothlet({ dir: "./api" });
+await api.math.add(2, 3);  // 5
+await api.slothlet.shutdown();
+```
+**Example**
+```js
+// ESM named import
+import { slothlet } from "@cldmv/slothlet";
+```
+**Example**
+```js
+// CommonJS require
+const slothlet = require("@cldmv/slothlet");
+```
+**Example**
+```js
+// Lazy loading mode — modules loaded on first access
+const api = await slothlet({ dir: "./api", mode: "lazy" });
+```
+**Example**
+```js
+// With per-request context isolation
+const api = await slothlet({
+  dir: "./api",
+  context: { db, logger },
+  runtime: "async"
+});
+
+// Inside an API module, access context via:
+// import { context } from "@cldmv/slothlet/runtime";
+```
+**Example**
+```js
+// With hook interception
+const api = await slothlet({ dir: "./api", hook: true });
+api.slothlet.hook.on("before", "math.*", (endpoint, args) => {
+  console.log("calling:", endpoint, args);
+});
+```
+**Example**
+```js
+// Multiple independent instances
+const api1 = await slothlet({ dir: "./api" });
+const api2 = await slothlet({ dir: "./other-api" });
+```
+**Example**
+```js
+// Shutdown when done
+await api.slothlet.shutdown();
 ```
 
 
@@ -209,36 +318,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 > <p><strong style="font-size: 1.1em;"><p>Custom error classes with i18n support</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_errors_dot_SlothletError"></a>
-
-### @cldmv/slothlet/errors.SlothletError
-> <p><strong style="font-size: 1.1em;"><p>Custom error class for Slothlet-specific errors with context and i18n</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/errors</code>](#at_cldmv_slash_slothlet_slash_errors)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_errors_dot_SlothletWarning"></a>
-
-### @cldmv/slothlet/errors.SlothletWarning
-> <p><strong style="font-size: 1.1em;"><p>Warning class for non-fatal issues with i18n support</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/errors</code>](#at_cldmv_slash_slothlet_slash_errors)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_errors_dot_SlothletDebug"></a>
-
-### @cldmv/slothlet/errors.SlothletDebug
-> <p><strong style="font-size: 1.1em;"><p>Debug utility class for centralized conditional console output with i18n</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/errors</code>](#at_cldmv_slash_slothlet_slash_errors)
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_i18n"></a>
 
@@ -250,15 +329,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 **Structure**
 
 [@cldmv/slothlet/i18n](#at_cldmv_slash_slothlet_slash_i18n)
-  * [.setLanguage(lang)](#at_cldmv_slash_slothlet_slash_i18n_dot_setLanguage)
-  * [.getLanguage()](#at_cldmv_slash_slothlet_slash_i18n_dot_getLanguage) ⇒ <code><code>string</code></code>
-  * [.translate(errorCode, params)](#at_cldmv_slash_slothlet_slash_i18n_dot_translate) ⇒ <code><code>string</code></code>
-  * [.initI18n(options)](#at_cldmv_slash_slothlet_slash_i18n_dot_initI18n)
-
-
-**Exported Constants**
-
-  * [@cldmv/slothlet/i18n.t](#at_cldmv_slash_slothlet_slash_i18n_dot_t)
 
 
 
@@ -271,87 +341,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 ### @cldmv/slothlet/i18n
 > <p><strong style="font-size: 1.1em;"><p>i18n translation system for Slothlet errors</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_i18n_dot_setLanguage"></a>
-
-### @cldmv/slothlet/i18n.setLanguage(lang)
-> <p><strong style="font-size: 1.1em;"><p>Set current language (synchronous)
-> Merges requested language translations over default English translations</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/i18n</code>](#at_cldmv_slash_slothlet_slash_i18n)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| lang | <code>string</code> |  | <p>Language code</p> |
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_i18n_dot_getLanguage"></a>
-
-### @cldmv/slothlet/i18n.getLanguage() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Get current language</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/i18n</code>](#at_cldmv_slash_slothlet_slash_i18n)
-
-**Returns**:
-
-- <code>string</code> <p>Language code</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_i18n_dot_translate"></a>
-
-### @cldmv/slothlet/i18n.translate(errorCode, params) ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Translate error message with interpolation</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/i18n</code>](#at_cldmv_slash_slothlet_slash_i18n)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| errorCode | <code>string</code> |  | <p>Error code</p> |
-| params | <code>Object</code> |  | <p>Parameters for interpolation</p> |
-
-
-**Returns**:
-
-- <code>string</code> <p>Translated message</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_i18n_dot_initI18n"></a>
-
-### @cldmv/slothlet/i18n.initI18n(options)
-> <p><strong style="font-size: 1.1em;"><p>Initialize i18n system (synchronous)</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/i18n</code>](#at_cldmv_slash_slothlet_slash_i18n)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| options | <code>Object</code> |  | <p>Options</p> |
-| [options.language] | <code>string</code> |  | <p>Language code (auto-detect if not provided)</p> |
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_i18n_dot_t"></a>
-
-### @cldmv/slothlet/i18n.t
-> <p><strong style="font-size: 1.1em;"><p>Shorthand for translate</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/i18n</code>](#at_cldmv_slash_slothlet_slash_i18n)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_ownership"></a>
@@ -366,11 +355,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 [@cldmv/slothlet/ownership](#at_cldmv_slash_slothlet_slash_ownership)
 
 
-**Type Definitions**
-
-  * [undefined](#)
-
-
 
 
 
@@ -381,25 +365,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 ### @cldmv/slothlet/ownership
 > <p><strong style="font-size: 1.1em;"><p>Centralized ownership tracking for hot reload</p></strong></p>
 > 
-
-* * *
-
-<a id="typedef_module_at_cldmv_slash_slothlet_slash_ownership~UnregisterResult"></a>
-
-### @cldmv/slothlet/ownership.UnregisterResult
-> <p><strong style="font-size: 1.1em;"><p>Summary result of an unregister operation.</p></strong></p>
-> 
-**Kind**: inner typedef of [<code>@cldmv/slothlet/ownership</code>](#at_cldmv_slash_slothlet_slash_ownership)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_ownership~OwnershipManager"></a>
-
-### @cldmv/slothlet/ownership.OwnershipManager
-> 
-**Kind**: inner class of [<code>@cldmv/slothlet/ownership</code>](#at_cldmv_slash_slothlet_slash_ownership)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_runtime"></a>
@@ -414,13 +379,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 [@cldmv/slothlet/runtime](#at_cldmv_slash_slothlet_slash_runtime)
 
 
-**Exported Constants**
-
-  * [@cldmv/slothlet/runtime.self](#at_cldmv_slash_slothlet_slash_runtime_dot_self) ⇒ <code>Proxy</code>
-  * [@cldmv/slothlet/runtime.context](#at_cldmv_slash_slothlet_slash_runtime_dot_context) ⇒ <code>Proxy</code>
-  * [@cldmv/slothlet/runtime.instanceID](#at_cldmv_slash_slothlet_slash_runtime_dot_instanceID) ⇒ <code>Proxy</code>
-
-
 
 
 
@@ -431,39 +389,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 ### @cldmv/slothlet/runtime
 > <p><strong style="font-size: 1.1em;"><p>Runtime dispatcher - proxies to async or live runtime based on configuration</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_dot_self"></a>
-
-### @cldmv/slothlet/runtime.self
-> <p><strong style="font-size: 1.1em;"><p>Live binding to the current API (self-reference)
-> Proxies to the appropriate runtime's self export</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime</code>](#at_cldmv_slash_slothlet_slash_runtime)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_dot_context"></a>
-
-### @cldmv/slothlet/runtime.context
-> <p><strong style="font-size: 1.1em;"><p>User-provided context data for live bindings
-> Proxies to the appropriate runtime's context export</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime</code>](#at_cldmv_slash_slothlet_slash_runtime)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_dot_instanceID"></a>
-
-### @cldmv/slothlet/runtime.instanceID
-> <p><strong style="font-size: 1.1em;"><p>Current instance ID
-> Proxies to the appropriate runtime's instanceID export</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime</code>](#at_cldmv_slash_slothlet_slash_runtime)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_builders_slash_api_builder"></a>
@@ -477,14 +402,6 @@ const categoryDecisions = flatten.buildCategoryDecisions(options);
 **Structure**
 
 [@cldmv/slothlet/builders/api_builder](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder)
-  * [._resolvePathOrModuleId(slothlet, pathOrModuleId)](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder~_resolvePathOrModuleId) ⇒ <code><code>string</code></code>
-  * [.enabled](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder~enabled)
-  * [.compilePattern(pattern)](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder~compilePattern) ⇒ <code><code>function</code></code>
-
-
-**Type Definitions**
-
-  * [undefined](#)
 
 
 **Example**
@@ -510,72 +427,6 @@ const api = await builder.buildFinalAPI(userApi);
 const builder = new ApiBuilder(slothlet);
 const api = await builder.buildFinalAPI(userApi);
 ```
-
-
-
-* * *
-
-<a id="typedef_module_at_cldmv_slash_slothlet_slash_builders_slash_api_builder~I18nNamespace"></a>
-
-### @cldmv/slothlet/builders/api_builder.I18nNamespace
-> <p><strong style="font-size: 1.1em;"><p>i18n translation helpers exposed on every Slothlet namespace.</p></strong></p>
-> 
-**Kind**: inner typedef of [<code>@cldmv/slothlet/builders/api_builder</code>](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_builders_slash_api_builder~_resolvePathOrModuleId"></a>
-
-### @cldmv/slothlet/builders/api_builder._resolvePathOrModuleId(slothlet, pathOrModuleId) ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Checks whether the given string matches a moduleID recorded in <code>addHistory</code>.
-> If it does, returns the <code>apiPath</code> that was registered with it. Otherwise
-> returns the string as-is (treating it as a dot-notation path), consistent
-> with the resolution logic used by <code>api.reload()</code> and <code>api.remove()</code>.</p></strong></p>
-> 
-**Kind**: inner method of [<code>@cldmv/slothlet/builders/api_builder</code>](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| slothlet | <code>object</code> |  | <p>Slothlet instance</p> |
-| pathOrModuleId | <code>string</code> |  | <p>Dot-notation API path or a registered moduleID</p> |
-
-
-**Returns**:
-
-- <code>string</code> <p>Resolved dot-notation apiPath</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_builders_slash_api_builder~enabled"></a>
-
-### @cldmv/slothlet/builders/api_builder.enabled
-> <p><strong style="font-size: 1.1em;"><p>Hook manager enabled state</p></strong></p>
-> 
-**Kind**: inner property of [<code>@cldmv/slothlet/builders/api_builder</code>](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_builders_slash_api_builder~compilePattern"></a>
-
-### @cldmv/slothlet/builders/api_builder.compilePattern(pattern) ⇒ <code>function</code>
-> <p><strong style="font-size: 1.1em;"><p>Compile a glob pattern into a matcher function for diagnostic use.</p></strong></p>
-> 
-**Kind**: inner method of [<code>@cldmv/slothlet/builders/api_builder</code>](#at_cldmv_slash_slothlet_slash_builders_slash_api_builder)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| pattern | <code>string</code> |  | <p>Glob pattern</p> |
-
-
-**Returns**:
-
-- <code>function</code> <p>Compiled matcher function</p>
 
 
 
@@ -710,14 +561,6 @@ class MyHandler extends ComponentBase {
 **Structure**
 
 [@cldmv/slothlet/factories/context](#at_cldmv_slash_slothlet_slash_factories_slash_context)
-  * [.getContextManager(runtime)](#at_cldmv_slash_slothlet_slash_factories_slash_context_dot_getContextManager) ⇒ <code><code>Object</code></code>
-
-
-**Exported Constants**
-
-  * [@cldmv/slothlet/factories/context.contextManager](#at_cldmv_slash_slothlet_slash_factories_slash_context_dot_contextManager)
-  * [@cldmv/slothlet/factories/context.asyncRuntime](#at_cldmv_slash_slothlet_slash_factories_slash_context_dot_asyncRuntime)
-  * [@cldmv/slothlet/factories/context.liveRuntime](#at_cldmv_slash_slothlet_slash_factories_slash_context_dot_liveRuntime)
 
 
 
@@ -730,57 +573,6 @@ class MyHandler extends ComponentBase {
 ### @cldmv/slothlet/factories/context
 > <p><strong style="font-size: 1.1em;"><p>Context management factory - selects appropriate manager based on runtime</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_factories_slash_context_dot_getContextManager"></a>
-
-### @cldmv/slothlet/factories/context.getContextManager(runtime) ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Get context manager for specified runtime type</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/factories/context</code>](#at_cldmv_slash_slothlet_slash_factories_slash_context)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| runtime | <code>string</code> |  | <p>Runtime type (&quot;async&quot; or &quot;live&quot;)</p> |
-
-
-**Returns**:
-
-- <code>Object</code> <p>Context manager instance</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_factories_slash_context_dot_contextManager"></a>
-
-### @cldmv/slothlet/factories/context.contextManager
-> <p><strong style="font-size: 1.1em;"><p>Default context manager (async)</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/factories/context</code>](#at_cldmv_slash_slothlet_slash_factories_slash_context)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_factories_slash_context_dot_asyncRuntime"></a>
-
-### @cldmv/slothlet/factories/context.asyncRuntime
-> <p><strong style="font-size: 1.1em;"><p>Async runtime for runtime exports</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/factories/context</code>](#at_cldmv_slash_slothlet_slash_factories_slash_context)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_factories_slash_context_dot_liveRuntime"></a>
-
-### @cldmv/slothlet/factories/context.liveRuntime
-> <p><strong style="font-size: 1.1em;"><p>Live runtime for runtime exports</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/factories/context</code>](#at_cldmv_slash_slothlet_slash_factories_slash_context)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager"></a>
@@ -795,11 +587,6 @@ class MyHandler extends ComponentBase {
 **Structure**
 
 [@cldmv/slothlet/handlers/api-cache-manager](#at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager)
-
-
-**Type Definitions**
-
-  * [undefined](#)
 
 
 **Example**
@@ -839,25 +626,6 @@ cache.set("base_abc123", {
 const baseApi = cache.get("base_abc123").api; // Get API from cache
 ```
 
-
-
-* * *
-
-<a id="typedef_module_at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager~CacheEntry"></a>
-
-### @cldmv/slothlet/handlers/api-cache-manager.CacheEntry
-> <p><strong style="font-size: 1.1em;"><p>Cache entry structure for API tree storage and rebuild parameters.</p></strong></p>
-> 
-**Kind**: inner typedef of [<code>@cldmv/slothlet/handlers/api-cache-manager</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager_dot_ApiCacheManager"></a>
-
-### @cldmv/slothlet/handlers/api-cache-manager.ApiCacheManager
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/handlers/api-cache-manager</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_api-cache-manager)
 
 
 
@@ -949,11 +717,6 @@ await manager.addApiComponent({
 [@cldmv/slothlet/handlers/context-async](#at_cldmv_slash_slothlet_slash_handlers_slash_context-async)
 
 
-**Exported Constants**
-
-  * [@cldmv/slothlet/handlers/context-async.asyncContextManager](#at_cldmv_slash_slothlet_slash_handlers_slash_context-async_dot_asyncContextManager)
-
-
 
 
 
@@ -964,27 +727,6 @@ await manager.addApiComponent({
 ### @cldmv/slothlet/handlers/context-async
 > <p><strong style="font-size: 1.1em;"><p>AsyncLocalStorage-based context manager</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_context-async_dot_AsyncContextManager"></a>
-
-### @cldmv/slothlet/handlers/context-async.AsyncContextManager
-> <p><strong style="font-size: 1.1em;"><p>AsyncLocalStorage-based context manager for async runtime
-> Uses ALS for full context isolation across async operations</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/handlers/context-async</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_context-async)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_context-async_dot_asyncContextManager"></a>
-
-### @cldmv/slothlet/handlers/context-async.asyncContextManager
-> <p><strong style="font-size: 1.1em;"><p>Singleton async context manager</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/handlers/context-async</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_context-async)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_handlers_slash_context-live"></a>
@@ -999,11 +741,6 @@ await manager.addApiComponent({
 [@cldmv/slothlet/handlers/context-live](#at_cldmv_slash_slothlet_slash_handlers_slash_context-live)
 
 
-**Exported Constants**
-
-  * [@cldmv/slothlet/handlers/context-live.liveContextManager](#at_cldmv_slash_slothlet_slash_handlers_slash_context-live_dot_liveContextManager)
-
-
 
 
 
@@ -1014,27 +751,6 @@ await manager.addApiComponent({
 ### @cldmv/slothlet/handlers/context-live
 > <p><strong style="font-size: 1.1em;"><p>Live bindings context manager (no AsyncLocalStorage)</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_context-live_dot_LiveContextManager"></a>
-
-### @cldmv/slothlet/handlers/context-live.LiveContextManager
-> <p><strong style="font-size: 1.1em;"><p>Live bindings context manager (direct global state)
-> Uses direct instance tracking without AsyncLocalStorage overhead</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/handlers/context-live</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_context-live)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_context-live_dot_liveContextManager"></a>
-
-### @cldmv/slothlet/handlers/context-live.liveContextManager
-> <p><strong style="font-size: 1.1em;"><p>Singleton live context manager</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/handlers/context-live</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_context-live)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_handlers_slash_lifecycle-token"></a>
@@ -1064,11 +780,6 @@ await manager.addApiComponent({
 [@cldmv/slothlet/handlers/lifecycle-token](#at_cldmv_slash_slothlet_slash_handlers_slash_lifecycle-token)
 
 
-**Exported Constants**
-
-  * [@cldmv/slothlet/handlers/lifecycle-token.instanceTokens](#at_cldmv_slash_slothlet_slash_handlers_slash_lifecycle-token~instanceTokens) ⇒ <code>WeakMap.&lt;object, symbol&gt;</code>
-
-
 
 
 
@@ -1094,17 +805,6 @@ await manager.addApiComponent({
 > </ul>
 > <p>Do NOT add any token-value export to this file or to the package.json exports map.</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_lifecycle-token~instanceTokens"></a>
-
-### @cldmv/slothlet/handlers/lifecycle-token.instanceTokens
-> <p><strong style="font-size: 1.1em;"><p>Module-private map of Slothlet instance → per-instance capability token.
-> Never exported — the only way to interact with it is through the three functions below.</p></strong></p>
-> 
-**Kind**: inner constant of [<code>@cldmv/slothlet/handlers/lifecycle-token</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_lifecycle-token)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_handlers_slash_materialize-manager"></a>
@@ -1154,15 +854,6 @@ await manager.addApiComponent({
 > <p><strong style="font-size: 1.1em;"><p>Metadata API handler for accessing function metadata</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_metadata_dot_Metadata"></a>
-
-### @cldmv/slothlet/handlers/metadata.Metadata
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/handlers/metadata</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_metadata)
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper"></a>
 
@@ -1174,14 +865,6 @@ await manager.addApiComponent({
 **Structure**
 
 [@cldmv/slothlet/handlers/unified-wrapper](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-  * [.getSafeFunctionName(apiPath, fallback)](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper~getSafeFunctionName) ⇒ <code><code>string</code></code>
-  * [.createNamedProxyTarget(nameHint, fallback)](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper~createNamedProxyTarget) ⇒ <code><code>function</code></code>
-  * [.resolveWrapper(value)](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper_dot_resolveWrapper) ⇒ <code><code>UnifiedWrapper | null</code></code>
-
-
-**Exported Constants**
-
-  * [@cldmv/slothlet/handlers/unified-wrapper.TYPE_STATES](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper_dot_TYPE_STATES)
 
 
 
@@ -1194,106 +877,6 @@ await manager.addApiComponent({
 ### @cldmv/slothlet/handlers/unified-wrapper
 > <p><strong style="font-size: 1.1em;"><p>Unified wrapper - combines __impl pattern, lazy/eager modes, materialization, and context binding</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper_dot_TYPE_STATES"></a>
-
-### @cldmv/slothlet/handlers/unified-wrapper.TYPE_STATES
-> <p><strong style="font-size: 1.1em;"><p>Symbols for __type property states</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/handlers/unified-wrapper</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper~getSafeFunctionName"></a>
-
-### @cldmv/slothlet/handlers/unified-wrapper.getSafeFunctionName(apiPath, fallback) ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Build a safe function name for debugging and inspection output.</p></strong></p>
-> 
-**Kind**: inner method of [<code>@cldmv/slothlet/handlers/unified-wrapper</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| apiPath | <code>string</code> |  | <p>API path to derive a name from.</p> |
-| fallback | <code>string</code> |  | <p>Fallback name when a safe name cannot be derived.</p> |
-
-
-**Returns**:
-
-- <code>string</code> <p>Safe function name.</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper~createNamedProxyTarget"></a>
-
-### @cldmv/slothlet/handlers/unified-wrapper.createNamedProxyTarget(nameHint, fallback) ⇒ <code>function</code>
-> <p><strong style="font-size: 1.1em;"><p>Create a named proxy target function for clearer debug output.</p></strong></p>
-> 
-**Kind**: inner method of [<code>@cldmv/slothlet/handlers/unified-wrapper</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| nameHint | <code>string</code> |  | <p>Name hint derived from apiPath.</p> |
-| fallback | <code>string</code> |  | <p>Fallback function name if nameHint is unusable.</p> |
-
-
-**Returns**:
-
-- <code>function</code> <p>Named proxy target function.</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper_dot_UnifiedWrapper"></a>
-
-### @cldmv/slothlet/handlers/unified-wrapper.UnifiedWrapper
-> <p><strong style="font-size: 1.1em;"><p>Unified wrapper class that handles all proxy concerns in one place:</p>
-> <ul>
-> <li>__impl pattern for reload support</li>
-> <li>Lazy/eager mode materialization</li>
-> <li>Recursive waiting proxy for deep lazy loading</li>
-> <li>Context binding through contextManager</li>
-> </ul></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/handlers/unified-wrapper</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper_dot_resolveWrapper"></a>
-
-### @cldmv/slothlet/handlers/unified-wrapper.resolveWrapper(value) ⇒ <code>UnifiedWrapper | null</code>
-> <p><strong style="font-size: 1.1em;"><p>Resolves a value to its backing UnifiedWrapper instance.
-> Accepts a proxy registered via createProxy() or a raw UnifiedWrapper instance.
-> Returns null for any other value.</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/handlers/unified-wrapper</code>](#at_cldmv_slash_slothlet_slash_handlers_slash_unified-wrapper)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| value | <code>unknown</code> |  | <p>Value to resolve</p> |
-
-
-**Returns**:
-
-- <code>UnifiedWrapper | null</code> <p>The backing wrapper, or null</p>
-
-
-**Example**
-```js
-const wrapper = resolveWrapper(someProxy);
-if (wrapper) wrapper.____slothletInternal.impl = newImpl;
-```
-
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_class-instance-wrapper"></a>
@@ -1345,15 +928,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 > <p><strong style="font-size: 1.1em;"><p>Configuration normalization utilities</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_config~Config"></a>
-
-### @cldmv/slothlet/helpers/config.Config
-> 
-**Kind**: inner class of [<code>@cldmv/slothlet/helpers/config</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_config)
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context"></a>
 
@@ -1369,10 +943,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 **Structure**
 
 [@cldmv/slothlet/helpers/eventemitter-context](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context)
-  * [.setApiContextChecker(checker)](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_setApiContextChecker)
-  * [.enableEventEmitterPatching()](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_enableEventEmitterPatching)
-  * [.disableEventEmitterPatching()](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_disableEventEmitterPatching)
-  * [.cleanupEventEmitterResources()](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_cleanupEventEmitterResources)
 
 
 
@@ -1389,58 +959,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 > <p>Additionally tracks EventEmitters created within slothlet API context so they can
 > be cleaned up on shutdown.</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_setApiContextChecker"></a>
-
-### @cldmv/slothlet/helpers/eventemitter-context.setApiContextChecker(checker)
-> <p><strong style="font-size: 1.1em;"><p>Set the context checker callback
-> Called by the runtime to register a way to detect API context</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/helpers/eventemitter-context</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| checker | <code>function</code> |  | <p>Function that returns true if in API context</p> |
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_enableEventEmitterPatching"></a>
-
-### @cldmv/slothlet/helpers/eventemitter-context.enableEventEmitterPatching()
-> <p><strong style="font-size: 1.1em;"><p>Enable EventEmitter context propagation by patching EventEmitter.prototype.
-> This should be called ONCE globally when the first slothlet instance is created.
-> Subsequent calls will be ignored (patching is global).</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/helpers/eventemitter-context</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_disableEventEmitterPatching"></a>
-
-### @cldmv/slothlet/helpers/eventemitter-context.disableEventEmitterPatching()
-> <p><strong style="font-size: 1.1em;"><p>Disable EventEmitter context propagation and restore original methods.
-> This should only be called when ALL slothlet instances have been shut down.</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/helpers/eventemitter-context</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context_dot_cleanupEventEmitterResources"></a>
-
-### @cldmv/slothlet/helpers/eventemitter-context.cleanupEventEmitterResources()
-> <p><strong style="font-size: 1.1em;"><p>Cleanup all tracked EventEmitters created within slothlet API context.
-> This removes all listeners from tracked emitters and clears tracking structures.
-> Should be called during shutdown to prevent memory leaks and hanging processes.</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/helpers/eventemitter-context</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_eventemitter-context)
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_hint-detector"></a>
@@ -1490,16 +1008,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 > <p><strong style="font-size: 1.1em;"><p>Pure utility functions for mode processing</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_modes-utils_dot_ModesUtils"></a>
-
-### @cldmv/slothlet/helpers/modes-utils.ModesUtils
-> <p><strong style="font-size: 1.1em;"><p>Mode processing utilities component class</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/helpers/modes-utils</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_modes-utils)
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_resolve-from-caller"></a>
 
@@ -1535,7 +1043,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 **Structure**
 
 [@cldmv/slothlet/helpers/sanitize](#at_cldmv_slash_slothlet_slash_helpers_slash_sanitize)
-  * [.sanitizePropertyName(input, options)](#at_cldmv_slash_slothlet_slash_helpers_slash_sanitize_dot_sanitizePropertyName) ⇒ <code><code>string</code></code>
 
 
 
@@ -1548,38 +1055,6 @@ if (wrapper) wrapper.____slothletInternal.impl = newImpl;
 ### @cldmv/slothlet/helpers/sanitize
 > <p><strong style="font-size: 1.1em;"><p>Advanced filename sanitization with rule-based transformation</p></strong></p>
 > 
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_sanitize_dot_Sanitize"></a>
-
-### @cldmv/slothlet/helpers/sanitize.Sanitize
-> <p><strong style="font-size: 1.1em;"><p>Advanced filename sanitization with rule-based transformation</p></strong></p>
-> 
-**Kind**: static class of [<code>@cldmv/slothlet/helpers/sanitize</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_sanitize)
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_helpers_slash_sanitize_dot_sanitizePropertyName"></a>
-
-### @cldmv/slothlet/helpers/sanitize.sanitizePropertyName(input, options) ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Standalone sanitizePropertyName function for backward compatibility</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/helpers/sanitize</code>](#at_cldmv_slash_slothlet_slash_helpers_slash_sanitize)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| input | <code>string</code> |  | <p>Input string to sanitize</p> |
-| options | <code>object</code> |  | <p>Sanitization options</p> |
-
-
-**Returns**:
-
-- <code>string</code> <p>Sanitized property name</p>
-
-
 
 
 <a id="at_cldmv_slash_slothlet_slash_helpers_slash_utilities"></a>
@@ -1704,7 +1179,6 @@ const module = await loader.loadModule("./path/to/file.mjs", instanceID);
 **Structure**
 
 [@cldmv/slothlet/processors/type-generator](#at_cldmv_slash_slothlet_slash_processors_slash_type-generator)
-  * [.generateTypes(api, options)](#at_cldmv_slash_slothlet_slash_processors_slash_type-generator_dot_generateTypes) ⇒ <code><code>Promise.&lt;{output: string, filePath: string}&gt;</code></code>
 
 
 
@@ -1718,31 +1192,6 @@ const module = await loader.loadModule("./path/to/file.mjs", instanceID);
 > <p><strong style="font-size: 1.1em;"><p>TypeScript declaration file (.d.ts) generation</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_processors_slash_type-generator_dot_generateTypes"></a>
-
-### @cldmv/slothlet/processors/type-generator.generateTypes(api, options) ⇒ <code>Promise.&lt;{output: string, filePath: string}&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Generate TypeScript declaration file for a Slothlet API</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/processors/type-generator</code>](#at_cldmv_slash_slothlet_slash_processors_slash_type-generator)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| api | <code>object</code> |  | <p>The loaded Slothlet API</p> |
-| options | <code>object</code> |  | <p>Generation options</p> |
-| options.output | <code>string</code> |  | <p>Output file path for .d.ts</p> |
-| options.interfaceName | <code>string</code> |  | <p>Name of the interface to generate</p> |
-| [options.includeDocumentation] | <code>boolean</code> | <code>true</code> | <p>Include JSDoc comments</p> |
-
-
-**Returns**:
-
-- <code>Promise.&lt;{output: string, filePath: string}&gt;</code> <p>Generated declaration and output path</p>
-
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_processors_slash_typescript"></a>
 
@@ -1754,9 +1203,6 @@ const module = await loader.loadModule("./path/to/file.mjs", instanceID);
 **Structure**
 
 [@cldmv/slothlet/processors/typescript](#at_cldmv_slash_slothlet_slash_processors_slash_typescript)
-  * [.transformTypeScript(filePath, options)](#at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_transformTypeScript) ⇒ <code><code>Promise.&lt;string&gt;</code></code>
-  * [.createDataUrl(code)](#at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_createDataUrl) ⇒ <code><code>string</code></code>
-  * [.transformTypeScriptStrict(filePath, options)](#at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_transformTypeScriptStrict) ⇒ <code><code>Promise.&lt;{code: string, diagnostics: Array.&lt;object&gt;}&gt;</code></code>
 
 
 
@@ -1770,89 +1216,6 @@ const module = await loader.loadModule("./path/to/file.mjs", instanceID);
 > <p><strong style="font-size: 1.1em;"><p>TypeScript file transformation using esbuild (fast mode)</p></strong></p>
 > 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_transformTypeScript"></a>
-
-### @cldmv/slothlet/processors/typescript.transformTypeScript(filePath, options) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Transform TypeScript code to JavaScript using esbuild</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/processors/typescript</code>](#at_cldmv_slash_slothlet_slash_processors_slash_typescript)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| filePath | <code>string</code> |  | <p>Path to the TypeScript file</p> |
-| [options] | <code>object</code> | <code>{}</code> | <p>esbuild transform options</p> |
-| [options.target] | <code>string</code> |  | <p>ECMAScript target version (default: &quot;es2020&quot;)</p> |
-| [options.format] | <code>string</code> |  | <p>Module format (default: &quot;esm&quot;)</p> |
-| [options.sourcemap] | <code>boolean</code> |  | <p>Generate source maps (default: false)</p> |
-
-
-**Returns**:
-
-- <code>Promise.&lt;string&gt;</code> <p>Transformed JavaScript code</p>
-
-
-**Throws**:
-
-- <code>SlothletError</code> <p>If transformation fails</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_createDataUrl"></a>
-
-### @cldmv/slothlet/processors/typescript.createDataUrl(code) ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Create a data URL for dynamic import with cache busting</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/processors/typescript</code>](#at_cldmv_slash_slothlet_slash_processors_slash_typescript)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| code | <code>string</code> |  | <p>JavaScript code to encode</p> |
-
-
-**Returns**:
-
-- <code>string</code> <p>Data URL suitable for dynamic import</p>
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_processors_slash_typescript_dot_transformTypeScriptStrict"></a>
-
-### @cldmv/slothlet/processors/typescript.transformTypeScriptStrict(filePath, options) ⇒ <code>Promise.&lt;{code: string, diagnostics: Array.&lt;object&gt;}&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Transform TypeScript code to JavaScript using tsc with type checking</p></strong></p>
-> 
-**Kind**: static method of [<code>@cldmv/slothlet/processors/typescript</code>](#at_cldmv_slash_slothlet_slash_processors_slash_typescript)
-
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| filePath | <code>string</code> |  | <p>Path to the TypeScript file</p> |
-| [options] | <code>object</code> | <code>{}</code> | <p>TypeScript compiler options</p> |
-| [options.target] | <code>string</code> |  | <p>ECMAScript target version (default: &quot;ES2020&quot;)</p> |
-| [options.module] | <code>string</code> |  | <p>Module format (default: &quot;ESNext&quot;)</p> |
-| [options.strict] | <code>boolean</code> |  | <p>Enable strict type checking (default: true)</p> |
-| [options.skipTypeCheck] | <code>boolean</code> |  | <p>Skip type checking and only transform (default: false)</p> |
-| [options.typeDefinitionPath] | <code>string</code> |  | <p>Path to .d.ts file for type checking</p> |
-
-
-**Returns**:
-
-- <code>Promise.&lt;{code: string, diagnostics: Array.&lt;object&gt;}&gt;</code> <p>Transformed code and type diagnostics</p>
-
-
-**Throws**:
-
-- <code>SlothletError</code> <p>If transformation fails</p>
-
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_runtime_slash_async"></a>
 
@@ -1865,13 +1228,6 @@ const module = await loader.loadModule("./path/to/file.mjs", instanceID);
 **Structure**
 
 [@cldmv/slothlet/runtime/async](#at_cldmv_slash_slothlet_slash_runtime_slash_async)
-
-
-**Exported Constants**
-
-  * [@cldmv/slothlet/runtime/async.self](#at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_self) ⇒ <code>Proxy</code>
-  * [@cldmv/slothlet/runtime/async.context](#at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_context) ⇒ <code>Proxy</code>
-  * [@cldmv/slothlet/runtime/async.instanceID](#at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_instanceID) ⇒ <code>Proxy</code>
 
 
 **Example**
@@ -1930,74 +1286,6 @@ exports.myFunction = function() {
 
 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_self"></a>
-
-### @cldmv/slothlet/runtime/async.self
-> <p><strong style="font-size: 1.1em;"><p>A proxy that provides access to the full API object within the current context.
-> Automatically resolves to the correct instance's API in AsyncLocalStorage context.</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime/async</code>](#at_cldmv_slash_slothlet_slash_runtime_slash_async)
-
-**Example**
-```js
-import { self } from "@cldmv/slothlet/runtime/async";
-
-export function callOtherFunction() {
-  // Call another function in the same API
-  return self.otherFunction();
-}
-```
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_context"></a>
-
-### @cldmv/slothlet/runtime/async.context
-> <p><strong style="font-size: 1.1em;"><p>A proxy that provides access to user-provided context data (e.g., request data, user info).
-> Can be set via <code>slothlet.run()</code> or <code>slothlet.scope()</code>.</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime/async</code>](#at_cldmv_slash_slothlet_slash_runtime_slash_async)
-
-**Example**
-```js
-import { context } from "@cldmv/slothlet/runtime/async";
-
-export function getUserInfo() {
-  // Access user-provided context
-  return {
-    userId: context.userId,
-    userName: context.userName
-  };
-}
-```
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_slash_async_dot_instanceID"></a>
-
-### @cldmv/slothlet/runtime/async.instanceID
-> <p><strong style="font-size: 1.1em;"><p>A proxy that provides access to the current slothlet instance ID.
-> Useful for debugging and tracking which instance is handling a request.</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime/async</code>](#at_cldmv_slash_slothlet_slash_runtime_slash_async)
-
-**Example**
-```js
-import { instanceID } from "@cldmv/slothlet/runtime/async";
-
-export function getInstanceInfo() {
-  return { instanceID };
-}
-```
-
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_runtime_slash_live"></a>
 
@@ -2010,12 +1298,6 @@ export function getInstanceInfo() {
 **Structure**
 
 [@cldmv/slothlet/runtime/live](#at_cldmv_slash_slothlet_slash_runtime_slash_live)
-
-
-**Exported Constants**
-
-  * [@cldmv/slothlet/runtime/live.self](#at_cldmv_slash_slothlet_slash_runtime_slash_live_dot_self) ⇒ <code>Proxy</code>
-  * [@cldmv/slothlet/runtime/live.context](#at_cldmv_slash_slothlet_slash_runtime_slash_live_dot_context) ⇒ <code>Proxy</code>
 
 
 **Example**
@@ -2072,51 +1354,6 @@ exports.myFunction = function() {
 
 
 
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_slash_live_dot_self"></a>
-
-### @cldmv/slothlet/runtime/live.self
-> <p><strong style="font-size: 1.1em;"><p>A proxy that provides direct access to the current instance's API.
-> In live mode, this directly references the active instance without AsyncLocalStorage.</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime/live</code>](#at_cldmv_slash_slothlet_slash_runtime_slash_live)
-
-**Example**
-```js
-import { self } from "@cldmv/slothlet/runtime/live";
-
-export function callOtherFunction() {
-  return self.otherFunction();
-}
-```
-
-
-
-* * *
-
-<a id="at_cldmv_slash_slothlet_slash_runtime_slash_live_dot_context"></a>
-
-### @cldmv/slothlet/runtime/live.context
-> <p><strong style="font-size: 1.1em;"><p>A proxy that provides access to user-provided context data.
-> In live mode, this directly accesses the current instance's context.</p></strong></p>
-> 
-**Kind**: static constant of [<code>@cldmv/slothlet/runtime/live</code>](#at_cldmv_slash_slothlet_slash_runtime_slash_live)
-
-**Example**
-```js
-import { context } from "@cldmv/slothlet/runtime/live";
-
-export function getUserInfo() {
-  return {
-    userId: context.userId,
-    userName: context.userName
-  };
-}
-```
-
-
-
 
 <a id="at_cldmv_slash_slothlet_slash_lib_slash_builders_slash_api-assignment"></a>
 
@@ -2158,5 +1395,70 @@ assignment.assignToApiPath(api, "math", mathWrapper, {});
 
 
 
+
+
+
+* * *
+
+## Type Definitions
+
+<a id="typedef_SlothletOptions"></a>
+
+### SlothletOptions : <code>object</code>
+<p>Configuration options passed to {@link module:@cldmv/slothlet slothlet()}.</p>
+
+**Kind**: typedef  
+**Scope**: global
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| dir | <code>string</code> |  | Directory to scan for API modules. Relative paths are resolved from the calling file. |
+| [mode] | <code>"eager" | "lazy"</code> | <code>"eager"</code> | Loading strategy. <ul> <li>`"eager"` — all modules are loaded immediately at startup (default).</li> <li>`"lazy"` — modules are loaded on first access via a Proxy. Also accepted: `"immediate"` / `"preload"` (eager aliases); `"deferred"` / `"proxy"` (lazy aliases).</li> </ul> |
+| [runtime] | <code>"async" | "live"</code> | <code>"async"</code> | Context propagation runtime. <ul> <li>`"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).</li> <li>`"live"` — Experimental live bindings. Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.</li> </ul> |
+| [apiDepth] | <code>number</code> | <code>Infinity</code> | Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root. |
+| [context] | <code>object | null</code> | <code>null</code> | Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`. |
+| [reference] | <code>object | null</code> | <code>null</code> | Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`. |
+| [scope] | <code>Object</code> |  | Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects. |
+| [api] | <code>object</code> |  | API build and mutation settings. |
+| [api.collision] | <code>string | Object</code> | <code>"merge"</code> | Collision strategy when two modules export the same path. Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`. Pass an object to use different strategies for the initial build vs. runtime `api.slothlet.api.add()` calls. |
+| [api.mutations] | <code>object</code> | <code>{add:true,remove:true,reload:true}</code> | Enable or disable runtime mutation methods on `api.slothlet.api`. Object with boolean keys `add`, `remove`, `reload` (all default `true`). |
+| [hook] | <code>boolean | string | object</code> | <code>false</code> | Hook system configuration. <ul> <li>`false` — disabled (default).</li> <li>`true` — enabled, all endpoints.</li> <li>`string` — enabled with a default glob pattern.</li> <li>`object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.</li> </ul> |
+| [debug] | <code>boolean | object</code> | <code>false</code> | Enable verbose internal logging. `true` enables all categories. Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems. |
+| [silent] | <code>boolean</code> | <code>false</code> | Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`. |
+| [diagnostics] | <code>boolean</code> | <code>false</code> | Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production. |
+| [tracking] | <code>boolean | object</code> | <code>false</code> | Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress. |
+| [backgroundMaterialize] | <code>boolean</code> | <code>false</code> | When `mode: "lazy"`, immediately begins materializing all paths in the background after init. |
+| [i18n] | <code>object</code> |  | Internationalization settings (dev-facing, process-global). `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`). |
+| [typescript] | <code>boolean | "fast" | "strict" | object</code> | <code>false</code> | TypeScript support. <ul> <li>`false` — disabled (default).</li> <li>`true` or `"fast"` — esbuild transpilation, no type checking.</li> <li>`"strict"` — tsc compilation with type checking and `.d.ts` generation. See <a href="docs/TYPESCRIPT.md">TYPESCRIPT.md</a> for the full configuration reference.</li> </ul> |
+
+
+* * *
+
+<a id="typedef_SlothletAPI"></a>
+
+### SlothletAPI : <code>object</code>
+<p>Bound API object returned by {@link module:@cldmv/slothlet slothlet()}.
+The root contains all loaded module exports plus the reserved <code>slothlet</code> namespace.</p>
+
+**Kind**: typedef  
+**Scope**: global
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| slothlet | <code>object</code> |  | Built-in control namespace. |
+| slothlet.shutdown | <code>function</code> |  | Shut down the instance and release all resources. |
+| slothlet.api | <code>object</code> |  | Runtime mutation methods (`add`, `remove`, `reload`) — availability controlled by `api.mutations` option. |
+| slothlet.hook | <code>object</code> |  | Hook registration surface (`on`, `off`, `once`, `clear`) — only present when `hook` option is enabled. |
+| slothlet.context | <code>object</code> |  | Per-request context helpers (`run`, `get`, `set`, `extend`). |
+| slothlet.lifecycle | <code>object</code> |  | Lifecycle event emitter (`on`, `off`, `once`, `emit`). |
+| slothlet.metadata | <code>object</code> |  | Module metadata accessor (`get`, `set`, `has`). |
+| slothlet.ownership | <code>object</code> |  | Module ownership registry (`get`, `unregister`). |
+| [slothlet.diag] | <code>object</code> |  | Diagnostics namespace — only present when `diagnostics: true`. |
+| [slothlet.reference] | <code>object</code> |  | The `reference` object from config, accessible as `api.slothlet.reference`. |
+
+
+* * *
 
 

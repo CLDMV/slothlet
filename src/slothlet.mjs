@@ -12,8 +12,74 @@
  */
 
 /**
- * @fileoverview Main Slothlet orchestrator
+ * @fileoverview Slothlet — transform a directory of ESM/CJS/TypeScript files into a unified, proxy-based API object.
  * @module @cldmv/slothlet
+ * @typicalname slothlet
+ * @version 3.0.0
+ * @author CLDMV/Shinrai
+ * @public
+ * @simpleName
+ *
+ * @description
+ * Slothlet is a module-loading framework for Node.js (ESM-first) that scans a directory of source files
+ * and assembles them into a single, cohesive API object with zero runtime dependencies.
+ *
+ * Key Features:
+ * - Eager and lazy loading strategies with configurable traversal depth
+ * - Proxy-based API object with hot-reload, dynamic add/remove, and ownership tracking
+ * - AsyncLocalStorage-based per-request context isolation (or experimental live bindings)
+ * - Declarative hook system for intercepting and modifying API calls
+ * - TypeScript file support (esbuild fast mode or tsc strict mode)
+ * - Collision handling with merge / replace / skip / warn / error modes
+ * - Rich lifecycle events, metadata annotations, and diagnostics
+ * - Full i18n support for all framework messages (11 languages)
+ *
+ * @example
+ * // ESM default import (recommended)
+ * import slothlet from "@cldmv/slothlet";
+ *
+ * const api = await slothlet({ dir: "./api" });
+ * await api.math.add(2, 3);  // 5
+ * await api.slothlet.shutdown();
+ *
+ * @example
+ * // ESM named import
+ * import { slothlet } from "@cldmv/slothlet";
+ *
+ * @example
+ * // CommonJS require
+ * const slothlet = require("@cldmv/slothlet");
+ *
+ * @example
+ * // Lazy loading mode — modules loaded on first access
+ * const api = await slothlet({ dir: "./api", mode: "lazy" });
+ *
+ * @example
+ * // With per-request context isolation
+ * const api = await slothlet({
+ *   dir: "./api",
+ *   context: { db, logger },
+ *   runtime: "async"
+ * });
+ *
+ * // Inside an API module, access context via:
+ * // import { context } from "@cldmv/slothlet/runtime";
+ *
+ * @example
+ * // With hook interception
+ * const api = await slothlet({ dir: "./api", hook: true });
+ * api.slothlet.hook.on("before", "math.*", (endpoint, args) => {
+ *   console.log("calling:", endpoint, args);
+ * });
+ *
+ * @example
+ * // Multiple independent instances
+ * const api1 = await slothlet({ dir: "./api" });
+ * const api2 = await slothlet({ dir: "./other-api" });
+ *
+ * @example
+ * // Shutdown when done
+ * await api.slothlet.shutdown();
  */
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -799,21 +865,43 @@ class Slothlet {
 }
 
 /**
- * Create new Slothlet instance and load API
- * Middleware function that delegates to Slothlet class
- * @param {Object} config - Configuration options
- * @returns {Promise<Object>} Bound API object with control methods
+ * Create a new Slothlet instance and load an API from a directory.
+ * This is the sole public entry point for slothlet. Each call produces an independent
+ * API instance with its own component graph, context store, and lifecycle.
+ * @alias module:@cldmv/slothlet
+ * @async
+ * @param {SlothletOptions} config - Configuration options
+ * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
  * @public
  * @example
- * const api = await slothlet({ dir: "./api_tests/api_test" });
- * // Use API
- * const result = api.math.add(2, 3);
- * // Hot reload
- * await api.api.reload();
- * // Full reload
- * await api.reload();
- * // Shutdown when done
- * await api.api.shutdown();
+ * // Minimal usage
+ * const api = await slothlet({ dir: "./api" });
+ * const result = await api.math.add(2, 3);
+ * await api.slothlet.shutdown();
+ *
+ * @example
+ * // Lazy mode with background materialization
+ * const api = await slothlet({
+ *   dir: "./api",
+ *   mode: "lazy",
+ *   backgroundMaterialize: true
+ * });
+ *
+ * @example
+ * // With hooks
+ * const api = await slothlet({ dir: "./api", hook: true });
+ * api.slothlet.hook.on("before", "**", (endpoint, args) => { /* ... *\/ });
+ *
+ * @example
+ * // Hot-reload a module at runtime
+ * await api.slothlet.api.reload("./api/math.mjs");
+ *
+ * @example
+ * // Strict collision control
+ * const api = await slothlet({
+ *   dir: "./api",
+ *   api: { collision: { initial: "merge", api: "error" } }
+ * });
  */
 export async function slothlet(config) {
 	const instance = new Slothlet();
@@ -824,3 +912,65 @@ export async function slothlet(config) {
 }
 
 export default slothlet;
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * Configuration options passed to {@link module:@cldmv/slothlet slothlet()}.
+ * @typedef {object} SlothletOptions
+ * @property {string} dir - Directory to scan for API modules. Relative paths are resolved from the calling file.
+ * @property {"eager"|"lazy"} [mode="eager"] - Loading strategy.
+ *   - `"eager"` — all modules are loaded immediately at startup (default).
+ *   - `"lazy"` — modules are loaded on first access via a Proxy.
+ *   Also accepted: `"immediate"` / `"preload"` (eager aliases); `"deferred"` / `"proxy"` (lazy aliases).
+ * @property {"async"|"live"} [runtime="async"] - Context propagation runtime.
+ *   - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
+ *   - `"live"` — Experimental live bindings.
+ *   Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
+ * @property {number} [apiDepth=Infinity] - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
+ * @property {object|null} [context=null] - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
+ * @property {object|null} [reference=null] - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
+ * @property {{merge: "shallow"|"deep"}} [scope] - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
+ * @property {object} [api] - API build and mutation settings.
+ * @property {string|{initial: string, api: string}} [api.collision="merge"] - Collision strategy when two modules export the same path.
+ *   Modes: `"merge"` (default), `"merge-replace"`, `"replace"`, `"skip"`, `"warn"`, `"error"`.
+ *   Pass an object to use different strategies for the initial build vs. runtime `api.slothlet.api.add()` calls.
+ * @property {object} [api.mutations={add:true,remove:true,reload:true}] - Enable or disable runtime mutation methods on `api.slothlet.api`.
+ *   Object with boolean keys `add`, `remove`, `reload` (all default `true`).
+ * @property {boolean|string|object} [hook=false] - Hook system configuration.
+ *   - `false` — disabled (default).
+ *   - `true` — enabled, all endpoints.
+ *   - `string` — enabled with a default glob pattern.
+ *   - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
+ * @property {boolean|object} [debug=false] - Enable verbose internal logging. `true` enables all categories.
+ *   Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
+ * @property {boolean} [silent=false] - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
+ * @property {boolean} [diagnostics=false] - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+ * @property {boolean|object} [tracking=false] - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
+ * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+ * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
+ *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
+ * @property {boolean|"fast"|"strict"|object} [typescript=false] - TypeScript support.
+ *   - `false` — disabled (default).
+ *   - `true` or `"fast"` — esbuild transpilation, no type checking.
+ *   - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
+ *   See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
+ */
+
+/**
+ * Bound API object returned by {@link module:@cldmv/slothlet slothlet()}.
+ * The root contains all loaded module exports plus the reserved `slothlet` namespace.
+ * @typedef {object} SlothletAPI
+ * @property {object} slothlet - Built-in control namespace.
+ * @property {Function} slothlet.shutdown - Shut down the instance and release all resources.
+ * @property {object} slothlet.api - Runtime mutation methods (`add`, `remove`, `reload`) — availability controlled by `api.mutations` option.
+ * @property {object} slothlet.hook - Hook registration surface (`on`, `off`, `once`, `clear`) — only present when `hook` option is enabled.
+ * @property {object} slothlet.context - Per-request context helpers (`run`, `get`, `set`, `extend`).
+ * @property {object} slothlet.lifecycle - Lifecycle event emitter (`on`, `off`, `once`, `emit`).
+ * @property {object} slothlet.metadata - Module metadata accessor (`get`, `set`, `has`).
+ * @property {object} slothlet.ownership - Module ownership registry (`get`, `unregister`).
+ * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`.
+ * @property {object} [slothlet.reference] - The `reference` object from config, accessible as `api.slothlet.reference`.
+ */
