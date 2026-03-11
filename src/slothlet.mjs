@@ -963,66 +963,66 @@ export default slothlet;
  * Bound API object returned by {@link module:@cldmv/slothlet slothlet()}.
  * The root contains all loaded module exports plus the reserved `slothlet` namespace.
  * @typedef {object} SlothletAPI
- * @property {Function} shutdown - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first.
  * @property {Function} destroy - Like `shutdown()` but additionally invokes registered destroy hooks before teardown.
+ * @property {Function} shutdown - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first.
  * @property {object} slothlet - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
- * @property {Function} slothlet.shutdown - Shut down the instance and release all resources.
- * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`.
- * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`.
- * @property {Function} slothlet.scope - Execute a function with full structured per-request context options. Convenience alias for `slothlet.context.scope()`.
  * @property {object} slothlet.api - Runtime API mutation methods — availability controlled by `api.mutations` config option.
  * @property {Function} slothlet.api.add - Mount a new API module at runtime.
- * @property {Function} slothlet.api.remove - Unmount an API module at runtime.
  * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path.
- * @property {object} slothlet.hook - Hook registration surface — only present when the `hook` option is enabled.
- * @property {Function} slothlet.hook.on - Register a hook handler for a type:pattern (e.g. `"before:math.*"`).
- * @property {Function} slothlet.hook.off - Remove hooks by ID or filter object (v2 alias for `remove()`).
- * @property {Function} slothlet.hook.remove - Remove hooks matching a filter (`id`, `type`, `pattern`).
- * @property {Function} slothlet.hook.clear - Alias for `remove()`.
- * @property {Function} slothlet.hook.enable - Enable hooks matching a filter (empty = enable all).
- * @property {Function} slothlet.hook.disable - Disable hooks matching a filter (empty = disable all).
- * @property {Function} slothlet.hook.list - List registered hooks matching a filter.
+ * @property {Function} slothlet.api.remove - Unmount an API module at runtime.
  * @property {object} slothlet.context - Per-request context helpers.
+ * @property {Function} slothlet.context.get - Get a value from the current per-request context store.
+ * @property {Function} slothlet.context.inspect - Return a snapshot of the current context state (for debugging).
  * @property {Function} slothlet.context.run - Execute a callback with isolated context data merged in.
  * @property {Function} slothlet.context.scope - Execute a function with structured context options (`context`, `fn`, `args`, `merge`, `isolation`).
- * @property {Function} slothlet.context.get - Get a value from the current per-request context store.
  * @property {Function} slothlet.context.set - Set a value in the current per-request context store.
- * @property {Function} slothlet.context.inspect - Return a snapshot of the current context state (for debugging).
- * @property {object} slothlet.lifecycle - Lifecycle event emitter.
- * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`).
- * @property {Function} slothlet.lifecycle.off - Unsubscribe a handler from a lifecycle event.
- * @property {object} slothlet.metadata - Module metadata accessor.
- * @property {Function} slothlet.metadata.setGlobal - Set global metadata applied to every function in the instance.
- * @property {Function} slothlet.metadata.set - Set per-function metadata by direct function reference.
- * @property {Function} slothlet.metadata.remove - Remove per-function metadata (all keys or a specific key).
- * @property {Function} slothlet.metadata.setFor - Set metadata for all functions reachable under an API path or moduleID.
- * @property {Function} slothlet.metadata.removeFor - Remove path-level metadata for a given API path or moduleID.
- * @property {Function} slothlet.metadata.get - Get metadata for a specific function reference.
- * @property {Function} slothlet.metadata.self - Get metadata for the currently-executing API function (runtime-injected).
- * @property {Function} slothlet.metadata.caller - Get metadata for the function that invoked the current one (runtime-injected).
- * @property {object} slothlet.ownership - Module ownership registry.
- * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path.
- * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records.
- * @property {object} slothlet.owner - Direct path ownership accessor (shorthand for `slothlet.ownership`).
- * @property {Function} slothlet.owner.get - Get ownership info for a specific API path.
- * @property {object} slothlet.materialize - Lazy materialization tracking (meaningful only when `mode: "lazy"`).
- * @property {boolean} slothlet.materialize.materialized - `true` once all lazy folders have been fully loaded.
- * @property {Function} slothlet.materialize.get - Get current materialization statistics (`{ total, materialized, remaining, percentage }`).
- * @property {Function} slothlet.materialize.wait - Returns a Promise that resolves when all lazy folders are fully materialized.
  * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`. Do not enable in production.
- * @property {Function} [slothlet.diag.describe] - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only.
- * @property {object} [slothlet.diag.reference] - The `reference` config value as passed to `slothlet()`.
- * @property {object} [slothlet.diag.context] - The `context` config value as passed to `slothlet()`.
- * @property {Function} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state.
- * @property {Function} [slothlet.diag.getAPI] - Return the live bound API proxy object.
- * @property {Function} [slothlet.diag.getOwnership] - Return ownership diagnostics for all registered API paths.
- * @property {object} [slothlet.diag.owner] - Ownership sub-namespace for diagnostics.
- * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path.
  * @property {object} [slothlet.diag.caches] - Cache diagnostics sub-namespace.
  * @property {Function} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ totalCaches, caches[] }`).
  * @property {Function} [slothlet.diag.caches.getAllModuleIDs] - Return all moduleIDs currently in cache.
  * @property {Function} [slothlet.diag.caches.has] - Check whether a cache entry exists for a given moduleID.
- * @property {Function} [slothlet.diag.SlothletWarning] - The `SlothletWarning` class — access `.captured` for warnings emitted during tests.
+ * @property {object} [slothlet.diag.context] - The `context` config value as passed to `slothlet()`.
+ * @property {Function} [slothlet.diag.describe] - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only.
+ * @property {Function} [slothlet.diag.getAPI] - Return the live bound API proxy object.
+ * @property {Function} [slothlet.diag.getOwnership] - Return ownership diagnostics for all registered API paths.
  * @property {object} [slothlet.diag.hook] - Hook system diagnostics sub-namespace (present only when hooks are enabled).
+ * @property {Function} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state.
+ * @property {object} [slothlet.diag.owner] - Ownership sub-namespace for diagnostics.
+ * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path.
+ * @property {object} [slothlet.diag.reference] - The `reference` config value as passed to `slothlet()`.
+ * @property {Function} [slothlet.diag.SlothletWarning] - The `SlothletWarning` class — access `.captured` for warnings emitted during tests.
+ * @property {object} slothlet.hook - Hook registration surface — only present when the `hook` option is enabled.
+ * @property {Function} slothlet.hook.clear - Alias for `remove()`.
+ * @property {Function} slothlet.hook.disable - Disable hooks matching a filter (empty = disable all).
+ * @property {Function} slothlet.hook.enable - Enable hooks matching a filter (empty = enable all).
+ * @property {Function} slothlet.hook.list - List registered hooks matching a filter.
+ * @property {Function} slothlet.hook.off - Remove hooks by ID or filter object (v2 alias for `remove()`).
+ * @property {Function} slothlet.hook.on - Register a hook handler for a type:pattern (e.g. `"before:math.*"`).
+ * @property {Function} slothlet.hook.remove - Remove hooks matching a filter (`id`, `type`, `pattern`).
+ * @property {object} slothlet.lifecycle - Lifecycle event emitter.
+ * @property {Function} slothlet.lifecycle.off - Unsubscribe a handler from a lifecycle event.
+ * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`).
+ * @property {object} slothlet.materialize - Lazy materialization tracking (meaningful only when `mode: "lazy"`).
+ * @property {Function} slothlet.materialize.get - Get current materialization statistics (`{ total, materialized, remaining, percentage }`).
+ * @property {boolean} slothlet.materialize.materialized - `true` once all lazy folders have been fully loaded.
+ * @property {Function} slothlet.materialize.wait - Returns a Promise that resolves when all lazy folders are fully materialized.
+ * @property {object} slothlet.metadata - Module metadata accessor.
+ * @property {Function} slothlet.metadata.caller - Get metadata for the function that invoked the current one (runtime-injected).
+ * @property {Function} slothlet.metadata.get - Get metadata for a specific function reference.
+ * @property {Function} slothlet.metadata.remove - Remove per-function metadata (all keys or a specific key).
+ * @property {Function} slothlet.metadata.removeFor - Remove path-level metadata for a given API path or moduleID.
+ * @property {Function} slothlet.metadata.self - Get metadata for the currently-executing API function (runtime-injected).
+ * @property {Function} slothlet.metadata.set - Set per-function metadata by direct function reference.
+ * @property {Function} slothlet.metadata.setFor - Set metadata for all functions reachable under an API path or moduleID.
+ * @property {Function} slothlet.metadata.setGlobal - Set global metadata applied to every function in the instance.
+ * @property {object} slothlet.owner - Direct path ownership accessor (shorthand for `slothlet.ownership`).
+ * @property {Function} slothlet.owner.get - Get ownership info for a specific API path.
+ * @property {object} slothlet.ownership - Module ownership registry.
+ * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path.
+ * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records.
  * @property {object} [slothlet.reference] - The `reference` object from config, merged onto the root API and accessible here.
+ * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`.
+ * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`.
+ * @property {Function} slothlet.scope - Execute a function with full structured per-request context options. Convenience alias for `slothlet.context.scope()`.
+ * @property {Function} slothlet.shutdown - Shut down the instance and release all resources.
  */
