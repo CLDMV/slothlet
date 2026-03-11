@@ -30,14 +30,14 @@
 	* @example // ESM usage via slothlet API
 	* import slothlet from "@cldmv/slothlet";
 	* const api_test = await slothlet({ dir: './api_tests/api_test' });
-	* console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
+	* console.log(api_test.math.add(2, 3)); // 5
 	* console.log(api_test.math.multiply(2, 3)); // 6
 	*
 	* @example // ESM usage via slothlet API (inside async function)
 	* async function example() {
 	*   const { default: slothlet } = await import("@cldmv/slothlet");
 	*   const api_test = await slothlet({ dir: './api_tests/api_test' });
-	*   console.log(api_test.math.add(2, 3)); // 1003
+	*   console.log(api_test.math.add(2, 3)); // 5
 	*   console.log(api_test.math.multiply(2, 3)); // 6
 	* }
 	*
@@ -46,14 +46,14 @@
 	* (async () => {
 	*   ({ slothlet } = await import("@cldmv/slothlet"));
 	*   const api_test = await slothlet({ dir: './api_tests/api_test' });
-	*   console.log(api_test.math.add(2, 3)); // 1003
+	*   console.log(api_test.math.add(2, 3)); // 5
 	*   console.log(api_test.math.multiply(2, 3)); // 6
 	* })();
 	*
 	* @example // CJS usage via slothlet API (inside async function)
 	* const slothlet = require("@cldmv/slothlet");
 	* const api_test = await slothlet({ dir: './api_tests/api_test' });
-	* console.log(api_test.math.add(2, 3)); // 1003  (root math.mjs wins collision → a+b+1000)
+	* console.log(api_test.math.add(2, 3)); // 5
 	* console.log(api_test.math.multiply(2, 3)); // 6
 	*/
 export const math =
@@ -61,24 +61,21 @@ export const math =
 	{
 		/**
 	* Adds two numbers together.
-	* This implementation returns `a + b` in isolation, but under default slothlet
-	* loading the root `math.mjs` file wins the collision for `add`, returning
-	* `a + b + 1000` instead. See the examples below for the effective runtime value.
 	* @function add
 	* @public
 	* @param {number} a - First number to add
 	* @param {number} b - Second number to add
-	* @returns {number} The sum of a and b (+ 1000 via collision with root math.mjs)
+	* @returns {number} The sum of a and b
 	* @example // ESM usage via slothlet API
 	* import slothlet from "@cldmv/slothlet";
 	* const api_test = await slothlet({ dir: './api_tests/api_test' });
-	* console.log(api_test.math.add(5, 7)); // 1012  (root file wins collision → a+b+1000)
+	* console.log(api_test.math.add(5, 7)); // 12
 	*
 	* @example // ESM usage via slothlet API (inside async function)
 	* async function example() {
 	*   const { default: slothlet } = await import("@cldmv/slothlet");
 	*   const api_test = await slothlet({ dir: './api_tests/api_test' });
-	*   console.log(api_test.math.add(5, 7)); // 1012
+	*   console.log(api_test.math.add(5, 7)); // 12
 	* }
 	*
 	* @example // CJS usage via slothlet API (top-level)
@@ -86,13 +83,13 @@ export const math =
 	* (async () => {
 	*   ({ slothlet } = await import("@cldmv/slothlet"));
 	*   const api_test = await slothlet({ dir: './api_tests/api_test' });
-	*   console.log(api_test.math.add(5, 7)); // 1012
+	*   console.log(api_test.math.add(5, 7)); // 12
 	* })();
 	*
 	* @example // CJS usage via slothlet API (inside async function)
 	* const slothlet = require("@cldmv/slothlet");
 	* const api_test = await slothlet({ dir: './api_tests/api_test' });
-	* console.log(api_test.math.add(5, 7)); // 1012
+	* console.log(api_test.math.add(5, 7)); // 12
 	*/
 		add(a, b) {
 			return a + b;
