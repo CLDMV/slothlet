@@ -484,12 +484,16 @@ const format = {
 			// We want to remove that redundant part and keep any suffix
 			const moduleBaseName = modulePrefix.substring(modulePrefix.lastIndexOf("/") + 1).replace("module:", ""); // "slothlet" or "api_test"
 
-			if (afterDash.startsWith(moduleBaseName)) {
-				const suffix = afterDash.substring(moduleBaseName.length); // "" or "/runtime"
+			// Strip jsdoc's "exports." prefix which is added for ESM `export const` declarations
+			// e.g. "exports.slothlet/runtime" → "slothlet/runtime"
+			const afterDashClean = afterDash.startsWith("exports.") ? afterDash.substring("exports.".length) : afterDash;
+
+			if (afterDashClean.startsWith(moduleBaseName)) {
+				const suffix = afterDashClean.substring(moduleBaseName.length); // "" or "/runtime"
 				result = modulePrefix + suffix;
 			} else {
 				// For cases like "api_test--math", preserve the namespace: "module:api_test.math"
-				result = modulePrefix + "." + afterDash;
+				result = modulePrefix + "." + afterDashClean;
 			}
 		} else {
 			result = memberof;
@@ -2226,7 +2230,7 @@ const partials = {
 				// Direct item, nested item, or child item - create a link
 				const doclet = item.doclet;
 				if (doclet) {
-					if (doclet.kind === "function" || doclet.kind === "member" || doclet.kind === "module" || doclet.kind === "namespace") {
+					if (doclet.kind === "function" || doclet.kind === "member" || doclet.kind === "namespace") {
 						// const returns =
 						// 	constant.doclet?.type && constant.doclet.type.names
 						// 		? ` ⇒ <code>${helper.escapeHtml(constant.doclet.type.names.join(" | "))}</code>`
@@ -2235,6 +2239,9 @@ const partials = {
 						// const returns = doclet.returns ? ` ⇒ <code>${format.returnsForTOC(doclet.returns)}</code>` : "";
 						// const anchor = item.anchor || doclet.anchor;
 						// output += `${indent}${prefix}[${key}(${format.paramsForTOC(doclet.params)})](#${anchor})${returns}\n`;
+					} else if (doclet.kind === "module") {
+						// Module containers are already rendered as ## headings by the template.
+						// Skip the TOC entry to avoid a self-referencing link, but still recurse.
 					} else if (doclet.kind === "constant" || doclet.kind === "object") {
 						// Module bridge constants (e.g., math, tcp, rootstring via @alias) should
 						// appear in the TOC just like namespaces do.
@@ -2333,6 +2340,15 @@ const partials = {
 				// if (item.type === "module" || item.type === "direct" || item.type === "item") {
 				const doclet = item.doclet;
 				if (!doclet) return;
+
+				// Module-kind items are section containers already rendered at the ## level by the
+				// template. Skip the duplicate ### header/description but still recurse into children.
+				if (doclet.kind === "module") {
+					if (item.children && Object.keys(item.children).length > 0) {
+						sectionOutput += generateModuleSection(item.children, fullPath);
+					}
+					return;
+				}
 
 				// Use pre-calculated anchor
 				sectionOutput += `\n* * *\n\n`;
