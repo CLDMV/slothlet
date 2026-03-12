@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 18:47:29 -07:00 (1773280049)
+ *	@Last modified time: 2026-03-11 19:53:47 -07:00 (1773284027)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -2011,9 +2011,9 @@ const partials = {
 	 * @returns {string} Global typedef definitions section
 	 */
 	globalTypedefDefinitions() {
-				// If integratedModules already rendered typedefs inline inside the main module,
-				// skip the standalone section entirely.
-				if (slothletTypedefsInlined) return "";
+		// If integratedModules already rendered typedefs inline inside the main module,
+		// skip the standalone section entirely.
+		if (slothletTypedefsInlined) return "";
 		if (!Array.isArray(availableTypedefs) || availableTypedefs.length === 0) return "";
 
 		let output = "\n\n* * *\n\n";
@@ -2055,25 +2055,25 @@ const partials = {
 					const returnType = match[2] ? match[2].trim() : null;
 					const params = paramsStr
 						? paramsStr
-							  .split(",")
-							  .map((s) => s.trim())
-							  .filter(Boolean)
-							  .map((p) => {
-								  const isOpt = p.startsWith("[");
-								  if (isOpt) {
-									  // Pattern: [name]: Type  →  name is inside brackets, type follows
-									  const m = p.match(/^\[([^\]]+)\]:\s*(.+)$/);
-									  if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true };
-									  // Fallback: bracket-only wrapping with no type annotation
-									  const cleaned = p.replace(/^\[|\]$/g, "").trim();
-									  return { name: cleaned, type: { names: ["*"] }, optional: true };
-								  }
-								  const ci = p.indexOf(":");
-								  if (ci > -1) {
-									  return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false };
-								  }
-								  return { name: p, type: { names: ["*"] }, optional: false };
-							  })
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean)
+								.map((p) => {
+									const isOpt = p.startsWith("[");
+									if (isOpt) {
+										// Pattern: [name]: Type  →  name is inside brackets, type follows
+										const m = p.match(/^\[([^\]]+)\]:\s*(.+)$/);
+										if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true };
+										// Fallback: bracket-only wrapping with no type annotation
+										const cleaned = p.replace(/^\[|\]$/g, "").trim();
+										return { name: cleaned, type: { names: ["*"] }, optional: true };
+									}
+									const ci = p.indexOf(":");
+									if (ci > -1) {
+										return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false };
+									}
+									return { name: p, type: { names: ["*"] }, optional: false };
+								})
 						: [];
 					return { params, returnType };
 				}
@@ -2099,7 +2099,7 @@ const partials = {
 						const pa = propAnchorFor(prop);
 						const rawName = prop.name.replace(/^\[|\]$/g, "");
 						const isOptional = prop.name.startsWith("[");
-						const displayName = isOptional ? `[${rawName}()]` : `${rawName}()`;
+						const displayName = isOptional ? `[api.${rawName}()]` : `api.${rawName}()`;
 						output += `<a id="${pa}"></a>\n\n`;
 						output += `#### ${displayName}\n\n`;
 						if (prop.description) {
@@ -2162,8 +2162,6 @@ const partials = {
 					});
 					output += "\n";
 				}
-
-
 			}
 
 			output = partials.examples(typedef, output);
@@ -2299,7 +2297,9 @@ const partials = {
 					if (!prop) return;
 					const isFunc = prop.type?.names?.some((n) => n === "Function" || n === "function");
 					const isOptional = prop.optional;
-					const displayKey = isOptional ? `\\[.${key}\\]` : `.${key}`;
+					const displayKey = isOptional
+						? `\\[${depth === startDepth ? "api" : ""}.${key}\\]`
+						: `${depth === startDepth ? "api" : ""}.${key}`;
 					const params = isFunc ? "()" : "";
 					// For function-typed properties, the type IS the function — omit return arrow
 					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
@@ -2387,8 +2387,11 @@ const partials = {
 
 		if (output !== "") {
 			output = `**Structure**\n\n` + output;
+			// For the main slothlet module, append a link to the runtime sub-module
+			if (baseModuleLongname === "module:@cldmv/slothlet") {
+				output += `\n[@cldmv/slothlet/runtime](#at_cldmv_slash_slothlet_slash_runtime)\n`;
+			}
 		}
-
 		// Add constants section if any
 		if (constants && constants.length > 0) {
 			output += `\n\n`;
