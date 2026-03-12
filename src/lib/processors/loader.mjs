@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-06 09:20:41 -08:00 (1772817641)
+ *	@Last modified time: 2026-03-12 16:21:42 -07:00 (1773357702)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -83,7 +83,7 @@ export class Loader extends ComponentBase {
 
 						// Get the path to the type generation script (in tools/ not src/tools/)
 						const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const scriptPath = path.resolve(__dirname, "../../../tools/build/generate-types-worker.mjs");
+						const scriptPath = path.resolve(__dirname, "../../../tools/build/generate-types-worker.mjs");
 
 						// Prepare config for child process
 						// Note: Child process needs 'dir' not 'root', and should use eager mode

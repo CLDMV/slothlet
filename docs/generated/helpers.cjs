@@ -139,7 +139,16 @@ const gets = {
 		return doclet ? doclet[key] : obj ? obj[key] : undefined;
 	},
 	// Get original module title (from @module tag, not affected by @name)
+	// A @title custom tag on the module doclet overrides the heading entirely.
 	originalModuleTitle() {
+		// Check for @title custom tag override first
+		const titleTag =
+			(this.customTags && this.customTags.find((t) => t.tag === "title")) ||
+			(this.tags && this.tags.find((t) => t.title === "title"));
+		if (titleTag) {
+			const val = (titleTag.value || titleTag.text || "").trim();
+			if (val) return val;
+		}
 		// For modules, prefer alias (which should contain the original path)
 		// over name (which might be shortened by @name tag)
 		if (this.kind === "module") {

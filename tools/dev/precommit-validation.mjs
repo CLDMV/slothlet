@@ -12,8 +12,19 @@
  */
 
 /**
- * @fileoverview Pre-commit validation tool that runs the mandatory validation sequence and only allows commits if all tests pass.
+ * @fileoverview Runs the mandatory pre-commit validation sequence (lint → vitest → type
+ * check) and exits non-zero if any step fails, preventing the commit. Invoked
+ * automatically by the Husky pre-commit hook.
  * @module @cldmv/slothlet/tools/precommit-validation
+ * @title npm run precommit
+ *
+ * @example
+ * // Run manually via npm script
+ * npm run precommit
+ *
+ * @description
+ * No CLI options. The tool runs the full validation sequence unconditionally and
+ * prints a pass/fail summary. Exit code mirrors the result of the last failing step.
  */
 
 import { spawn } from "node:child_process";
@@ -21,6 +32,7 @@ import { pathToFileURL } from "node:url";
 
 /**
  * Main pre-commit validation function.
+ * @internal
  * @package
  * @async
  * @returns {Promise<void>}

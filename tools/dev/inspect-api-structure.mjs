@@ -6,14 +6,54 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
+ *	@Last modified time: 2026-03-12 16:30:47 -07:00 (1773358247)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Debug tool to load a Slothlet instance and display the full API tree structure.
+ * @fileoverview Loads a Slothlet API folder and prints the full API tree: all
+ * callable paths, lazy vs eager status, function signatures, and nested
+ * namespace structure. Useful for verifying module wiring and debugging load issues.
  * @module @cldmv/slothlet/tools/inspect-api-structure
+ * @title npm run inspect
+ *
+ * @example
+ * // Run via npm script (inspect api_test folder)
+ * npm run inspect -- api_test
+ *
+ * @example
+ * // Use eager loading
+ * npm run inspect -- api_test --eager
+ *
+ * @example
+ * // Override traversal depth
+ * npm run inspect -- api_test --depth 4
+ *
+ * @example
+ * // Use live runtime
+ * npm run inspect -- api_test --runtime live
+ *
+ * @example
+ * // Raw util.inspect output
+ * npm run inspect -- api_test --raw
+ *
+ * @description
+ * **CLI Options:**
+ *
+ * | Option | Default | Description |
+ * | --- | --- | --- |
+ * | `<api-name>` | — | Name of the `api_tests/` folder to load (required) |
+ * | `--depth <n>` | `8` | Maximum tree traversal depth |
+ * | `--lazy` | ✓ | Use lazy loading mode (default) |
+ * | `--eager` | | Use eager loading mode |
+ * | `--raw` | | Print raw `util.inspect` output only |
+ * | `--runtime <type>` | `async` | Context runtime: `async` or `live` |
+ * | `--apiDepth <n>` | unlimited | Slothlet `apiDepth` config option |
+ * | `--debug` | | Enable Slothlet debug output |
+ * | `--allowMutation` | | Allow runtime API mutation |
+ * | `--hooks` | | Enable lifecycle hooks |
+ * | `--help` / `-h` | | Show usage information |
  */
 
 import chalk from "chalk";
@@ -29,6 +69,7 @@ let slothlet;
 /**
  * Ensure slothlet dev conditions are set for V3.
  * @returns {boolean} True if a child process was spawned.
+ * @internal
  */
 function ensureDevEnvFlags() {
 	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../dist");
@@ -37,6 +78,7 @@ function ensureDevEnvFlags() {
 	}
 
 	/**
+	 * @internal
 	 * @param {string[]} args
 	 * @param {string} condition
 	 * @returns {boolean}
@@ -98,6 +140,7 @@ function ensureDevEnvFlags() {
  * @param {number} [maxDepth=8] - Maximum depth to traverse
  * @param {WeakSet} [visited=new WeakSet()] - Visited objects to prevent cycles
  * @returns {string[]} Array of formatted strings describing the structure
+ * @internal
  */
 function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = new WeakSet()) {
 	const indent = "  ".repeat(depth);
@@ -211,6 +254,7 @@ function inspectApiStructure(obj, path = "", depth = 0, maxDepth = 8, visited = 
  * @param {any} api - The API object to materialize
  * @param {boolean} useV2 - Whether v2 behavior should be used
  * @returns {Promise<void>}
+ * @internal
  */
 async function forceMaterializeLazyFolders(api) {
 	if (!api) return;
@@ -231,12 +275,7 @@ async function forceMaterializeLazyFolders(api) {
 		try {
 			// Check if property descriptor indicates a lazy folder
 			const descriptor = Object.getOwnPropertyDescriptor(api, key);
-			if (
-				descriptor &&
-				"value" in descriptor &&
-				typeof descriptor.value === "function" &&
-				descriptor.value.name?.includes("lazy")
-			) {
+			if (descriptor && "value" in descriptor && typeof descriptor.value === "function" && descriptor.value.name?.includes("lazy")) {
 				console.log(chalk.gray(`  Found lazy folder: ${key}, attempting materialization...`));
 
 				try {
@@ -297,6 +336,7 @@ async function forceMaterializeLazyFolders(api) {
  * @param {boolean} [options.raw=false] - Output only the raw API via console.log
  * @param {object} [options.slothletConfig] - Configuration for slothlet initialization
  * @returns {Promise<void>}
+ * @internal
  */
 async function inspectApi(apiName, options = {}) {
 	const { maxDepth = 8, lazy = true, raw = false, slothletConfig = {} } = options;
@@ -413,6 +453,7 @@ async function inspectApi(apiName, options = {}) {
  * @param {any} obj - Object to materialize
  * @param {WeakSet} [visited] - Visited objects tracker to prevent infinite recursion
  * @returns {Promise<void>}
+ * @internal
  */
 async function materializeLazyStructure(obj, visited = new WeakSet()) {
 	// Avoid infinite recursion
@@ -463,6 +504,7 @@ async function materializeLazyStructure(obj, visited = new WeakSet()) {
  * @param {number} [depth=0] - Current depth
  * @param {number} [maxDepth=8] - Maximum depth to traverse
  * @returns {Promise<string[]>} Array of callable paths
+ * @internal
  */
 async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(), skipSelf = false, depth = 0, maxDepth = 8) {
 	const paths = [];
@@ -514,6 +556,7 @@ async function findCallablePaths(obj, basePath = "api", visited = new WeakSet(),
 /**
  * Main entry point for the utility.
  * @returns {Promise<void>}
+ * @internal
  */
 async function main() {
 	const args = process.argv.slice(2);
