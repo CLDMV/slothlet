@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "类型生成失败：{error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "生成 TypeScript 声明的子进程遇到错误。请检查错误信息并确保 TypeScript 源文件有效。",
 		"TS_TYPE_GENERATION_FORK_FAILED": "无法派生类型生成进程：{error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "类型生成工作进程无法启动。请确保 Node.js 有权限派生子进程，并且存在 tools/generate-types-worker.mjs 脚本。",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "类型生成工作进程无法启动。请确保 Node.js 有权限派生子进程，并且存在 tools/build/generate-types-worker.mjs 脚本。",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "类型生成进程以代码 {code} 退出：{output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "类型生成子进程以非零代码退出。检查输出中的编译器错误并验证 TypeScript 源是否有效。",
 		"TS_TYPE_CHECK_ERRORS": "在 '{filePath}' 中发现 TypeScript 类型错误：\n{errors}",

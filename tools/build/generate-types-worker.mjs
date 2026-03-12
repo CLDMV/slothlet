@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/generate-types-worker.mjs
+ *	@Filename: /tools/build/generate-types-worker.mjs
  *	@Date: 2026-02-14T18:14:33-08:00 (1771121673)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -17,8 +17,8 @@
  * This runs in a forked child process to avoid module cache conflicts
  */
 
-import slothlet from "../index.mjs";
-import { generateTypes } from "../src/lib/processors/type-generator.mjs";
+import slothlet from "../../index.mjs";
+import { generateTypes } from "../../src/lib/processors/type-generator.mjs";
 
 async function main() {
 	try {

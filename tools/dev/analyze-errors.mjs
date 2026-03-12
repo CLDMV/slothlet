@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/analyze-errors.mjs
+ *	@Filename: /tools/dev/analyze-errors.mjs
  *	@Date: 2026-01-17T17:51:34-08:00 (1768701094)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -13,6 +13,9 @@
 
 /**
  * @fileoverview Analyze all SlothletError and SlothletWarning usage and translations
+ * @module @cldmv/slothlet/tools/analyze-errors
+ *
+ * @description
  * Checks:
  * - Proper error construction (originalError passed when needed)
  * - Hint availability for each error code
@@ -27,12 +30,12 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
+import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/header-config.mjs";
 
 const execAsync = promisify(exec);
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const rootDir = join(__dirname, "..");
+const rootDir = join(__dirname, "../..");
 const srcDir = join(rootDir, "src");
 
 // CLI args

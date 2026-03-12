@@ -38,5 +38,5 @@ export const FILE_HEADER_IGNORE_FOLDERS = [
 	"coverage", // Ignore coverage reports
 	"tmp", // Ignore temporary files
 	"node_modules", // Ignore node_modules
-	"tools/fix-headers.mjs" // Ignore fix-headers.mjs (self-exclusion)
+	"tools/dev/fix-headers.mjs" // Ignore fix-headers.mjs (self-exclusion)
 ];

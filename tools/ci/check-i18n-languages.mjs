@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/check-i18n-languages.mjs
+ *	@Filename: /tools/ci/check-i18n-languages.mjs
  *	@Date: 2026-02-21T17:52:07-08:00 (1771725127)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -61,7 +61,7 @@ function difference(a, b) {
  */
 function resolveRepoRoot() {
 	const toolDir = dirname(fileURLToPath(import.meta.url));
-	return join(toolDir, "..");
+	return join(toolDir, "../..");
 }
 
 /**

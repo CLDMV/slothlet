@@ -83,7 +83,7 @@ export class Loader extends ComponentBase {
 
 						// Get the path to the type generation script (in tools/ not src/tools/)
 						const __dirname = path.dirname(fileURLToPath(import.meta.url));
-						const scriptPath = path.resolve(__dirname, "../../../tools/generate-types-worker.mjs");
+const scriptPath = path.resolve(__dirname, "../../../tools/build/generate-types-worker.mjs");
 
 						// Prepare config for child process
 						// Note: Child process needs 'dir' not 'root', and should use eager mode

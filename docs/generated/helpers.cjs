@@ -2345,7 +2345,14 @@ const partials = {
 					// Anchor for this individual property — dash-separated path keeps it readable.
 					const rawName = prop.name.replace(/^\[|\]$/g, "");
 					const propAnchor = `${typedefAnchor}_prop_${rawName.replace(/\./g, "-")}`;
-					treeOut += `${ind}* [${displayKey}${params}](#${propAnchor})${retStr}\n`;
+					// Only link function-typed props: their anchors are standalone <a id> sections
+					// (resolvable by the markdown linter). Non-function props have their anchors
+					// embedded inside table cells, which fragment-link checkers cannot resolve.
+					if (isFunc) {
+						treeOut += `${ind}* [${displayKey}${params}](#${propAnchor})${retStr}\n`;
+					} else {
+						treeOut += `${ind}* ${displayKey}${retStr}\n`;
+					}
 					if (Object.keys(entry._children).length > 0) {
 						renderNode(entry._children, depth + 1);
 					}

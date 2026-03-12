@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "Typ-Generierung fehlgeschlagen: {error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "Der Kindprozess, der die TypeScript-Deklarationen generiert, ist auf einen Fehler gestoßen. Prüfen Sie die Fehlermeldung auf Details und stellen Sie sicher, dass die TypeScript-Quelldateien gültig sind.",
 		"TS_TYPE_GENERATION_FORK_FAILED": "Fehler beim Forken des Typ-Generierungs-Prozesses: {error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "Der Worker-Prozess zur Typ-Generierung konnte nicht gestartet werden. Stellen Sie sicher, dass Node.js Berechtigungen zum Forken von Kindprozessen hat und das Script tools/generate-types-worker.mjs existiert.",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "Der Worker-Prozess zur Typ-Generierung konnte nicht gestartet werden. Stellen Sie sicher, dass Node.js Berechtigungen zum Forken von Kindprozessen hat und das Script tools/build/generate-types-worker.mjs existiert.",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "Prozess zur Typ-Generierung mit Code {code} beendet: {output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "Der Kindprozess zur Typ-Generierung wurde mit einem Nicht-Null-Code beendet. Prüfen Sie die Ausgabe auf Compiler-Fehler und stellen Sie sicher, dass die TypeScript-Quellen gültig sind.",
 		"TS_TYPE_CHECK_ERRORS": "TypeScript-Typfehler in '{filePath}' gefunden:\n{errors}",

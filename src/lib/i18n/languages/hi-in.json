@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "प्रकार पीढ़ी विफल: {error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "टाइपस्क्रिप्ट घोषणाएं उत्पन्न करने वाली चाइल्ड प्रोसेस में त्रुटि हुई। विवरण के लिए त्रुटि संदेश की जांच करें और सुनिश्चित करें कि टाइपस्क्रिप्ट स्रोत फ़ाइलें मान्य हैं।",
 		"TS_TYPE_GENERATION_FORK_FAILED": "प्रकार पीढ़ी प्रोसेस को फोर्क (fork) करने में विफल: {error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "प्रकार पीढ़ी वर्कर प्रोसेस शुरू नहीं किया जा सका। सुनिश्चित करें कि Node.js के पास चाइल्ड प्रोसेस फोर्क करने की अनुमति है और tools/generate-types-worker.mjs स्क्रिप्ट मौजूद है।",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "प्रकार पीढ़ी वर्कर प्रोसेस शुरू नहीं किया जा सका। सुनिश्चित करें कि Node.js के पास चाइल्ड प्रोसेस फोर्क करने की अनुमति है और tools/build/generate-types-worker.mjs स्क्रिप्ट मौजूद है।",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "प्रकार पीढ़ी प्रोसेस कोड {code} के साथ बाहर निकला: {output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "प्रकार पीढ़ी चाइल्ड प्रोसेस गैर-शून्य कोड के साथ समाप्त हुई। कंपाइलर त्रुटियों के लिए आउटपुट की जांच करें और सत्यापित करें कि टाइपस्क्रिप्ट स्रोत मान्य हैं।",
 		"TS_TYPE_CHECK_ERRORS": "'{filePath}' में टाइपस्क्रिप्ट प्रकार त्रुटियाँ मिलीं:\n{errors}",
