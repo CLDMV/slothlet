@@ -26,7 +26,7 @@
  * | Export | Type | Description |
  * | --- | --- | --- |
  * | `self` | `object` | Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles. |
- * | `context` | `object` | Per-request context data set by `api.slothlet.context.run(ctx, fn)`. Readable and writable. |
+ * | `context` | `object` | The current ambient context object. Seeded at startup via `config.context` and persists across calls. `api.slothlet.context.run()` / `.scope()` can override it for the duration of a single call. Readable and writable. |
  * | `instanceID` | `string` | Unique identifier of the active Slothlet instance. |
  *
  * All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
@@ -104,15 +104,19 @@ export const self = new Proxy(
 );
 
 /**
- * Per-request context data provided via `api.slothlet.context.run(ctx, fn)` or
- * `slothlet.context.run(ctx, fn)`. Readable and writable inside the current scope.
+ * The current ambient context object. Seeded at instance startup via `config.context` and
+ * persists for the lifetime of the instance. `api.slothlet.context.run()` and `.scope()` can
+ * temporarily override it for the duration of a single call, after which the previous context
+ * is restored. Readable and writable.
  *
  * @memberof module:@cldmv/slothlet/runtime
  * @type {object}
  * @example
  * import { context } from "@cldmv/slothlet/runtime";
- * // Inside an API function called within a context.run() scope:
+ * // Read the ambient context set via config.context or written by a previous call:
  * const userId = context.userId;
+ * // context.run() overrides it only for the duration of that one call:
+ * await api.slothlet.context.run({ userId: 42 }, myFn);
  */
 export const context = new Proxy(
 	{},

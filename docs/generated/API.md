@@ -972,7 +972,7 @@ Shut down the instance and release all resources.
 > <tr>
 > <td><code>context</code></td>
 > <td><code>object</code></td>
-> <td>Per-request context data set by <code>api.slothlet.context.run(ctx, fn)</code>. Readable and writable.</td>
+> <td>The current ambient context object. Seeded at startup via <code>config.context</code> and persists across calls. <code>api.slothlet.context.run()</code> / <code>.scope()</code> can override it for the duration of a single call. Readable and writable.</td>
 > </tr>
 > <tr>
 > <td><code>instanceID</code></td>
