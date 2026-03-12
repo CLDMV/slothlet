@@ -186,7 +186,7 @@ try {
 					localeReport.duplicates.push({ value: val, keys });
 				}
 			}
-		} catch (err) {
+		} catch {
 			// non-fatal
 		}
 
