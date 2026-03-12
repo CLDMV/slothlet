@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/ci-cleanup-src.mjs
+ *	@Filename: /tools/ci/ci-cleanup-src.mjs
  *	@Date: 2025-12-08T01:23:27-08:00 (1765185807)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -23,7 +23,7 @@ import path from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.dirname(__dirname); // Go up one level from tools/ to project root
+const rootDir = path.dirname(path.dirname(__dirname)); // Go up two levels from tools/ci/ to project root
 const srcPath = path.join(rootDir, "src");
 
 // Detect if we're running in a CI environment

@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/prepend-license.mjs
+ *	@Filename: /tools/build/prepend-license.mjs
  *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -59,7 +59,7 @@ const __dirname = path.dirname(__filename);
 const TEXT_EXTS = new Set([".js", ".mjs", ".cjs", ".css", ".scss", ".less", ".html", ".jsonc", ".yml", ".yaml"]);
 
 const APACHE_MARKER = "Licensed under the Apache License, Version 2.0";
-const root = path.join(__dirname, "..");
+const root = path.join(__dirname, "../..");
 const licensePath = path.join(root, ".configs", "license-header.txt");
 
 /**

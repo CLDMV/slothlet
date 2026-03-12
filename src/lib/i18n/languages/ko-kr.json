@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "타입 생성 실패: {error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "TypeScript 선언을 생성하는 하위 프로세스에서 오류가 발생했습니다. 오류 메시지에서 세부 정보를 확인하고 TypeScript 소스 파일이 유효한지 확인하십시오.",
 		"TS_TYPE_GENERATION_FORK_FAILED": "타입 생성 프로세스 분기(fork) 실패: {error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "타입 생성 워커 프로세스를 시작할 수 없습니다. Node.js에 하위 프로세스 분기 권한이 있는지, tools/generate-types-worker.mjs 스크립트가 존재하는지 확인하십시오.",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "타입 생성 워커 프로세스를 시작할 수 없습니다. Node.js에 하위 프로세스 분기 권한이 있는지, tools/build/generate-types-worker.mjs 스크립트가 존재하는지 확인하십시오.",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "타입 생성 프로세스가 종료 코드 {code}로 종료됨: {output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "타입 생성 하위 프로세스가 0이 아닌 코드로 종료되었습니다. 컴파일러 오류가 있는지 출력을 확인하고 TypeScript 소스가 유효한지 확인하십시오.",
 		"TS_TYPE_CHECK_ERRORS": "'{filePath}'에서 TypeScript 타입 오류 발견:\n{errors}",

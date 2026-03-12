@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "Type generation failed: {error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "The child process that generates TypeScript declarations encountered an error. Check the error message for details and ensure the TypeScript source files are valid.",
 		"TS_TYPE_GENERATION_FORK_FAILED": "Failed to fork the type generation process: {error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "The type generation worker process could not be started. Ensure Node.js has permission to fork child processes and that the tools/generate-types-worker.mjs script exists.",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "The type generation worker process could not be started. Ensure Node.js has permission to fork child processes and that the tools/build/generate-types-worker.mjs script exists.",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "Type generation process exited with code {code}: {output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "The type generation child process exited with a non-zero code. Check the output for compiler errors and verify the TypeScript sources are valid.",
 		"TS_TYPE_CHECK_ERRORS": "TypeScript type errors found in '{filePath}':\n{errors}",

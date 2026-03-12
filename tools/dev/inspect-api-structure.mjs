@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/inspect-api-structure.mjs
+ *	@Filename: /tools/dev/inspect-api-structure.mjs
  *	@Date: 2025-10-23T12:08:52-07:00 (1761246532)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -9,6 +9,11 @@
  *	@Last modified time: 2026-03-01 20:21:57 -08:00 (1772425317)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Debug tool to load a Slothlet instance and display the full API tree structure.
+ * @module @cldmv/slothlet/tools/inspect-api-structure
  */
 
 import chalk from "chalk";
@@ -26,7 +31,7 @@ let slothlet;
  * @returns {boolean} True if a child process was spawned.
  */
 function ensureDevEnvFlags() {
-	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../dist");
 	if (existsSync(distPath)) {
 		return false;
 	}

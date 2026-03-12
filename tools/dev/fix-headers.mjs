@@ -1,6 +1,6 @@
 /**
  *	@Project: @cldmv/slothlet
- *	@Filename: /tools/fix-headers.mjs
+ *	@Filename: /tools/dev/fix-headers.mjs
  *	@Date: 2026-03-01T00:00:00-08:00 (1740819600)
  *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
@@ -13,8 +13,7 @@
 
 /**
  * @fileoverview Compatibility wrapper that delegates header fixing to @cldmv/fix-headers.
- * @module tools/fix-headers
- * @internal
+ * @module @cldmv/slothlet/tools/fix-headers
  *
  * @description
  * Preserves the original script UX for Slothlet (`--dry-run`, `--verbose`, `--diff`,
@@ -30,7 +29,7 @@
 import { fixHeaders } from "@cldmv/fix-headers";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/header-config.mjs";
+import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/header-config.mjs";
 
 /**
  * Options accepted by the `fixHeaders` function from @cldmv/fix-headers.
@@ -58,7 +57,7 @@ import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "./lib/hea
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, "..");
+const projectRoot = path.resolve(__dirname, "../..");
 
 /**
  * Print CLI help.

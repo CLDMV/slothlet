@@ -359,7 +359,7 @@
 		"TS_TYPE_GENERATION_FAILED": "Ошибка генерации типов: {error}",
 		"HINT_TS_TYPE_GENERATION_FAILED": "Дочерний процесс генерации типов завершился с ошибкой. Проверьте вывод.",
 		"TS_TYPE_GENERATION_FORK_FAILED": "Не удалось форкнуть процесс генерации типов: {error}",
-		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "Убедитесь, что Node.js может форкать процессы и существует tools/generate-types-worker.mjs.",
+		"HINT_TS_TYPE_GENERATION_FORK_FAILED": "Убедитесь, что Node.js может форкать процессы и существует tools/build/generate-types-worker.mjs.",
 		"TS_TYPE_GENERATION_PROCESS_EXITED": "Процесс генерации типов завершился с кодом {code}: {output}",
 		"HINT_TS_TYPE_GENERATION_PROCESS_EXITED": "Проверьте вывод дочернего процесса на ошибки компилятора.",
 		"TS_TYPE_CHECK_ERRORS": "Ошибки типов TypeScript в '{filePath}':\n{errors}",

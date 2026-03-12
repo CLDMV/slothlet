@@ -32,7 +32,7 @@
 			"dest": "docs/generated/api_tests/api_test_mixed.md"
 		},
 		{
-			"src": "tools/**/*.mjs",
+			"src": "tools/dev/**/*.mjs",
 			"dest": "docs/tools/build-tools.md"
 		}
 	]
