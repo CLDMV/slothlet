@@ -918,7 +918,7 @@ export default slothlet;
 // ============================================================================
 
 /**
- * Configuration options passed to {@link module:@cldmv/slothlet slothlet()}.
+ * Configuration options passed to `slothlet()`.
  * @typedef {object} SlothletOptions
  * @property {string} dir - Directory to scan for API modules. Relative paths are resolved from the calling file.
  * @property {"eager"|"lazy"} [mode="eager"] - Loading strategy.
@@ -960,7 +960,7 @@ export default slothlet;
  */
 
 /**
- * Bound API object returned by {@link module:@cldmv/slothlet slothlet()}.
+ * Bound API object returned by `slothlet()`.
  * The root contains all loaded module exports plus the reserved `slothlet` namespace.
  * @typedef {object} SlothletAPI
  * @property {function(): void} destroy - Like `shutdown()` but additionally invokes registered destroy hooks before teardown.
@@ -978,19 +978,19 @@ export default slothlet;
  * @property {Function} slothlet.context.set - Set a value in the current per-request context store. %%sig: (key: string, value: *): void%%
  * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`. Do not enable in production.
  * @property {object} [slothlet.diag.caches] - Cache diagnostics sub-namespace.
- * @property {function(): Object} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ totalCaches, caches[] }`).
- * @property {function(): string[]} [slothlet.diag.caches.getAllModuleIDs] - Return all moduleIDs currently in cache.
- * @property {Function} [slothlet.diag.caches.has] - Check whether a cache entry exists for a given moduleID. %%sig: (moduleID: string): boolean%%
+ * @property {function(): Object} [slothlet.diag.caches.get] - Get full cache diagnostic data (`{ totalCaches, caches[] }`). Only available when `diagnostics: true`.
+ * @property {function(): string[]} [slothlet.diag.caches.getAllModuleIDs] - Return all moduleIDs currently in cache. Only available when `diagnostics: true`.
+ * @property {Function} [slothlet.diag.caches.has] - Check whether a cache entry exists for a given moduleID. Only available when `diagnostics: true`. %%sig: (moduleID: string): boolean%%
  * @property {object} [slothlet.diag.context] - The `context` config value as passed to `slothlet()`.
- * @property {Function} [slothlet.diag.describe] - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only. %%sig: ([showAll]: boolean): *%%
- * @property {function(): Object} [slothlet.diag.getAPI] - Return the live bound API proxy object.
- * @property {function(): Object} [slothlet.diag.getOwnership] - Return ownership diagnostics for all registered API paths.
+ * @property {Function} [slothlet.diag.describe] - Describe API structure. Pass `true` to return the full API object; omit for top-level keys only. Only available when `diagnostics: true`. %%sig: ([showAll]: boolean): *%%
+ * @property {function(): Object} [slothlet.diag.getAPI] - Return the live bound API proxy object. Only available when `diagnostics: true`.
+ * @property {function(): Object} [slothlet.diag.getOwnership] - Return ownership diagnostics for all registered API paths. Only available when `diagnostics: true`.
  * @property {object} [slothlet.diag.hook] - Hook system diagnostics sub-namespace (present only when hooks are enabled).
- * @property {function(): Object} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state.
+ * @property {function(): Object} [slothlet.diag.inspect] - Return a full diagnostic snapshot of current instance state. Only available when `diagnostics: true`.
  * @property {object} [slothlet.diag.owner] - Ownership sub-namespace for diagnostics.
- * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path. %%sig: (apiPath: string): string[]%%
+ * @property {Function} [slothlet.diag.owner.get] - Get the owning moduleIDs for a specific API path. Only available when `diagnostics: true`. %%sig: (apiPath: string): string[]%%
  * @property {object} [slothlet.diag.reference] - The `reference` config value as passed to `slothlet()`.
- * @property {function(): SlothletWarning} [slothlet.diag.SlothletWarning] - The `SlothletWarning` class — access `.captured` for warnings emitted during tests.
+ * @property {function(): SlothletWarning} [slothlet.diag.SlothletWarning] - The `SlothletWarning` class — access `.captured` for warnings emitted during tests. Only available when `diagnostics: true`.
  * @property {object} slothlet.hook - Hook registration surface — only present when the `hook` option is enabled.
  * @property {Function} slothlet.hook.clear - Alias for `remove()`. %%sig: ([filter]: Object): void%%
  * @property {Function} slothlet.hook.disable - Disable hooks matching a filter (empty = disable all). %%sig: ([filter]: Object): void%%
