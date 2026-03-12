@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 17:34:55 -07:00 (1773275695)
+ *	@Last modified time: 2026-03-11 18:47:29 -07:00 (1773280049)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -755,7 +755,6 @@ const functions = {
 
 		const baseModuleName = baseModuleLongname.replace(/^module:/, "");
 
-		// STEP 0: Normalize all doclets upfront - add normalized properties to each doclet
 		let normalizedDoclets = doclets.map((doclet) => functions.applyNormalize(doclet));
 
 		// Filter to only include doclets that belong to this module
@@ -1817,52 +1816,6 @@ const partials = {
 			output += `**Returns**:\n\n`;
 			output += `- <code>${format.typeForTableWithLinks(func.returns[0].type)}</code> <p>${returnsDesc || ""}</p>\n`;
 			output += "\n\n";
-
-			// When the return type wraps a typedef with @property entries (e.g. Promise.<SlothletAPI>),
-			// render its property tree inline so the full API surface is visible here.
-			const returnTypeNames = func.returns[0]?.type?.names || [];
-			returnTypeNames.forEach((typeName) => {
-				const candidates = [typeName];
-				const inner = typeName.match(/\.<([^>]+)>$/);
-				if (inner) candidates.push(inner[1]);
-				candidates.forEach((name) => {
-					const typedef = availableTypedefs.find((td) => td.name === name && td.properties && td.properties.length > 0);
-					if (typedef) {
-						const isFunction = (prop) => prop.type?.names?.some((n) => n.toLowerCase() === "function");
-						const tableProps = typedef.properties.filter((p) => !isFunction(p));
-						const fnProps = typedef.properties.filter(isFunction);
-						const typedefAnchor = typedef.anchor || `typedef_${name}`;
-
-						if (tableProps.length > 0) {
-							output += `**${name} Properties**:\n\n`;
-							output += `| Property | Type | Description |\n`;
-							output += `| --- | --- | --- |\n`;
-							tableProps.forEach((prop) => {
-								const propName = prop.optional ? `[${prop.name}]` : prop.name;
-								// Collapse newlines so multi-line HTML descriptions don't break table rows
-								const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
-								output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${propDesc} |\n`;
-							});
-							output += "\n\n";
-						}
-
-						if (fnProps.length > 0) {
-							output += `**${name} Methods** — see [${name}](#${typedefAnchor}) for full documentation:\n\n`;
-							output += `| Method | Description |\n`;
-							output += `| --- | --- |\n`;
-							fnProps.forEach((prop) => {
-								const rawPropName = prop.name || "";
-								const isOptional = prop.optional;
-								const displayName = isOptional ? `[${rawPropName}()]` : `${rawPropName}()`;
-								const propAnchor = `${typedefAnchor}_prop_${rawPropName.replace(/\./g, "-")}`;
-								const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").replace(/<p>|<\/p>/g, "");
-								output += `| [${displayName}](#${propAnchor}) | ${propDesc} |\n`;
-							});
-							output += "\n\n";
-						}
-					}
-				});
-			});
 		}
 		return output;
 	},
@@ -2099,7 +2052,102 @@ const partials = {
 					return `${anchor}_prop_${rawPropName.replace(/\./g, "-")}`;
 				};
 
-				const isFunction = (prop) => prop.type && prop.type.names && prop.type.names.some((n) => n.toLowerCase() === "function");
+				const isFunction = (prop) => prop.type && prop.type.names && prop.type.names.some((n) => /^function\s*(?:\(|$)/i.test(n));
+
+				/**
+				 * Parse a typed function signature from the %%sig: (params): ReturnType%% marker.
+				 * e.g. "(apiPath: string, folderPath: string, [options]: Object): Promise.<void>"
+				 * @param {string} sigStr - Content of %%sig: ...%%
+				 * @returns {{params: Array, returnType: string|null}|null}
+				 */
+				function parseFunctionSig(sigStr) {
+					const match = sigStr.match(/^\(([^)]*)\)\s*(?::\s*(.+))?$/);
+					if (!match) return null;
+					const paramsStr = match[1].trim();
+					const returnType = match[2] ? match[2].trim() : null;
+					const params = paramsStr
+						? paramsStr
+							  .split(",")
+							  .map((s) => s.trim())
+							  .filter(Boolean)
+							  .map((p) => {
+								  const isOpt = p.startsWith("[");
+								  if (isOpt) {
+									  // Pattern: [name]: Type  →  name is inside brackets, type follows
+									  const m = p.match(/^\[([^\]]+)\]:\s*(.+)$/);
+									  if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true };
+									  // Fallback: bracket-only wrapping with no type annotation
+									  const cleaned = p.replace(/^\[|\]$/g, "").trim();
+									  return { name: cleaned, type: { names: ["*"] }, optional: true };
+								  }
+								  const ci = p.indexOf(":");
+								  if (ci > -1) {
+									  return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false };
+								  }
+								  return { name: p, type: { names: ["*"] }, optional: false };
+							  })
+						: [];
+					return { params, returnType };
+				}
+
+				/**
+				 * Extract a %%sig: ...%% marker from a JSDoc description string.
+				 * @param {string} desc - Raw description string (may contain HTML)
+				 * @returns {{ sig: string|null, cleanDesc: string }}
+				 */
+				function extractSigFromDesc(desc) {
+					if (!desc) return { sig: null, cleanDesc: "" };
+					const m = desc.match(/%%sig:\s*([^%]+)%%/);
+					if (!m) return { sig: null, cleanDesc: desc };
+					const cleanDesc = desc.replace(/\s*%%sig:[^%]+%%/, "").trim();
+					return { sig: m[1].trim(), cleanDesc };
+				}
+
+				// Section rendering: function-type properties become #### sub-sections (rendered first)
+				const fnProps = typedef.properties.filter(isFunction);
+				if (fnProps.length > 0) {
+					output += "\n";
+					fnProps.forEach((prop) => {
+						const pa = propAnchorFor(prop);
+						const rawName = prop.name.replace(/^\[|\]$/g, "");
+						const isOptional = prop.name.startsWith("[");
+						const displayName = isOptional ? `[${rawName}()]` : `${rawName}()`;
+						output += `<a id="${pa}"></a>\n\n`;
+						output += `#### ${displayName}\n\n`;
+						if (prop.description) {
+							// Strip outer <p> tags and %%sig: ...%% markers for clean display
+							const { cleanDesc } = extractSigFromDesc(prop.description.replace(/^<p>|<\/p>$/g, "").trim());
+							if (cleanDesc) output += `${cleanDesc}\n\n`;
+						}
+						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
+
+						// Parse params and return type from the %%sig: ...%% marker in the description
+						const rawDesc = prop.description || "";
+						const { sig: sigStr } = extractSigFromDesc(rawDesc.replace(/^<p>|<\/p>$/g, "").trim());
+						const impl = sigStr ? parseFunctionSig(sigStr) : null;
+
+						if (impl && impl.params && impl.params.length > 0) {
+							// Filter to top-level params only (no dotted sub-params in signature row)
+							const hasDefaults = impl.params.some((p) => p.defaultvalue !== undefined);
+							output += `| Param | Type | ${hasDefaults ? "Default | " : ""}Description |\n`;
+							output += `| --- | --- | ${hasDefaults ? "--- | " : ""}--- |\n`;
+							impl.params.forEach((param) => {
+								const pName = param.optional ? `[${param.name}]` : param.name;
+								const pType = param.type && param.type.names ? `<code>${format.typeForTableWithLinks(param.type)}</code>` : "";
+								const pDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+								const pDefault = hasDefaults ? `${param.defaultvalue !== undefined ? `<code>${param.defaultvalue}</code>` : ""} | ` : "";
+								output += `| ${pName} | ${pType} | ${pDefault}${pDesc} |\n`;
+							});
+							output += "\n";
+						}
+
+						if (impl && impl.returnType) {
+							output += `**Returns**: <code>${impl.returnType}</code>\n\n`;
+						}
+
+						output += `* * *\n\n`;
+					});
+				}
 
 				// Table section: non-function properties (namespaces, booleans, config values, metadata)
 				const tableProps = typedef.properties.filter((p) => !isFunction(p));
@@ -2127,26 +2175,7 @@ const partials = {
 					output += "\n";
 				}
 
-				// Section rendering: function-type properties become ### sub-sections
-				const fnProps = typedef.properties.filter(isFunction);
-				if (fnProps.length > 0) {
-					output += "\n";
-					fnProps.forEach((prop) => {
-						const pa = propAnchorFor(prop);
-						const rawName = prop.name.replace(/^\[|\]$/g, "");
-						const isOptional = prop.name.startsWith("[");
-						const displayName = isOptional ? `[${rawName}()]` : `${rawName}()`;
-						output += `<a id="${pa}"></a>\n\n`;
-						output += `#### ${displayName}\n\n`;
-						if (prop.description) {
-							// Strip outer <p> tags for cleaner block-level rendering
-							const desc = prop.description.replace(/^<p>|<\/p>$/g, "").trim();
-							output += `${desc}\n\n`;
-						}
-						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
-						output += `* * *\n\n`;
-					});
-				}
+
 			}
 
 			output = partials.examples(typedef, output);
@@ -2385,18 +2414,6 @@ const partials = {
 					constant.doclet?.type && constant.doclet.type.names
 						? ` ⇒ <code>${helper.escapeHtml(constant.doclet.type.names.join(" | "))}</code>`
 						: "";
-				output += `  * [${simpleName}](#${anchor})${typeInfo}\n`;
-			});
-		}
-
-		// Add typedefs section if any
-		if (typedefs && typedefs.length > 0) {
-			output += `\n\n`;
-			output += `**Type Definitions**\n\n`;
-			typedefs.forEach((typedef) => {
-				const anchor = typedef?.anchor || format.generateAnchor(typedef?.id);
-				const simpleName = typedef?.simpleName || typedef?.name;
-				const typeInfo = typedef?.type && typedef.type.names ? ` : <code>${helper.escapeHtml(typedef.type.names.join(" | "))}</code>` : "";
 				output += `  * [${simpleName}](#${anchor})${typeInfo}\n`;
 			});
 		}
