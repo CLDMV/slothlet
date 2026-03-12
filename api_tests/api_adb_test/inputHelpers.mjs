@@ -56,7 +56,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.inputHelpers.sendKeycode('myKey');
-/
+ */
 /**
  * sendKeycode.
  * @param {*} keycode - keycode.
@@ -123,7 +123,7 @@ export async function sendKeycode(keycode) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.inputHelpers.sendText('hello');
-/
+ */
 /**
  * sendText.
  * @param {*} text - text.
@@ -192,7 +192,7 @@ export async function sendText(text) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.inputHelpers.sendTap(null, null);
-/
+ */
 /**
  * sendTap.
  * @param {*} x - x.
@@ -264,7 +264,7 @@ export async function sendTap(x, y) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.inputHelpers.sendSwipe(null, null, null, null);
-/
+ */
 /**
  * sendSwipe.
  * @param {*} x1 - x1.
@@ -335,7 +335,7 @@ export async function sendSwipe(x1, y1, x2, y2, duration = 300) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.inputHelpers.sendLongPress('myKey');
-/
+ */
 /**
  * sendLongPress.
  * @param {*} keycode - keycode.

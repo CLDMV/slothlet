@@ -61,7 +61,7 @@ export const isolationTestState = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_getValue();
-/
+ */
 /**
  * isolationTest_getValue.
  * @returns {*}
@@ -122,7 +122,7 @@ export function isolationTest_getValue() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_setValue(null);
-/
+ */
 /**
  * isolationTest_setValue.
  * @param {*} newValue - newValue.
@@ -184,7 +184,7 @@ export function isolationTest_setValue(newValue) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_increment();
-/
+ */
 /**
  * isolationTest_increment.
  * @returns {*}
@@ -246,7 +246,7 @@ export function isolationTest_increment() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_getCounter();
-/
+ */
 /**
  * isolationTest_getCounter.
  * @returns {*}
@@ -307,7 +307,7 @@ export function isolationTest_getCounter() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_setFlag(null);
-/
+ */
 /**
  * isolationTest_setFlag.
  * @param {*} flag - flag.
@@ -369,7 +369,7 @@ export function isolationTest_setFlag(flag) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.isolation-test.isolationTest_getFlag();
-/
+ */
 /**
  * isolationTest_getFlag.
  * @returns {*}

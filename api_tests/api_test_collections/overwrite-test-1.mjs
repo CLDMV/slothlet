@@ -77,7 +77,7 @@ export function overwriteTest() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
  * api_test_collections.overwrite-test-1.conflictingName();
-/
+ */
 /**
  * conflictingName.
  * @returns {*}

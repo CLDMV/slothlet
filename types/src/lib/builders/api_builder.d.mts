@@ -12,7 +12,7 @@
  * const builder = new ApiBuilder(slothlet);
  * const api = await builder.buildFinalAPI(userApi);
  */
-export class ApiBuilder extends ComponentBase {
+export class ApiBuilder {
     static slothletProperty: string;
     /**
      * Create an ApiBuilder instance.
@@ -101,5 +101,4 @@ export type I18nNamespace = {
      */
     initI18n: Function;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api_builder.d.mts.map

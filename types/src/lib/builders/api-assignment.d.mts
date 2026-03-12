@@ -12,7 +12,7 @@
  * const assignment = new ApiAssignment(slothlet);
  * assignment.assignToApiPath(api, "math", mathWrapper, {});
  */
-export class ApiAssignment extends ComponentBase {
+export class ApiAssignment {
     static slothletProperty: string;
     /**
      * Create an ApiAssignment instance.
@@ -102,5 +102,4 @@ export class ApiAssignment extends ComponentBase {
         removeMissing?: boolean;
     }): Promise<void>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api-assignment.d.mts.map

@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class EagerMode extends ComponentBase {
+export class EagerMode {
     static slothletProperty: string;
     /**
      * Create EagerMode instance.
@@ -38,5 +38,4 @@ export class EagerMode extends ComponentBase {
         fileFilter?: Function | null;
     }): Promise<any>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=eager.d.mts.map

@@ -10,8 +10,9 @@
  * @extends ComponentBase
  * @public
  */
-export class OwnershipManager extends ComponentBase {
+export class OwnershipManager {
     static slothletProperty: string;
+    constructor(slothlet: any);
     moduleToPath: Map<any, any>;
     pathToModule: Map<any, any>;
     _unregisteredModules: Set<any>;
@@ -165,5 +166,4 @@ export type UnregisterResult = {
      */
     rolledBack: any[];
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=ownership.d.mts.map

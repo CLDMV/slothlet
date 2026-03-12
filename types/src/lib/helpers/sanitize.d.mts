@@ -11,7 +11,7 @@ export function sanitizePropertyName(input: string, options?: object): string;
  * @extends ComponentBase
  * @public
  */
-export class Sanitize extends ComponentBase {
+export class Sanitize {
     static slothletProperty: string;
     /**
      * Advanced sanitization function with configurable rule-based transformation
@@ -94,5 +94,4 @@ export class Sanitize extends ComponentBase {
     public shouldPreserveFunctionCase(name: string): boolean;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=sanitize.d.mts.map

@@ -5,7 +5,7 @@
  * @extends ComponentBase
  * @package
  */
-export class ModesProcessor extends ComponentBase {
+export class ModesProcessor {
     static slothletProperty: string;
     /**
      * Creates a new ModesProcessor instance.
@@ -34,5 +34,4 @@ export class ModesProcessor extends ComponentBase {
      */
     public applyRootContributor(api: any, rootFunction: Function | null, mode: string): Promise<any | Function>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=modes-processor.d.mts.map

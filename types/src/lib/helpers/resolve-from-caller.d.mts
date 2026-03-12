@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class Resolver extends ComponentBase {
+export class Resolver {
     static slothletProperty: string;
     /**
      * Get V8 stack trace as CallSite array.
@@ -29,5 +29,4 @@ export class Resolver extends ComponentBase {
     public resolvePathFromCaller(rel: string): string;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=resolve-from-caller.d.mts.map

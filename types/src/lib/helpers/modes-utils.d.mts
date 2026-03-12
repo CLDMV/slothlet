@@ -2,7 +2,7 @@
  * Mode processing utilities component class
  * @extends ComponentBase
  */
-export class ModesUtils extends ComponentBase {
+export class ModesUtils {
     static slothletProperty: string;
     /**
      * Create a named wrapper for default export functions when they are anonymous.
@@ -31,5 +31,4 @@ export class ModesUtils extends ComponentBase {
      */
     public getOwnershipCollisionMode(config: any, collisionContext?: string): string;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=modes-utils.d.mts.map

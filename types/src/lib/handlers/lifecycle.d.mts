@@ -3,7 +3,7 @@
  * @extends ComponentBase
  * @public
  */
-export class Lifecycle extends ComponentBase {
+export class Lifecycle {
     /**
      * Where this component should be mounted on the Slothlet instance
      * @type {string}
@@ -90,5 +90,4 @@ export class Lifecycle extends ComponentBase {
      */
     private emit;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=lifecycle.d.mts.map

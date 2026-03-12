@@ -9,18 +9,16 @@ export function getContextManager(runtime?: string): any;
  * Default context manager (async)
  * @public
  */
-export const contextManager: import("@cldmv/slothlet/handlers/context-async").AsyncContextManager;
+export const contextManager: any;
 /**
  * Async runtime for runtime exports
  * @public
  */
-export const asyncRuntime: import("@cldmv/slothlet/handlers/context-async").AsyncContextManager;
+export const asyncRuntime: any;
 /**
  * Live runtime for runtime exports
  * @public
  */
-export const liveRuntime: import("@cldmv/slothlet/handlers/context-live").LiveContextManager;
-import { asyncContextManager } from "@cldmv/slothlet/handlers/context-async";
-import { liveContextManager } from "@cldmv/slothlet/handlers/context-live";
+export const liveRuntime: any;
 export { asyncContextManager, liveContextManager };
 //# sourceMappingURL=context.d.mts.map

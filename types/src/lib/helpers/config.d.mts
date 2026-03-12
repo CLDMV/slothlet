@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @public
  */
-export class Config extends ComponentBase {
+export class Config {
     static slothletProperty: string;
     /**
      * Normalize collision configuration for handling property collisions
@@ -92,5 +92,4 @@ export class Config extends ComponentBase {
      */
     public normalizeTypeScript(typescript: boolean | string | any): any | null;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=config.d.mts.map

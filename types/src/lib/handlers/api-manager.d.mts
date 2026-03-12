@@ -13,7 +13,7 @@
  * const manager = new ApiManager(slothlet);
  * await manager.addApiComponent({ apiPath: "plugins", folderPath: "./plugins" });
  */
-export class ApiManager extends ComponentBase {
+export class ApiManager {
     static slothletProperty: string;
     /**
      * Create an ApiManager instance.
@@ -401,5 +401,4 @@ export class ApiManager extends ComponentBase {
      */
     private _restoreApiTree;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api-manager.d.mts.map
