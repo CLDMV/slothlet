@@ -12,18 +12,37 @@
  */
 
 /**
- * @fileoverview Compatibility wrapper that delegates header fixing to @cldmv/fix-headers.
+ * @fileoverview Scans all source files in the project and validates or updates their standard
+ * file header block (project name, filename, date, author, copyright). Delegates to
+ * the shared `\@cldmv/fix-headers` package.
  * @module @cldmv/slothlet/tools/fix-headers
+ * @title npm run fix:headers
+ *
+ * @example
+ * // Run via npm script
+ * npm run fix:headers
+ *
+ * @example
+ * // Preview changes without writing
+ * npm run fix:headers -- --dry-run
+ *
+ * @example
+ * // Show diff for each changed file
+ * npm run fix:headers -- --diff
+ *
+ * @example
+ * // Verbose output
+ * npm run fix:headers -- --verbose
  *
  * @description
- * Preserves the original script UX for Slothlet (`--dry-run`, `--verbose`, `--diff`,
- * `--help`), while offloading all header logic to the shared @cldmv/fix-headers package.
+ * **CLI Options:**
  *
- * @example
- * node tools/fix-headers.mjs --dry-run
- *
- * @example
- * node tools/fix-headers.mjs --verbose
+ * | Option | Description |
+ * | --- | --- |
+ * | `--dry-run` | Preview what would change without writing any files |
+ * | `--diff` | Show a per-file diff of header changes |
+ * | `--verbose` | Print each file examined |
+ * | `--help` | Show usage information |
  */
 
 import { fixHeaders } from "@cldmv/fix-headers";
@@ -43,6 +62,7 @@ import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/he
  * @property {string[]} [includeFolders] - Folder paths to scan.
  * @property {string[]} [excludeFolders] - Folder paths to skip.
  * @property {string[]} [includeExtensions] - File extensions to process.
+ * @internal
  */
 
 /**
@@ -53,6 +73,7 @@ import { FILE_HEADER_CHECK_FOLDERS, FILE_HEADER_IGNORE_FOLDERS } from "../lib/he
  * @property {boolean} dryRun - Whether this was a dry run.
  * @property {object[]} changes - Per-file change details (each with `file`, `changed`, and optional `sample` fields).
  * @property {object} metadata - Resolved project metadata used during the run.
+ * @internal
  */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +82,7 @@ const projectRoot = path.resolve(__dirname, "../..");
 
 /**
  * Print CLI help.
+ * @internal
  * @returns {void}
  * @example
  * showHelp();
@@ -83,6 +105,7 @@ OPTIONS:
 
 /**
  * Parse CLI arguments into runner options.
+ * @internal
  * @param {string[]} args - Raw process arguments excluding node and script path.
  * @returns {{ help: boolean, dryRun: boolean, verbose: boolean, diff: boolean }} Parsed options.
  * @example
@@ -112,6 +135,7 @@ function parseArguments(args) {
 
 /**
  * Build fixHeaders options from parsed CLI args and project header config.
+ * @internal
  * @param {{ dryRun: boolean }} parsed - Parsed CLI arguments.
  * @returns {FixHeadersOptions} Options for @cldmv/fix-headers.
  * @example
@@ -133,6 +157,7 @@ function buildOptions(parsed) {
 
 /**
  * Print the run result summary to stdout.
+ * @internal
  * @param {FixHeadersResult} result - Result from @cldmv/fix-headers.
  * @param {{ verbose: boolean, diff: boolean, dryRun: boolean }} opts - Display options.
  * @returns {void}
@@ -173,6 +198,7 @@ function printSummary(result, opts) {
 
 /**
  * Execute the compatibility wrapper.
+ * @internal
  * @returns {Promise<void>} Resolves when all header processing is complete.
  * @example
  * await main();

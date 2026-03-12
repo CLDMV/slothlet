@@ -6,23 +6,42 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 20:15:07 -07:00 (1773026107)
+ *	@Last modified time: 2026-03-12 16:30:47 -07:00 (1773358247)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Analyze all SlothletError and SlothletWarning usage and translations
+ * @fileoverview Analyzes all SlothletError and SlothletWarning usage across the codebase and
+ * validates against translations. Checks for:
+ * proper error construction, hint availability, stub vs real error classification,
+ * translation coverage, unused translations, and placeholder consistency.
  * @module @cldmv/slothlet/tools/analyze-errors
+ * @title npm run analyze
+ *
+ * @example
+ * // Run via npm script
+ * npm run analyze
+ *
+ * @example
+ * // Limit output (default: 10)
+ * npm run analyze -- --limit=25
+ *
+ * @example
+ * // Verbose output
+ * npm run analyze -- --verbose
+ *
+ * @example
+ * // Combined
+ * npm run analyze -- --verbose --limit=50
  *
  * @description
- * Checks:
- * - Proper error construction (originalError passed when needed)
- * - Hint availability for each error code
- * - Stub vs real error classification
- * - Translation availability for all error codes
- * - Unused translations
- * - Placeholder consistency between usage and translations
+ * **CLI Options:**
+ *
+ * | Option | Description |
+ * | --- | --- |
+ * | `--limit=<n>` | Limit reported issues per category (default: 10) |
+ * | `--verbose` | Show extended context for each issue |
  */
 
 import { readFile, readdir, stat } from "node:fs/promises";
@@ -54,6 +73,7 @@ const hintKeys = Object.keys(translations).filter((k) => k.startsWith("HINT_"));
 
 /**
  * Check if a path should be ignored
+ * @internal
  */
 function shouldIgnorePath(filePath, ignoreFolders) {
 	const relPath = relative(rootDir, filePath);
@@ -66,6 +86,7 @@ function shouldIgnorePath(filePath, ignoreFolders) {
 
 /**
  * Recursively find all .mjs files
+ * @internal
  */
 async function findMjsFiles(dir, files = []) {
 	const entries = await readdir(dir);
@@ -86,6 +107,7 @@ async function findMjsFiles(dir, files = []) {
 
 /**
  * Find all .mjs files in specified folders with optional recursion
+ * @internal
  */
 async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 	const allFiles = [];
@@ -131,6 +153,7 @@ async function findMjsFilesInFolders(folderConfigs, ignoreFolders) {
 
 /**
  * Parse console.warn calls from file content
+ * @internal
  */
 function parseConsoleWarns(content, filePath) {
 	const warns = [];
@@ -240,6 +263,7 @@ function parseConsoleWarns(content, filePath) {
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of improper console.log statements (outside SlothletDebug)
+ * @internal
  */
 function parseConsoleLogs(content, filePath) {
 	const logs = [];
@@ -347,6 +371,7 @@ function parseConsoleLogs(content, filePath) {
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of improper console.error statements
+ * @internal
  */
 function parseConsoleErrors(content, filePath) {
 	const errors = [];
@@ -405,6 +430,7 @@ function parseConsoleErrors(content, filePath) {
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of bare new Error usages
+ * @internal
  */
 function parseBareNewErrors(content, filePath) {
 	const found = [];
@@ -477,6 +503,7 @@ function parseBareNewErrors(content, filePath) {
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {boolean} True if file has proper header
+ * @internal
  */
 function hasProperFileHeader(content, ____filePath) {
 	// Expected header format (first 12 lines)
@@ -492,6 +519,7 @@ function hasProperFileHeader(content, ____filePath) {
 
 /**
  * Parse SlothletError and SlothletWarning throws from file content
+ * @internal
  */
 function parseErrorThrows(content, filePath) {
 	const errors = [];
@@ -607,6 +635,7 @@ function parseErrorThrows(content, filePath) {
 
 /**
  * Analyze error and determine status
+ * @internal
  */
 function analyzeError(error) {
 	const issues = [];
@@ -687,6 +716,7 @@ function analyzeError(error) {
 
 /**
  * Check if translation exists for error code
+ * @internal
  */
 function checkTranslationExists(errorCode) {
 	return Object.prototype.hasOwnProperty.call(translations, errorCode);
@@ -694,6 +724,7 @@ function checkTranslationExists(errorCode) {
 
 /**
  * Check if hint exists for error code
+ * @internal
  */
 function checkHintExists(errorCode) {
 	// Convention: CONTEXT_NOT_FOUND → HINT_CONTEXT_NOT_FOUND
@@ -1230,6 +1261,7 @@ console.log("=".repeat(80) + "\n");
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of hardcoded reason strings
+ * @internal
  */
 function parseHardcodedReasons(content, filePath) {
 	const reasons = [];
@@ -1305,6 +1337,7 @@ console.log("=".repeat(80) + "\n");
  * @param {string} content - File content
  * @param {string} filePath - File path
  * @returns {Array} Array of hardcoded debug message strings
+ * @internal
  */
 function parseHardcodedDebugMessagesMultiline(content, filePath) {
 	const messages = [];
