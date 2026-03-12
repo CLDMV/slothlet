@@ -753,11 +753,16 @@ for (const filePath of files) {
 	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
 	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
 	const translateCallPattern = /\btranslate\(\s*["']([A-Z_]+)["']/g;
+	// Match key: "DEBUG_MODE_..." / key: 'FLATTEN_REASON_...' - object property in this.debug() calls
+	const debugKeyPattern = /\bkey:\s*["']([A-Z_]+)["']/g;
 	let match;
 	while ((match = tCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
 	}
 	while ((match = translateCallPattern.exec(content)) !== null) {
+		directTranslationUsage.add(match[1]);
+	}
+	while ((match = debugKeyPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
 	}
 }
@@ -1098,7 +1103,7 @@ if (missingTranslations.length > 0) {
 // Detection coverage notes:
 //   - HINT_* keys are EXCLUDED from this check - they are resolved dynamically by the error
 //     system via `HINT_${errorCode}` convention and via hint-detector.mjs rule matching.
-//   - DEBUG_MODE_* and FLATTEN_REASON_* keys are detected via direct t("KEY") literal scan.
+//   - DEBUG_MODE_* and FLATTEN_REASON_* keys are detected via key: "KEY" property scan (this.debug() calls).
 //   - WARNING_LANGUAGE_LOAD_FAILED / WARNING_LANGUAGE_UNAVAILABLE are excluded because they
 //     are used via console.warn in translations.mjs itself (circular dependency workaround).
 //   - Any key still appearing here has no SlothletError throw or t("KEY") literal usage in src/.
