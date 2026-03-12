@@ -20,9 +20,9 @@
 **Structure**
 
 [@cldmv/slothlet(config)](#at_cldmv_slash_slothlet) ⇒ <code>Promise.&lt;SlothletAPI&gt;</code>
-  * [api.destroy()](#typedef_SlothletAPI_prop_destroy)
-  * [api.shutdown()](#typedef_SlothletAPI_prop_shutdown)
-  * [api.slothlet](#typedef_SlothletAPI_prop_slothlet) ⇒ <code>object</code>
+  * [.destroy()](#typedef_SlothletAPI_prop_destroy)
+  * [.shutdown()](#typedef_SlothletAPI_prop_shutdown)
+  * [.slothlet](#typedef_SlothletAPI_prop_slothlet) ⇒ <code>object</code>
     * [.api](#typedef_SlothletAPI_prop_slothlet-api) ⇒ <code>object</code>
       * [.add()](#typedef_SlothletAPI_prop_slothlet-api-add)
       * [.reload()](#typedef_SlothletAPI_prop_slothlet-api-reload)
@@ -230,7 +230,7 @@ await api.slothlet.shutdown();
 <a id="typedef_SlothletOptions"></a>
 
 ### SlothletOptions : <code>object</code>
-<p>Configuration options passed to {@link module:@cldmv/slothlet slothlet()}.</p>
+<p>Configuration options passed to <code>slothlet()</code>.</p>
 
 **Kind**: typedef  
 **Scope**: global
@@ -263,7 +263,7 @@ await api.slothlet.shutdown();
 <a id="typedef_SlothletAPI"></a>
 
 ### SlothletAPI : <code>object</code>
-<p>Bound API object returned by {@link module:@cldmv/slothlet slothlet()}.
+<p>Bound API object returned by <code>slothlet()</code>.
 The root contains all loaded module exports plus the reserved <code>slothlet</code> namespace.</p>
 
 **Kind**: typedef  
@@ -292,7 +292,7 @@ Convenience alias for <code>slothlet.shutdown()</code>. Shuts down the instance 
 
 <a id="typedef_SlothletAPI_prop_slothlet-api-add"></a>
 
-#### api.slothlet.api.add()
+#### api.slothlet.api.add(apiPath, folderPath, [options]) ⇒ <code>Promise.&lt;void&gt;</code>
 
 Mount a new API module at runtime.
 
@@ -304,13 +304,13 @@ Mount a new API module at runtime.
 | folderPath | <code>string</code> |  |
 | [options] | <code>Object</code> |  |
 
-**Returns**: <code>Promise.<void></code>
+**Returns**: <code>Promise.&lt;void&gt;</code>
 
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-api-reload"></a>
 
-#### api.slothlet.api.reload()
+#### api.slothlet.api.reload([pathOrModuleId], [options]) ⇒ <code>Promise.&lt;void&gt;</code>
 
 Hot-reload a specific module or directory path.
 
@@ -321,13 +321,13 @@ Hot-reload a specific module or directory path.
 | [pathOrModuleId] | <code>string|null</code> |  |
 | [options] | <code>Object</code> |  |
 
-**Returns**: <code>Promise.<void></code>
+**Returns**: <code>Promise.&lt;void&gt;</code>
 
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-api-remove"></a>
 
-#### api.slothlet.api.remove()
+#### api.slothlet.api.remove(pathOrModuleId) ⇒ <code>Promise.&lt;void&gt;</code>
 
 Unmount an API module at runtime.
 
@@ -337,13 +337,13 @@ Unmount an API module at runtime.
 | --- | --- | --- |
 | pathOrModuleId | <code>string</code> |  |
 
-**Returns**: <code>Promise.<void></code>
+**Returns**: <code>Promise.&lt;void&gt;</code>
 
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-get"></a>
 
-#### api.slothlet.context.get()
+#### api.slothlet.context.get([key]) ⇒ <code>*</code>
 
 Get a value from the current per-request context store.
 
@@ -369,7 +369,7 @@ Return a snapshot of the current context state (for debugging).
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-run"></a>
 
-#### api.slothlet.context.run()
+#### api.slothlet.context.run(contextData, callback, args) ⇒ <code>*</code>
 
 Execute a callback with isolated context data merged in.
 
@@ -387,7 +387,7 @@ Execute a callback with isolated context data merged in.
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-scope"></a>
 
-#### api.slothlet.context.scope()
+#### api.slothlet.context.scope(options) ⇒ <code>*</code>
 
 Execute a function with structured context options (<code>context</code>, <code>fn</code>, <code>args</code>, <code>merge</code>, <code>isolation</code>).
 
@@ -403,7 +403,7 @@ Execute a function with structured context options (<code>context</code>, <code>
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-set"></a>
 
-#### api.slothlet.context.set()
+#### api.slothlet.context.set(key, value) ⇒ <code>void</code>
 
 Set a value in the current per-request context store.
 
@@ -422,7 +422,7 @@ Set a value in the current per-request context store.
 
 #### api.slothlet.diag.caches.get()
 
-Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>).
+Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>). Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -432,7 +432,7 @@ Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>).
 
 #### api.slothlet.diag.caches.getAllModuleIDs()
 
-Return all moduleIDs currently in cache.
+Return all moduleIDs currently in cache. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -440,9 +440,9 @@ Return all moduleIDs currently in cache.
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-caches-has"></a>
 
-#### api.slothlet.diag.caches.has()
+#### api.slothlet.diag.caches.has(moduleID) ⇒ <code>boolean</code>
 
-Check whether a cache entry exists for a given moduleID.
+Check whether a cache entry exists for a given moduleID. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -456,9 +456,9 @@ Check whether a cache entry exists for a given moduleID.
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-describe"></a>
 
-#### api.slothlet.diag.describe()
+#### api.slothlet.diag.describe([showAll]) ⇒ <code>*</code>
 
-Describe API structure. Pass <code>true</code> to return the full API object; omit for top-level keys only.
+Describe API structure. Pass <code>true</code> to return the full API object; omit for top-level keys only. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -474,7 +474,7 @@ Describe API structure. Pass <code>true</code> to return the full API object; om
 
 #### api.slothlet.diag.getAPI()
 
-Return the live bound API proxy object.
+Return the live bound API proxy object. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -484,7 +484,7 @@ Return the live bound API proxy object.
 
 #### api.slothlet.diag.getOwnership()
 
-Return ownership diagnostics for all registered API paths.
+Return ownership diagnostics for all registered API paths. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -494,7 +494,7 @@ Return ownership diagnostics for all registered API paths.
 
 #### api.slothlet.diag.inspect()
 
-Return a full diagnostic snapshot of current instance state.
+Return a full diagnostic snapshot of current instance state. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -502,9 +502,9 @@ Return a full diagnostic snapshot of current instance state.
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-owner-get"></a>
 
-#### api.slothlet.diag.owner.get()
+#### api.slothlet.diag.owner.get(apiPath) ⇒ <code>string[]</code>
 
-Get the owning moduleIDs for a specific API path.
+Get the owning moduleIDs for a specific API path. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -520,7 +520,7 @@ Get the owning moduleIDs for a specific API path.
 
 #### api.slothlet.diag.SlothletWarning()
 
-The <code>SlothletWarning</code> class — access <code>.captured</code> for warnings emitted during tests.
+The <code>SlothletWarning</code> class — access <code>.captured</code> for warnings emitted during tests. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -528,7 +528,7 @@ The <code>SlothletWarning</code> class — access <code>.captured</code> for war
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-clear"></a>
 
-#### api.slothlet.hook.clear()
+#### api.slothlet.hook.clear([filter]) ⇒ <code>void</code>
 
 Alias for <code>remove()</code>.
 
@@ -544,7 +544,7 @@ Alias for <code>remove()</code>.
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-disable"></a>
 
-#### api.slothlet.hook.disable()
+#### api.slothlet.hook.disable([filter]) ⇒ <code>void</code>
 
 Disable hooks matching a filter (empty = disable all).
 
@@ -560,7 +560,7 @@ Disable hooks matching a filter (empty = disable all).
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-enable"></a>
 
-#### api.slothlet.hook.enable()
+#### api.slothlet.hook.enable([filter]) ⇒ <code>void</code>
 
 Enable hooks matching a filter (empty = enable all).
 
@@ -576,7 +576,7 @@ Enable hooks matching a filter (empty = enable all).
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-list"></a>
 
-#### api.slothlet.hook.list()
+#### api.slothlet.hook.list([filter]) ⇒ <code>Object[]</code>
 
 List registered hooks matching a filter.
 
@@ -592,7 +592,7 @@ List registered hooks matching a filter.
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-off"></a>
 
-#### api.slothlet.hook.off()
+#### api.slothlet.hook.off(idOrFilter) ⇒ <code>void</code>
 
 Remove hooks by ID or filter object (v2 alias for <code>remove()</code>).
 
@@ -608,7 +608,7 @@ Remove hooks by ID or filter object (v2 alias for <code>remove()</code>).
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-on"></a>
 
-#### api.slothlet.hook.on()
+#### api.slothlet.hook.on(typePattern, handler, [options]) ⇒ <code>string</code>
 
 Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;</code>).
 
@@ -626,7 +626,7 @@ Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-remove"></a>
 
-#### api.slothlet.hook.remove()
+#### api.slothlet.hook.remove([filter]) ⇒ <code>void</code>
 
 Remove hooks matching a filter (<code>id</code>, <code>type</code>, <code>pattern</code>).
 
@@ -642,7 +642,7 @@ Remove hooks matching a filter (<code>id</code>, <code>type</code>, <code>patter
 
 <a id="typedef_SlothletAPI_prop_slothlet-lifecycle-off"></a>
 
-#### api.slothlet.lifecycle.off()
+#### api.slothlet.lifecycle.off(event, handler) ⇒ <code>void</code>
 
 Unsubscribe a handler from a lifecycle event.
 
@@ -659,7 +659,7 @@ Unsubscribe a handler from a lifecycle event.
 
 <a id="typedef_SlothletAPI_prop_slothlet-lifecycle-on"></a>
 
-#### api.slothlet.lifecycle.on()
+#### api.slothlet.lifecycle.on(event, handler) ⇒ <code>void</code>
 
 Subscribe to a lifecycle event (e.g. <code>&quot;materialized:complete&quot;</code>).
 
@@ -706,7 +706,7 @@ Get metadata for the function that invoked the current one (runtime-injected).
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-get"></a>
 
-#### api.slothlet.metadata.get()
+#### api.slothlet.metadata.get(fn) ⇒ <code>Object</code>
 
 Get metadata for a specific function reference.
 
@@ -722,7 +722,7 @@ Get metadata for a specific function reference.
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-remove"></a>
 
-#### api.slothlet.metadata.remove()
+#### api.slothlet.metadata.remove(fn, [key]) ⇒ <code>void</code>
 
 Remove per-function metadata (all keys or a specific key).
 
@@ -739,7 +739,7 @@ Remove per-function metadata (all keys or a specific key).
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-removeFor"></a>
 
-#### api.slothlet.metadata.removeFor()
+#### api.slothlet.metadata.removeFor(pathOrModuleId, [key]) ⇒ <code>void</code>
 
 Remove path-level metadata for a given API path or moduleID.
 
@@ -766,7 +766,7 @@ Get metadata for the currently-executing API function (runtime-injected).
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-set"></a>
 
-#### api.slothlet.metadata.set()
+#### api.slothlet.metadata.set(fn, key, value) ⇒ <code>void</code>
 
 Set per-function metadata by direct function reference.
 
@@ -784,7 +784,7 @@ Set per-function metadata by direct function reference.
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-setFor"></a>
 
-#### api.slothlet.metadata.setFor()
+#### api.slothlet.metadata.setFor(pathOrModuleId, keyOrObj, [value]) ⇒ <code>void</code>
 
 Set metadata for all functions reachable under an API path or moduleID.
 
@@ -802,7 +802,7 @@ Set metadata for all functions reachable under an API path or moduleID.
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-setGlobal"></a>
 
-#### api.slothlet.metadata.setGlobal()
+#### api.slothlet.metadata.setGlobal(key, value) ⇒ <code>void</code>
 
 Set global metadata applied to every function in the instance.
 
@@ -819,7 +819,7 @@ Set global metadata applied to every function in the instance.
 
 <a id="typedef_SlothletAPI_prop_slothlet-owner-get"></a>
 
-#### api.slothlet.owner.get()
+#### api.slothlet.owner.get(apiPath) ⇒ <code>Object</code>
 
 Get ownership info for a specific API path.
 
@@ -835,7 +835,7 @@ Get ownership info for a specific API path.
 
 <a id="typedef_SlothletAPI_prop_slothlet-ownership-get"></a>
 
-#### api.slothlet.ownership.get()
+#### api.slothlet.ownership.get(apiPath) ⇒ <code>Set.&lt;string&gt;</code>
 
 Get the set of moduleIDs that own a given API path.
 
@@ -845,13 +845,13 @@ Get the set of moduleIDs that own a given API path.
 | --- | --- | --- |
 | apiPath | <code>string</code> |  |
 
-**Returns**: <code>Set.<string></code>
+**Returns**: <code>Set.&lt;string&gt;</code>
 
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-ownership-unregister"></a>
 
-#### api.slothlet.ownership.unregister()
+#### api.slothlet.ownership.unregister(moduleID) ⇒ <code>void</code>
 
 Unregister a module from all ownership records.
 
@@ -867,7 +867,7 @@ Unregister a module from all ownership records.
 
 <a id="typedef_SlothletAPI_prop_slothlet-reload"></a>
 
-#### api.slothlet.reload()
+#### api.slothlet.reload([options]) ⇒ <code>Promise.&lt;void&gt;</code>
 
 Reload the entire instance (re-scans the directory and recreates all module references). Accepts <code>{ keepInstanceID: boolean }</code>.
 
@@ -877,13 +877,13 @@ Reload the entire instance (re-scans the directory and recreates all module refe
 | --- | --- | --- |
 | [options] | <code>Object</code> |  |
 
-**Returns**: <code>Promise.<void></code>
+**Returns**: <code>Promise.&lt;void&gt;</code>
 
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-run"></a>
 
-#### api.slothlet.run()
+#### api.slothlet.run(contextData, callback, args) ⇒ <code>*</code>
 
 Execute a callback with isolated per-request context data. Convenience alias for <code>slothlet.context.run()</code>.
 
@@ -901,7 +901,7 @@ Execute a callback with isolated per-request context data. Convenience alias for
 
 <a id="typedef_SlothletAPI_prop_slothlet-scope"></a>
 
-#### api.slothlet.scope()
+#### api.slothlet.scope(options) ⇒ <code>*</code>
 
 Execute a function with full structured per-request context options. Convenience alias for <code>slothlet.context.scope()</code>.
 

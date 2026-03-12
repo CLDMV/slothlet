@@ -2099,20 +2099,25 @@ const partials = {
 						const pa = propAnchorFor(prop);
 						const rawName = prop.name.replace(/^\[|\]$/g, "");
 						const isOptional = prop.name.startsWith("[");
-						const displayName = isOptional ? `[api.${rawName}()]` : `api.${rawName}()`;
+						// Extract sig early so we can put params and return type into the #### heading
+						const _rawDesc = (prop.description || "").replace(/^<p>|<\/p>$/g, "").trim();
+						const { sig: _headingSigStr, cleanDesc: _cleanDesc } = extractSigFromDesc(_rawDesc);
+						const _headingImpl = _headingSigStr ? parseFunctionSig(_headingSigStr) : null;
+						const _paramList = _headingImpl?.params?.length
+							? _headingImpl.params.map((p) => (p.optional ? `[${p.name}]` : p.name)).join(", ")
+							: "";
+						const _retSuffix = _headingImpl?.returnType
+							? ` ⇒ <code>${helper.escapeHtml(_headingImpl.returnType)}</code>`
+							: "";
+						const displayName = isOptional ? `[api.${rawName}(${_paramList})]${_retSuffix}` : `api.${rawName}(${_paramList})${_retSuffix}`;
 						output += `<a id="${pa}"></a>\n\n`;
 						output += `#### ${displayName}\n\n`;
-						if (prop.description) {
-							// Strip outer <p> tags and %%sig: ...%% markers for clean display
-							const { cleanDesc } = extractSigFromDesc(prop.description.replace(/^<p>|<\/p>$/g, "").trim());
-							if (cleanDesc) output += `${cleanDesc}\n\n`;
-						}
+						if (_cleanDesc) output += `${_cleanDesc}\n\n`;
 						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
 
-						// Parse params and return type from the %%sig: ...%% marker in the description
-						const rawDesc = prop.description || "";
-						const { sig: sigStr } = extractSigFromDesc(rawDesc.replace(/^<p>|<\/p>$/g, "").trim());
-						const impl = sigStr ? parseFunctionSig(sigStr) : null;
+						// Use already-parsed sig (extracted above for the heading)
+						const sigStr = _headingSigStr;
+						const impl = _headingImpl;
 
 						if (impl && impl.params && impl.params.length > 0) {
 							// Filter to top-level params only (no dotted sub-params in signature row)
@@ -2130,7 +2135,7 @@ const partials = {
 						}
 
 						if (impl && impl.returnType) {
-							output += `**Returns**: <code>${impl.returnType}</code>\n\n`;
+							output += `**Returns**: <code>${helper.escapeHtml(impl.returnType)}</code>\n\n`;
 						}
 
 						output += `* * *\n\n`;
@@ -2297,9 +2302,7 @@ const partials = {
 					if (!prop) return;
 					const isFunc = prop.type?.names?.some((n) => n === "Function" || n === "function");
 					const isOptional = prop.optional;
-					const displayKey = isOptional
-						? `\\[${depth === startDepth ? "api" : ""}.${key}\\]`
-						: `${depth === startDepth ? "api" : ""}.${key}`;
+					const displayKey = isOptional ? `\\[.${key}\\]` : `.${key}`;
 					const params = isFunc ? "()" : "";
 					// For function-typed properties, the type IS the function — omit return arrow
 					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
