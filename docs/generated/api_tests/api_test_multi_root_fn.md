@@ -7,9 +7,9 @@
 
 **Structure**
 
-  * [.doA](#api_test_multi_root_fn~doA)
+  * [.doA](#api_test_multi_root_fn_doA)
     * [.doA()](#api_test_multi_root_fn_dot_doA) ⇒ <code>string</code>
-  * [.doB](#api_test_multi_root_fn~doB)
+  * [.doB](#api_test_multi_root_fn_doB)
     * [.doB()](#api_test_multi_root_fn_dot_doB) ⇒ <code>string</code>
 
 
@@ -49,7 +49,7 @@ const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi
 
 * * *
 
-<a id="api_test_multi_root_fn~doA"></a>
+<a id="api_test_multi_root_fn_doA"></a>
 
 ### api_test_multi_root_fn.doA
 > 
@@ -75,12 +75,45 @@ const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi
 const api = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
 api.doA(); // 'result-a'
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+api_test_multi_root_fn.do-a.doA();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+  api_test_multi_root_fn.do-a.doA();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+  api_test_multi_root_fn.do-a.doA();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+api_test_multi_root_fn.do-a.doA();
+```
 
 
 
 * * *
 
-<a id="api_test_multi_root_fn~doB"></a>
+<a id="api_test_multi_root_fn_doB"></a>
 
 ### api_test_multi_root_fn.doB
 > 
@@ -105,6 +138,39 @@ api.doA(); // 'result-a'
 ```js
 const api = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
 api.doB(); // 'result-b'
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+api_test_multi_root_fn.do-b.doB();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+  api_test_multi_root_fn.do-b.doB();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+  api_test_multi_root_fn.do-b.doB();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+api_test_multi_root_fn.do-b.doB();
 ```
 
 

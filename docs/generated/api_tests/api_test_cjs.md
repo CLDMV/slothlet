@@ -253,7 +253,7 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 ### multiply(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Multiplies two numbers using explicit CJS default pattern.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 
 | Param | Type | Default | Description |
@@ -275,7 +275,7 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 ### divide(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Divides two numbers using explicit CJS default pattern.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 
 | Param | Type | Default | Description |
@@ -297,7 +297,7 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 ### getCalculatorName() ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the name of the calculator for testing named exports alongside explicit defaults.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 **Returns**:
 

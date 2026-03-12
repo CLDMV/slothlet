@@ -7,7 +7,7 @@
 
 **Structure**
 
-  * [.adb](#api_adb_test~adb)
+  * [.adb](#api_adb_test_adb)
     * [.initialize(host, port)](#api_adb_test_dot_adb_dot_initialize) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.getClient()](#api_adb_test_dot_adb_dot_getClient) ⇒ <code>Object</code>
     * [.getDevice()](#api_adb_test_dot_adb_dot_getDevice) ⇒ <code>Object</code>
@@ -16,16 +16,16 @@
     * [.connect()](#api_adb_test_dot_adb_dot_connect) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.disconnect()](#api_adb_test_dot_adb_dot_disconnect) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.input(inputCommand)](#api_adb_test_dot_adb_dot_input) ⇒ <code>Promise.&lt;string&gt;</code>
-      * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;void&gt;</code>
-      * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
-      * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;void&gt;</code>
-      * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;void&gt;</code>
-      * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>Object</code>
-      * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>Object</code>
+      * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;*&gt;</code>
+      * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;*&gt;</code>
+      * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;*&gt;</code>
+      * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;*&gt;</code>
+      * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>*</code>
+      * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>*</code>
     * [.screenshot()](#api_adb_test_dot_adb_dot_screenshot) ⇒ <code>Promise.&lt;Buffer&gt;</code>
     * [.listPackages()](#api_adb_test_dot_adb_dot_listPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
     * [.getProperties()](#api_adb_test_dot_adb_dot_getProperties) ⇒ <code>Promise.&lt;Object&gt;</code>
-  * [.app](#api_adb_test~app)
+  * [.app](#api_adb_test_app)
     * [.launch(packageName, options)](#api_adb_test_dot_app_dot_launch) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.stop(packageName)](#api_adb_test_dot_app_dot_stop) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.getCurrentApp(options)](#api_adb_test_dot_app_dot_getCurrentApp) ⇒ <code>Promise.&lt;Object&gt;</code>
@@ -39,14 +39,14 @@
     * [.uninstall(packageName, options)](#api_adb_test_dot_app_dot_uninstall) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.getCurrentPackage()](#api_adb_test_dot_app_dot_getCurrentPackage) ⇒ <code>Promise.&lt;string&gt;</code>
     * [.getCurrentActivity()](#api_adb_test_dot_app_dot_getCurrentActivity) ⇒ <code>Promise.&lt;string&gt;</code>
-  * [.config](#api_adb_test~config)
-    * [.get(key)](#api_adb_test_dot_config_dot_get) ⇒ <code>any</code>
-    * [.set(key, value)](#api_adb_test_dot_config_dot_set) ⇒ <code>void</code>
-    * [.merge(configObject, deep)](#api_adb_test_dot_config_dot_merge) ⇒ <code>Object</code>
-    * [.reset(keys)](#api_adb_test_dot_config_dot_reset) ⇒ <code>Object</code>
-    * [.validate(configToValidate)](#api_adb_test_dot_config_dot_validate) ⇒ <code>Object</code>
-    * [.snapshot()](#api_adb_test_dot_config_dot_snapshot) ⇒ <code>Object</code>
-  * [.connection](#api_adb_test~connection)
+  * [.config](#api_adb_test_config)
+    * [.get(key)](#api_adb_test_dot_config_dot_get) ⇒ <code>*</code>
+    * [.set(key, value)](#api_adb_test_dot_config_dot_set) ⇒ <code>*</code>
+    * [.merge(configObject, deep)](#api_adb_test_dot_config_dot_merge) ⇒ <code>*</code>
+    * [.reset(keys)](#api_adb_test_dot_config_dot_reset) ⇒ <code>*</code>
+    * [.validate(configToValidate)](#api_adb_test_dot_config_dot_validate) ⇒ <code>*</code>
+    * [.snapshot()](#api_adb_test_dot_config_dot_snapshot) ⇒ <code>*</code>
+  * [.connection](#api_adb_test_connection)
     * [.ensureConnected()](#api_adb_test_dot_connection_dot_ensureConnected) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.disconnect(isAutoDisconnect)](#api_adb_test_dot_connection_dot_disconnect) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.isConnected()](#api_adb_test_dot_connection_dot_isConnected) ⇒ <code>boolean</code>
@@ -58,7 +58,7 @@
     * [.shell(command, options)](#api_adb_test_dot_connection_dot_shell) ⇒ <code>Promise.&lt;string&gt;</code>
     * [.getInfo()](#api_adb_test_dot_connection_dot_getInfo) ⇒ <code>Object</code>
     * [.getEmitter()](#api_adb_test_dot_connection_dot_getEmitter) ⇒ <code>EventEmitter</code>
-  * [.device](#api_adb_test~device)
+  * [.device](#api_adb_test_device)
     * [.get(key)](#api_adb_test_dot_device_dot_get) ⇒ <code>Promise.&lt;any&gt;</code>
     * [.set(key, value)](#api_adb_test_dot_device_dot_set) ⇒ <code>void</code>
     * [.merge(dataObject, deep)](#api_adb_test_dot_device_dot_merge) ⇒ <code>Promise.&lt;Object&gt;</code>
@@ -67,13 +67,13 @@
     * [.withDisplay()](#api_adb_test_dot_device_dot_withDisplay) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.basic()](#api_adb_test_dot_device_dot_basic) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.snapshot(options)](#api_adb_test_dot_device_dot_snapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
-  * [.display](#api_adb_test~display)
+  * [.display](#api_adb_test_display)
     * [.capture(options)](#api_adb_test_dot_display_dot_capture) ⇒ <code>Promise.&lt;Buffer&gt;</code>
     * [.getInfo()](#api_adb_test_dot_display_dot_getInfo) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.getResolution()](#api_adb_test_dot_display_dot_getResolution) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.analyzeScreenshot(options)](#api_adb_test_dot_display_dot_analyzeScreenshot) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.saveScreenshot(filepath, options)](#api_adb_test_dot_display_dot_saveScreenshot) ⇒ <code>Promise.&lt;void&gt;</code>
-  * [.helpers](#api_adb_test~helpers)
+  * [.helpers](#api_adb_test_helpers)
     * [.fetchDeviceProperties(properties)](#api_adb_test_dot_helpers_dot_fetchDeviceProperties) ⇒ <code>Promise.&lt;Object&gt;</code>
     * [.fetchCurrentAppInfo()](#api_adb_test_dot_helpers_dot_fetchCurrentAppInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
     * [.fetchInstalledPackages(systemApps, thirdPartyOnly)](#api_adb_test_dot_helpers_dot_fetchInstalledPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
@@ -83,62 +83,64 @@
     * [.refreshCurrentAppInfo(reason, options)](#api_adb_test_dot_helpers_dot_refreshCurrentAppInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
     * [.collectStartupMetadata(reason)](#api_adb_test_dot_helpers_dot_collectStartupMetadata) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
     * [.scheduleAppInfoRefresh(context, options)](#api_adb_test_dot_helpers_dot_scheduleAppInfoRefresh) ⇒ <code>void</code>
-  * [.input](#api_adb_test~input)
-    * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>Object</code>
-    * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>Object</code>
-  * [.inputHelpers](#api_adb_test~inputHelpers)
-    * [.sendKeycode(keycode)](#api_adb_test_dot_inputHelpers_dot_sendKeycode) ⇒ <code>Promise.&lt;string&gt;</code>
-    * [.sendText(text)](#api_adb_test_dot_inputHelpers_dot_sendText) ⇒ <code>Promise.&lt;string&gt;</code>
-    * [.sendTap(x, y)](#api_adb_test_dot_inputHelpers_dot_sendTap) ⇒ <code>Promise.&lt;string&gt;</code>
-    * [.sendSwipe(x1, y1, x2, y2, duration)](#api_adb_test_dot_inputHelpers_dot_sendSwipe) ⇒ <code>Promise.&lt;string&gt;</code>
-    * [.sendLongPress(keycode)](#api_adb_test_dot_inputHelpers_dot_sendLongPress) ⇒ <code>Promise.&lt;string&gt;</code>
-  * [.metadata](#api_adb_test~metadata)
-    * [.get(key)](#api_adb_test_dot_metadata_dot_get) ⇒ <code>Promise.&lt;any&gt;</code>
-    * [.set(key, value)](#api_adb_test_dot_metadata_dot_set) ⇒ <code>void</code>
-    * [.merge(metaObject, deep)](#api_adb_test_dot_metadata_dot_merge) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.refresh(reason, force)](#api_adb_test_dot_metadata_dot_refresh) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.collect(reason)](#api_adb_test_dot_metadata_dot_collect) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.clear(keys)](#api_adb_test_dot_metadata_dot_clear) ⇒ <code>void</code>
-    * [.age()](#api_adb_test_dot_metadata_dot_age) ⇒ <code>Object</code>
-    * [.startup()](#api_adb_test_dot_metadata_dot_startup) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.deviceMeta()](#api_adb_test_dot_metadata_dot_deviceMeta) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.networkMeta()](#api_adb_test_dot_metadata_dot_networkMeta) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.packages()](#api_adb_test_dot_metadata_dot_packages) ⇒ <code>Promise.&lt;(Array|null)&gt;</code>
-    * [.snapshot(includeAge)](#api_adb_test_dot_metadata_dot_snapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
-  * [.power](#api_adb_test~power)
-  * [.press](#api_adb_test~press)
-    * [.key(keyName)](#api_adb_test_dot_press_dot_key) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.power()](#api_adb_test_dot_press_dot_power) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.home()](#api_adb_test_dot_press_dot_home) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.back()](#api_adb_test_dot_press_dot_back) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.navigate(direction)](#api_adb_test_dot_press_dot_navigate) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.select()](#api_adb_test_dot_press_dot_select) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.getRemoteKeys()](#api_adb_test_dot_press_dot_getRemoteKeys) ⇒ <code>Object</code>
-    * [.getKeycodes()](#api_adb_test_dot_press_dot_getKeycodes) ⇒ <code>Object</code>
-  * [.state](#api_adb_test~state)
-    * [.getConfig()](#api_adb_test_dot_state_dot_getConfig) ⇒ <code>Object</code>
-    * [.getConnectionState()](#api_adb_test_dot_state_dot_getConnectionState) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.getDefaults()](#api_adb_test_dot_state_dot_getDefaults) ⇒ <code>Object</code>
-    * [.getMetadata()](#api_adb_test_dot_state_dot_getMetadata) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.getDevice()](#api_adb_test_dot_state_dot_getDevice) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.getDeviceWithDisplay()](#api_adb_test_dot_state_dot_getDeviceWithDisplay) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.getCurrentApp()](#api_adb_test_dot_state_dot_getCurrentApp) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.getPowerState()](#api_adb_test_dot_state_dot_getPowerState) ⇒ <code>Promise.&lt;Object&gt;</code>
-    * [.getAudioState()](#api_adb_test_dot_state_dot_getAudioState) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.getNetworkInfo()](#api_adb_test_dot_state_dot_getNetworkInfo) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-    * [.getInstalledPackages(options)](#api_adb_test_dot_state_dot_getInstalledPackages) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
-    * [.refreshDeviceInfo(options)](#api_adb_test_dot_state_dot_refreshDeviceInfo) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.refreshAppInfo()](#api_adb_test_dot_state_dot_refreshAppInfo) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.refreshNetworkInfo()](#api_adb_test_dot_state_dot_refreshNetworkInfo) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.refreshAudioInfo()](#api_adb_test_dot_state_dot_refreshAudioInfo) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.refreshAll()](#api_adb_test_dot_state_dot_refreshAll) ⇒ <code>Promise.&lt;void&gt;</code>
-    * [.createSnapshot(options)](#api_adb_test_dot_state_dot_createSnapshot) ⇒ <code>Promise.&lt;Object&gt;</code>
-  * [.utils](#api_adb_test~utils)
-    * [.defaults](#api_adb_test_dot_utils~defaults)
+  * [.input](#api_adb_test_input)
+    * [.text(text)](#api_adb_test_dot_input_dot_text) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.key(key)](#api_adb_test_dot_input_dot_key) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.tap(x, y)](#api_adb_test_dot_input_dot_tap) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.swipe(startX, startY, endX, endY, duration)](#api_adb_test_dot_input_dot_swipe) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getKeyboardKeys()](#api_adb_test_dot_input_dot_getKeyboardKeys) ⇒ <code>*</code>
+    * [.getKeycodes()](#api_adb_test_dot_input_dot_getKeycodes) ⇒ <code>*</code>
+  * [.inputHelpers](#api_adb_test_inputHelpers)
+    * [.sendKeycode(keycode)](#api_adb_test_dot_inputHelpers_dot_sendKeycode) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.sendText(text)](#api_adb_test_dot_inputHelpers_dot_sendText) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.sendTap(x, y)](#api_adb_test_dot_inputHelpers_dot_sendTap) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.sendSwipe(x1, y1, x2, y2, duration)](#api_adb_test_dot_inputHelpers_dot_sendSwipe) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.sendLongPress(keycode)](#api_adb_test_dot_inputHelpers_dot_sendLongPress) ⇒ <code>Promise.&lt;*&gt;</code>
+  * [.metadata](#api_adb_test_metadata)
+    * [.get(key)](#api_adb_test_dot_metadata_dot_get) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.set(key, value)](#api_adb_test_dot_metadata_dot_set) ⇒ <code>*</code>
+    * [.merge(metaObject, deep)](#api_adb_test_dot_metadata_dot_merge) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refresh(reason, force)](#api_adb_test_dot_metadata_dot_refresh) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.collect(reason)](#api_adb_test_dot_metadata_dot_collect) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.clear(keys)](#api_adb_test_dot_metadata_dot_clear) ⇒ <code>*</code>
+    * [.age()](#api_adb_test_dot_metadata_dot_age) ⇒ <code>*</code>
+    * [.startup()](#api_adb_test_dot_metadata_dot_startup) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.deviceMeta()](#api_adb_test_dot_metadata_dot_deviceMeta) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.networkMeta()](#api_adb_test_dot_metadata_dot_networkMeta) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.packages()](#api_adb_test_dot_metadata_dot_packages) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.snapshot(includeAge)](#api_adb_test_dot_metadata_dot_snapshot) ⇒ <code>Promise.&lt;*&gt;</code>
+  * [.power](#api_adb_test_power)
+    * [.sleep()](#api_adb_test_dot_power_dot_sleep) ⇒ <code>Promise.&lt;*&gt;</code>
+  * [.press](#api_adb_test_press)
+    * [.key(keyName)](#api_adb_test_dot_press_dot_key) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.power()](#api_adb_test_dot_press_dot_power) ⇒ <code>Promise.&lt;*&gt;</code>
+      * [.sleep()](#api_adb_test_dot_power_dot_sleep) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.home()](#api_adb_test_dot_press_dot_home) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.back()](#api_adb_test_dot_press_dot_back) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.navigate(direction)](#api_adb_test_dot_press_dot_navigate) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.select()](#api_adb_test_dot_press_dot_select) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getRemoteKeys()](#api_adb_test_dot_press_dot_getRemoteKeys) ⇒ <code>*</code>
+    * [.getKeycodes()](#api_adb_test_dot_press_dot_getKeycodes) ⇒ <code>*</code>
+  * [.state](#api_adb_test_state)
+    * [.getConfig()](#api_adb_test_dot_state_dot_getConfig) ⇒ <code>*</code>
+    * [.getConnectionState()](#api_adb_test_dot_state_dot_getConnectionState) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getDefaults()](#api_adb_test_dot_state_dot_getDefaults) ⇒ <code>*</code>
+    * [.getMetadata()](#api_adb_test_dot_state_dot_getMetadata) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getDevice()](#api_adb_test_dot_state_dot_getDevice) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getDeviceWithDisplay()](#api_adb_test_dot_state_dot_getDeviceWithDisplay) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getCurrentApp()](#api_adb_test_dot_state_dot_getCurrentApp) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getPowerState()](#api_adb_test_dot_state_dot_getPowerState) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getAudioState()](#api_adb_test_dot_state_dot_getAudioState) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getNetworkInfo()](#api_adb_test_dot_state_dot_getNetworkInfo) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.getInstalledPackages(options)](#api_adb_test_dot_state_dot_getInstalledPackages) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refreshDeviceInfo(options)](#api_adb_test_dot_state_dot_refreshDeviceInfo) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refreshAppInfo()](#api_adb_test_dot_state_dot_refreshAppInfo) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refreshNetworkInfo()](#api_adb_test_dot_state_dot_refreshNetworkInfo) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refreshAudioInfo()](#api_adb_test_dot_state_dot_refreshAudioInfo) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.refreshAll()](#api_adb_test_dot_state_dot_refreshAll) ⇒ <code>Promise.&lt;*&gt;</code>
+    * [.createSnapshot(options)](#api_adb_test_dot_state_dot_createSnapshot) ⇒ <code>Promise.&lt;*&gt;</code>
+  * [.utils](#api_adb_test_utils)
+    * [.defaults](#api_adb_test_dot_utils_defaults)
       * [.loadDefaultsFromFiles()](#api_adb_test_dot_utils_dot_defaults_dot_loadDefaultsFromFiles) ⇒ <code>Object</code>
       * [.getDefaults(dataSystemName)](#api_adb_test_dot_utils_dot_defaults_dot_getDefaults) ⇒ <code>Object</code>
       * [.getAllDefaults()](#api_adb_test_dot_utils_dot_defaults_dot_getAllDefaults) ⇒ <code>Object</code>
@@ -186,7 +188,7 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 * * *
 
-<a id="api_adb_test~adb"></a>
+<a id="api_adb_test_adb"></a>
 
 ### api_adb_test.adb
 > 
@@ -200,7 +202,7 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### initialize(host, port) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Initializes ADB client and device connection.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -214,6 +216,41 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.initialize('192.168.1.1');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.initialize('192.168.1.1');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.initialize('192.168.1.1');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.initialize('192.168.1.1');
+```
+
+
 
 * * *
 
@@ -222,11 +259,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### getClient() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current ADB client instance.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Object</code> <p>ADB client</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getClient();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getClient();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getClient();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getClient();
+```
 
 
 
@@ -237,11 +309,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### getDevice() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current device instance.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Object</code> <p>ADB device</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getDevice();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getDevice();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getDevice();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getDevice();
+```
 
 
 
@@ -252,11 +359,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### getDeviceId() ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current device ID.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>string</code> <p>Device ID</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getDeviceId();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getDeviceId();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.adb.getDeviceId();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.adb.getDeviceId();
+```
 
 
 
@@ -267,7 +409,7 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### shell(command) ⇒ <code>Promise.&lt;string&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Executes an ADB shell command.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -280,6 +422,41 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 - <code>Promise.&lt;string&gt;</code> <p>Command output</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.shell('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.shell('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.shell('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.shell('value');
+```
+
+
 
 * * *
 
@@ -288,11 +465,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### connect() ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Connects to the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;void&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.connect();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.connect();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.connect();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.connect();
+```
 
 
 
@@ -303,11 +515,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### disconnect() ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Disconnects from the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;void&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.disconnect();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.disconnect();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.disconnect();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.disconnect();
+```
 
 
 
@@ -318,7 +565,7 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### input(inputCommand) ⇒ <code>Promise.&lt;string&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Executes an input command.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -331,25 +578,95 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 - <code>Promise.&lt;string&gt;</code> <p>Command output</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.input('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.input('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.input('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.input('value');
+```
+
+
 
 * * *
 
 <a id="api_adb_test_dot_input_dot_text"></a>
 
-### text(text) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends text input to the device.</p></strong></p>
+### text(text) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>text.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| text | <code>string</code> |  | <p>Text to input</p> |
+| text | <code>*</code> |  | <p>text.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.text('hello');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.text('hello');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.text('hello');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.text('hello');
+```
 
 
 
@@ -357,20 +674,55 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 <a id="api_adb_test_dot_input_dot_key"></a>
 
-### key(key) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a key event.</p></strong></p>
+### key(key) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>key.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| key | <code>string | number</code> |  | <p>Key name or code</p> |
+| key | <code>*</code> |  | <p>key.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.key('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.key('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.key('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.key('myKey');
+```
 
 
 
@@ -378,21 +730,56 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 <a id="api_adb_test_dot_input_dot_tap"></a>
 
-### tap(x, y) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a tap event at coordinates.</p></strong></p>
+### tap(x, y) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>tap.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| x | <code>number</code> |  | <p>X coordinate</p> |
-| y | <code>number</code> |  | <p>Y coordinate</p> |
+| x | <code>*</code> |  | <p>x.</p> |
+| y | <code>*</code> |  | <p>y.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.tap(null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.tap(null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.tap(null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.tap(null, null);
+```
 
 
 
@@ -400,24 +787,59 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 <a id="api_adb_test_dot_input_dot_swipe"></a>
 
-### swipe(startX, startY, endX, endY, duration) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a swipe gesture.</p></strong></p>
+### swipe(startX, startY, endX, endY, duration) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>swipe.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| startX | <code>number</code> |  | <p>Start X coordinate</p> |
-| startY | <code>number</code> |  | <p>Start Y coordinate</p> |
-| endX | <code>number</code> |  | <p>End X coordinate</p> |
-| endY | <code>number</code> |  | <p>End Y coordinate</p> |
-| [duration] | <code>number</code> | <code>300</code> | <p>Swipe duration in ms</p> |
+| startX | <code>*</code> |  | <p>startX.</p> |
+| startY | <code>*</code> |  | <p>startY.</p> |
+| endX | <code>*</code> |  | <p>endX.</p> |
+| endY | <code>*</code> |  | <p>endY.</p> |
+| [duration] | <code>*</code> |  | <p>duration.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.swipe(null, null, null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.swipe(null, null, null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.swipe(null, null, null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.swipe(null, null, null, null);
+```
 
 
 
@@ -425,14 +847,49 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 <a id="api_adb_test_dot_input_dot_getKeyboardKeys"></a>
 
-### getKeyboardKeys() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets available keyboard keys.</p></strong></p>
+### getKeyboardKeys() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getKeyboardKeys.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Keyboard keys mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeyboardKeys();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeyboardKeys();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeyboardKeys();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeyboardKeys();
+```
 
 
 
@@ -440,14 +897,49 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 
 <a id="api_adb_test_dot_input_dot_getKeycodes"></a>
 
-### getKeycodes() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets keycodes mapping.</p></strong></p>
+### getKeycodes() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getKeycodes.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Keycodes mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeycodes();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeycodes();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeycodes();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeycodes();
+```
 
 
 
@@ -458,11 +950,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### screenshot() ⇒ <code>Promise.&lt;Buffer&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Takes a screenshot and returns the buffer.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;Buffer&gt;</code> <p>Screenshot buffer</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.screenshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.screenshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.screenshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.screenshot();
+```
 
 
 
@@ -473,11 +1000,46 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### listPackages() ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Lists installed packages.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;Array.&lt;string&gt;&gt;</code> <p>Array of package names</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.listPackages();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.listPackages();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.listPackages();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.listPackages();
+```
 
 
 
@@ -488,17 +1050,52 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### getProperties() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets device properties.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;Object&gt;</code> <p>Device properties</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.getProperties();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.getProperties();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.adb.getProperties();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.adb.getProperties();
+```
+
+
 
 * * *
 
-<a id="api_adb_test~app"></a>
+<a id="api_adb_test_app"></a>
 
 ### api_adb_test.app
 > 
@@ -512,7 +1109,7 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ### launch(packageName, options) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Launches an application by package name.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -538,6 +1135,39 @@ await api.app.launch("com.android.settings", {
   activity: ".Settings"
 });
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.launch('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.launch('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.launch('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.launch('com.example.app');
+```
 
 
 
@@ -548,7 +1178,7 @@ await api.app.launch("com.android.settings", {
 ### stop(packageName) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Stops an application by package name.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -561,6 +1191,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.stop('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.stop('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.stop('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.stop('com.example.app');
+```
+
+
 
 * * *
 
@@ -569,7 +1234,7 @@ await api.app.launch("com.android.settings", {
 ### getCurrentApp(options) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the currently running app.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -582,6 +1247,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;Object&gt;</code> <p>Current app info</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentApp();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentApp();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentApp();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentApp();
+```
+
+
 
 * * *
 
@@ -590,11 +1290,46 @@ await api.app.launch("com.android.settings", {
 ### refresh() ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Refreshes the app state.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;void&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.refresh();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.refresh();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.refresh();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.refresh();
+```
 
 
 
@@ -605,7 +1340,7 @@ await api.app.launch("com.android.settings", {
 ### getInstalledPackages(options) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets installed packages.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -618,6 +1353,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;Array.&lt;string&gt;&gt;</code> <p>List of package names</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getInstalledPackages();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getInstalledPackages();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getInstalledPackages();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getInstalledPackages();
+```
+
+
 
 * * *
 
@@ -626,7 +1396,7 @@ await api.app.launch("com.android.settings", {
 ### startMonitoring(options) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Starts monitoring app changes.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -639,6 +1409,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.startMonitoring();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.startMonitoring();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.startMonitoring();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.startMonitoring();
+```
+
+
 
 * * *
 
@@ -647,11 +1452,46 @@ await api.app.launch("com.android.settings", {
 ### stopMonitoring() ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Stops monitoring app changes.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;void&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.stopMonitoring();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.stopMonitoring();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.stopMonitoring();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.stopMonitoring();
+```
 
 
 
@@ -662,7 +1502,7 @@ await api.app.launch("com.android.settings", {
 ### clearData(packageName, options) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Clears app data.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -676,6 +1516,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.clearData('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.clearData('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.clearData('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.clearData('com.example.app');
+```
+
+
 
 * * *
 
@@ -684,7 +1559,7 @@ await api.app.launch("com.android.settings", {
 ### setEnabled(packageName, enabled) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Enables or disables an app.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -698,6 +1573,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.setEnabled('com.example.app', true);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.setEnabled('com.example.app', true);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.setEnabled('com.example.app', true);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.setEnabled('com.example.app', true);
+```
+
+
 
 * * *
 
@@ -706,7 +1616,7 @@ await api.app.launch("com.android.settings", {
 ### getPackageInfo(packageName) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets package information.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -719,6 +1629,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;Object&gt;</code> <p>Package info</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getPackageInfo('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getPackageInfo('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getPackageInfo('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getPackageInfo('com.example.app');
+```
+
+
 
 * * *
 
@@ -727,7 +1672,7 @@ await api.app.launch("com.android.settings", {
 ### uninstall(packageName, options) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Uninstalls an app.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -741,6 +1686,41 @@ await api.app.launch("com.android.settings", {
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.uninstall('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.uninstall('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.uninstall('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.uninstall('com.example.app');
+```
+
+
 
 * * *
 
@@ -749,11 +1729,46 @@ await api.app.launch("com.android.settings", {
 ### getCurrentPackage() ⇒ <code>Promise.&lt;string&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current package name.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;string&gt;</code> <p>Current package name</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentPackage();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentPackage();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentPackage();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentPackage();
+```
 
 
 
@@ -764,17 +1779,52 @@ await api.app.launch("com.android.settings", {
 ### getCurrentActivity() ⇒ <code>Promise.&lt;string&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current activity name.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;string&gt;</code> <p>Current activity name</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentActivity();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentActivity();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.app.getCurrentActivity();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.app.getCurrentActivity();
+```
+
+
 
 * * *
 
-<a id="api_adb_test~config"></a>
+<a id="api_adb_test_config"></a>
 
 ### api_adb_test.config
 > 
@@ -785,29 +1835,54 @@ await api.app.launch("com.android.settings", {
 
 <a id="api_adb_test_dot_config_dot_get"></a>
 
-### get(key) ⇒ <code>any</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets configuration values.</p></strong></p>
+### get(key) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>get.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [key] | <code>string</code> |  | <p>Specific config key to get, or undefined for entire config</p> |
+| key | <code>*</code> |  | <p>key.</p> |
 
 
 **Returns**:
 
-- <code>any</code> <p>Configuration value(s)</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Get entire config
-const config = api.config.get();
-
-// Get specific value
-const host = api.config.get('host');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.get('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.get('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.get('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.get('myKey');
 ```
 
 
@@ -816,33 +1891,55 @@ const host = api.config.get('host');
 
 <a id="api_adb_test_dot_config_dot_set"></a>
 
-### set(key, value) ⇒ <code>void</code>
-> <p><strong style="font-size: 1.1em;"><p>Sets a configuration value.</p></strong></p>
+### set(key, value) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>set.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| key | <code>string | Object</code> |  | <p>Config key to set, or object of key-value pairs</p> |
-| [value] | <code>any</code> |  | <p>Value to set (if key is string)</p> |
+| key | <code>*</code> |  | <p>key.</p> |
+| value | <code>*</code> |  | <p>value.</p> |
 
 
 **Returns**:
 
-- <code>void</code> <p></p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Set single value
-api.config.set('quiet', true);
-
-// Set multiple values
-api.config.set({
-  quiet: true,
-  heartbeatInterval: 60000
-});
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.set('myKey', null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.set('myKey', null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.set('myKey', null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.set('myKey', null);
 ```
 
 
@@ -851,30 +1948,55 @@ api.config.set({
 
 <a id="api_adb_test_dot_config_dot_merge"></a>
 
-### merge(configObject, deep) ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Merges configuration values with existing config.</p></strong></p>
+### merge(configObject, deep) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>merge.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| configObject | <code>Object</code> |  | <p>Configuration object to merge</p> |
-| [deep] | <code>boolean</code> | <code>false</code> | <p>Whether to perform deep merge</p> |
+| configObject | <code>*</code> |  | <p>configObject.</p> |
+| [deep] | <code>*</code> |  | <p>deep.</p> |
 
 
 **Returns**:
 
-- <code>Object</code> <p>Updated configuration</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Shallow merge
-api.config.merge({ quiet: true, port: 5556 });
-
-// Deep merge
-api.config.merge({ advanced: { timeout: 10000 } }, true);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.merge(null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.merge(null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.merge(null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.merge(null);
 ```
 
 
@@ -883,30 +2005,54 @@ api.config.merge({ advanced: { timeout: 10000 } }, true);
 
 <a id="api_adb_test_dot_config_dot_reset"></a>
 
-### reset(keys) ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Resets configuration to defaults.</p></strong></p>
+### reset(keys) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>reset.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [keys] | <code>string | Array.&lt;string&gt;</code> |  | <p>Specific keys to reset, or undefined to reset all</p> |
+| keys | <code>*</code> |  | <p>keys.</p> |
 
 
 **Returns**:
 
-- <code>Object</code> <p>Updated configuration</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Reset all to defaults
-api.config.reset();
-
-// Reset specific keys
-api.config.reset(['quiet', 'port']);
-api.config.reset('host');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.reset('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.reset('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.reset('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.reset('myKey');
 ```
 
 
@@ -915,28 +2061,54 @@ api.config.reset('host');
 
 <a id="api_adb_test_dot_config_dot_validate"></a>
 
-### validate(configToValidate) ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Validates configuration values.</p></strong></p>
+### validate(configToValidate) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>validate.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [configToValidate] | <code>Object</code> |  | <p>Config to validate, or current config if not provided</p> |
+| configToValidate | <code>*</code> |  | <p>configToValidate.</p> |
 
 
 **Returns**:
 
-- <code>Object</code> <p>Validation result with isValid boolean and errors array</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-const validation = api.config.validate();
-if (!validation.isValid) {
-  console.log('Config errors:', validation.errors);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.validate('item1');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.validate('item1');
 }
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.validate('item1');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.validate('item1');
 ```
 
 
@@ -945,27 +2117,55 @@ if (!validation.isValid) {
 
 <a id="api_adb_test_dot_config_dot_snapshot"></a>
 
-### snapshot() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets a snapshot of the current configuration state.</p></strong></p>
+### snapshot() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>snapshot.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Configuration snapshot with metadata</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-const snapshot = api.config.snapshot();
-console.log('Config created:', snapshot.timestamp);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.snapshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.snapshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.config.snapshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.config.snapshot();
 ```
 
 
 
 * * *
 
-<a id="api_adb_test~connection"></a>
+<a id="api_adb_test_connection"></a>
 
 ### api_adb_test.connection
 > 
@@ -979,7 +2179,7 @@ console.log('Config created:', snapshot.timestamp);
 ### ensureConnected() ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Ensures the device is connected, attempting to connect if not.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -989,6 +2189,39 @@ console.log('Config created:', snapshot.timestamp);
 **Example**
 ```js
 await remote.connection.ensureConnected();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.ensureConnected();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.ensureConnected();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.ensureConnected();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.ensureConnected();
 ```
 
 
@@ -1000,7 +2233,7 @@ await remote.connection.ensureConnected();
 ### disconnect(isAutoDisconnect) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Disconnects from the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1017,6 +2250,39 @@ await remote.connection.ensureConnected();
 ```js
 await remote.connection.disconnect();
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.disconnect();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.disconnect();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.disconnect();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.disconnect();
+```
 
 
 
@@ -1027,7 +2293,7 @@ await remote.connection.disconnect();
 ### isConnected() ⇒ <code>boolean</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the current connection status.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1040,6 +2306,39 @@ if (remote.connection.isConnected()) {
   // Device is connected
 }
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.isConnected();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.isConnected();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.isConnected();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.isConnected();
+```
 
 
 
@@ -1050,7 +2349,7 @@ if (remote.connection.isConnected()) {
 ### isAwake() ⇒ <code>Promise.&lt;boolean&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Checks if the device is awake and responsive.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1060,6 +2359,39 @@ if (remote.connection.isConnected()) {
 **Example**
 ```js
 const awake = await remote.connection.isAwake();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.isAwake();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.isAwake();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.isAwake();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.isAwake();
 ```
 
 
@@ -1071,7 +2403,7 @@ const awake = await remote.connection.isAwake();
 ### ensureAwake() ⇒ <code>Promise.&lt;boolean&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Ensures the device is awake, waking it if necessary.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1081,6 +2413,39 @@ const awake = await remote.connection.isAwake();
 **Example**
 ```js
 await remote.connection.ensureAwake();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.ensureAwake();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.ensureAwake();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.ensureAwake();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.ensureAwake();
 ```
 
 
@@ -1092,7 +2457,7 @@ await remote.connection.ensureAwake();
 ### startHeartbeat() ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Starts the heartbeat mechanism to maintain connection.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1102,6 +2467,39 @@ await remote.connection.ensureAwake();
 **Example**
 ```js
 remote.connection.startHeartbeat();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.startHeartbeat();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.startHeartbeat();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.startHeartbeat();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.startHeartbeat();
 ```
 
 
@@ -1113,7 +2511,7 @@ remote.connection.startHeartbeat();
 ### stopHeartbeat() ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Stops the heartbeat mechanism.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1123,6 +2521,39 @@ remote.connection.startHeartbeat();
 **Example**
 ```js
 remote.connection.stopHeartbeat();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.stopHeartbeat();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.stopHeartbeat();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.stopHeartbeat();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.stopHeartbeat();
 ```
 
 
@@ -1134,7 +2565,7 @@ remote.connection.stopHeartbeat();
 ### clearTimeouts() ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Clears all active timers.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1144,6 +2575,39 @@ remote.connection.stopHeartbeat();
 **Example**
 ```js
 remote.connection.clearTimeouts();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.clearTimeouts();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.clearTimeouts();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.clearTimeouts();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.clearTimeouts();
 ```
 
 
@@ -1155,7 +2619,7 @@ remote.connection.clearTimeouts();
 ### shell(command, options) ⇒ <code>Promise.&lt;string&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Executes a shell command on the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1175,6 +2639,39 @@ remote.connection.clearTimeouts();
 const output = await remote.connection.shell('getprop ro.product.model');
 console.log('Device model:', output);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.shell('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.shell('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.connection.shell('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.connection.shell('value');
+```
 
 
 
@@ -1185,7 +2682,7 @@ console.log('Device model:', output);
 ### getInfo() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets connection information and statistics.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1197,6 +2694,39 @@ console.log('Device model:', output);
 const info = remote.connection.getInfo();
 console.log('Connection info:', info);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.getInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.getInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.getInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.getInfo();
+```
 
 
 
@@ -1207,7 +2737,7 @@ console.log('Connection info:', info);
 ### getEmitter() ⇒ <code>EventEmitter</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets the connection event emitter for subscribing to connection events.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1221,12 +2751,45 @@ emitter.on('connected', (event) => {
   console.log('Connected to', event.host);
 });
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.getEmitter();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.getEmitter();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.connection.getEmitter();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.connection.getEmitter();
+```
 
 
 
 * * *
 
-<a id="api_adb_test~device"></a>
+<a id="api_adb_test_device"></a>
 
 ### api_adb_test.device
 > 
@@ -1240,7 +2803,7 @@ emitter.on('connected', (event) => {
 ### get(key) ⇒ <code>Promise.&lt;any&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets device data.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1262,6 +2825,39 @@ const device = await api.device.get();
 const info = await api.device.get('info');
 const network = await api.device.get('network');
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.get();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.get();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.get();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.get();
+```
 
 
 
@@ -1272,12 +2868,12 @@ const network = await api.device.get('network');
 ### set(key, value) ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Sets device data (primarily for caching).</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| key | <code>string | Object</code> |  | <p>Device data key or object of key-value pairs</p> |
+| key | <code>string \| Object</code> |  | <p>Device data key or object of key-value pairs</p> |
 | [value] | <code>any</code> |  | <p>Value to set (if key is string)</p> |
 
 
@@ -1297,6 +2893,39 @@ api.device.set({
   network: networkInfo
 });
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.device.set(value);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.device.set(value);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.device.set(value);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.device.set(value);
+```
 
 
 
@@ -1307,7 +2936,7 @@ api.device.set({
 ### merge(dataObject, deep) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Merges device data with existing data.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1326,6 +2955,39 @@ api.device.set({
 // Merge new device info
 await api.device.merge({ info: newDeviceInfo });
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.merge({});
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.merge({});
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.merge({});
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.merge({});
+```
 
 
 
@@ -1336,12 +2998,12 @@ await api.device.merge({ info: newDeviceInfo });
 ### refresh(keys, force) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Refreshes device data from the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [keys] | <code>string | Array.&lt;string&gt;</code> |  | <p>Specific keys to refresh, or undefined to refresh all</p> |
+| [keys] | <code>string \| Array.&lt;string&gt;</code> |  | <p>Specific keys to refresh, or undefined to refresh all</p> |
 | [force] | <code>boolean</code> | <code>false</code> | <p>Force refresh even if recently updated</p> |
 
 
@@ -1359,6 +3021,39 @@ await api.device.refresh();
 await api.device.refresh(['info', 'network']);
 await api.device.refresh('power');
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.refresh();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.refresh();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.refresh();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.refresh();
+```
 
 
 
@@ -1369,12 +3064,12 @@ await api.device.refresh('power');
 ### clear(keys) ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Clears cached device data.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [keys] | <code>string | Array.&lt;string&gt;</code> |  | <p>Specific keys to clear, or undefined to clear all</p> |
+| [keys] | <code>string \| Array.&lt;string&gt;</code> |  | <p>Specific keys to clear, or undefined to clear all</p> |
 
 
 **Returns**:
@@ -1391,6 +3086,39 @@ api.device.clear();
 api.device.clear(['info', 'network']);
 api.device.clear('power');
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.device.clear();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.device.clear();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.device.clear();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.device.clear();
+```
 
 
 
@@ -1401,7 +3129,7 @@ api.device.clear('power');
 ### withDisplay() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets device data with display information included.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1413,6 +3141,39 @@ api.device.clear('power');
 const deviceWithDisplay = await api.device.withDisplay();
 console.log('Display info:', deviceWithDisplay.display);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.withDisplay();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.withDisplay();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.withDisplay();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.withDisplay();
+```
 
 
 
@@ -1423,7 +3184,7 @@ console.log('Display info:', deviceWithDisplay.display);
 ### basic() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets basic device data without display information.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1433,6 +3194,39 @@ console.log('Display info:', deviceWithDisplay.display);
 **Example**
 ```js
 const basicDevice = await api.device.basic();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.basic();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.basic();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.basic();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.basic();
 ```
 
 
@@ -1444,7 +3238,7 @@ const basicDevice = await api.device.basic();
 ### snapshot(options) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets a snapshot of the current device state.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1464,12 +3258,45 @@ const basicDevice = await api.device.basic();
 const snapshot = await api.device.snapshot();
 console.log('Device snapshot:', snapshot);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.snapshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.snapshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.device.snapshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.device.snapshot();
+```
 
 
 
 * * *
 
-<a id="api_adb_test~display"></a>
+<a id="api_adb_test_display"></a>
 
 ### api_adb_test.display
 > 
@@ -1483,7 +3310,7 @@ console.log('Device snapshot:', snapshot);
 ### capture(options) ⇒ <code>Promise.&lt;Buffer&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Captures a screenshot from the Android TV device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1501,6 +3328,41 @@ console.log('Device snapshot:', snapshot);
 - <code>Promise.&lt;Buffer&gt;</code> <p>Screenshot buffer</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.capture();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.capture();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.capture();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.capture();
+```
+
+
 
 * * *
 
@@ -1509,11 +3371,46 @@ console.log('Device snapshot:', snapshot);
 ### getInfo() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets display information.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;Object&gt;</code> <p>Display info</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.getInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.getInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.getInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.getInfo();
+```
 
 
 
@@ -1524,11 +3421,46 @@ console.log('Device snapshot:', snapshot);
 ### getResolution() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets screen resolution.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Promise.&lt;Object&gt;</code> <p>Resolution info</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.getResolution();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.getResolution();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.getResolution();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.getResolution();
+```
 
 
 
@@ -1539,7 +3471,7 @@ console.log('Device snapshot:', snapshot);
 ### analyzeScreenshot(options) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Analyzes screenshot for brightness/darkness.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1552,6 +3484,41 @@ console.log('Device snapshot:', snapshot);
 - <code>Promise.&lt;Object&gt;</code> <p>Analysis results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.analyzeScreenshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.analyzeScreenshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.analyzeScreenshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.analyzeScreenshot();
+```
+
+
 
 * * *
 
@@ -1560,7 +3527,7 @@ console.log('Device snapshot:', snapshot);
 ### saveScreenshot(filepath, options) ⇒ <code>Promise.&lt;void&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Saves screenshot to file.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1574,10 +3541,45 @@ console.log('Device snapshot:', snapshot);
 - <code>Promise.&lt;void&gt;</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.saveScreenshot('./file.mjs');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.saveScreenshot('./file.mjs');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.display.saveScreenshot('./file.mjs');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.display.saveScreenshot('./file.mjs');
+```
+
+
 
 * * *
 
-<a id="api_adb_test~helpers"></a>
+<a id="api_adb_test_helpers"></a>
 
 ### api_adb_test.helpers
 > 
@@ -1591,12 +3593,12 @@ console.log('Device snapshot:', snapshot);
 ### fetchDeviceProperties(properties) ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Fetches device properties from the Android system.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [properties] | <code>Array.&lt;string&gt; | null</code> | <code>null</code> | <p>Specific properties to fetch, or null for all</p> |
+| [properties] | <code>Array.&lt;string&gt; \| null</code> | <code>null</code> | <p>Specific properties to fetch, or null for all</p> |
 
 
 **Returns**:
@@ -1612,6 +3614,39 @@ const allProps = await api.helpers.fetchDeviceProperties();
 // Get specific properties
 const specificProps = await api.helpers.fetchDeviceProperties(['ro.product.model', 'ro.build.version.release']);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchDeviceProperties();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchDeviceProperties();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchDeviceProperties();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchDeviceProperties();
+```
 
 
 
@@ -1622,11 +3657,11 @@ const specificProps = await api.helpers.fetchDeviceProperties(['ro.product.model
 ### fetchCurrentAppInfo() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Fetches information about the currently running application.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Current app information or null</p>
+- <code>Promise.&lt;(Object\|null)&gt;</code> <p>Current app information or null</p>
 
 
 **Example**
@@ -1635,6 +3670,39 @@ const currentApp = await api.helpers.fetchCurrentAppInfo();
 if (currentApp) {
   console.log('Current app:', currentApp.packageName);
 }
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchCurrentAppInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchCurrentAppInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchCurrentAppInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchCurrentAppInfo();
 ```
 
 
@@ -1646,7 +3714,7 @@ if (currentApp) {
 ### fetchInstalledPackages(systemApps, thirdPartyOnly) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Fetches the list of installed packages.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1668,6 +3736,39 @@ console.log('Installed packages:', packages.length);
 // Include system apps
 const allPackages = await api.helpers.fetchInstalledPackages(true, false);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchInstalledPackages();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchInstalledPackages();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchInstalledPackages();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchInstalledPackages();
+```
 
 
 
@@ -1678,7 +3779,7 @@ const allPackages = await api.helpers.fetchInstalledPackages(true, false);
 ### fetchNetworkDetails() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Fetches network connection details.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1690,6 +3791,39 @@ const allPackages = await api.helpers.fetchInstalledPackages(true, false);
 const network = await api.helpers.fetchNetworkDetails();
 console.log('WiFi connected:', network.wifi.connected);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchNetworkDetails();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchNetworkDetails();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchNetworkDetails();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchNetworkDetails();
+```
 
 
 
@@ -1700,7 +3834,7 @@ console.log('WiFi connected:', network.wifi.connected);
 ### fetchAudioInfo() ⇒ <code>Promise.&lt;Object&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Fetches audio system information.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -1712,6 +3846,39 @@ console.log('WiFi connected:', network.wifi.connected);
 const audio = await api.helpers.fetchAudioInfo();
 console.log('Audio info:', audio);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchAudioInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchAudioInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.fetchAudioInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.fetchAudioInfo();
+```
 
 
 
@@ -1722,7 +3889,7 @@ console.log('Audio info:', audio);
 ### resolveDefaultActivity(packageName) ⇒ <code>Promise.&lt;(string|null)&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Resolves the default activity for a given package.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1732,13 +3899,46 @@ console.log('Audio info:', audio);
 
 **Returns**:
 
-- <code>Promise.&lt;(string|null)&gt;</code> <p>Default activity name or null</p>
+- <code>Promise.&lt;(string\|null)&gt;</code> <p>Default activity name or null</p>
 
 
 **Example**
 ```js
 const activity = await api.helpers.resolveDefaultActivity('com.netflix.ninja');
 console.log('Default activity:', activity);
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
 ```
 
 
@@ -1750,7 +3950,7 @@ console.log('Default activity:', activity);
 ### refreshCurrentAppInfo(reason, options) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Refreshes current app information and emits change events if needed.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1762,7 +3962,7 @@ console.log('Default activity:', activity);
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Updated app information</p>
+- <code>Promise.&lt;(Object\|null)&gt;</code> <p>Updated app information</p>
 
 
 **Example**
@@ -1771,6 +3971,39 @@ const appInfo = await api.helpers.refreshCurrentAppInfo();
 
 // Force emit event
 await api.helpers.refreshCurrentAppInfo("user_action", { forceEmit: true });
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.refreshCurrentAppInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.refreshCurrentAppInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.refreshCurrentAppInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.refreshCurrentAppInfo();
 ```
 
 
@@ -1782,7 +4015,7 @@ await api.helpers.refreshCurrentAppInfo("user_action", { forceEmit: true });
 ### collectStartupMetadata(reason) ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
 > <p><strong style="font-size: 1.1em;"><p>Collects comprehensive startup metadata from the device.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1792,13 +4025,46 @@ await api.helpers.refreshCurrentAppInfo("user_action", { forceEmit: true });
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Collected metadata or null on error</p>
+- <code>Promise.&lt;(Object\|null)&gt;</code> <p>Collected metadata or null on error</p>
 
 
 **Example**
 ```js
 const metadata = await api.helpers.collectStartupMetadata();
 console.log('Device metadata:', metadata);
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.collectStartupMetadata();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.collectStartupMetadata();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.helpers.collectStartupMetadata();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.helpers.collectStartupMetadata();
 ```
 
 
@@ -1810,7 +4076,7 @@ console.log('Device metadata:', metadata);
 ### scheduleAppInfoRefresh(context, options) ⇒ <code>void</code>
 > <p><strong style="font-size: 1.1em;"><p>Schedules an app info refresh with a delay.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1829,12 +4095,45 @@ console.log('Device metadata:', metadata);
 ```js
 api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+```
 
 
 
 * * *
 
-<a id="api_adb_test~input"></a>
+<a id="api_adb_test_input"></a>
 
 ### api_adb_test.input
 > 
@@ -1845,20 +4144,55 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_text"></a>
 
-### text(text) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends text input to the device.</p></strong></p>
+### text(text) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>text.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| text | <code>string</code> |  | <p>Text to input</p> |
+| text | <code>*</code> |  | <p>text.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.text('hello');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.text('hello');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.text('hello');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.text('hello');
+```
 
 
 
@@ -1866,20 +4200,55 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_key"></a>
 
-### key(key) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a key event.</p></strong></p>
+### key(key) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>key.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| key | <code>string | number</code> |  | <p>Key name or code</p> |
+| key | <code>*</code> |  | <p>key.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.key('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.key('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.key('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.key('myKey');
+```
 
 
 
@@ -1887,21 +4256,56 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_tap"></a>
 
-### tap(x, y) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a tap event at coordinates.</p></strong></p>
+### tap(x, y) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>tap.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| x | <code>number</code> |  | <p>X coordinate</p> |
-| y | <code>number</code> |  | <p>Y coordinate</p> |
+| x | <code>*</code> |  | <p>x.</p> |
+| y | <code>*</code> |  | <p>y.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.tap(null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.tap(null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.tap(null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.tap(null, null);
+```
 
 
 
@@ -1909,24 +4313,59 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_swipe"></a>
 
-### swipe(startX, startY, endX, endY, duration) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a swipe gesture.</p></strong></p>
+### swipe(startX, startY, endX, endY, duration) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>swipe.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| startX | <code>number</code> |  | <p>Start X coordinate</p> |
-| startY | <code>number</code> |  | <p>Start Y coordinate</p> |
-| endX | <code>number</code> |  | <p>End X coordinate</p> |
-| endY | <code>number</code> |  | <p>End Y coordinate</p> |
-| [duration] | <code>number</code> | <code>300</code> | <p>Swipe duration in ms</p> |
+| startX | <code>*</code> |  | <p>startX.</p> |
+| startY | <code>*</code> |  | <p>startY.</p> |
+| endX | <code>*</code> |  | <p>endX.</p> |
+| endY | <code>*</code> |  | <p>endY.</p> |
+| [duration] | <code>*</code> |  | <p>duration.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.swipe(null, null, null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.swipe(null, null, null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.input.swipe(null, null, null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.input.swipe(null, null, null, null);
+```
 
 
 
@@ -1934,14 +4373,49 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_getKeyboardKeys"></a>
 
-### getKeyboardKeys() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets available keyboard keys.</p></strong></p>
+### getKeyboardKeys() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getKeyboardKeys.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Keyboard keys mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeyboardKeys();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeyboardKeys();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeyboardKeys();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeyboardKeys();
+```
 
 
 
@@ -1949,20 +4423,55 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_input_dot_getKeycodes"></a>
 
-### getKeycodes() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets keycodes mapping.</p></strong></p>
+### getKeycodes() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getKeycodes.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Keycodes mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeycodes();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeycodes();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.input.getKeycodes();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.input.getKeycodes();
+```
 
 
 
 * * *
 
-<a id="api_adb_test~inputHelpers"></a>
+<a id="api_adb_test_inputHelpers"></a>
 
 ### api_adb_test.inputHelpers
 > 
@@ -1973,25 +4482,54 @@ api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
 
 <a id="api_adb_test_dot_inputHelpers_dot_sendKeycode"></a>
 
-### sendKeycode(keycode) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a keycode to the device using input keyevent.</p></strong></p>
+### sendKeycode(keycode) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sendKeycode.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| keycode | <code>number</code> |  | <p>The Android keycode to send</p> |
+| keycode | <code>*</code> |  | <p>keycode.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;string&gt;</code> <p>Shell command output</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.inputHelpers.sendKeycode(3); // KEYCODE_HOME
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendKeycode('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendKeycode('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendKeycode('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendKeycode('myKey');
 ```
 
 
@@ -2000,25 +4538,54 @@ await api.inputHelpers.sendKeycode(3); // KEYCODE_HOME
 
 <a id="api_adb_test_dot_inputHelpers_dot_sendText"></a>
 
-### sendText(text) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends text input to the device.</p></strong></p>
+### sendText(text) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sendText.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| text | <code>string</code> |  | <p>The text to input</p> |
+| text | <code>*</code> |  | <p>text.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;string&gt;</code> <p>Shell command output</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.inputHelpers.sendText('Hello World');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendText('hello');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendText('hello');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendText('hello');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendText('hello');
 ```
 
 
@@ -2027,26 +4594,55 @@ await api.inputHelpers.sendText('Hello World');
 
 <a id="api_adb_test_dot_inputHelpers_dot_sendTap"></a>
 
-### sendTap(x, y) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a tap gesture at specified coordinates.</p></strong></p>
+### sendTap(x, y) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sendTap.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| x | <code>number</code> |  | <p>X coordinate</p> |
-| y | <code>number</code> |  | <p>Y coordinate</p> |
+| x | <code>*</code> |  | <p>x.</p> |
+| y | <code>*</code> |  | <p>y.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;string&gt;</code> <p>Shell command output</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.inputHelpers.sendTap(500, 300);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendTap(null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendTap(null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendTap(null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendTap(null, null);
 ```
 
 
@@ -2055,29 +4651,58 @@ await api.inputHelpers.sendTap(500, 300);
 
 <a id="api_adb_test_dot_inputHelpers_dot_sendSwipe"></a>
 
-### sendSwipe(x1, y1, x2, y2, duration) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a swipe gesture between two points.</p></strong></p>
+### sendSwipe(x1, y1, x2, y2, duration) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sendSwipe.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| x1 | <code>number</code> |  | <p>Start X coordinate</p> |
-| y1 | <code>number</code> |  | <p>Start Y coordinate</p> |
-| x2 | <code>number</code> |  | <p>End X coordinate</p> |
-| y2 | <code>number</code> |  | <p>End Y coordinate</p> |
-| [duration] | <code>number</code> | <code>300</code> | <p>Swipe duration in milliseconds</p> |
+| x1 | <code>*</code> |  | <p>x1.</p> |
+| y1 | <code>*</code> |  | <p>y1.</p> |
+| x2 | <code>*</code> |  | <p>x2.</p> |
+| y2 | <code>*</code> |  | <p>y2.</p> |
+| [duration] | <code>*</code> |  | <p>duration.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;string&gt;</code> <p>Shell command output</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.inputHelpers.sendSwipe(100, 500, 900, 500, 500); // Horizontal swipe
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendSwipe(null, null, null, null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendSwipe(null, null, null, null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendSwipe(null, null, null, null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendSwipe(null, null, null, null);
 ```
 
 
@@ -2086,32 +4711,61 @@ await api.inputHelpers.sendSwipe(100, 500, 900, 500, 500); // Horizontal swipe
 
 <a id="api_adb_test_dot_inputHelpers_dot_sendLongPress"></a>
 
-### sendLongPress(keycode) ⇒ <code>Promise.&lt;string&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Sends a long press keycode using sendevent.</p></strong></p>
+### sendLongPress(keycode) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sendLongPress.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| keycode | <code>number</code> |  | <p>The keycode to long press</p> |
+| keycode | <code>*</code> |  | <p>keycode.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;string&gt;</code> <p>Shell command output</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.inputHelpers.sendLongPress(26); // Long press power button
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendLongPress('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendLongPress('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.inputHelpers.sendLongPress('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.inputHelpers.sendLongPress('myKey');
 ```
 
 
 
 * * *
 
-<a id="api_adb_test~metadata"></a>
+<a id="api_adb_test_metadata"></a>
 
 ### api_adb_test.metadata
 > 
@@ -2122,30 +4776,54 @@ await api.inputHelpers.sendLongPress(26); // Long press power button
 
 <a id="api_adb_test_dot_metadata_dot_get"></a>
 
-### get(key) ⇒ <code>Promise.&lt;any&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets metadata.</p></strong></p>
+### get(key) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>get.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [key] | <code>string</code> |  | <p>Specific metadata key, or undefined for entire metadata</p> |
+| key | <code>*</code> |  | <p>key.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;any&gt;</code> <p>Metadata value(s)</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-// Get entire metadata
-const metadata = await api.metadata.get();
-
-// Get specific metadata
-const deviceMeta = await api.metadata.get('device');
-const networkMeta = await api.metadata.get('network');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.get('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.get('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.get('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.get('myKey');
 ```
 
 
@@ -2154,33 +4832,55 @@ const networkMeta = await api.metadata.get('network');
 
 <a id="api_adb_test_dot_metadata_dot_set"></a>
 
-### set(key, value) ⇒ <code>void</code>
-> <p><strong style="font-size: 1.1em;"><p>Sets metadata (primarily for caching).</p></strong></p>
+### set(key, value) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>set.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| key | <code>string | Object</code> |  | <p>Metadata key or object of key-value pairs</p> |
-| [value] | <code>any</code> |  | <p>Value to set (if key is string)</p> |
+| key | <code>*</code> |  | <p>key.</p> |
+| value | <code>*</code> |  | <p>value.</p> |
 
 
 **Returns**:
 
-- <code>void</code> <p></p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Set single value
-api.metadata.set('device', deviceMetadata);
-
-// Set multiple values
-api.metadata.set({
-  device: deviceMeta,
-  network: networkMeta
-});
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.set('myKey', null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.set('myKey', null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.set('myKey', null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.set('myKey', null);
 ```
 
 
@@ -2189,27 +4889,55 @@ api.metadata.set({
 
 <a id="api_adb_test_dot_metadata_dot_merge"></a>
 
-### merge(metaObject, deep) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Merges metadata with existing metadata.</p></strong></p>
+### merge(metaObject, deep) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>merge.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| metaObject | <code>Object</code> |  | <p>Metadata object to merge</p> |
-| [deep] | <code>boolean</code> | <code>false</code> | <p>Whether to perform deep merge</p> |
+| metaObject | <code>*</code> |  | <p>metaObject.</p> |
+| [deep] | <code>*</code> |  | <p>deep.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Updated metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-// Merge new metadata
-await api.metadata.merge({ device: newDeviceMeta });
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.merge(null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.merge(null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.merge(null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.merge(null);
 ```
 
 
@@ -2218,30 +4946,55 @@ await api.metadata.merge({ device: newDeviceMeta });
 
 <a id="api_adb_test_dot_metadata_dot_refresh"></a>
 
-### refresh(reason, force) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes metadata by collecting it from the device.</p></strong></p>
+### refresh(reason, force) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refresh.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [reason] | <code>string</code> | <code>"manual"</code> | <p>Reason for refresh</p> |
-| [force] | <code>boolean</code> | <code>false</code> | <p>Force refresh even if recently updated</p> |
+| [reason] | <code>*</code> |  | <p>reason.</p> |
+| [force] | <code>*</code> |  | <p>force.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Updated metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-// Refresh metadata
-await api.metadata.refresh("user_requested");
-
-// Force refresh
-await api.metadata.refresh("force_update", true);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.refresh();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.refresh();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.refresh();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.refresh();
 ```
 
 
@@ -2250,25 +5003,54 @@ await api.metadata.refresh("force_update", true);
 
 <a id="api_adb_test_dot_metadata_dot_collect"></a>
 
-### collect(reason) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Collects fresh metadata from the device.</p></strong></p>
+### collect(reason) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>collect.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [reason] | <code>string</code> | <code>"collect"</code> | <p>Reason for collection</p> |
+| [reason] | <code>*</code> |  | <p>reason.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Collected metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const freshMetadata = await api.metadata.collect("initialization");
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.collect();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.collect();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.collect();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.collect();
 ```
 
 
@@ -2277,30 +5059,54 @@ const freshMetadata = await api.metadata.collect("initialization");
 
 <a id="api_adb_test_dot_metadata_dot_clear"></a>
 
-### clear(keys) ⇒ <code>void</code>
-> <p><strong style="font-size: 1.1em;"><p>Clears cached metadata.</p></strong></p>
+### clear(keys) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>clear.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [keys] | <code>string | Array.&lt;string&gt;</code> |  | <p>Specific keys to clear, or undefined to clear all</p> |
+| keys | <code>*</code> |  | <p>keys.</p> |
 
 
 **Returns**:
 
-- <code>void</code> <p></p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-// Clear all metadata
-api.metadata.clear();
-
-// Clear specific metadata
-api.metadata.clear(['device', 'network']);
-api.metadata.clear('packages');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.clear('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.clear('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.clear('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.clear('myKey');
 ```
 
 
@@ -2309,20 +5115,48 @@ api.metadata.clear('packages');
 
 <a id="api_adb_test_dot_metadata_dot_age"></a>
 
-### age() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets the age of the metadata cache.</p></strong></p>
+### age() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>age.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Cache age information</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-const age = api.metadata.age();
-console.log('Metadata is', age.minutes, 'minutes old');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.age();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.age();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.metadata.age();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.metadata.age();
 ```
 
 
@@ -2331,22 +5165,48 @@ console.log('Metadata is', age.minutes, 'minutes old');
 
 <a id="api_adb_test_dot_metadata_dot_startup"></a>
 
-### startup() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets startup-specific metadata.</p></strong></p>
+### startup() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>startup.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Startup metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const startup = await api.metadata.startup();
-if (startup) {
-  console.log('Startup reason:', startup.reason);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.startup();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.startup();
 }
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.startup();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.startup();
 ```
 
 
@@ -2355,19 +5215,48 @@ if (startup) {
 
 <a id="api_adb_test_dot_metadata_dot_deviceMeta"></a>
 
-### deviceMeta() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets device-specific metadata.</p></strong></p>
+### deviceMeta() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>deviceMeta.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Device metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const deviceMeta = await api.metadata.device();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.deviceMeta();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.deviceMeta();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.deviceMeta();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.deviceMeta();
 ```
 
 
@@ -2376,19 +5265,48 @@ const deviceMeta = await api.metadata.device();
 
 <a id="api_adb_test_dot_metadata_dot_networkMeta"></a>
 
-### networkMeta() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets network-specific metadata.</p></strong></p>
+### networkMeta() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>networkMeta.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Network metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const networkMeta = await api.metadata.network();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.networkMeta();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.networkMeta();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.networkMeta();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.networkMeta();
 ```
 
 
@@ -2397,20 +5315,48 @@ const networkMeta = await api.metadata.network();
 
 <a id="api_adb_test_dot_metadata_dot_packages"></a>
 
-### packages() ⇒ <code>Promise.&lt;(Array|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets packages metadata.</p></strong></p>
+### packages() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>packages.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Array|null)&gt;</code> <p>Packages metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const packages = await api.metadata.packages();
-console.log('Installed packages:', packages?.length);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.packages();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.packages();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.packages();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.packages();
 ```
 
 
@@ -2419,33 +5365,61 @@ console.log('Installed packages:', packages?.length);
 
 <a id="api_adb_test_dot_metadata_dot_snapshot"></a>
 
-### snapshot(includeAge) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets a snapshot of the current metadata state.</p></strong></p>
+### snapshot(includeAge) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>snapshot.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [includeAge] | <code>boolean</code> | <code>true</code> | <p>Include age information</p> |
+| [includeAge] | <code>*</code> |  | <p>includeAge.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Metadata snapshot with metadata</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const snapshot = await api.metadata.snapshot();
-console.log('Metadata snapshot:', snapshot);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.snapshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.snapshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.metadata.snapshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.metadata.snapshot();
 ```
 
 
 
 * * *
 
-<a id="api_adb_test~power"></a>
+<a id="api_adb_test_power"></a>
 
 ### api_adb_test.power
 > 
@@ -2454,7 +5428,57 @@ console.log('Metadata snapshot:', snapshot);
 
 * * *
 
-<a id="api_adb_test~press"></a>
+<a id="api_adb_test_dot_power_dot_sleep"></a>
+
+### sleep() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sleep.</p></strong></p>
+> 
+**Kind**: static method
+
+**Returns**:
+
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.power.sleep();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.power.sleep();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.power.sleep();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.power.sleep();
+```
+
+
+
+* * *
+
+<a id="api_adb_test_press"></a>
 
 ### api_adb_test.press
 > 
@@ -2465,20 +5489,55 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_key"></a>
 
-### key(keyName) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses a remote control key.</p></strong></p>
+### key(keyName) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>key.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| keyName | <code>string</code> |  | <p>Name of the key to press</p> |
+| keyName | <code>*</code> |  | <p>keyName.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.key('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.key('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.key('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.key('myKey');
+```
 
 
 
@@ -2486,14 +5545,99 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_power"></a>
 
-### power() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses the power button.</p></strong></p>
+### power() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>power.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.power();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.power();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.power();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.power();
+```
+
+
+
+* * *
+
+<a id="api_adb_test_dot_power_dot_sleep"></a>
+
+### sleep() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>sleep.</p></strong></p>
+> 
+**Kind**: static method
+
+**Returns**:
+
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.power.sleep();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.power.sleep();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.power.sleep();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.power.sleep();
+```
 
 
 
@@ -2501,14 +5645,49 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_home"></a>
 
-### home() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses the home button.</p></strong></p>
+### home() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>home.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.home();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.home();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.home();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.home();
+```
 
 
 
@@ -2516,14 +5695,49 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_back"></a>
 
-### back() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses the back button.</p></strong></p>
+### back() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>back.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.back();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.back();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.back();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.back();
+```
 
 
 
@@ -2531,20 +5745,55 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_navigate"></a>
 
-### navigate(direction) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses navigation keys.</p></strong></p>
+### navigate(direction) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>navigate.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| direction | <code>string</code> |  | <p>Direction (&quot;up&quot;, &quot;down&quot;, &quot;left&quot;, &quot;right&quot;)</p> |
+| direction | <code>*</code> |  | <p>direction.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.navigate('./');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.navigate('./');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.navigate('./');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.navigate('./');
+```
 
 
 
@@ -2552,14 +5801,49 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_select"></a>
 
-### select() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Presses the select/OK button.</p></strong></p>
+### select() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>select.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.select();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.select();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.press.select();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.press.select();
+```
 
 
 
@@ -2567,14 +5851,49 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_getRemoteKeys"></a>
 
-### getRemoteKeys() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets available remote keys.</p></strong></p>
+### getRemoteKeys() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getRemoteKeys.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Remote keys mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.press.getRemoteKeys();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.press.getRemoteKeys();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.press.getRemoteKeys();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.press.getRemoteKeys();
+```
 
 
 
@@ -2582,20 +5901,55 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_press_dot_getKeycodes"></a>
 
-### getKeycodes() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets keycodes mapping.</p></strong></p>
+### getKeycodes() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getKeycodes.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Keycodes mapping</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.press.getKeycodes();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.press.getKeycodes();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.press.getKeycodes();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.press.getKeycodes();
+```
 
 
 
 * * *
 
-<a id="api_adb_test~state"></a>
+<a id="api_adb_test_state"></a>
 
 ### api_adb_test.state
 > 
@@ -2606,21 +5960,48 @@ console.log('Metadata snapshot:', snapshot);
 
 <a id="api_adb_test_dot_state_dot_getConfig"></a>
 
-### getConfig() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets the current configuration settings.</p></strong></p>
+### getConfig() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getConfig.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Configuration object</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-const config = api.state.getConfig();
-console.log('Host:', config.host);
-console.log('Port:', config.port);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.state.getConfig();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.state.getConfig();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.state.getConfig();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.state.getConfig();
 ```
 
 
@@ -2629,21 +6010,48 @@ console.log('Port:', config.port);
 
 <a id="api_adb_test_dot_state_dot_getConnectionState"></a>
 
-### getConnectionState() ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets the current connection state.</p></strong></p>
+### getConnectionState() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getConnectionState.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Connection state information</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const connectionState = await api.state.getConnectionState();
-console.log('Connected:', connectionState.connected);
-console.log('Status:', connectionState.status);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getConnectionState();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getConnectionState();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getConnectionState();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getConnectionState();
 ```
 
 
@@ -2652,20 +6060,48 @@ console.log('Status:', connectionState.status);
 
 <a id="api_adb_test_dot_state_dot_getDefaults"></a>
 
-### getDefaults() ⇒ <code>Object</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets default configuration values.</p></strong></p>
+### getDefaults() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>getDefaults.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Object</code> <p>Default configuration object</p>
+- <code>*</code> <p></p>
 
 
 **Example**
 ```js
-const defaults = api.state.getDefaults();
-console.log('Default port:', defaults.port);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.state.getDefaults();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.state.getDefaults();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.state.getDefaults();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.state.getDefaults();
 ```
 
 
@@ -2674,21 +6110,48 @@ console.log('Default port:', defaults.port);
 
 <a id="api_adb_test_dot_state_dot_getMetadata"></a>
 
-### getMetadata() ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets device metadata collected during initialization.</p></strong></p>
+### getMetadata() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getMetadata.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Device metadata object</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const metadata = await api.state.getMetadata();
-console.log('Device model:', metadata.device?.model);
-console.log('Android version:', metadata.device?.version);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getMetadata();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getMetadata();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getMetadata();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getMetadata();
 ```
 
 
@@ -2697,20 +6160,48 @@ console.log('Android version:', metadata.device?.version);
 
 <a id="api_adb_test_dot_state_dot_getDevice"></a>
 
-### getDevice() ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets basic device information without display info.</p></strong></p>
+### getDevice() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getDevice.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Device information object</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const device = await api.state.getDevice();
-console.log('Device info:', device);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getDevice();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getDevice();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getDevice();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getDevice();
 ```
 
 
@@ -2719,20 +6210,48 @@ console.log('Device info:', device);
 
 <a id="api_adb_test_dot_state_dot_getDeviceWithDisplay"></a>
 
-### getDeviceWithDisplay() ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets comprehensive device information including display details.</p></strong></p>
+### getDeviceWithDisplay() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getDeviceWithDisplay.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Complete device information object</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const deviceWithDisplay = await api.state.getDeviceWithDisplay();
-console.log('Display info:', deviceWithDisplay.display);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getDeviceWithDisplay();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getDeviceWithDisplay();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getDeviceWithDisplay();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getDeviceWithDisplay();
 ```
 
 
@@ -2741,22 +6260,48 @@ console.log('Display info:', deviceWithDisplay.display);
 
 <a id="api_adb_test_dot_state_dot_getCurrentApp"></a>
 
-### getCurrentApp() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets the current application state.</p></strong></p>
+### getCurrentApp() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getCurrentApp.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Current application information</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const currentApp = await api.state.getCurrentApp();
-if (currentApp) {
-  console.log('Current app:', currentApp.packageName);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getCurrentApp();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getCurrentApp();
 }
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getCurrentApp();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getCurrentApp();
 ```
 
 
@@ -2765,20 +6310,48 @@ if (currentApp) {
 
 <a id="api_adb_test_dot_state_dot_getPowerState"></a>
 
-### getPowerState() ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets device power state information.</p></strong></p>
+### getPowerState() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getPowerState.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Power state information</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const powerState = await api.state.getPowerState();
-console.log('Device awake:', powerState.mWakefulness === 'Awake');
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getPowerState();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getPowerState();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getPowerState();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getPowerState();
 ```
 
 
@@ -2787,22 +6360,48 @@ console.log('Device awake:', powerState.mWakefulness === 'Awake');
 
 <a id="api_adb_test_dot_state_dot_getAudioState"></a>
 
-### getAudioState() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets current audio state information.</p></strong></p>
+### getAudioState() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getAudioState.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Audio state information</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const audioState = await api.state.getAudioState();
-if (audioState) {
-  console.log('Audio info:', audioState);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getAudioState();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getAudioState();
 }
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getAudioState();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getAudioState();
 ```
 
 
@@ -2811,22 +6410,48 @@ if (audioState) {
 
 <a id="api_adb_test_dot_state_dot_getNetworkInfo"></a>
 
-### getNetworkInfo() ⇒ <code>Promise.&lt;(Object|null)&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets network information for the device.</p></strong></p>
+### getNetworkInfo() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getNetworkInfo.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;(Object|null)&gt;</code> <p>Network information</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const networkInfo = await api.state.getNetworkInfo();
-if (networkInfo) {
-  console.log('WiFi connected:', networkInfo.wifi.connected);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getNetworkInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getNetworkInfo();
 }
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getNetworkInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getNetworkInfo();
 ```
 
 
@@ -2835,28 +6460,54 @@ if (networkInfo) {
 
 <a id="api_adb_test_dot_state_dot_getInstalledPackages"></a>
 
-### getInstalledPackages(options) ⇒ <code>Promise.&lt;Array.&lt;string&gt;&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Gets the list of installed packages.</p></strong></p>
+### getInstalledPackages(options) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getInstalledPackages.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [options] | <code>Object</code> | <code>{}</code> | <p>Options for package listing</p> |
-| [options.systemApps] | <code>boolean</code> | <code>false</code> | <p>Include system apps</p> |
-| [options.thirdPartyOnly] | <code>boolean</code> | <code>true</code> | <p>Only third-party apps</p> |
+| [options] | <code>*</code> |  | <p>options.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Array.&lt;string&gt;&gt;</code> <p>Array of package names</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const packages = await api.state.getInstalledPackages();
-console.log('Installed apps:', packages.length);
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getInstalledPackages();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getInstalledPackages();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.getInstalledPackages();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.getInstalledPackages();
 ```
 
 
@@ -2865,30 +6516,54 @@ console.log('Installed apps:', packages.length);
 
 <a id="api_adb_test_dot_state_dot_refreshDeviceInfo"></a>
 
-### refreshDeviceInfo(options) ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes device information cache.</p></strong></p>
+### refreshDeviceInfo(options) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refreshDeviceInfo.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [options] | <code>Object</code> | <code>{}</code> | <p>Refresh options</p> |
-| [options.force] | <code>boolean</code> | <code>false</code> | <p>Force refresh even if recently updated</p> |
+| [options] | <code>*</code> |  | <p>options.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-// Refresh device info
-await api.state.refreshDeviceInfo();
-
-// Force refresh
-await api.state.refreshDeviceInfo({ force: true });
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshDeviceInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshDeviceInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshDeviceInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshDeviceInfo();
 ```
 
 
@@ -2897,19 +6572,48 @@ await api.state.refreshDeviceInfo({ force: true });
 
 <a id="api_adb_test_dot_state_dot_refreshAppInfo"></a>
 
-### refreshAppInfo() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes application information cache.</p></strong></p>
+### refreshAppInfo() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refreshAppInfo.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.state.refreshAppInfo();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAppInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAppInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAppInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAppInfo();
 ```
 
 
@@ -2918,19 +6622,48 @@ await api.state.refreshAppInfo();
 
 <a id="api_adb_test_dot_state_dot_refreshNetworkInfo"></a>
 
-### refreshNetworkInfo() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes network information cache.</p></strong></p>
+### refreshNetworkInfo() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refreshNetworkInfo.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.state.refreshNetworkInfo();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshNetworkInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshNetworkInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshNetworkInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshNetworkInfo();
 ```
 
 
@@ -2939,19 +6672,48 @@ await api.state.refreshNetworkInfo();
 
 <a id="api_adb_test_dot_state_dot_refreshAudioInfo"></a>
 
-### refreshAudioInfo() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes audio information cache.</p></strong></p>
+### refreshAudioInfo() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refreshAudioInfo.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-await api.state.refreshAudioInfo();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAudioInfo();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAudioInfo();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAudioInfo();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAudioInfo();
 ```
 
 
@@ -2960,20 +6722,48 @@ await api.state.refreshAudioInfo();
 
 <a id="api_adb_test_dot_state_dot_refreshAll"></a>
 
-### refreshAll() ⇒ <code>Promise.&lt;void&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Refreshes all cached information.</p></strong></p>
+### refreshAll() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>refreshAll.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
-- <code>Promise.&lt;void&gt;</code> <p></p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-// Refresh everything
-await api.state.refreshAll();
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAll();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAll();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.refreshAll();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.refreshAll();
 ```
 
 
@@ -2982,41 +6772,61 @@ await api.state.refreshAll();
 
 <a id="api_adb_test_dot_state_dot_createSnapshot"></a>
 
-### createSnapshot(options) ⇒ <code>Promise.&lt;Object&gt;</code>
-> <p><strong style="font-size: 1.1em;"><p>Creates a complete snapshot of the current device state.</p></strong></p>
+### createSnapshot(options) ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>createSnapshot.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| [options] | <code>Object</code> | <code>{}</code> | <p>Snapshot options</p> |
-| [options.includeDisplay] | <code>boolean</code> | <code>true</code> | <p>Include display information</p> |
-| [options.compact] | <code>boolean</code> | <code>false</code> | <p>Create compact snapshot</p> |
+| [options] | <code>*</code> |  | <p>options.</p> |
 
 
 **Returns**:
 
-- <code>Promise.&lt;Object&gt;</code> <p>Complete device state snapshot</p>
+- <code>Promise.&lt;*&gt;</code> <p></p>
 
 
 **Example**
 ```js
-const snapshot = await api.state.createSnapshot();
-console.log('Device snapshot:', snapshot);
-
-// Compact snapshot without display
-const compactSnapshot = await api.state.createSnapshot({
-  includeDisplay: false,
-  compact: true
-});
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.createSnapshot();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.createSnapshot();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  await api_adb_test.state.createSnapshot();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+await api_adb_test.state.createSnapshot();
 ```
 
 
 
 * * *
 
-<a id="api_adb_test~utils"></a>
+<a id="api_adb_test_utils"></a>
 
 ### api_adb_test.utils
 > 
@@ -3025,11 +6835,11 @@ const compactSnapshot = await api.state.createSnapshot({
 
 * * *
 
-<a id="api_adb_test_dot_utils~defaults"></a>
+<a id="api_adb_test_dot_utils_defaults"></a>
 
 ### defaults
 > 
-**Kind**: inner namespace of [<code></code>](#undefined)
+**Kind**: inner namespace
 
 
 * * *
@@ -3039,11 +6849,46 @@ const compactSnapshot = await api.state.createSnapshot({
 ### loadDefaultsFromFiles() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Auto-scans and loads defaults from JSON files in data/defaults/ directory.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 **Returns**:
 
 - <code>Object</code> <p>Loaded defaults organized by data system</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.loadDefaultsFromFiles();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.loadDefaultsFromFiles();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.loadDefaultsFromFiles();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.loadDefaultsFromFiles();
+```
 
 
 
@@ -3054,7 +6899,7 @@ const compactSnapshot = await api.state.createSnapshot({
 ### getDefaults(dataSystemName) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets defaults for a specific data system.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -3067,6 +6912,41 @@ const compactSnapshot = await api.state.createSnapshot({
 - <code>Object</code> <p>Defaults for the data system</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.getDefaults('myName');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.getDefaults('myName');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.getDefaults('myName');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.getDefaults('myName');
+```
+
+
 
 * * *
 
@@ -3075,11 +6955,46 @@ const compactSnapshot = await api.state.createSnapshot({
 ### getAllDefaults() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets all defaults organized by data system.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Object</code> <p>All defaults</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.getAllDefaults();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.getAllDefaults();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.getAllDefaults();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.getAllDefaults();
+```
 
 
 
@@ -3090,11 +7005,46 @@ const compactSnapshot = await api.state.createSnapshot({
 ### reloadDefaults() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Reloads defaults from files (clears cache).</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
 - <code>Object</code> <p>Reloaded defaults</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.reloadDefaults();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.reloadDefaults();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.reloadDefaults();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.reloadDefaults();
+```
 
 
 
@@ -3105,7 +7055,7 @@ const compactSnapshot = await api.state.createSnapshot({
 ### createDefaultsAPI(dataSystemName, getCurrentValues, setValues) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Creates a defaults API object for a specific data system.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -3120,6 +7070,41 @@ const compactSnapshot = await api.state.createSnapshot({
 - <code>Object</code> <p>Defaults API for the data system</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+```
+
+
 
 * * *
 
@@ -3128,17 +7113,52 @@ const compactSnapshot = await api.state.createSnapshot({
 ### restore(keys) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Restores specific keys to their default values.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| keys | <code>string | Array.&lt;string&gt;</code> |  | <p>Key(s) to restore</p> |
+| keys | <code>string \| Array.&lt;string&gt;</code> |  | <p>Key(s) to restore</p> |
 
 
 **Returns**:
 
 - <code>Object</code> <p>The restored values</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.restore([]);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.restore([]);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.restore([]);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.restore([]);
+```
 
 
 
@@ -3149,7 +7169,7 @@ const compactSnapshot = await api.state.createSnapshot({
 ### isDefault(key) ⇒ <code>boolean</code>
 > <p><strong style="font-size: 1.1em;"><p>Checks if a value is at its default.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 
 | Param | Type | Default | Description |
@@ -3162,6 +7182,41 @@ const compactSnapshot = await api.state.createSnapshot({
 - <code>boolean</code> <p>True if at default value</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.isDefault('myKey');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.isDefault('myKey');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.isDefault('myKey');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.isDefault('myKey');
+```
+
+
 
 * * *
 
@@ -3170,11 +7225,46 @@ const compactSnapshot = await api.state.createSnapshot({
 ### customized() ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Gets all keys that have been customized (not at default).</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 **Returns**:
 
 - <code>Object</code> <p>Object with customized keys and their current vs default values</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.customized();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.customized();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.customized();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.customized();
+```
 
 
 
@@ -3185,7 +7275,7 @@ const compactSnapshot = await api.state.createSnapshot({
 ### resetAll(exclude) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Resets all values to defaults.</p></strong></p>
 > 
-**Kind**: inner method of [<code></code>](#undefined)
+**Kind**: inner method
 
 
 | Param | Type | Default | Description |
@@ -3196,6 +7286,41 @@ const compactSnapshot = await api.state.createSnapshot({
 **Returns**:
 
 - <code>Object</code> <p>The reset values</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.resetAll();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.resetAll();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+  api_adb_test.utils.defaults.resetAll();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+api_adb_test.utils.defaults.resetAll();
+```
 
 
 
