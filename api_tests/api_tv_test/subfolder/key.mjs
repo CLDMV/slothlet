@@ -21,14 +21,100 @@
  * @memberof module:api_tv_test.subfolder
  * @alias module:api_tv_test.subfolder.key
  */
+/**
+ * key.
+ * @param {*} keyName - keyName.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.subfolder.key.key('myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.subfolder.key.key('myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.subfolder.key.key('myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.subfolder.key.key('myKey');
+ */
 export async function key(keyName, _ = {}) {
 	return { success: true, key: keyName };
 }
 
+/**
+ * getAllKeyNames.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.subfolder.key.getAllKeyNames();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.subfolder.key.getAllKeyNames();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.subfolder.key.getAllKeyNames();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.subfolder.key.getAllKeyNames();
+ */
 export function getAllKeyNames() {
 	return ["POWER", "HOME", "UP", "DOWN", "LEFT", "RIGHT", "OK", "BACK"];
 }
 
+/**
+ * getKeyCode.
+ * @param {*} keyName - keyName.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.subfolder.key.getKeyCode(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.subfolder.key.getKeyCode(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.subfolder.key.getKeyCode(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.subfolder.key.getKeyCode(null);
+ */
 export function getKeyCode(keyName) {
 	const codes = {
 		POWER: 1,

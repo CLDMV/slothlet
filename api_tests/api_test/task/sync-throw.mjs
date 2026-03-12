@@ -26,6 +26,31 @@
  * @example
  * // Expect this to throw when called without suppressErrors
  * api.task.syncThrow();
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * try { api_test.task.syncThrow(); } catch (e) { /* expected *\/ }
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   try { api_test.task.syncThrow(); } catch (e) { /* expected *\/ }
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   try { api_test.task.syncThrow(); } catch (e) { /* expected *\/ }
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * try { api_test.task.syncThrow(); } catch (e) { /* expected *\/ }
  */
 export default function syncThrow(message = "sync-threw") {
 	throw new Error(message);

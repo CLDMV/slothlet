@@ -15,6 +15,34 @@
  * @fileoverview Root utils module for smart-flatten folder-different testing.
  * @module api_smart_flatten_folder_different.utils
  */
+/**
+ * getUtils.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_folder_different = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_different' });
+ * api_smart_flatten_folder_different.utils.getUtils();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_folder_different = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_different' });
+ *   api_smart_flatten_folder_different.utils.getUtils();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_folder_different = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_different' });
+ *   api_smart_flatten_folder_different.utils.getUtils();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_folder_different = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_different' });
+ * api_smart_flatten_folder_different.utils.getUtils();
+ */
 export function getUtils() {
 	return "utility-functions";
 }

@@ -43,7 +43,32 @@ export const tcp =
 		 * Test context availability in the tcp module.
 		 * @function testContext
 		 * @returns {object} Context test results
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.tcp.testContext();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.tcp.testContext();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.tcp.testContext();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.tcp.testContext();
+ */
 		testContext() {
 			// Try to enumerate self - let's see what breaks
 			const selfKeys = Object.keys(self);
@@ -68,7 +93,32 @@ export const tcp =
 		 * @function createTestServer
 		 * @param {number} [port=0] - Port to listen on (0 for random)
 		 * @returns {Promise<{port: number, server: NetServer}>} Server instance and port
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.tcp.createTestServer();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.tcp.createTestServer();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.tcp.createTestServer();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.tcp.createTestServer();
+ */
 		async createTestServer(port = 0) {
 			const server = net.createServer();
 			const contextTests = []; // Array to collect context test results

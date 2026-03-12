@@ -41,6 +41,31 @@ import { self } from "@cldmv/slothlet/runtime";
  * @example
  * // Called from another slothlet function via self
  * const result = await api.metadataTestHelper.invokeCallerTest(); // → metadata object
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.caller-test.getCallerMeta();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.caller-test.getCallerMeta();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.caller-test.getCallerMeta();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.caller-test.getCallerMeta();
  */
 export function getCallerMeta() {
 	return self.slothlet.metadata.caller();

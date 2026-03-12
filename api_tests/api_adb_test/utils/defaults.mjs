@@ -42,6 +42,31 @@ let defaultsCache = null;
 /**
  * Auto-scans and loads defaults from JSON files in data/defaults/ directory.
  *	@returns {Object} Loaded defaults organized by data system
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.loadDefaultsFromFiles();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.loadDefaultsFromFiles();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.loadDefaultsFromFiles();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.loadDefaultsFromFiles();
  */
 function loadDefaultsFromFiles() {
 	const defaultsDir = path.join(__dirname, "..", "..", "data", "defaults");
@@ -82,6 +107,31 @@ function loadDefaultsFromFiles() {
  * Gets defaults for a specific data system.
  *	@param {string} dataSystemName - Name of the data system (config, device, etc.)
  *	@returns {Object} Defaults for the data system
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.getDefaults('myName');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.getDefaults('myName');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.getDefaults('myName');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.getDefaults('myName');
  */
 export function getDefaults(dataSystemName) {
 	// Load defaults if not cached
@@ -95,6 +145,31 @@ export function getDefaults(dataSystemName) {
 /**
  * Gets all defaults organized by data system.
  *	@returns {Object} All defaults
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.getAllDefaults();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.getAllDefaults();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.getAllDefaults();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.getAllDefaults();
  */
 export function getAllDefaults() {
 	// Load defaults if not cached
@@ -108,6 +183,31 @@ export function getAllDefaults() {
 /**
  * Reloads defaults from files (clears cache).
  *	@returns {Object} Reloaded defaults
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.reloadDefaults();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.reloadDefaults();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.reloadDefaults();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.reloadDefaults();
  */
 export function reloadDefaults() {
 	defaultsCache = null;
@@ -120,6 +220,31 @@ export function reloadDefaults() {
  *	@param {Function} getCurrentValues - Function to get current values from the system
  *	@param {Function} setValues - Function to set values in the system
  *	@returns {Object} Defaults API for the data system
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.createDefaultsAPI('myName', () => {}, () => {});
  */
 export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 	const systemDefaults = getDefaults(dataSystemName);
@@ -132,7 +257,32 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 		 * Restores specific keys to their default values.
 		 * @param {string|string[]} keys - Key(s) to restore
 		 * @returns {Object} The restored values
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.restore([]);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.restore([]);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.restore([]);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.restore([]);
+ */
 		restore(keys) {
 			const keysArray = Array.isArray(keys) ? keys : [keys];
 			const restored = {};
@@ -155,7 +305,32 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 		 * Checks if a value is at its default.
 		 * @param {string} key - Key to check
 		 * @returns {boolean} True if at default value
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.isDefault('myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.isDefault('myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.isDefault('myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.isDefault('myKey');
+ */
 		isDefault(key) {
 			if (!Object.prototype.hasOwnProperty.call(systemDefaults, key)) {
 				return false;
@@ -168,7 +343,32 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 		/**
 		 * Gets all keys that have been customized (not at default).
 		 * @returns {Object} Object with customized keys and their current vs default values
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.customized();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.customized();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.customized();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.customized();
+ */
 		customized() {
 			const currentValues = getCurrentValues ? getCurrentValues() : {};
 			const customized = {};
@@ -189,7 +389,32 @@ export function createDefaultsAPI(dataSystemName, getCurrentValues, setValues) {
 		 * Resets all values to defaults.
 		 * @param {string[]} [exclude] - Keys to exclude from reset
 		 * @returns {Object} The reset values
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.resetAll();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.resetAll();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.utils.defaults.resetAll();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.utils.defaults.resetAll();
+ */
 		resetAll(exclude = []) {
 			const resetValues = {};
 

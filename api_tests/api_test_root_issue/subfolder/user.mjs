@@ -30,6 +30,31 @@
  * @param {string} name - User name
  * @param {string} email - User email
  * @returns {object} User object
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.createUser('myName', 'value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.createUser('myName', 'value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.createUser('myName', 'value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.createUser('myName', 'value');
  */
 function createUser(name, email) {
 	return { id: Math.random(), name, email, created: new Date() };
@@ -42,6 +67,31 @@ function createUser(name, email) {
  * @public
  * @param {object} user - User object to validate
  * @returns {boolean} True if valid
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.validateUser({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.validateUser({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.validateUser({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.validateUser({});
  */
 export function validateUser(user) {
 	return user && user.name && user.email;
@@ -54,6 +104,31 @@ export function validateUser(user) {
  * @public
  * @param {object} user - User object to format
  * @returns {string} Formatted user string
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.formatUser({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.formatUser({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.subfolder.user.formatUser({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.subfolder.user.formatUser({});
  */
 export function formatUser(user) {
 	return `${user.name} <${user.email}>`;

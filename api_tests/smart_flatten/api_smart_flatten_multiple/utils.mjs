@@ -15,14 +15,99 @@
  * @fileoverview Utils module — one of multiple root-level files in the multiple-roots fixture.
  * @module api_smart_flatten_multiple.utils
  */
+/**
+ * utilFunction.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_multiple = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_multiple' });
+ * api_smart_flatten_multiple.utils.utilFunction();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_multiple = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_multiple' });
+ *   api_smart_flatten_multiple.utils.utilFunction();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_multiple = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_multiple' });
+ *   api_smart_flatten_multiple.utils.utilFunction();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_multiple = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_multiple' });
+ * api_smart_flatten_multiple.utils.utilFunction();
+ */
 export function utilFunction() {
 	return "utility function";
 }
 
+/**
+ * helperMethod.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_multiple.utils.helperMethod();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_multiple.utils.helperMethod();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_multiple.utils.helperMethod();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_multiple.utils.helperMethod();
+ */
 export function helperMethod() {
 	return "helper method";
 }
 
+/**
+ * formatData.
+ * @param {*} data - data.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_multiple.utils.formatData(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_multiple.utils.formatData(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_multiple.utils.formatData(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_multiple.utils.formatData(null);
+ */
 export function formatData(data) {
 	return `Formatted: ${data}`;
 }

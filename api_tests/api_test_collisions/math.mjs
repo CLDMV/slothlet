@@ -22,6 +22,36 @@
  * @alias module:api_test_collisions.mathFile
  */
 
+/**
+ * power.
+ * @param {*} base - base.
+ * @param {*} exponent - exponent.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.power(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.power(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.power(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.power(null, null);
+ */
 export function power(base, exponent) {
 	return Math.pow(base, exponent);
 }
@@ -30,6 +60,31 @@ export function power(base, exponent) {
  * Calculate square root of a number.
  * @param {number} n - The number.
  * @returns {number} The square root.
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.sqrt(1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.sqrt(1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.sqrt(1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.sqrt(1);
  */
 export function sqrt(n) {
 	return Math.sqrt(n);
@@ -40,6 +95,31 @@ export function sqrt(n) {
  * @param {number} a - First number.
  * @param {number} b - Second number.
  * @returns {number} The remainder.
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.modulo(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.modulo(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.math.modulo(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.math.modulo(1, 1);
  */
 export function modulo(a, b) {
 	return a % b;

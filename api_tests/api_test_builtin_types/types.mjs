@@ -45,6 +45,34 @@ export const myWeakMap = new WeakMap();
 export const myWeakSet = new WeakSet();
 
 /** A plain async function to confirm that a normal callable also works in the same module. */
+/**
+ * getVersion.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+ * await api_test_builtin_types.types.getVersion();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+ *   await api_test_builtin_types.types.getVersion();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+ *   await api_test_builtin_types.types.getVersion();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+ * await api_test_builtin_types.types.getVersion();
+ */
 export async function getVersion() {
 	return "1.0.0";
 }

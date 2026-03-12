@@ -15,10 +15,67 @@
  * @fileoverview Services/api subfolder fixture for api_smart_flatten_addapi_with_folders.
  * @module api_smart_flatten_addapi_with_folders.services.api
  */
+/**
+ * getPluginApiService.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_addapi_with_folders = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_addapi_with_folders' });
+ * api_smart_flatten_addapi_with_folders.services.api.getPluginApiService();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_addapi_with_folders = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_addapi_with_folders' });
+ *   api_smart_flatten_addapi_with_folders.services.api.getPluginApiService();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_addapi_with_folders = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_addapi_with_folders' });
+ *   api_smart_flatten_addapi_with_folders.services.api.getPluginApiService();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_addapi_with_folders = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_addapi_with_folders' });
+ * api_smart_flatten_addapi_with_folders.services.api.getPluginApiService();
+ */
 export function getPluginApiService() {
 	return "plugin-api-service";
 }
 
+/**
+ * pluginApiMethod.
+ * @param {*} action - action.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_with_folders.services.api.pluginApiMethod(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_with_folders.services.api.pluginApiMethod(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_with_folders.services.api.pluginApiMethod(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_with_folders.services.api.pluginApiMethod(null);
+ */
 export function pluginApiMethod(action) {
 	return `plugin-api-${action}`;
 }

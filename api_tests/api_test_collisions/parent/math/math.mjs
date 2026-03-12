@@ -21,14 +21,104 @@
  * @memberof module:api_test_collisions.parent
  * @alias module:api_test_collisions.parent.math
  */
+/**
+ * add.
+ * @param {*} a - a.
+ * @param {*} b - b.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.add(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.add(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.add(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.add(null, null);
+ */
 export function add(a, b) {
 	return a + b;
 }
 
+/**
+ * multiply.
+ * @param {*} a - a.
+ * @param {*} b - b.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.multiply(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.multiply(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.multiply(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.multiply(null, null);
+ */
 export function multiply(a, b) {
 	return a * b;
 }
 
+/**
+ * divide.
+ * @param {*} a - a.
+ * @param {*} b - b.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.divide(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.divide(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ *   api_test_collisions.parent.math.divide(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collisions = await slothlet({ dir: './api_tests/api_test_collisions' });
+ * api_test_collisions.parent.math.divide(null, null);
+ */
 export function divide(a, b) {
 	return a / b;
 }

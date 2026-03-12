@@ -26,6 +26,31 @@ import { self, context, instanceID } from "@cldmv/slothlet/runtime";
  * Comprehensive runtime verification that tests all aspects of the runtime system.
  * @function verifyRuntime
  * @returns {object} Complete runtime verification results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.verifyRuntime();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.verifyRuntime();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.verifyRuntime();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.verifyRuntime();
  */
 export function verifyRuntime() {
 	const results = {
@@ -148,6 +173,31 @@ export function verifyRuntime() {
  * @param {number} a - First number
  * @param {number} b - Second number
  * @returns {object} Cross-call test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfCrossCall(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfCrossCall(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfCrossCall(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfCrossCall(1, 1);
  */
 export function testSelfCrossCall(a = 5, b = 3) {
 	const results = {
@@ -185,6 +235,31 @@ export function testSelfCrossCall(a = 5, b = 3) {
  * Test context isolation by checking for unique context data.
  * @function testContextIsolation
  * @returns {object} Context isolation test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testContextIsolation();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testContextIsolation();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testContextIsolation();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testContextIsolation();
  */
 export function testContextIsolation() {
 	const results = {
@@ -221,6 +296,31 @@ export function testContextIsolation() {
  * Performance test to help distinguish between runtime types.
  * @function testPerformance
  * @returns {object} Performance test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testPerformance();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testPerformance();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testPerformance();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testPerformance();
  */
 export function testPerformance() {
 	const results = {
@@ -258,6 +358,31 @@ export function testPerformance() {
  * Comprehensive runtime test that combines all verification methods.
  * @function comprehensiveRuntimeTest
  * @returns {object} Complete runtime test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.comprehensiveRuntimeTest();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.comprehensiveRuntimeTest();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.comprehensiveRuntimeTest();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.comprehensiveRuntimeTest();
  */
 export function comprehensiveRuntimeTest() {
 	return {
@@ -272,6 +397,31 @@ export function comprehensiveRuntimeTest() {
  * Test self and reference propagation through API function calls.
  * @function testSelfAndReference
  * @returns {object} Self and reference test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfAndReference();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfAndReference();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfAndReference();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfAndReference();
  */
 export function testSelfAndReference() {
 	const results = {
@@ -329,6 +479,31 @@ export function testSelfAndReference() {
  * @example
  * const result = api.runtimeTest.getAsyncInstanceID();
  * // result.id === api.slothlet.instanceID
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.getAsyncInstanceID();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.getAsyncInstanceID();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.getAsyncInstanceID();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.getAsyncInstanceID();
  */
 export function getAsyncInstanceID() {
 	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
@@ -360,6 +535,31 @@ export function getAsyncInstanceID() {
  * @example
  * const result = api.runtimeTest.exerciseContextDispatcherTraps();
  * expect(result.hasUserId).toBe(true);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseContextDispatcherTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseContextDispatcherTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseContextDispatcherTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseContextDispatcherTraps();
  */
 export function exerciseContextDispatcherTraps() {
 	// ownKeys trap (lines 99-101 in runtime.mjs)
@@ -388,6 +588,31 @@ export function exerciseContextDispatcherTraps() {
  * @example
  * const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
  * expect(result.id).toBeTruthy();
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
  */
 export function exerciseInstanceIDDispatcherTraps() {
 	// get trap (lines 128-130 in runtime.mjs): instanceID[prop]
@@ -414,6 +639,31 @@ export function exerciseInstanceIDDispatcherTraps() {
  * await api.slothlet.context.run({ userId: 99 }, async () => {
  *   return api.runtimeTest.exerciseAsyncContextWriteTraps();
  * });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseAsyncContextWriteTraps();
  */
 export function exerciseAsyncContextWriteTraps() {
 	// set trap — context.prop = value within active ALS context

@@ -16,10 +16,69 @@
  * when the flatten option is not set, verifying normal nested API structure is preserved.
  * @module api_smart_flatten_none.users
  */
+/**
+ * getUser.
+ * @param {*} id - id.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_none = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_none' });
+ * api_smart_flatten_none.users.getUser('item1');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_none = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_none' });
+ *   api_smart_flatten_none.users.getUser('item1');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_none = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_none' });
+ *   api_smart_flatten_none.users.getUser('item1');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_none = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_none' });
+ * api_smart_flatten_none.users.getUser('item1');
+ */
 export function getUser(id) {
 	return `User ${id}`;
 }
 
+/**
+ * updateUser.
+ * @param {*} id - id.
+ * @param {*} data - data.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_none.users.updateUser(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_none.users.updateUser(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_none.users.updateUser(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_none.users.updateUser(null, null);
+ */
 export function updateUser(id, data) {
 	return `User ${id} updated with ${data}`;
 }
