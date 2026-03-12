@@ -18,14 +18,98 @@
 /**
  * ADB API module for Android TV Remote - Dummy implementation for testing.
  */
+/**
+ * on.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.on();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.on();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.on();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.on();
+ */
 export function on() {
 	return "Power on";
 }
 
+/**
+ * off.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.off();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.off();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.off();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.off();
+ */
 export function off() {
 	return "Power off";
 }
 
+/**
+ * getState.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.getState();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.getState();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.multi_defaults.power.getState();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.multi_defaults.power.getState();
+ */
 export function getState() {
 	return "Power state: on";
 }

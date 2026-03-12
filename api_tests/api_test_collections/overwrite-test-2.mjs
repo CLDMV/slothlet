@@ -17,6 +17,34 @@
  * @memberof module:api_test_collections
  */
 
+/**
+ * overwriteTest.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.overwriteTest();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.overwriteTest();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.overwriteTest();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.overwriteTest();
+ */
 export function overwriteTest() {
 	return "overwrite-test-2";
 }
@@ -24,7 +52,60 @@ export function overwriteTest() {
 /**
 	* Named export attempting to overwrite the one from file 1
 	* @returns {string} Version identifier
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.conflictingName();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.conflictingName();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.conflictingName();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.conflictingName();
+/
+/**
+ * conflictingName.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.conflictingName();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.conflictingName();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ *   api_test_collections.overwrite-test-2.conflictingName();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_collections = await slothlet({ dir: './api_tests/api_test_collections' });
+ * api_test_collections.overwrite-test-2.conflictingName();
+ */
 export function conflictingName() {
 	return "from-file-2";
 }

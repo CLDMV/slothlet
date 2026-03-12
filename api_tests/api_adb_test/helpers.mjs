@@ -36,6 +36,31 @@ import { self, context } from "@cldmv/slothlet/runtime";
  *
  * // Get specific properties
  * const specificProps = await api.helpers.fetchDeviceProperties(['ro.product.model', 'ro.build.version.release']);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchDeviceProperties();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchDeviceProperties();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchDeviceProperties();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchDeviceProperties();
  */
 export async function fetchDeviceProperties(properties = null) {
 	if (properties && Array.isArray(properties)) {
@@ -72,6 +97,31 @@ export async function fetchDeviceProperties(properties = null) {
  * if (currentApp) {
  *   console.log('Current app:', currentApp.packageName);
  * }
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchCurrentAppInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchCurrentAppInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchCurrentAppInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchCurrentAppInfo();
  */
 export async function fetchCurrentAppInfo() {
 	const output = await self.connection.shell("dumpsys activity activities | grep 'mResumedActivity'");
@@ -137,6 +187,31 @@ export async function fetchCurrentAppInfo() {
  *
  * // Include system apps
  * const allPackages = await api.helpers.fetchInstalledPackages(true, false);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchInstalledPackages();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchInstalledPackages();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchInstalledPackages();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchInstalledPackages();
  */
 export async function fetchInstalledPackages(systemApps = false, thirdPartyOnly = true) {
 	let command = "pm list packages";
@@ -161,6 +236,31 @@ export async function fetchInstalledPackages(systemApps = false, thirdPartyOnly 
  * @example
  * const network = await api.helpers.fetchNetworkDetails();
  * console.log('WiFi connected:', network.wifi.connected);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchNetworkDetails();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchNetworkDetails();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchNetworkDetails();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchNetworkDetails();
  */
 export async function fetchNetworkDetails() {
 	try {
@@ -187,6 +287,31 @@ export async function fetchNetworkDetails() {
  * @example
  * const audio = await api.helpers.fetchAudioInfo();
  * console.log('Audio info:', audio);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchAudioInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchAudioInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.fetchAudioInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.fetchAudioInfo();
  */
 export async function fetchAudioInfo() {
 	try {
@@ -215,6 +340,31 @@ export async function fetchAudioInfo() {
  * @example
  * const activity = await api.helpers.resolveDefaultActivity('com.netflix.ninja');
  * console.log('Default activity:', activity);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.resolveDefaultActivity('com.example.app');
  */
 export async function resolveDefaultActivity(packageName) {
 	try {
@@ -246,6 +396,31 @@ export async function resolveDefaultActivity(packageName) {
  *
  * // Force emit event
  * await api.helpers.refreshCurrentAppInfo("user_action", { forceEmit: true });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.refreshCurrentAppInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.refreshCurrentAppInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.refreshCurrentAppInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.refreshCurrentAppInfo();
  */
 export async function refreshCurrentAppInfo(____reason = "manual", options = {}) {
 	const { forceEmit = false } = options;
@@ -275,6 +450,31 @@ export async function refreshCurrentAppInfo(____reason = "manual", options = {})
  * @example
  * const metadata = await api.helpers.collectStartupMetadata();
  * console.log('Device metadata:', metadata);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.collectStartupMetadata();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.collectStartupMetadata();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.helpers.collectStartupMetadata();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.helpers.collectStartupMetadata();
  */
 export async function collectStartupMetadata(reason = "init") {
 	context.lastStartupMetadataReason = reason;
@@ -318,6 +518,31 @@ export async function collectStartupMetadata(reason = "init") {
  * @returns {void}
  * @example
  * api.helpers.scheduleAppInfoRefresh("home_pressed", { forceEmit: true });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   api_adb_test.helpers.scheduleAppInfoRefresh('hello');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * api_adb_test.helpers.scheduleAppInfoRefresh('hello');
  */
 export function scheduleAppInfoRefresh(context, options = {}) {
 	if (context.pendingAppInfoRefresh) return;

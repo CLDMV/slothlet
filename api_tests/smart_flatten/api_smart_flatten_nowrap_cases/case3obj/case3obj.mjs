@@ -48,6 +48,31 @@ export const case3obj = {
  * @returns {string} A constant identifier.
  * @example
  * extra(); // "extra-value"
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_nowrap_cases.case3obj.extra();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_nowrap_cases.case3obj.extra();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_nowrap_cases.case3obj.extra();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_nowrap_cases.case3obj.extra();
  */
 export function extra() {
 	return "extra-value";

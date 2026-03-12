@@ -29,6 +29,31 @@
  * @returns {string} Worker identifier.
  * @example
  * worker(); // "worker-impl"
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_lazy_fn_collision.worker.worker();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_lazy_fn_collision.worker.worker();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_lazy_fn_collision.worker.worker();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_lazy_fn_collision.worker.worker();
  */
 function worker() {
 	return "worker-impl";

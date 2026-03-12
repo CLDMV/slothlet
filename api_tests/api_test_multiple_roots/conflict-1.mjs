@@ -29,11 +29,65 @@
  * @returns {string} 'from-file-1'
  * @example
  * api.conflict1(); // 'from-file-1'
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ * api_test_multiple_roots.conflict-1.conflictingName();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ *   api_test_multiple_roots.conflict-1.conflictingName();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ *   api_test_multiple_roots.conflict-1.conflictingName();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ * api_test_multiple_roots.conflict-1.conflictingName();
  */
 export default function conflictingName() {
 	return "from-file-1";
 }
 
+/**
+ * rootFunctionShout.
+ * @param {*} name - name.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ * api_test_multiple_roots.conflict-1.rootFunctionShout(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ *   api_test_multiple_roots.conflict-1.rootFunctionShout(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ *   api_test_multiple_roots.conflict-1.rootFunctionShout(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
+ * api_test_multiple_roots.conflict-1.rootFunctionShout(null);
+ */
 export function rootFunctionShout(name) {
 	return `HELLO 1, ${name.toUpperCase()}!`;
 }

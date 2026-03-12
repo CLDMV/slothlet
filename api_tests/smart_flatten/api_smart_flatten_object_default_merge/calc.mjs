@@ -26,6 +26,31 @@
  * @returns {number}
  * @example
  * calc.add(2, 3); // 5
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_object_default_merge.calc.add(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_object_default_merge.calc.add(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_object_default_merge.calc.add(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_object_default_merge.calc.add(1, 1);
  */
 function add(a, b) {
 	return a + b;
@@ -38,6 +63,31 @@ function add(a, b) {
  * @returns {number}
  * @example
  * calc.subtract(5, 2); // 3
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_object_default_merge.calc.subtract(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_object_default_merge.calc.subtract(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_object_default_merge.calc.subtract(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_object_default_merge.calc.subtract(1, 1);
  */
 function subtract(a, b) {
 	return a - b;

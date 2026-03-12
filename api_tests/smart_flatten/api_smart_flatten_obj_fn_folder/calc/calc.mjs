@@ -32,6 +32,31 @@
  * @returns {number} A constant result.
  * @example
  * calc(); // 42
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_obj_fn_folder.calc.calc();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_obj_fn_folder.calc.calc();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_obj_fn_folder.calc.calc();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_obj_fn_folder.calc.calc();
  */
 function calc() {
 	return 42;

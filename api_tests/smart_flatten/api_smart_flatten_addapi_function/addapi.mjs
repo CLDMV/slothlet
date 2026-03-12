@@ -21,6 +21,31 @@
 /**
  * Main plugin function (default export).
  * @returns {string} Plugin result
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.plugin();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.plugin();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.plugin();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.plugin();
  */
 function plugin() {
 	return "Plugin function called";
@@ -29,6 +54,31 @@ function plugin() {
 /**
  * Initialize plugin.
  * @returns {string} Initialization message
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.initialize();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.initialize();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.initialize();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.initialize();
  */
 export function initialize() {
 	return "Plugin initialized (function default)";
@@ -37,6 +87,31 @@ export function initialize() {
 /**
  * Plugin configuration method.
  * @returns {string} Config message
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.configure();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.configure();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ *   smart_flatten.api_smart_flatten_addapi_function.addapi.configure();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const smart_flatten = await slothlet({ dir: './api_tests/smart_flatten' });
+ * smart_flatten.api_smart_flatten_addapi_function.addapi.configure();
  */
 export function configure() {
 	return "Plugin configured";

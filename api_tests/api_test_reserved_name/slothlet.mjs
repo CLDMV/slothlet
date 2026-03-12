@@ -28,6 +28,31 @@
  * @returns {string} A simple string.
  * @example
  * slothlet.slothlet.greet(); // "hello"
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+ * api_test_reserved_name.slothlet.greet();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+ *   api_test_reserved_name.slothlet.greet();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+ *   api_test_reserved_name.slothlet.greet();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+ * api_test_reserved_name.slothlet.greet();
  */
 export function greet() {
 	return "hello";

@@ -30,6 +30,31 @@
  * @example
  * const api = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
  * api.doA(); // 'result-a'
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+ * api_test_multi_root_fn.do-a.doA();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+ *   api_test_multi_root_fn.do-a.doA();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+ *   api_test_multi_root_fn.do-a.doA();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
+ * api_test_multi_root_fn.do-a.doA();
  */
 export default function doA() {
 	return "result-a";

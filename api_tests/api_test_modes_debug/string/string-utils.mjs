@@ -34,6 +34,31 @@
  * @param {string} s - Input string.
  * @param {number} len - Target length.
  * @returns {string} Padded string.
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.string.string-utils.pad('value', 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.string.string-utils.pad('value', 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.string.string-utils.pad('value', 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.string.string-utils.pad('value', 1);
  */
 export function pad(s, len) {
 	return String(s).padEnd(len, " ");

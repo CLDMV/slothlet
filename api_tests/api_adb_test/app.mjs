@@ -41,6 +41,31 @@ import { self as _ } from "@cldmv/slothlet/runtime";
  * await api.app.launch("com.android.settings", {
  *   activity: ".Settings"
  * });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.launch('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.launch('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.launch('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.launch('com.example.app');
  */
 export async function launch(packageName, options = {}) {
 	const { activity, clearTop = false, delay = 2000 } = options;
@@ -54,6 +79,31 @@ export async function launch(packageName, options = {}) {
  * Stops an application by package name.
  * @param {string} packageName - The package name of the app to stop
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.stop('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.stop('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.stop('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.stop('com.example.app');
  */
 export async function stop(packageName) {
 	return Promise.resolve({ stopped: packageName });
@@ -63,6 +113,31 @@ export async function stop(packageName) {
  * Gets the currently running app.
  * @param {Object} [options={}] - Options
  * @returns {Promise<Object>} Current app info
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentApp();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentApp();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentApp();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentApp();
  */
 export async function getCurrentApp(___options = {}) {
 	return Promise.resolve({
@@ -74,6 +149,31 @@ export async function getCurrentApp(___options = {}) {
 /**
  * Refreshes the app state.
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.refresh();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.refresh();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.refresh();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.refresh();
  */
 export async function refresh() {
 	return Promise.resolve();
@@ -83,6 +183,31 @@ export async function refresh() {
  * Gets installed packages.
  * @param {Object} [options={}] - Options
  * @returns {Promise<string[]>} List of package names
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getInstalledPackages();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getInstalledPackages();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getInstalledPackages();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getInstalledPackages();
  */
 export async function getInstalledPackages(___options = {}) {
 	return Promise.resolve(["com.netflix.ninja", "com.youtube.tv", "com.android.settings", "com.google.android.apps.tv.launcherx"]);
@@ -92,6 +217,31 @@ export async function getInstalledPackages(___options = {}) {
  * Starts monitoring app changes.
  * @param {Object} [options={}] - Monitor options
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.startMonitoring();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.startMonitoring();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.startMonitoring();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.startMonitoring();
  */
 export async function startMonitoring(___options = {}) {
 	return Promise.resolve({ monitoring: true });
@@ -100,6 +250,31 @@ export async function startMonitoring(___options = {}) {
 /**
  * Stops monitoring app changes.
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.stopMonitoring();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.stopMonitoring();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.stopMonitoring();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.stopMonitoring();
  */
 export async function stopMonitoring() {
 	return Promise.resolve({ monitoring: false });
@@ -110,6 +285,31 @@ export async function stopMonitoring() {
  * @param {string} packageName - Package name to clear
  * @param {Object} [options={}] - Clear options
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.clearData('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.clearData('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.clearData('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.clearData('com.example.app');
  */
 export async function clearData(packageName, ___options = {}) {
 	return Promise.resolve({ cleared: packageName });
@@ -120,6 +320,31 @@ export async function clearData(packageName, ___options = {}) {
  * @param {string} packageName - Package name
  * @param {boolean} enabled - Whether to enable the app
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.setEnabled('com.example.app', true);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.setEnabled('com.example.app', true);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.setEnabled('com.example.app', true);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.setEnabled('com.example.app', true);
  */
 export async function setEnabled(packageName, enabled) {
 	return Promise.resolve({ packageName, enabled });
@@ -129,6 +354,31 @@ export async function setEnabled(packageName, enabled) {
  * Gets package information.
  * @param {string} packageName - Package name to get info for
  * @returns {Promise<Object>} Package info
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getPackageInfo('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getPackageInfo('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getPackageInfo('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getPackageInfo('com.example.app');
  */
 export async function getPackageInfo(packageName) {
 	return Promise.resolve({
@@ -144,6 +394,31 @@ export async function getPackageInfo(packageName) {
  * @param {string} packageName - Package name to uninstall
  * @param {Object} [options={}] - Uninstall options
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.uninstall('com.example.app');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.uninstall('com.example.app');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.uninstall('com.example.app');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.uninstall('com.example.app');
  */
 export async function uninstall(packageName, ___options = {}) {
 	return Promise.resolve({ uninstalled: packageName });
@@ -152,6 +427,31 @@ export async function uninstall(packageName, ___options = {}) {
 /**
  * Gets the current package name.
  * @returns {Promise<string>} Current package name
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentPackage();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentPackage();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentPackage();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentPackage();
  */
 export async function getCurrentPackage() {
 	return Promise.resolve("com.netflix.ninja");
@@ -160,6 +460,31 @@ export async function getCurrentPackage() {
 /**
  * Gets the current activity name.
  * @returns {Promise<string>} Current activity name
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentActivity();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentActivity();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.app.getCurrentActivity();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.app.getCurrentActivity();
  */
 export async function getCurrentActivity() {
 	return Promise.resolve("com.netflix.ninja.MainActivity");

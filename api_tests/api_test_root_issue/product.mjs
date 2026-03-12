@@ -30,6 +30,31 @@
  * @param {string} name - Product name
  * @param {number} price - Product price
  * @returns {object} Product object
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.createProduct('myName', 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.createProduct('myName', 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.createProduct('myName', 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.createProduct('myName', 1);
  */
 function createProduct(name, price) {
 	return { id: Math.random(), name, price, created: new Date() };
@@ -43,6 +68,31 @@ function createProduct(name, price) {
  * @param {object} product - Product object
  * @param {number} rate - Tax rate (0.1 for 10%)
  * @returns {number} Tax amount
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.calculateTax({}, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.calculateTax({}, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.calculateTax({}, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.calculateTax({}, 1);
  */
 export function calculateTax(product, rate) {
 	return product.price * rate;
@@ -55,6 +105,31 @@ export function calculateTax(product, rate) {
  * @public
  * @param {object} product - Product object
  * @returns {string} Formatted product string
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.formatProduct({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.formatProduct({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.product.formatProduct({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.product.formatProduct({});
  */
 export function formatProduct(product) {
 	return `${product.name} - $${product.price}`;

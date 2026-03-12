@@ -35,6 +35,31 @@ import { self as _ } from "@cldmv/slothlet/runtime";
  * @param {number} [options.height] - Resize height
  * @param {boolean} [options.useSharp=true] - Use Sharp for image processing
  * @returns {Promise<Buffer>} Screenshot buffer
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.capture();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.capture();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.capture();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.capture();
  */
 export async function capture(options = {}) {
 	const { format = "png", quality = 90, width, height } = options;
@@ -47,6 +72,31 @@ export async function capture(options = {}) {
 /**
  * Gets display information.
  * @returns {Promise<Object>} Display info
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.getInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.getInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.getInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.getInfo();
  */
 export async function getInfo() {
 	return Promise.resolve({
@@ -60,6 +110,31 @@ export async function getInfo() {
 /**
  * Gets screen resolution.
  * @returns {Promise<Object>} Resolution info
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.getResolution();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.getResolution();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.getResolution();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.getResolution();
  */
 export async function getResolution() {
 	return Promise.resolve({
@@ -72,6 +147,31 @@ export async function getResolution() {
  * Analyzes screenshot for brightness/darkness.
  * @param {Object} [options={}] - Analysis options
  * @returns {Promise<Object>} Analysis results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.analyzeScreenshot();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.analyzeScreenshot();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.analyzeScreenshot();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.analyzeScreenshot();
  */
 export async function analyzeScreenshot(___options = {}) {
 	return Promise.resolve({
@@ -86,6 +186,31 @@ export async function analyzeScreenshot(___options = {}) {
  * @param {string} filepath - Path to save screenshot
  * @param {Object} [options={}] - Save options
  * @returns {Promise<void>}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.saveScreenshot('./file.mjs');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.saveScreenshot('./file.mjs');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ *   await api_adb_test.display.saveScreenshot('./file.mjs');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
+ * await api_adb_test.display.saveScreenshot('./file.mjs');
  */
 export async function saveScreenshot(filepath, options = {}) {
 	return Promise.resolve({ saved: filepath, options });

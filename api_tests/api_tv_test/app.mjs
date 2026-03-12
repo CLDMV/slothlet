@@ -21,18 +21,131 @@
  * @memberof module:api_tv_test
  * @alias module:api_tv_test.app
  */
+/**
+ * setApp.
+ * @param {*} appName - appName.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.app.setApp('myName');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.app.setApp('myName');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.app.setApp('myName');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.app.setApp('myName');
+ */
 export async function setApp(appName, _ = {}) {
 	return { success: true, app: appName };
 }
 
+/**
+ * getCurrentApp.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.app.getCurrentApp();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.app.getCurrentApp();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.app.getCurrentApp();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.app.getCurrentApp();
+ */
 export function getCurrentApp() {
 	return "Netflix";
 }
 
+/**
+ * getAllApps.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.app.getAllApps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.app.getAllApps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.app.getAllApps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.app.getAllApps();
+ */
 export function getAllApps() {
 	return ["Netflix", "YouTube", "Amazon Prime", "Disney+"];
 }
 
+/**
+ * retrieveCurrentApp.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.app.retrieveCurrentApp();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.app.retrieveCurrentApp();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.app.retrieveCurrentApp();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.app.retrieveCurrentApp();
+ */
 export async function retrieveCurrentApp(_ = {}) {
 	return { app: "Netflix", appId: "netflix" };
 }

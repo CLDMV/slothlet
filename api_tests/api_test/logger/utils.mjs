@@ -29,6 +29,31 @@
  * @returns {string} Formatted debug message
  * @example
  * utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.logger.utils.debug('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.logger.utils.debug('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.logger.utils.debug('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.logger.utils.debug('value');
  */
 export function debug(message) {
 	return `[DEBUG] ${new Date().toISOString()}: ${message}`;
@@ -38,6 +63,31 @@ export function debug(message) {
  * Error level logging
  * @param {string} message - Error message
  * @returns {string} Formatted error message
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.logger.utils.error('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.logger.utils.error('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.logger.utils.error('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.logger.utils.error('value');
  */
 export function error(message) {
 	return `[ERROR] ${new Date().toISOString()}: ${message}`;

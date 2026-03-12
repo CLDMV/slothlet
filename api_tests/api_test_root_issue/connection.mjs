@@ -22,6 +22,34 @@
  * @alias module:api_test_root_issue.connection
  */
 
+/**
+ * isConnected.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.connection.isConnected();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.connection.isConnected();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.connection.isConnected();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.connection.isConnected();
+ */
 export function isConnected() {
 	// Mock implementation for testing - returns false by default
 	return false;

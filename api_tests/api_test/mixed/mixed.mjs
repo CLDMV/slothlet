@@ -31,6 +31,31 @@
  * @example
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * console.log(api_test.mixed('hello')); // 'Mixed default: hello'
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixed('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixed('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixed('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixed('value');
  */
 function mixedDefault(message) {
 	return `Mixed default: ${message}`;
@@ -40,6 +65,31 @@ function mixedDefault(message) {
  * Named function for mixed export test.
  * @param {string} value - Value to process
  * @returns {string} Processed value
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixedNamed('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixedNamed('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixedNamed('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixedNamed('value');
  */
 export function mixedNamed(value) {
 	return `Mixed named: ${value}`;
@@ -49,6 +99,31 @@ export function mixedNamed(value) {
  * Another named function for mixed export test.
  * @param {number} num - Number to process
  * @returns {number} Processed number
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixedAnother(1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixedAnother(1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.mixed.mixedAnother(1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.mixed.mixedAnother(1);
  */
 export function mixedAnother(num) {
 	return num * 2;

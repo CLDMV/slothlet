@@ -26,6 +26,31 @@
  * General utility functions for modes-processor debug coverage testing.
  * @param {string} name
  * @returns {string}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.utils.greet('myName');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.utils.greet('myName');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.utils.greet('myName');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.utils.greet('myName');
  */
 export function greet(name) {
 	return `Hello, ${name}!`;
@@ -35,6 +60,31 @@ export function greet(name) {
  * @param {number} a
  * @param {number} b
  * @returns {number}
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.utils.add(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.utils.add(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ *   api_test_modes_debug.utils.add(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+ * api_test_modes_debug.utils.add(1, 1);
  */
 export function add(a, b) {
 	return a + b;

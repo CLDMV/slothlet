@@ -31,6 +31,31 @@
  * @example
  * const api = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
  * api.root('world'); // 'root:world'
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+ * api_test_single_root_fn.root.rootFn();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+ *   api_test_single_root_fn.root.rootFn();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+ *   api_test_single_root_fn.root.rootFn();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+ * api_test_single_root_fn.root.rootFn();
  */
 export default function rootFn(input = "world") {
 	return `root:${input}`;

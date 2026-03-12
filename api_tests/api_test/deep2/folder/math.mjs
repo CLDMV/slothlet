@@ -15,6 +15,36 @@
  * @module api_test.deep2.folder.math
  * @memberof module:api_test
  */
+/**
+ * add.
+ * @param {*} a - a.
+ * @param {*} b - b.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.deep2.folder.math.add(null, null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.deep2.folder.math.add(null, null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.deep2.folder.math.add(null, null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.deep2.folder.math.add(null, null);
+ */
 export function add(a, b) {
 	return a + b + 1000; // Different implementation to test collision
 }

@@ -36,7 +36,60 @@ export const isolationTestState = {
 /**
 	* Get current state value
 	* @returns {string} Current state value
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getValue();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getValue();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getValue();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getValue();
+/
+/**
+ * isolationTest_getValue.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getValue();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getValue();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getValue();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getValue();
+ */
 export function isolationTest_getValue() {
 	return self.isolationTest.isolationTestState.value;
 }
@@ -44,7 +97,61 @@ export function isolationTest_getValue() {
 /**
 	* Set state value (mutates exported object)
 	* @param {string} newValue - New value to set
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setValue(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setValue(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setValue(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setValue(null);
+/
+/**
+ * isolationTest_setValue.
+ * @param {*} newValue - newValue.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setValue(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setValue(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setValue(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setValue(null);
+ */
 export function isolationTest_setValue(newValue) {
 	self.isolationTest.isolationTestState.value = newValue;
 }
@@ -52,7 +159,60 @@ export function isolationTest_setValue(newValue) {
 /**
 	* Increment counter (mutates exported object)
 	* @returns {number} New counter value
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_increment();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_increment();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_increment();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_increment();
+/
+/**
+ * isolationTest_increment.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_increment();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_increment();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_increment();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_increment();
+ */
 export function isolationTest_increment() {
 	self.isolationTest.isolationTestState.counter += 1;
 	return self.isolationTest.isolationTestState.counter;
@@ -61,7 +221,60 @@ export function isolationTest_increment() {
 /**
 	* Get counter value
 	* @returns {number} Current counter value
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getCounter();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getCounter();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getCounter();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getCounter();
+/
+/**
+ * isolationTest_getCounter.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getCounter();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getCounter();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getCounter();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getCounter();
+ */
 export function isolationTest_getCounter() {
 	return self.isolationTest.isolationTestState.counter;
 }
@@ -69,7 +282,61 @@ export function isolationTest_getCounter() {
 /**
 	* Set nested flag (mutates nested object)
 	* @param {boolean} flag - Flag value
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setFlag(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setFlag(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setFlag(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setFlag(null);
+/
+/**
+ * isolationTest_setFlag.
+ * @param {*} flag - flag.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setFlag(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setFlag(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_setFlag(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_setFlag(null);
+ */
 export function isolationTest_setFlag(flag) {
 	self.isolationTest.isolationTestState.nested.flag = flag;
 }
@@ -77,7 +344,60 @@ export function isolationTest_setFlag(flag) {
 /**
 	* Get nested flag value
 	* @returns {boolean} Flag value
-	*/
+	* *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getFlag();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getFlag();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getFlag();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getFlag();
+/
+/**
+ * isolationTest_getFlag.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getFlag();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getFlag();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.isolation-test.isolationTest_getFlag();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.isolation-test.isolationTest_getFlag();
+ */
 export function isolationTest_getFlag() {
 	return self.isolationTest.isolationTestState.nested.flag;
 }

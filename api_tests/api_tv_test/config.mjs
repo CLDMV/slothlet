@@ -36,7 +36,32 @@ const config = {
 	 * Get configuration value(s)
 	 * @param {string} [key] - Specific key to get, or undefined to get all
 	 * @returns {*} The value or entire config object
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.get();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.get();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.get();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.get();
+ */
 	get(key) {
 		return key ? this.state[key] : { ...this.state };
 	},
@@ -46,7 +71,32 @@ const config = {
 	 * @param {string|object} keyOrConfig - Key name or config object
 	 * @param {*} [value] - Value if first param is key
 	 * @returns {object} Success response with updated values
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.update(value);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.update(value);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.update(value);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.update(value);
+ */
 	update(keyOrConfig, value) {
 		if (typeof keyOrConfig === "object") {
 			// Update multiple values from object
@@ -64,7 +114,32 @@ const config = {
 	 * @param {string} key - Configuration key
 	 * @param {*} value - Configuration value
 	 * @returns {object} Success response
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.set('myKey', null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.set('myKey', null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.set('myKey', null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.set('myKey', null);
+ */
 	set(key, value) {
 		return this.update(key, value);
 	},
@@ -72,7 +147,32 @@ const config = {
 	/**
 	 * Get the current port or default
 	 * @returns {number} Port number
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.getDefaultPort();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.getDefaultPort();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.getDefaultPort();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.getDefaultPort();
+ */
 	getDefaultPort() {
 		return this.state.port || 3000;
 	},
@@ -82,7 +182,32 @@ const config = {
 	 * @param {object} configToValidate - Config to validate
 	 * @param {string[]} [requiredKeys] - Required keys
 	 * @returns {object} Validation result
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.validate({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.validate({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.validate({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.validate({});
+ */
 	validate(configToValidate, requiredKeys = []) {
 		const missing = requiredKeys.filter((key) => !(key in configToValidate));
 		return {
@@ -98,7 +223,32 @@ const config = {
 	 * @param {object} [userConfig] - User configuration
 	 * @param {string} [_] - Context (unused)
 	 * @returns {object} Merged configuration
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.merge();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.merge();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.merge();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.merge();
+ */
 	merge(userConfig = {}, _ = "") {
 		return { ...this.state, ...userConfig };
 	},
@@ -108,7 +258,32 @@ const config = {
 	 * @param {string} manufacturer - Manufacturer name
 	 * @param {object} [options] - Additional options
 	 * @returns {object} Manufacturer config
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.createManufacturerConfig('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.createManufacturerConfig('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.createManufacturerConfig('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.createManufacturerConfig('value');
+ */
 	createManufacturerConfig(manufacturer, options = {}) {
 		return { manufacturer, ...this.state, ...options };
 	},
@@ -116,7 +291,32 @@ const config = {
 	/**
 	 * Get instance information for debugging
 	 * @returns {object} Instance info
-	 */
+	 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.getInstanceInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.getInstanceInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.config.getInstanceInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.config.getInstanceInfo();
+ */
 	getInstanceInfo() {
 		return {
 			instanceId: this.state.instanceId,

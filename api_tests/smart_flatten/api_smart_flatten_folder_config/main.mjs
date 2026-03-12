@@ -15,6 +15,34 @@
  * @fileoverview Root-level main module for smart-flatten folder-config testing.
  * @module api_smart_flatten_folder_config.main
  */
+/**
+ * getRootInfo.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_folder_config = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_config' });
+ * api_smart_flatten_folder_config.main.getRootInfo();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_folder_config = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_config' });
+ *   api_smart_flatten_folder_config.main.getRootInfo();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_folder_config = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_config' });
+ *   api_smart_flatten_folder_config.main.getRootInfo();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_folder_config = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_folder_config' });
+ * api_smart_flatten_folder_config.main.getRootInfo();
+ */
 export function getRootInfo() {
 	return "root-level-function";
 }

@@ -15,6 +15,34 @@
  * @fileoverview Services/api module for smart-flatten nested fixture.
  * @module api_smart_flatten_nested.services.api
  */
+/**
+ * getApiService.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ * api_smart_flatten_nested.services.api.getApiService();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ *   api_smart_flatten_nested.services.api.getApiService();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ *   api_smart_flatten_nested.services.api.getApiService();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ * api_smart_flatten_nested.services.api.getApiService();
+ */
 export function getApiService() {
 	return "api-service-function";
 }

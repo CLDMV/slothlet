@@ -51,12 +51,69 @@ class SubfolderTVController {
 /**
  * Helper function for subfolder controllers.
  */
+/**
+ * getControllerCount.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.controllers.tv-controllers.getControllerCount();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.controllers.tv-controllers.getControllerCount();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.controllers.tv-controllers.getControllerCount();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.controllers.tv-controllers.getControllerCount();
+ */
 export function getControllerCount() {
 	return 4;
 }
 
 /**
  * Helper function to validate TV ID.
+ */
+/**
+ * validateTvId.
+ * @param {*} tvId - tvId.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.controllers.tv-controllers.validateTvId('item1');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.controllers.tv-controllers.validateTvId('item1');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.controllers.tv-controllers.validateTvId('item1');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.controllers.tv-controllers.validateTvId('item1');
  */
 export function validateTvId(tvId) {
 	return typeof tvId === "string" && tvId.startsWith("tv");

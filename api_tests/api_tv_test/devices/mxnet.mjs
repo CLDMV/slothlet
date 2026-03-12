@@ -22,6 +22,35 @@
  * @alias module:api_tv_test.devices.mxnet
  */
 
+/**
+ * initialize.
+ * @param {*} config - config.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.initialize(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.initialize(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.initialize(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.initialize(null);
+ */
 export async function initialize(config) {
 	if (!config || !config.enabled) {
 		console.log("MXNet device disabled in configuration");
@@ -44,6 +73,31 @@ export async function initialize(config) {
  * Powers on MXNet device (mock)
  * @param {string} deviceId - Device identifier
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.powerOn('emulator-5554');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.powerOn('emulator-5554');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.powerOn('emulator-5554');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.powerOn('emulator-5554');
  */
 export async function powerOn(deviceId = "default") {
 	console.log(`Mock: Powering on MXNet device: ${deviceId}`);
@@ -54,6 +108,31 @@ export async function powerOn(deviceId = "default") {
  * Powers off MXNet device (mock)
  * @param {string} deviceId - Device identifier
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.powerOff('emulator-5554');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.powerOff('emulator-5554');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.powerOff('emulator-5554');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.powerOff('emulator-5554');
  */
 export async function powerOff(deviceId = "default") {
 	console.log(`Mock: Powering off MXNet device: ${deviceId}`);
@@ -65,6 +144,31 @@ export async function powerOff(deviceId = "default") {
  * @param {string} deviceId - Device identifier
  * @param {string} command - Command to send
  * @returns {Promise<Object>} Command response
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.sendCommand('emulator-5554', 'value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.sendCommand('emulator-5554', 'value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.sendCommand('emulator-5554', 'value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.sendCommand('emulator-5554', 'value');
  */
 export async function sendCommand(deviceId = "default", command) {
 	console.log(`Mock: Sending command "${command}" to MXNet device: ${deviceId}`);
@@ -80,6 +184,31 @@ export async function sendCommand(deviceId = "default", command) {
  * Gets device status (mock)
  * @param {string} deviceId - Device identifier
  * @returns {Promise<Object>} Device status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.getStatus('emulator-5554');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.getStatus('emulator-5554');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.mxnet.getStatus('emulator-5554');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.mxnet.getStatus('emulator-5554');
  */
 export async function getStatus(deviceId = "default") {
 	console.log(`Mock: Getting status for MXNet device: ${deviceId}`);
@@ -111,6 +240,31 @@ export const COMMANDS = {
  * @returns {boolean} True if command is valid
  * @example
  * isValidCommand(COMMANDS.POWER_ON); // true
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.mxnet.isValidCommand('value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.mxnet.isValidCommand('value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.mxnet.isValidCommand('value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.mxnet.isValidCommand('value');
  */
 export function isValidCommand(command) {
 	return Object.values(COMMANDS).includes(command);
