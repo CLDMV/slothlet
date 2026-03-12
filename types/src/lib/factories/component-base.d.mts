@@ -13,6 +13,7 @@
 /**
  * @fileoverview Base class for Slothlet component classes providing common Slothlet access.
  * @module @cldmv/slothlet/factories/component-base
+ * @internal
  * @package
  *
  * @description

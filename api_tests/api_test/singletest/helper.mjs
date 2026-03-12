@@ -45,7 +45,7 @@ export const utilities = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.singletest.helper.format(null);
-/
+ */
 	format(input) {
 		return `Formatted: ${input}`;
 	},
@@ -79,7 +79,7 @@ export const utilities = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.singletest.helper.parse(null);
-/
+ */
 	parse(value) {
 		return `Parsed: ${value}`;
 	}

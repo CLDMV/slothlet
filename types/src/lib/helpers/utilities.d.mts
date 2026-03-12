@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class Utilities extends ComponentBase {
+export class Utilities {
     static slothletProperty: string;
     /**
      * Check if value is a plain object
@@ -53,5 +53,4 @@ export class Utilities extends ComponentBase {
      */
     public generateId(): string;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=utilities.d.mts.map

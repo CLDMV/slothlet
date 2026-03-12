@@ -5,7 +5,7 @@
  * @class HookManager
  * @extends ComponentBase
  */
-export class HookManager extends ComponentBase {
+export class HookManager {
     /**
      * Property name for auto-discovery
      * @type {string}
@@ -200,5 +200,4 @@ export type HookExecutionResult = {
      */
     result?: any;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=hook-manager.d.mts.map

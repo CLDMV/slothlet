@@ -48,7 +48,7 @@
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.conflicting-name-1.conflictingName();
-/
+ */
 /**
  * conflictingName.
  * @returns {*}

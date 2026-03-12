@@ -79,7 +79,7 @@ const keycodes = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.key('myKey');
-/
+ */
 /**
  * key.
  * @param {*} keyName - keyName.
@@ -145,7 +145,7 @@ export async function key(keyName) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.power();
-/
+ */
 /**
  * power.
  * @returns {Promise.<*>}
@@ -206,7 +206,7 @@ export async function power() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.home();
-/
+ */
 /**
  * home.
  * @returns {Promise.<*>}
@@ -267,7 +267,7 @@ export async function home() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.back();
-/
+ */
 /**
  * back.
  * @returns {Promise.<*>}
@@ -329,7 +329,7 @@ export async function back() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.navigate('./');
-/
+ */
 /**
  * navigate.
  * @param {*} direction - direction.
@@ -391,7 +391,7 @@ export async function navigate(direction) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.press.select();
-/
+ */
 /**
  * select.
  * @returns {Promise.<*>}
@@ -452,7 +452,7 @@ export async function select() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.press.getRemoteKeys();
-/
+ */
 /**
  * getRemoteKeys.
  * @returns {*}
@@ -513,7 +513,7 @@ export function getRemoteKeys() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.press.getKeycodes();
-/
+ */
 /**
  * getKeycodes.
  * @returns {*}

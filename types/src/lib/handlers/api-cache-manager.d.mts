@@ -26,7 +26,7 @@
  * const cacheManager = new ApiCacheManager(slothlet);
  * cacheManager.set("module_abc", { api: tree, folderPath: "./plugins", ... });
  */
-export class ApiCacheManager extends ComponentBase {
+export class ApiCacheManager {
     static slothletProperty: string;
     /**
      * Create ApiCacheManager instance
@@ -210,5 +210,4 @@ export type CacheEntry = {
      */
     timestamp: number;
 };
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=api-cache-manager.d.mts.map

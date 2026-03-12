@@ -65,7 +65,7 @@ let activeConfig = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.get();
-/
+ */
 /**
  * get.
  * @param {*} key - key.
@@ -143,7 +143,7 @@ export function get(key) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.set('myKey');
-/
+ */
 /**
  * set.
  * @param {*} key - key.
@@ -232,7 +232,7 @@ export function set(key, value) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.merge(null);
-/
+ */
 /**
  * merge.
  * @param {*} configObject - configObject.
@@ -330,7 +330,7 @@ export function merge(configObject, deep = false) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.reset();
-/
+ */
 /**
  * reset.
  * @param {*} keys - keys.
@@ -410,7 +410,7 @@ export function reset(keys) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.validate();
-/
+ */
 /**
  * validate.
  * @param {*} configToValidate - configToValidate.
@@ -498,7 +498,7 @@ export function validate(configToValidate) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.config.snapshot();
-/
+ */
 /**
  * snapshot.
  * @returns {*}

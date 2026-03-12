@@ -51,7 +51,7 @@ export const requestContext = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.request-context.getContext();
-/
+ */
 	getContext() {
 		return {
 			userId: context.userId,
@@ -94,7 +94,7 @@ export const requestContext = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.request-context.get('myKey');
-/
+ */
 	get(key) {
 		return context[key];
 	},

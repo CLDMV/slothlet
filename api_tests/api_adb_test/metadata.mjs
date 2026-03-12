@@ -73,7 +73,7 @@ let metadataState = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.get();
-/
+ */
 /**
  * get.
  * @param {*} key - key.
@@ -157,7 +157,7 @@ export async function get(key) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.metadata.set('myKey');
-/
+ */
 /**
  * set.
  * @param {*} key - key.
@@ -231,7 +231,7 @@ export function set(key, value) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.merge(null);
-/
+ */
 /**
  * merge.
  * @param {*} metaObject - metaObject.
@@ -322,7 +322,7 @@ export async function merge(metaObject, deep = false) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.refresh();
-/
+ */
 /**
  * refresh.
  * @param {*} [reason] - reason.
@@ -427,7 +427,7 @@ export async function refresh(reason = "manual", force = false) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.collect();
-/
+ */
 /**
  * collect.
  * @param {*} [reason] - reason.
@@ -497,7 +497,7 @@ export async function collect(reason = "collect") {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.metadata.clear();
-/
+ */
 /**
  * clear.
  * @param {*} keys - keys.
@@ -577,7 +577,7 @@ export function clear(keys) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.metadata.age();
-/
+ */
 /**
  * age.
  * @returns {*}
@@ -656,7 +656,7 @@ export function age() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.startup();
-/
+ */
 /**
  * startup.
  * @returns {Promise.<*>}
@@ -720,7 +720,7 @@ export async function startup() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.deviceMeta();
-/
+ */
 /**
  * deviceMeta.
  * @returns {Promise.<*>}
@@ -784,7 +784,7 @@ export async function deviceMeta() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.networkMeta();
-/
+ */
 /**
  * networkMeta.
  * @returns {Promise.<*>}
@@ -849,7 +849,7 @@ export async function networkMeta() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.packages();
-/
+ */
 /**
  * packages.
  * @returns {Promise.<*>}
@@ -915,7 +915,7 @@ export async function packages() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.metadata.snapshot();
-/
+ */
 /**
  * snapshot.
  * @param {*} [includeAge] - includeAge.

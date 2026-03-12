@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class HintDetector extends ComponentBase {
+export class HintDetector {
     static slothletProperty: string;
     /**
      * Detect appropriate hint key based on error
@@ -16,5 +16,4 @@ export class HintDetector extends ComponentBase {
     public detectHint(error: Error, errorCode: string): string | undefined;
 }
 export const detectHint: any;
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=hint-detector.d.mts.map

@@ -167,7 +167,7 @@ export const selfObject =
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.advanced.self-object.getCurrentInstanceId();
-/
+ */
 		async getCurrentInstanceId() {
 			try {
 				const { instanceId } = await import("@cldmv/slothlet/runtime");

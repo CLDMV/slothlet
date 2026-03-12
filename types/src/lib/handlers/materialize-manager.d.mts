@@ -24,7 +24,7 @@
  * // Wait for full materialization
  * await api.slothlet.materialize.wait();
  */
-export class MaterializeManager extends ComponentBase {
+export class MaterializeManager {
     static slothletProperty: string;
     /**
      * Create MaterializeManager instance
@@ -77,5 +77,4 @@ export class MaterializeManager extends ComponentBase {
      */
     public wait(): Promise<void>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=materialize-manager.d.mts.map

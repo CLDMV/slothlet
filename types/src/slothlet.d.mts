@@ -40,7 +40,7 @@
 export function slothlet(config: SlothletOptions): Promise<SlothletAPI>;
 export default slothlet;
 /**
- * Configuration options passed to {@link module :@cldmv/slothlet slothlet()}.
+ * Configuration options passed to `slothlet()`.
  */
 export type SlothletOptions = {
     /**
@@ -133,23 +133,92 @@ export type SlothletOptions = {
     typescript?: boolean | "fast" | "strict" | object;
 };
 /**
- * Bound API object returned by {@link module :@cldmv/slothlet slothlet()}.
+ * Bound API object returned by `slothlet()`.
  * The root contains all loaded module exports plus the reserved `slothlet` namespace.
  */
 export type SlothletAPI = {
     /**
-     * - Built-in control namespace.
+     * - Like `shutdown()` but additionally invokes registered destroy hooks before teardown. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.destroy();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.destroy();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.destroy();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.destroy();%%
+     */
+    destroy: () => void;
+    /**
+     * - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.shutdown();%%
+     */
+    shutdown: () => void;
+    /**
+     * - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
      */
     slothlet: {
-        shutdown: Function;
-        api: object;
-        hook: object;
-        context: object;
-        lifecycle: object;
-        metadata: object;
-        ownership: object;
-        diag?: object;
+        api: {
+            add: Function;
+            reload: Function;
+            remove: Function;
+        };
+        context: {
+            get: Function;
+            inspect: () => any;
+            run: Function;
+            scope: Function;
+            set: Function;
+        };
+        diag?: {
+            caches?: {
+                get?: () => any;
+                getAllModuleIDs?: () => string[];
+                has?: Function;
+            };
+            context?: object;
+            describe?: Function;
+            getAPI?: () => any;
+            getOwnership?: () => any;
+            hook?: object;
+            inspect?: () => any;
+            owner?: {
+                get?: Function;
+            };
+            reference?: object;
+            SlothletWarning?: () => SlothletWarning;
+        };
+        hook: {
+            clear: Function;
+            disable: Function;
+            enable: Function;
+            list: Function;
+            off: Function;
+            on: Function;
+            remove: Function;
+        };
+        lifecycle: {
+            off: Function;
+            on: Function;
+        };
+        materialize: {
+            get: () => any;
+            materialized: boolean;
+            wait: () => Promise<void>;
+        };
+        metadata: {
+            caller: () => any | null;
+            get: Function;
+            remove: Function;
+            removeFor: Function;
+            self: () => any | null;
+            set: Function;
+            setFor: Function;
+            setGlobal: Function;
+        };
+        owner: {
+            get: Function;
+        };
+        ownership: {
+            get: Function;
+            unregister: Function;
+        };
         reference?: object;
+        reload: Function;
+        run: Function;
+        scope: Function;
+        shutdown: () => Promise<void>;
     };
 };
 //# sourceMappingURL=slothlet.d.mts.map

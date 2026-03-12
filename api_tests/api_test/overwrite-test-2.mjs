@@ -80,7 +80,7 @@ export function overwriteTest() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_test = await slothlet({ dir: './api_tests/api_test' });
  * api_test.overwrite-test-2.conflictingName();
-/
+ */
 /**
  * conflictingName.
  * @returns {*}

@@ -57,7 +57,7 @@ import { self, context } from "@cldmv/slothlet/runtime";
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.state.getConfig();
-/
+ */
 /**
  * getConfig.
  * @returns {*}
@@ -133,7 +133,7 @@ export function getConfig() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getConnectionState();
-/
+ */
 /**
  * getConnectionState.
  * @returns {Promise.<*>}
@@ -203,7 +203,7 @@ export async function getConnectionState() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.state.getDefaults();
-/
+ */
 /**
  * getDefaults.
  * @returns {*}
@@ -268,7 +268,7 @@ export function getDefaults() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getMetadata();
-/
+ */
 /**
  * getMetadata.
  * @returns {Promise.<*>}
@@ -345,7 +345,7 @@ export async function getMetadata() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getDevice();
-/
+ */
 /**
  * getDevice.
  * @returns {Promise.<*>}
@@ -420,7 +420,7 @@ export async function getDevice() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getDeviceWithDisplay();
-/
+ */
 /**
  * getDeviceWithDisplay.
  * @returns {Promise.<*>}
@@ -494,7 +494,7 @@ export async function getDeviceWithDisplay() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getCurrentApp();
-/
+ */
 /**
  * getCurrentApp.
  * @returns {Promise.<*>}
@@ -563,7 +563,7 @@ export async function getCurrentApp() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getPowerState();
-/
+ */
 /**
  * getPowerState.
  * @returns {Promise.<*>}
@@ -632,7 +632,7 @@ export async function getPowerState() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getAudioState();
-/
+ */
 /**
  * getAudioState.
  * @returns {Promise.<*>}
@@ -703,7 +703,7 @@ export async function getAudioState() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getNetworkInfo();
-/
+ */
 /**
  * getNetworkInfo.
  * @returns {Promise.<*>}
@@ -775,7 +775,7 @@ export async function getNetworkInfo() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.getInstalledPackages();
-/
+ */
 /**
  * getInstalledPackages.
  * @param {*} [options] - options.
@@ -846,7 +846,7 @@ export async function getInstalledPackages(options = {}) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.refreshDeviceInfo();
-/
+ */
 /**
  * refreshDeviceInfo.
  * @param {*} [options] - options.
@@ -926,7 +926,7 @@ export async function refreshDeviceInfo(options = {}) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.refreshAppInfo();
-/
+ */
 /**
  * refreshAppInfo.
  * @returns {Promise.<*>}
@@ -989,7 +989,7 @@ export async function refreshAppInfo() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.refreshNetworkInfo();
-/
+ */
 /**
  * refreshNetworkInfo.
  * @returns {Promise.<*>}
@@ -1052,7 +1052,7 @@ export async function refreshNetworkInfo() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.refreshAudioInfo();
-/
+ */
 /**
  * refreshAudioInfo.
  * @returns {Promise.<*>}
@@ -1116,7 +1116,7 @@ export async function refreshAudioInfo() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.refreshAll();
-/
+ */
 /**
  * refreshAll.
  * @returns {Promise.<*>}
@@ -1197,7 +1197,7 @@ export async function refreshAll() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.state.createSnapshot();
-/
+ */
 /**
  * createSnapshot.
  * @param {*} [options] - options.

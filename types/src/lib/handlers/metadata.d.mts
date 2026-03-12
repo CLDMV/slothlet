@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class Metadata extends ComponentBase {
+export class Metadata {
     static slothletProperty: string;
     /**
      * Create Metadata instance
@@ -216,5 +216,4 @@ export class Metadata extends ComponentBase {
     public caller(): object | null;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=metadata.d.mts.map

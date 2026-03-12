@@ -12,7 +12,7 @@
  * const builder = new Builder(slothlet);
  * const api = await builder.buildAPI({ dir: "./api" });
  */
-export class Builder extends ComponentBase {
+export class Builder {
     static slothletProperty: string;
     /**
      * Create Builder instance.
@@ -68,5 +68,4 @@ export class Builder extends ComponentBase {
         fileFilter?: Function | null;
     }): Promise<any>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=builder.d.mts.map

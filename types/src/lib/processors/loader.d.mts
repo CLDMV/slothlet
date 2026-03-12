@@ -4,8 +4,9 @@
  * @extends ComponentBase
  * @package
  */
-export class Loader extends ComponentBase {
+export class Loader {
     static slothletProperty: string;
+    constructor(slothlet: any);
     /**
      * Load a single module
      * @param {string} filePath - Path to module file
@@ -42,5 +43,4 @@ export class Loader extends ComponentBase {
     public extractExports(module: any): any;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=loader.d.mts.map

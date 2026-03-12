@@ -26,7 +26,7 @@ export namespace TYPE_STATES {
  * @extends ComponentBase
  * @public
  */
-export class UnifiedWrapper extends ComponentBase {
+export class UnifiedWrapper {
     /**
      * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
      * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
@@ -245,6 +245,5 @@ export class UnifiedWrapper extends ComponentBase {
     [util.inspect.custom](____depth: any, ____options: any, ____inspect: any): any;
     #private;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 import util from "node:util";
 //# sourceMappingURL=unified-wrapper.d.mts.map

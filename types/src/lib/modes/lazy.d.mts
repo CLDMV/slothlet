@@ -4,7 +4,7 @@
  * @extends ComponentBase
  * @package
  */
-export class LazyMode extends ComponentBase {
+export class LazyMode {
     static slothletProperty: string;
     /**
      * Create LazyMode instance.
@@ -51,5 +51,4 @@ export class LazyMode extends ComponentBase {
         fileFilter?: Function | null;
     }): Promise<any>;
 }
-import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=lazy.d.mts.map

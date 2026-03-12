@@ -69,7 +69,7 @@ const keycodes = {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.input.text('hello');
-/
+ */
 /**
  * text.
  * @param {*} text - text.
@@ -132,7 +132,7 @@ export async function text(text) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.input.key('myKey');
-/
+ */
 /**
  * key.
  * @param {*} key - key.
@@ -196,7 +196,7 @@ export async function key(key) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.input.tap(null, null);
-/
+ */
 /**
  * tap.
  * @param {*} x - x.
@@ -264,7 +264,7 @@ export async function tap(x, y) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * await api_adb_test.input.swipe(null, null, null, null);
-/
+ */
 /**
  * swipe.
  * @param {*} startX - startX.
@@ -332,7 +332,7 @@ export async function swipe(startX, startY, endX, endY, duration = 300) {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.input.getKeyboardKeys();
-/
+ */
 /**
  * getKeyboardKeys.
  * @returns {*}
@@ -393,7 +393,7 @@ export function getKeyboardKeys() {
  * const slothlet = require("@cldmv/slothlet");
  * const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
  * api_adb_test.input.getKeycodes();
-/
+ */
 /**
  * getKeycodes.
  * @returns {*}
