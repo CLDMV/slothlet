@@ -1847,23 +1847,6 @@ const partials = {
 				// Collapse newlines so multi-line HTML descriptions (ul/li etc.) don't break table rows
 				const paramDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
 				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${paramDesc} |\n`;
-
-				// When the param type is a direct typedef reference (no generics), expand its
-				// properties as indented sub-rows so the full option set is visible inline.
-				const typeNames = param.type?.names || [];
-				if (typeNames.length === 1 && !typeNames[0].includes("<") && availableTypedefs) {
-					const typedef = availableTypedefs.find((td) => td.name === typeNames[0]);
-					if (typedef && typedef.properties && typedef.properties.length > 0) {
-						typedef.properties.forEach((prop) => {
-							const propPath = `${param.name}.${prop.name}`;
-							const propDisplay = prop.optional ? `[${propPath}]` : propPath;
-							const propDefault = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
-							// Collapse newlines so multi-line HTML descriptions don't break table rows
-							const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
-							output += `| ${propDisplay} | <code>${format.typeForTableWithLinks(prop.type, moduleId, availableTypedefs)}</code> | ${propDefault} | ${propDesc} |\n`;
-						});
-					}
-				}
 			});
 			output += "\n\n";
 		}
