@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 16:00:04 -07:00 (1773270004)
+ *	@Last modified time: 2026-03-11 17:34:55 -07:00 (1773275695)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -179,7 +179,9 @@ const gets = {
 		if (!Array.isArray(doclets)) return [];
 
 		// Filter for modules only (exclude @internal modules from public docs)
-		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:") && helper.shouldInclude(doclet));
+		const modules = doclets.filter(
+			(doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:") && helper.shouldInclude(doclet)
+		);
 
 		// Sort by depth first, then alphabetically
 		return modules.sort((a, b) => {
@@ -1826,16 +1828,38 @@ const partials = {
 				candidates.forEach((name) => {
 					const typedef = availableTypedefs.find((td) => td.name === name && td.properties && td.properties.length > 0);
 					if (typedef) {
-						output += `**${name} Properties**:\n\n`;
-						output += `| Property | Type | Description |\n`;
-						output += `| --- | --- | --- |\n`;
-						typedef.properties.forEach((prop) => {
-							const propName = prop.optional ? `[${prop.name}]` : prop.name;
-							// Collapse newlines so multi-line HTML descriptions don't break table rows
-							const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
-							output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${propDesc} |\n`;
-						});
-						output += "\n\n";
+						const isFunction = (prop) => prop.type?.names?.some((n) => n.toLowerCase() === "function");
+						const tableProps = typedef.properties.filter((p) => !isFunction(p));
+						const fnProps = typedef.properties.filter(isFunction);
+						const typedefAnchor = typedef.anchor || `typedef_${name}`;
+
+						if (tableProps.length > 0) {
+							output += `**${name} Properties**:\n\n`;
+							output += `| Property | Type | Description |\n`;
+							output += `| --- | --- | --- |\n`;
+							tableProps.forEach((prop) => {
+								const propName = prop.optional ? `[${prop.name}]` : prop.name;
+								// Collapse newlines so multi-line HTML descriptions don't break table rows
+								const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+								output += `| ${propName} | <code>${format.typeForTableWithLinks(prop.type)}</code> | ${propDesc} |\n`;
+							});
+							output += "\n\n";
+						}
+
+						if (fnProps.length > 0) {
+							output += `**${name} Methods** — see [${name}](#${typedefAnchor}) for full documentation:\n\n`;
+							output += `| Method | Description |\n`;
+							output += `| --- | --- |\n`;
+							fnProps.forEach((prop) => {
+								const rawPropName = prop.name || "";
+								const isOptional = prop.optional;
+								const displayName = isOptional ? `[${rawPropName}()]` : `${rawPropName}()`;
+								const propAnchor = `${typedefAnchor}_prop_${rawPropName.replace(/\./g, "-")}`;
+								const propDesc = (prop.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").replace(/<p>|<\/p>/g, "");
+								output += `| [${displayName}](#${propAnchor}) | ${propDesc} |\n`;
+							});
+							output += "\n\n";
+						}
 					}
 				});
 			});
@@ -2067,30 +2091,62 @@ const partials = {
 			output += `**Kind**: typedef  \n`;
 			output += `**Scope**: ${typedef.scope || "global"}\n\n`;
 
-			// Add properties table if the typedef has properties
+			// Add properties: split into table-rendered (non-function) and section-rendered (function)
 			if (typedef.properties && typedef.properties.length > 0) {
-				// Simple table with HTML cleanup
-				output += "\n| Param | Type | Default | Description |\n";
-				output += "| --- | --- | --- | --- |\n";
-				typedef.properties.forEach((prop) => {
-					const name = prop.optional ? `[${prop.name}]` : prop.name;
-					const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
-					const defaultValue = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
-
-					// Clean HTML from description and convert to markdown-safe format
-					let description = "";
-					if (prop.description) {
-						description = format.escapeForTable(prop.description);
-					}
-
-					// Add a per-property anchor in the first cell so TOC sub-trees can link here
+				// Helper: build per-property anchor (same format as before so structure-tree links still resolve)
+				const propAnchorFor = (prop) => {
 					const rawPropName = prop.name.replace(/^\[|\]$/g, "");
-					// Use dash-separated path (e.g. slothlet-diag-caches-get) — much shorter than
-					// the _dot_ encoding that format.generateAnchor() would produce.
-					const propAnchor = `${anchor}_prop_${rawPropName.replace(/\./g, "-")}`;
-					output += `| <a id="${propAnchor}"></a>${name} | ${type} | ${defaultValue} | ${description} |\n`;
-				});
-				output += "\n";
+					return `${anchor}_prop_${rawPropName.replace(/\./g, "-")}`;
+				};
+
+				const isFunction = (prop) => prop.type && prop.type.names && prop.type.names.some((n) => n.toLowerCase() === "function");
+
+				// Table section: non-function properties (namespaces, booleans, config values, metadata)
+				const tableProps = typedef.properties.filter((p) => !isFunction(p));
+				if (tableProps.length > 0) {
+					const hasDefaults = tableProps.some((p) => p.defaultvalue !== undefined);
+					if (hasDefaults) {
+						output += "\n| Property | Type | Default | Description |\n";
+						output += "| --- | --- | --- | --- |\n";
+					} else {
+						output += "\n| Property | Type | Description |\n";
+						output += "| --- | --- | --- |\n";
+					}
+					tableProps.forEach((prop) => {
+						const name = prop.optional ? `[${prop.name}]` : prop.name;
+						const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
+						let description = prop.description ? format.escapeForTable(prop.description) : "";
+						const pa = propAnchorFor(prop);
+						if (hasDefaults) {
+							const defaultValue = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
+							output += `| <a id="${pa}"></a>${name} | ${type} | ${defaultValue} | ${description} |\n`;
+						} else {
+							output += `| <a id="${pa}"></a>${name} | ${type} | ${description} |\n`;
+						}
+					});
+					output += "\n";
+				}
+
+				// Section rendering: function-type properties become ### sub-sections
+				const fnProps = typedef.properties.filter(isFunction);
+				if (fnProps.length > 0) {
+					output += "\n";
+					fnProps.forEach((prop) => {
+						const pa = propAnchorFor(prop);
+						const rawName = prop.name.replace(/^\[|\]$/g, "");
+						const isOptional = prop.name.startsWith("[");
+						const displayName = isOptional ? `[${rawName}()]` : `${rawName}()`;
+						output += `<a id="${pa}"></a>\n\n`;
+						output += `#### ${displayName}\n\n`;
+						if (prop.description) {
+							// Strip outer <p> tags for cleaner block-level rendering
+							const desc = prop.description.replace(/^<p>|<\/p>$/g, "").trim();
+							output += `${desc}\n\n`;
+						}
+						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
+						output += `* * *\n\n`;
+					});
+				}
 			}
 
 			output = partials.examples(typedef, output);
