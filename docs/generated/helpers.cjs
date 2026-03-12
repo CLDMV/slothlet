@@ -2132,7 +2132,6 @@ const partials = {
 						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
 
 						// Use already-parsed sig (extracted above for the heading)
-						const sigStr = _headingSigStr;
 						const impl = _headingImpl;
 
 						if (impl && impl.params && impl.params.length > 0) {
