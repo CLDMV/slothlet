@@ -306,6 +306,12 @@ Mount a new API module at runtime.
 
 **Returns**: <code>Promise.&lt;void&gt;</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.add('utils.math', './api/utils/math');
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-api-reload"></a>
@@ -323,6 +329,15 @@ Hot-reload a specific module or directory path.
 
 **Returns**: <code>Promise.&lt;void&gt;</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+// Reload a specific module
+await api.slothlet.api.reload('utils.math');
+// Reload everything
+await api.slothlet.api.reload();
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-api-remove"></a>
@@ -338,6 +353,12 @@ Unmount an API module at runtime.
 | pathOrModuleId | <code>string</code> |  |
 
 **Returns**: <code>Promise.&lt;void&gt;</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.remove('utils.math');
+```
 
 * * *
 
@@ -382,6 +403,14 @@ Execute a callback with isolated context data merged in.
 | args | <code>*</code> |  |
 
 **Returns**: <code>*</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  return api.myModule.getUser(); // sees context.userId = 42
+});
+```
 
 * * *
 
@@ -622,6 +651,14 @@ Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;
 
 **Returns**: <code>string</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+const hookId = api.slothlet.hook.on('before:math.*', ({ args }) =&gt; {
+  console.log('math called with', args);
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-remove"></a>
@@ -671,6 +708,14 @@ Subscribe to a lifecycle event (e.g. <code>&quot;materialized:complete&quot;</co
 | handler | <code>function</code> |  |
 
 **Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.lifecycle.on('shutdown', () =&gt; {
+  console.log('Slothlet is shutting down');
+});
+```
 
 * * *
 
@@ -878,6 +923,12 @@ Reload the entire instance (re-scans the directory and recreates all module refe
 | [options] | <code>Object</code> |  |
 
 **Returns**: <code>Promise.&lt;void&gt;</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.reload(); // full reload
+```
 
 * * *
 

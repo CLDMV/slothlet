@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 19:53:47 -07:00 (1773284027)
+ *	@Last modified time: 2026-03-11 20:08:07 -07:00 (1773284887)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -2061,18 +2061,21 @@ const partials = {
 								.map((p) => {
 									const isOpt = p.startsWith("[");
 									if (isOpt) {
-										// Pattern: [name]: Type  →  name is inside brackets, type follows
-										const m = p.match(/^\[([^\]]+)\]:\s*(.+)$/);
-										if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true };
+										// Pattern: [name]: Type "description"  →  name inside brackets, optional quoted description
+										const m = p.match(/^\[([^\]]+)\]:\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
+										if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true, description: m[3] ? m[3].trim() : "" };
 										// Fallback: bracket-only wrapping with no type annotation
 										const cleaned = p.replace(/^\[|\]$/g, "").trim();
-										return { name: cleaned, type: { names: ["*"] }, optional: true };
+										return { name: cleaned, type: { names: ["*"] }, optional: true, description: "" };
 									}
+									// Pattern: name: Type "description"  →  type before optional quoted description
+									const m2 = p.match(/^([^:]+):\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
+									if (m2) return { name: m2[1].trim(), type: { names: [m2[2].trim()] }, optional: false, description: m2[3] ? m2[3].trim() : "" };
 									const ci = p.indexOf(":");
 									if (ci > -1) {
-										return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false };
+										return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false, description: "" };
 									}
-									return { name: p, type: { names: ["*"] }, optional: false };
+									return { name: p, type: { names: ["*"] }, optional: false, description: "" };
 								})
 						: [];
 					return { params, returnType };
@@ -2084,11 +2087,15 @@ const partials = {
 				 * @returns {{ sig: string|null, cleanDesc: string }}
 				 */
 				function extractSigFromDesc(desc) {
-					if (!desc) return { sig: null, cleanDesc: "" };
-					const m = desc.match(/%%sig:\s*([^%]+)%%/);
-					if (!m) return { sig: null, cleanDesc: desc };
-					const cleanDesc = desc.replace(/\s*%%sig:[^%]+%%/, "").trim();
-					return { sig: m[1].trim(), cleanDesc };
+					if (!desc) return { sig: null, cleanDesc: "", examples: [] };
+					const sigMatch = desc.match(/%%sig:\s*([^%]+)%%/);
+					const exampleMatches = [...desc.matchAll(/%%example:\s*([^%]*)%%/g)];
+					const examples = exampleMatches.map((em) => em[1].trim().split("|").join("\n"));
+					const cleanDesc = desc
+						.replace(/\s*%%sig:[^%]+%%/, "")
+						.replace(/\s*%%example:[^%]*%%/g, "")
+						.trim();
+					return { sig: sigMatch ? sigMatch[1].trim() : null, cleanDesc, examples };
 				}
 
 				// Section rendering: function-type properties become #### sub-sections (rendered first)
@@ -2101,14 +2108,18 @@ const partials = {
 						const isOptional = prop.name.startsWith("[");
 						// Extract sig early so we can put params and return type into the #### heading
 						const _rawDesc = (prop.description || "").replace(/^<p>|<\/p>$/g, "").trim();
-						const { sig: _headingSigStr, cleanDesc: _cleanDesc } = extractSigFromDesc(_rawDesc);
+						const { sig: _headingSigStr, cleanDesc: _cleanDesc, examples: _examples } = extractSigFromDesc(_rawDesc);
 						const _headingImpl = _headingSigStr ? parseFunctionSig(_headingSigStr) : null;
+						// Fall back to return type encoded in the function type annotation (e.g. {function(): Object})
+						const _typeAnnotationReturn =
+							!_headingImpl?.returnType && prop.type?.names?.[0]
+								? (prop.type.names[0].match(/^function\s*\(\s*\)\s*:\s*(.+)$/i) || [])[1] || null
+								: null;
+						const _effectiveReturnType = _headingImpl?.returnType || _typeAnnotationReturn;
 						const _paramList = _headingImpl?.params?.length
 							? _headingImpl.params.map((p) => (p.optional ? `[${p.name}]` : p.name)).join(", ")
 							: "";
-						const _retSuffix = _headingImpl?.returnType
-							? ` ⇒ <code>${helper.escapeHtml(_headingImpl.returnType)}</code>`
-							: "";
+						const _retSuffix = _effectiveReturnType ? ` ⇒ <code>${helper.escapeHtml(_effectiveReturnType)}</code>` : "";
 						const displayName = isOptional ? `[api.${rawName}(${_paramList})]${_retSuffix}` : `api.${rawName}(${_paramList})${_retSuffix}`;
 						output += `<a id="${pa}"></a>\n\n`;
 						output += `#### ${displayName}\n\n`;
@@ -2134,8 +2145,14 @@ const partials = {
 							output += "\n";
 						}
 
-						if (impl && impl.returnType) {
-							output += `**Returns**: <code>${helper.escapeHtml(impl.returnType)}</code>\n\n`;
+if (_effectiveReturnType) {
+					output += `**Returns**: <code>${helper.escapeHtml(_effectiveReturnType)}</code>\n\n`;
+				}
+
+				if (_examples && _examples.length > 0) {
+					_examples.forEach((ex) => {
+						output += `**Example**\n\`\`\`javascript\n${ex}\n\`\`\`\n\n`;
+					});
 						}
 
 						output += `* * *\n\n`;
