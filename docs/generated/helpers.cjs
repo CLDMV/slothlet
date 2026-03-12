@@ -18,6 +18,8 @@
 const docletData = new Map();
 const anchorMap = new Map();
 let availableTypedefs = [];
+// When true, typedef definitions were already inlined inside the main module block.
+let slothletTypedefsInlined = false;
 
 const helper = {
 	// Equality comparison helper
@@ -2026,6 +2028,9 @@ const partials = {
 	 * @returns {string} Global typedef definitions section
 	 */
 	globalTypedefDefinitions() {
+				// If integratedModules already rendered typedefs inline inside the main module,
+				// skip the standalone section entirely.
+				if (slothletTypedefsInlined) return "";
 		if (!Array.isArray(availableTypedefs) || availableTypedefs.length === 0) return "";
 
 		let output = "\n\n* * *\n\n";
@@ -2510,10 +2515,15 @@ const partials = {
 		// Generate the main module documentation
 		output += generateModuleSection(items);
 
-		// Add constants section if any
-		// if (constants && constants.length > 0) {
-		// 	output = partials.exportedConstantsBlock(constants, output, baseModuleName, baseModuleLongname);
-		// }
+		// For the main slothlet module, inline the typedef definitions here so they
+		// appear within ## @cldmv/slothlet — before ## @cldmv/slothlet/runtime.
+		if (baseModuleLongname === "module:@cldmv/slothlet" && availableTypedefs.length > 0) {
+			slothletTypedefsInlined = false; // allow the call below to produce output
+			const typedefBlock = partials.globalTypedefDefinitions();
+			// Strip the "## Type Definitions" H2 header so content stays inside this module
+			output += typedefBlock.replace(/[\r\n]*## Type Definitions\n+/, "\n\n");
+			slothletTypedefsInlined = true;
+		}
 
 		return output;
 	},

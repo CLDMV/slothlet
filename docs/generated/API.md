@@ -241,55 +241,7 @@ await api.slothlet.shutdown();
 
 
 
-<a id="at_cldmv_slash_slothlet_slash_runtime"></a>
-
-## @cldmv/slothlet/runtime
-> <p><strong style="font-size: 1.1em;"><p>Provides live bindings for use inside API module functions. Import the exports you need:</p>
-> <pre class="prettyprint source lang-js"><code>import { self, context, instanceID } from &quot;@cldmv/slothlet/runtime&quot;;
-> </code></pre>
-> <table>
-> <thead>
-> <tr>
-> <th>Export</th>
-> <th>Type</th>
-> <th>Description</th>
-> </tr>
-> </thead>
-> <tbody>
-> <tr>
-> <td><code>self</code></td>
-> <td><code>object</code></td>
-> <td>Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles.</td>
-> </tr>
-> <tr>
-> <td><code>context</code></td>
-> <td><code>object</code></td>
-> <td>Per-request context data set by <code>api.slothlet.context.run(ctx, fn)</code>. Readable and writable.</td>
-> </tr>
-> <tr>
-> <td><code>instanceID</code></td>
-> <td><code>string</code></td>
-> <td>Unique identifier of the active Slothlet instance.</td>
-> </tr>
-> </tbody>
-> </table>
-> <p>All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
-> whether the instance uses <code>&quot;async&quot;</code> (AsyncLocalStorage) or <code>&quot;live&quot;</code> runtime mode.</p></strong></p>
-> 
-
-
-
-
-
-
-
-
-
-
-
 * * *
-
-## Type Definitions
 
 <a id="typedef_SlothletOptions"></a>
 
@@ -1012,5 +964,51 @@ Shut down the instance and release all resources.
 
 
 * * *
+
+
+
+<a id="at_cldmv_slash_slothlet_slash_runtime"></a>
+
+## @cldmv/slothlet/runtime
+> <p><strong style="font-size: 1.1em;"><p>Provides live bindings for use inside API module functions. Import the exports you need:</p>
+> <pre class="prettyprint source lang-js"><code>import { self, context, instanceID } from &quot;@cldmv/slothlet/runtime&quot;;
+> </code></pre>
+> <table>
+> <thead>
+> <tr>
+> <th>Export</th>
+> <th>Type</th>
+> <th>Description</th>
+> </tr>
+> </thead>
+> <tbody>
+> <tr>
+> <td><code>self</code></td>
+> <td><code>object</code></td>
+> <td>Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles.</td>
+> </tr>
+> <tr>
+> <td><code>context</code></td>
+> <td><code>object</code></td>
+> <td>Per-request context data set by <code>api.slothlet.context.run(ctx, fn)</code>. Readable and writable.</td>
+> </tr>
+> <tr>
+> <td><code>instanceID</code></td>
+> <td><code>string</code></td>
+> <td>Unique identifier of the active Slothlet instance.</td>
+> </tr>
+> </tbody>
+> </table>
+> <p>All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
+> whether the instance uses <code>&quot;async&quot;</code> (AsyncLocalStorage) or <code>&quot;live&quot;</code> runtime mode.</p></strong></p>
+> 
+
+
+
+
+
+
+
+
 
 
