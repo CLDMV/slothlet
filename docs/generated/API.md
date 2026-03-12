@@ -282,6 +282,37 @@ Like <code>shutdown()</code> but additionally invokes registered destroy hooks b
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.destroy();
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.destroy();
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.destroy();
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.destroy();
 ```
@@ -300,6 +331,37 @@ Convenience alias for <code>slothlet.shutdown()</code>. Shuts down the instance 
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.shutdown();
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.shutdown();
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.shutdown();
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.shutdown();
 ```
@@ -324,6 +386,37 @@ Mount a new API module at runtime.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.add('utils.math', './api/utils/math');
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.add('utils.math', './api/utils/math');
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.add('utils.math', './api/utils/math');
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.api.add('utils.math', './api/utils/math');
 ```
@@ -347,6 +440,46 @@ Hot-reload a specific module or directory path.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+// Reload a specific module
+await api.slothlet.api.reload('utils.math');
+// Reload everything
+await api.slothlet.api.reload();
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  // Reload a specific module
+  await api.slothlet.api.reload('utils.math');
+  // Reload everything
+  await api.slothlet.api.reload();
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  // Reload a specific module
+  await api.slothlet.api.reload('utils.math');
+  // Reload everything
+  await api.slothlet.api.reload();
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 // Reload a specific module
 await api.slothlet.api.reload('utils.math');
@@ -372,6 +505,37 @@ Unmount an API module at runtime.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.remove('utils.math');
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.remove('utils.math');
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.remove('utils.math');
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.api.remove('utils.math');
 ```
@@ -394,6 +558,43 @@ Get a value from the current per-request context store.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  const userId = api.slothlet.context.get('userId'); // 42
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    const userId = api.slothlet.context.get('userId'); // 42
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    const userId = api.slothlet.context.get('userId'); // 42
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
   const userId = api.slothlet.context.get('userId'); // 42
@@ -414,6 +615,46 @@ Return a snapshot of the current context state (for debugging).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  const snapshot = api.slothlet.context.inspect();
+  // { data: { userId: 42 }, ... }
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    const snapshot = api.slothlet.context.inspect();
+    // { data: { userId: 42 }, ... }
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    const snapshot = api.slothlet.context.inspect();
+    // { data: { userId: 42 }, ... }
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
   const snapshot = api.slothlet.context.inspect();
@@ -441,6 +682,43 @@ Execute a callback with isolated context data merged in.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  return api.myModule.getUser(); // sees context.userId = 42
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    return api.myModule.getUser(); // sees context.userId = 42
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+    return api.myModule.getUser(); // sees context.userId = 42
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const result = await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
   return api.myModule.getUser(); // sees context.userId = 42
@@ -465,6 +743,46 @@ Execute a function with structured context options (<code>context</code>, <code>
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.context.scope({
+  context: { userId: 42 },
+  fn: async () =&gt; api.myModule.getUser()
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.context.scope({
+    context: { userId: 42 },
+    fn: async () =&gt; api.myModule.getUser()
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.context.scope({
+    context: { userId: 42 },
+    fn: async () =&gt; api.myModule.getUser()
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const result = await api.slothlet.context.scope({
   context: { userId: 42 },
@@ -491,6 +809,43 @@ Set a value in the current per-request context store.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({}, async () =&gt; {
+  api.slothlet.context.set('traceId', 'abc-123');
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({}, async () =&gt; {
+    api.slothlet.context.set('traceId', 'abc-123');
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.context.run({}, async () =&gt; {
+    api.slothlet.context.set('traceId', 'abc-123');
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.context.run({}, async () =&gt; {
   api.slothlet.context.set('traceId', 'abc-123');
@@ -513,6 +868,40 @@ Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>). Only av
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const cacheData = api.slothlet.diag.caches.get();
+// { totalCaches: 2, caches: [...] }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const cacheData = api.slothlet.diag.caches.get();
+  // { totalCaches: 2, caches: [...] }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const cacheData = api.slothlet.diag.caches.get();
+  // { totalCaches: 2, caches: [...] }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const cacheData = api.slothlet.diag.caches.get();
 // { totalCaches: 2, caches: [...] }
@@ -534,6 +923,40 @@ Return all moduleIDs currently in cache. Only available when <code>diagnostics: 
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const ids = api.slothlet.diag.caches.getAllModuleIDs();
+// ['utils/math.mjs', 'utils/strings.mjs']
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const ids = api.slothlet.diag.caches.getAllModuleIDs();
+  // ['utils/math.mjs', 'utils/strings.mjs']
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const ids = api.slothlet.diag.caches.getAllModuleIDs();
+  // ['utils/math.mjs', 'utils/strings.mjs']
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const ids = api.slothlet.diag.caches.getAllModuleIDs();
 // ['utils/math.mjs', 'utils/strings.mjs']
@@ -559,6 +982,37 @@ Check whether a cache entry exists for a given moduleID. Only available when <co
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
 ```
@@ -583,6 +1037,40 @@ Describe API structure. Pass <code>true</code> to return the full API object; om
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const keys = api.slothlet.diag.describe();
+const full = api.slothlet.diag.describe(true);
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const keys = api.slothlet.diag.describe();
+  const full = api.slothlet.diag.describe(true);
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const keys = api.slothlet.diag.describe();
+  const full = api.slothlet.diag.describe(true);
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const keys = api.slothlet.diag.describe();
 const full = api.slothlet.diag.describe(true);
@@ -604,6 +1092,37 @@ Return the live bound API proxy object. Only available when <code>diagnostics: t
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
 ```
@@ -624,6 +1143,37 @@ Return ownership diagnostics for all registered API paths. Only available when <
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const ownership = api.slothlet.diag.getOwnership();
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const ownership = api.slothlet.diag.getOwnership();
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const ownership = api.slothlet.diag.getOwnership();
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const ownership = api.slothlet.diag.getOwnership();
 ```
@@ -644,6 +1194,40 @@ Return a full diagnostic snapshot of current instance state. Only available when
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const snapshot = api.slothlet.diag.inspect();
+console.log(snapshot.modules, snapshot.hooks);
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const snapshot = api.slothlet.diag.inspect();
+  console.log(snapshot.modules, snapshot.hooks);
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const snapshot = api.slothlet.diag.inspect();
+  console.log(snapshot.modules, snapshot.hooks);
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const snapshot = api.slothlet.diag.inspect();
 console.log(snapshot.modules, snapshot.hooks);
@@ -669,6 +1253,40 @@ Get the owning moduleIDs for a specific API path. Only available when <code>diag
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const owners = api.slothlet.diag.owner.get('math.add');
+// ['utils/math.mjs']
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const owners = api.slothlet.diag.owner.get('math.add');
+  // ['utils/math.mjs']
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const owners = api.slothlet.diag.owner.get('math.add');
+  // ['utils/math.mjs']
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const owners = api.slothlet.diag.owner.get('math.add');
 // ['utils/math.mjs']
@@ -690,6 +1308,40 @@ The <code>SlothletWarning</code> class — access <code>.captured</code> for war
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', diagnostics: true });
+const SlothletWarning = api.slothlet.diag.SlothletWarning;
+console.log(SlothletWarning.captured); // array of captured warnings
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const SlothletWarning = api.slothlet.diag.SlothletWarning;
+  console.log(SlothletWarning.captured); // array of captured warnings
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', diagnostics: true });
+  const SlothletWarning = api.slothlet.diag.SlothletWarning;
+  console.log(SlothletWarning.captured); // array of captured warnings
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', diagnostics: true });
 const SlothletWarning = api.slothlet.diag.SlothletWarning;
 console.log(SlothletWarning.captured); // array of captured warnings
@@ -713,6 +1365,37 @@ Alias for <code>remove()</code>.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.clear({ type: 'before' });
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.clear({ type: 'before' });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.clear({ type: 'before' });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', hook: true });
 api.slothlet.hook.clear({ type: 'before' });
 ```
@@ -735,6 +1418,40 @@ Disable hooks matching a filter (empty = disable all).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.disable(); // disable all
+api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.disable(); // disable all
+  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.disable(); // disable all
+  api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', hook: true });
 api.slothlet.hook.disable(); // disable all
 api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks
@@ -758,6 +1475,43 @@ Enable hooks matching a filter (empty = enable all).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.disable();
+// later...
+api.slothlet.hook.enable(); // re-enable all
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.disable();
+  // later...
+  api.slothlet.hook.enable(); // re-enable all
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.disable();
+  // later...
+  api.slothlet.hook.enable(); // re-enable all
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', hook: true });
 api.slothlet.hook.disable();
 // later...
@@ -782,6 +1536,40 @@ List registered hooks matching a filter.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', hook: true });
+const allHooks = api.slothlet.hook.list();
+const beforeHooks = api.slothlet.hook.list({ type: 'before' });
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  const allHooks = api.slothlet.hook.list();
+  const beforeHooks = api.slothlet.hook.list({ type: 'before' });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  const allHooks = api.slothlet.hook.list();
+  const beforeHooks = api.slothlet.hook.list({ type: 'before' });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', hook: true });
 const allHooks = api.slothlet.hook.list();
 const beforeHooks = api.slothlet.hook.list({ type: 'before' });
@@ -805,8 +1593,45 @@ Remove hooks by ID or filter object (v2 alias for <code>remove()</code>).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
 const api = await slothlet({ dir: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.*', handler);
+const hookId = api.slothlet.hook.on('before:math.<em>', handler);
+api.slothlet.hook.off(hookId); // remove by ID
+api.slothlet.hook.off({ type: 'after' }); // remove by filter
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  const hookId = api.slothlet.hook.on('before:math.</em>', handler);
+  api.slothlet.hook.off(hookId); // remove by ID
+  api.slothlet.hook.off({ type: 'after' }); // remove by filter
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  const hookId = api.slothlet.hook.on('before:math.<em>', handler);
+  api.slothlet.hook.off(hookId); // remove by ID
+  api.slothlet.hook.off({ type: 'after' }); // remove by filter
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
+const api = await slothlet({ dir: './api', hook: true });
+const hookId = api.slothlet.hook.on('before:math.</em>', handler);
 api.slothlet.hook.off(hookId); // remove by ID
 api.slothlet.hook.off({ type: 'after' }); // remove by filter
 ```
@@ -831,8 +1656,45 @@ Register a hook handler for a type:pattern (e.g. <code>&quot;before:math.*&quot;
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
 const api = await slothlet({ dir: './api', hook: true });
-const hookId = api.slothlet.hook.on('before:math.*', ({ args }) =&gt; {
+const hookId = api.slothlet.hook.on('before:math.<em>', ({ args }) =&gt; {
+  console.log('math called with', args);
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  const hookId = api.slothlet.hook.on('before:math.</em>', ({ args }) =&gt; {
+    console.log('math called with', args);
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  const hookId = api.slothlet.hook.on('before:math.<em>', ({ args }) =&gt; {
+    console.log('math called with', args);
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
+const api = await slothlet({ dir: './api', hook: true });
+const hookId = api.slothlet.hook.on('before:math.</em>', ({ args }) =&gt; {
   console.log('math called with', args);
 });
 ```
@@ -855,8 +1717,39 @@ Remove hooks matching a filter (<code>id</code>, <code>type</code>, <code>patter
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
 const api = await slothlet({ dir: './api', hook: true });
-api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });
+api.slothlet.hook.remove({ type: 'before', pattern: 'math.<em>' });
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.remove({ type: 'before', pattern: 'math.</em>' });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', hook: true });
+  api.slothlet.hook.remove({ type: 'before', pattern: 'math.<em>' });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.remove({ type: 'before', pattern: 'math.</em>' });
 ```
 
 * * *
@@ -878,6 +1771,43 @@ Unsubscribe a handler from a lifecycle event.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const handler = () =&gt; console.log('shutdown');
+api.slothlet.lifecycle.on('shutdown', handler);
+api.slothlet.lifecycle.off('shutdown', handler);
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const handler = () =&gt; console.log('shutdown');
+  api.slothlet.lifecycle.on('shutdown', handler);
+  api.slothlet.lifecycle.off('shutdown', handler);
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const handler = () =&gt; console.log('shutdown');
+  api.slothlet.lifecycle.on('shutdown', handler);
+  api.slothlet.lifecycle.off('shutdown', handler);
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const handler = () =&gt; console.log('shutdown');
 api.slothlet.lifecycle.on('shutdown', handler);
@@ -903,6 +1833,43 @@ Subscribe to a lifecycle event (e.g. <code>&quot;materialized:complete&quot;</co
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.lifecycle.on('shutdown', () =&gt; {
+  console.log('Slothlet is shutting down');
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.lifecycle.on('shutdown', () =&gt; {
+    console.log('Slothlet is shutting down');
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.lifecycle.on('shutdown', () =&gt; {
+    console.log('Slothlet is shutting down');
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.lifecycle.on('shutdown', () =&gt; {
   console.log('Slothlet is shutting down');
@@ -923,6 +1890,40 @@ Get current materialization statistics (<code>{ total, materialized, remaining, 
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', mode: 'lazy' });
+const stats = api.slothlet.materialize.get();
+// { total: 5, materialized: 3, remaining: 2, percentage: 60 }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', mode: 'lazy' });
+  const stats = api.slothlet.materialize.get();
+  // { total: 5, materialized: 3, remaining: 2, percentage: 60 }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', mode: 'lazy' });
+  const stats = api.slothlet.materialize.get();
+  // { total: 5, materialized: 3, remaining: 2, percentage: 60 }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', mode: 'lazy' });
 const stats = api.slothlet.materialize.get();
 // { total: 5, materialized: 3, remaining: 2, percentage: 60 }
@@ -942,6 +1943,37 @@ Returns a Promise that resolves when all lazy folders are fully materialized.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api', mode: 'lazy' });
+await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api', mode: 'lazy' });
+  await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api', mode: 'lazy' });
+  await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api', mode: 'lazy' });
 await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded
 ```
@@ -960,6 +1992,40 @@ Get metadata for the function that invoked the current one (runtime-injected).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+// Inside an API module, get metadata of the calling function:
+const callerMeta = api.slothlet.metadata.caller(); // null if no caller
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  // Inside an API module, get metadata of the calling function:
+  const callerMeta = api.slothlet.metadata.caller(); // null if no caller
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  // Inside an API module, get metadata of the calling function:
+  const callerMeta = api.slothlet.metadata.caller(); // null if no caller
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 // Inside an API module, get metadata of the calling function:
 const callerMeta = api.slothlet.metadata.caller(); // null if no caller
@@ -983,6 +2049,43 @@ Get metadata for a specific function reference.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+const meta = api.slothlet.metadata.get(api.math.add);
+// { label: 'Addition' }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  const meta = api.slothlet.metadata.get(api.math.add);
+  // { label: 'Addition' }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  const meta = api.slothlet.metadata.get(api.math.add);
+  // { label: 'Addition' }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
 const meta = api.slothlet.metadata.get(api.math.add);
@@ -1008,6 +2111,43 @@ Remove per-function metadata (all keys or a specific key).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+api.slothlet.metadata.remove(api.math.add, 'label'); // remove key
+api.slothlet.metadata.remove(api.math.add); // remove all
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  api.slothlet.metadata.remove(api.math.add, 'label'); // remove key
+  api.slothlet.metadata.remove(api.math.add); // remove all
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  api.slothlet.metadata.remove(api.math.add, 'label'); // remove key
+  api.slothlet.metadata.remove(api.math.add); // remove all
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
 api.slothlet.metadata.remove(api.math.add, 'label'); // remove key
@@ -1033,6 +2173,40 @@ Remove path-level metadata for a given API path or moduleID.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions
+api.slothlet.metadata.removeFor('math'); // remove all metadata
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions
+  api.slothlet.metadata.removeFor('math'); // remove all metadata
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions
+  api.slothlet.metadata.removeFor('math'); // remove all metadata
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions
 api.slothlet.metadata.removeFor('math'); // remove all metadata
@@ -1052,6 +2226,43 @@ Get metadata for the currently-executing API function (runtime-injected).
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+// Inside api.math.add, get its own metadata:
+const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  // Inside api.math.add, get its own metadata:
+  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  // Inside api.math.add, get its own metadata:
+  const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
 // Inside api.math.add, get its own metadata:
@@ -1078,6 +2289,40 @@ Set per-function metadata by direct function reference.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+  api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
 api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);
@@ -1103,6 +2348,40 @@ Set metadata for all functions reachable under an API path or moduleID.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.setFor('math', 'category', 'utilities');
+api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.setFor('math', 'category', 'utilities');
+  api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.setFor('math', 'category', 'utilities');
+  api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.setFor('math', 'category', 'utilities');
 api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });
@@ -1127,6 +2406,40 @@ Set global metadata applied to every function in the instance.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.setGlobal('version', '2.0');
+// Every function now has metadata: { version: '2.0' }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.setGlobal('version', '2.0');
+  // Every function now has metadata: { version: '2.0' }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  api.slothlet.metadata.setGlobal('version', '2.0');
+  // Every function now has metadata: { version: '2.0' }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 api.slothlet.metadata.setGlobal('version', '2.0');
 // Every function now has metadata: { version: '2.0' }
@@ -1150,6 +2463,40 @@ Get ownership info for a specific API path.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const info = api.slothlet.owner.get('math.add');
+// { path: 'math.add', owners: Set { 'utils/math.mjs' } }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const info = api.slothlet.owner.get('math.add');
+  // { path: 'math.add', owners: Set { 'utils/math.mjs' } }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const info = api.slothlet.owner.get('math.add');
+  // { path: 'math.add', owners: Set { 'utils/math.mjs' } }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const info = api.slothlet.owner.get('math.add');
 // { path: 'math.add', owners: Set { 'utils/math.mjs' } }
@@ -1173,6 +2520,40 @@ Get the set of moduleIDs that own a given API path.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const owners = api.slothlet.ownership.get('math.add');
+// Set { 'utils/math.mjs' }
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const owners = api.slothlet.ownership.get('math.add');
+  // Set { 'utils/math.mjs' }
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const owners = api.slothlet.ownership.get('math.add');
+  // Set { 'utils/math.mjs' }
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const owners = api.slothlet.ownership.get('math.add');
 // Set { 'utils/math.mjs' }
@@ -1196,6 +2577,40 @@ Unregister a module from all ownership records.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.remove('math');
+api.slothlet.ownership.unregister('utils/math.mjs');
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.remove('math');
+  api.slothlet.ownership.unregister('utils/math.mjs');
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.api.remove('math');
+  api.slothlet.ownership.unregister('utils/math.mjs');
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.api.remove('math');
 api.slothlet.ownership.unregister('utils/math.mjs');
@@ -1219,6 +2634,37 @@ Reload the entire instance (re-scans the directory and recreates all module refe
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.reload(); // full reload
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.reload(); // full reload
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.reload(); // full reload
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.reload(); // full reload
 ```
@@ -1243,6 +2689,43 @@ Execute a callback with isolated per-request context data. Convenience alias for
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.run({ userId: 42 }, async () =&gt; {
+  return api.myModule.getUser();
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.run({ userId: 42 }, async () =&gt; {
+    return api.myModule.getUser();
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.run({ userId: 42 }, async () =&gt; {
+    return api.myModule.getUser();
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const result = await api.slothlet.run({ userId: 42 }, async () =&gt; {
   return api.myModule.getUser();
@@ -1267,6 +2750,46 @@ Execute a function with full structured per-request context options. Convenience
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.scope({
+  context: { userId: 42 },
+  fn: async () =&gt; api.myModule.getUser()
+});
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.scope({
+    context: { userId: 42 },
+    fn: async () =&gt; api.myModule.getUser()
+  });
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  const result = await api.slothlet.scope({
+    context: { userId: 42 },
+    fn: async () =&gt; api.myModule.getUser()
+  });
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 const result = await api.slothlet.scope({
   context: { userId: 42 },
@@ -1288,6 +2811,37 @@ Shut down the instance and release all resources.
 
 **Example**
 ```javascript
+// ESM usage via slothlet API
+import slothlet from &quot;@cldmv/slothlet&quot;;
+const api = await slothlet({ dir: './api' });
+await api.slothlet.shutdown();
+```
+
+**Example**
+```javascript
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import(&quot;@cldmv/slothlet&quot;);
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.shutdown();
+}
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () =&gt; {
+  ({ slothlet } = await import(&quot;@cldmv/slothlet&quot;));
+  const api = await slothlet({ dir: './api' });
+  await api.slothlet.shutdown();
+})();
+```
+
+**Example**
+```javascript
+// CJS usage via slothlet API (inside async function)
+const slothlet = require(&quot;@cldmv/slothlet&quot;);
 const api = await slothlet({ dir: './api' });
 await api.slothlet.shutdown();
 ```
