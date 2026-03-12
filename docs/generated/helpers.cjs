@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 20:08:07 -07:00 (1773284887)
+ *	@Last modified time: 2026-03-11 21:17:02 -07:00 (1773289022)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -2063,14 +2063,16 @@ const partials = {
 									if (isOpt) {
 										// Pattern: [name]: Type "description"  →  name inside brackets, optional quoted description
 										const m = p.match(/^\[([^\]]+)\]:\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
-										if (m) return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true, description: m[3] ? m[3].trim() : "" };
+										if (m)
+											return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true, description: m[3] ? m[3].trim() : "" };
 										// Fallback: bracket-only wrapping with no type annotation
 										const cleaned = p.replace(/^\[|\]$/g, "").trim();
 										return { name: cleaned, type: { names: ["*"] }, optional: true, description: "" };
 									}
 									// Pattern: name: Type "description"  →  type before optional quoted description
 									const m2 = p.match(/^([^:]+):\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
-									if (m2) return { name: m2[1].trim(), type: { names: [m2[2].trim()] }, optional: false, description: m2[3] ? m2[3].trim() : "" };
+									if (m2)
+										return { name: m2[1].trim(), type: { names: [m2[2].trim()] }, optional: false, description: m2[3] ? m2[3].trim() : "" };
 									const ci = p.indexOf(":");
 									if (ci > -1) {
 										return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false, description: "" };
@@ -2124,6 +2126,9 @@ const partials = {
 						output += `<a id="${pa}"></a>\n\n`;
 						output += `#### ${displayName}\n\n`;
 						if (_cleanDesc) output += `${_cleanDesc}\n\n`;
+						if (rawName.startsWith("slothlet.diag")) {
+							output += `> **Requires**: \`diagnostics: true\` in config\n\n`;
+						}
 						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
 
 						// Use already-parsed sig (extracted above for the heading)
@@ -2145,14 +2150,14 @@ const partials = {
 							output += "\n";
 						}
 
-if (_effectiveReturnType) {
-					output += `**Returns**: <code>${helper.escapeHtml(_effectiveReturnType)}</code>\n\n`;
-				}
+						if (_effectiveReturnType) {
+							output += `**Returns**: <code>${helper.escapeHtml(_effectiveReturnType)}</code>\n\n`;
+						}
 
-				if (_examples && _examples.length > 0) {
-					_examples.forEach((ex) => {
-						output += `**Example**\n\`\`\`javascript\n${ex}\n\`\`\`\n\n`;
-					});
+						if (_examples && _examples.length > 0) {
+							_examples.forEach((ex) => {
+								output += `**Example**\n\`\`\`javascript\n${ex}\n\`\`\`\n\n`;
+							});
 						}
 
 						output += `* * *\n\n`;
