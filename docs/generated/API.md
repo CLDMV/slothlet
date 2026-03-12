@@ -505,6 +505,8 @@ await api.slothlet.context.run({}, async () =&gt; {
 
 Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>). Only available when <code>diagnostics: true</code>.
 
+> **Requires**: `diagnostics: true` in config
+
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
 **Returns**: <code>Object</code>
@@ -524,6 +526,8 @@ const cacheData = api.slothlet.diag.caches.get();
 
 Return all moduleIDs currently in cache. Only available when <code>diagnostics: true</code>.
 
+> **Requires**: `diagnostics: true` in config
+
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
 **Returns**: <code>string[]</code>
@@ -542,6 +546,8 @@ const ids = api.slothlet.diag.caches.getAllModuleIDs();
 #### api.slothlet.diag.caches.has(moduleID) ⇒ <code>boolean</code>
 
 Check whether a cache entry exists for a given moduleID. Only available when <code>diagnostics: true</code>.
+
+> **Requires**: `diagnostics: true` in config
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -564,6 +570,8 @@ const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
 #### api.slothlet.diag.describe([showAll]) ⇒ <code>*</code>
 
 Describe API structure. Pass <code>true</code> to return the full API object; omit for top-level keys only. Only available when <code>diagnostics: true</code>.
+
+> **Requires**: `diagnostics: true` in config
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -588,6 +596,8 @@ const full = api.slothlet.diag.describe(true);
 
 Return the live bound API proxy object. Only available when <code>diagnostics: true</code>.
 
+> **Requires**: `diagnostics: true` in config
+
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
 **Returns**: <code>Object</code>
@@ -605,6 +615,8 @@ const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
 #### api.slothlet.diag.getOwnership() ⇒ <code>Object</code>
 
 Return ownership diagnostics for all registered API paths. Only available when <code>diagnostics: true</code>.
+
+> **Requires**: `diagnostics: true` in config
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -624,6 +636,8 @@ const ownership = api.slothlet.diag.getOwnership();
 
 Return a full diagnostic snapshot of current instance state. Only available when <code>diagnostics: true</code>.
 
+> **Requires**: `diagnostics: true` in config
+
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
 **Returns**: <code>Object</code>
@@ -642,6 +656,8 @@ console.log(snapshot.modules, snapshot.hooks);
 #### api.slothlet.diag.owner.get(apiPath) ⇒ <code>string[]</code>
 
 Get the owning moduleIDs for a specific API path. Only available when <code>diagnostics: true</code>.
+
+> **Requires**: `diagnostics: true` in config
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
@@ -665,6 +681,8 @@ const owners = api.slothlet.diag.owner.get('math.add');
 #### api.slothlet.diag.SlothletWarning() ⇒ <code>SlothletWarning</code>
 
 The <code>SlothletWarning</code> class — access <code>.captured</code> for warnings emitted during tests. Only available when <code>diagnostics: true</code>.
+
+> **Requires**: `diagnostics: true` in config
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
