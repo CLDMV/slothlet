@@ -967,13 +967,13 @@ export default slothlet;
  * @property {function(): void} shutdown - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first.
  * @property {object} slothlet - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
  * @property {object} slothlet.api - Runtime API mutation methods — availability controlled by `api.mutations` config option.
- * @property {Function} slothlet.api.add - Mount a new API module at runtime. %%sig: (apiPath: string, folderPath: string, [options]: Object): Promise.<void>%%
- * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path. %%sig: ([pathOrModuleId]: string|null, [options]: Object): Promise.<void>%%
- * @property {Function} slothlet.api.remove - Unmount an API module at runtime. %%sig: (pathOrModuleId: string): Promise.<void>%%
+ * @property {Function} slothlet.api.add - Mount a new API module at runtime. %%sig: (apiPath: string, folderPath: string, [options]: Object): Promise.<void>%% %%example: const api = await slothlet({ dir: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%%
+ * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path. %%sig: ([pathOrModuleId]: string|null, [options]: Object): Promise.<void>%% %%example: const api = await slothlet({ dir: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%%
+ * @property {Function} slothlet.api.remove - Unmount an API module at runtime. %%sig: (pathOrModuleId: string): Promise.<void>%% %%example: const api = await slothlet({ dir: './api' });|await api.slothlet.api.remove('utils.math');%%
  * @property {object} slothlet.context - Per-request context helpers.
  * @property {Function} slothlet.context.get - Get a value from the current per-request context store. %%sig: ([key]: string): *%%
  * @property {function(): Object} slothlet.context.inspect - Return a snapshot of the current context state (for debugging).
- * @property {Function} slothlet.context.run - Execute a callback with isolated context data merged in. %%sig: (contextData: Object, callback: function, args: *): *%%
+ * @property {Function} slothlet.context.run - Execute a callback with isolated context data merged in. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: const api = await slothlet({ dir: './api' });|const result = await api.slothlet.context.run({ userId: 42 }, async () => {|  return api.myModule.getUser(); // sees context.userId = 42|});%%
  * @property {Function} slothlet.context.scope - Execute a function with structured context options (`context`, `fn`, `args`, `merge`, `isolation`). %%sig: (options: Object): *%%
  * @property {Function} slothlet.context.set - Set a value in the current per-request context store. %%sig: (key: string, value: *): void%%
  * @property {object} [slothlet.diag] - Diagnostics namespace — only present when `diagnostics: true`. Do not enable in production.
@@ -997,11 +997,11 @@ export default slothlet;
  * @property {Function} slothlet.hook.enable - Enable hooks matching a filter (empty = enable all). %%sig: ([filter]: Object): void%%
  * @property {Function} slothlet.hook.list - List registered hooks matching a filter. %%sig: ([filter]: Object): Object[]%%
  * @property {Function} slothlet.hook.off - Remove hooks by ID or filter object (v2 alias for `remove()`). %%sig: (idOrFilter: string|Object): void%%
- * @property {Function} slothlet.hook.on - Register a hook handler for a type:pattern (e.g. `"before:math.*"`). %%sig: (typePattern: string, handler: function, [options]: Object): string%%
+ * @property {Function} slothlet.hook.on - Register a hook handler for a type:pattern (e.g. `"before:math.*"`). %%sig: (typePattern: string, handler: function, [options]: Object): string%% %%example: const api = await slothlet({ dir: './api', hook: true });|const hookId = api.slothlet.hook.on('before:math.*', ({ args }) => {|  console.log('math called with', args);|});%%
  * @property {Function} slothlet.hook.remove - Remove hooks matching a filter (`id`, `type`, `pattern`). %%sig: ([filter]: Object): void%%
  * @property {object} slothlet.lifecycle - Lifecycle event emitter.
  * @property {Function} slothlet.lifecycle.off - Unsubscribe a handler from a lifecycle event. %%sig: (event: string, handler: function): void%%
- * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`). %%sig: (event: string, handler: function): void%%
+ * @property {Function} slothlet.lifecycle.on - Subscribe to a lifecycle event (e.g. `"materialized:complete"`). %%sig: (event: string, handler: function): void%% %%example: const api = await slothlet({ dir: './api' });|api.slothlet.lifecycle.on('shutdown', () => {|  console.log('Slothlet is shutting down');|});%%
  * @property {object} slothlet.materialize - Lazy materialization tracking (meaningful only when `mode: "lazy"`).
  * @property {function(): Object} slothlet.materialize.get - Get current materialization statistics (`{ total, materialized, remaining, percentage }`).
  * @property {boolean} slothlet.materialize.materialized - `true` once all lazy folders have been fully loaded.
@@ -1021,7 +1021,7 @@ export default slothlet;
  * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path. %%sig: (apiPath: string): Set.<string>%%
  * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records. %%sig: (moduleID: string): void%%
  * @property {object} [slothlet.reference] - The `reference` object from config, merged onto the root API and accessible here.
- * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`. %%sig: ([options]: Object): Promise.<void>%%
+ * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`. %%sig: ([options]: Object): Promise.<void>%% %%example: const api = await slothlet({ dir: './api' });|await api.slothlet.reload(); // full reload%%
  * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`. %%sig: (contextData: Object, callback: function, args: *): *%%
  * @property {Function} slothlet.scope - Execute a function with full structured per-request context options. Convenience alias for `slothlet.context.scope()`. %%sig: (options: Object): *%%
  * @property {function(): Promise.<void>} slothlet.shutdown - Shut down the instance and release all resources.
