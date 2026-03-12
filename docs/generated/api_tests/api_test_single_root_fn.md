@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_single_root_fn](#api_test_single_root_fn)
   * [.helper](#api_test_single_root_fn~helper)
     * [.helperFn(value)](#api_test_single_root_fn_dot_helper_dot_helperFn) ⇒ <code>string</code>
   * [.root](#api_test_single_root_fn~root)
@@ -45,45 +44,6 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_single_root_fn"></a>
-
-### api_test_single_root_fn
-> <p><strong style="font-size: 1.1em;"><p>Single root function export modules for slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
-```
 
 
 

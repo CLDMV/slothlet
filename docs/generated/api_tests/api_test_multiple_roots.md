@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_multiple_roots](#api_test_multiple_roots)
   * [.conflict1](#api_test_multiple_roots~conflict1)
     * [.conflictingName()](#api_test_multiple_roots_dot_conflict1_dot_conflictingName) ⇒ <code>string</code>
   * [.conflict2](#api_test_multiple_roots~conflict2)
@@ -51,45 +50,6 @@ const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_mult
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_multiple_roots"></a>
-
-### api_test_multiple_roots
-> <p><strong style="font-size: 1.1em;"><p>Multiple-root conflict modules for slothlet collision and overwrite testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_multiple_roots = await slothlet({ dir: './api_tests/api_test_multiple_roots' });
-```
 
 
 

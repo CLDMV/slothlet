@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_mixed](#api_test_mixed)
   * [.interop](#api_test_mixed_dot_interop)
     * [.interopCjs()](#api_test_mixed_dot_interop_dot_interopCjs)
   * [mathCjs()](#api_test_mixed_dot_mathCjs)
@@ -46,45 +45,6 @@ const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_mixed"></a>
-
-### api_test_mixed
-> <p><strong style="font-size: 1.1em;"><p>Mixed ESM+CJS test modules for slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_mixed = await slothlet({ dir: './api_tests/api_test_mixed' });
-```
 
 
 

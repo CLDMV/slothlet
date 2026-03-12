@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_impl](#api_test_impl)
   * [.math](#api_test_impl~math)
     * [.add(a, b)](#api_test_impl_dot_math_dot_add) ⇒ <code>number</code>
     * [.collisionVersion](#api_test_impl_dot_math_dot_collisionVersion)
@@ -44,45 +43,6 @@ const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_impl"></a>
-
-### api_test_impl
-> <p><strong style="font-size: 1.1em;"><p>Alternative-implementation modules for collision resolution testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
-```
 
 
 

@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_primitives](#api_test_primitives)
   * [.boolval](#api_test_primitives~boolval)
   * [.numval](#api_test_primitives~numval)
   * [.strval](#api_test_primitives~strval)
@@ -44,45 +43,6 @@ const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitiv
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_primitives"></a>
-
-### api_test_primitives
-> <p><strong style="font-size: 1.1em;"><p>Primitive-value export modules for unified-wrapper __type branch coverage testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitives' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitives' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitives' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitives' });
-```
 
 
 

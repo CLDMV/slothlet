@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_modes_debug](#api_test_modes_debug)
   * [.logger](#api_test_modes_debug~logger)
     * [.loggerMeta](#api_test_modes_debug_dot_logger~loggerMeta)
     * [.logger](#api_test_modes_debug_dot_logger~logger)
@@ -66,45 +65,6 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug"></a>
-
-### api_test_modes_debug
-> <p><strong style="font-size: 1.1em;"><p>Modes-processor debug coverage modules for slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
-```
-
-
-
-* * *
-
 <a id="api_test_modes_debug~logger"></a>
 
 ### api_test_modes_debug.logger
@@ -118,7 +78,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.loggerMeta
 > 
-**Kind**: inner namespace of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: inner namespace of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -127,7 +87,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.logger
 > 
-**Kind**: inner namespace of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: inner namespace of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -136,7 +96,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.log(msg) ⇒ <code>string</code>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static method of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 | Param | Type | Default | Description |
@@ -156,7 +116,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.source
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static constant of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -165,7 +125,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.log(msg) ⇒ <code>string</code>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static method of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 | Param | Type | Default | Description |
@@ -185,7 +145,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.source
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static constant of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -194,7 +154,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### level.level.version
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static constant of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -203,7 +163,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### version.version.levels
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static constant of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -214,7 +174,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 > <p><strong style="font-size: 1.1em;"><p>Logger API module for modes-processor debug coverage testing.
 > Uses folder/folder.mjs pattern with a default export function (Case 2).</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static method of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -223,7 +183,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### module.exports.module.exports.level
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.logger</code>](#api_test_modes_debug_dot_logger)
+**Kind**: static constant of [<code>module.exports.module.exports.level</code>](#api_test_modes_debug_dot_logger)
 
 
 * * *
@@ -241,7 +201,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### string.string.stringUtils
 > 
-**Kind**: inner namespace of [<code>api_test_modes_debug.string</code>](#api_test_modes_debug_dot_string)
+**Kind**: inner namespace of [<code>pad.pad.string</code>](#api_test_modes_debug_dot_string)
 
 
 * * *
@@ -251,7 +211,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 ### string.string.pad(s, len) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Pad a string to a fixed length.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.string</code>](#api_test_modes_debug_dot_string)
+**Kind**: static method of [<code>pad.pad.string</code>](#api_test_modes_debug_dot_string)
 
 
 | Param | Type | Default | Description |
@@ -277,7 +237,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 > to trigger the Case 1 single-file-folder-detected path, including the
 > debug.modes guard for <code>categoryName === &quot;string&quot;</code>.</p></strong></p>
 > 
-**Kind**: static constant of [<code>api_test_modes_debug.string</code>](#api_test_modes_debug_dot_string)
+**Kind**: static constant of [<code>pad.pad.string</code>](#api_test_modes_debug_dot_string)
 
 
 * * *
@@ -286,7 +246,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### string.string.format(s) ⇒ <code>string</code>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.string</code>](#api_test_modes_debug_dot_string)
+**Kind**: static method of [<code>pad.pad.string</code>](#api_test_modes_debug_dot_string)
 
 
 | Param | Type | Default | Description |
@@ -306,7 +266,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### string.string.trim(s) ⇒ <code>string</code>
 > 
-**Kind**: static method of [<code>api_test_modes_debug.string</code>](#api_test_modes_debug_dot_string)
+**Kind**: static method of [<code>pad.pad.string</code>](#api_test_modes_debug_dot_string)
 
 
 | Param | Type | Default | Description |

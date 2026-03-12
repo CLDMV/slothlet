@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_multi_root_fn](#api_test_multi_root_fn)
   * [.doA](#api_test_multi_root_fn~doA)
     * [.doA()](#api_test_multi_root_fn_dot_doA) ⇒ <code>string</code>
   * [.doB](#api_test_multi_root_fn~doB)
@@ -50,45 +49,6 @@ const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi
 
 * * *
 
-<a id="api_test_multi_root_fn"></a>
-
-### api_test_multi_root_fn
-> <p><strong style="font-size: 1.1em;"><p>Multiple-root function modules for slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi_root_fn' });
-```
-
-
-
-* * *
-
 <a id="api_test_multi_root_fn~doA"></a>
 
 ### api_test_multi_root_fn.doA
@@ -103,7 +63,7 @@ const api_test_multi_root_fn = await slothlet({ dir: './api_tests/api_test_multi
 ### doA.doA() ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Returns result-a string.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_multi_root_fn.doA</code>](#api_test_multi_root_fn_dot_doA)
+**Kind**: static method of [<code>doA.doA</code>](#api_test_multi_root_fn_dot_doA)
 
 **Returns**:
 
@@ -134,7 +94,7 @@ api.doA(); // 'result-a'
 ### doB.doB() ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Returns result-b string.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_multi_root_fn.doB</code>](#api_test_multi_root_fn_dot_doB)
+**Kind**: static method of [<code>doB.doB</code>](#api_test_multi_root_fn_dot_doB)
 
 **Returns**:
 
