@@ -272,21 +272,37 @@ The root contains all loaded module exports plus the reserved <code>slothlet</co
 
 <a id="typedef_SlothletAPI_prop_destroy"></a>
 
-#### api.destroy()
+#### api.destroy() ⇒ <code>void</code>
 
 Like <code>shutdown()</code> but additionally invokes registered destroy hooks before teardown.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.destroy();
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_shutdown"></a>
 
-#### api.shutdown()
+#### api.shutdown() ⇒ <code>void</code>
 
 Convenience alias for <code>slothlet.shutdown()</code>. Shuts down the instance and invokes any user-provided shutdown hook first.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.shutdown();
+```
 
 * * *
 
@@ -376,15 +392,34 @@ Get a value from the current per-request context store.
 
 **Returns**: <code>*</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  const userId = api.slothlet.context.get('userId'); // 42
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-inspect"></a>
 
-#### api.slothlet.context.inspect()
+#### api.slothlet.context.inspect() ⇒ <code>Object</code>
 
 Return a snapshot of the current context state (for debugging).
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({ userId: 42 }, async () =&gt; {
+  const snapshot = api.slothlet.context.inspect();
+  // { data: { userId: 42 }, ... }
+});
+```
 
 * * *
 
@@ -428,6 +463,15 @@ Execute a function with structured context options (<code>context</code>, <code>
 
 **Returns**: <code>*</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.context.scope({
+  context: { userId: 42 },
+  fn: async () =&gt; api.myModule.getUser()
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-context-set"></a>
@@ -445,25 +489,51 @@ Set a value in the current per-request context store.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.context.run({}, async () =&gt; {
+  api.slothlet.context.set('traceId', 'abc-123');
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-caches-get"></a>
 
-#### api.slothlet.diag.caches.get()
+#### api.slothlet.diag.caches.get() ⇒ <code>Object</code>
 
 Get full cache diagnostic data (<code>{ totalCaches, caches[] }</code>). Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const cacheData = api.slothlet.diag.caches.get();
+// { totalCaches: 2, caches: [...] }
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-caches-getAllModuleIDs"></a>
 
-#### api.slothlet.diag.caches.getAllModuleIDs()
+#### api.slothlet.diag.caches.getAllModuleIDs() ⇒ <code>string[]</code>
 
 Return all moduleIDs currently in cache. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>string[]</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const ids = api.slothlet.diag.caches.getAllModuleIDs();
+// ['utils/math.mjs', 'utils/strings.mjs']
+```
 
 * * *
 
@@ -481,6 +551,12 @@ Check whether a cache entry exists for a given moduleID. Only available when <co
 
 **Returns**: <code>boolean</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const exists = api.slothlet.diag.caches.has('utils/math.mjs'); // true or false
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-describe"></a>
@@ -497,35 +573,67 @@ Describe API structure. Pass <code>true</code> to return the full API object; om
 
 **Returns**: <code>*</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const keys = api.slothlet.diag.describe();
+const full = api.slothlet.diag.describe(true);
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-getAPI"></a>
 
-#### api.slothlet.diag.getAPI()
+#### api.slothlet.diag.getAPI() ⇒ <code>Object</code>
 
 Return the live bound API proxy object. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const proxy = api.slothlet.diag.getAPI(); // the live bound API proxy
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-getOwnership"></a>
 
-#### api.slothlet.diag.getOwnership()
+#### api.slothlet.diag.getOwnership() ⇒ <code>Object</code>
 
 Return ownership diagnostics for all registered API paths. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const ownership = api.slothlet.diag.getOwnership();
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-inspect"></a>
 
-#### api.slothlet.diag.inspect()
+#### api.slothlet.diag.inspect() ⇒ <code>Object</code>
 
 Return a full diagnostic snapshot of current instance state. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const snapshot = api.slothlet.diag.inspect();
+console.log(snapshot.modules, snapshot.hooks);
+```
 
 * * *
 
@@ -543,15 +651,31 @@ Get the owning moduleIDs for a specific API path. Only available when <code>diag
 
 **Returns**: <code>string[]</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const owners = api.slothlet.diag.owner.get('math.add');
+// ['utils/math.mjs']
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-diag-SlothletWarning"></a>
 
-#### api.slothlet.diag.SlothletWarning()
+#### api.slothlet.diag.SlothletWarning() ⇒ <code>SlothletWarning</code>
 
 The <code>SlothletWarning</code> class — access <code>.captured</code> for warnings emitted during tests. Only available when <code>diagnostics: true</code>.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>SlothletWarning</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', diagnostics: true });
+const SlothletWarning = api.slothlet.diag.SlothletWarning;
+console.log(SlothletWarning.captured); // array of captured warnings
+```
 
 * * *
 
@@ -569,6 +693,12 @@ Alias for <code>remove()</code>.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.clear({ type: 'before' });
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-disable"></a>
@@ -584,6 +714,13 @@ Disable hooks matching a filter (empty = disable all).
 | [filter] | <code>Object</code> |  |
 
 **Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.disable(); // disable all
+api.slothlet.hook.disable({ type: 'before' }); // disable only before hooks
+```
 
 * * *
 
@@ -601,6 +738,14 @@ Enable hooks matching a filter (empty = enable all).
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.disable();
+// later...
+api.slothlet.hook.enable(); // re-enable all
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-list"></a>
@@ -617,6 +762,13 @@ List registered hooks matching a filter.
 
 **Returns**: <code>Object[]</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+const allHooks = api.slothlet.hook.list();
+const beforeHooks = api.slothlet.hook.list({ type: 'before' });
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-hook-off"></a>
@@ -632,6 +784,14 @@ Remove hooks by ID or filter object (v2 alias for <code>remove()</code>).
 | idOrFilter | <code>string|Object</code> |  |
 
 **Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+const hookId = api.slothlet.hook.on('before:math.*', handler);
+api.slothlet.hook.off(hookId); // remove by ID
+api.slothlet.hook.off({ type: 'after' }); // remove by filter
+```
 
 * * *
 
@@ -675,6 +835,12 @@ Remove hooks matching a filter (<code>id</code>, <code>type</code>, <code>patter
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', hook: true });
+api.slothlet.hook.remove({ type: 'before', pattern: 'math.*' });
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-lifecycle-off"></a>
@@ -691,6 +857,14 @@ Unsubscribe a handler from a lifecycle event.
 | handler | <code>function</code> |  |
 
 **Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const handler = () =&gt; console.log('shutdown');
+api.slothlet.lifecycle.on('shutdown', handler);
+api.slothlet.lifecycle.off('shutdown', handler);
+```
 
 * * *
 
@@ -721,31 +895,57 @@ api.slothlet.lifecycle.on('shutdown', () =&gt; {
 
 <a id="typedef_SlothletAPI_prop_slothlet-materialize-get"></a>
 
-#### api.slothlet.materialize.get()
+#### api.slothlet.materialize.get() ⇒ <code>Object</code>
 
 Get current materialization statistics (<code>{ total, materialized, remaining, percentage }</code>).
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', mode: 'lazy' });
+const stats = api.slothlet.materialize.get();
+// { total: 5, materialized: 3, remaining: 2, percentage: 60 }
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-materialize-wait"></a>
 
-#### api.slothlet.materialize.wait()
+#### api.slothlet.materialize.wait() ⇒ <code>Promise.&lt;void&gt;</code>
 
 Returns a Promise that resolves when all lazy folders are fully materialized.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
 
+**Returns**: <code>Promise.&lt;void&gt;</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api', mode: 'lazy' });
+await api.slothlet.materialize.wait(); // resolves when all lazy modules are loaded
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-caller"></a>
 
-#### api.slothlet.metadata.caller()
+#### api.slothlet.metadata.caller() ⇒ <code>Object|null</code>
 
 Get metadata for the function that invoked the current one (runtime-injected).
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>Object|null</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+// Inside an API module, get metadata of the calling function:
+const callerMeta = api.slothlet.metadata.caller(); // null if no caller
+```
 
 * * *
 
@@ -762,6 +962,14 @@ Get metadata for a specific function reference.
 | fn | <code>function</code> |  |
 
 **Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+const meta = api.slothlet.metadata.get(api.math.add);
+// { label: 'Addition' }
+```
 
 * * *
 
@@ -780,6 +988,14 @@ Remove per-function metadata (all keys or a specific key).
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+api.slothlet.metadata.remove(api.math.add, 'label'); // remove key
+api.slothlet.metadata.remove(api.math.add); // remove all
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-removeFor"></a>
@@ -797,15 +1013,32 @@ Remove path-level metadata for a given API path or moduleID.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.removeFor('math', 'label'); // remove 'label' from all math functions
+api.slothlet.metadata.removeFor('math'); // remove all metadata
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-self"></a>
 
-#### api.slothlet.metadata.self()
+#### api.slothlet.metadata.self() ⇒ <code>Object|null</code>
 
 Get metadata for the currently-executing API function (runtime-injected).
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>Object|null</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+// Inside api.math.add, get its own metadata:
+const ownMeta = api.slothlet.metadata.self(); // { label: 'Addition' }
+```
 
 * * *
 
@@ -825,6 +1058,13 @@ Set per-function metadata by direct function reference.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.set(api.math.add, 'label', 'Addition');
+api.slothlet.metadata.set(api.math.add, 'tags', ['math', 'util']);
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-setFor"></a>
@@ -843,6 +1083,13 @@ Set metadata for all functions reachable under an API path or moduleID.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.setFor('math', 'category', 'utilities');
+api.slothlet.metadata.setFor('math', { category: 'utils', version: '1.0' });
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-metadata-setGlobal"></a>
@@ -860,6 +1107,13 @@ Set global metadata applied to every function in the instance.
 
 **Returns**: <code>void</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+api.slothlet.metadata.setGlobal('version', '2.0');
+// Every function now has metadata: { version: '2.0' }
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-owner-get"></a>
@@ -875,6 +1129,13 @@ Get ownership info for a specific API path.
 | apiPath | <code>string</code> |  |
 
 **Returns**: <code>Object</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const info = api.slothlet.owner.get('math.add');
+// { path: 'math.add', owners: Set { 'utils/math.mjs' } }
+```
 
 * * *
 
@@ -892,6 +1153,13 @@ Get the set of moduleIDs that own a given API path.
 
 **Returns**: <code>Set.&lt;string&gt;</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const owners = api.slothlet.ownership.get('math.add');
+// Set { 'utils/math.mjs' }
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-ownership-unregister"></a>
@@ -907,6 +1175,13 @@ Unregister a module from all ownership records.
 | moduleID | <code>string</code> |  |
 
 **Returns**: <code>void</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.api.remove('math');
+api.slothlet.ownership.unregister('utils/math.mjs');
+```
 
 * * *
 
@@ -948,6 +1223,14 @@ Execute a callback with isolated per-request context data. Convenience alias for
 
 **Returns**: <code>*</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.run({ userId: 42 }, async () =&gt; {
+  return api.myModule.getUser();
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-scope"></a>
@@ -964,15 +1247,32 @@ Execute a function with full structured per-request context options. Convenience
 
 **Returns**: <code>*</code>
 
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+const result = await api.slothlet.scope({
+  context: { userId: 42 },
+  fn: async () =&gt; api.myModule.getUser()
+});
+```
+
 * * *
 
 <a id="typedef_SlothletAPI_prop_slothlet-shutdown"></a>
 
-#### api.slothlet.shutdown()
+#### api.slothlet.shutdown() ⇒ <code>Promise.&lt;void&gt;</code>
 
 Shut down the instance and release all resources.
 
 **Kind**: function property of [<code>SlothletAPI</code>](#typedef_SlothletAPI)
+
+**Returns**: <code>Promise.&lt;void&gt;</code>
+
+**Example**
+```javascript
+const api = await slothlet({ dir: './api' });
+await api.slothlet.shutdown();
+```
 
 * * *
 
