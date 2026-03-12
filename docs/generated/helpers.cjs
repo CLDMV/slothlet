@@ -1322,6 +1322,36 @@ const functions = {
 
 		// const allNestedItems = extractItemsRecursive(nestedStructure);
 		extractRecursive(nestedStructure);
+
+		// Register the base module root under both its bare name and the "module:" prefixed name
+		// so that @memberof module:X lookups in getParentDoclet can always resolve the parent.
+		//
+		// Background: jsdoc sub-module files that declare `@module api_test.advanced.selfObject`
+		// produce doclets with `normalizedMemberof = "module:api_test"` (the short unqualified name
+		// from the @module tag, NOT the full @alias path like "@cldmv/slothlet/api_tests/api_test").
+		// When simpleNameFromChain walks the parent chain for the "advanced" namespace, it calls
+		// getParentDoclet("module:api_test") which misses the docletData entry (stored under the
+		// full normalized id). Registering both "api_test" and "module:api_test" here closes that gap.
+		//
+		// We also correct the doclet's name to baseModuleName (rather than the internal callable
+		// function name e.g. "greet") so the chain produces "api_test.advanced" not "greet.advanced".
+		const baseModuleShortName = baseModuleName.split("/").pop();
+		{
+			const baseModRootItem = nestedStructure[baseModuleName];
+			if (baseModRootItem?.doclet) {
+				if (baseModRootItem.doclet.name !== baseModuleName) {
+					baseModRootItem.doclet.name = baseModuleName;
+				}
+				const moduleRootDoclet = baseModRootItem.doclet;
+				docletData.set(baseModuleName, moduleRootDoclet);
+				docletData.set("module:" + baseModuleName, moduleRootDoclet);
+				if (baseModuleShortName && baseModuleShortName !== baseModuleName) {
+					docletData.set(baseModuleShortName, moduleRootDoclet);
+					docletData.set("module:" + baseModuleShortName, moduleRootDoclet);
+				}
+			}
+		}
+
 		setSimpleNameRecursive(nestedStructure);
 
 		// Post-simpleName pass: if a root callable function (alias === baseModuleLongname) has
@@ -1770,7 +1800,11 @@ const partials = {
 		// const baseModuleAnchor = format.generateAnchor(baseModuleLongname);
 		output += `**Kind**: ${scope} ${kindDescription}`;
 		if (parentDoclet) {
-			output += ` of [<code>${parentDoclet.parentDocletLongName}</code>](#${parentDoclet.anchor})\n\n`;
+			// Prefer simpleName (set by setSimpleNameRecursive) over parentDocletLongName which is
+			// derived from normalizedLongname and may include internal callable names like
+			// "api_test.rootFunction.greet" instead of the clean module name "api_test".
+			const parentDisplayName = parentDoclet.simpleName || parentDoclet.parentDocletLongName;
+			output += ` of [<code>${parentDisplayName}</code>](#${parentDoclet.anchor})\n\n`;
 		}
 		return output;
 	},

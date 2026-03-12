@@ -7,20 +7,11 @@
 
 **Structure**
 
-[api_test_collections](#api_test_collections)
   * [collections](#api_test_collections_dot_collections)
 
 
 
 
-
-* * *
-
-<a id="api_test_collections"></a>
-
-### api_test_collections
-> <p><strong style="font-size: 1.1em;"><p>Test module containing Map and Set collections for proxy testing.</p></strong></p>
-> 
 
 * * *
 

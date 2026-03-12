@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_adb_test](#api_adb_test)
   * [.adb](#api_adb_test~adb)
     * [.initialize(host, port)](#api_adb_test_dot_adb_dot_initialize) ⇒ <code>Promise.&lt;void&gt;</code>
     * [.getClient()](#api_adb_test_dot_adb_dot_getClient) ⇒ <code>Object</code>
@@ -182,45 +181,6 @@ const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
 ```
 
 
-
-
-
-* * *
-
-<a id="api_adb_test"></a>
-
-### api_adb_test
-> <p><strong style="font-size: 1.1em;"><p>ADB API dummy modules for Android TV Remote slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_adb_test = await slothlet({ dir: './api_tests/api_adb_test' });
-```
 
 
 

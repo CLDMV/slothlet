@@ -117,17 +117,17 @@ const api_test_cjs = await slothlet({ dir: './api_tests/api_test_cjs' });
 
 <a id="api_test_cjs_dot_advanced"></a>
 
-### advanced
+### api_test_cjs.advanced
 > <p><strong style="font-size: 1.1em;">Auto-generated namespace for advanced components.</strong></p>
 > 
-**Kind**: static namespace of [<code></code>](#undefined)
+**Kind**: static namespace of [<code>api_test_cjs</code>](#api_test_cjs)
 
 
 * * *
 
 <a id="api_test_cjs_dot_advanced_dot_selfObject"></a>
 
-### advanced.selfObject
+### api_test_cjs.advanced.selfObject
 > <p><strong style="font-size: 1.1em;"><p>Advanced self-object API for testing CJS live-binding functionality.
 > Accessed as <code>api.advanced.selfObject</code> in the slothlet API.</p></strong></p>
 > 
@@ -173,7 +173,7 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 <a id="api_test_cjs_dot_advanced_dot_selfObject_dot_addViaSelf"></a>
 
-### advanced.selfObject.addViaSelf(a, b) ⇒ <code>number</code>
+### api_test_cjs.advanced.selfObject.addViaSelf(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Returns the result of self.math.add(a, b) using live-binding via runtime import.
 > Adds two numbers.</p></strong></p>
 > 
@@ -230,17 +230,17 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 <a id="api_test_cjs_dot_explicitDefaults"></a>
 
-### explicitDefaults
+### api_test_cjs.explicitDefaults
 > <p><strong style="font-size: 1.1em;">Auto-generated namespace for explicitDefaults components.</strong></p>
 > 
-**Kind**: static namespace of [<code></code>](#undefined)
+**Kind**: static namespace of [<code>api_test_cjs</code>](#api_test_cjs)
 
 
 * * *
 
 <a id="api_test_cjs_dot_explicitDefaults_dot_explicitDefault"></a>
 
-### explicitDefaults.explicitDefault
+### api_test_cjs.explicitDefaults.explicitDefault
 > <p><strong style="font-size: 1.1em;"><p>Calculator object with explicit default export.</p></strong></p>
 > 
 **Kind**: static constant of [<code>api_test_cjs.explicitDefaults</code>](#api_test_cjs_dot_explicitDefaults)
@@ -309,12 +309,12 @@ console.log(api_test_cjs.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 <a id="api_test_cjs_dot_math"></a>
 
-### math
+### api_test_cjs.math
 > <p><strong style="font-size: 1.1em;"><p>Math API object with basic arithmetic operations for testing auto-flattening (CJS version).
 > This module tests slothlet's ability to flatten single-file folder structures.
 > Accessed as <code>api.math</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static constant of [<code></code>](#undefined)
+**Kind**: static constant of [<code>api_test_cjs</code>](#api_test_cjs)
 
 **Example**
 ```js
@@ -360,7 +360,7 @@ console.log(api_test_cjs.math.multiply(2, 3)); // 6
 
 <a id="api_test_cjs_dot_math_dot_add"></a>
 
-### math.add(a, b) ⇒ <code>number</code>
+### api_test_cjs.math.add(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Adds two numbers.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.math</code>](#api_test_cjs_dot_math)
@@ -417,7 +417,7 @@ console.log(api_test_cjs.math.add(2, 3)); // 5
 
 <a id="api_test_cjs_dot_math_dot_multiply"></a>
 
-### math.multiply(a, b) ⇒ <code>number</code>
+### api_test_cjs.math.multiply(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Multiplies two numbers.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.math</code>](#api_test_cjs_dot_math)
@@ -474,11 +474,11 @@ console.log(api_test_cjs.math.multiply(2, 3)); // 6
 
 <a id="api_test_cjs_dot_shout"></a>
 
-### shout(name) ⇒ <code>string</code>
+### api_test_cjs.shout(name) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Shouts a greeting.
 > Accessed as <code>api.rootFunctionShout()</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method of [<code>api_test_cjs</code>](#api_test_cjs)
 
 
 | Param | Type | Default | Description |
@@ -531,12 +531,12 @@ console.log(api_test_cjs.rootFunctionShout("World")); // 'HELLO, WORLD!'
 
 <a id="api_test_cjs_dot_rootMath"></a>
 
-### rootMath
+### api_test_cjs.rootMath
 > <p><strong style="font-size: 1.1em;"><p>Math API object with basic arithmetic operations (CJS version).
 > Provides add and multiply functions for testing mathematical operations in slothlet.
 > Accessed as <code>api.rootMath</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static constant of [<code></code>](#undefined)
+**Kind**: static constant of [<code>api_test_cjs</code>](#api_test_cjs)
 
 **Example**
 ```js
@@ -582,7 +582,7 @@ console.log(api_test_cjs.rootMath.multiply(2, 3)); // 6
 
 <a id="api_test_cjs_dot_rootMath_dot_add"></a>
 
-### rootMath.add(a, b) ⇒ <code>number</code>
+### api_test_cjs.rootMath.add(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Adds two numbers.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.rootMath</code>](#api_test_cjs_dot_rootMath)
@@ -639,7 +639,7 @@ console.log(api_test_cjs.rootMath.add(2, 3)); // 5
 
 <a id="api_test_cjs_dot_rootMath_dot_multiply"></a>
 
-### rootMath.multiply(a, b) ⇒ <code>number</code>
+### api_test_cjs.rootMath.multiply(a, b) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Multiplies two numbers.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.rootMath</code>](#api_test_cjs_dot_rootMath)
@@ -696,12 +696,12 @@ console.log(api_test_cjs.rootMath.multiply(2, 3)); // 6
 
 <a id="api_test_cjs_dot_string"></a>
 
-### string
+### api_test_cjs.string
 > <p><strong style="font-size: 1.1em;"><p>String API object with string manipulation operations for testing auto-flattening (CJS version).
 > This module tests slothlet's ability to flatten single-file folder structures.
 > Accessed as <code>api.string</code> in the slothlet API.</p></strong></p>
 > 
-**Kind**: static constant of [<code></code>](#undefined)
+**Kind**: static constant of [<code>api_test_cjs</code>](#api_test_cjs)
 
 **Example**
 ```js
@@ -747,7 +747,7 @@ console.log(api_test_cjs.string.reverse("abc")); // 'cba'
 
 <a id="api_test_cjs_dot_string_dot_upper"></a>
 
-### string.upper(str) ⇒ <code>string</code>
+### api_test_cjs.string.upper(str) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Converts a string to uppercase.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.string</code>](#api_test_cjs_dot_string)
@@ -803,7 +803,7 @@ console.log(api_test_cjs.string.upper("abc")); // 'ABC'
 
 <a id="api_test_cjs_dot_string_dot_reverse"></a>
 
-### string.reverse(str) ⇒ <code>string</code>
+### api_test_cjs.string.reverse(str) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Reverses a string.</p></strong></p>
 > 
 **Kind**: inner method of [<code>api_test_cjs.string</code>](#api_test_cjs_dot_string)

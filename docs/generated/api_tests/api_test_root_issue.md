@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_root_issue](#api_test_root_issue)
   * [.config](#api_test_root_issue~config)
     * [.config](#api_test_root_issue_dot_config)
     * [.defaults](#api_test_root_issue_dot_config_dot_config_dot_defaults)
@@ -93,45 +92,6 @@ const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_iss
 
 * * *
 
-<a id="api_test_root_issue"></a>
-
-### api_test_root_issue
-> <p><strong style="font-size: 1.1em;"><p>Root-issue reproduction modules for slothlet API testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
-```
-
-
-
-* * *
-
 <a id="api_test_root_issue~config"></a>
 
 ### api_test_root_issue.config
@@ -146,7 +106,7 @@ const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_iss
 ### config.config
 > <p><strong style="font-size: 1.1em;"><p>Config API object containing all configuration functions</p></strong></p>
 > 
-**Kind**: static constant of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static constant of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 * * *
@@ -156,7 +116,7 @@ const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_iss
 ### config.config.defaults
 > <p><strong style="font-size: 1.1em;"><p>Default configuration values for TV control</p></strong></p>
 > 
-**Kind**: static property of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static property of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 * * *
@@ -167,7 +127,7 @@ const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_iss
 > <p><strong style="font-size: 1.1em;"><p>Retrieves configuration from the TV Control instance. Supports dot notation
 > for nested values like 'lg.activeKeycode' or 'state.refreshDelayMs'.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -202,7 +162,7 @@ const keycode = get('lg.activeKeycode');
 > <p><strong style="font-size: 1.1em;"><p>Updates configuration either by merging an object or setting a specific key.
 > Supports dot notation for nested keys like 'lg.activeKeycode'.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -231,7 +191,7 @@ update('lg.activeKeycode', '12345678');
 ### config.config.set(key, value)
 > <p><strong style="font-size: 1.1em;"><p>Convenience function for setting a single configuration value.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -255,7 +215,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.getDefaultPort(manufacturer) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Get the default port for a specific manufacturer</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -276,7 +236,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.validate(config, required) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Validate that required configuration is present</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -298,7 +258,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.merge(userConfig, manufacturer) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Get a merged configuration with defaults</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -320,7 +280,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.createManufacturerConfig(manufacturer, options) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Create a manufacturer-specific configuration</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -524,7 +484,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config
 > <p><strong style="font-size: 1.1em;"><p>Config API object containing all configuration functions</p></strong></p>
 > 
-**Kind**: static constant of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static constant of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 * * *
@@ -534,7 +494,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config
 > <p><strong style="font-size: 1.1em;"><p>Config API object containing all configuration functions</p></strong></p>
 > 
-**Kind**: static constant of [<code>api_test_root_issue.config</code>](#api_test_root_issue_dot_config)
+**Kind**: static constant of [<code>config.config</code>](#api_test_root_issue_dot_config)
 
 
 * * *
@@ -544,7 +504,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.defaults
 > <p><strong style="font-size: 1.1em;"><p>Default configuration values for TV control</p></strong></p>
 > 
-**Kind**: static property of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static property of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 * * *
@@ -555,7 +515,7 @@ set('lg.activeKeycode', '87654321');
 > <p><strong style="font-size: 1.1em;"><p>Retrieves configuration from the TV Control instance. Supports dot notation
 > for nested values like 'lg.activeKeycode' or 'state.refreshDelayMs'.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -590,7 +550,7 @@ const keycode = get('lg.activeKeycode');
 > <p><strong style="font-size: 1.1em;"><p>Updates configuration either by merging an object or setting a specific key.
 > Supports dot notation for nested keys like 'lg.activeKeycode'.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -619,7 +579,7 @@ update('lg.activeKeycode', '12345678');
 ### config.config.set(key, value)
 > <p><strong style="font-size: 1.1em;"><p>Convenience function for setting a single configuration value.</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -643,7 +603,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.getDefaultPort(manufacturer) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Get the default port for a specific manufacturer</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -664,7 +624,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.validate(config, required) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Validate that required configuration is present</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -686,7 +646,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.merge(userConfig, manufacturer) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Get a merged configuration with defaults</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |
@@ -708,7 +668,7 @@ set('lg.activeKeycode', '87654321');
 ### config.config.createManufacturerConfig(manufacturer, options) ⇒ <code>Object</code>
 > <p><strong style="font-size: 1.1em;"><p>Create a manufacturer-specific configuration</p></strong></p>
 > 
-**Kind**: static method of [<code>api_test_root_issue.subfolder.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
+**Kind**: static method of [<code>config.config</code>](#api_test_root_issue_dot_subfolder_dot_config)
 
 
 | Param | Type | Default | Description |

@@ -7,7 +7,6 @@
 
 **Structure**
 
-[api_test_builtin_types](#api_test_builtin_types)
   * [.types](#api_test_builtin_types~types)
     * [.getVersion()](#api_test_builtin_types_dot_types_dot_getVersion)
 
@@ -43,45 +42,6 @@ const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_built
 ```
 
 
-
-
-
-* * *
-
-<a id="api_test_builtin_types"></a>
-
-### api_test_builtin_types
-> <p><strong style="font-size: 1.1em;"><p>Built-in type export modules for type-handling coverage testing.</p></strong></p>
-> 
-**Example**
-```js
-// ESM usage via slothlet API
-import slothlet from "@cldmv/slothlet";
-const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
-```
-**Example**
-```js
-// ESM usage via slothlet API (inside async function)
-async function example() {
-  const { default: slothlet } = await import("@cldmv/slothlet");
-  const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
-}
-```
-**Example**
-```js
-// CJS usage via slothlet API (top-level)
-let slothlet;
-(async () => {
-  ({ slothlet } = await import("@cldmv/slothlet"));
-  const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
-})();
-```
-**Example**
-```js
-// CJS usage via slothlet API (inside async function)
-const slothlet = require("@cldmv/slothlet");
-const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
-```
 
 
 
