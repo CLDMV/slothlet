@@ -753,8 +753,6 @@ for (const filePath of files) {
 	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
 	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
 	const translateCallPattern = /\btranslate\(\s*["']([A-Z_]+)["']/g;
-	// Match key: "DEBUG_MODE_..." / key: 'FLATTEN_REASON_...' - object property in this.debug() calls
-	const debugKeyPattern = /\bkey:\s*["']([A-Z_]+)["']/g;
 	let match;
 	while ((match = tCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
@@ -762,8 +760,29 @@ for (const filePath of files) {
 	while ((match = translateCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
 	}
-	while ((match = debugKeyPattern.exec(content)) !== null) {
-		directTranslationUsage.add(match[1]);
+	// Extract key: "KEY" from .debug() calls using balanced-paren extraction so property values
+	// that contain nested {} (e.g. `Object.keys(impl || {})`) don't break detection.
+	// Anchored to .debug( so only debug call objects are scanned — not unrelated key: properties.
+	const debugCallAnchor = /\.debug\(/g;
+	let debugAnchorMatch;
+	while ((debugAnchorMatch = debugCallAnchor.exec(content)) !== null) {
+		const openParen = debugAnchorMatch.index + debugAnchorMatch[0].length - 1;
+		let depth = 0;
+		let end = -1;
+		for (let i = openParen; i < content.length; i++) {
+			if (content[i] === "(") depth++;
+			else if (content[i] === ")") {
+				depth--;
+				if (depth === 0) {
+					end = i;
+					break;
+				}
+			}
+		}
+		if (end === -1) continue;
+		const callBody = content.slice(openParen + 1, end);
+		const keyInCall = /\bkey:\s*["']([A-Z_]+)["']/.exec(callBody);
+		if (keyInCall) directTranslationUsage.add(keyInCall[1]);
 	}
 }
 
