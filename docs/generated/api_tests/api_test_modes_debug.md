@@ -7,9 +7,9 @@
 
 **Structure**
 
-  * [.logger](#api_test_modes_debug~logger)
-    * [.loggerMeta](#api_test_modes_debug_dot_logger~loggerMeta)
-    * [.logger](#api_test_modes_debug_dot_logger~logger)
+  * [.logger](#api_test_modes_debug_logger)
+    * [.loggerMeta](#api_test_modes_debug_dot_logger_loggerMeta)
+    * [.logger](#api_test_modes_debug_dot_logger_logger)
       * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code>string</code>
       * [.source](#api_test_modes_debug_dot_logger_dot_source)
     * [.log(msg)](#api_test_modes_debug_dot_logger_dot_log) ⇒ <code>string</code>
@@ -18,13 +18,13 @@
     * [.levels](#api_test_modes_debug_dot_logger)
     * [.module.exports()](#api_test_modes_debug_dot_logger)
     * [.level](#api_test_modes_debug_dot_logger)
-  * [.string](#api_test_modes_debug~string)
-    * [.stringUtils](#api_test_modes_debug_dot_string~stringUtils)
+  * [.string](#api_test_modes_debug_string)
+    * [.stringUtils](#api_test_modes_debug_dot_string_stringUtils)
     * [.pad(s, len)](#api_test_modes_debug_dot_string) ⇒ <code>string</code>
     * [.string](#api_test_modes_debug_dot_string)
     * [.format(s)](#api_test_modes_debug_dot_string_dot_string_dot_format) ⇒ <code>string</code>
     * [.trim(s)](#api_test_modes_debug_dot_string_dot_string_dot_trim) ⇒ <code>string</code>
-  * [.utils](#api_test_modes_debug~utils)
+  * [.utils](#api_test_modes_debug_utils)
     * [.greet(name)](#api_test_modes_debug_dot_utils_dot_greet) ⇒ <code>string</code>
     * [.add(a, b)](#api_test_modes_debug_dot_utils_dot_add) ⇒ <code>number</code>
 
@@ -65,7 +65,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug~logger"></a>
+<a id="api_test_modes_debug_logger"></a>
 
 ### api_test_modes_debug.logger
 > 
@@ -74,7 +74,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug_dot_logger~loggerMeta"></a>
+<a id="api_test_modes_debug_dot_logger_loggerMeta"></a>
 
 ### level.level.loggerMeta
 > 
@@ -83,7 +83,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug_dot_logger~logger"></a>
+<a id="api_test_modes_debug_dot_logger_logger"></a>
 
 ### level.level.logger
 > 
@@ -107,6 +107,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 **Returns**:
 
 - <code>string</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.logger.log('message');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.logger.log('message');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.logger.log('message');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.logger.log('message');
+```
 
 
 
@@ -136,6 +171,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 **Returns**:
 
 - <code>string</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.logger.log('message');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.logger.log('message');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.logger.log('message');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.logger.log('message');
+```
 
 
 
@@ -188,7 +258,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug~string"></a>
+<a id="api_test_modes_debug_string"></a>
 
 ### api_test_modes_debug.string
 > 
@@ -197,7 +267,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 * * *
 
-<a id="api_test_modes_debug_dot_string~stringUtils"></a>
+<a id="api_test_modes_debug_dot_string_stringUtils"></a>
 
 ### string.string.stringUtils
 > 
@@ -223,6 +293,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 **Returns**:
 
 - <code>string</code> <p>Padded string.</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.string-utils.pad('value', 1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.string-utils.pad('value', 1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.string-utils.pad('value', 1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.string-utils.pad('value', 1);
+```
 
 
 
@@ -259,6 +364,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 - <code>string</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.format('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.format('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.format('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.format('value');
+```
+
+
 
 * * *
 
@@ -279,10 +419,45 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 - <code>string</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.trim('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.trim('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.string.trim('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.string.trim('value');
+```
+
+
 
 * * *
 
-<a id="api_test_modes_debug~utils"></a>
+<a id="api_test_modes_debug_utils"></a>
 
 ### api_test_modes_debug.utils
 > 
@@ -296,7 +471,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 ### greet(name) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>General utility functions for modes-processor debug coverage testing.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -309,6 +484,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 - <code>string</code> <p></p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.utils.greet('myName');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.utils.greet('myName');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.utils.greet('myName');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.utils.greet('myName');
+```
+
+
 
 * * *
 
@@ -316,7 +526,7 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 
 ### add(a, b) ⇒ <code>number</code>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -328,6 +538,41 @@ const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_d
 **Returns**:
 
 - <code>number</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.utils.add(1, 1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.utils.add(1, 1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+  api_test_modes_debug.utils.add(1, 1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_modes_debug = await slothlet({ dir: './api_tests/api_test_modes_debug' });
+api_test_modes_debug.utils.add(1, 1);
+```
 
 
 

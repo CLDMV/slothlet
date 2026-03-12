@@ -7,9 +7,9 @@
 
 **Structure**
 
-  * [.boolval](#api_test_primitives~boolval)
-  * [.numval](#api_test_primitives~numval)
-  * [.strval](#api_test_primitives~strval)
+  * [.boolval](#api_test_primitives_boolval)
+  * [.numval](#api_test_primitives_numval)
+  * [.strval](#api_test_primitives_strval)
 
 
 **Example**
@@ -48,7 +48,7 @@ const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitiv
 
 * * *
 
-<a id="api_test_primitives~boolval"></a>
+<a id="api_test_primitives_boolval"></a>
 
 ### api_test_primitives.boolval
 > 
@@ -57,7 +57,7 @@ const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitiv
 
 * * *
 
-<a id="api_test_primitives~numval"></a>
+<a id="api_test_primitives_numval"></a>
 
 ### api_test_primitives.numval
 > 
@@ -66,7 +66,7 @@ const api_test_primitives = await slothlet({ dir: './api_tests/api_test_primitiv
 
 * * *
 
-<a id="api_test_primitives~strval"></a>
+<a id="api_test_primitives_strval"></a>
 
 ### api_test_primitives.strval
 > 

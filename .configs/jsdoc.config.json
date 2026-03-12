@@ -1,7 +1,7 @@
 {
 	"source": {
 		"includePattern": ".+\\.(mjs|cjs|js)(doc|x)?$",
-		"excludePattern": "(.config|dist|build|node_modules)/"
+		"excludePattern": "(\\.config|dist|build|node_modules)/"
 	},
 	"tags": { "dictionaries": ["jsdoc", "closure"] },
 	"plugins": ["plugins/markdown"],

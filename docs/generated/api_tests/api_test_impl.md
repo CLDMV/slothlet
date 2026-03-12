@@ -7,7 +7,7 @@
 
 **Structure**
 
-  * [.math](#api_test_impl~math)
+  * [.math](#api_test_impl_math)
     * [.add(a, b)](#api_test_impl_dot_math_dot_add) ⇒ <code>number</code>
     * [.collisionVersion](#api_test_impl_dot_math_dot_collisionVersion)
 
@@ -48,7 +48,7 @@ const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
 
 * * *
 
-<a id="api_test_impl~math"></a>
+<a id="api_test_impl_math"></a>
 
 ### api_test_impl.math
 > 
@@ -63,7 +63,7 @@ const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
 > <p><strong style="font-size: 1.1em;"><p>Adds two numbers together with a +2000 offset.
 > Used to test collision resolution — this implementation co-exists with other math modules.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -82,6 +82,39 @@ const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
 const api = await slothlet({ dir: './api_tests/api_test_impl' });
 api.math.add(1, 2); // 2003
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
+api_test_impl.math.add(1, 1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
+  api_test_impl.math.add(1, 1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
+  api_test_impl.math.add(1, 1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_impl = await slothlet({ dir: './api_tests/api_test_impl' });
+api_test_impl.math.add(1, 1);
+```
 
 
 
@@ -92,7 +125,7 @@ api.math.add(1, 2); // 2003
 ### collisionVersion
 > <p><strong style="font-size: 1.1em;"><p>Version identifier for collision detection.</p></strong></p>
 > 
-**Kind**: static constant of [<code></code>](#undefined)
+**Kind**: static constant
 
 
 

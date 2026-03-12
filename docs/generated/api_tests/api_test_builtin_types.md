@@ -7,8 +7,8 @@
 
 **Structure**
 
-  * [.types](#api_test_builtin_types~types)
-    * [.getVersion()](#api_test_builtin_types_dot_types_dot_getVersion)
+  * [.types](#api_test_builtin_types_types)
+    * [.getVersion()](#api_test_builtin_types_dot_types_dot_getVersion) ⇒ <code>Promise.&lt;*&gt;</code>
 
 
 **Example**
@@ -47,7 +47,7 @@ const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_built
 
 * * *
 
-<a id="api_test_builtin_types~types"></a>
+<a id="api_test_builtin_types_types"></a>
 
 ### api_test_builtin_types.types
 > 
@@ -58,10 +58,50 @@ const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_built
 
 <a id="api_test_builtin_types_dot_types_dot_getVersion"></a>
 
-### getVersion()
-> <p><strong style="font-size: 1.1em;"><p>A plain async function to confirm that a normal callable also works in the same module.</p></strong></p>
+### getVersion() ⇒ <code>Promise.&lt;*&gt;</code>
+> <p><strong style="font-size: 1.1em;"><p>getVersion.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
+
+**Returns**:
+
+- <code>Promise.&lt;*&gt;</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+await api_test_builtin_types.types.getVersion();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+  await api_test_builtin_types.types.getVersion();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+  await api_test_builtin_types.types.getVersion();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_builtin_types = await slothlet({ dir: './api_tests/api_test_builtin_types' });
+await api_test_builtin_types.types.getVersion();
+```
+
 
 
 

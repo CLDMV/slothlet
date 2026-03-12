@@ -376,7 +376,9 @@ const format = {
 	// Format type for table - with HTML entities
 	typeForTable(type) {
 		if (!type || !type.names || !Array.isArray(type.names)) return "";
-		let typeStr = type.names.join(" | ");
+		// Escape | within each type name AND use \| as join separator so pipes don't split table columns
+		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
+		let typeStr = type.names.map((n) => n.replace(/\|/g, "\\|")).join(" \\| ");
 		// Convert < and > to HTML entities like the original
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
@@ -430,7 +432,9 @@ const format = {
 			return typeName;
 		});
 
-		let typeStr = typeNames.join(" | ");
+		// Escape | within each result entry and use \| as separator so pipes don't split table columns
+		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
+		let typeStr = typeNames.map((n) => n.replace(/\|/g, "\\|")).join(" \\| ");
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
 	},
@@ -530,6 +534,7 @@ const format = {
 			.replace(/\//g, "_slash_") // / to _slash_ (preserves meaning)
 			.replace(/\./g, "_dot_") // . to _dot_ (periods might cause ESLint issues)
 			.replace(/#/g, "_hash_") // # to _hash_ (# is invalid in anchor IDs)
+			.replace(/~/g, "_") // ~ to _ (tilde is invalid in HTML anchor IDs)
 			.replace(/\s+/g, "_") // spaces to underscores
 			.replace(/[<>'"&]/g, "") // Remove only truly problematic HTML characters
 			.replace(/_+/g, "_"); // remove duplicate underscores
@@ -1807,7 +1812,15 @@ const partials = {
 			// derived from normalizedLongname and may include internal callable names like
 			// "api_test.rootFunction.greet" instead of the clean module name "api_test".
 			const parentDisplayName = parentDoclet.simpleName || parentDoclet.parentDocletLongName;
-			output += ` of [<code>${parentDisplayName}</code>](#${parentDoclet.anchor})\n\n`;
+			const parentAnchor = parentDoclet.anchor;
+			// Only emit the "of [parent]" link if we have both a display name and a valid anchor.
+			// getParentDoclet always returns an object, so parentDoclet may have undefined fields
+			// when the parent wasn't fully processed through applyAnchor/applySimpleName.
+			if (parentDisplayName && parentAnchor) {
+				output += ` of [<code>${parentDisplayName}</code>](#${parentAnchor})\n\n`;
+			} else {
+				output += "\n\n";
+			}
 		}
 		return output;
 	},
@@ -2176,7 +2189,7 @@ const partials = {
 					}
 					tableProps.forEach((prop) => {
 						const name = prop.optional ? `[${prop.name}]` : prop.name;
-						const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
+						const type = prop.type ? `<code>${prop.type.names.join(" \\| ")}</code>` : "";
 						let description = prop.description ? format.escapeForTable(prop.description) : "";
 						const pa = propAnchorFor(prop);
 						if (hasDefaults) {

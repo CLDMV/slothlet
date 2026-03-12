@@ -7,9 +7,9 @@
 
 **Structure**
 
-  * [.helper](#api_test_single_root_fn~helper)
+  * [.helper](#api_test_single_root_fn_helper)
     * [.helperFn(value)](#api_test_single_root_fn_dot_helper_dot_helperFn) ⇒ <code>string</code>
-  * [.root](#api_test_single_root_fn~root)
+  * [.root](#api_test_single_root_fn_root)
     * [.rootFn(input)](#api_test_single_root_fn_dot_root_dot_rootFn) ⇒ <code>string</code>
 
 
@@ -49,7 +49,7 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 
 * * *
 
-<a id="api_test_single_root_fn~helper"></a>
+<a id="api_test_single_root_fn_helper"></a>
 
 ### api_test_single_root_fn.helper
 > 
@@ -63,7 +63,7 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 ### helperFn(value) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Named export helper functions.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -76,10 +76,45 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 - <code>string</code> <p>Processed value</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+api_test_single_root_fn.helper.helperFn('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+  api_test_single_root_fn.helper.helperFn('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+  api_test_single_root_fn.helper.helperFn('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+api_test_single_root_fn.helper.helperFn('value');
+```
+
+
 
 * * *
 
-<a id="api_test_single_root_fn~root"></a>
+<a id="api_test_single_root_fn_root"></a>
 
 ### api_test_single_root_fn.root
 > 
@@ -93,7 +128,7 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 ### rootFn(input) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Single root function - acts as the callable API root.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -110,6 +145,39 @@ const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_sing
 ```js
 const api = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
 api.root('world'); // 'root:world'
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+api_test_single_root_fn.root.rootFn();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+  api_test_single_root_fn.root.rootFn();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+  api_test_single_root_fn.root.rootFn();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_single_root_fn = await slothlet({ dir: './api_tests/api_test_single_root_fn' });
+api_test_single_root_fn.root.rootFn();
 ```
 
 

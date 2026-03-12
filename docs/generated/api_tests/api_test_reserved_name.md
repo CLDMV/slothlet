@@ -7,7 +7,7 @@
 
 **Structure**
 
-  * [.slothlet](#api_test_reserved_name~slothlet)
+  * [.slothlet](#api_test_reserved_name_slothlet)
     * [.greet()](#api_test_reserved_name_dot_slothlet_dot_greet) ⇒ <code>string</code>
 
 
@@ -47,7 +47,7 @@ const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reser
 
 * * *
 
-<a id="api_test_reserved_name~slothlet"></a>
+<a id="api_test_reserved_name_slothlet"></a>
 
 ### api_test_reserved_name.slothlet
 > 
@@ -61,7 +61,7 @@ const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reser
 ### greet() ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>A stub function — the filename &quot;slothlet&quot; conflicts with the reserved namespace.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 **Returns**:
 
@@ -71,6 +71,39 @@ const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reser
 **Example**
 ```js
 slothlet.slothlet.greet(); // "hello"
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+api_test_reserved_name.slothlet.greet();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+  api_test_reserved_name.slothlet.greet();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+  api_test_reserved_name.slothlet.greet();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test_reserved_name = await slothlet({ dir: './api_tests/api_test_reserved_name' });
+api_test_reserved_name.slothlet.greet();
 ```
 
 

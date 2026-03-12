@@ -19,24 +19,24 @@
     * [.getCallerMeta()](#api_test_dot_callerTest_dot_getCallerMeta) ⇒ <code>object | null</code>
   * [config](#api_test_dot_config)
   * [.conflictingName1](#api_test_dot_conflictingName1)
-    * [.conflictingName()](#api_test_dot_conflictingName1_dot_conflictingName) ⇒ <code>string</code>
+    * [.conflictingName()](#api_test_dot_conflictingName1_dot_conflictingName) ⇒ <code>*</code>
   * [.conflictingName2](#api_test_dot_conflictingName2)
-    * [.conflictingName()](#api_test_dot_conflictingName2_dot_conflictingName) ⇒ <code>string</code>
+    * [.conflictingName()](#api_test_dot_conflictingName2_dot_conflictingName) ⇒ <code>*</code>
   * [.createTestService](#api_test_dot_createTestService)
-    * [.createTestService()](#api_test_dot_createTestService)
+    * [.createTestService(name)](#api_test_dot_createTestService) ⇒ <code>*</code>
   * [.exportDefault](#api_test_dot_exportDefault)
     * [.extra()](#api_test_dot_exportDefault_dot_extra) ⇒ <code>string</code>
-  * [.funcmod(name)](#api_test~funcmod) ⇒ <code>string</code>
+  * [.funcmod(name)](#api_test_funcmod) ⇒ <code>string</code>
   * [.isolationTest](#api_test_dot_isolationTest)
     * [.isolationTestState](#api_test_dot_isolationTest_dot_isolationTestState)
-    * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code>string</code>
-    * [.isolationTest_setValue(newValue)](#api_test_dot_isolationTest_dot_isolationTest_setValue)
-    * [.isolationTest_increment()](#api_test_dot_isolationTest_dot_isolationTest_increment) ⇒ <code>number</code>
-    * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code>number</code>
-    * [.isolationTest_setFlag(flag)](#api_test_dot_isolationTest_dot_isolationTest_setFlag)
-    * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code>boolean</code>
-  * [.logger(message)](#api_test~logger) ⇒ <code>string</code>
-    * [.utils](#api_test_dot_logger~utils)
+    * [.isolationTest_getValue()](#api_test_dot_isolationTest_dot_isolationTest_getValue) ⇒ <code>*</code>
+    * [.isolationTest_setValue(newValue)](#api_test_dot_isolationTest_dot_isolationTest_setValue) ⇒ <code>*</code>
+    * [.isolationTest_increment()](#api_test_dot_isolationTest_dot_isolationTest_increment) ⇒ <code>*</code>
+    * [.isolationTest_getCounter()](#api_test_dot_isolationTest_dot_isolationTest_getCounter) ⇒ <code>*</code>
+    * [.isolationTest_setFlag(flag)](#api_test_dot_isolationTest_dot_isolationTest_setFlag) ⇒ <code>*</code>
+    * [.isolationTest_getFlag()](#api_test_dot_isolationTest_dot_isolationTest_getFlag) ⇒ <code>*</code>
+  * [.logger(message)](#api_test_logger) ⇒ <code>string</code>
+    * [.utils](#api_test_dot_logger_utils)
       * [.debug(message)](#api_test_dot_logger_dot_utils_dot_debug) ⇒ <code>string</code>
       * [.error(message)](#api_test_dot_logger_dot_utils_dot_error) ⇒ <code>string</code>
   * [math](#api_test_dot_math)
@@ -50,7 +50,7 @@
     * [.testCaller()](#api_test_dot_metadataTestHelper_dot_testCaller) ⇒ <code>Promise.&lt;object&gt;</code>
     * [.verifyMetadata(path)](#api_test_dot_metadataTestHelper_dot_verifyMetadata) ⇒ <code>Promise.&lt;object&gt;</code>
     * [.invokeCallerTest()](#api_test_dot_metadataTestHelper_dot_invokeCallerTest) ⇒ <code>Promise.&lt;(object|null)&gt;</code>
-  * [.mixed(message)](#api_test~mixed) ⇒ <code>string</code>
+  * [.mixed(message)](#api_test_mixed) ⇒ <code>string</code>
     * [.mixedNamed(value)](#api_test_dot_mixed_dot_mixedNamed) ⇒ <code>string</code>
     * [.mixedAnother(num)](#api_test_dot_mixed_dot_mixedAnother) ⇒ <code>number</code>
   * [multi_func](#api_test_dot_multi_func)
@@ -64,9 +64,11 @@
     * [.warn(message)](#api_test_dot_objectDefaultMethod_dot_warn) ⇒ <code>string</code>
     * [.error(message)](#api_test_dot_objectDefaultMethod_dot_error) ⇒ <code>string</code>
   * [.overwriteTest1](#api_test_dot_overwriteTest1)
-    * [.conflictingName()](#api_test_dot_overwriteTest1_dot_conflictingName) ⇒ <code>string</code>
+    * [.overwriteTest()](#api_test_dot_overwriteTest1_dot_overwriteTest) ⇒ <code>*</code>
+    * [.conflictingName()](#api_test_dot_overwriteTest1_dot_conflictingName) ⇒ <code>*</code>
   * [.overwriteTest2](#api_test_dot_overwriteTest2)
-    * [.conflictingName()](#api_test_dot_overwriteTest2_dot_conflictingName) ⇒ <code>string</code>
+    * [.overwriteTest()](#api_test_dot_overwriteTest2_dot_overwriteTest) ⇒ <code>*</code>
+    * [.conflictingName()](#api_test_dot_overwriteTest2_dot_conflictingName) ⇒ <code>*</code>
   * [.requestContext](#api_test_dot_requestContext)
   * [.rootFunction](#api_test_dot_rootFunction)
     * [.greet(name)](#api_test_dot_rootFunction_dot_greet) ⇒ <code>string</code>
@@ -320,7 +322,43 @@ console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 
 **Returns**:
 
-- <code>string</code> <p>The current instance ID</p>
+- <code>string</code> <p>The current instance ID
+*</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.advanced.self-object.getCurrentInstanceId();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.advanced.self-object.getCurrentInstanceId();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.advanced.self-object.getCurrentInstanceId();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.advanced.self-object.getCurrentInstanceId();
+```
 
 
 
@@ -359,6 +397,39 @@ console.log(await api_test.advanced.selfObject.addViaSelf(2, 3)); // 5
 ```js
 await asyncAdd(2, 3); // 5
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.async-await test.asyncAdd(1, 1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.async-await test.asyncAdd(1, 1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.async-await test.asyncAdd(1, 1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.async-await test.asyncAdd(1, 1);
+```
 
 
 
@@ -386,6 +457,39 @@ await asyncAdd(2, 3); // 5
 ```js
 await asyncEcho("hello"); // "hello"
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.async-await test.asyncEcho('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.async-await test.asyncEcho('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.async-await test.asyncEcho('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.async-await test.asyncEcho('value');
+```
 
 
 
@@ -412,7 +516,7 @@ await asyncEcho("hello"); // "hello"
 
 **Returns**:
 
-- <code>object | null</code> <p>Metadata of the calling slothlet function, or null</p>
+- <code>object \| null</code> <p>Metadata of the calling slothlet function, or null</p>
 
 
 **Example**
@@ -424,6 +528,39 @@ const result = api.callerTest.getCallerMeta(); // → null
 ```js
 // Called from another slothlet function via self
 const result = await api.metadataTestHelper.invokeCallerTest(); // → metadata object
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.caller-test.getCallerMeta();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.caller-test.getCallerMeta();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.caller-test.getCallerMeta();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.caller-test.getCallerMeta();
 ```
 
 
@@ -488,14 +625,49 @@ console.log(api_test.config.host); // "https://slothlet"
 
 <a id="api_test_dot_conflictingName1_dot_conflictingName"></a>
 
-### api_test.conflictingName1.conflictingName() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Named export that will be overwritten</p></strong></p>
+### api_test.conflictingName1.conflictingName() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>conflictingName.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.conflictingName1</code>](#api_test_dot_conflictingName1)
 
 **Returns**:
 
-- <code>string</code> <p>Version identifier</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.conflicting-name-1.conflictingName();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.conflicting-name-1.conflictingName();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.conflicting-name-1.conflictingName();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.conflicting-name-1.conflictingName();
+```
 
 
 
@@ -512,14 +684,49 @@ console.log(api_test.config.host); // "https://slothlet"
 
 <a id="api_test_dot_conflictingName2_dot_conflictingName"></a>
 
-### api_test.conflictingName2.conflictingName() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Named export attempting to overwrite the one from file 1</p></strong></p>
+### api_test.conflictingName2.conflictingName() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>conflictingName.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.conflictingName2</code>](#api_test_dot_conflictingName2)
 
 **Returns**:
 
-- <code>string</code> <p>Version identifier</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.conflicting-name-2.conflictingName();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.conflicting-name-2.conflictingName();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.conflicting-name-2.conflictingName();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.conflicting-name-2.conflictingName();
+```
 
 
 
@@ -536,10 +743,56 @@ console.log(api_test.config.host); // "https://slothlet"
 
 <a id="api_test_dot_createTestService"></a>
 
-### api_test.createTestService.createTestService()
-> <p><strong style="font-size: 1.1em;"><p>Factory function that returns a class instance</p></strong></p>
+### api_test.createTestService.createTestService(name) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>createTestService.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.createTestService.createTestService</code>](#api_test_dot_createTestService)
+
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| name | <code>*</code> |  | <p>name.</p> |
+
+
+**Returns**:
+
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.create-test-service.createTestService('myName');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.create-test-service.createTestService('myName');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.create-test-service.createTestService('myName');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.create-test-service.createTestService('myName');
+```
+
 
 
 * * *
@@ -600,7 +853,7 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 
 * * *
 
-<a id="api_test~funcmod"></a>
+<a id="api_test_funcmod"></a>
 
 ### api_test.funcmod(name) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Main callable function for the funcmod module.
@@ -623,6 +876,39 @@ const api_test = await slothlet({ dir: './api_tests/api_test' });
 ```js
 const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.funcmod('World')); // 'Hello, World!'
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.funcmod.funcmod('myName');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.funcmod.funcmod('myName');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.funcmod.funcmod('myName');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.funcmod.funcmod('myName');
 ```
 
 
@@ -652,14 +938,49 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_getValue"></a>
 
-### api_test.isolationTest.isolationTest_getValue() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Get current state value</p></strong></p>
+### api_test.isolationTest.isolationTest_getValue() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_getValue.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 **Returns**:
 
-- <code>string</code> <p>Current state value</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getValue();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getValue();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getValue();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getValue();
+```
 
 
 
@@ -667,15 +988,55 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_setValue"></a>
 
-### api_test.isolationTest.isolationTest_setValue(newValue)
-> <p><strong style="font-size: 1.1em;"><p>Set state value (mutates exported object)</p></strong></p>
+### api_test.isolationTest.isolationTest_setValue(newValue) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_setValue.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| newValue | <code>string</code> |  | <p>New value to set</p> |
+| newValue | <code>*</code> |  | <p>newValue.</p> |
+
+
+**Returns**:
+
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_setValue(null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_setValue(null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_setValue(null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_setValue(null);
+```
 
 
 
@@ -683,14 +1044,49 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_increment"></a>
 
-### api_test.isolationTest.isolationTest_increment() ⇒ <code>number</code>
-> <p><strong style="font-size: 1.1em;"><p>Increment counter (mutates exported object)</p></strong></p>
+### api_test.isolationTest.isolationTest_increment() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_increment.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 **Returns**:
 
-- <code>number</code> <p>New counter value</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_increment();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_increment();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_increment();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_increment();
+```
 
 
 
@@ -698,14 +1094,49 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_getCounter"></a>
 
-### api_test.isolationTest.isolationTest_getCounter() ⇒ <code>number</code>
-> <p><strong style="font-size: 1.1em;"><p>Get counter value</p></strong></p>
+### api_test.isolationTest.isolationTest_getCounter() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_getCounter.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 **Returns**:
 
-- <code>number</code> <p>Current counter value</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getCounter();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getCounter();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getCounter();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getCounter();
+```
 
 
 
@@ -713,15 +1144,55 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_setFlag"></a>
 
-### api_test.isolationTest.isolationTest_setFlag(flag)
-> <p><strong style="font-size: 1.1em;"><p>Set nested flag (mutates nested object)</p></strong></p>
+### api_test.isolationTest.isolationTest_setFlag(flag) ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_setFlag.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 
 | Param | Type | Default | Description |
 | --- | --- | --- | --- |
-| flag | <code>boolean</code> |  | <p>Flag value</p> |
+| flag | <code>*</code> |  | <p>flag.</p> |
+
+
+**Returns**:
+
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_setFlag(null);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_setFlag(null);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_setFlag(null);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_setFlag(null);
+```
 
 
 
@@ -729,20 +1200,55 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 
 <a id="api_test_dot_isolationTest_dot_isolationTest_getFlag"></a>
 
-### api_test.isolationTest.isolationTest_getFlag() ⇒ <code>boolean</code>
-> <p><strong style="font-size: 1.1em;"><p>Get nested flag value</p></strong></p>
+### api_test.isolationTest.isolationTest_getFlag() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>isolationTest_getFlag.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.isolationTest</code>](#api_test_dot_isolationTest)
 
 **Returns**:
 
-- <code>boolean</code> <p>Flag value</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getFlag();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getFlag();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.isolation-test.isolationTest_getFlag();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.isolation-test.isolationTest_getFlag();
+```
 
 
 
 * * *
 
-<a id="api_test~logger"></a>
+<a id="api_test_logger"></a>
 
 ### api_test.logger(message) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Main callable log function for the logger module.
@@ -766,16 +1272,49 @@ console.log(api_test.funcmod('World')); // 'Hello, World!'
 const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.logger('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.logger('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.logger('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.logger('value');
+```
 
 
 
 * * *
 
-<a id="api_test_dot_logger~utils"></a>
+<a id="api_test_dot_logger_utils"></a>
 
 ### utils
 > 
-**Kind**: inner namespace of [<code></code>](#undefined)
+**Kind**: inner namespace
 
 
 * * *
@@ -785,7 +1324,7 @@ console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
 ### debug(message) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Debug level logging.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -802,6 +1341,39 @@ console.log(api_test.logger('hello')); // '[LOG] 2026-...: hello'
 ```js
 utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.utils.debug('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.utils.debug('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.utils.debug('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.utils.debug('value');
+```
 
 
 
@@ -812,7 +1384,7 @@ utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
 ### error(message) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Error level logging</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -823,6 +1395,41 @@ utils.debug("loaded"); // "[DEBUG] 2026-...: loaded"
 **Returns**:
 
 - <code>string</code> <p>Formatted error message</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.utils.error('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.utils.error('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.logger.utils.error('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.logger.utils.error('value');
+```
 
 
 
@@ -902,7 +1509,6 @@ console.log(api_test.math.multiply(2, 3)); // 6
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(5, 7)); // 1012  (root file wins collision → a+b+1000)
 ```
 **Example**
 ```js
@@ -910,7 +1516,6 @@ console.log(api_test.math.add(5, 7)); // 1012  (root file wins collision → a+b
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(5, 7)); // 1012
 }
 ```
 **Example**
@@ -920,7 +1525,6 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.math.add(5, 7)); // 1012
 })();
 ```
 **Example**
@@ -928,7 +1532,6 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.math.add(5, 7)); // 1012
 ```
 
 
@@ -1090,13 +1693,46 @@ console.log(api_test.math.divide(10, 2)); // 5
 
 **Returns**:
 
-- <code>Promise.&lt;(object|null)&gt;</code> <p>Metadata object or null</p>
+- <code>Promise.&lt;(object\|null)&gt;</code> <p>Metadata object or null</p>
 
 
 **Example**
 ```js
 // From test file
 const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.getMetadata('./file.mjs');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.getMetadata('./file.mjs');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.getMetadata('./file.mjs');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.getMetadata('./file.mjs');
 ```
 
 
@@ -1113,13 +1749,46 @@ const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
 
 **Returns**:
 
-- <code>Promise.&lt;(object|null)&gt;</code> <p>This function's metadata or null</p>
+- <code>Promise.&lt;(object\|null)&gt;</code> <p>This function's metadata or null</p>
 
 
 **Example**
 ```js
 // From test file
 const meta = await api.metadataTestHelper.getSelfMetadata();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.getSelfMetadata();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.getSelfMetadata();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.getSelfMetadata();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.getSelfMetadata();
 ```
 
 
@@ -1144,6 +1813,39 @@ const meta = await api.metadataTestHelper.getSelfMetadata();
 // From test file
 const result = await api.metadataTestHelper.testCaller();
 console.log(result.callerMeta); // Should show testCaller's metadata
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.testCaller();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.testCaller();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.testCaller();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.testCaller();
 ```
 
 
@@ -1171,7 +1873,35 @@ console.log(result.callerMeta); // Should show testCaller's metadata
 **Example**
 ```js
 // From test file
-const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
 ```
 
 
@@ -1190,7 +1920,7 @@ const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add"
 
 **Returns**:
 
-- <code>Promise.&lt;(object|null)&gt;</code> <p>Metadata of this function as seen by the callee</p>
+- <code>Promise.&lt;(object\|null)&gt;</code> <p>Metadata of this function as seen by the callee</p>
 
 
 **Example**
@@ -1198,12 +1928,45 @@ const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add"
 const meta = await api.metadataTestHelper.invokeCallerTest();
 console.log(meta.filePath); // → path to metadata-test-helper.mjs
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.invokeCallerTest();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.invokeCallerTest();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.metadata-test-await helper.invokeCallerTest();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.metadata-test-await helper.invokeCallerTest();
+```
 
 
 
 * * *
 
-<a id="api_test~mixed"></a>
+<a id="api_test_mixed"></a>
 
 ### api_test.mixed(message) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Default callable function for the mixed module.
@@ -1228,6 +1991,39 @@ console.log(meta.filePath); // → path to metadata-test-helper.mjs
 const api_test = await slothlet({ dir: './api_tests/api_test' });
 console.log(api_test.mixed('hello')); // 'Mixed default: hello'
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixed('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixed('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixed('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixed('value');
+```
 
 
 
@@ -1238,7 +2034,7 @@ console.log(api_test.mixed('hello')); // 'Mixed default: hello'
 ### mixedNamed(value) ⇒ <code>string</code>
 > <p><strong style="font-size: 1.1em;"><p>Named function for mixed export test.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1251,6 +2047,41 @@ console.log(api_test.mixed('hello')); // 'Mixed default: hello'
 - <code>string</code> <p>Processed value</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixedNamed('value');
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixedNamed('value');
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixedNamed('value');
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixedNamed('value');
+```
+
+
 
 * * *
 
@@ -1259,7 +2090,7 @@ console.log(api_test.mixed('hello')); // 'Mixed default: hello'
 ### mixedAnother(num) ⇒ <code>number</code>
 > <p><strong style="font-size: 1.1em;"><p>Another named function for mixed export test.</p></strong></p>
 > 
-**Kind**: static method of [<code></code>](#undefined)
+**Kind**: static method
 
 
 | Param | Type | Default | Description |
@@ -1270,6 +2101,41 @@ console.log(api_test.mixed('hello')); // 'Mixed default: hello'
 **Returns**:
 
 - <code>number</code> <p>Processed number</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixedAnother(1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixedAnother(1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.mixed.mixedAnother(1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.mixed.mixedAnother(1);
+```
 
 
 
@@ -1753,16 +2619,101 @@ console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 
 * * *
 
-<a id="api_test_dot_overwriteTest1_dot_conflictingName"></a>
+<a id="api_test_dot_overwriteTest1_dot_overwriteTest"></a>
 
-### api_test.overwriteTest1.conflictingName() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Named export that will be overwritten</p></strong></p>
+### api_test.overwriteTest1.overwriteTest() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>overwriteTest.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.overwriteTest1</code>](#api_test_dot_overwriteTest1)
 
 **Returns**:
 
-- <code>string</code> <p>Version identifier</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-1.overwriteTest();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-1.overwriteTest();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-1.overwriteTest();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-1.overwriteTest();
+```
+
+
+
+* * *
+
+<a id="api_test_dot_overwriteTest1_dot_conflictingName"></a>
+
+### api_test.overwriteTest1.conflictingName() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>conflictingName.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.overwriteTest1</code>](#api_test_dot_overwriteTest1)
+
+**Returns**:
+
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-1.conflictingName();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-1.conflictingName();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-1.conflictingName();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-1.conflictingName();
+```
 
 
 
@@ -1777,16 +2728,101 @@ console.log(api_test.objectDefaultMethod.error("hello")); // 'ERROR: Hello'
 
 * * *
 
-<a id="api_test_dot_overwriteTest2_dot_conflictingName"></a>
+<a id="api_test_dot_overwriteTest2_dot_overwriteTest"></a>
 
-### api_test.overwriteTest2.conflictingName() ⇒ <code>string</code>
-> <p><strong style="font-size: 1.1em;"><p>Named export attempting to overwrite the one from file 1</p></strong></p>
+### api_test.overwriteTest2.overwriteTest() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>overwriteTest.</p></strong></p>
 > 
 **Kind**: static method of [<code>api_test.overwriteTest2</code>](#api_test_dot_overwriteTest2)
 
 **Returns**:
 
-- <code>string</code> <p>Version identifier</p>
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-2.overwriteTest();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-2.overwriteTest();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-2.overwriteTest();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-2.overwriteTest();
+```
+
+
+
+* * *
+
+<a id="api_test_dot_overwriteTest2_dot_conflictingName"></a>
+
+### api_test.overwriteTest2.conflictingName() ⇒ <code>*</code>
+> <p><strong style="font-size: 1.1em;"><p>conflictingName.</p></strong></p>
+> 
+**Kind**: static method of [<code>api_test.overwriteTest2</code>](#api_test_dot_overwriteTest2)
+
+**Returns**:
+
+- <code>*</code> <p></p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-2.conflictingName();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-2.conflictingName();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.overwrite-test-2.conflictingName();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.overwrite-test-2.conflictingName();
+```
 
 
 
@@ -2016,7 +3052,6 @@ console.log(api_test.rootFunctionWhisper("World")); // 'hello, world.'
 // ESM usage via slothlet API
 import slothlet from "@cldmv/slothlet";
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.rootMath.add(5, 7)); // 12
 ```
 **Example**
 ```js
@@ -2024,7 +3059,6 @@ console.log(api_test.rootMath.add(5, 7)); // 12
 async function example() {
   const { default: slothlet } = await import("@cldmv/slothlet");
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.rootMath.add(5, 7)); // 12
 }
 ```
 **Example**
@@ -2034,7 +3068,6 @@ let slothlet;
 (async () => {
   ({ slothlet } = await import("@cldmv/slothlet"));
   const api_test = await slothlet({ dir: './api_tests/api_test' });
-  console.log(api_test.rootMath.add(5, 7)); // 12
 })();
 ```
 **Example**
@@ -2042,7 +3075,6 @@ let slothlet;
 // CJS usage via slothlet API (inside async function)
 const slothlet = require("@cldmv/slothlet");
 const api_test = await slothlet({ dir: './api_tests/api_test' });
-console.log(api_test.rootMath.add(5, 7)); // 12
 ```
 
 
@@ -2290,6 +3322,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 - <code>object</code> <p>Complete runtime verification results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.verifyRuntime();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.verifyRuntime();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.verifyRuntime();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.verifyRuntime();
+```
+
+
 
 * * *
 
@@ -2312,6 +3379,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 - <code>object</code> <p>Cross-call test results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testSelfCrossCall(1, 1);
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testSelfCrossCall(1, 1);
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testSelfCrossCall(1, 1);
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testSelfCrossCall(1, 1);
+```
+
+
 
 * * *
 
@@ -2325,6 +3427,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 **Returns**:
 
 - <code>object</code> <p>Context isolation test results</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testContextIsolation();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testContextIsolation();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testContextIsolation();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testContextIsolation();
+```
 
 
 
@@ -2342,6 +3479,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 - <code>object</code> <p>Performance test results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testPerformance();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testPerformance();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testPerformance();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testPerformance();
+```
+
+
 
 * * *
 
@@ -2357,6 +3529,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 - <code>object</code> <p>Complete runtime test results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.comprehensiveRuntimeTest();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.comprehensiveRuntimeTest();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.comprehensiveRuntimeTest();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.comprehensiveRuntimeTest();
+```
+
+
 
 * * *
 
@@ -2370,6 +3577,41 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 **Returns**:
 
 - <code>object</code> <p>Self and reference test results</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testSelfAndReference();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testSelfAndReference();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.testSelfAndReference();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.testSelfAndReference();
+```
 
 
 
@@ -2393,6 +3635,39 @@ console.log(api_test.rootstring.reverse("hello")); // 'olleh'
 ```js
 const result = api.runtimeTest.getAsyncInstanceID();
 // result.id === api.slothlet.instanceID
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.getAsyncInstanceID();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.getAsyncInstanceID();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.getAsyncInstanceID();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.getAsyncInstanceID();
 ```
 
 
@@ -2419,6 +3694,39 @@ const result = api.runtimeTest.getAsyncInstanceID();
 const result = api.runtimeTest.exerciseContextDispatcherTraps();
 expect(result.hasUserId).toBe(true);
 ```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseContextDispatcherTraps();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseContextDispatcherTraps();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseContextDispatcherTraps();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseContextDispatcherTraps();
+```
 
 
 
@@ -2442,6 +3750,39 @@ expect(result.hasUserId).toBe(true);
 ```js
 const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
 expect(result.id).toBeTruthy();
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
 ```
 
 
@@ -2468,6 +3809,39 @@ expect(result.id).toBeTruthy();
 await api.slothlet.context.run({ userId: 99 }, async () => {
   return api.runtimeTest.exerciseAsyncContextWriteTraps();
 });
+```
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseAsyncContextWriteTraps();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseAsyncContextWriteTraps();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.runtime-test.exerciseAsyncContextWriteTraps();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.runtime-test.exerciseAsyncContextWriteTraps();
 ```
 
 
@@ -2681,6 +4055,41 @@ console.log(await api_test.task.autoIp()); // "testAutoIP"
 - <code>object</code> <p>Context test results</p>
 
 
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.tcp.testContext();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.tcp.testContext();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  api_test.tcp.testContext();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+api_test.tcp.testContext();
+```
+
+
 
 * * *
 
@@ -2700,6 +4109,41 @@ console.log(await api_test.task.autoIp()); // "testAutoIP"
 **Returns**:
 
 - <code>Promise.&lt;{port: number, server: NetServer}&gt;</code> <p>Server instance and port</p>
+
+
+**Example**
+```js
+// ESM usage via slothlet API
+import slothlet from "@cldmv/slothlet";
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+await api_test.tcp.createTestServer();
+```
+**Example**
+```js
+// ESM usage via slothlet API (inside async function)
+async function example() {
+  const { default: slothlet } = await import("@cldmv/slothlet");
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  await api_test.tcp.createTestServer();
+}
+```
+**Example**
+```js
+// CJS usage via slothlet API (top-level)
+let slothlet;
+(async () => {
+  ({ slothlet } = await import("@cldmv/slothlet"));
+  const api_test = await slothlet({ dir: './api_tests/api_test' });
+  await api_test.tcp.createTestServer();
+})();
+```
+**Example**
+```js
+// CJS usage via slothlet API (inside async function)
+const slothlet = require("@cldmv/slothlet");
+const api_test = await slothlet({ dir: './api_tests/api_test' });
+await api_test.tcp.createTestServer();
+```
 
 
 
