@@ -29,13 +29,10 @@ const matrixConfigs = getMatrixConfigs({ mode: "lazy" });
  * @param {{ t: (code: string, params?: object) => string }} i18n - i18n API surface
  * @returns {{ message: string, expectedSpanishFragment: string }} Message and a spanish fragment to assert.
  */
-function buildModuleNotFoundMessage(i18n) {
+function buildTranslationTestMessage(i18n) {
 	return {
-		message: i18n.t("MODULE_NOT_FOUND", {
-			modulePath: "./api/math.mjs",
-			hint: "Check the file exists."
-		}),
-		expectedSpanishFragment: "Módulo no encontrado"
+		message: i18n.t("NO_ACTIVE_CONTEXT_ASYNC"),
+		expectedSpanishFragment: "Sin contexto activo"
 	};
 }
 
@@ -77,14 +74,14 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 			});
 
 			api.slothlet.i18n.setLanguage("en-us");
-			const english = buildModuleNotFoundMessage(api.slothlet.i18n).message;
-			expect(english).toContain("Module not found");
+			const english = buildTranslationTestMessage(api.slothlet.i18n).message;
+			expect(english).toContain("No active context");
 
 			api.slothlet.i18n.setLanguage("es-mx");
 			expect(api.slothlet.i18n.getLanguage()).toBe("es-mx");
 
-			const spanish = buildModuleNotFoundMessage(api.slothlet.i18n).message;
-			expect(spanish).toContain("Módulo no encontrado");
+			const spanish = buildTranslationTestMessage(api.slothlet.i18n).message;
+			expect(spanish).toContain("Sin contexto activo");
 
 			// Should not be identical if translations are actually switching
 			expect(spanish).not.toBe(english);
@@ -99,7 +96,7 @@ describe("Public I18N API (api.slothlet.i18n)", () => {
 
 			expect(api.slothlet.i18n.getLanguage()).toBe("es-mx");
 
-			const { message, expectedSpanishFragment } = buildModuleNotFoundMessage(api.slothlet.i18n);
+			const { message, expectedSpanishFragment } = buildTranslationTestMessage(api.slothlet.i18n);
 			expect(message).toContain(expectedSpanishFragment);
 		});
 	});
