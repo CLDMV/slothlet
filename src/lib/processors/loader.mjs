@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-12 16:21:42 -07:00 (1773357702)
+ *	@Last modified time: 2026-03-12 17:26:52 -07:00 (1773361612)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -121,13 +121,16 @@ export class Loader extends ComponentBase {
 									// file-scoped and the dynamic import("child_process") caches across workers.
 									/* v8 ignore start */
 								} else if (msg.type === "error") {
-									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", { error: msg.error }, null, { validationError: true }));
+									// msg.error is a string (serialized over IPC). Wrap in a message-object so
+									// SlothletError auto-enriches {error} from originalError.message without
+									// needing a bare new Error() construction.
+									reject(new this.SlothletError("TS_TYPE_GENERATION_FAILED", {}, { message: msg.error }));
 								}
 								/* v8 ignore stop */
 							});
 
 							child.on("error", (error) => {
-								reject(new this.SlothletError("TS_TYPE_GENERATION_FORK_FAILED", { error: error.message }, null, { validationError: true }));
+								reject(new this.SlothletError("TS_TYPE_GENERATION_FORK_FAILED", {}, error));
 							});
 
 							child.on("exit", (code) => {
