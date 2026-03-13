@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "Cache entry not found for moduleID '{moduleID}' during '{operation}' operation. The module may not be loaded or the cache may have been cleared.",
 		"CACHE_MANAGER_NOT_AVAILABLE": "Cache manager is not available. Cannot perform '{operation}' operation. Ensure the cache manager is initialized.",
 		"MODULE_LOAD_FAILED": "Failed to load module '{modulePath}' (ID: {moduleID}): {error}",
+		"MODULE_NOT_FOUND": "Module not found: {modulePath}. {hint}",
 		"MODULE_IMPORT_FAILED": "Failed to import module '{modulePath}': {error}. Check that the file exists and has valid syntax.",
 		"CONTEXT_ALREADY_EXISTS": "Context for instance '{instanceID}' already exists. Cannot initialize twice.",
 		"CONTEXT_NOT_FOUND": "Context not found for instance '{instanceID}'. Instance may have been shut down. Available instances: {availableInstances}",

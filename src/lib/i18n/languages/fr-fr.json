@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "Entrée de cache non trouvée pour le moduleID '{moduleID}' lors de l'opération '{operation}'. Le module n'est peut-être pas chargé ou le cache a été vidé.",
 		"CACHE_MANAGER_NOT_AVAILABLE": "Le gestionnaire de cache n'est pas disponible. Impossible de d'effectuer l'opération '{operation}'. Assurez-vous que le gestionnaire de cache est initialisé.",
 		"MODULE_LOAD_FAILED": "Échec du chargement du module '{modulePath}' (ID : {moduleID}) : {error}",
+		"MODULE_NOT_FOUND": "Module non trouvé : {modulePath}. {hint}",
 		"MODULE_IMPORT_FAILED": "Échec de l'importation du module '{modulePath}' : {error}. Vérifiez que le fichier existe et possède une syntaxe valide.",
 		"CONTEXT_ALREADY_EXISTS": "Le contexte pour l'instance '{instanceID}' existe déjà. Impossible d'initialiser deux fois.",
 		"CONTEXT_NOT_FOUND": "Contexte non trouvé pour l'instance '{instanceID}'. L'instance a peut-être été arrêtée. Instances disponibles : {availableInstances}",

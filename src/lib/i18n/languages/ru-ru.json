@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "Запись кеша не найдена для moduleID '{moduleID}' при операции '{operation}'. Модуль может быть не загружен или кеш очищен.",
 		"CACHE_MANAGER_NOT_AVAILABLE": "Менеджер кеша недоступен. Нельзя выполнить '{operation}'. Убедитесь, что менеджер инициализирован.",
 		"MODULE_LOAD_FAILED": "Не удалось загрузить модуль '{modulePath}' (ID: {moduleID}): {error}",
+		"MODULE_NOT_FOUND": "Модуль не найден: {modulePath}. {hint}",
 		"MODULE_IMPORT_FAILED": "Не удалось импортировать модуль '{modulePath}': {error}. Проверьте, существует ли файл и корректен ли синтаксис.",
 		"CONTEXT_ALREADY_EXISTS": "Контекст для экземпляра '{instanceID}' уже существует. Невозможно инициализировать дважды.",
 		"CONTEXT_NOT_FOUND": "Контекст для экземпляра '{instanceID}' не найден. Экземпляр мог быть завершён. Доступные экземпляры: {availableInstances}",

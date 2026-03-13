@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "'{operation}' 操作中に moduleID '{moduleID}' のキャッシュエントリが見つかりませんでした。モジュールが読み込まれていないか、キャッシュがクリアされた可能性があります。",
 		"CACHE_MANAGER_NOT_AVAILABLE": "キャッシュマネージャーが利用できません。'{operation}' 操作を実行できません。キャッシュマネージャーが初期化されているか確認してください。",
 		"MODULE_LOAD_FAILED": "モジュール '{modulePath}' (ID: {moduleID}) の読み込みに失敗しました: {error}",
+		"MODULE_NOT_FOUND": "モジュールが見つかりません: {modulePath}。 {hint}",
 		"MODULE_IMPORT_FAILED": "モジュール '{modulePath}' のインポートに失敗しました: {error}。ファイルが存在し、構文が正しいか確認してください。",
 		"CONTEXT_ALREADY_EXISTS": "インスタンス '{instanceID}' のコンテキストは既に存在します。2回初期化することはできません。",
 		"CONTEXT_NOT_FOUND": "インスタンス '{instanceID}' のコンテキストが見つかりません。インスタンスが終了した可能性があります。利用可能なインスタンス: {availableInstances}",

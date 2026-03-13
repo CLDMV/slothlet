@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "在执行 '{operation}' 操作期间未找到 moduleID 为 '{moduleID}' 的缓存条目。模块可能未加载或缓存已被清除。",
 		"CACHE_MANAGER_NOT_AVAILABLE": "缓存管理器不可用。无法执行 '{operation}' 操作。请确保缓存管理器已初始化。",
 		"MODULE_LOAD_FAILED": "加载模块 '{modulePath}'（ID: {moduleID}）失败：{error}",
+		"MODULE_NOT_FOUND": "未找到模块：{modulePath}。{hint}",
 		"MODULE_IMPORT_FAILED": "导入模块 '{modulePath}' 失败：{error}。请检查文件是否存在且语法正确。",
 		"CONTEXT_ALREADY_EXISTS": "实例 '{instanceID}' 的上下文已存在。不能初始化两次。",
 		"CONTEXT_NOT_FOUND": "未找到实例 '{instanceID}' 的上下文。实例可能已关闭。可用实例：{availableInstances}",
