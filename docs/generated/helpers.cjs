@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-11 21:17:02 -07:00 (1773289022)
+ *	@Last modified time: 2026-03-13 16:52:51 -07:00 (1773445971)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -143,8 +143,7 @@ const gets = {
 	originalModuleTitle() {
 		// Check for @title custom tag override first
 		const titleTag =
-			(this.customTags && this.customTags.find((t) => t.tag === "title")) ||
-			(this.tags && this.tags.find((t) => t.title === "title"));
+			(this.customTags && this.customTags.find((t) => t.tag === "title")) || (this.tags && this.tags.find((t) => t.title === "title"));
 		if (titleTag) {
 			const val = (titleTag.value || titleTag.text || "").trim();
 			if (val) return val;
@@ -387,7 +386,17 @@ const format = {
 		if (!type || !type.names || !Array.isArray(type.names)) return "";
 		// Escape | within each type name AND use \| as join separator so pipes don't split table columns
 		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
-		let typeStr = type.names.map((n) => n.replace(/\|/g, "\\|")).join(" \\| ");
+		// Step 1: double any existing backslashes so they survive the next replacement.
+		// Step 2: escape any pipe characters so they are treated as literals in the table.
+		/**
+		 * Escape backslashes then pipes in a type name for Markdown table output.
+		 * @param {string} n - Raw type name string.
+		 * @returns {string} Type name with backslashes doubled and pipes escaped.
+		 */
+		function escapeTypeName(n) {
+			return n.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+		}
+		let typeStr = type.names.map(escapeTypeName).join(" \\| ");
 		// Convert < and > to HTML entities like the original
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
@@ -443,7 +452,8 @@ const format = {
 
 		// Escape | within each result entry and use \| as separator so pipes don't split table columns
 		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
-		let typeStr = typeNames.map((n) => n.replace(/\|/g, "\\|")).join(" \\| ");
+		// Step 1: double existing backslashes before step 2 escapes pipes, so \| is not misinterpreted.
+		let typeStr = typeNames.map((n) => n.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")).join(" \\| ");
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
 	},

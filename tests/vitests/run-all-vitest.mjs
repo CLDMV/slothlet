@@ -100,6 +100,21 @@ const DEFAULT_TEST_DIR = "tests/vitests/suites";
 const BASELINE_PATH = "tests/vitests/baseline-tests.json";
 const DEFAULT_VITEST_CONFIG = ".configs/vitest.config.mjs";
 
+/**
+ * Escape all regex metacharacters in a string so it can be safely used
+ * as a literal pattern inside `new RegExp()`.
+ * This prevents regex injection when the value comes from user-controlled
+ * CLI input (e.g. --file-pattern).
+ * @param {string} string - Raw user input to escape.
+ * @returns {string} String with all regex metacharacters escaped.
+ * @example
+ * escapeRegExp("foo.bar"); // "foo\\.bar"
+ * escapeRegExp("a|b");    // "a\\|b"
+ */
+function escapeRegExp(string) {
+	return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const SOLO_RUN_PATTERNS = [
 	// "listener-cleanup/",
 	"lazy/lazy-background-materialization.test.vitest.mjs",
@@ -248,14 +263,14 @@ function parseArguments(args) {
 		if (arg === "--file-pattern") {
 			const next = args[i + 1];
 			if (next && !next.startsWith("-")) {
-				testFilePattern = new RegExp(next, "i");
+				testFilePattern = new RegExp(escapeRegExp(next), "i");
 				i++;
 			}
 			continue;
 		}
 
 		if (arg.startsWith("--file-pattern=")) {
-			testFilePattern = new RegExp(arg.split("=").slice(1).join("="), "i");
+			testFilePattern = new RegExp(escapeRegExp(arg.split("=").slice(1).join("=")), "i");
 			continue;
 		}
 
