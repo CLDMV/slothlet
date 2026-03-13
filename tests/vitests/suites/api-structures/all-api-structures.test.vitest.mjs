@@ -109,7 +109,7 @@ describe("All API Structures Validation", () => {
 		return new Promise((resolve) => {
 			const currentFile = fileURLToPath(import.meta.url);
 			const rootDir = path.resolve(path.dirname(currentFile), "../../../..");
-			const inspectToolPath = path.join(rootDir, "tools", "inspect-api-structure.mjs");
+const inspectToolPath = path.join(rootDir, "tools", "dev", "inspect-api-structure.mjs");
 
 			// Build arguments for the inspection tool
 			const args = [inspectToolPath, folderName];
