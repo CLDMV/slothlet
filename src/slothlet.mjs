@@ -82,8 +82,8 @@
  * await api.slothlet.shutdown();
  */
 import { readdirSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
@@ -152,7 +152,7 @@ class Slothlet {
 		//   - runtime/ (context managers set manually during load)
 		//   - i18n/ (translation utilities, not instance components)
 
-		const baseDir = join(import.meta.dirname, "lib");
+		const baseDir = join(dirname(fileURLToPath(import.meta.url)), "lib");
 
 		for (const category of this.componentCategories) {
 			const categoryDir = join(baseDir, category);
