@@ -525,14 +525,18 @@ function parseErrorThrows(content, filePath) {
 	const errors = [];
 
 	// Matches all access patterns:
-	//   new SlothletError(...)                  - direct (standalone import)
-	//   new this.SlothletError(...)             - via ComponentBase getter
+	//   throw new SlothletError(...)            - direct (standalone import)
+	//   throw new this.SlothletError(...)       - via ComponentBase getter
+	//   new this.SlothletError(...)             - non-throw form, e.g. reject(new this.SlothletError(...))
 	//   new this.slothlet.SlothletError(...)    - via double-hop (handler/builder classes)
 	//   new slothlet.SlothletError(...)         - closure variable (api_builder.mjs)
 	//   new wrapper.slothlet.SlothletError(...) - via proxy wrapper (unified-wrapper.mjs)
 	// Same patterns for SlothletWarning.
+	// NOTE: the non-throw SlothletError alternative may produce duplicate allErrors entries
+	// for throw-sites already matched by the first alternative; this is harmless since
+	// usedErrorCodes is a Set (deduplicates) and Total Errors display uses a separate filter.
 	const throwPattern =
-		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
+		/(?:throw\s+(?:await\s+)?(?:new\s+)?(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletWarning|new\s+(?:(?:wrapper|this)(?:\.slothlet)?\.)?SlothletError|(?:throw\s+new\s+)?slothlet\.SlothletError)(?:\.create)?/g;
 
 	const throwStarts = [];
 	let match;
@@ -750,9 +754,9 @@ const directTranslationUsage = new Set();
 for (const filePath of files) {
 	const content = await readFile(filePath, "utf-8");
 	// Match t("KEY", ...) or t('KEY', ...) - direct shorthand calls
-	const tCallPattern = /\bt\(\s*["']([A-Z_]+)["']/g;
+	const tCallPattern = /\bt\(\s*["']([A-Z0-9_]+)["']/g;
 	// Match translate("KEY", ...) or translate('KEY', ...) - direct full-function calls
-	const translateCallPattern = /\btranslate\(\s*["']([A-Z_]+)["']/g;
+	const translateCallPattern = /\btranslate\(\s*["']([A-Z0-9_]+)["']/g;
 	let match;
 	while ((match = tCallPattern.exec(content)) !== null) {
 		directTranslationUsage.add(match[1]);
@@ -781,8 +785,16 @@ for (const filePath of files) {
 		}
 		if (end === -1) continue;
 		const callBody = content.slice(openParen + 1, end);
-		const keyInCall = /\bkey:\s*["']([A-Z_]+)["']/.exec(callBody);
-		if (keyInCall) directTranslationUsage.add(keyInCall[1]);
+		// Scan for ALL quoted ALL_UPPER_SNAKE_CASE strings in the call body.
+		// Using /g + while loop handles both direct key: "KEY" and ternary
+		// key: cond ? "KEY_A" : "KEY_B" patterns. Requiring at least one
+		// underscore excludes the lowercase category arg ("modes", "api", etc.).
+		// [A-Z0-9_] handles keys containing digits (e.g. RULE_13_*).
+		const upperKeyPattern = /["']([A-Z][A-Z0-9_]*_[A-Z0-9_]+)["']/g;
+		let upperKeyMatch;
+		while ((upperKeyMatch = upperKeyPattern.exec(callBody)) !== null) {
+			directTranslationUsage.add(upperKeyMatch[1]);
+		}
 	}
 }
 
