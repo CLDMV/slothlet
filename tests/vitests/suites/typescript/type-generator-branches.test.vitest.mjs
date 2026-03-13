@@ -30,10 +30,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "node:url";
 import { generateTypes } from "@cldmv/slothlet/processors/type-generator";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** Temp output file in project tmp/ dir (never /tmp). */
-const OUTPUT_PATH = path.resolve("/srv/repos/slothlet/tmp/type-gen-test.d.ts");
+const OUTPUT_PATH = path.resolve(__dirname, "../../../../tmp/type-gen-test.d.ts");
 
 afterEach(() => {
 	if (fs.existsSync(OUTPUT_PATH)) {
