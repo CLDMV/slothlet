@@ -35,8 +35,12 @@
  */
 
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, it, expect } from "vitest";
 import { Resolver } from "@cldmv/slothlet/helpers/resolve-from-caller";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "../../../../");
 
 /**
  * Create a Resolver instance with a minimal slothlet mock.
@@ -251,7 +255,7 @@ describe("resolvePathFromCaller — invoked via slothlet config.dir resolution",
 		const slothlet = (await import("@cldmv/slothlet")).default;
 
 		// Use a file:// URL as the dir (exercises line 155 in resolvePathFromCaller)
-		const fileUrl = "file:///srv/repos/slothlet/api_tests/api_test";
+		const fileUrl = pathToFileURL(path.join(PROJECT_ROOT, "api_tests/api_test")).href;
 		const api = await slothlet({
 			dir: fileUrl,
 			mode: "eager",
