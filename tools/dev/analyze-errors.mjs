@@ -821,6 +821,26 @@ for (const filePath of files) {
 	}
 }
 
+// Also scan tests/vitests for translation keys used directly in tests (e.g. as SlothletError
+// codes in unit tests, or translate("KEY") calls). These are legitimate usages even though
+// they don't appear as throws in src/ — without this, test-only keys get flagged as orphaned.
+// NOTE: stored in a SEPARATE set so it only feeds the "unused" check, not "missing" check.
+// (Tests may intentionally use fake/sentinel keys like INVALID_CONFIG_TOTALLY_UNKNOWN_KEY_ZZ
+// to verify error-code fallback behaviour — those should not be required to have translations.)
+const testTranslationUsage = new Set();
+const testFiles = await findMjsFiles(join(rootDir, "tests", "vitests"));
+// Patterns: new SlothletError("KEY") / new SlothletWarning("KEY") / t("KEY") / translate("KEY")
+const testErrorCodePattern = /new\s+Slothlet(?:Error|Warning)\(\s*["']([A-Z0-9_]+)["']/g;
+const testTCallPattern = /\bt\(\s*["']([A-Z0-9_]+)["']/g;
+const testTranslateCallPattern = /\btranslate\(\s*["']([A-Z0-9_]+)["']/g;
+for (const filePath of testFiles) {
+	const content = await readFile(filePath, "utf-8");
+	let m;
+	while ((m = testErrorCodePattern.exec(content)) !== null) testTranslationUsage.add(m[1]);
+	while ((m = testTCallPattern.exec(content)) !== null) testTranslationUsage.add(m[1]);
+	while ((m = testTranslateCallPattern.exec(content)) !== null) testTranslationUsage.add(m[1]);
+}
+
 console.log(`Found ${allErrors.length} error throws\n`);
 if (VERBOSE) {
 	console.log(`Available hints: ${hintKeys.join(", ")}\n`);
@@ -1239,8 +1259,8 @@ for (const key of translationKeys) {
 			}
 		}
 
-		// Check in direct t() calls
-		if (directTranslationUsage.has(key)) {
+		// Check in direct t() calls (src/) or test-file usage
+		if (directTranslationUsage.has(key) || testTranslationUsage.has(key)) {
 			// Find which files use this key in t() calls
 			for (const file of files) {
 				const content = await readFile(file, "utf-8");
