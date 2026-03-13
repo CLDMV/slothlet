@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "Impossible de définir les métadonnées utilisateur : aucun moduleID trouvé dans les métadonnées système. Assurez-vous que la fonction/l'objet cible a été chargé via Slothlet.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() doit être appelé via le système de cycle de vie. Utilisez lifecycle.emit('impl:created') ou lifecycle.emit('impl:changed') au lieu d'un appel direct.",
 		"INVALID_METADATA_KEY": "Clé de métadonnées invalide : attendu {expected}, reçu {type} pour la clé '{key}'. Les clés de métadonnées doivent être correctement formatées.",
+		"WARNING_METADATA_MISMATCH": "Avertissement de sécurité : incompatibilité du chemin du fichier de métadonnées pour '{apiPath}'. La trace de la pile affiche '{stackFile}' mais les métadonnées indiquent '{metadataFile}'. Cela peut indiquer un rechargement à chaud ou une altération.",
 		"COLLISION_ERROR": "Erreur de collision à '{key}' (contexte : {collisionContext}, mode : {collisionMode}). Réglez le mode de collision sur 'merge', 'replace', 'warn' ou 'skip' pour gérer les collisions.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "Collision détectée : la propriété '{key}' existe déjà sur l'export par défaut à '{apiPath}'. Le mode de collision est 'error'.",
 		"INVALID_ARGUMENT": "Argument invalide '{argument}' : attendu {expected}, reçu {received}.",

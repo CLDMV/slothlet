@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "ユーザーメタデータを設定できません: システムメタデータに moduleID が見つかりません。ターゲットとなる関数/オブジェクトが Slothlet を通じて読み込まれているか確認してください。",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() はライフサイクルシステムを通じて呼び出す必要があります。直接呼び出す代わりに、lifecycle.emit('impl:created') または lifecycle.emit('impl:changed') を使用してください。",
 		"INVALID_METADATA_KEY": "無効なメタデータキー: {expected} が必要ですが、キー '{key}' に対して {type} を受信しました。メタデータキーは正しくフォーマットされている必要があります。",
+		"WARNING_METADATA_MISMATCH": "セキュリティ警告: '{apiPath}' のメタデータファイルパスが一致しません。スタックトレースには '{stackFile}' と表示されていますが、メタデータには '{metadataFile}' と表示されています。これはホットリロードまたは改ざんの可能性があります。",
 		"COLLISION_ERROR": "'{key}' で衝突エラーが発生しました (コンテキスト: {collisionContext}, モード: {collisionMode})。衝突を処理するには、衝突モードを 'merge', 'replace', 'warn', または 'skip' に設定してください。",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "衝突を検出しました: プロパティ '{key}' は '{apiPath}' のデフォルトエクスポートに既に存在します。衝突モードは 'error' です。",
 		"INVALID_ARGUMENT": "無効な引数 '{argument}' です: {expected} が必要ですが、{received} を受信しました。",

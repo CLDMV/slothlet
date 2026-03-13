@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "无法设置用户元数据：系统元数据中未找到 moduleID。请确保目标函数/对象是通过 Slothlet 加载的。",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() 必须通过生命周期系统调用。请使用 lifecycle.emit('impl:created') 或 lifecycle.emit('impl:changed')，而不是直接调用。",
 		"INVALID_METADATA_KEY": "无效的元数据键：预期为 {expected}，键 '{key}' 接收到类型 {type}。元数据键必须格式正确。",
+		"WARNING_METADATA_MISMATCH": "安全警告：'{apiPath}' 的元数据文件路径不匹配。堆栈跟踪显示为 '{stackFile}'，但元数据记录为 '{metadataFile}'。这可能表明存在热重载或篡改。",
 		"COLLISION_ERROR": "冲突错误 at '{key}' (context: {collisionContext}, mode: {collisionMode})。请将冲突模式设置为 'merge'、'replace'、'warn' 或 'skip' 以处理冲突。",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "检测到冲突：属性 '{key}' 已存在于 '{apiPath}' 的默认导出中。当前冲突模式为 'error'。",
 		"INVALID_ARGUMENT": "无效参数 '{argument}'：预期为 {expected}，接收到 {received}。",

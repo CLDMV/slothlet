@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "Невозможно установить пользовательские метаданные: moduleID не найден. Убедитесь, что цель загружена через Slothlet.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() должен вызываться через систему жизненного цикла. Используйте lifecycle.emit('impl:created') или lifecycle.emit('impl:changed').",
 		"INVALID_METADATA_KEY": "Неверный ключ метаданных: ожидалось {expected}, получено {type} для ключа '{key}'.",
+		"WARNING_METADATA_MISMATCH": "Предупреждение: путь файла метаданных для '{apiPath}' не совпадает. Stack: '{stackFile}', metadata: '{metadataFile}'. Это может указывать на hot-reload или вмешательство.",
 		"COLLISION_ERROR": "Ошибка конфликта на '{key}' (контекст: {collisionContext}, режим: {collisionMode}). Установите режим 'merge', 'replace', 'warn' или 'skip'.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "Обнаружен конфликт: свойство '{key}' уже существует в default export по пути '{apiPath}'. Режим — 'error'.",
 		"INVALID_ARGUMENT": "Неверный аргумент '{argument}': ожидалось {expected}, получено {received}.",

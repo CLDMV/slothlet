@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "उपयोगकर्ता मेटाडेटा सेट नहीं किया जा सकता: सिस्टम मेटाडेटा में कोई moduleID नहीं मिला। सुनिश्चित करें कि लक्ष्य फ़ंक्शन/ऑब्जेक्ट Slothlet के माध्यम से लोड किया गया था।",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() को लाइफसाइकिल सिस्टम के माध्यम से कॉल किया जाना चाहिए। सीधे कॉल के बजाय lifecycle.emit('impl:created') या lifecycle.emit('impl:changed') का उपयोग करें।",
 		"INVALID_METADATA_KEY": "अमान्य मेटाडेटा कुंजी: {expected} अपेक्षित था, कुंजी '{key}' के लिए {type} प्राप्त हुआ। मेटाडेटा कुंजी उचित रूप से स्वरूपित होनी चाहिए।",
+		"WARNING_METADATA_MISMATCH": "सुरक्षा चेतावनी: '{apiPath}' के लिए मेटाडेटा फ़ाइल पथ बेमेल। स्टैक ट्रेस '{stackFile}' दिखाता है लेकिन मेटाडेटा '{metadataFile}' दिखाता है। यह हॉट रीलोड या छेड़छाड़ का संकेत दे सकता है।",
 		"COLLISION_ERROR": "'{key}' पर टकराव त्रुटि (संदर्भ: {collisionContext}, मोड: {collisionMode})। टकरावों को संभालने के लिए टकराव मोड को 'merge', 'replace', 'warn', या 'skip' पर सेट करें।",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "टकराव पाया गया: गुण '{key}' पहले से ही '{apiPath}' पर डिफ़ॉल्ट निर्यात में मौजूद है। टकराव मोड 'error' है।",
 		"INVALID_ARGUMENT": "अमान्य तर्क '{argument}': {expected} अपेक्षित था, {received} प्राप्त हुआ।",
