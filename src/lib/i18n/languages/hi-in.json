@@ -22,6 +22,7 @@
 		"CACHE_NOT_FOUND": "'{operation}' ऑपरेशन के दौरान moduleID '{moduleID}' के लिए कैश प्रविष्टि नहीं मिली। मॉड्यूल लोड नहीं हो सकता है या कैश साफ़ कर दिया गया है।",
 		"CACHE_MANAGER_NOT_AVAILABLE": "कैश प्रबंधक उपलब्ध नहीं है। '{operation}' ऑपरेशन नहीं किया जा सकता। सुनिश्चित करें कि कैश प्रबंधक प्रारंभ किया गया है।",
 		"MODULE_LOAD_FAILED": "मॉड्यूल '{modulePath}' (ID: {moduleID}) लोड करने में विफल: {error}",
+		"MODULE_NOT_FOUND": "मॉड्यूल नहीं मिला: {modulePath}। {hint}",
 		"MODULE_IMPORT_FAILED": "मॉड्यूल '{modulePath}' आयात करने में विफल: {error}। जांचें कि फ़ाइल मौजूद है और इसमें मान्य सिंटैक्स है।",
 		"CONTEXT_ALREADY_EXISTS": "इंस्टेंस '{instanceID}' के लिए संदर्भ पहले से मौजूद है। दो बार प्रारंभ नहीं किया जा सकता।",
 		"CONTEXT_NOT_FOUND": "इंस्टेंस '{instanceID}' के लिए संदर्भ नहीं मिला। इंस्टेंस बंद हो सकता है। उपलब्ध इंस्टेंस: {availableInstances}",

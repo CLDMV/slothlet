@@ -60,7 +60,7 @@ describe("SlothletDebug", () => {
 	});
 
 	it("log() outputs a translated message when a valid key is provided (hasTranslation path)", () => {
-		// MODULE_NOT_FOUND is a real key in en-us.json
+		// MODULE_NOT_FOUND is a real key in en-us.json with {modulePath} and {hint} placeholders
 		const debug = new SlothletDebug({ debug: { modes: true } });
 		debug.log("modes", { key: "MODULE_NOT_FOUND", modulePath: "./math.mjs", hint: "Check path" });
 		expect(consoleSpy).toHaveBeenCalled();
