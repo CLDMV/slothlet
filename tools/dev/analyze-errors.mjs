@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-12 16:30:47 -07:00 (1773358247)
+ *	@Last modified time: 2026-03-12 17:32:41 -07:00 (1773361961)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -464,6 +464,29 @@ function parseBareNewErrors(content, filePath) {
 		// (already excluded by the negative lookbehind `(?<![A-Za-z])` – but double-check)
 		const afterNew = content.substring(match.index + match[0].length - 1);
 		if (/^Error[A-Z]/.test(afterNew)) continue;
+
+		// Skip new Error() that is passed as a direct argument to SlothletError/SlothletWarning.
+		// This is the legitimate pattern for wrapping an external string payload (e.g. IPC message)
+		// into an Error object for use as the originalError 3rd param.
+		// Walk backwards to find the enclosing unclosed '(' and check if it belongs to a Slothlet call.
+		{
+			let depth = 0;
+			let isInsideSlothletCall = false;
+			for (let i = match.index - 1; i >= 0; i--) {
+				if (content[i] === ")") depth++;
+				else if (content[i] === "(") {
+					if (depth === 0) {
+						const before = content.substring(0, i);
+						if (/(?:SlothletError|SlothletWarning)\s*$/.test(before)) {
+							isInsideSlothletCall = true;
+						}
+						break;
+					}
+					depth--;
+				}
+			}
+			if (isInsideSlothletCall) continue;
+		}
 
 		const startIndex = match.index;
 		const parenStart = content.indexOf("(", startIndex);
