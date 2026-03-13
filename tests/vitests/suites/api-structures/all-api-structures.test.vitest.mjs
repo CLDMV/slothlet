@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:44 -08:00 (1772425304)
+ *	@Last modified time: 2026-03-13 05:45:29 -07:00 (1773405929)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -109,7 +109,7 @@ describe("All API Structures Validation", () => {
 		return new Promise((resolve) => {
 			const currentFile = fileURLToPath(import.meta.url);
 			const rootDir = path.resolve(path.dirname(currentFile), "../../../..");
-const inspectToolPath = path.join(rootDir, "tools", "dev", "inspect-api-structure.mjs");
+			const inspectToolPath = path.join(rootDir, "tools", "dev", "inspect-api-structure.mjs");
 
 			// Build arguments for the inspection tool
 			const args = [inspectToolPath, folderName];
@@ -223,14 +223,14 @@ const inspectToolPath = path.join(rootDir, "tools", "dev", "inspect-api-structur
 		}
 
 		// Check for errors - exclude success messages containing checkmarks
-		const lines = output.split('\n');
-		structure.hasErrors = lines.some(line => {
+		const lines = output.split("\n");
+		structure.hasErrors = lines.some((line) => {
 			// Ignore lines that start with success checkmarks
-			if (line.trim().startsWith('✅')) return false;
-			// Check for actual error indicators  
-// Check for actual error indicators (not property listings like "  error: function")
-// Real errors start with "Error:" at beginning of line (no spaces before)
-return line.includes('❌') || /^Error:/i.test(line);
+			if (line.trim().startsWith("✅")) return false;
+			// Check for actual error indicators
+			// Check for actual error indicators (not property listings like "  error: function")
+			// Real errors start with "Error:" at beginning of line (no spaces before)
+			return line.includes("❌") || /^Error:/i.test(line);
 		});
 
 		return structure;
