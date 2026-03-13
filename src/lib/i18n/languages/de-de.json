@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "Benutzermetadaten können nicht gesetzt werden: Keine moduleID in den Systemmetadaten gefunden. Stellen Sie sicher, dass die Zielfunktion/das Zielobjekt über Slothlet geladen wurde.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() muss über das Lifecycle-System aufgerufen werden. Verwenden Sie lifecycle.emit('impl:created') oder lifecycle.emit('impl:changed') anstelle eines direkten Aufrufs.",
 		"INVALID_METADATA_KEY": "Ungültiger Metadatenschlüssel: Erwartet wurde {expected}, erhalten wurde {type} für Schlüssel '{key}'. Metadatenschlüssel müssen korrekt formatiert sein.",
+		"WARNING_METADATA_MISMATCH": "Sicherheitswarnung: Pfad der Metadatendatei für '{apiPath}' stimmt nicht überein. Stack-Trace zeigt '{stackFile}', aber Metadaten zeigen '{metadataFile}'. Dies kann auf Hot Reload oder Manipulation hindeuten.",
 		"COLLISION_ERROR": "Kollisionsfehler bei '{key}' (Kontext: {collisionContext}, Modus: {collisionMode}). Setzen Sie den Kollisionsmodus auf 'merge', 'replace', 'warn' oder 'skip', um Kollisionen zu behandeln.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "Kollision erkannt: Eigenschaft '{key}' existiert bereits im Standard-Export bei '{apiPath}'. Der Kollisionsmodus ist 'error'.",
 		"INVALID_ARGUMENT": "Ungültiges Argument '{argument}': Erwartet wurde {expected}, erhalten wurde {received}.",

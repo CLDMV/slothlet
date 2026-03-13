@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "No se pueden establecer metadatos de usuario: no se encontró moduleID en los metadatos del sistema. Asegúrese de que el objetivo sea una función u objeto cargado a través de Slothlet.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() debe llamarse a través del sistema de ciclo de vida. Use lifecycle.emit('impl:created') o lifecycle.emit('impl:changed') en lugar de llamar directamente.",
 		"INVALID_METADATA_KEY": "Clave de metadatos inválida: se esperaba {expected}, se recibió el tipo {type} para la clave '{key}'. Las claves de metadatos deben estar bien formadas.",
+		"WARNING_METADATA_MISMATCH": "ADVERTENCIA DE SEGURIDAD: desajuste en la ruta del archivo de metadatos para '{apiPath}'. El seguimiento de pila muestra '{stackFile}', pero los metadatos registraron '{metadataFile}'. Esto puede indicar una recarga en caliente o manipulación.",
 		"COLLISION_ERROR": "Error de colisión en '{key}' (contexto: {collisionContext}, modo: {collisionMode}). Establezca el modo de colisión en 'merge', 'replace', 'warn' o 'skip' para manejar colisiones.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "Colisión detectada: la propiedad '{key}' ya existe en la exportación por defecto en '{apiPath}'. El modo de colisión es 'error'.",
 		"INVALID_ARGUMENT": "Argumento inválido '{argument}': se esperaba {expected}, se recibió {received}.",

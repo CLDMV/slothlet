@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "Cannot set user metadata: no moduleID found in system metadata. Ensure the target function/object was loaded through Slothlet.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata() must be called through the lifecycle system. Use lifecycle.emit('impl:created') or lifecycle.emit('impl:changed') instead of a direct call.",
 		"INVALID_METADATA_KEY": "Invalid metadata key: expected {expected}, received {type} for key '{key}'. Metadata keys must be properly formatted.",
+		"WARNING_METADATA_MISMATCH": "Security warning: Metadata file path mismatch for '{apiPath}'. Stack trace shows '{stackFile}' but metadata shows '{metadataFile}'. This may indicate hot reload or tampering.",
 		"COLLISION_ERROR": "Collision error at '{key}' (context: {collisionContext}, mode: {collisionMode}). Set collision mode to 'merge', 'replace', 'warn', or 'skip' to handle collisions.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "Collision detected: property '{key}' already exists on default export at '{apiPath}'. Collision mode is 'error'.",
 		"INVALID_ARGUMENT": "Invalid argument '{argument}': expected {expected}, received {received}.",

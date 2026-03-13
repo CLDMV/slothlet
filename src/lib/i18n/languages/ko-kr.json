@@ -13,6 +13,7 @@
 		"METADATA_NO_MODULE_ID": "사용자 메타데이터를 설정할 수 없습니다: 시스템 메타데이터에서 moduleID를 찾을 수 없습니다. 대상 함수/객체가 Slothlet을 통해 로드되었는지 확인하십시오.",
 		"METADATA_LIFECYCLE_BYPASS": "tagSystemMetadata()는 수명 주기 시스템을 통해 호출되어야 합니다. 직접 호출 대신 lifecycle.emit('impl:created') 또는 lifecycle.emit('impl:changed')를 사용하십시오.",
 		"INVALID_METADATA_KEY": "유효하지 않은 메타데이터 키: {expected}이(가) 필요하지만 키 '{key}'에 대해 {type}을(를) 받았습니다. 메타데이터 키는 올바른 형식이어야 합니다.",
+		"WARNING_METADATA_MISMATCH": "보안 경고: '{apiPath}'에 대한 메타데이터 파일 경로가 일치하지 않습니다. 스택 추적에는 '{stackFile}'로 표시되지만 메타데이터에는 '{metadataFile}'로 표시됩니다. 이는 핫 리로드 또는 변조를 나타낼 수 있습니다.",
 		"COLLISION_ERROR": "'{key}'에서 충돌 오류 발생 (컨텍스트: {collisionContext}, 모드: {collisionMode}). 충돌을 처리하려면 충돌 모드를 'merge', 'replace', 'warn' 또는 'skip'으로 설정하십시오.",
 		"COLLISION_DEFAULT_EXPORT_ERROR": "충돌 감지: '{apiPath}'의 기본 내보내기에 '{key}' 속성이 이미 존재합니다. 충돌 모드가 'error'입니다.",
 		"INVALID_ARGUMENT": "유효하지 않은 인수 '{argument}': {expected}이(가) 필요하지만 {received}을(를) 받았습니다.",
