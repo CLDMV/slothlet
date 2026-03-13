@@ -17,6 +17,7 @@
  */
 
 import { execSync } from "child_process";
+import { pathToFileURL } from "node:url";
 
 /**
  * Get the current Node.js major version
@@ -57,7 +58,7 @@ async function runConditionalTests() {
 }
 
 // Run if this script is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	runConditionalTests();
 }
 

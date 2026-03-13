@@ -18,7 +18,7 @@
 
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -60,7 +60,7 @@ async function removeSrcInCI() {
 }
 
 // Run if this script is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	removeSrcInCI();
 }
 

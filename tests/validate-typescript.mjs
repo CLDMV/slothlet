@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-09 17:17:19 -07:00 (1773101839)
+ *	@Last modified time: 2026-03-13 07:04:35 -07:00 (1773410675)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -15,6 +15,7 @@ import { execSync } from "child_process";
 import { writeFileSync, rmSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
+import { pathToFileURL } from "node:url";
 
 /**
  * Gets list of .mjs files in a directory.
@@ -48,7 +49,7 @@ async function main() {
 	try {
 		// Create temporary directory in project root
 		const randomSuffix = randomBytes(4).toString("hex"); // 8 character random string
-		tempDir = join(process.cwd(), 'tmp', `ts-validate-${randomSuffix}`);
+		tempDir = join(process.cwd(), "tmp", `ts-validate-${randomSuffix}`);
 		mkdirSync(tempDir, { recursive: true });
 		console.log(`📁 Using temp directory: ${tempDir}`);
 
@@ -239,7 +240,7 @@ export default validateMainExport;
 // Current approach uses individual export testing.
 
 // Run if called directly
-if (import.meta.url.endsWith(process.argv[1]) || process.argv[1].endsWith("validate-typescript.mjs")) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	main().catch((error) => {
 		console.error("Validation failed:", error);
 		process.exit(1);

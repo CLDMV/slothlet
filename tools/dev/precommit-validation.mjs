@@ -174,7 +174,7 @@ async function runCommand(command, args) {
 }
 
 // Run if called directly
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	main().catch((error) => {
 		console.error("❌ Pre-commit validation error:", error);
 		process.exit(1);

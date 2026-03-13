@@ -626,7 +626,7 @@ async function main() {
 }
 
 // Run if called directly
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	main().catch((error) => {
 		console.error(chalk.red("Error:"), error);
 		process.exit(1);

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	@Last modified time: 2026-03-13 07:00:18 -07:00 (1773410418)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -47,7 +47,7 @@ function ensureDevEnvFlags() {
 	// Use V3 slothlet-dev condition
 	const allExecArgv = [...process.execArgv];
 	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
-const ____allConditions = [...allExecArgv, ...envOptions];
+	const ____allConditions = [...allExecArgv, ...envOptions];
 
 	const slothletCondition = "slothlet-dev";
 
