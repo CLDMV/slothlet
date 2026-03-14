@@ -141,9 +141,9 @@ export function translate(errorCode, params = {}) {
 		message = message.replace(new RegExp(`\\{${key}\\}`, "g"), value !== undefined ? String(value) : "");
 	}
 
-	// Clean up empty placeholders
+	// Clean up empty placeholders (no surrounding \s* to avoid ReDoS on whitespace-heavy input)
 	message = message
-		.replace(/\s*\{\w+\}\s*/g, " ")
+		.replace(/\{\w+\}/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
 
