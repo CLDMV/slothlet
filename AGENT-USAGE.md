@@ -2,87 +2,68 @@
 
 > **Critical**: This guide prevents AI agents from making architectural mistakes when building Slothlet API modules.
 
-## 📋 **Related Documentation**
+## 📋 Related Documentation
 
-- **[API-RULES.md](./API-RULES.md)** - 778+ lines of verified API transformation rules with test examples
-- **[README.md](./README.md)** - Complete project overview and usage examples
-- **[api_tests/\*/README.md](./api_tests/)** - Live examples demonstrating each pattern mentioned below
+- **[`docs/API-RULES.md`](docs/API-RULES.md)** - All 13 API transformation rules with verified test examples
+- **[`README.md`](README.md)** - Complete project overview and usage examples
+- **[`api_tests/*/README.md`](api_tests/)** - Live examples demonstrating each pattern below
 
 ---
 
 ## 🚫 NEVER DO: Cross-Module Imports
 
-**The #1 mistake AI agents make with Slothlet**: Trying to import API files from each other.
+**The #1 mistake AI agents make with Slothlet**: Importing API files from each other.
 
 ```js
 // ❌ WRONG - Do NOT import API modules from each other
 import { math } from "./math/math.mjs"; // BREAKS SLOTHLET
 import { config } from "../config.mjs"; // BREAKS SLOTHLET
 import { util } from "./util/util.mjs"; // BREAKS SLOTHLET
-
-// ❌ WRONG - Do NOT use relative imports between API modules
-import { someFunction } from "../../other-api.mjs"; // BREAKS SLOTHLET
 ```
 
 **Why this breaks Slothlet**:
 
-- Slothlet builds your API structure dynamically
+- Slothlet builds API structure dynamically at runtime
 - Cross-imports create circular dependencies
 - Breaks lazy loading and context isolation
-- Defeats the purpose of module loading framework
+- Defeats the purpose of the module loading framework
 
 ## ✅ CORRECT: Use Slothlet's Live-Binding System
 
 ```js
 // ✅ CORRECT - Import from Slothlet runtime for cross-module access
-import { self, context, reference } from "@cldmv/slothlet/runtime";
+import { self, context } from "@cldmv/slothlet/runtime";
 
-// ✅ CORRECT - Access other modules through `self`
 export const myModule = {
 	async processData(input) {
-		// Access other API modules via `self`
+		// Access other API modules via `self` (live binding - always current)
 		const mathResult = self.math.add(2, 3);
 		const configValue = self.config.get("setting");
-
-		return `Processed: ${input}, Math: ${mathResult}, Config: ${configValue}`;
+		// context holds the current request/call context
+		console.log(`Caller: ${context.userId}`);
+		return `Processed: ${input}, Math: ${mathResult}`;
 	}
 };
 ```
 
-## 🏗️ Slothlet API Module Patterns
+---
+
+## 🏗️ API Module Patterns
 
 ### Pattern 1: Simple Object Export (Most Common)
 
 **File**: `math/math.mjs` → **API**: `api.math.add()`, `api.math.multiply()`
 
 ```js
-/**
- * @fileoverview Math operations module. Internal file (not exported in package.json).
- * @module api_test.math
- * @memberof module:api_test
- */
-
-// ✅ Import runtime for cross-module access (if needed)
-// import { self, context, reference } from "@cldmv/slothlet/runtime";
-
-/**
- * Math operations object accessed as `api.math`.
- * @alias module:api_test.math
- */
 export const math = {
-	add(a, b) {
-		return a + b;
-	},
-
-	multiply(a, b) {
-		return a * b;
-	}
+	add(a, b) { return a + b; },
+	multiply(a, b) { return a * b; }
 };
 ```
 
 **Result**: Filename matches folder (`math/math.mjs`) → Auto-flattening → `api.math.add()` (not `api.math.math.add()`)
 
-> 📖 **See**: [API-RULES.md Rule 1](./API-RULES.md#rule-1-filename-matches-container-flattening) for technical implementation details
+> 📖 See [API-RULES.md Rule 1](docs/API-RULES.md) for flattening details.
 
 ### Pattern 2: Multiple Files in Folder
 
@@ -90,47 +71,31 @@ export const math = {
 
 ```js
 // File: multi/alpha.mjs
-export const alpha = {
-	hello() {
-		return "alpha hello";
-	}
-};
+export const alpha = { hello() { return "alpha hello"; } };
 
 // File: multi/beta.mjs
-export const beta = {
-	world() {
-		return "beta world";
-	}
-};
+export const beta = { world() { return "beta world"; } };
 ```
 
-**Result**: Different filenames from folder → No flattening → Nested structure preserved
-
-> 📖 **See**: [API-RULES.md Rule 2](./API-RULES.md#rule-2-named-only-export-collection) for multi-file folder processing
+**Result**: Different filenames from folder → No flattening → Nested structure preserved.
 
 ### Pattern 3: Default Function Export
 
 **File**: `funcmod/funcmod.mjs` → **API**: `api.funcmod(name)`
 
 ```js
-/**
- * Default function export accessed as `api.funcmod()`.
- * @param {string} name - Name to greet
- * @returns {string} Greeting message
- */
 export default function funcmod(name) {
 	return `Hello, ${name}!`;
 }
 ```
 
-**Result**: Filename matches folder + default export → Function flattened to `api.funcmod()`
+**Result**: Filename matches folder + default export → Function flattened to `api.funcmod()`.
 
 ### Pattern 4: Root-Level API Functions
 
 **File**: `root-function.mjs` → **API**: `api(name)` + `api.rootFunctionShout()`
 
 ```js
-// ✅ Root-level file creates top-level API methods
 export default function greet(name) {
 	return `Hello, ${name}!`;
 }
@@ -140,282 +105,357 @@ export function rootFunctionShout(message) {
 }
 ```
 
-**Result**: Root file with default export → `api()` callable + named exports as `api.methodName()`
-
-> 📖 **See**: [API-RULES.md Rule 4](./API-RULES.md#rule-4-default-export-container-pattern) for root-level default export handling
+**Result**: Root file with default export → `api()` callable + named exports as top-level `api.methodName()`.
 
 ### Pattern 5: AddApi Special File Pattern (Rule 11)
 
-**File**: `addapi.mjs` loaded via `addApi()` → **API**: Always flattened for API extensions
+Files named `addapi.mjs` always flatten regardless of `autoFlatten` setting:
 
 ```js
 // File: plugins/addapi.mjs
-/**
- * Special addapi.mjs file for runtime API extensions.
- * Always flattens regardless of autoFlatten setting.
- */
-export function initializePlugin() {
-	return "Plugin initialized";
-}
-
-export function cleanup() {
-	return "Plugin cleaned up";
-}
-
-export function configure(options) {
-	return `Configured with ${options}`;
-}
-
-// Usage:
-await api.addApi("plugins", "./plugins-folder");
-
-// Result: Always flattened (no .addapi. level)
-api.plugins.initializePlugin(); // ✅ Direct extension
-api.plugins.cleanup(); // ✅ No intermediate namespace
-api.plugins.configure(opts); // ✅ Seamless integration
+export function initializePlugin() { return "Plugin initialized"; }
+export function cleanup() { return "Plugin cleaned up"; }
 ```
-
-**Result**: `addapi.mjs` always flattens → Perfect for plugin systems and runtime extensions
-
-**Use Cases**:
-
-- 🔌 **Plugin Systems**: Runtime plugin loading
-- 🔄 **Hot Reloading**: Dynamic API updates during development
-- 📦 **Modular Extensions**: Clean extension of existing API surfaces
-
-> 📖 **See**: [API-RULES.md Rule 11](./API-RULES.md#rule-11-addapi-special-file-pattern) for technical implementation details
-
-## 🔄 Cross-Module Communication Patterns
-
-### ✅ Using Live Bindings
 
 ```js
-// File: interop/esm-module.mjs
-import { self, context } from "@cldmv/slothlet/runtime";
-
-export const interopEsm = {
-	async testCrossCall(a, b) {
-		console.log(`ESM Context: User=${context.user}`);
-
-		// ✅ CORRECT - Access other modules via self
-		if (self?.mathCjs?.multiply) {
-			const result = self.mathCjs.multiply(a, b);
-			return result;
-		}
-
-		throw new Error("CJS mathCjs.multiply not available via self");
-	}
-};
+await api.slothlet.api.add("plugins", "./plugins-folder");
+api.plugins.initializePlugin(); // ✅ Direct extension - no intermediate namespace
 ```
 
-### ✅ Context Isolation
+> 📖 See [API-RULES.md Rule 11](docs/API-RULES.md) for addApi flattening details.
+
+---
+
+## 🔄 Operating Modes
+
+Slothlet supports two loading modes set via `mode:` in the config:
+
+### Eager Mode (default)
+
+All modules are loaded synchronously at `await slothlet(...)`. The API is fully populated before `slothlet()` resolves.
 
 ```js
-// Each Slothlet instance gets isolated context
-const api1 = await slothlet({
-	dir: "./api",
-	context: { user: "alice", session: "session1" }
-});
-
-const api2 = await slothlet({
-	dir: "./api",
-	context: { user: "bob", session: "session2" }
-});
-
-// Contexts are isolated - alice can't see bob's data
+const api = await slothlet({ dir: "./api" }); // mode: "eager" is default
+// All api.* properties are immediately available
 ```
 
-## 🎣 Hook System (v2.6.4+)
+### Lazy Mode
 
-Slothlet provides a powerful hook system for intercepting and modifying API function calls. Hooks work across all modes and runtimes.
+Modules are loaded on first access via transparent proxy. `slothlet()` resolves immediately without loading any files.
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	mode: "lazy"
+});
+// api.math is a proxy - file not loaded yet
+const result = api.math.add(2, 3); // First access triggers load
+```
+
+#### Background Materialization
+
+Enable `backgroundMaterialize: true` to pre-load all modules in the background immediately after init (still non-blocking):
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	mode: "lazy",
+	backgroundMaterialize: true
+});
+
+// Subscribe to completion event
+api.slothlet.lifecycle.on("materialized:complete", (data) => {
+	console.log(`${data.total} modules materialized`);
+});
+
+// Or await all modules to be ready
+await api.slothlet.materialize.wait();
+
+// Or check current progress
+const stats = api.slothlet.materialize.get();
+// { total, materialized, remaining, percentage }
+```
+
+**Important**: Lazy mode hot reload intentionally restores modules to an unmaterialized state on reload (references are not preserved). Eager mode preserves existing references by merging into the live wrapper.
+
+---
+
+## 🎣 Hook System
+
+Hooks intercept API function calls. They work across all modes. See [`docs/HOOKS.md`](docs/HOOKS.md) for the full reference.
 
 ### Hook Configuration
 
 ```js
-// Enable hooks with default settings
-const api = await slothlet({
-	dir: "./api",
-	hooks: true // Enables all hooks with pattern "**"
-});
+// Simple enable (default pattern "**")
+const api = await slothlet({ dir: "./api", hook: true });
 
-// Enable with error suppression
+// Enable with default pattern filter
+const api = await slothlet({ dir: "./api", hook: "database.*" });
+
+// Full configuration
 const api = await slothlet({
 	dir: "./api",
-	hooks: {
+	hook: {
 		enabled: true,
 		pattern: "**",
-		suppressErrors: true // Errors reported to error hooks only, not thrown
+		suppressErrors: false // true = errors suppressed (returns undefined instead of throwing)
 	}
 });
 ```
 
 ### Hook Types
 
-**Four hook types available:**
-
-- **`before`**: Intercept before function execution
-  - Modify arguments
-  - Cancel execution (short-circuit) and return custom value
-  - Validation and pre-processing
-
-- **`after`**: Transform results after execution
-  - Transform return values
-  - Only runs if function executes
-  - Chain transformations
-
-- **`always`**: Observe final result (read-only)
-  - Always executes (even on short-circuit)
-  - Cannot modify result
-  - Perfect for logging and metrics
-
-- **`error`**: Monitor and handle errors
-  - Receives detailed error context
-  - Source tracking (before/function/after/always)
-  - Error class identification
+- **`before`** - Executes before the function. Can modify arguments or short-circuit. **Must be synchronous.**
+- **`after`** - Executes after successful completion. Can transform the return value.
+- **`always`** - Read-only observer. Always executes (even on short-circuit). Return value ignored.
+- **`error`** - Executes only when an error occurs. Receives error with source tracking.
 
 ### Basic Hook Usage
 
+The `hook.on(typePattern, handler, options)` signature uses `"type:pattern"` as the first argument:
+
 ```js
 // Before hook - modify arguments
-api.hooks.on(
-	"validate-input",
-	"before",
-	({ path, args }) => {
-		console.log(`Calling ${path} with:`, args);
-		return [args[0] * 2, args[1] * 2]; // Modified args
+api.slothlet.hook.on(
+	"before:math.add",
+	({ path, args, ctx }) => {
+		return [args[0] * 2, args[1] * 2]; // Return array to replace arguments
+		// Return any non-array non-undefined value to short-circuit (skip function)
+		// Return undefined to continue with original args
 	},
-	{ pattern: "math.add", priority: 100 }
+	{ id: "double-args", priority: 100 }
 );
 
 // After hook - transform result
-api.hooks.on(
-	"format-output",
-	"after",
-	({ path, result }) => {
-		return result * 10; // Transform result
+api.slothlet.hook.on(
+	"after:math.*",
+	({ path, args, result, ctx }) => {
+		return result * 10; // Return value to replace result; undefined = no change
 	},
-	{ pattern: "math.*" }
+	{ id: "scale-result" }
 );
 
 // Always hook - observe (read-only)
-api.hooks.on(
-	"log-final",
-	"always",
-	({ path, result }) => {
-		console.log(`Final: ${path} = ${result}`);
+api.slothlet.hook.on(
+	"always:**",
+	({ path, result, hasError, errors }) => {
+		if (hasError) console.error(`${path} failed:`, errors);
+		else console.log(`${path} returned:`, result);
+		// Return value is ignored
 	},
-	{ pattern: "**" }
+	{ id: "logger" }
 );
 
 // Error hook - monitor failures
-api.hooks.on(
-	"error-monitor",
-	"error",
-	({ path, error, source, errorType }) => {
-		console.error(`${source.type} error in ${path}:`, error.message);
-		console.error(`Error type: ${errorType}`);
+api.slothlet.hook.on(
+	"error:**",
+	({ path, error, source }) => {
+		// source.type: "before" | "after" | "always" | "function"
+		console.error(`Error in ${path} (from ${source.type}):`, error.message);
 	},
-	{ pattern: "**" }
+	{ id: "error-monitor" }
 );
 ```
 
-### Hook Pattern Matching
+### Pattern Matching
+
+| Syntax | Description | Example |
+|---|---|---|
+| `exact.path` | Exact match | `"before:math.add"` |
+| `namespace.*` | All functions in namespace | `"after:math.*"` |
+| `*.funcName` | Function name across namespaces | `"always:*.add"` |
+| `**` | All functions | `"error:**"` |
+| `{a,b}` | Brace expansion | `"before:{math,utils}.*"` |
+| `!pattern` | Negation | `"before:!internal.*"` |
+
+### Hook Subsets
+
+Each hook type has three ordered execution phases:
+
+| Subset | Order | Typical use |
+|---|---|---|
+| `"before"` | First | Auth checks, security validation |
+| `"primary"` | Middle (default) | Main hook logic |
+| `"after"` | Last | Audit trails, cleanup |
 
 ```js
-// Exact match
-api.hooks.on("hook1", "before", handler, { pattern: "math.add" });
-
-// Namespace wildcard
-api.hooks.on("hook2", "before", handler, { pattern: "math.*" });
-
-// Function wildcard
-api.hooks.on("hook3", "before", handler, { pattern: "*.add" });
-
-// All functions
-api.hooks.on("hook4", "before", handler, { pattern: "**" });
-```
-
-### Short-Circuit Execution
-
-```js
-// Return non-undefined value to short-circuit
-api.hooks.on(
-	"cache-check",
-	"before",
-	({ path, args }) => {
-		const key = JSON.stringify({ path, args });
-		if (cache.has(key)) {
-			return cache.get(key); // Skip function execution
-		}
-		// Return undefined to continue
-	},
-	{ pattern: "**", priority: 1000 }
+api.slothlet.hook.on(
+	"before:protected.*",
+	({ ctx }) => { if (!ctx.user) throw new Error("Unauthorized"); },
+	{ id: "auth", subset: "before", priority: 2000 }
 );
-```
-
-### Error Suppression
-
-Error hooks **ALWAYS receive errors** regardless of the `suppressErrors` setting. This option only controls whether errors are thrown after error hooks execute.
-
-**Important**: Hooks must be enabled (`enabled: true`) for error hooks to work. If hooks are disabled, all hooks (including error hooks) are bypassed and errors throw normally.
-
-**Default behavior (`suppressErrors: false`)**:
-
-- Errors sent to error hooks, THEN thrown
-- Application crashes on uncaught errors
-
-**Suppressed errors (`suppressErrors: true`)**:
-
-- Errors sent to error hooks, BUT NOT thrown
-- Function returns `undefined` instead of throwing
-- All hook errors suppressed (before, after, always)
-- Perfect for resilient systems with monitoring
-
-```js
-const api = await slothlet({
-	dir: "./api",
-	hooks: {
-		enabled: true,
-		suppressErrors: true // Suppress all errors
-	}
-});
-
-api.hooks.on(
-	"error-log",
-	"error",
-	({ path, error }) => {
-		// Log error without crashing app
-		sendToMonitoring(path, error);
-	},
-	{ pattern: "**" }
-);
-
-// Function fails gracefully
-const result = await api.riskyOperation();
-if (result === undefined) {
-	console.log("Operation failed but didn't crash");
-}
 ```
 
 ### Hook Management
 
 ```js
-// Register hook and get ID
-const hookId = api.hooks.on("my-hook", "before", handler, { pattern: "**" });
+// Remove by ID
+api.slothlet.hook.remove({ id: "my-hook" });
+api.slothlet.hook.off("my-hook"); // alias for remove
 
-// Remove specific hook
-api.hooks.off(hookId);
+// Remove by filter
+api.slothlet.hook.remove({ type: "before", pattern: "math.*" });
 
-// Clear all hooks
-api.hooks.clear();
+// Remove all
+api.slothlet.hook.clear();
 
-// List registered hooks
-const hooks = api.hooks.list();
+// List hooks
+const all = api.slothlet.hook.list();
+const active = api.slothlet.hook.list({ enabled: true });
 
-// Enable/disable hooks at runtime
-api.hooks.disable(); // Fast-path bypass
-api.hooks.enable("database.*"); // Re-enable with new pattern
+// Enable / disable without unregistering
+api.slothlet.hook.disable();         // disable all
+api.slothlet.hook.disable({ pattern: "math.*" });
+api.slothlet.hook.enable();          // re-enable all
+api.slothlet.hook.enable({ type: "before" });
 ```
+
+---
+
+## 🔄 Per-Request Context
+
+Execute functions with temporary merged context using `api.slothlet.context`:
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	context: { appName: "MyApp", version: "3.0" }
+});
+
+// run() - execute a function inside a scoped context
+await api.slothlet.context.run({ userId: "alice", role: "admin" }, async () => {
+	// Inside this scope: context = { appName, version, userId, role }
+	await api.database.query();
+	await api.audit.log();
+});
+
+// scope() - return a new API object with merged context
+const scopedApi = api.slothlet.context.scope({ userId: "bob" });
+await scopedApi.database.query(); // context includes userId: "bob"
+```
+
+### Deep Merge Strategy
+
+```js
+// Default: shallow merge (top-level properties replaced)
+await api.slothlet.context.run({ newProp: "value" }, handler);
+
+// Deep merge: nested objects recursively merged
+await api.slothlet.context.run(
+	{ nested: { prop: "value" } },
+	handler,
+	{ mergeStrategy: "deep" }
+);
+```
+
+### Automatic EventEmitter Context Propagation
+
+Context propagates automatically through EventEmitter callbacks:
+
+```js
+import net from "net";
+import { context } from "@cldmv/slothlet/runtime";
+
+export const server = {
+	async start() {
+		const tcpServer = net.createServer((socket) => {
+			// Context automatically available in connection handler
+			console.log(`User ${context.userId} connected`);
+
+			socket.on("data", (data) => {
+				// Context preserved in nested event callbacks
+				console.log(`Data from ${context.userId}: ${data}`);
+			});
+		});
+		tcpServer.listen(3000);
+	}
+};
+```
+
+Works with: TCP servers, HTTP servers, custom EventEmitters, unlimited nested callbacks.
+
+> 📖 See [`docs/CONTEXT-PROPAGATION.md`](docs/CONTEXT-PROPAGATION.md) for full documentation.
+
+---
+
+## 🏷️ Metadata System
+
+Tag API paths with metadata for authorization, auditing, and security. See [`docs/METADATA.md`](docs/METADATA.md) for the full reference.
+
+```js
+// Set metadata when loading (via api.slothlet.api.add)
+await api.slothlet.api.add("plugins/trusted", "./trusted-dir", {
+	metadata: { trusted: true, securityLevel: "high" }
+});
+
+// Set metadata at runtime
+api.slothlet.metadata.set("plugins.trusted.someFunc", { version: 2 });
+api.slothlet.metadata.setGlobal({ environment: "production" });
+api.slothlet.metadata.setFor("plugins/trusted", { owner: "core-team" });
+
+// Read metadata inside a module
+import { self } from "@cldmv/slothlet/runtime";
+
+export const secureOperation = {
+	async execute() {
+		// Access metadata via api.slothlet.metadata from within a module via self
+		// Or read it externally:
+		// const meta = api.slothlet.metadata.get("plugins.trusted.execute");
+		return "Authorized execution";
+	}
+};
+```
+
+---
+
+## 🔁 Hot Reload / Dynamic API Management
+
+```js
+// Add new modules at runtime
+await api.slothlet.api.add("newModule", "./new-module-path");
+await api.slothlet.api.add("plugins", "./plugins", { collision: "merge" });
+
+// Remove modules by path
+await api.slothlet.api.remove("oldModule");
+
+// Reload all modules
+await api.slothlet.reload();
+
+// Reload specific API path
+await api.slothlet.api.reload("database.*");
+await api.slothlet.api.reload("plugins.auth");
+```
+
+> **Lazy mode reload behavior**: In lazy mode, reload restores modules to an unmaterialized proxy state - existing references to lazy wrappers are intentionally not preserved. Eager mode merges new module exports into the existing live wrapper, preserving references.
+
+> 📖 See [`docs/RELOAD.md`](docs/RELOAD.md) for reload system documentation.
+
+---
+
+## ⚡ Lifecycle Events
+
+Subscribe to internal API events via `api.slothlet.lifecycle`:
+
+```js
+// Available events
+api.slothlet.lifecycle.on("materialized:complete", (data) => {
+	console.log(`${data.total} modules materialized`);
+});
+
+api.slothlet.lifecycle.on("impl:changed", (data) => {
+	console.log(`Module at ${data.apiPath} was reloaded`);
+});
+
+// Unsubscribe
+const handler = (data) => console.log(data);
+api.slothlet.lifecycle.on("materialized:complete", handler);
+api.slothlet.lifecycle.off("materialized:complete", handler);
+```
+
+**Available events**: `"materialized:complete"`, `"impl:created"`, `"impl:changed"`, `"impl:removed"`
+
+---
 
 ## 📁 File Organization Best Practices
 
@@ -425,7 +465,7 @@ api.hooks.enable("database.*"); // Re-enable with new pattern
 api/
 ├── config.mjs              → api.config.*
 ├── math/
-│   └── math.mjs            → api.math.* (flattened)
+│   └── math.mjs            → api.math.* (flattened - filename matches folder)
 ├── util/
 │   ├── util.mjs            → api.util.* (flattened methods)
 │   ├── extract.mjs         → api.util.extract.*
@@ -438,140 +478,130 @@ api/
     └── beta.mjs            → api.multi.beta.*
 ```
 
-### ✅ Module Naming Conventions
+### ✅ Naming Conventions
 
-- **Filename matches folder** → Auto-flattening (cleaner API)
+- **Filename matches folder** → Auto-flattening (`math/math.mjs` → `api.math.*`)
 - **Different filename** → Nested structure preserved
 - **Dash-separated names** → camelCase API (`auto-ip.mjs` → `api.autoIP`)
-- **Function name preference** → Original capitalization preserved (`autoIP`, `parseJSON`) - [See API-RULES.md Rule 9](./API-RULES.md#rule-9-function-name-preference-over-sanitization)
+- **Function name preferred** → Original capitalization kept over sanitized form
+  (see [Rule 9](docs/API-RULES.md))
 
-## 🧪 JSDoc Documentation Patterns
-
-> 📖 **For detailed JSDoc templates and examples**, see [.github/copilot-instructions.md - JSDoc Standards](./.github/copilot-instructions.md#-jsdoc-standards--patterns)
-
-### ✅ Primary Module File (One per folder)
-
-```js
-/**
- * @fileoverview Math operations for API testing.
- * @module api_test
- * @name api_test
- * @alias @cldmv/slothlet/api_tests/api_test
- */
-```
-
-### ✅ Secondary Contributing Files
-
-```js
-/**
- * @fileoverview Math utilities. Internal file (not exported in package.json).
- * @module api_test.math
- * @memberof module:api_test
- */
-```
-
-### ✅ Live-Binding Imports Pattern
-
-```js
-// ✅ Always include runtime imports (even if commented out for structure)
-// import { self, context, reference } from "@cldmv/slothlet/runtime";
-```
+---
 
 ## 🚨 Common AI Agent Mistakes
-
-> 📖 **For complete technical details on all API transformation rules**, see [API-RULES.md](./API-RULES.md) (778+ lines of verified examples)
 
 ### ❌ Mistake 1: Cross-Module Imports
 
 ```js
 // ❌ WRONG
 import { config } from "./config.mjs";
+// ✅ CORRECT
+import { self } from "@cldmv/slothlet/runtime";
+// then: self.config.get(...)
 ```
 
-### ❌ Mistake 2: Missing Runtime Imports
+### ❌ Mistake 2: Using V2 API Surface
 
 ```js
-// ❌ WRONG - No way to access other modules
-export const module = {
-	method() {
-		// How do I access other modules? 🤔
-	}
-};
+// ❌ WRONG (v2 API - does not exist in v3)
+await api.addApi("plugins", "./dir");
+await api.reloadApi("math.*");
+api.hooks.on("validate", "before", handler, { pattern: "math.*" });
+await api.run({ userId: "alice" }, fn);
+
+// ✅ CORRECT (v3 API)
+await api.slothlet.api.add("plugins", "./dir");
+await api.slothlet.api.reload("math.*");
+api.slothlet.hook.on("before:math.*", handler);
+await api.slothlet.context.run({ userId: "alice" }, fn);
 ```
 
-### ❌ Mistake 3: Wrong JSDoc Module Patterns
+### ❌ Mistake 3: Wrong Hook Config Key
 
 ```js
-// ❌ WRONG - Multiple @module declarations create duplicates
-/**
- * @module api_test     ← Already declared elsewhere
- * @module api_test.math  ← Should only use @memberof
- */
+// ❌ WRONG
+const api = await slothlet({ dir: "./api", hooks: true }); // "hooks" plural
+
+// ✅ CORRECT
+const api = await slothlet({ dir: "./api", hook: true }); // "hook" singular
 ```
 
 ### ❌ Mistake 4: Breaking Auto-Flattening
 
 ```js
-// File: math/calculator.mjs  (different name than folder)
-export const math = {
-	/* methods */
-};
-// Result: api.math.calculator.math.* (nested, not flattened)
+// File: math/calculator.mjs (different name from folder)
+export const math = { /* methods */ };
+// Result: api.math.calculator.math.* ← extra nesting, not flattened
 
 // ✅ CORRECT: File math/math.mjs
-export const math = {
-	/* methods */
-};
-// Result: api.math.* (flattened)
+export const math = { /* methods */ };
+// Result: api.math.* ← flattened
 ```
+
+### ❌ Mistake 5: Using lifecycle.subscribe / lifecycle.emit
+
+```js
+// ❌ WRONG - subscribe/emit are internal
+api.slothlet.lifecycle.subscribe("materialized:complete", handler);
+api.slothlet.lifecycle.emit("impl:changed", data);
+
+// ✅ CORRECT - public surface is on/off only
+api.slothlet.lifecycle.on("materialized:complete", handler);
+api.slothlet.lifecycle.off("materialized:complete", handler);
+```
+
+---
 
 ## ✅ AI Agent Checklist
 
-When building Slothlet API modules:
-
-- [ ] **NO cross-module imports** - Use `self` from runtime instead
-- [ ] **Import runtime** - `import { self, context, reference } from "@cldmv/slothlet/runtime"`
+- [ ] **No cross-module imports** - use `self` from `@cldmv/slothlet/runtime` instead
 - [ ] **Match filename to folder** for cleaner APIs (auto-flattening)
-- [ ] **Use proper JSDoc patterns** - One `@module` per folder, `@memberof` for secondary files
-- [ ] **Test cross-module access** via `self.otherModule.method()`
-- [ ] **Include context usage** if module needs user/session data
-- [ ] **Consider hooks** - Will functions be intercepted? Need error monitoring?
-- [ ] **Double quotes everywhere** - Follow Slothlet coding standards
+- [ ] **Hook config key is `hook:` (singular)**, not `hooks:`
+- [ ] **Hook API** is `api.slothlet.hook.*`, not `api.hooks.*`
+- [ ] **Context API** is `api.slothlet.context.run/scope()`, not `api.run/scope()`
+- [ ] **Reload/add/remove** is `api.slothlet.api.add/remove/reload()`, not `api.addApi()` etc.
+- [ ] **Lifecycle** uses `api.slothlet.lifecycle.on/off()` only
+- [ ] **Lazy mode**: if using background materialization, use `api.slothlet.materialize.wait()` before accessing the API
+- [ ] **Hook subsets**: auth/security → `subset: "before"`, main logic → `"primary"`, audit → `"after"`
+- [ ] **Double quotes everywhere** - follow Slothlet coding standards
+
+---
 
 ## 📚 Reference Examples
 
 - **Auto-flattening**: `api_tests/api_test/math/math.mjs`
 - **Multi-file folders**: `api_tests/api_test/multi/`
-- **Cross-module calls**: `api_tests/api_test_mixed/interop/`
+- **Cross-module calls**: `api_tests/api_test_mixed/`
 - **Root-level APIs**: `api_tests/api_test/root-function.mjs`
 - **Nested structures**: `api_tests/api_test/nested/date/`
 
-## 📖 Essential Documentation for AI Agents
+---
 
-### 🏗️ **Core Architecture & Patterns**
+## 📖 Essential Documentation
 
-- **[`API-RULES.md`](./API-RULES.md)** - **CRITICAL** - Comprehensive verified rules for API transformation (778+ lines of verified examples)
-- **[`API-RULES-CONDITIONS.md`](./API-RULES-CONDITIONS.md)** - Technical reference for all conditional logic controlling API generation
+### Core Architecture
 
-### � **Usage & Installation**
+- **[`docs/API-RULES.md`](docs/API-RULES.md)** - All 13 API transformation rules
+- **[`docs/API-RULES/API-RULES-CONDITIONS.md`](docs/API-RULES/API-RULES-CONDITIONS.md)** - All C01–C34 conditional logic
+- **[`docs/API-RULES/API-FLATTENING.md`](docs/API-RULES/API-FLATTENING.md)** - Flattening rules F01–F08
 
-- **[`README.md`](./README.md)** - Complete project overview, installation, and usage examples
+### Configuration & Features
 
-### 🧪 **Live Examples & Patterns**
+- **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)** - All config options
+- **[`docs/HOOKS.md`](docs/HOOKS.md)** - Hook system (types, subsets, patterns, management)
+- **[`docs/METADATA.md`](docs/METADATA.md)** - Metadata system
+- **[`docs/CONTEXT-PROPAGATION.md`](docs/CONTEXT-PROPAGATION.md)** - Per-request context and EventEmitter propagation
+- **[`docs/RELOAD.md`](docs/RELOAD.md)** - Hot reload and dynamic API management
+- **[`docs/LIFECYCLE.md`](docs/LIFECYCLE.md)** - Lazy mode, materialization, and lifecycle events
+- **[`docs/SANITIZATION.md`](docs/SANITIZATION.md)** - Property name sanitization rules
+- **[`docs/I18N.md`](docs/I18N.md)** - Internationalization and language support
+- **[`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)** - Performance characteristics and benchmarks
 
-- **[`api_tests/api_test/README.md`](./api_tests/api_test/README.md)** - ESM module patterns and filename-folder flattening
-- **[`api_tests/api_test_cjs/README.md`](./api_tests/api_test_cjs/)** - CommonJS module patterns and interoperability
-- **[`api_tests/api_test_mixed/README.md`](./api_tests/api_test_mixed/)** - Mixed ESM/CJS patterns and live-binding examples
+### Critical Reading Order for AI Agents
 
-### 🔧 **Advanced Pattern Documentation**
-
-- **[`docs/generated/api_tests/`](./docs/generated/api_tests/)** - Generated documentation for all test module patterns
-
-### ⚡ **Critical Reading Order for AI Agents**
-
-1. **This file (`AGENT-USAGE.md`)** - Prevents major architectural mistakes
-2. **[`README.md`](./README.md)** - Complete project context and installation
-3. **[`API-RULES.md`](./API-RULES.md)** - Understand verified API transformation patterns
-4. **[`api_tests/*/README.md`](./api_tests/)** - Live examples of each pattern
-
-Understanding these patterns and documentation is essential for building effective Slothlet APIs that work with the framework rather than against it.
+1. **This file** - Prevents architectural mistakes
+2. **[`README.md`](README.md)** - Project overview and quickstart
+3. **[`docs/API-RULES.md`](docs/API-RULES.md)** - API transformation rules
+4. **[`docs/HOOKS.md`](docs/HOOKS.md)** - Hook system (if needed)
+5. **[`docs/METADATA.md`](docs/METADATA.md)** - Metadata system (if needed)
+6. **[`api_tests/api_test/README.md`](api_tests/api_test/README.md)** - Live examples

@@ -1,0 +1,225 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-manager/api-manager-reference-identity.test.vitest.mjs
+ *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:43 -08:00 (1772425303)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Comprehensive reference identity preservation tests for hot reload.
+ *
+ * @description
+ * Tests that ALL entity types preserve their reference identity across reloadApi():
+ * - Functions (standalone, nested, methods)
+ * - Objects (namespaces, nested objects)
+ * - Mixed exports (default + named)
+ * - Wrapped functions (for hot-reload reference preservation)
+ *
+ * NOTE: reload() does a full reload and creates new references (expected behavior).
+ * Only reloadApi() and api.slothlet.api.add with mutateExisting preserve references via wrappers.
+ *
+ * @module tests/vitests/processed/hot-reload/hot-reload-reference-identity.test.vitest
+ */
+
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
+import { describe, it, expect, afterEach } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+/**
+ * Create a slothlet API instance for a given configuration.
+ * @param {object} baseConfig - Base configuration from the matrix.
+ * @param {object} [overrides] - Additional overrides for the slothlet config.
+ * @returns {Promise<object>} Initialized slothlet API instance.
+ */
+async function createApiInstance(baseConfig, overrides = {}) {
+	return slothlet({ ...baseConfig, ...overrides });
+}
+
+const BASE_DIRS = [
+	{ label: "api-test", dir: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+];
+
+const HOT_RELOAD_MATRIX = getMatrixConfigs({}).flatMap(({ name, config }) =>
+	BASE_DIRS.map(({ label, dir }) => ({
+		name: `${name} | ${label}`,
+		config: { ...config, dir }
+	}))
+);
+
+describe.each(HOT_RELOAD_MATRIX)("Hot Reload Reference Identity - $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) {
+			await api.shutdown();
+		}
+		api = null;
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	});
+
+	it("preserves root-level API reference across reload()", async () => {
+		api = await createApiInstance(config);
+		const apiRef = api;
+
+		await api.slothlet.reload();
+
+		// Root API reference is always preserved
+		expect(api).toBe(apiRef);
+	});
+
+	it("preserves function references (eager) / breaks references (lazy) across reloadApi()", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "test-module" });
+
+		if (config.mode === "lazy") {
+			// Pre-materialize so we can capture stable references
+			await api.extra?.mathCjs?.multiply(2, 3);
+			await api.extra?.mathEsm?.add(1, 2);
+		}
+
+		// Capture references before reload
+		const mathCjsRef = api.extra?.mathCjs;
+		const multiplyRef = api.extra?.mathCjs?.multiply;
+		const mathEsmRef = api.extra?.mathEsm;
+		const addRef = api.extra?.mathEsm?.add;
+
+		await api.slothlet.api.reload("extra");
+
+		if (config.mode === "lazy") {
+			// Lazy reload fully resets wrappers - references break
+			expect(api.extra?.mathCjs).not.toBe(mathCjsRef);
+			expect(api.extra?.mathCjs?.multiply).not.toBe(multiplyRef);
+			expect(api.extra?.mathEsm).not.toBe(mathEsmRef);
+			expect(api.extra?.mathEsm?.add).not.toBe(addRef);
+		} else {
+			// Eager mode: same references after reloadApi
+			expect(api.extra?.mathCjs).toBe(mathCjsRef);
+			expect(api.extra?.mathCjs?.multiply).toBe(multiplyRef);
+			expect(api.extra?.mathEsm).toBe(mathEsmRef);
+			expect(api.extra?.mathEsm?.add).toBe(addRef);
+		}
+	});
+
+	it("preserves nested references (eager) / breaks references (lazy) across reloadApi()", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-module" });
+
+		// In lazy mode, materialize before capturing references
+		if (config.mode === "lazy") {
+			await api.deep.util.controller.getDefault();
+			await api.deep.math.add(1, 1);
+		}
+
+		// Capture nested references before reload
+		const utilRef = api.deep?.util;
+		const controllerRef = api.deep?.util?.controller;
+		const getDefaultRef = api.deep?.util?.controller?.getDefault;
+		const mathRef = api.deep?.math;
+		const addFuncRef = api.deep?.math?.add;
+
+		await api.slothlet.api.reload("deep");
+
+		if (config.mode === "lazy") {
+			// Lazy reload fully resets wrappers - references break
+			expect(api.deep?.util).not.toBe(utilRef);
+			expect(api.deep?.math).not.toBe(mathRef);
+		} else {
+			// Eager mode: same references after reloadApi
+			expect(api.deep?.util).toBe(utilRef);
+			expect(api.deep?.util?.controller).toBe(controllerRef);
+			expect(api.deep?.util?.controller?.getDefault).toBe(getDefaultRef);
+			expect(api.deep?.math).toBe(mathRef);
+			expect(api.deep?.math?.add).toBe(addFuncRef);
+		}
+	});
+
+	it("preserves mixed export references (eager) / breaks references (lazy) across reloadApi()", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("extra", TEST_DIRS.API_TEST, { moduleID: "test-module" });
+
+		if (config.mode === "lazy") {
+			// Pre-materialize so we can capture stable references
+			const mixedVal = await api.extra?.mixed;
+			expect(mixedVal).toBeDefined();
+		}
+
+		// Capture references before reload
+		const mixedRef = api.extra?.mixed;
+		const mixedNamedRef = api.extra?.mixed?.mixedNamed;
+		const mixedAnotherRef = api.extra?.mixed?.mixedAnother;
+
+		await api.slothlet.api.reload("extra");
+
+		if (config.mode === "lazy") {
+			// Lazy reload fully resets wrappers - references break
+			expect(api.extra?.mixed).not.toBe(mixedRef);
+			expect(api.extra?.mixed?.mixedNamed).not.toBe(mixedNamedRef);
+			expect(api.extra?.mixed?.mixedAnother).not.toBe(mixedAnotherRef);
+		} else {
+			// Eager mode: same references after reloadApi
+			expect(api.extra?.mixed).toBe(mixedRef);
+			expect(api.extra?.mixed?.mixedNamed).toBe(mixedNamedRef);
+			expect(api.extra?.mixed?.mixedAnother).toBe(mixedAnotherRef);
+		}
+	});
+
+	it("preserves all reference types (eager) / breaks references (lazy) across reloadApi()", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("comprehensive", TEST_DIRS.API_TEST, { moduleID: "comp-module" });
+
+		if (config.mode === "lazy") {
+			// Pre-materialize so we can capture stable references
+			await api.comprehensive?.math?.add(1, 1);
+			await api.comprehensive?.util?.controller?.getDefault();
+			await api.comprehensive?.mixed?.mixedNamed();
+		}
+
+		// Capture references for ALL entity types
+		const refs = {
+			math: api.comprehensive?.math,
+			util: api.comprehensive?.util,
+			advanced: api.comprehensive?.advanced,
+			mathAdd: api.comprehensive?.math?.add,
+			mathMultiply: api.comprehensive?.math?.multiply,
+			controller: api.comprehensive?.util?.controller,
+			nest2: api.comprehensive?.advanced?.nest2,
+			getDefault: api.comprehensive?.util?.controller?.getDefault,
+			mixed: api.comprehensive?.mixed,
+			mixedNamed: api.comprehensive?.mixed?.mixedNamed,
+			config: api.comprehensive?.config
+		};
+
+		await api.slothlet.api.reload("comprehensive");
+
+		if (config.mode === "lazy") {
+			// Lazy reload fully resets wrappers - references break
+			expect(api.comprehensive?.math).not.toBe(refs.math);
+			expect(api.comprehensive?.util).not.toBe(refs.util);
+			expect(api.comprehensive?.advanced).not.toBe(refs.advanced);
+			expect(api.comprehensive?.mixed).not.toBe(refs.mixed);
+			expect(api.comprehensive?.config).not.toBe(refs.config);
+		} else {
+			// Eager mode: verify ALL references are preserved
+			expect(api.comprehensive?.math).toBe(refs.math);
+			expect(api.comprehensive?.util).toBe(refs.util);
+			expect(api.comprehensive?.advanced).toBe(refs.advanced);
+			expect(api.comprehensive?.math?.add).toBe(refs.mathAdd);
+			expect(api.comprehensive?.math?.multiply).toBe(refs.mathMultiply);
+			expect(api.comprehensive?.util?.controller).toBe(refs.controller);
+			expect(api.comprehensive?.advanced?.nest2).toBe(refs.nest2);
+			expect(api.comprehensive?.util?.controller?.getDefault).toBe(refs.getDefault);
+			expect(api.comprehensive?.mixed).toBe(refs.mixed);
+			expect(api.comprehensive?.mixed?.mixedNamed).toBe(refs.mixedNamed);
+			expect(api.comprehensive?.config).toBe(refs.config);
+		}
+	});
+});

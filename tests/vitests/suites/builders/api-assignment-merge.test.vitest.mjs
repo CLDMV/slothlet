@@ -1,0 +1,419 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/builders/api-assignment-merge.test.vitest.mjs
+ *	@Date: 2026-02-26T07:16:44-08:00 (1772119004)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:44 -08:00 (1772425304)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Unit tests for ApiAssignment.mergeApiObjects (api-assignment.mjs lines 584-656).
+ *
+ * @description
+ * `mergeApiObjects` is called during hot-reload when an API path maps to a plain object
+ * on both sides (existing and next). In production it's reached via api-manager.mjs's
+ * `mutateApiValue` when neither value is a UnifiedWrapper proxy. Because integration tests
+ * always work with wrapped values, this path is never reached there.
+ *
+ * These direct unit tests instantiate `ApiAssignment` with a minimal mock slothlet and
+ * call `mergeApiObjects` to cover all branches:
+ * - Lines 584-596: normal entry path with valid source → starts processing
+ * - Lines 597-605: early return when sourceApi is null/undefined/primitive
+ * - Lines 607-626: outer loop with debug logging (config.debug.api = true)
+ * - Lines 627-638: if both target and source values are plain objects → recurse
+ * - Lines 639-651: else-branch → call assignToApiPath for non-object values
+ * - Lines 653-658: removeMissing=true → delete target keys absent from source
+ * - Line 554 (assignToApiPath): "return false" when existing is defined and overwrite is blocked
+ *
+ * @module tests/vitests/suites/builders/api-assignment-merge.test.vitest
+ */
+
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
+import { describe, it, expect, afterEach } from "vitest";
+import { ApiAssignment } from "@cldmv/slothlet/builders/api-assignment";
+import slothlet from "@cldmv/slothlet";
+import { TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+/**
+ * Create an ApiAssignment instance with a minimal mock slothlet.
+ * @param {object} [debugOverride] - Override for the debug function.
+ * @returns {{ assignment: ApiAssignment, debugCalls: string[] }} Instance and captured debug keys.
+ */
+function makeAssignment(debugOverride) {
+	const debugCalls = [];
+	const mockSlothlet = {
+		debug: debugOverride ?? ((__, args) => debugCalls.push(args?.key))
+	};
+	const assignment = new ApiAssignment(mockSlothlet);
+	return { assignment, debugCalls };
+}
+
+describe("ApiAssignment.mergeApiObjects", () => {
+	// ─── Early-return for invalid / falsy source (lines 597-605) ───────────
+
+	it("should be a no-op when sourceApi is null", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, null, {});
+		expect(target).toEqual({ a: 1 });
+	});
+
+	it("should be a no-op when sourceApi is undefined", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, undefined, {});
+		expect(target).toEqual({ a: 1 });
+	});
+
+	it("should be a no-op when sourceApi is a number (non-object primitive)", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, 42, {});
+		expect(target).toEqual({ a: 1 });
+	});
+
+	it("should be a no-op when sourceApi is a string", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, "hello", {});
+		expect(target).toEqual({ a: 1 });
+	});
+
+	// ─── Basic merge: flat objects (lines 639-651, assignToApiPath) ─────────
+
+	it("should merge new keys from sourceApi into targetApi", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, { b: 2 }, { allowOverwrite: true });
+		expect(target.b).toBe(2);
+	});
+
+	it("should overwrite existing scalar keys when allowOverwrite is true", async () => {
+		const { assignment } = makeAssignment();
+		const target = { x: 1 };
+		await assignment.mergeApiObjects(target, { x: 99 }, { allowOverwrite: true });
+		expect(target.x).toBe(99);
+	});
+
+	// ─── Assignment-blocked path (line 554 in assignToApiPath) ──────────────
+
+	it("should NOT overwrite existing scalar keys when allowOverwrite is false (line 554)", async () => {
+		// allowOverwrite=false (default), mutateExisting=false, useCollisionDetection=false
+		// → assignToApiPath returns false → value stays unchanged
+		const { assignment } = makeAssignment();
+		const target = { x: 1 };
+		await assignment.mergeApiObjects(target, { x: 99 }, {});
+		// x should remain 1 because the assignment was blocked
+		expect(target.x).toBe(1);
+	});
+
+	// ─── Recursive merge for nested plain objects (lines 627-638) ───────────
+
+	it("should recursively merge nested plain objects", async () => {
+		const { assignment } = makeAssignment();
+		const target = { nested: { a: 1, b: 2 } };
+		await assignment.mergeApiObjects(target, { nested: { b: 99, c: 3 } }, { allowOverwrite: true });
+		// b gets overwritten (allowOverwrite), c gets added
+		expect(target.nested.a).toBe(1); // untouched
+		expect(target.nested.b).toBe(99); // overwritten
+		expect(target.nested.c).toBe(3); // new
+	});
+
+	it("should deeply recurse through 3-level nested plain objects", async () => {
+		const { assignment } = makeAssignment();
+		const target = { lvl1: { lvl2: { val: "old" } } };
+		await assignment.mergeApiObjects(target, { lvl1: { lvl2: { val: "new", extra: true } } }, { allowOverwrite: true });
+		expect(target.lvl1.lvl2.val).toBe("new");
+		expect(target.lvl1.lvl2.extra).toBe(true);
+	});
+
+	it("should handle a function-type source (functions are also valid object-like sources)", async () => {
+		const { assignment } = makeAssignment();
+		const fn = function myFn() {};
+		fn.helper = "value";
+		const target = {};
+		await assignment.mergeApiObjects(target, fn, { allowOverwrite: true });
+		// "helper" should be merged into target
+		expect(target.helper).toBe("value");
+	});
+
+	// ─── removeMissing=true (lines 653-658) ─────────────────────────────────
+
+	it("should delete target keys not present in source when removeMissing=true", async () => {
+		const { assignment } = makeAssignment();
+		const target = { keep: 1, remove: 2, alsoRemove: 3 };
+		await assignment.mergeApiObjects(target, { keep: 10, newKey: 4 }, { removeMissing: true, allowOverwrite: true });
+		expect(target.keep).toBe(10); // updated
+		expect(target.newKey).toBe(4); // added
+		expect("remove" in target).toBe(false); // deleted
+		expect("alsoRemove" in target).toBe(false); // deleted
+	});
+
+	it("should NOT delete target keys when removeMissing is false (default)", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1, b: 2 };
+		await assignment.mergeApiObjects(target, { a: 10 }, { allowOverwrite: true });
+		expect(target.b).toBe(2); // b still present
+	});
+
+	// ─── Debug logging paths (lines 584-622 with config.debug.api=true) ────
+
+	it("should invoke debug logging for entry, source-keys, and per-key when config.debug.api=true", async () => {
+		const debugCalls = [];
+		const mockSlothlet = { debug: (__, args) => debugCalls.push(args?.key) };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, { a: 10, b: 5 }, {
+			config: { debug: { api: true } },
+			allowOverwrite: true
+		});
+
+		// Should have fired entry, source-keys, and per-key debug messages
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_ENTRY");
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_SOURCE_KEYS");
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_PROCESSING_KEY");
+	});
+
+	it("should log a recursing debug message when both target and source values are plain objects", async () => {
+		const debugCalls = [];
+		const mockSlothlet = { debug: (__, args) => debugCalls.push(args?.key) };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = { nested: { x: 1 } };
+		await assignment.mergeApiObjects(target, { nested: { x: 2 } }, {
+			config: { debug: { api: true } },
+			allowOverwrite: true
+		});
+
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_RECURSING");
+	});
+
+	it("should log exit-invalid-source when source is null + debug.api=true (lines 597-605)", async () => {
+		const debugCalls = [];
+		const mockSlothlet = { debug: (__, args) => debugCalls.push(args?.key) };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		await assignment.mergeApiObjects({}, null, { config: { debug: { api: true } } });
+
+		// The early-return path logs the invalid source exit message
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_EXIT_INVALID_SOURCE");
+	});
+
+	it("should log the assign debug message when assignToApiPath is called (non-object value)", async () => {
+		const debugCalls = [];
+		const mockSlothlet = { debug: (__, args) => debugCalls.push(args?.key) };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		await assignment.mergeApiObjects({}, { scalarKey: 42 }, {
+			config: { debug: { api: true } },
+			allowOverwrite: true
+		});
+
+		expect(debugCalls).toContain("DEBUG_MODE_MERGE_API_OBJECTS_CALLING_ASSIGN");
+	});
+
+	// ─── Edge cases ──────────────────────────────────────────────────────────
+
+	it("should handle empty source (no keys) without errors", async () => {
+		const { assignment } = makeAssignment();
+		const target = { a: 1 };
+		await assignment.mergeApiObjects(target, {}, { removeMissing: true });
+		// removeMissing=true with empty source should clear the target
+		expect("a" in target).toBe(false);
+	});
+
+	it("should add deeply nested paths that do not exist in target", async () => {
+		const { assignment } = makeAssignment();
+		const target = {};
+		await assignment.mergeApiObjects(target, { brand: { new: true } }, { allowOverwrite: true });
+		// brand is new in target → not a case for recursion (target.brand is undefined)
+		// assignToApiPath should set it directly
+		expect(target.brand).toBeDefined();
+	});
+});
+
+// ─── ApiAssignment.assignToApiPath collision-detection paths ─────────────────────────────
+//
+// These paths require `useCollisionDetection: true` which mergeApiObjects never passes.
+// The collision if-block in assignToApiPath (lines 148-547) has several branches that are
+// only exercised when modes-processor calls assignToApiPath during initial file processing.
+//
+// Covered here by calling assignToApiPath directly with mock slothlet:
+//
+// Lines 541-543: "Both are plain objects - use Object.assign"
+//   → `existingIsWrapper=false` (plain obj), `valueIsWrapper=false` (plain obj),
+//     `collisionMode="merge"` → `Object.assign(existing, value); return true;`
+//
+// ─────────────────────────────────────────────────────────────────────────────────────────
+describe("ApiAssignment.assignToApiPath collision-detection – both-plain path (lines 541-543)", () => {
+	it("merges two plain-object values into existing via Object.assign (lines 541-543)", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = {
+			debug: () => {},
+			SlothletError: class extends Error {
+				/**
+				 * @param {string} code - Code.
+				 */
+				constructor(code) {
+					super(code);
+					this.code = code;
+				}
+			},
+			SlothletWarning: class {
+				/**
+				 * @param {string} code - Code.
+				 */
+				constructor(code) {
+					this.code = code;
+				}
+			}
+		};
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = {};
+		// Pre-populate target.config with a plain object (not a wrapper proxy)
+		target.config = { version: "1", debug: false };
+
+		// Call assignToApiPath with useCollisionDetection=true and merge mode
+		// Both existing (target.config) and value are plain objects → lines 541-543 fire
+		const result = assignment.assignToApiPath(target, "config", { env: "prod", debug: true }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "merge" } },
+			collisionContext: "initial"
+		});
+
+		// Object.assign merged value into existing in-place
+		expect(result).toBe(true);
+		expect(target.config.version).toBe("1"); // original preserved
+		expect(target.config.debug).toBe(true); // overwritten by merge
+		expect(target.config.env).toBe("prod"); // new key added
+	});
+
+	it("same-reference check: existing object is mutated in-place (not replaced) (lines 541-543)", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = {};
+		const original = { a: 1, b: 2 };
+		target.settings = original;
+
+		assignment.assignToApiPath(target, "settings", { c: 3 }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "merge" } },
+			collisionContext: "initial"
+		});
+
+		// Object.assign mutates in-place so identity is preserved
+		expect(target.settings).toBe(original);
+		expect(target.settings.a).toBe(1);
+		expect(target.settings.c).toBe(3);
+	});
+
+	it("skip mode returns false without modifying existing (collision.initial='skip') for plain-plain", async () => {
+		const { ApiAssignment } = await import("@cldmv/slothlet/builders/api-assignment");
+		const mockSlothlet = { debug: () => {}, SlothletError: Error, SlothletWarning: class {} };
+		const assignment = new ApiAssignment(mockSlothlet);
+
+		const target = { cfg: { x: 1 } };
+
+		const result = assignment.assignToApiPath(target, "cfg", { x: 99 }, {
+			useCollisionDetection: true,
+			config: { collision: { initial: "skip" } },
+			collisionContext: "initial"
+		});
+
+		// "skip" returns false immediately — plain-plain branch never reached
+		expect(result).toBe(false);
+		expect(target.cfg.x).toBe(1);
+	});
+});
+// ---------------------------------------------------------------------------
+// Group K: Integration – wrapper+wrapper causes syncWrapper (lines 133-134)
+//   When both `target[key]` and `value` are UnifiedWrapper proxies,
+//   and `mutateExisting === true` and a `syncWrapper` callback is provided,
+//   lines 133-134 call syncWrapper(existing, value) and return true.
+//
+//   Triggered via: api.slothlet.api.add(path, dir, "replace") TWICE.
+//   Second call → setValueAtPath → mutateApiValue → syncWrapper(existingWrapper, newWrapper)
+//   → mergeApiObjects(existingWrapper, newWrapper, {syncWrapper})
+//   → for each child key: assignToApiPath(existingWrapper, childKey, newWrapper[childKey], {mutateExisting, syncWrapper})
+//   → if existingWrapper[childKey] AND newWrapper[childKey] are both wrappers → lines 133-134.
+// ---------------------------------------------------------------------------
+describe("api-assignment – wrapper+wrapper syncWrapper path via nested folder re-add (lines 133-134)", () => {
+        let api;
+
+        afterEach(async () => {
+                if (api) {
+                        await api.shutdown();
+                        api = null;
+                }
+        });
+
+        it("re-adding a nested-folder dir at an existing wrapper path triggers syncWrapper on child wrappers (lines 133-134)", async () => {
+                api = await slothlet({
+                        mode: "eager",
+                        runtime: "async",
+                        hook: { enabled: false },
+                        dir: TEST_DIRS.API_TEST,
+                        silent: true
+                });
+
+                // First add: create a nested wrapper structure at 'plugins'.
+                // API_SMART_FLATTEN has config/ + services/ + utils/ subdirs → child wrapper proxies.
+                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "replace",
+                        moduleID: "plugins_v1"
+                });
+
+                expect(api.plugins).toBeDefined();
+                expect(api.plugins.config).toBeDefined();
+
+                // Second add at the same 'plugins' path with 'replace' mode.
+                // setValueAtPath sees existing=wrapper, value=wrapper → mutateApiValue
+                // → syncWrapper(existingPlugins, newPlugins)
+                // → mergeApiObjects(existingPlugins, newPlugins, {syncWrapper})
+                // → for key 'config': assignToApiPath(existingPlugins, 'config', newPlugins.config, {mutateExisting:true, syncWrapper})
+                // → existingPlugins.config is a wrapper AND newPlugins.config is a wrapper → lines 133-134
+                await api.slothlet.api.add("plugins", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "replace",
+                        moduleID: "plugins_v2"
+                });
+
+                // API should remain intact after sync
+                expect(api.plugins).toBeDefined();
+                expect(api.plugins.config).toBeDefined();
+        });
+
+        it("re-adding with merge mode also triggers syncWrapper on nested child wrappers (lines 133-134)", async () => {
+                api = await slothlet({
+                        mode: "eager",
+                        runtime: "async",
+                        hook: { enabled: false },
+                        dir: TEST_DIRS.API_TEST,
+                        silent: true
+                });
+
+                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "merge",
+                        moduleID: "ns_v1"
+                });
+                expect(api.ns).toBeDefined();
+
+                // With merge mode, the second add also triggers mutateApiValue
+                // → syncWrapper → mergeApiObjects → assignToApiPath with both sub-wrappers
+                await api.slothlet.api.add("ns", TEST_DIRS.API_SMART_FLATTEN, {
+                        collisionMode: "merge",
+                        moduleID: "ns_v2"
+                });
+
+                expect(api.ns).toBeDefined();
+        });
+});

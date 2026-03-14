@@ -1,14 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test/tcp/tcp.mjs
- *	@Date: 2025-10-21 13:32:36 -07:00 (1761078756)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-10-22T09:43:36-07:00 (1761151416)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-21 16:01:36 -07:00 (1761087696)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-12 21:33:05 -07:00 (1773376385)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
@@ -16,9 +16,18 @@
  * @module api_test.tcp
  * @memberof module:api_test
  */
-
 import net from "node:net";
 import { self, context } from "@cldmv/slothlet/runtime";
+
+// Helper to check if debug mode is enabled
+const isDebugEnabled = () => {
+	try {
+		// V3: config.debug is an object with enabled property
+		return self?.slothlet?.config?.debug?.enabled === true;
+	} catch {
+		return false;
+	}
+};
 
 /**
  * TCP server API object for testing automatic EventEmitter context propagation.
@@ -35,16 +44,45 @@ export const tcp =
 		 * Test context availability in the tcp module.
 		 * @function testContext
 		 * @returns {object} Context test results
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.tcp.testContext();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.tcp.testContext();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.tcp.testContext();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.tcp.testContext();
+ */
 		testContext() {
+			// Try to enumerate self - let's see what breaks
 			const selfKeys = Object.keys(self);
+			const contextKeys = Object.keys(context);
 			const immediateContext = context;
 			const immediateUser = context?.user;
 
 			return {
 				selfAvailable: selfKeys.length > 1,
 				selfKeys: selfKeys,
-				contextAvailable: immediateUser === "test-user",
+				contextAvailable: contextKeys.length > 1,
+				contextKeys: contextKeys,
+				contextUserMatches: immediateUser === "test-user",
 				contextData: immediateContext,
 				contextUser: immediateUser,
 				timestamp: new Date().toISOString()
@@ -56,33 +94,63 @@ export const tcp =
 		 * @function createTestServer
 		 * @param {number} [port=0] - Port to listen on (0 for random)
 		 * @returns {Promise<{port: number, server: NetServer}>} Server instance and port
-		 */
+		 *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.tcp.createTestServer();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.tcp.createTestServer();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.tcp.createTestServer();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.tcp.createTestServer();
+ */
 		async createTestServer(port = 0) {
 			const server = net.createServer();
+			const contextTests = []; // Array to collect context test results
 
-			console.log("  🔍 DEBUG - Server inspection:");
-			console.log("    Server type:", typeof server);
-			console.log("    Server constructor:", server.constructor.name);
-			console.log('    Server has "on" method:', typeof server.on === "function");
-			console.log('    Server has "emit" method:', typeof server.emit === "function");
-
-			const contextTests = [];
+			if (isDebugEnabled()) {
+				console.log("  🔍 DEBUG - Server inspection:");
+				console.log("    Server type:", typeof server);
+				console.log("    Server constructor:", server.constructor.name);
+				console.log('    Server has "on" method:', typeof server.on === "function");
+				console.log('    Server has "emit" method:', typeof server.emit === "function");
+			}
 
 			// CRITICAL: Set up connection handler BEFORE starting server
 			// The key insight: this callback will use the original server.on method
 			// Server only gets wrapped when the Promise resolves with the {server} object
 			server.on("connection", (socket) => {
-				console.log("  🔌 TCP Connection established");
+				if (isDebugEnabled()) {
+					console.log("  🔌 TCP Connection established");
+				}
 
-				// Check context availability in connection handler
+				// Test context access immediately in the connection handler
 				const immediateContext = context;
 				const immediateUser = context?.user;
 				const selfKeys = Object.keys(self);
 
-				console.log("  🔍 DEBUG - Connection handler context access:");
-				console.log("    Immediate context:", immediateContext);
-				console.log("    Immediate user:", immediateUser);
-				console.log("    Self keys count:", selfKeys.length);
+				if (isDebugEnabled()) {
+					console.log("  🔍 DEBUG - Connection handler context access:");
+					console.log("    Immediate context:", immediateContext);
+					console.log("    Immediate user:", immediateUser);
+					console.log("    Self keys count:", selfKeys.length);
+				}
 
 				const connectionTest = {
 					event: "connection",
@@ -95,33 +163,40 @@ export const tcp =
 				};
 
 				contextTests.push(connectionTest);
-				console.log("  📊 Context in connection handler:", {
-					selfKeys: connectionTest.selfKeys.length,
-					contextUser: immediateUser,
-					testContextUser: connectionTest.contextUser
-				});
 
-				// Debug: Check if socket is wrapped before calling socket.on()
-				console.log("  🔍 DEBUG - Before socket.on('data') call:");
-				console.log("    Socket type:", typeof socket);
-				console.log("    Socket constructor:", socket.constructor.name);
-				console.log("    Socket 'on' method type:", typeof socket.on);
-				console.log("    Socket toString contains Proxy:", socket.toString().includes("Proxy"));
-				console.log("    Socket proxy detection:", Object.getOwnPropertyDescriptor(socket, "constructor"));
+				if (isDebugEnabled()) {
+					console.log("  📊 Context in connection handler:", {
+						selfKeys: connectionTest.selfKeys.length,
+						contextUser: immediateUser,
+						testContextUser: connectionTest.contextUser
+					});
+
+					// Debug: Check if socket is wrapped before calling socket.on()
+					console.log("  🔍 DEBUG - Before socket.on('data') call:");
+					console.log("    Socket type:", typeof socket);
+					console.log("    Socket constructor:", socket.constructor.name);
+					console.log("    Socket 'on' method type:", typeof socket.on);
+					console.log("    Socket toString contains Proxy:", socket.toString().includes("Proxy"));
+					console.log("    Socket proxy detection:", Object.getOwnPropertyDescriptor(socket, "constructor"));
+				}
 
 				// Test socket data handler - this should now preserve context
 				socket.on("data", (_) => {
-					console.log("  📥 Data received on socket");
+					if (isDebugEnabled()) {
+						console.log("  📥 Data received on socket");
+					}
 
 					// Check context availability in data handler
 					const immediateContextData = context;
 					const immediateContextUser = context?.user;
 					const selfKeysData = Object.keys(self);
 
-					console.log("  🔍 DEBUG - Data handler context access:");
-					console.log("    Immediate context:", immediateContextData);
-					console.log("    Immediate user:", immediateContextUser);
-					console.log("    Self keys count:", selfKeysData.length);
+					if (isDebugEnabled()) {
+						console.log("  🔍 DEBUG - Data handler context access:");
+						console.log("    Immediate context:", immediateContextData);
+						console.log("    Immediate user:", immediateContextUser);
+						console.log("    Self keys count:", selfKeysData.length);
+					}
 
 					const dataTest = {
 						event: "data",
@@ -134,11 +209,13 @@ export const tcp =
 					};
 
 					contextTests.push(dataTest);
-					console.log("  📊 Context in data handler:", {
-						selfKeys: dataTest.selfKeys.length,
-						contextUser: immediateContextUser,
-						testContextUser: dataTest.contextUser
-					});
+					if (isDebugEnabled()) {
+						console.log("  📊 Context in data handler:", {
+							selfKeys: dataTest.selfKeys.length,
+							contextUser: immediateContextUser,
+							testContextUser: dataTest.contextUser
+						});
+					}
 
 					// Test API access from within the socket handler
 					let apiAccess = { success: false, error: "Not attempted" };
@@ -170,11 +247,15 @@ export const tcp =
 			return new Promise((resolve, reject) => {
 				server.listen(port, (err) => {
 					if (err) {
-						console.log("  ❌ Server failed to start:", err.message);
+						if (isDebugEnabled()) {
+							console.log("  ❌ Server failed to start:", err.message);
+						}
 						reject(err);
 					} else {
 						const actualPort = server.address()?.port || port;
-						console.log(`  🌐 TCP Server listening on port ${actualPort}`);
+						if (isDebugEnabled()) {
+							console.log(`  🌐 TCP Server listening on port ${actualPort}`);
+						}
 
 						// Return object containing server - this will trigger immediate wrapping
 						resolve({
@@ -194,5 +275,6 @@ export const tcp =
 	};
 
 /**
- * @typedef {import('node:net').Server} NetServer
+ * A Node.js TCP server instance (net.Server).
+ * @typedef {object} NetServer
  */

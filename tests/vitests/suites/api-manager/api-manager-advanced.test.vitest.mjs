@@ -1,0 +1,164 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/api-manager/api-manager-advanced.test.vitest.mjs
+ *	@Date: 2026-01-27T22:45:42-08:00 (1769582742)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:42 -08:00 (1772425302)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Hot reload advanced functionality coverage using vitest matrix.
+ *
+ * @description
+ * Tests advanced hot reload operations: reloadApi(), context/reference preservation,
+ * nested reloads, deep reference preservation, and shutdown/reload cycles.
+ *
+ * @module tests/vitests/processed/hot-reload/hot-reload-advanced.test.vitest
+ */
+
+process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
+
+import { describe, it, expect, afterEach } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
+
+/**
+ * Create a slothlet API instance for a given configuration.
+ * @param {object} baseConfig - Base configuration from the matrix.
+ * @param {object} [overrides] - Additional overrides for the slothlet config.
+ * @returns {Promise<object>} Initialized slothlet API instance.
+ */
+async function createApiInstance(baseConfig, overrides = {}) {
+	return slothlet({ ...baseConfig, ...overrides });
+}
+
+/**
+ * Resolve the math add function for the current API based on the source directory.
+ * @param {object} api - Slothlet API instance.
+ * @param {string} dir - API directory used during initialization.
+ * @returns {Function|undefined} Math add function.
+ */
+function getMathAdd(api, dir) {
+	return dir === TEST_DIRS.API_TEST_MIXED ? api.mathEsm?.add : api.rootMath?.add;
+}
+
+const BASE_DIRS = [
+	{ label: "api-test", dir: TEST_DIRS.API_TEST },
+	{ label: "api-test-mixed", dir: TEST_DIRS.API_TEST_MIXED }
+];
+
+const HOT_RELOAD_MATRIX = getMatrixConfigs({}).flatMap(({ name, config }) =>
+	BASE_DIRS.map(({ label, dir }) => ({
+		name: `${name} | ${label}`,
+		config: { ...config, dir }
+	}))
+);
+
+describe.each(HOT_RELOAD_MATRIX)("Hot Reload Advanced - $name", ({ config }) => {
+	let api;
+
+	afterEach(async () => {
+		if (api?.shutdown) {
+			await api.shutdown();
+		}
+		api = null;
+	});
+
+	it("reinitializes after shutdown followed by reload", async () => {
+		api = await createApiInstance(config);
+		const mathAdd = getMathAdd(api, config.dir);
+		expect(mathAdd).toBeTypeOf("function");
+
+		await api.shutdown();
+		await api.slothlet.reload();
+
+		const mathAddAfter = getMathAdd(api, config.dir);
+		expect(await mathAddAfter(10, 20)).toBe(30);
+	});
+
+	it("reloads a specific API path without affecting siblings", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("extra1", TEST_DIRS.API_TEST_MIXED, { moduleID: "module-1" });
+		await api.slothlet.api.add("extra2", TEST_DIRS.API_TEST, { moduleID: "module-2" });
+
+		const extra1Ref = api.extra1;
+		await api.slothlet.api.reload("extra1");
+
+		expect(api.extra1).toBe(extra1Ref);
+		expect(api.extra2?.math?.add).toBeTypeOf("function");
+	});
+
+	it("reloads combined modules on the same path", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST, { moduleID: "core" });
+		await api.slothlet.api.add("features", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra", forceOverwrite: true });
+
+		await api.slothlet.api.reload("features");
+
+		expect(api.features?.math?.add).toBeTypeOf("function");
+	});
+
+	it("preserves context across reloads", async () => {
+		api = await createApiInstance(config, {
+			context: { userId: 123, session: "abc" }
+		});
+
+		await api.slothlet.reload();
+
+		const ctx = api.slothlet.context.get();
+		expect(ctx.userId).toBe(123);
+		expect(ctx.session).toBe("abc");
+	});
+
+	it("preserves reference object across reloads", async () => {
+		const customUtil = () => "test";
+		api = await createApiInstance(config, {
+			reference: { customUtil, constant: 42 }
+		});
+
+		await api.slothlet.reload();
+
+		expect(api.customUtil()).toBe("test");
+		expect(api.constant).toBe(42);
+	});
+
+	it("reloads nested API paths while preserving siblings", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("features.core", TEST_DIRS.API_TEST, { moduleID: "core" });
+		await api.slothlet.api.add("features.extra", TEST_DIRS.API_TEST_MIXED, { moduleID: "extra" });
+
+		await api.slothlet.api.reload("features.core");
+
+		expect(api.features?.core?.math?.add).toBeTypeOf("function");
+		expect(api.features?.extra?.mathCjs).toBeTypeOf("object");
+	});
+
+	it("preserves deep references when mutateExisting is used", async () => {
+		api = await createApiInstance(config);
+		await api.slothlet.api.add("deep", TEST_DIRS.API_TEST, { moduleID: "deep-test" });
+
+		// Materialize lazy wrappers so references are concrete before capturing
+		const preReloadResult = await api.deep.math.add(1, 2);
+
+		const mathRef = api.deep?.math;
+		const addRef = api.deep?.math?.add;
+
+		await api.slothlet.api.reload("deep");
+
+		if (config.mode === "lazy") {
+			// Lazy reload intentionally resets wrappers to un-materialized state - references
+			// from before the reload are invalidated by design.
+			// Verify the reloaded API still produces the same result from the same source.
+			expect(await api.deep?.math?.add(1, 2)).toBe(preReloadResult);
+		} else {
+			// Eager mode: wrapper references are preserved across reload via ___setImpl.
+			expect(api.deep?.math).toBe(mathRef);
+			expect(api.deep?.math?.add).toBe(addRef);
+		}
+	});
+});

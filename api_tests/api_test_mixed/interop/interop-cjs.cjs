@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_mixed/interop/interop-cjs.cjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:14 -08:00 (1772425274)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview CJS interoperability module for slothlet mixed API testing. Internal file (not exported in package.json).
  * @module api_test_mixed.interop.interopCjs
  * @memberof module:api_test_mixed
@@ -77,17 +90,25 @@ const interopCjs =
 		 * console.log(await api_test_mixed.interop.interopCjs.testCrossCall(2, 3)); // result
 		 */
 		async testCrossCall(a, b) {
-			console.log("CJS Interop: Testing cross-module calls");
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log("CJS Interop: Testing cross-module calls");
+			}
 
 			// console.log(self);
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			// Try to call ESM math via self reference
 			if (self && self.mathEsm && typeof self.mathEsm.add === "function") {
-				console.log("CJS -> ESM call via self reference");
+				if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+					console.log("CJS -> ESM call via self reference");
+				}
 				const result = self.mathEsm.add(a, b);
-				console.log(`CJS received from ESM: ${result}`);
+				if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+					console.log(`CJS received from ESM: ${result}`);
+				}
 				return result;
 			} else {
 				throw new Error("ESM mathEsm.add not available via self");

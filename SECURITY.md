@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 2.x.x   | ✅ Yes             |
+| 3.x.x   | ✅ Yes             |
+| 2.x.x   | ❌ No (deprecated) |
 | 1.x.x   | ❌ No (deprecated) |
 
 ## Reporting a Vulnerability
@@ -22,8 +23,9 @@ Slothlet dynamically loads and executes JavaScript modules. When using Slothlet:
 
 - Only load modules from trusted sources
 - Validate input when using `context` or `reference` objects
-- Be cautious with `mode: "vm"` - it provides isolation but is not a security boundary
-- Consider the security implications of your specific use case
+- Be cautious with any dynamic module loading paths passed to `api.slothlet.api.add()`
+- Consider using [`api.slothlet.metadata`](docs/METADATA.md) to tag and authorize modules at runtime
+- Validate context values before passing them to `api.slothlet.context.run()` or `api.slothlet.context.scope()`
 
 ## Response Timeline
 

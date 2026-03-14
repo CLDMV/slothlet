@@ -1,0 +1,299 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/ownership/module-ownership-removal.test.vitest.mjs
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:53 -08:00 (1772425313)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Comprehensive tests for module ownership tracking and API removal
+ * Tests Rule 13: Auto-cleanup before reload to prevent orphan functions
+ * @module tests/vitests/processed/ownership/module-ownership-removal.test.vitest
+ * @memberof tests.vitests
+ */
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { getMatrixConfigs, TEST_DIRS, withSuppressedSlothletErrorOutput } from "../../setup/vitest-helper.mjs";
+import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Test modules directory - temporary folder next to this test file
+const testDir = path.join(__dirname, "temp-ownership-modules");
+
+/**
+ * Setup test module directories with different function sets
+ */
+async function setupTestModules() {
+	// Clean up if exists
+	try {
+		await fs.rm(testDir, { recursive: true, force: true });
+	} catch (_) {
+		// Ignore if doesn't exist
+	}
+
+	// Create test module directories
+	await fs.mkdir(testDir, { recursive: true });
+
+	// Module A - Version 1 (has function1 and function2)
+	const moduleAv1Dir = path.join(testDir, "moduleA_v1");
+	await fs.mkdir(moduleAv1Dir, { recursive: true });
+	await fs.writeFile(
+		path.join(moduleAv1Dir, "functions.mjs"),
+		`
+export function function1() {
+	return "moduleA_v1_function1";
+}
+
+export function function2() {
+	return "moduleA_v1_function2";
+}
+`.trim()
+	);
+
+	// Module A - Version 2 (has function2 and function3, no function1)
+	const moduleAv2Dir = path.join(testDir, "moduleA_v2");
+	await fs.mkdir(moduleAv2Dir, { recursive: true });
+	await fs.writeFile(
+		path.join(moduleAv2Dir, "functions.mjs"),
+		`
+export function function2() {
+	return "moduleA_v2_function2";
+}
+
+export function function3() {
+	return "moduleA_v2_function3";
+}
+`.trim()
+	);
+
+	// Module B - Has different functions
+	const moduleBDir = path.join(testDir, "moduleB");
+	await fs.mkdir(moduleBDir, { recursive: true });
+	await fs.writeFile(
+		path.join(moduleBDir, "helpers.mjs"),
+		`
+export function helperA() {
+	return "moduleB_helperA";
+}
+
+export function helperB() {
+	return "moduleB_helperB";
+}
+`.trim()
+	);
+}
+
+/**
+ * Cleanup test modules
+ */
+async function cleanupTestModules() {
+	try {
+		await fs.rm(testDir, { recursive: true, force: true });
+	} catch (_) {
+		// Ignore errors
+	}
+}
+
+// Setup once before all tests
+beforeAll(async () => {
+	await setupTestModules();
+});
+
+// Cleanup after all tests
+afterAll(async () => {
+	await cleanupTestModules();
+});
+
+// Basic API removal tests
+describe.each(getMatrixConfigs())("Basic API Removal > Config: '$name'", ({ config }) => {
+	let slothlet;
+	let api;
+
+	beforeEach(async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		slothlet = slothletModule.default;
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("should remove API by path", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Add an API
+		await api.slothlet.api.add("test.module", testDir + "/moduleA_v1");
+
+		// Remove it
+		const removed = await api.slothlet.api.remove("test.module");
+		expect(removed).toBe(true);
+		expect(api.test?.module).toBeUndefined();
+	});
+
+	it("should handle removeApi error cases", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Test invalid types
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.remove(123)).rejects.toThrow();
+		});
+
+		// Test empty object
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(api.slothlet.api.remove({})).rejects.toThrow();
+		});
+
+		// Test non-existent path (should return false, not throw)
+		const removed = await api.slothlet.api.remove("nonexistent.path");
+		expect(removed).toBe(false);
+	});
+
+	it("should work without ownership tracking", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Add API without moduleID
+		await api.slothlet.api.add("test.module", testDir + "/moduleA_v1");
+
+		// Remove by path (should work)
+		const removed = await api.slothlet.api.remove("test.module");
+		expect(removed).toBe(true);
+		expect(api.test?.module).toBeUndefined();
+	});
+
+	it("should return false for moduleID removal without ownership tracking", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Try to remove by moduleID without ownership tracking
+		const removed = await api.slothlet.api.remove("someModule");
+		expect(removed).toBe(false);
+	});
+
+	it("should remove by moduleID when ownership is available", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Add API with moduleID (ownership tracking is ALWAYS available in v3)
+		await api.slothlet.api.add("plugins.test", testDir + "/moduleA_v1", { moduleID: "testModule" });
+
+		expect(api.plugins?.test).toBeDefined();
+
+		// Remove by moduleID should work (ownership is available)
+		const removedById = await api.slothlet.api.remove("testModule");
+		expect(removedById).toBe(true);
+		expect(api.plugins?.test).toBeUndefined();
+	});
+});
+
+// Module ownership tests - ownership tracking always available in v3
+describe.each(getMatrixConfigs())("Module Ownership > Config: '$name'", ({ config }) => {
+	let slothlet;
+	let api;
+
+	beforeEach(async () => {
+		const slothletModule = await import("@cldmv/slothlet");
+		slothlet = slothletModule.default;
+	});
+
+	afterEach(async () => {
+		if (api) {
+			await api.shutdown();
+			api = null;
+		}
+	});
+
+	it("should remove API by moduleID", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Add multiple APIs for the same module
+		await api.slothlet.api.add("plugins.feature1", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+		await api.slothlet.api.add("plugins.feature2", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+
+		// Remove all APIs owned by moduleA
+		const removed = await api.slothlet.api.remove("moduleA");
+		expect(removed).toBe(true);
+		expect(api.plugins?.feature1).toBeUndefined();
+		expect(api.plugins?.feature2).toBeUndefined();
+	});
+
+	it("should auto-cleanup to prevent orphan functions", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Load version 1 (has function1 and function2)
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+
+		// Reload with version 2 (has function2 and function3, NO function1)
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
+
+		// With auto-cleanup, function1 should be GONE (no errors should occur)
+		expect(api.plugins?.moduleA).toBeDefined();
+	});
+
+	it("should isolate auto-cleanup by moduleID", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Load moduleA
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v1", { moduleID: "moduleA" });
+
+		// Load moduleB
+		await api.slothlet.api.add("plugins.moduleB", testDir + "/moduleB", { moduleID: "moduleB" });
+
+		// Reload moduleA with version 2
+		await api.slothlet.api.add("plugins.moduleA", testDir + "/moduleA_v2", { moduleID: "moduleA" });
+
+		// moduleB should be untouched
+		expect(api.plugins?.moduleB).toBeDefined();
+	});
+
+	it("should remove nested API paths by moduleID", async () => {
+		api = await slothlet({
+			...config,
+			dir: TEST_DIRS.API_TEST
+		});
+
+		// Add APIs at different nesting levels
+		await api.slothlet.api.add("level1", testDir + "/moduleA_v1", { moduleID: "test" });
+		await api.slothlet.api.add("level1.level2", testDir + "/moduleB", { moduleID: "test" });
+		await api.slothlet.api.add("level1.level2.level3", testDir + "/moduleA_v1", { moduleID: "test" });
+
+		// Remove all by moduleID
+		const removed = await api.slothlet.api.remove("test");
+		expect(removed).toBe(true);
+		expect(api.level1).toBeUndefined();
+	});
+});

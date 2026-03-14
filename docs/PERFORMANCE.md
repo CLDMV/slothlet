@@ -6,22 +6,25 @@ This document provides detailed performance analysis of Slothlet's loading modes
 
 ## 📊 Executive Summary
 
-> [!NOTE] > **Performance Winner Depends on Your Use Case**
+> [!NOTE]
+> **Performance Winner Depends on Your Use Case**
 >
-> | Metric             | Lazy Mode           | Eager Mode   | Winner       | Improvement       |
-> | ------------------ | ------------------- | ------------ | ------------ | ----------------- |
-> | **Startup Time**   | 4.89ms              | 14.29ms      | 🎯 **Lazy**  | **2.9x faster**   |
-> | **Function Calls** | 0.99μs              | 0.90μs       | 🚀 **Eager** | **1.1x faster**   |
-> | **Memory Usage**   | On-demand           | Full upfront | 🎯 **Lazy**  | Scales with usage |
-> | **Predictability** | Variable first-call | Consistent   | 🚀 **Eager** | No surprises      |
+> | Metric              | Lazy Mode           | Eager Mode   | Winner       | Improvement     |
+> | ------------------- | ------------------- | ------------ | ------------ | --------------- |
+> | **Startup Time**    | 15.41ms             | 34.28ms      | 🎯 **Lazy**  | **2.2x faster** |
+> | **Function Calls**  | 9.99μs              | 9.46μs       | ≈ **Equal**  | **Within 6%**   |
+> | **Realistic Usage** | 7.75μs              | 8.26μs       | ≈ **Equal**  | **Within 7%**   |
+> | **Memory Usage**    | On-demand           | Full upfront | 🎯 **Lazy**  | Scales with use |
+> | **Predictability**  | Variable first-call | Consistent   | 🚀 **Eager** | No surprises    |
 
 ### Key Takeaways
 
-> [!TIP] > **Choose your loading strategy based on your specific needs:**
+> [!TIP]
+> **Choose your loading strategy based on your specific needs:**
 >
-> - ✅ **Lazy mode excels at startup** - 2.9x faster initialization
-> - ✅ **Eager mode excels at runtime** - 1.1x faster function calls
-> - ✅ **Materialization cost is minimal** - ~371μs one-time overhead per module
+> - ✅ **Lazy mode excels at startup** - 2.2x faster initialization
+> - ✅ **Both modes equal at runtime** - Post-materialization performance identical (within measurement noise)
+> - ✅ **Materialization cost is one-time** - ~107–788μs per module, only on first access
 > - ✅ **Both modes are production-ready** with different optimization targets
 
 ---
@@ -31,12 +34,12 @@ This document provides detailed performance analysis of Slothlet's loading modes
 ### Startup Performance Comparison
 
 ```text
-📊 Startup Time Analysis
-========================
-Eager Mode:  14.29ms (avg) | 11.82ms (min) | 41.17ms (max)
-Lazy Mode:   4.89ms (avg) | 3.62ms (min) | 42.20ms (max)
+📊 Startup Time Analysis (Aggregated - February 21, 2026)
+======================================
+Eager Mode:  34.28ms (avg)
+Lazy Mode:   15.41ms (avg)
 
-Winner: Lazy mode (2.9x faster)
+Winner: Lazy mode (2.2x faster)
 ```
 
 **Why Lazy Startup Wins:**
@@ -49,34 +52,52 @@ Winner: Lazy mode (2.9x faster)
 ### Function Call Performance Comparison
 
 ```text
-📊 Function Call Analysis (aggregated benchmark)
+📊 Function Call Analysis (Aggregated - February 21, 2026)
 ===============================================
-Eager Calls:       0.90μs (avg) | 0.60μs (min) | 41.70μs (max)
-Lazy Subsequent:   0.99μs (avg) | 0.60μs (min) | 43.70μs (max)
-Lazy First Call:   371μs (materialization overhead)
+Eager Calls:       9.46μs (avg)
+Lazy Subsequent:   9.99μs (avg)
+Lazy First Call:   538μs (materialization overhead, avg across modules)
 
-Winner: Eager mode (1.1x faster)
+Winner: Equal (within 6% measurement noise)
 ```
 
-**Why Eager Function Calls Win:**
+**Why Performance is Equal:**
 
-- ✅ No proxy overhead after startup
-- ✅ Direct function references without wrapping
-- ✅ Consistent performance characteristics
-- ✅ V8 can optimize more aggressively with stable references
+- ✅ **Fixed `__slothletPath` assignment** - Eager mode pre-assigns paths during loading
+- ✅ **No runtime property definition** - Eliminated `Object.defineProperty` overhead in wrapper
+- ✅ **Identical code paths** - Post-materialization, both modes execute the same functions
+- ✅ **6% difference is measurement noise** - Single-digit microsecond timing inherently variable
+
+### Realistic API Usage Performance
+
+```text
+📊 Realistic Usage (500 iterations, 41 unique API calls)
+=========================================================
+Eager Mode:  8.26μs (avg)
+Lazy Mode:   7.75μs (avg)
+
+Winner: Lazy mode (1.07x faster, within measurement noise)
+```
+
+**Performance Parity Achieved:**
+
+- ✅ Tests diverse API usage patterns from actual test suite
+- ✅ 41 unique function calls across all modules
+- ✅ Both modes perform identically in real-world scenarios
+- ✅ Differences within statistical noise at single-digit microsecond scale
 
 ### Materialization Analysis
 
 ```text
-📊 Lazy Mode Materialization Breakdown
-======================================
+📊 Lazy Mode Materialization Breakdown (Aggregated - February 21, 2026)
+====================================================
 Module Type                    | First Call | Subsequent | Benefit
 -------------------------------|------------|------------|--------
-math/math.mjs (nested)         | 316.10μs   | 0.82μs     | 385.5x
-string/string.mjs (flattened)  | 277.93μs   | 1.12μs     | 248.2x
-funcmod/funcmod.mjs (callable) | 283.35μs   | 0.91μs     | 311.4x
+math/math.mjs (nested)         | ~107μs     | 6.37μs     | 17x
+string/string.mjs (flattened)  | ~788μs     | 6.60μs     | 119x
+funcmod/funcmod.mjs (callable) | ~774μs     | 4.79μs     | 162x
 
-Average materialization cost: ~371μs per module
+Average materialization cost: ~538μs per module (one-time)
 ```
 
 **Materialization Insights:**
@@ -84,7 +105,7 @@ Average materialization cost: ~371μs per module
 - ✅ One-time cost per module (not per function call)
 - ✅ Deeper nesting = higher initial cost, same final performance
 - ✅ Complex modules show bigger relative improvements
-- ✅ Post-materialization performance approaches eager mode
+- ✅ Post-materialization performance equals eager mode
 
 ---
 
@@ -92,43 +113,45 @@ Average materialization cost: ~371μs per module
 
 ### Choose **Lazy Mode** When:
 
-🎯 **Fast startup is critical** (2.9x faster)
+🎯 **Fast startup is critical** (2.2x faster)
 
 - Serverless functions with cold starts
 - CLI tools that need instant responsiveness
 - Development environments with frequent restarts
 
+🎯 **Partial API usage expected**
+
+- Only 20–50% of API surface area used
+- Conditional feature loading
+- Plugin-based architectures
+
 🎯 **Memory efficiency matters**
 
 - Large APIs with many unused endpoints
 - Resource-constrained environments
-- Microservices using subset functionality
-
-🎯 **Usage patterns are sparse**
-
-- Only 20-50% of API surface area used
-- Conditional feature loading
-- Plugin-based architectures
+- Microservices with many instances
 
 ### Choose **Eager Mode** When:
-
-🚀 **Function call performance is critical**
-
-- High-throughput applications
-- Real-time processing systems
-- Performance-sensitive inner loops
 
 🚀 **Predictable behavior is required**
 
 - Production systems requiring consistent latency
 - Applications sensitive to timing variations
-- When materialization delays are unacceptable
+- When first-call materialization delays are unacceptable
 
 🚀 **Full API usage expected**
 
 - Using 80%+ of available modules
 - Batch processing systems
-- Long-running applications
+- Long-running applications where startup time is amortized
+
+🚀 **Simpler mental model preferred**
+
+- All modules loaded upfront
+- No materialization surprises
+- Traditional synchronous initialization
+
+**Note:** Function call performance is equal between modes post-materialization (within 6% measurement noise).
 
 ---
 
@@ -136,13 +159,16 @@ Average materialization cost: ~371μs per module
 
 ### Performance Characteristics
 
-| Aspect             | Lazy Mode       | Eager Mode      |
-| ------------------ | --------------- | --------------- |
-| **Startup**        | 4.89ms ⚡       | 14.29ms 🐌      |
-| **Function Calls** | 0.99μs 🐌       | 0.90μs ⚡       |
-| **First Access**   | ~371μs overhead | Instant         |
-| **Memory**         | On-demand ⚡    | Full upfront 🐌 |
-| **Predictability** | Variable 🐌     | Consistent ⚡   |
+| Aspect              | Lazy Mode        | Eager Mode       |
+| ------------------- | ---------------- | ---------------- |
+| **Startup**         | 15.41ms ⚡       | 34.28ms 🐌       |
+| **Function Calls**  | 9.99μs ≈         | 9.46μs ≈         |
+| **Realistic Usage** | 7.75μs ≈         | 8.26μs ≈         |
+| **First Access**    | ~538μs overhead  | Instant          |
+| **Memory**          | On-demand ⚡     | Full upfront 🐌  |
+| **Predictability**  | Variable 🐌      | Consistent ⚡    |
+
+**Legend:** ⚡ Winner | 🐌 Slower | ≈ Equal (within measurement noise)
 
 ### Real-World Scenarios
 
@@ -150,18 +176,30 @@ Average materialization cost: ~371μs per module
 
 ```javascript
 // Scenario: CLI tool using 2 out of 20 modules
-Startup: 4.89ms vs 14.29ms = 2.9x faster
-Memory: ~10% usage vs 100% = 90% savings
-Total time: 4.89ms + (2 × 0.371ms) = 5.63ms vs 14.29ms
+Startup: 15.41ms vs 34.28ms = 2.2x faster ⚡
+Memory: ~10% usage vs 100% = 90% savings ⚡
+Total time: 15.41ms + (2 × 0.54ms) = 16.5ms vs 34.28ms
+Function calls: 7.75μs vs 8.26μs = Equal (within 7%)
 ```
 
-**Eager Mode Wins:**
+**Eager Mode Wins (Predictability):**
 
 ```javascript
-// Scenario: High-throughput API using most modules
-Consistent latency: No materialization surprises
-Function calls: 0.90μs vs 0.99μs = 1.1x faster (eager)
-Note: For call-intensive workloads, eager's predictability and speed win
+// Scenario: Production API where consistent latency is critical
+Startup: 34.28ms (one-time cost, amortized over lifetime)
+Function calls: 9.46μs = Equal to lazy (within 6%)
+First access: Instant (no materialization delay) ⚡
+Predictability: No timing surprises ⚡
+```
+
+**Both Modes Equal:**
+
+```javascript
+// Function call performance after lazy materialization
+Lazy:  9.99μs per call
+Eager: 9.46μs per call
+Difference: ~6% (within measurement noise)
+Conclusion: Performance parity achieved ✅
 ```
 
 ---
@@ -170,8 +208,10 @@ Note: For call-intensive workloads, eager's predictability and speed win
 
 ### Test Environment
 
-- **Node.js**: v22+ (development conditions)
-- **Platform**: Windows 11
+- **Node.js**: v24.13.1 (development conditions)
+- **Platform**: Pop!_OS 24.04 LTS (Linux, kernel 6.17.9)
+- **CPU**: Intel® Xeon® E3-1270 v6 @ 3.80 GHz, 8 Logical Processors
+- **RAM**: ~64 GB DDR4 @ 2400 MT/s
 - **Test Suite**: 200+ iterations per measurement for statistical accuracy
 - **API Directory**: `api_tests/api_test` (25+ modules)
 
@@ -221,47 +261,81 @@ This methodology reveals:
 ### Comprehensive Benchmark Data
 
 ```text
-📊 AGGREGATED PERFORMANCE RESULTS
+📊 AGGREGATED PERFORMANCE RESULTS (February 21, 2026)
 ================================
 
 🚀 STARTUP PERFORMANCE:
-   Eager: 14.29ms (avg) | Range: 11.82ms - 41.17ms
-   Lazy:  4.89ms (avg) | Range: 3.62ms - 42.20ms
-   Winner: Lazy mode (2.9x faster)
+   Eager: 34.28ms (avg)
+   Lazy:  15.41ms (avg)
+   Winner: Lazy mode (2.2x faster)
 
 ⚡ FUNCTION CALL PERFORMANCE:
-   Eager:             0.90μs (avg)
-   Lazy (first):      371μs (materialization)
-   Lazy (subsequent): 0.99μs (avg)
-   Winner: Eager mode (1.1x faster)
+   Eager:             9.46μs (avg)
+   Lazy (first):      538μs (materialization)
+   Lazy (subsequent): 9.99μs (avg)
+   Winner: Equal (within 6% measurement noise)
 
 🎯 COMPLEX MODULE PERFORMANCE:
-   Eager:             0.91μs (avg)
-   Lazy (first):      440μs (materialization)
-   Lazy (subsequent): 0.98μs (avg)
-   Winner: Eager mode (1.1x faster)
+   Eager:             8.76μs (avg)
+   Lazy (first):      1.58ms (materialization)
+   Lazy (subsequent): 12.48μs (avg)
+   Winner: Equal (within measurement noise)
 
 🔄 MULTI-MODULE ACCESS PATTERNS:
 
    Nested Math Module (math/math.mjs):
-     Eager:             0.89μs
-     Lazy (subsequent): 0.98μs
-     Winner: Eager (1.1x faster)
+     Eager:             6.80μs
+     Lazy (subsequent): 6.37μs
+     Winner: Lazy (1.07x faster)
 
    String Module (string/string.mjs):
-     Eager:             1.08μs
-     Lazy (subsequent): 1.26μs
-     Winner: Eager (1.2x faster)
+     Eager:             8.86μs
+     Lazy (subsequent): 6.60μs
+     Winner: Lazy (1.34x faster)
 
    Callable Function Module (funcmod/funcmod.mjs):
-     Eager:             0.57μs
-     Lazy (subsequent): 0.91μs
-     Winner: Eager (1.6x faster)
+     Eager:             4.21μs
+     Lazy (subsequent): 4.79μs
+     Winner: Eager (1.14x faster)
+
+🌐 REALISTIC API USAGE (⭐ HIGH WEIGHT - 500 iterations, 41 unique calls):
+   Eager: 8.26μs (avg)
+   Lazy:  7.75μs (avg)
+   Winner: Lazy (1.07x faster)
+```
+
+### Per-Module Materialization Breakdown (Aggregated)
+
+```text
+📊 LAZY MODE MATERIALIZATION (Lazy-First / Eager-First / Avg)
+=============================================================
+
+math/math.mjs (nested structure):
+  Lazy-first run:    131.74μs (materialization)
+  Eager-first run:   83.02μs (materialization)
+  Avg:               ~107μs
+  Subsequent:        6.37μs (materialized)
+  Benefit:           ~17x faster after materialization
+
+string/string.mjs (flattened):
+  Lazy-first run:    995.56μs (materialization)
+  Eager-first run:   580.96μs (materialization)
+  Avg:               ~788μs
+  Subsequent:        6.60μs (materialized)
+  Benefit:           ~119x faster after materialization
+
+funcmod/funcmod.mjs (callable):
+  Lazy-first run:    1.01ms (materialization)
+  Eager-first run:   537.77μs (materialization)
+  Avg:               ~774μs
+  Subsequent:        4.79μs (materialized)
+  Benefit:           ~162x faster after materialization
 ```
 
 ### Performance Variance Analysis
 
-> [!WARNING] > **Performance can vary significantly due to JIT compiler effects and system conditions.**
+> [!WARNING]
+> **Performance can vary significantly due to JIT compiler effects and system conditions.**
 >
 > These benchmarks represent a single test run. For production decisions, run multiple tests with your specific API structure and usage patterns.
 
@@ -282,40 +356,18 @@ This methodology reveals:
 ## 📏 Raw Performance Data
 
 ```text
-Benchmark Results (Latest Run - December 30, 2025)
-===================================================
-• Eager startup:       14.29ms
-• Lazy startup:        4.89ms
-• Eager calls:         0.90μs
-• Lazy calls:          0.99μs
-• Materialization:     371μs (average per module)
+Benchmark Results (Aggregated - February 21, 2026)
+==================================================
+• Eager startup:       34.28ms
+• Lazy startup:        15.41ms
+• Eager calls:         9.46μs
+• Lazy calls:          9.99μs
+• Materialization:     ~538μs (average per module, aggregated)
 
 Performance Ratios:
-• Startup ratio:       2.9x faster (lazy)
-• Call ratio:          1.1x faster (eager)
-• Materialization:     ~375x improvement (371μs → 0.99μs)
-```
-
-### Individual Module Performance
-
-```text
-🔍 PER-MODULE MATERIALIZATION BREAKDOWN
-=======================================
-
-math/math.mjs (nested structure):
-  First Call:    316.10μs (materialization)
-  Subsequent:    0.82μs (materialized)
-  Benefit:       385.5x faster after materialization
-
-string/string.mjs (flattened):
-  First Call:    277.93μs (materialization)
-  Subsequent:    1.12μs (materialized)
-  Benefit:       248.2x faster after materialization
-
-funcmod/funcmod.mjs (callable):
-  First Call:    283.35μs (materialization)
-  Subsequent:    0.91μs (materialized)
-  Benefit:       311.4x faster after materialization
+• Startup ratio:       2.2x faster (lazy)
+• Call ratio:          Equal (within 6% measurement noise)
+• Materialization:     ~57x improvement (538μs → 9.99μs)
 ```
 
 ---
@@ -325,15 +377,8 @@ funcmod/funcmod.mjs (callable):
 ### Running Benchmarks
 
 ```bash
-# Set development environment (loads from src/ instead of dist/)
-set NODE_ENV=development
-set NODE_OPTIONS=--conditions=development
-
 # Run the comprehensive performance test suite
 npm run test:performance
-
-# Or run directly
-node tests/performance-benchmark.mjs
 ```
 
 ### Quick Performance Test
@@ -344,11 +389,11 @@ node tests/performance-benchmark.mjs
 import slothlet from "@cldmv/slothlet";
 
 console.time("eager-startup");
-const eagerApi = await slothlet({ lazy: false, dir: "./api_tests/api_test" });
+const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
 console.timeEnd("eager-startup");
 
 console.time("lazy-startup");
-const lazyApi = await slothlet({ lazy: true, dir: "./api_tests/api_test" });
+const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
 console.timeEnd("lazy-startup");
 
 // Test your specific usage patterns
@@ -372,11 +417,11 @@ const slothlet = require("@cldmv/slothlet");
 
 async function performanceTest() {
 	console.time("eager-startup");
-	const eagerApi = await slothlet({ lazy: false, dir: "./api_tests/api_test" });
+	const eagerApi = await slothlet({ mode: "eager", dir: "./api_tests/api_test" });
 	console.timeEnd("eager-startup");
 
 	console.time("lazy-startup");
-	const lazyApi = await slothlet({ lazy: true, dir: "./api_tests/api_test" });
+	const lazyApi = await slothlet({ mode: "lazy", dir: "./api_tests/api_test" });
 	console.timeEnd("lazy-startup");
 
 	// Test your specific usage patterns
@@ -468,5 +513,6 @@ performanceTest().catch(console.error);
 
 ---
 
-**📊 Performance analysis updated: December 30, 2025**  
-**🔬 Based on slothlet v2.8.0 with controlled performance testing methodology**
+**📊 Performance analysis updated: February 21, 2026**  
+**🔬 Based on slothlet v3.0.0**  
+**📈 All metrics from `tests/performance/performance-benchmark-aggregated.mjs`**

@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "2.11.0",
+	"version": "3.0.0",
 	"moduleVersions": {
 		"lazy": "1.3.1",
 		"eager": "1.3.1",
@@ -67,42 +67,134 @@
 			},
 			"types": "./types/dist/lib/modes/*.d.mts",
 			"import": "./dist/lib/modes/*.mjs"
+		},
+		"./builders/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/builders/*.d.mts",
+				"import": "./src/lib/builders/*.mjs"
+			},
+			"types": "./types/dist/lib/builders/*.d.mts",
+			"import": "./dist/lib/builders/*.mjs"
+		},
+		"./handlers/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/handlers/*.d.mts",
+				"import": "./src/lib/handlers/*.mjs"
+			},
+			"types": "./types/dist/lib/handlers/*.d.mts",
+			"import": "./dist/lib/handlers/*.mjs"
+		},
+		"./processors/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/processors/*.d.mts",
+				"import": "./src/lib/processors/*.mjs"
+			},
+			"types": "./types/dist/lib/processors/*.d.mts",
+			"import": "./dist/lib/processors/*.mjs"
+		},
+		"./factories/*": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/factories/*.d.mts",
+				"import": "./src/lib/factories/*.mjs"
+			},
+			"types": "./types/dist/lib/factories/*.d.mts",
+			"import": "./dist/lib/factories/*.mjs"
+		},
+		"./errors": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/errors.d.mts",
+				"import": "./src/lib/errors.mjs"
+			},
+			"types": "./types/dist/lib/errors.d.mts",
+			"import": "./dist/lib/errors.mjs"
+		},
+		"./i18n": {
+			"slothlet-dev": {
+				"types": "./types/src/lib/i18n/translations.d.mts",
+				"import": "./src/lib/i18n/translations.mjs"
+			},
+			"types": "./types/dist/lib/i18n/translations.d.mts",
+			"import": "./dist/lib/i18n/translations.mjs"
 		}
 	},
 	"types": "./types/index.d.mts",
 	"scripts": {
-		"precommit": "node tools/precommit-validation.mjs",
-		"publish:manual": "npm publish --access public",
-		"test": "node tests/test-conditional.mjs",
+		"precommit": "node tools/dev/precommit-validation.mjs",
+		"debug": "node tests/debug-slothlet.mjs",
+		"i18n:check": "node tools/ci/check-i18n-languages.mjs",
+		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
+		"baseline": "npm run vitest -- --baseline",
+		"coverage": "npm run vitest -- --coverage-quiet",
+		"test": "npm run test:pre-build",
 		"test:pre-build": "node tests/test-conditional.mjs",
 		"test:post-build": "npm run test:types",
 		"test:complete": "node tests/test-conditional.mjs && npm run test:post-build",
-		"test:unit": "vitest --config .configs/vitest.config.mjs run",
 		"test:node": "node tests/run-all-tests.mjs",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",
-		"debug": "node tests/debug-slothlet.mjs",
-		"test:entry": "node tests/test-entry-points.mjs",
-		"test:performance": "node tests/performance-benchmark.mjs",
-		"test:performance-aggregated": "node tests/performance-benchmark-aggregated.mjs",
+		"test:performance": "node tests/performance/performance-benchmark-aggregated.mjs",
+		"test:performance-simple": "node tests/performance/performance-benchmark.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
-		"build": "node tools/build-with-tests.mjs",
+		"inspect": "node tools/dev/inspect-api-structure.mjs",
+		"check:node-versions": "node tools/dev/check-node-versions.mjs",
+		"analyze": "node tools/dev/analyze-errors.mjs",
+		"fix:headers": "node tools/dev/fix-headers.mjs",
+		"build": "npm run build:dev",
 		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
+		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run build:cleanup",
 		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
-		"ci:cleanup-src": "node tools/ci-cleanup-src.mjs",
+		"ci:cleanup-src": "node tools/ci/ci-cleanup-src.mjs",
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",
 		"build:dist": "shx mkdir -p dist && shx cp -r src/* dist/ && shx rm -rf dist/**/*.backup",
 		"build:types": "npx tsc -p .configs/tsconfig.dts.jsonc",
-		"build:docs": "npm run build:docs:slothlet && npm run build:docs:api-tests",
-		"build:docs:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"src/{slothlet.mjs,lib/{modes,helpers,runtime}/**/*.mjs}\" > docs/generated/API.md",
-		"build:docs:api-tests": "npm run build:docs:api-test && npm run build:docs:api-test-cjs && npm run build:docs:api-test-mixed",
-		"build:docs:api-test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test/**/*.mjs\" > docs/generated/api_tests/api_test.md",
-		"build:docs:api-test-cjs": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_cjs/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_cjs.md",
-		"build:docs:api-test-mixed": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_mixed/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_mixed.md",
-		"build:docs:tools": "shx mkdir -p docs/tools && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"tools/**/*.mjs\" > docs/tools/build-tools.md",
-		"build:exports": "node tools/build-exports.mjs",
-		"build:prepend-license": "node tools/prepend-license.mjs dist",
-		"prepublish-check": "npm run build && npm pack && node tools/prepublish-check.mjs"
+		"build:exports": "node tools/build/build-exports.mjs",
+		"build:prepend-license": "node tools/build/prepend-license.mjs dist",
+		"prepublish-check": "npm run build && npm pack && node tools/build/prepublish-check.mjs",
+		"docs:build": "npm run docs:build:slothlet && npm run docs:build:api-tests",
+		"docs:build:slothlet": "jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"src/{slothlet.mjs,lib/**/**/*.mjs}\" > docs/generated/API.md",
+		"publish:manual": "npm publish --access public",
+		"docs:build:api_adb_test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_adb_test/**/*.mjs\" > docs/generated/api_tests/api_adb_test.md",
+		"docs:build:api_test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test/**/*.mjs\" > docs/generated/api_tests/api_test.md",
+		"docs:build:api_test-builtin-types": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_builtin_types/**/*.mjs\" > docs/generated/api_tests/api_test_builtin_types.md",
+		"docs:build:api_test-cjs": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_cjs/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_cjs.md",
+		"docs:build:api_test-collections": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_collections/**/*.mjs\" > docs/generated/api_tests/api_test_collections.md",
+		"docs:build:api_test-collisions": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_collisions/**/*.mjs\" > docs/generated/api_tests/api_test_collisions.md",
+		"docs:build:api_test-impl": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_impl/**/*.mjs\" > docs/generated/api_tests/api_test_impl.md",
+		"docs:build:api_test-mixed": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_mixed/**/*.{mjs,cjs}\" > docs/generated/api_tests/api_test_mixed.md",
+		"docs:build:api_test-modes-debug": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_modes_debug/**/*.mjs\" > docs/generated/api_tests/api_test_modes_debug.md",
+		"docs:build:api_test-multi-root-fn": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_multi_root_fn/**/*.mjs\" > docs/generated/api_tests/api_test_multi_root_fn.md",
+		"docs:build:api_test-multiple-roots": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_multiple_roots/**/*.mjs\" > docs/generated/api_tests/api_test_multiple_roots.md",
+		"docs:build:api_test-primitives": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_primitives/**/*.mjs\" > docs/generated/api_tests/api_test_primitives.md",
+		"docs:build:api_test-reserved-name": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_reserved_name/**/*.mjs\" > docs/generated/api_tests/api_test_reserved_name.md",
+		"docs:build:api_test-root-issue": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_root_issue/**/*.mjs\" > docs/generated/api_tests/api_test_root_issue.md",
+		"docs:build:api_test-single-root-fn": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_test_single_root_fn/**/*.mjs\" > docs/generated/api_tests/api_test_single_root_fn.md",
+		"docs:build:api_tv_test": "shx mkdir -p docs/generated/api_tests && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/api_tv_test/**/*.mjs\" > docs/generated/api_tests/api_tv_test.md",
+		"docs:build:sf-addapi": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_addapi/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_addapi.md",
+		"docs:build:sf-addapi-function": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_addapi_function/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_addapi_function.md",
+		"docs:build:sf-addapi-subfolder": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_addapi_subfolder/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_addapi_subfolder.md",
+		"docs:build:sf-addapi-with-folders": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_addapi_with_folders/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_addapi_with_folders.md",
+		"docs:build:sf-bad-module": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_bad_module/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_bad_module.md",
+		"docs:build:sf-conflict": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_conflict/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_conflict.md",
+		"docs:build:sf-file-folder-lazy": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_file_folder_lazy/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_file_folder_lazy.md",
+		"docs:build:sf-fn-file-folder-lazy": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_fn_file_folder_lazy/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_fn_file_folder_lazy.md",
+		"docs:build:sf-fn-fn-folder": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_fn_fn_folder/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_fn_fn_folder.md",
+		"docs:build:sf-folder-config": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_folder_config/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_folder_config.md",
+		"docs:build:sf-folder-different": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_folder_different/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_folder_different.md",
+		"docs:build:sf-folder-with-named": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_folder_with_named/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_folder_with_named.md",
+		"docs:build:sf-lazy-fn-collision": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_lazy_fn_collision/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_lazy_fn_collision.md",
+		"docs:build:sf-lazy-nested-file-folder": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_lazy_nested_file_folder/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_lazy_nested_file_folder.md",
+		"docs:build:sf-multi-export-skip": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_multi_export_skip/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_multi_export_skip.md",
+		"docs:build:sf-multiple": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_multiple/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_multiple.md",
+		"docs:build:sf-nested": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_nested/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_nested.md",
+		"docs:build:sf-none": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_none/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_none.md",
+		"docs:build:sf-nowrap-cases": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_nowrap_cases/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_nowrap_cases.md",
+		"docs:build:sf-object-default-merge": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_object_default_merge/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_object_default_merge.md",
+		"docs:build:sf-obj-fn-folder": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_obj_fn_folder/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_obj_fn_folder.md",
+		"docs:build:sf-single": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_single/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_single.md",
+		"docs:build:sf-solo-subfolder": "shx mkdir -p docs/generated/api_tests/smart_flatten && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"api_tests/smart_flatten/api_smart_flatten_solo_subfolder/**/*.mjs\" > docs/generated/api_tests/smart_flatten/api_smart_flatten_solo_subfolder.md",
+		"docs:build:smart-flatten": "shx mkdir -p docs/generated/api_tests/smart_flatten && npm run docs:build:sf-addapi && npm run docs:build:sf-addapi-function && npm run docs:build:sf-addapi-subfolder && npm run docs:build:sf-addapi-with-folders && npm run docs:build:sf-bad-module && npm run docs:build:sf-conflict && npm run docs:build:sf-file-folder-lazy && npm run docs:build:sf-fn-file-folder-lazy && npm run docs:build:sf-fn-fn-folder && npm run docs:build:sf-folder-config && npm run docs:build:sf-folder-different && npm run docs:build:sf-folder-with-named && npm run docs:build:sf-lazy-fn-collision && npm run docs:build:sf-lazy-nested-file-folder && npm run docs:build:sf-multi-export-skip && npm run docs:build:sf-multiple && npm run docs:build:sf-nested && npm run docs:build:sf-none && npm run docs:build:sf-nowrap-cases && npm run docs:build:sf-object-default-merge && npm run docs:build:sf-obj-fn-folder && npm run docs:build:sf-single && npm run docs:build:sf-solo-subfolder",
+		"docs:build:api-tests": "npm run docs:build:api_adb_test && npm run docs:build:api_test && npm run docs:build:api_test-builtin-types && npm run docs:build:api_test-cjs && npm run docs:build:api_test-collections && npm run docs:build:api_test-collisions && npm run docs:build:api_test-impl && npm run docs:build:api_test-mixed && npm run docs:build:api_test-modes-debug && npm run docs:build:api_test-multi-root-fn && npm run docs:build:api_test-multiple-roots && npm run docs:build:api_test-primitives && npm run docs:build:api_test-reserved-name && npm run docs:build:api_test-root-issue && npm run docs:build:api_test-single-root-fn && npm run docs:build:api_tv_test && npm run docs:build:smart-flatten",
+		"docs:build:tools": "shx mkdir -p docs/tools && jsdoc2md -g grouped -m dl --no-cache --separators -c \".configs/jsdoc.config.json\" --helper \"docs/generated/helpers.cjs\" --template \"docs/generated/template.hbs\" \"tools/dev/**/*.mjs\" > docs/tools/build-tools.md"
 	},
 	"keywords": [
 		"api",
@@ -152,26 +244,47 @@
 		"url": "https://github.com/sponsors/shinrai"
 	},
 	"type": "module",
+	"peerDependencies": {
+		"esbuild": "^0.27.3",
+		"typescript": "^5.9.3"
+	},
+	"peerDependenciesMeta": {
+		"esbuild": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
+		"@cldmv/fix-headers": "^1.2.0",
+		"@cldmv/vitest-runner": "^1.0.3",
 		"@eslint/css": "^0.10.0",
 		"@eslint/js": "^9.33.0",
 		"@eslint/json": "^0.13.1",
 		"@eslint/markdown": "^7.2.0",
-		"@html-eslint/eslint-plugin": "^0.45.0",
 		"@html-eslint/parser": "^0.45.0",
 		"@types/node": "^24.9.1",
+		"@vitest/coverage-v8": "^4.0.18",
 		"chalk": "^5.6.0",
+		"chokidar": "^5.0.0",
 		"dmd": "^7.1.1",
-		"eslint": "^9.33.0",
+		"esbuild": "^0.27.3",
+		"eslint": "^10.0.2",
+		"globals": "^17.4.0",
 		"jsdoc": "^4.0.4",
 		"jsdoc-to-markdown": "^9.1.2",
 		"jsdoc2md": "^1.0.0",
 		"jsonc-parser": "^3.3.1",
 		"prettier": "^3.3.3",
 		"shx": "^0.4.0",
-		"typescript": "^5.9.2",
+		"typescript": "^5.9.3",
 		"vest": "^5.4.6",
-		"vitest": "^3.2.4"
+		"vitest": "^4.0.18"
+	},
+	"overrides": {
+		"minimatch": "^10.2.3",
+		"rollup": "^4.59.0"
 	},
 	"repository": {
 		"type": "git",

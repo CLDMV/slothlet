@@ -1,12 +1,27 @@
 /**
- * @file api/devices/lg.mjs - LG TV control (stripped for testing)
- * @description Minimal device control module with proxy for testing slothlet proxy behavior
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/lg.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:16 -08:00 (1772425276)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * TV Controller class for individual TV operations (mock)
- * Enables array-style access like lg[0].power.on()
+ * @fileoverview LG TV device module for TV Remote testing.
+ * @module api_tv_test.devices.lg
+ * @memberof module:api_tv_test
  */
+/**
+ * @namespace lg
+ * @memberof module:api_tv_test.devices
+ * @alias module:api_tv_test.devices.lg
+ */
+
 class TVController {
 	constructor(tvId) {
 		this.tvId = tvId;
@@ -52,6 +67,31 @@ const tvControllerCache = new Map();
  * Get or create a TV controller instance with caching
  * @param {string} tvId - TV identifier (tv1, tv2, etc.)
  * @returns {TVController} TV controller instance
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.lg.getTVController('item1');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.lg.getTVController('item1');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.lg.getTVController('item1');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.lg.getTVController('item1');
  */
 function getTVController(tvId) {
 	if (!tvControllerCache.has(tvId)) {
@@ -65,6 +105,31 @@ function getTVController(tvId) {
 /**
  * Powers on all TVs (mock)
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.powerOnAll();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.powerOnAll();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.powerOnAll();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.powerOnAll();
  */
 export async function powerOnAll() {
 	console.log("Mock: Powering on all TVs");
@@ -74,6 +139,31 @@ export async function powerOnAll() {
 /**
  * Powers off all TVs (mock)
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.powerOffAll();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.powerOffAll();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.powerOffAll();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.powerOffAll();
  */
 export async function powerOffAll() {
 	console.log("Mock: Powering off all TVs");
@@ -84,9 +174,34 @@ export async function powerOffAll() {
  * Gets TV status (mock)
  * @param {string} tvId - TV identifier
  * @returns {Promise<Object>} TV status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.getStatus('item1');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.getStatus('item1');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.lg.getStatus('item1');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.lg.getStatus('item1');
  */
 export async function getStatus(tvId) {
-	console.log(`Mock: Getting status for TV ${tvId}`);
+	if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") console.log(`Mock: Getting status for TV ${tvId}`);
 	return {
 		tvId,
 		power: "on",
@@ -98,6 +213,34 @@ export async function getStatus(tvId) {
 
 /**
  * Clear the TV controller cache (mock)
+ */
+/**
+ * clearCache.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.lg.clearCache();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.lg.clearCache();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.lg.clearCache();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.lg.clearCache();
  */
 export function clearCache() {
 	console.log("Mock: Clearing TV controller cache");
@@ -113,11 +256,13 @@ const LGTVControllers = new Proxy(
 	{},
 	{
 		get(target, prop) {
-			console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+				console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
 
 			// ✅ FIRST: Check if property exists on target (Slothlet-attached named exports)
 			if (prop in target) {
-				console.log(`📋 Found property "${String(prop)}" in target`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`📋 Found property "${String(prop)}" in target`);
 				return target[prop];
 			}
 
@@ -126,18 +271,20 @@ const LGTVControllers = new Proxy(
 			if (typeof prop === "string" && /^\d+$/.test(prop)) {
 				const index = parseInt(prop);
 				const tvId = `tv${index + 1}`; // Convert 0->tv1, 1->tv2, etc.
-				console.log(`🎯 Creating TVController for index ${index} → ${tvId}`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`🎯 Creating TVController for index ${index} → ${tvId}`);
 				return getTVController(tvId);
 			}
 
 			// Handle direct TV IDs (tv1, tv2, etc.)
 			if (typeof prop === "string" && prop.startsWith("tv")) {
-				console.log(`🎯 Creating TVController for TV ID: ${prop}`);
+				if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+					console.log(`🎯 Creating TVController for TV ID: ${prop}`);
 				return getTVController(prop);
 			}
 
 			// Return undefined for invalid properties
-			console.log(`❓ Property "${String(prop)}" not found`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true") console.log(`❓ Property "${String(prop)}" not found`);
 			return undefined;
 		}
 	}
@@ -148,3 +295,4 @@ const LGTVControllers = new Proxy(
  * @default
  */
 export default LGTVControllers;
+

@@ -1,21 +1,25 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_root_issue/user.mjs
- *	@Date: 2025-10-23 12:24:39 -07:00 (1761247479)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-10-23T13:13:39-07:00 (1761250419)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-23 12:30:35 -07:00 (1761247835)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:16 -08:00 (1772425276)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview User management functions for root-level API testing.
- * Root-level default export should flatten but currently breaks with multi-default detection.
- * Expected: api() creates user, api.validateUser(), api.formatUser()
- * Actual bug: api.user() creates user (not flattened)
+ * @fileoverview User API module for api_test_root_issue testing.
+ * @module api_test_root_issue.user
+ * @memberof module:api_test_root_issue
+ */
+/**
+ * @namespace user
+ * @memberof module:api_test_root_issue
+ * @alias module:api_test_root_issue.user
  */
 
 /**
@@ -26,6 +30,31 @@
  * @param {string} name - User name
  * @param {string} email - User email
  * @returns {object} User object
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.createUser('myName', 'value');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.createUser('myName', 'value');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.createUser('myName', 'value');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.createUser('myName', 'value');
  */
 function createUser(name, email) {
 	return { id: Math.random(), name, email, created: new Date() };
@@ -38,6 +67,31 @@ function createUser(name, email) {
  * @public
  * @param {object} user - User object to validate
  * @returns {boolean} True if valid
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.validateUser({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.validateUser({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.validateUser({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.validateUser({});
  */
 export function validateUser(user) {
 	return user && user.name && user.email;
@@ -50,6 +104,31 @@ export function validateUser(user) {
  * @public
  * @param {object} user - User object to format
  * @returns {string} Formatted user string
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.formatUser({});
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.formatUser({});
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ *   api_test_root_issue.user.formatUser({});
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test_root_issue = await slothlet({ dir: './api_tests/api_test_root_issue' });
+ * api_test_root_issue.user.formatUser({});
  */
 export function formatUser(user) {
 	return `${user.name} <${user.email}>`;

@@ -4,7 +4,7 @@ Slothlet supports sophisticated module organization patterns with seamless ESM/C
 
 ## Overview
 
-Slothlet's intelligent module loader automatically transforms your file structure into a clean, intuitive API. It handles mixed ESM/CJS modules, automatic flattening, smart naming, and various export patterns.
+Slothlet's module loader automatically transforms your file structure into a clean, intuitive API. It handles mixed ESM/CJS modules, automatic flattening, smart naming, and various export patterns - with no configuration required for common cases.
 
 ## Table of Contents
 
@@ -17,19 +17,20 @@ Slothlet's intelligent module loader automatically transforms your file structur
 - [Nested Structure](#nested-structure)
 - [Utility Modules](#utility-modules)
 - [Smart Function Naming](#smart-function-naming)
+- [TypeScript Modules](#typescript-modules)
+
+---
 
 ## Root-Level Modules
 
-Files at the root of your API directory become top-level API properties:
+Files at the root of your API directory become top-level API properties. Dash-separated filenames are converted to camelCase:
 
 ```text
 api/
-├── root-math.mjs     → api.rootMath (dash-to-camelCase)
+├── root-math.mjs     → api.rootMath
 ├── rootstring.mjs    → api.rootstring
 └── config.mjs        → api.config
 ```
-
-**Example:**
 
 ```javascript
 // api/root-math.mjs
@@ -42,21 +43,21 @@ const api = await slothlet({ dir: "./api" });
 const result = api.rootMath.add(2, 3); // 5
 ```
 
+---
+
 ## Filename-Folder Matching Modules
 
-When a folder contains a single file with a matching name, slothlet automatically flattens the structure:
+When a folder contains a single file whose name matches the folder name, slothlet automatically flattens the structure - the intermediate namespace is eliminated:
 
 ```text
 api/
 ├── math/
-│   └── math.mjs      → api.math (folder + filename match)
+│   └── math.mjs      → api.math   (not api.math.math)
 ├── string/
 │   └── string.mjs    → api.string
 └── util/
-	└── util.cjs      → api.util (CJS support)
+    └── util.cjs      → api.util
 ```
-
-**Example:**
 
 ```javascript
 // api/math/math.mjs
@@ -70,23 +71,25 @@ export function subtract(a, b) {
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-const sum = api.math.add(2, 3); // Not api.math.math.add()
+const sum = api.math.add(2, 3);       // ✅ not api.math.math.add()
 const diff = api.math.subtract(5, 2);
 ```
 
+See [API Flattening Rules](API-RULES/API-FLATTENING.md) for the full set of flattening patterns.
+
+---
+
 ## Multi-File Modules
 
-Folders with multiple files create nested API structures:
+Folders with multiple files create namespaced API structures. Each file becomes a sub-key:
 
 ```text
 api/
 └── multi/
-	├── alpha.mjs   → api.multi.alpha
-	├── beta.mjs    → api.multi.beta
-	└── gamma.cjs   → api.multi.gamma (mixed ESM/CJS)
+    ├── alpha.mjs   → api.multi.alpha
+    ├── beta.mjs    → api.multi.beta
+    └── gamma.cjs   → api.multi.gamma
 ```
-
-**Example:**
 
 ```javascript
 // api/multi/alpha.mjs
@@ -99,7 +102,7 @@ export function processBeta(data) {
 	return `Beta: ${data}`;
 }
 
-// api/multi/gamma.cjs (CJS module)
+// api/multi/gamma.cjs
 function processGamma(data) {
 	return `Gamma: ${data}`;
 }
@@ -112,20 +115,20 @@ api.multi.beta.processBeta("test");
 api.multi.gamma.processGamma("test"); // CJS works seamlessly
 ```
 
+---
+
 ## Function-Based Modules
 
-Modules that export a default function become callable:
+Modules that export a default function become callable directly at their API path:
 
 ```text
 api/
 ├── funcmod/
-│   └── funcmod.mjs   → api.funcmod() (callable function)
+│   └── funcmod.mjs   → api.funcmod()        (callable)
 └── multi_func/
-	├── alpha.mjs     → api.multi_func.alpha()
-	└── beta.cjs      → api.multi_func.beta() (CJS callable)
+    ├── alpha.mjs     → api.multi_func.alpha()
+    └── beta.cjs      → api.multi_func.beta()
 ```
-
-**Example:**
 
 ```javascript
 // api/funcmod/funcmod.mjs
@@ -138,31 +141,31 @@ export default function(value) {
 	return value * 2;
 }
 
-// api/multi_func/beta.cjs (CJS default export)
+// api/multi_func/beta.cjs
 module.exports = function(value) {
 	return value * 3;
 };
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-api.funcmod("Alice"); // "Hello, Alice!"
-api.multi_func.alpha(5); // 10
-api.multi_func.beta(5); // 15
+api.funcmod("Alice");         // "Hello, Alice!"
+api.multi_func.alpha(5);      // 10
+api.multi_func.beta(5);       // 15
 ```
+
+---
 
 ## Mixed ESM/CJS Modules
 
-Slothlet seamlessly handles mixed ESM and CJS modules in the same directory:
+ESM and CJS modules coexist transparently in the same directory. CJS `module.exports` is treated equivalently to an ESM `export default` - no `.default` wrapper is introduced:
 
 ```text
 api/
 └── interop/
-	├── esm-module.mjs → api.interop.esmModule
-	├── cjs-module.cjs → api.interop.cjsModule
-	└── mixed.mjs      → api.interop.mixed (calls both)
+    ├── esm-module.mjs → api.interop.esmModule
+    ├── cjs-module.cjs → api.interop.cjsModule
+    └── mixed.mjs      → api.interop.mixed
 ```
-
-**Example:**
 
 ```javascript
 // api/interop/esm-module.mjs
@@ -176,7 +179,7 @@ function cjsFunction(data) {
 }
 module.exports = { cjsFunction };
 
-// api/interop/mixed.mjs - Can call both!
+// api/interop/mixed.mjs - can call both through self
 import { self } from "@cldmv/slothlet/runtime";
 
 export function callBoth(data) {
@@ -192,19 +195,19 @@ api.interop.cjsModule.cjsFunction("test");
 api.interop.mixed.callBoth("test");
 ```
 
+> **CJS default exports**: `module.exports = { fn }` is always accessible directly as `api.module.fn` - never as `api.module.default.fn`. Slothlet normalizes the CJS `default` wrapper so CJS and ESM modules have identical access patterns.
+
+---
+
 ## Hybrid Export Patterns
 
-Modules can export both a default function and named properties:
+Modules can export both a default function and named properties. The default function becomes the callable entry point; named exports become methods on it:
 
 ```text
 api/
-├── exportDefault/
-│   └── exportDefault.mjs → api.exportDefault() (callable with methods)
-└── objectDefaultMethod/
-	└── method.mjs        → api.objectDefaultMethod() (object with default)
+└── exportDefault/
+    └── exportDefault.mjs → api.exportDefault()  (callable with .info / .error methods)
 ```
-
-**Example:**
 
 ```javascript
 // api/exportDefault/exportDefault.mjs
@@ -212,7 +215,6 @@ export default function logger(msg) {
 	console.log(msg);
 }
 
-// Add methods to the default function
 logger.info = (msg) => console.log(`[INFO] ${msg}`);
 logger.error = (msg) => console.error(`[ERROR] ${msg}`);
 
@@ -220,27 +222,26 @@ export { logger };
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-api.exportDefault("Hello"); // Direct call
-api.exportDefault.info("Info message"); // Method call
-api.exportDefault.error("Error message"); // Method call
+api.exportDefault("Hello");           // Direct call
+api.exportDefault.info("Info");       // Method call
+api.exportDefault.error("Error");     // Method call
 ```
+
+---
 
 ## Nested Structure
 
-Slothlet supports deeply nested directory structures:
+Slothlet supports arbitrarily deep directory structures:
 
 ```text
 api/
 ├── nested/
 │   └── date/
-│	   ├── date.mjs → api.nested.date
-│	   └── util.cjs → api.nested.dateUtil
+│       ├── date.mjs    → api.nested.date
+│       └── util.cjs    → api.nested.dateUtil
 └── advanced/
-	├── selfObject/  → api.advanced.selfObject
-	└── nest*/       → Various nesting examples
+    └── self-object/    → api.advanced.selfObject
 ```
-
-**Example:**
 
 ```javascript
 // api/nested/date/date.mjs
@@ -260,21 +261,21 @@ const formatted = api.nested.date.formatDate(new Date());
 const parsed = api.nested.dateUtil.parseDate("2025-12-30");
 ```
 
+---
+
 ## Utility Modules
 
-Organize utility functions in nested structures:
+Utility modules follow the same structural rules. Mixed ESM/CJS works at any depth:
 
 ```text
 api/
 └── util/
-	├── controller.mjs → api.util.controller
-	├── extract.cjs    → api.util.extract (CJS utility)
-	└── url/
-		├── parser.mjs → api.util.url.parser
-		└── builder.cjs → api.util.url.builder (mixed)
+    ├── controller.mjs → api.util.controller
+    ├── extract.cjs    → api.util.extract
+    └── url/
+        ├── parser.mjs  → api.util.url.parser
+        └── builder.cjs → api.util.url.builder
 ```
-
-**Example:**
 
 ```javascript
 // api/util/controller.mjs
@@ -307,25 +308,24 @@ api.util.url.parser.parseUrl("https://example.com");
 api.util.url.builder.buildUrl("https://example.com", "path");
 ```
 
+---
+
 ## Smart Function Naming
 
-Slothlet preserves function name capitalization for technical terms:
+Slothlet preserves function name capitalization for technical acronyms. When a module's exported function name contains an acronym (IP, JSON, HTTP, API, etc.), Slothlet uses the function's own name as the API key rather than deriving it from the filename:
 
 ```text
 api/
 ├── task/
-│   └── auto-ip.mjs      → api.task.autoIP (preserves function name)
+│   └── auto-ip.mjs      → api.task.autoIP    (not autoIp)
 ├── util/
-│   └── parseJSON.mjs    → api.util.parseJSON (preserves JSON)
+│   └── parseJSON.mjs    → api.util.parseJSON  (not parseJson)
 └── api/
-	└── getHTTPStatus.mjs → api.api.getHTTPStatus (preserves HTTP)
+    └── getHTTPStatus.mjs → api.api.getHTTPStatus
 ```
 
-**Example:**
-
 ```javascript
-// api/task/auto-ip.mjs
-// Function name takes precedence over filename
+// api/task/auto-ip.mjs - function name takes precedence over filename
 export function autoIP(config) {
 	return "192.168.1.1";
 }
@@ -342,24 +342,80 @@ export function getHTTPStatus(code) {
 
 // Usage
 const api = await slothlet({ dir: "./api" });
-api.task.autoIP({ mode: "dhcp" }); // Not api.task.autoIp
-api.util.parseJSON('{"key": "value"}'); // Not api.util.parseJson
-api.api.getHTTPStatus(200); // Not api.api.getHttpStatus
+api.task.autoIP({ mode: "dhcp" });        // not .autoIp
+api.util.parseJSON('{"key": "value"}');   // not .parseJson
+api.api.getHTTPStatus(200);               // not .getHttpStatus
 ```
-
-## Key Principles
-
-1. **Automatic Flattening**: When folder name matches single file name, structure is flattened
-2. **Mixed Module Support**: ESM and CJS modules work seamlessly together
-3. **Smart Naming**: Function names preserve technical term capitalization (IP, JSON, HTTP, API)
-4. **Flexible Exports**: Support for default exports, named exports, and hybrid patterns
-5. **Deep Nesting**: No limits on directory depth or complexity
-6. **Universal Access**: All modules accessible through `self` binding in any other module
 
 ---
 
-For more information, see:
+## TypeScript Modules
 
-- [API Flattening Rules](API-FLATTENING.md) - Detailed flattening logic
-- [API Rules](API-RULES.md) - Complete transformation rules
+Slothlet supports TypeScript modules with two transpilation strategies. TypeScript is a peer dependency - install only what you need.
+
+### Fast Mode (esbuild)
+
+```bash
+npm install esbuild
+```
+
+```text
+api/
+├── math.ts        → api.math
+└── utils.ts       → api.utils
+```
+
+```typescript
+// api/math.ts
+export function add(a: number, b: number): number {
+	return a + b;
+}
+
+export function multiply(a: number, b: number): number {
+	return a * b;
+}
+```
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	typescript: { mode: "fast" } // uses esbuild
+});
+
+api.math.add(2, 3);      // 5
+api.math.multiply(3, 4); // 12
+```
+
+### Strict Mode (tsc)
+
+```bash
+npm install typescript
+```
+
+```javascript
+const api = await slothlet({
+	dir: "./api",
+	typescript: { mode: "strict" } // uses tsc, respects tsconfig.json
+});
+```
+
+TypeScript modules (`.ts`) follow all the same structural rules as ESM modules - flattening, function naming, and nesting all behave identically.
+
+---
+
+## Key Principles
+
+1. **Automatic Flattening**: When a folder name matches its single file's name, the intermediate namespace is eliminated
+2. **Transparent CJS/ESM**: ESM and CJS modules have identical access patterns - no `.default` wrapper
+3. **Smart Naming**: Exported function names (including acronyms) take precedence over filenames for the API key
+4. **Flexible Exports**: Default exports, named exports, and hybrid patterns (callable + methods) are all supported
+5. **Unlimited Depth**: No constraints on directory depth or complexity
+6. **Universal Access**: All modules are accessible through the `self` live binding from any other module
+
+---
+
+## See Also
+
+- [API Flattening Rules](API-RULES/API-FLATTENING.md) - Detailed flattening logic and all 8 patterns
+- [API Rules](API-RULES.md) - Complete 13-rule transformation catalog
 - [README](../README.md) - Main project documentation

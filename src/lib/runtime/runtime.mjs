@@ -1,232 +1,170 @@
-﻿/**
- * @Project: @cldmv/slothlet
- * @Filename: /src/lib/runtime/runtime.mjs
- * @Author: Nate Hyson <CLDMV>
- * @Email: <Shinrai@users.noreply.github.com>
- * @Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/runtime/runtime.mjs
+ *	@Date: 2025-09-09 08:06:19 -07:00 (1725890779)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Runtime dispatcher - detects and forwards to correct runtime.
+ * @fileoverview Runtime dispatcher - proxies to async or live runtime based on configuration
  * @module @cldmv/slothlet/runtime
  * @public
+ *
+ * @description
+ * Provides live bindings for use inside API module functions. Import the exports you need:
+ *
+ * ```js
+ * import { self, context, instanceID } from "@cldmv/slothlet/runtime";
+ * ```
+ *
+ * | Export | Type | Description |
+ * | --- | --- | --- |
+ * | `self` | `object` | Live reference to the full Slothlet API proxy. Use to call sibling modules without import cycles. |
+ * | `context` | `object` | The current ambient context object. Seeded at startup via `config.context` and persists across calls. `api.slothlet.context.run()` / `.scope()` can override it for the duration of a single call. Readable and writable. |
+ * | `instanceID` | `string` | Unique identifier of the active Slothlet instance. |
+ *
+ * All three are lazy Proxy objects — they resolve to the correct runtime value at call time,
+ * whether the instance uses `"async"` (AsyncLocalStorage) or `"live"` runtime mode.
  */
 
-import { detectCurrentInstanceId, getInstanceData } from "@cldmv/slothlet/helpers/instance-manager";
+// Import context managers
+import { asyncRuntime, liveRuntime } from "@cldmv/slothlet/factories/context";
 
-// Pre-load both runtimes at module load time
-const asyncRuntime = await import("@cldmv/slothlet/runtime/async");
-const liveBindingsRuntime = await import("@cldmv/slothlet/runtime/live");
+// Pre-load both runtime modules at initialization
+const asyncRuntimeModule = await import("@cldmv/slothlet/runtime/async");
+const liveRuntimeModule = await import("@cldmv/slothlet/runtime/live");
 
-// Detect runtime type from instance configuration (called on each access)
-function detectRuntimeType() {
-	// Get current instance ID from stack traces (same method as live bindings runtime)
-	const instanceId = detectCurrentInstanceId();
-
-	if (instanceId) {
-		const instanceData = getInstanceData(instanceId);
-		if (instanceData && instanceData.config && instanceData.config.runtime) {
-			return instanceData.config.runtime;
-		}
+/**
+ * Determine which runtime to use by checking which context manager has an active context
+ * @returns {Object} Runtime module (async or live)
+ * @private
+ */
+function getCurrentRuntime() {
+	// Try async runtime first (ALS-based - only set when actively inside an async scope)
+	// This must be checked before live so that async functions aren't misidentified as
+	// live when a live instance has a stale currentInstanceID from a previous call.
+	const asyncCtx = asyncRuntime.tryGetContext();
+	if (asyncCtx) {
+		return asyncRuntimeModule;
 	}
 
-	// Default to async for backward compatibility
-	return "async";
+	// Try live runtime (synchronous global binding)
+	const liveCtx = liveRuntime.tryGetContext();
+	if (liveCtx) {
+		return liveRuntimeModule;
+	}
+
+	// Default to async if no active context (will throw proper error)
+	return asyncRuntimeModule;
 }
 
-// Get the appropriate runtime based on instance configuration
-function getCurrentRuntime() {
-	const runtimeType = detectRuntimeType();
-	return runtimeType === "live" ? liveBindingsRuntime : asyncRuntime;
-}
-
-// Export proxies that dynamically select the correct runtime
+/**
+ * Live binding to the current API instance. Resolves to the running Slothlet proxy,
+ * giving API modules access to all other API methods without import cycles.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {object}
+ * @example
+ * import { self } from "@cldmv/slothlet/runtime";
+ * // Inside an API function:
+ * const result = await self.math.add(1, 2);
+ */
 export const self = new Proxy(
-	function runtime_selfProxy() {}, // Use function target to match AsyncLocalStorage runtime
+	{},
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
 			return runtime.self[prop];
 		},
-		ownKeys(target) {
+		ownKeys() {
 			const runtime = getCurrentRuntime();
-			const runtimeKeys = Reflect.ownKeys(runtime.self);
-			const targetKeys = Reflect.ownKeys(target);
-
-			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
-			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
-			return Array.from(allKeys);
+			return Reflect.ownKeys(runtime.self);
 		},
 		has(_, prop) {
 			const runtime = getCurrentRuntime();
 			return prop in runtime.self;
 		},
-		getOwnPropertyDescriptor(target, prop) {
+		getOwnPropertyDescriptor(_, prop) {
 			const runtime = getCurrentRuntime();
-			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
-
-			// If no descriptor from runtime, check if it exists on our proxy target
-			if (!descriptor) {
-				return Reflect.getOwnPropertyDescriptor(target, prop);
+			const desc = Reflect.getOwnPropertyDescriptor(runtime.self, prop);
+			// If the property exists, return a descriptor that's always configurable
+			// to avoid proxy invariant violations (since the proxy target is an empty object)
+			if (desc) {
+				return { ...desc, configurable: true };
 			}
-
-			// If descriptor exists but property doesn't exist on our target,
-			// and descriptor is non-configurable, we need to handle this carefully
-			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
-				// For non-configurable properties that don't exist on target,
-				// we need to return undefined or Node.js will throw
-				return undefined;
-			}
-
-			return descriptor;
-		},
-		getPrototypeOf() {
-			const runtime = getCurrentRuntime();
-			return Reflect.getPrototypeOf(runtime.self);
-		},
-		isExtensible() {
-			const runtime = getCurrentRuntime();
-			return Reflect.isExtensible(runtime.self);
+			return undefined;
 		}
 	}
 );
 
+/**
+ * The current ambient context object. Seeded at instance startup via `config.context` and
+ * persists for the lifetime of the instance. `api.slothlet.context.run()` and `.scope()` can
+ * temporarily override it for the duration of a single call, after which the previous context
+ * is restored. Readable and writable.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {object}
+ * @example
+ * import { context } from "@cldmv/slothlet/runtime";
+ * // Read the ambient context set via config.context or written by a previous call:
+ * const userId = context.userId;
+ * // context.run() overrides it only for the duration of that one call:
+ * await api.slothlet.context.run({ userId: 42 }, myFn);
+ */
 export const context = new Proxy(
-	{}, // Use object target since context should be an object, not a function
+	{},
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
 			return runtime.context[prop];
 		},
-		ownKeys(target) {
+		ownKeys() {
 			const runtime = getCurrentRuntime();
-			const runtimeKeys = Reflect.ownKeys(runtime.context);
-			const targetKeys = Reflect.ownKeys(target);
-
-			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
-			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
-			return Array.from(allKeys);
+			return Reflect.ownKeys(runtime.context);
 		},
 		has(_, prop) {
 			const runtime = getCurrentRuntime();
 			return prop in runtime.context;
 		},
-		getOwnPropertyDescriptor(target, prop) {
+		getOwnPropertyDescriptor(_, prop) {
 			const runtime = getCurrentRuntime();
-			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.context, prop);
-
-			// If no descriptor from runtime, check if it exists on our proxy target
-			if (!descriptor) {
-				return Reflect.getOwnPropertyDescriptor(target, prop);
-			}
-
-			// If descriptor exists but property doesn't exist on our target,
-			// and descriptor is non-configurable, we need to handle this carefully
-			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
-				// For non-configurable properties that don't exist on target,
-				// we need to return undefined or Node.js will throw
-				return undefined;
-			}
-
-			return descriptor;
+			return Reflect.getOwnPropertyDescriptor(runtime.context, prop);
 		},
-		getPrototypeOf() {
+		set(_, prop, value) {
 			const runtime = getCurrentRuntime();
-			return Reflect.getPrototypeOf(runtime.context);
-		},
-		isExtensible() {
-			const runtime = getCurrentRuntime();
-			return Reflect.isExtensible(runtime.context);
+			runtime.context[prop] = value;
+			return true;
 		}
 	}
 );
 
-export const reference = new Proxy(
-	{}, // Use object target since reference should be an object, not a function
-	{
-		get(_, prop) {
-			const runtime = getCurrentRuntime();
-			return runtime.reference[prop];
-		},
-		ownKeys(target) {
-			const runtime = getCurrentRuntime();
-			const runtimeKeys = Reflect.ownKeys(runtime.reference);
-			const targetKeys = Reflect.ownKeys(target);
-
-			// Combine keys from both runtime and target, ensuring non-configurable target properties are included
-			const allKeys = new Set([...runtimeKeys, ...targetKeys]);
-			return Array.from(allKeys);
-		},
-		has(_, prop) {
-			const runtime = getCurrentRuntime();
-			return prop in runtime.reference;
-		},
-		getOwnPropertyDescriptor(target, prop) {
-			const runtime = getCurrentRuntime();
-			const descriptor = Reflect.getOwnPropertyDescriptor(runtime.reference, prop);
-
-			// If no descriptor from runtime, check if it exists on our proxy target
-			if (!descriptor) {
-				return Reflect.getOwnPropertyDescriptor(target, prop);
-			}
-
-			// If descriptor exists but property doesn't exist on our target,
-			// and descriptor is non-configurable, we need to handle this carefully
-			const targetDescriptor = Reflect.getOwnPropertyDescriptor(target, prop);
-			if (!targetDescriptor && descriptor && descriptor.configurable === false) {
-				// For non-configurable properties that don't exist on target,
-				// we need to return undefined or Node.js will throw
-				return undefined;
-			}
-
-			return descriptor;
-		},
-		getPrototypeOf() {
-			const runtime = getCurrentRuntime();
-			return Reflect.getPrototypeOf(runtime.reference);
-		},
-		isExtensible() {
-			const runtime = getCurrentRuntime();
-			return Reflect.isExtensible(runtime.reference);
-		}
-	}
-);
-
-export function runWithCtx(ctx, fn, thisArg, args) {
-	const runtime = getCurrentRuntime();
-	return runtime.runWithCtx(ctx, fn, thisArg, args);
-}
-
-export function makeWrapper(ctx) {
-	const runtime = getCurrentRuntime();
-	return runtime.makeWrapper(ctx);
-}
-
-export function getCtx() {
-	const runtime = getCurrentRuntime();
-	return (runtime.getCtx || runtime.getContext)();
-}
-
-export const instanceId = (() => {
-	const runtimeType = detectRuntimeType();
-	if (runtimeType === "async") {
-		return null;
-	}
-	const runtime = getCurrentRuntime();
-	return runtime.instanceId;
-})();
-
-export const sharedALS = getCurrentRuntime().sharedALS;
-
-// Forward metadataAPI from the appropriate runtime
-export const metadataAPI = new Proxy(
+/**
+ * Current Slothlet instance identifier. Unique per `slothlet()` call; useful when
+ * multiple Slothlet instances coexist and you need to identify which one is active.
+ *
+ * @memberof module:@cldmv/slothlet/runtime
+ * @type {string}
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime";
+ * console.log(instanceID); // e.g. "slothlet-1"
+ */
+export const instanceID = new Proxy(
 	{},
 	{
 		get(_, prop) {
 			const runtime = getCurrentRuntime();
-			return runtime.metadataAPI[prop];
+			return runtime.instanceID ? runtime.instanceID[prop] : undefined;
+		},
+		has(_, prop) {
+			const runtime = getCurrentRuntime();
+			return runtime.instanceID ? prop in runtime.instanceID : false;
 		}
 	}
 );

@@ -1,10 +1,21 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /.configs/eslint.config.mjs
+ *	@Date: 2026-02-10 20:46:58 -08:00 (1770785218)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:16:56 -08:00 (1772425016)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import js from "@eslint/js";
 import globals from "globals";
 import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 import css from "@eslint/css";
-import html from "@html-eslint/eslint-plugin";
-import htmlParser from "@html-eslint/parser";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
@@ -20,6 +31,7 @@ export default defineConfig([
 			".configs/**",
 			".vscode/**",
 			"coverage/**",
+			".vitest-coverage-tmp/**",
 			"*.min.js",
 			"*.min.css",
 			"**/package-lock.json",
@@ -47,10 +59,10 @@ export default defineConfig([
 			"no-unused-vars": [
 				"error",
 				{
-					argsIgnorePattern: "^_$",
-					caughtErrorsIgnorePattern: "^_$",
-					destructuredArrayIgnorePattern: "^_$",
-					varsIgnorePattern: "^_$"
+					argsIgnorePattern: "^(_|___.*)$",
+					caughtErrorsIgnorePattern: "^(_|___.*)$",
+					destructuredArrayIgnorePattern: "^(_|___.*)$",
+					varsIgnorePattern: "^(_|___.*)$"
 				}
 			]
 		}
@@ -84,15 +96,5 @@ export default defineConfig([
 			"markdown/no-missing-label-refs": "off"
 		}
 	},
-	{ files: ["**/*.css"], plugins: { css }, language: "css/css", extends: ["css/recommended"] },
-	{
-		files: ["**/*.html"],
-		plugins: { "@html-eslint": html },
-		languageOptions: { parser: htmlParser },
-		rules: {
-			"@html-eslint/require-doctype": "error",
-			"@html-eslint/require-lang": "error",
-			"@html-eslint/require-title": "error"
-		}
-	}
+	{ files: ["**/*.css"], plugins: { css }, language: "css/css", extends: ["css/recommended"] }
 ]);

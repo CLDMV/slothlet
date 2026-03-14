@@ -1,147 +1,90 @@
-﻿/**
+/**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/runtime/runtime-livebindings.mjs
- *	@Date: 2025-11-05 19:45:00 -08:00 (1762400700)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-11-10 09:52:57 -08:00 (1731258777)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-12-29 21:48:08 -08:00 (1767073688)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Instance-based runtime system for live bindings.
- * @module @cldmv/slothlet/runtime
- * @memberof module:@cldmv/slothlet
+ * @fileoverview Live bindings runtime - exports self, context, reference for API modules
+ * @module @cldmv/slothlet/runtime/live
+ * @internal
  * @public
- * @simpleName
  *
  * @description
- * Provides per-instance live bindings using instance ID detection from stack traces.
- * Eliminates AsyncLocalStorage overhead while maintaining full context isolation.
+ * Provides live bindings (`self`, `context`, `reference`) for use in API modules.
+ * Uses direct global bindings (no AsyncLocalStorage) for maximum performance.
  *
  * @example
- * // ESM usage (same as before - user doesn't need to change anything)
- * import { self, context, reference } from "@cldmv/slothlet/runtime";
+ * // In your API module (ESM)
+ * import { self, context } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function myFunction() {
+ *   return { api: self, data: context.userId };
+ * }
+import { SlothletError } from "@cldmv/slothlet/errors"; *
+ * @example
+ * // In your API module (CJS)
+ * const { self, context } = require("@cldmv/slothlet/runtime/live");
+ *
+ * exports.myFunction = function() {
+ *   return { api: self, data: context.userId };
+ * };
+ */
+
+import { liveRuntime } from "@cldmv/slothlet/factories/context";
+import { SlothletError } from "@cldmv/slothlet/errors";
+
+/**
+ * Live binding to the current API (self-reference)
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides direct access to the current instance's API.
+ * In live mode, this directly references the active instance without AsyncLocalStorage.
  *
  * @example
- * // CJS usage (same as before - user doesn't need to change anything)
- * const { self, context, reference } = require("@cldmv/slothlet/runtime");
- */
-
-import { AsyncLocalStorage } from "node:async_hooks";
-import {
-	detectCurrentInstanceId,
-	getInstanceData,
-	setActiveInstance,
-	getCurrentActiveInstanceId
-} from "@cldmv/slothlet/helpers/instance-manager";
-import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
-
-/**
- * Per-request AsyncLocalStorage instance for request-scoped context.
- * Works alongside live bindings to provide per-request context isolation.
- * @type {AsyncLocalStorage}
- * @public
- */
-export const requestALS = new AsyncLocalStorage();
-
-/**
- * Gets the current instance context, either from instance detection or ALS fallback.
- * @internal
- * @returns {object|null} The current context or null
- */
-function getCurrentInstanceContext() {
-	// Debug the stack trace to see if runtime import has instance ID
-	// if (process.env.DEBUG_RUNTIME) {
-	//	const stack = new Error().stack;
-	//	console.log("[RUNTIME DEBUG] Full stack trace:");
-	//	console.log(stack);
-	//	console.log("[RUNTIME DEBUG] Looking for slothlet_instance in stack...");
-	//	const instanceMatch = stack.match(/slothlet_instance=([^&\s)]+)/g);
-	//	console.log("[RUNTIME DEBUG] All slothlet_instance matches:", instanceMatch);
-	// }
-
-	// Try instance detection first using existing function
-	const instanceId = detectCurrentInstanceId();
-
-	// Add debugging to see what's happening
-	// if (process.env.DEBUG_RUNTIME) {
-	//	console.log("[RUNTIME DEBUG] Detected instance ID:", instanceId);
-	//	if (instanceId) {
-	//		const instanceData = getInstanceData(instanceId);
-	//		console.log("[RUNTIME DEBUG] Instance data found:", !!instanceData);
-	//		if (instanceData) {
-	//			console.log("[RUNTIME DEBUG] Instance data keys:", Object.keys(instanceData));
-	//		}
-	//	}
-	// }
-
-	if (instanceId) {
-		const instanceData = getInstanceData(instanceId);
-		if (instanceData) {
-			return instanceData;
-		}
-	}
-
-	// if (process.env.DEBUG_RUNTIME) {
-	//	console.log("[RUNTIME DEBUG] No context found");
-	// }
-	return null;
-}
-
-/**
- * Live-binding reference to the current API instance.
- * Automatically resolves to the appropriate instance based on calling context.
- * @type {object}
- * @public
+ * import { self } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function callOtherFunction() {
+ *   return self.otherFunction();
+ * }
  */
 export const self = new Proxy(
 	{},
 	{
-		get(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.self) {
-				return ctx.self[prop];
+		get(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.self) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_SELF", {}, null, { validationError: true });
 			}
-			return undefined;
+			return ctx.self[prop];
 		},
-
-		set(target, prop, value) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.self) {
-				ctx.self[prop] = value;
-				return true;
-			}
-			return false;
+		ownKeys() {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.self) return [];
+			return Reflect.ownKeys(ctx.self);
 		},
-
-		ownKeys(_) {
-			// if (process.env.DEBUG_RUNTIME) {
-			//	console.log("[RUNTIME DEBUG] ownKeys called - dumping stack trace:");
-			//	console.log(new Error().stack);
-			// }
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.self) {
-				return Reflect.ownKeys(ctx.self);
-			}
-			return [];
+		has(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.self) return false;
+			return prop in ctx.self;
 		},
-
-		has(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.self) {
-				return prop in ctx.self;
-			}
-			return false;
-		},
-
-		getOwnPropertyDescriptor(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.self) {
-				return Reflect.getOwnPropertyDescriptor(ctx.self, prop);
+		getOwnPropertyDescriptor(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.self) return undefined;
+			const desc = Reflect.getOwnPropertyDescriptor(ctx.self, prop);
+			// If the property exists, return a descriptor that's always configurable
+			// to avoid proxy invariant violations (since the proxy target is an empty object)
+			if (desc) {
+				return { ...desc, configurable: true };
 			}
 			return undefined;
 		}
@@ -149,355 +92,56 @@ export const self = new Proxy(
 );
 
 /**
- * Live-binding reference for contextual data.
- * Automatically resolves to the appropriate instance context.
- * @type {object}
+ * User-provided context object
+ * @type {Proxy}
  * @public
+ *
+ * @description
+ * A proxy that provides access to user-provided context data.
+ * In live mode, this directly accesses the current instance's context.
+ *
+ * @example
+ * import { context } from "@cldmv/slothlet/runtime/live";
+ *
+ * export function getUserInfo() {
+ *   return {
+ *     userId: context.userId,
+ *     userName: context.userName
+ *   };
+ * }
  */
 export const context = new Proxy(
 	{},
 	{
-		get(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			const baseContext = ctx?.context || {};
-			const requestContext = requestALS.getStore() || {};
-
-			// Check if deep merge is enabled via slothlet config
-			// If deep merge is enabled, requestContext already contains fully merged data
-			const isDeepMerge = ctx?.config?.scope?.merge === "deep";
-
-			if (isDeepMerge && Object.keys(requestContext).length > 0) {
-				// Deep merge mode: requestContext is already fully merged, return it directly
-				return requestContext[prop];
+		get(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.context) {
+				return undefined;
 			}
-
-			// Shallow merge mode: merge baseContext with requestContext
-			const merged = { ...baseContext, ...requestContext };
-			return merged[prop];
+			return ctx.context[prop];
 		},
-
-		set(target, prop, value) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.context) {
-				ctx.context[prop] = value;
-				return true;
+		set(_, prop, value) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.context) {
+				throw new SlothletError("RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT", {}, null, { validationError: true });
 			}
-			return false;
+			ctx.context[prop] = value;
+			return true;
 		},
-
-		ownKeys(_) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.context) {
-				return Reflect.ownKeys(ctx.context);
-			}
-			return [];
+		ownKeys() {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.context) return [];
+			return Reflect.ownKeys(ctx.context);
 		},
-
-		has(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.context) {
-				return prop in ctx.context;
-			}
-			return false;
+		has(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.context) return false;
+			return prop in ctx.context;
 		},
-
-		getOwnPropertyDescriptor(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.context) {
-				return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
-			}
-			return undefined;
+		getOwnPropertyDescriptor(_, prop) {
+			const ctx = liveRuntime.getContext();
+			if (!ctx || !ctx.context) return undefined;
+			return Reflect.getOwnPropertyDescriptor(ctx.context, prop);
 		}
 	}
 );
-
-/**
- * Live-binding reference for reference data.
- * Automatically resolves to the appropriate instance reference.
- * @type {object}
- * @public
- */
-export const reference = new Proxy(
-	{},
-	{
-		get(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.reference) {
-				return ctx.reference[prop];
-			}
-			return undefined;
-		},
-
-		set(target, prop, value) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.reference) {
-				ctx.reference[prop] = value;
-				return true;
-			}
-			return false;
-		},
-
-		ownKeys(_) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.reference) {
-				return Reflect.ownKeys(ctx.reference);
-			}
-			return [];
-		},
-
-		has(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.reference) {
-				return prop in ctx.reference;
-			}
-			return false;
-		},
-
-		getOwnPropertyDescriptor(target, prop) {
-			const ctx = getCurrentInstanceContext();
-			if (ctx && ctx.reference) {
-				return Reflect.getOwnPropertyDescriptor(ctx.reference, prop);
-			}
-			return undefined;
-		}
-	}
-);
-
-/**
- * Live-binding reference to the current instance ID.
- * Automatically resolves to the current instance identifier.
- * @type {string}
- * @public
- */
-export const instanceId = new Proxy(
-	{},
-	{
-		get(target, prop) {
-			if (prop === "valueOf" || prop === "toString" || prop === Symbol.toPrimitive) {
-				const currentId = detectCurrentInstanceId();
-				return () => currentId || "unknown";
-			}
-			return detectCurrentInstanceId() || "unknown";
-		},
-
-		ownKeys(_) {
-			return ["valueOf", "toString"];
-		},
-
-		has(target, prop) {
-			return prop === "valueOf" || prop === "toString" || prop === Symbol.toPrimitive;
-		},
-
-		getOwnPropertyDescriptor(target, prop) {
-			if (prop === "valueOf" || prop === "toString" || prop === Symbol.toPrimitive) {
-				return {
-					configurable: true,
-					enumerable: false,
-					writable: false,
-					value: () => detectCurrentInstanceId() || "unknown"
-				};
-			}
-			return undefined;
-		}
-	}
-);
-
-/**
- * Context-aware function execution with temporary active instance override.
- * Sets the active instance based on the context before calling the function,
- * ensuring CJS runtime imports detect the correct instance.
- * @param {object} ctx - Context object containing instanceId
- * @param {Function} fn - Function to execute
- * @param {any} thisArg - The this argument
- * @param {Array} args - The function arguments
- * @returns {any} The function result
- */
-export function runWithCtx(ctx, fn, thisArg, args) {
-	// Save current active instance
-	const previousActiveInstance = getCurrentActiveInstanceId();
-
-	// Temporarily set active instance from context
-	if (ctx && ctx.instanceId) {
-		setActiveInstance(ctx.instanceId);
-	}
-
-	try {
-		// Fast-path: If hooks are disabled OR no __slothletPath (internal functions), execute directly
-		if (!ctx.hookManager?.enabled || !fn.__slothletPath) {
-			return Reflect.apply(fn, thisArg, args);
-		}
-
-		// Extract function path for hook matching (only API functions have __slothletPath)
-		const path = fn.__slothletPath;
-
-		try {
-			// Execute before hooks
-			const beforeResult = ctx.hookManager.executeBeforeHooks(path, args);
-
-			// If cancelled, skip function and after hooks, but always execute always hooks
-			if (beforeResult.cancelled) {
-				ctx.hookManager.executeAlwaysHooks(path, beforeResult.value, []);
-				return beforeResult.value;
-			}
-
-			// Use potentially modified args
-			const actualArgs = beforeResult.args;
-
-			// Execute the actual function
-			const result = Reflect.apply(fn, thisArg, actualArgs);
-
-			// Handle Promise results
-			if (result && typeof result === "object" && typeof result.then === "function") {
-				return result.then(
-					(resolvedResult) => {
-						// Execute after hooks with chaining, then always hooks
-						const finalResult = ctx.hookManager.executeAfterHooks(path, resolvedResult);
-						ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
-						return finalResult;
-					},
-					(error) => {
-						// Execute error hooks for async function errors
-						if (!ctx.hookManager.reportedErrors.has(error)) {
-							ctx.hookManager.reportedErrors.add(error);
-							ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
-						}
-						// Always hooks run like finally blocks - even when errors occur
-						ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
-						// Re-throw error unless suppressErrors is enabled
-						if (!ctx.hookManager.suppressErrors) {
-							throw error;
-						}
-						return undefined; // Return undefined if error suppressed
-					}
-				);
-			}
-
-			// For sync results, execute after hooks then always hooks
-			const finalResult = ctx.hookManager.executeAfterHooks(path, result);
-			ctx.hookManager.executeAlwaysHooks(path, finalResult, []);
-			return finalResult;
-		} catch (error) {
-			// Execute error hooks for synchronous errors (from function or hooks)
-			if (!ctx.hookManager.reportedErrors.has(error)) {
-				ctx.hookManager.reportedErrors.add(error);
-				ctx.hookManager.executeErrorHooks(path, error, { type: "function" });
-			}
-			// Always hooks run like finally blocks - even when errors occur
-			ctx.hookManager.executeAlwaysHooks(path, undefined, [error]);
-			// Re-throw error unless suppressErrors is enabled
-			if (!ctx.hookManager.suppressErrors) {
-				throw error;
-			}
-			return undefined; // Return undefined if error suppressed
-		}
-	} finally {
-		// Restore previous active instance
-		setActiveInstance(previousActiveInstance);
-	}
-}
-
-/**
- * Create a wrapper function that sets __slothletPath on API functions.
- * Required for hook pattern matching to work correctly.
- * @internal
- * @param {object} ctx - The context to bind
- * @returns {function} A wrapper function that proxies the API
- */
-export function makeWrapper(ctx) {
-	const cache = new WeakMap();
-
-	return function wrapperFunction(obj, currentPath = "") {
-		if (obj == null || (typeof obj !== "object" && typeof obj !== "function")) {
-			return obj;
-		}
-
-		// Check cache to avoid wrapping the same object multiple times
-		if (cache.has(obj)) {
-			return cache.get(obj);
-		}
-
-		const proxied = new Proxy(obj, {
-			apply(target, thisArg, args) {
-				// Call runWithCtx for hook execution
-				return runWithCtx(ctx, target, thisArg, args);
-			},
-			get(target, prop, receiver) {
-				const value = Reflect.get(target, prop, receiver);
-
-				// Build path for nested properties
-				const newPath = currentPath ? `${currentPath}.${String(prop)}` : String(prop);
-
-				// Check if this is an internal slothlet property (should not have hooks)
-				const isInternalProperty = currentPath === "" && ["hooks", "__ctx", "shutdown", "_impl"].includes(String(prop));
-				const isInternalPath =
-					newPath === "hooks" ||
-					newPath.startsWith("hooks.") ||
-					newPath === "__ctx" ||
-					newPath.startsWith("__ctx.") ||
-					newPath === "shutdown" ||
-					newPath.startsWith("shutdown.") ||
-					newPath === "_impl" ||
-					newPath.startsWith("_impl.");
-
-				// Attach path to functions for hook matching (only for API functions, not internal)
-				if (typeof value === "function" && !value.__slothletPath && !isInternalProperty && !isInternalPath) {
-					try {
-						Object.defineProperty(value, "__slothletPath", {
-							value: newPath,
-							writable: false,
-							enumerable: false,
-							configurable: true
-						});
-					} catch {
-						// Ignore if property can't be defined (frozen objects, etc.)
-					}
-				}
-
-				// Recursively wrap returned values (functions and objects)
-				if ((typeof value === "function" || (value && typeof value === "object")) && !isInternalPath) {
-					return wrapperFunction(value, newPath);
-				}
-
-				return value;
-			}
-		});
-
-		cache.set(obj, proxied);
-		return proxied;
-	};
-}
-
-// Legacy exports for backwards compatibility - removed ALS
-
-/**
- * Legacy context management functions - kept for backwards compatibility
- * but may not be needed with instance detection approach.
- */
-
-export function getContext() {
-	return getCurrentInstanceContext();
-}
-
-export function setContext(newContext) {
-	// Instance contexts are managed by the registry,
-	// but we can still support ALS setting for compatibility
-	const ctx = getCurrentInstanceContext();
-	if (ctx) {
-		// Update the detected instance context
-		Object.assign(ctx, newContext);
-	}
-	// Note: We can't really "set" the ALS context from here since it needs to run in ALS.run()
-}
-
-export const contextManager = {
-	get: getContext,
-	set: setContext,
-	runWithCtx
-};
-
-/**
- * Metadata API for function introspection and access control.
- * Re-exported from helpers/metadata-api for convenient access.
- * @public
- */
-export { metadataAPI };

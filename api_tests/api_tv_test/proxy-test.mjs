@@ -1,10 +1,27 @@
 /**
- * @fileoverview Pure proxy test for slothlet - only default export
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/proxy-test.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:18 -08:00 (1772425278)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * Mock TV Controller class for testing proxy behavior.
+ * @fileoverview Proxy test module for TV Remote testing — tests class instance wrapping.
+ * @module api_tv_test.proxyTest
+ * @memberof module:api_tv_test
  */
+/**
+ * @namespace proxyTest
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.proxyTest
+ */
+
 class TVController {
 	constructor(tvId) {
 		this.tvId = tvId;
@@ -34,7 +51,8 @@ const LGTVControllers = new Proxy(
 	{},
 	{
 		get(target, prop) {
-			console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
+			if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+				console.log(`🔍 Proxy get called with prop: "${String(prop)}" (type: ${typeof prop})`);
 			// Handle numeric indices (0, 1, 2, 3 -> tv1, tv2, tv3, tv4)
 			if (typeof prop === "string" && /^\d+$/.test(prop)) {
 				const index = parseInt(prop);
@@ -53,10 +71,12 @@ const LGTVControllers = new Proxy(
 	}
 );
 
-console.log("🏗️ LGTVControllers proxy created during module initialization");
+if (process.env.DEBUG_PROXY === "1" || process.env.DEBUG_PROXY === "true")
+	console.log("🏗️ LGTVControllers proxy created during module initialization");
 
 /**
  * Default export of LGTVControllers proxy for pure proxy testing.
  * @default
  */
 export default LGTVControllers;
+

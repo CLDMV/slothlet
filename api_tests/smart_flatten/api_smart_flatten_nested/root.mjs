@@ -1,7 +1,48 @@
 /**
- * Root level file in nested test folder.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/smart_flatten/api_smart_flatten_nested/root.mjs
+ *	@Date: 2026-01-04T16:31:08-08:00 (1767573068)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-10 21:07:57 -07:00 (1773202077)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
+/**
+ * @fileoverview Root-level module for smart-flatten nested fixture.
+ * @module api_smart_flatten_nested.root
+ */
+/**
+ * getRootFunction.
+ * @returns {*}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ * api_smart_flatten_nested.root.getRootFunction();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ *   api_smart_flatten_nested.root.getRootFunction();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ *   api_smart_flatten_nested.root.getRootFunction();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_smart_flatten_nested = await slothlet({ dir: './api_tests/smart_flatten/api_smart_flatten_nested' });
+ * api_smart_flatten_nested.root.getRootFunction();
+ */
 export function getRootFunction() {
 	return "root-function-data";
 }

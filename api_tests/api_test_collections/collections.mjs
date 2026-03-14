@@ -1,14 +1,14 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_test_collections/collections.mjs
- *	@Date: 2025-11-14 16:35:00 -08:00 (1762302900)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-11-14T22:46:20-08:00 (1763189180)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-14 16:35:00 -08:00 (1762302900)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:13 -08:00 (1772425273)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**

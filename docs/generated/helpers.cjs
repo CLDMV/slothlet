@@ -2,13 +2,13 @@
  *	@Project: @cldmv/slothlet
  *	@Filename: /docs/generated/helpers.cjs
  *	@Date: 2025-09-09 13:22:38 -07:00 (1757449358)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 08:12:13 -07:00 (1761145933)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-13 16:52:51 -07:00 (1773445971)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 // CommonJS so jsdoc2md can require() it
@@ -18,6 +18,8 @@
 const docletData = new Map();
 const anchorMap = new Map();
 let availableTypedefs = [];
+// When true, typedef definitions were already inlined inside the main module block.
+let slothletTypedefsInlined = false;
 
 const helper = {
 	// Equality comparison helper
@@ -52,10 +54,12 @@ const helper = {
 		// Check if function/doclet is package-level
 		const isPackage = doclet.access === "package" || (doclet.tags && doclet.tags.some((tag) => tag.title === "package"));
 
-		// @internal is just metadata - doesn't affect visibility based on access level
-		// Public items are ALWAYS shown (even if @internal)
-		// Package items are shown with --private or --package flags
-		// Private items are shown only with --private flag
+		// @internal items are always excluded from public docs (no flag can surface them)
+		// Note: jsdoc-parse strips doclet.tags but preserves doclet.customTags
+		const isInternal =
+			(doclet.customTags && doclet.customTags.some((t) => t.tag === "internal")) ||
+			(doclet.tags && doclet.tags.some((tag) => tag.title === "internal"));
+		if (isInternal) return false;
 
 		const hasPrivateFlag = process.argv.includes("--private");
 		const hasPackageFlag = process.argv.includes("--package");
@@ -70,7 +74,7 @@ const helper = {
 			return hasPrivateFlag || hasPackageFlag;
 		}
 
-		// Public items (including public @internal): ALWAYS show
+		// Public items: ALWAYS show
 		return true;
 	},
 
@@ -135,7 +139,15 @@ const gets = {
 		return doclet ? doclet[key] : obj ? obj[key] : undefined;
 	},
 	// Get original module title (from @module tag, not affected by @name)
+	// A @title custom tag on the module doclet overrides the heading entirely.
 	originalModuleTitle() {
+		// Check for @title custom tag override first
+		const titleTag =
+			(this.customTags && this.customTags.find((t) => t.tag === "title")) || (this.tags && this.tags.find((t) => t.title === "title"));
+		if (titleTag) {
+			const val = (titleTag.value || titleTag.text || "").trim();
+			if (val) return val;
+		}
 		// For modules, prefer alias (which should contain the original path)
 		// over name (which might be shortened by @name tag)
 		if (this.kind === "module") {
@@ -176,8 +188,10 @@ const gets = {
 	orderModulesHierarchically(doclets) {
 		if (!Array.isArray(doclets)) return [];
 
-		// Filter for modules only
-		const modules = doclets.filter((doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:"));
+		// Filter for modules only (exclude @internal modules from public docs)
+		const modules = doclets.filter(
+			(doclet) => doclet.kind === "module" && doclet.longname && doclet.longname.startsWith("module:") && helper.shouldInclude(doclet)
+		);
 
 		// Sort by depth first, then alphabetically
 		return modules.sort((a, b) => {
@@ -370,7 +384,19 @@ const format = {
 	// Format type for table - with HTML entities
 	typeForTable(type) {
 		if (!type || !type.names || !Array.isArray(type.names)) return "";
-		let typeStr = type.names.join(" | ");
+		// Escape | within each type name AND use \| as join separator so pipes don't split table columns
+		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
+		// Step 1: double any existing backslashes so they survive the next replacement.
+		// Step 2: escape any pipe characters so they are treated as literals in the table.
+		/**
+		 * Escape backslashes then pipes in a type name for Markdown table output.
+		 * @param {string} n - Raw type name string.
+		 * @returns {string} Type name with backslashes doubled and pipes escaped.
+		 */
+		function escapeTypeName(n) {
+			return n.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+		}
+		let typeStr = type.names.map(escapeTypeName).join(" \\| ");
 		// Convert < and > to HTML entities like the original
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
@@ -424,7 +450,10 @@ const format = {
 			return typeName;
 		});
 
-		let typeStr = typeNames.join(" | ");
+		// Escape | within each result entry and use \| as separator so pipes don't split table columns
+		// (jsdoc can produce single-name unions like "string|null" where | is embedded in one name)
+		// Step 1: double existing backslashes before step 2 escapes pipes, so \| is not misinterpreted.
+		let typeStr = typeNames.map((n) => n.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")).join(" \\| ");
 		typeStr = helper.escapeHtml(typeStr);
 		return typeStr;
 	},
@@ -482,12 +511,16 @@ const format = {
 			// We want to remove that redundant part and keep any suffix
 			const moduleBaseName = modulePrefix.substring(modulePrefix.lastIndexOf("/") + 1).replace("module:", ""); // "slothlet" or "api_test"
 
-			if (afterDash.startsWith(moduleBaseName)) {
-				const suffix = afterDash.substring(moduleBaseName.length); // "" or "/runtime"
+			// Strip jsdoc's "exports." prefix which is added for ESM `export const` declarations
+			// e.g. "exports.slothlet/runtime" → "slothlet/runtime"
+			const afterDashClean = afterDash.startsWith("exports.") ? afterDash.substring("exports.".length) : afterDash;
+
+			if (afterDashClean.startsWith(moduleBaseName)) {
+				const suffix = afterDashClean.substring(moduleBaseName.length); // "" or "/runtime"
 				result = modulePrefix + suffix;
 			} else {
 				// For cases like "api_test--math", preserve the namespace: "module:api_test.math"
-				result = modulePrefix + "." + afterDash;
+				result = modulePrefix + "." + afterDashClean;
 			}
 		} else {
 			result = memberof;
@@ -520,6 +553,7 @@ const format = {
 			.replace(/\//g, "_slash_") // / to _slash_ (preserves meaning)
 			.replace(/\./g, "_dot_") // . to _dot_ (periods might cause ESLint issues)
 			.replace(/#/g, "_hash_") // # to _hash_ (# is invalid in anchor IDs)
+			.replace(/~/g, "_") // ~ to _ (tilde is invalid in HTML anchor IDs)
 			.replace(/\s+/g, "_") // spaces to underscores
 			.replace(/[<>'"&]/g, "") // Remove only truly problematic HTML characters
 			.replace(/_+/g, "_"); // remove duplicate underscores
@@ -747,7 +781,6 @@ const functions = {
 
 		const baseModuleName = baseModuleLongname.replace(/^module:/, "");
 
-		// STEP 0: Normalize all doclets upfront - add normalized properties to each doclet
 		let normalizedDoclets = doclets.map((doclet) => functions.applyNormalize(doclet));
 
 		// Filter to only include doclets that belong to this module
@@ -761,6 +794,86 @@ const functions = {
 
 		// STEP 1: Sort ALL doclets by their order property to maintain JSDoc sequence
 		const sortedDoclets = [...normalizedDoclets].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+		// STEP 1b: Collision resolution — mimic slothlet's default merge behaviour.
+		// When a root-level file (e.g. math.mjs) and a same-named folder module
+		// (e.g. math/math.mjs) both declare the same export name, slothlet merges
+		// them and the root-level file wins for any overlapping keys.
+		// Detect duplicates by (name + normalizedMemberof), then keep the doclet
+		// whose source file sits closest to the API root (fewest path components).
+		(function deduplicateCollisions() {
+			// Build a collision map: key → [docletIndex, ...]
+			const seen = new Map();
+			sortedDoclets.forEach((doclet, idx) => {
+				if (!doclet.name || !doclet.normalizedMemberof) return;
+				// Only deduplicate callable / value doclets; keep namespace/module bridges
+				if (doclet.kind === "module" || doclet.kind === "namespace" || doclet.kind === "typedef") return;
+				const key = `${doclet.normalizedMemberof}::${doclet.name}`;
+				if (!seen.has(key)) {
+					seen.set(key, [idx]);
+				} else {
+					seen.get(key).push(idx);
+				}
+			});
+
+			// For each collision group, identify the root-file winner (shallowest meta.path)
+			// and mark all others as superseded so they are excluded from further processing.
+			// - loserNames: Set of function names superseded by the root file
+			// - loserPaths: Set of meta.path values for the losing files
+			const loserNames = new Set();
+			const loserPaths = new Set();
+
+			seen.forEach((indices) => {
+				if (indices.length < 2) return;
+				// Sort by path depth ascending (fewer separators = closer to API root = wins)
+				indices.sort((a, b) => {
+					const pathA = sortedDoclets[a].meta?.path || "";
+					const pathB = sortedDoclets[b].meta?.path || "";
+					const depthA = (pathA.match(/[\\/]/g) || []).length;
+					const depthB = (pathB.match(/[\\/]/g) || []).length;
+					return depthA - depthB;
+				});
+				// Mark losers as superseded (keep index 0 = shallowest = winner)
+				for (let i = 1; i < indices.length; i++) {
+					sortedDoclets[indices[i]].__slothletCollisionLoser = true;
+					loserNames.add(sortedDoclets[indices[i]].name);
+					const loserPath = sortedDoclets[indices[i]].meta?.path;
+					if (loserPath) loserPaths.add(loserPath);
+				}
+			});
+
+			// Remove losers in-place
+			for (let i = sortedDoclets.length - 1; i >= 0; i--) {
+				if (sortedDoclets[i].__slothletCollisionLoser) sortedDoclets.splice(i, 1);
+			}
+
+			// Second pass: strip examples referencing collision-loser names from any module-level
+			// overview doclets (e.g. @alias constants) that came from a losing file. This prevents
+			// the overview section from showing stale values for superseded functions.
+			if (loserNames.size > 0 && loserPaths.size > 0) {
+				// Build a regex that matches any example line containing a loser function call
+				const loserPattern = new RegExp(`\\.(?:${[...loserNames].join("|")})\\s*\\(`, "g");
+				sortedDoclets.forEach((doclet) => {
+					if (!doclet.examples || !Array.isArray(doclet.examples)) return;
+					const docPath = doclet.meta?.path || "";
+					if (!loserPaths.has(docPath)) return;
+					// Filter out individual code lines inside examples that reference loser names.
+					// Each example is a string (a code block); we strip lines that call loser funcs.
+					doclet.examples = doclet.examples
+						.map((example) => {
+							const lines = example.split("\n");
+							const filtered = lines.filter((line) => !loserPattern.test(line));
+							// Reset lastIndex since we used the global flag
+							loserPattern.lastIndex = 0;
+							return filtered
+								.join("\n")
+								.replace(/\n{3,}/g, "\n\n")
+								.trim();
+						})
+						.filter(Boolean);
+				});
+			}
+		})();
 
 		// console.log(sortedDoclets);
 		// console.dir(sortedDoclets, { depth: 1 });
@@ -798,17 +911,21 @@ const functions = {
 						delete t?.children; // Remove children to avoid nesting issues
 						topLevelDoclets[existingIndex] = { ...t, ...doclet };
 					} else {
-						// Check if this should be added as exported constant (only for constants with specific alias format)
+						// Constants whose alias is a DIRECT child of the base module (no dots in the suffix)
+						// are module bridge doclets (e.g., module:api_test.math) and must appear in the TOC.
+						// Only nested constants (e.g., module:api_test.math.collisionVersion) go to exportedConstants.
+						const aliasSuffix = doclet.alias ? doclet.alias.slice(baseModuleLongname.length + 1) : "";
 						if (
 							doclet.kind === "constant" &&
 							doclet.isExported === true &&
 							doclet.alias &&
-							// !doclet.alias.startsWith("module:") &&
-							doclet.alias.startsWith(baseModuleLongname + ".")
+							doclet.alias.startsWith(baseModuleLongname + ".") &&
+							aliasSuffix.includes(".")
 						) {
+							// Nested constant — not a direct module entry
 							exportedConstants.push(doclet);
 						} else {
-							// Add as top level
+							// Add as top level (includes module bridge constants like math, tcp, rootstring)
 							topLevelDoclets.push(doclet);
 						}
 					}
@@ -816,6 +933,10 @@ const functions = {
 					// Skip module container doclets that don't have aliases - they are just containers
 					if (doclet.kind === "module") {
 						// console.log(`[SKIP MODULE] Skipping module container: ${doclet.name} (kind: ${doclet.kind}, no alias)`);
+					} else if (doclet.memberof && doclet.memberof !== baseModuleLongname) {
+						// This doclet's raw memberof points to a sub-module (e.g., "api_test.module:math")
+						// even though normalization collapsed it to the base module. Skip here —
+						// it will be picked up as a child during processChildrenRecursive.
 					} else {
 						// Regular top level doclet (no alias) - only add non-module items
 						topLevelDoclets.push(doclet);
@@ -829,6 +950,11 @@ const functions = {
 					// console.log(`[CROSS-MODULE ALIAS] Found ${doclet.name} with alias ${doclet.alias} pointing to base module`);
 					topLevelDoclets.push(doclet);
 				}
+			}
+			// Root callable: function with @alias pointing exactly at the base module itself
+			// (e.g., greet @alias module:api_test makes the entire api callable as api_test(name))
+			else if (doclet.alias === baseModuleLongname) {
+				topLevelDoclets.push(doclet);
 			}
 			// Note: All other doclets (children of top level items) are preserved in allRelevantDoclets
 
@@ -948,9 +1074,20 @@ const functions = {
 							newDescription.length > originalDescription.length ? newDescription : originalDescription;
 						// Use whichever summary has the highest string count
 						baseModuleContainer.doclet.summary = newSummary.length > originalSummary.length ? newSummary : originalSummary;
-						// Keep the children structure as-is
-						// baseModuleContainer.doclet.description = baseModuleContainer.doclet.description;
-						// baseModuleContainer.doclet.summary = baseModuleContainer.doclet.summary;
+						// Preserve the module's anchor and display name so the root callable links to
+						// the ## section anchor and shows the module name (e.g., "api_test(name)")
+						// rather than the internal JS function name (e.g., "greet(name)").
+						baseModuleContainer.doclet.anchor = t.doclet.anchor || baseModuleContainer.doclet.anchor;
+						baseModuleContainer.doclet.anchorSmart = t.doclet.anchorSmart || baseModuleContainer.doclet.anchorSmart;
+						// Preserve the module's normalizedMemberof (root modules have no parent) to prevent
+						// the function's own memberof ("module:@cldmv/slothlet") from creating a
+						// self-referencing loop in simpleNameFromChain and a broken Kind parent link.
+						baseModuleContainer.doclet.normalizedMemberof = t.doclet.normalizedMemberof || "";
+						// Use baseModuleName as the display name (e.g., "api_test") — the root callable
+						// function's internal JS name (e.g., "greet") is not meaningful to API consumers.
+						baseModuleContainer.doclet.simpleName = baseModuleName || t.doclet.simpleName || baseModuleContainer.doclet.simpleName;
+						baseModuleContainer.doclet.simpleNameShort =
+							baseModuleName || t.doclet.simpleNameShort || baseModuleContainer.doclet.simpleNameShort;
 					} else {
 						// console.log(`[DIRECT] ${doclet.name} (alias: ${doclet.alias}) -> baseModule: "${baseModuleWithoutPrefix}" -> key: "${aliasPath}"`);
 						baseModuleContainer.children[aliasPath] = {
@@ -1022,7 +1159,16 @@ const functions = {
 				const item = structure[key];
 				const fullPath = path ? `${path}.${key}` : key;
 
-				if ((item.type === "direct" || item.type === "item") && item.doclet) {
+				// Also process 'child' type items (sub-namespaces like logger.utils) so their
+				// own children (debug, error) can be discovered and attached recursively.
+				// Guard: skip items whose alias IS the base module root (e.g., greet with
+				// @alias module:api_test) to prevent them from re-collecting all top-level
+				// children when they appear as a 'child' of rootFunction, which would loop.
+				if (
+					(item.type === "direct" || item.type === "item" || item.type === "child") &&
+					item.doclet &&
+					item.doclet.alias !== baseModuleLongname
+				) {
 					// For items with aliases, use the alias to find the module that contains the children
 					let itemModule;
 					if (item.doclet.alias) {
@@ -1042,8 +1188,16 @@ const functions = {
 
 					// console.log(`[CHILDREN] Looking for children of ${fullPath} with memberof: module:${itemModule}`);
 
+					// Dot-notation sub-modules (e.g., math/math.mjs) have members with raw memberof
+					// like "api_test.module:math" which normalization collapses to "module:api_test".
+					// We must also match against that raw pattern to find their children.
+					const baseNameForChildren = baseModuleLongname.replace(/^module:/, "");
+					const dotNotationMemberof = item.doclet.name ? `${baseNameForChildren}.module:${item.doclet.name}` : null;
+
 					sortedDoclets.forEach((doclet) => {
-						if (doclet.normalizedMemberof === "module:" + itemModule && doclet.id !== item.doclet.id) {
+						const matchesByNormalized = doclet.normalizedMemberof === "module:" + itemModule;
+						const matchesByDotNotation = dotNotationMemberof && doclet.memberof === dotNotationMemberof;
+						if ((matchesByNormalized || matchesByDotNotation) && doclet.id !== item.doclet.id) {
 							// doclet.level = level + 1;
 							// console.log(`[CHILD] Found child ${doclet.name} (${doclet.kind}) for ${fullPath}`);
 							item.children[doclet.name] = {
@@ -1146,16 +1300,24 @@ const functions = {
 					item.doclet.returns.forEach((returnInfo) => {
 						if (returnInfo.type && returnInfo.type.names) {
 							returnInfo.type.names.forEach((typeName) => {
-								// Find global typedef with this name
-								const typedef = allTypedefs.find(
-									(td) =>
-										td.name === typeName &&
-										// (!td.memberof || td.scope === "global") &&
-										!typedefs.find((gt) => gt.normalizedId === td.normalizedId)
-								);
-								if (typedef) {
-									typedefs.push(typedef);
-								}
+								// Extract bare names from generic wrappers like "Promise.<SlothletAPI>"
+								// so that the inner typedef ("SlothletAPI") is still matched.
+								const candidateNames = [typeName];
+								const inner = typeName.match(/\.<([^>]+)>$/);
+								if (inner) candidateNames.push(inner[1]);
+
+								candidateNames.forEach((name) => {
+									// Find global typedef with this name
+									const typedef = allTypedefs.find(
+										(td) =>
+											td.name === name &&
+											// (!td.memberof || td.scope === "global") &&
+											!typedefs.find((gt) => gt.normalizedId === td.normalizedId)
+									);
+									if (typedef) {
+										typedefs.push(typedef);
+									}
+								});
 							});
 						}
 					});
@@ -1187,7 +1349,47 @@ const functions = {
 
 		// const allNestedItems = extractItemsRecursive(nestedStructure);
 		extractRecursive(nestedStructure);
+
+		// Register the base module root under both its bare name and the "module:" prefixed name
+		// so that @memberof module:X lookups in getParentDoclet can always resolve the parent.
+		//
+		// Background: jsdoc sub-module files that declare `@module api_test.advanced.selfObject`
+		// produce doclets with `normalizedMemberof = "module:api_test"` (the short unqualified name
+		// from the @module tag, NOT the full @alias path like "@cldmv/slothlet/api_tests/api_test").
+		// When simpleNameFromChain walks the parent chain for the "advanced" namespace, it calls
+		// getParentDoclet("module:api_test") which misses the docletData entry (stored under the
+		// full normalized id). Registering both "api_test" and "module:api_test" here closes that gap.
+		//
+		// We also correct the doclet's name to baseModuleName (rather than the internal callable
+		// function name e.g. "greet") so the chain produces "api_test.advanced" not "greet.advanced".
+		const baseModuleShortName = baseModuleName.split("/").pop();
+		{
+			const baseModRootItem = nestedStructure[baseModuleName];
+			if (baseModRootItem?.doclet) {
+				if (baseModRootItem.doclet.name !== baseModuleName) {
+					baseModRootItem.doclet.name = baseModuleName;
+				}
+				const moduleRootDoclet = baseModRootItem.doclet;
+				docletData.set(baseModuleName, moduleRootDoclet);
+				docletData.set("module:" + baseModuleName, moduleRootDoclet);
+				if (baseModuleShortName && baseModuleShortName !== baseModuleName) {
+					docletData.set(baseModuleShortName, moduleRootDoclet);
+					docletData.set("module:" + baseModuleShortName, moduleRootDoclet);
+				}
+			}
+		}
+
 		setSimpleNameRecursive(nestedStructure);
+
+		// Post-simpleName pass: if a root callable function (alias === baseModuleLongname) has
+		// replaced the base module container, restore the module name as the display name.
+		// applySimpleName (called inside setSimpleNameRecursive) would overwrite with the JS
+		// function's internal name (e.g., "greet"), so we re-apply the module name here.
+		const baseModItem = nestedStructure[baseModuleName];
+		if (baseModItem && baseModItem.doclet && baseModItem.doclet.alias === baseModuleLongname) {
+			baseModItem.doclet.simpleName = baseModuleName;
+			baseModItem.doclet.simpleNameShort = baseModuleName;
+		}
 
 		// Detect global typedefs that are referenced by this module's functions
 		// const globalTypedefs = [];
@@ -1625,7 +1827,19 @@ const partials = {
 		// const baseModuleAnchor = format.generateAnchor(baseModuleLongname);
 		output += `**Kind**: ${scope} ${kindDescription}`;
 		if (parentDoclet) {
-			output += ` of [<code>${parentDoclet.parentDocletLongName}</code>](#${parentDoclet.anchor})\n\n`;
+			// Prefer simpleName (set by setSimpleNameRecursive) over parentDocletLongName which is
+			// derived from normalizedLongname and may include internal callable names like
+			// "api_test.rootFunction.greet" instead of the clean module name "api_test".
+			const parentDisplayName = parentDoclet.simpleName || parentDoclet.parentDocletLongName;
+			const parentAnchor = parentDoclet.anchor;
+			// Only emit the "of [parent]" link if we have both a display name and a valid anchor.
+			// getParentDoclet always returns an object, so parentDoclet may have undefined fields
+			// when the parent wasn't fully processed through applyAnchor/applySimpleName.
+			if (parentDisplayName && parentAnchor) {
+				output += ` of [<code>${parentDisplayName}</code>](#${parentAnchor})\n\n`;
+			} else {
+				output += "\n\n";
+			}
 		}
 		return output;
 	},
@@ -1635,10 +1849,6 @@ const partials = {
 			const returnsDesc = format.returnsDesc(func.returns);
 			output += `**Returns**:\n\n`;
 			output += `- <code>${format.typeForTableWithLinks(func.returns[0].type)}</code> <p>${returnsDesc || ""}</p>\n`;
-			// output += `**Returns**: ${format.returnsForTOC(func.returns)}`;
-			// if (returnsDesc) {
-			// 	output += `  \n${returnsDesc}`;
-			// }
 			output += "\n\n";
 		}
 		return output;
@@ -1666,9 +1876,9 @@ const partials = {
 				// Get default value if available
 				const defaultValue = param.defaultvalue !== undefined ? `<code>${param.defaultvalue}</code>` : "";
 
-				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${
-					param.description || ""
-				} |\n`;
+				// Collapse newlines so multi-line HTML descriptions (ul/li etc.) don't break table rows
+				const paramDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+				output += `| ${paramName} | <code>${format.typeForTableWithLinks(param.type, moduleId, availableTypedefs)}</code> | ${defaultValue} | ${paramDesc} |\n`;
 			});
 			output += "\n\n";
 		}
@@ -1814,7 +2024,7 @@ const partials = {
 		if (!params && doclet.kind === "function") {
 			params = "()";
 		}
-		const returns = doclet.returns ? ` ⇒ <code>${format.returnsForTOC(doclet.returns)}</code>` : "";
+		const returns = doclet.returns ? ` ⇒ ${format.returnsForTOC(doclet.returns)}` : "";
 		let anchor = item.anchor || doclet.anchor;
 		if (doclet.level === 0) {
 			anchor = item.anchorSmart || doclet.anchorSmart;
@@ -1833,6 +2043,9 @@ const partials = {
 	 * @returns {string} Global typedef definitions section
 	 */
 	globalTypedefDefinitions() {
+		// If integratedModules already rendered typedefs inline inside the main module,
+		// skip the standalone section entirely.
+		if (slothletTypedefsInlined) return "";
 		if (!Array.isArray(availableTypedefs) || availableTypedefs.length === 0) return "";
 
 		let output = "\n\n* * *\n\n";
@@ -1851,25 +2064,162 @@ const partials = {
 			output += `**Kind**: typedef  \n`;
 			output += `**Scope**: ${typedef.scope || "global"}\n\n`;
 
-			// Add properties table if the typedef has properties
+			// Add properties: split into table-rendered (non-function) and section-rendered (function)
 			if (typedef.properties && typedef.properties.length > 0) {
-				// Simple table with HTML cleanup
-				output += "\n| Param | Type | Default | Description |\n";
-				output += "| --- | --- | --- | --- |\n";
-				typedef.properties.forEach((prop) => {
-					const name = prop.optional ? `[${prop.name}]` : prop.name;
-					const type = prop.type ? `<code>${prop.type.names.join(" | ")}</code>` : "";
-					const defaultValue = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
+				// Helper: build per-property anchor (same format as before so structure-tree links still resolve)
+				const propAnchorFor = (prop) => {
+					const rawPropName = prop.name.replace(/^\[|\]$/g, "");
+					return `${anchor}_prop_${rawPropName.replace(/\./g, "-")}`;
+				};
 
-					// Clean HTML from description and convert to markdown-safe format
-					let description = "";
-					if (prop.description) {
-						description = format.escapeForTable(prop.description);
+				const isFunction = (prop) => prop.type && prop.type.names && prop.type.names.some((n) => /^function\s*(?:\(|$)/i.test(n));
+
+				/**
+				 * Parse a typed function signature from the %%sig: (params): ReturnType%% marker.
+				 * e.g. "(apiPath: string, folderPath: string, [options]: Object): Promise.<void>"
+				 * @param {string} sigStr - Content of %%sig: ...%%
+				 * @returns {{params: Array, returnType: string|null}|null}
+				 */
+				function parseFunctionSig(sigStr) {
+					const match = sigStr.match(/^\(([^)]*)\)\s*(?::\s*(.+))?$/);
+					if (!match) return null;
+					const paramsStr = match[1].trim();
+					const returnType = match[2] ? match[2].trim() : null;
+					const params = paramsStr
+						? paramsStr
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean)
+								.map((p) => {
+									const isOpt = p.startsWith("[");
+									if (isOpt) {
+										// Pattern: [name]: Type "description"  →  name inside brackets, optional quoted description
+										const m = p.match(/^\[([^\]]+)\]:\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
+										if (m)
+											return { name: m[1].trim(), type: { names: [m[2].trim()] }, optional: true, description: m[3] ? m[3].trim() : "" };
+										// Fallback: bracket-only wrapping with no type annotation
+										const cleaned = p.replace(/^\[|\]$/g, "").trim();
+										return { name: cleaned, type: { names: ["*"] }, optional: true, description: "" };
+									}
+									// Pattern: name: Type "description"  →  type before optional quoted description
+									const m2 = p.match(/^([^:]+):\s*([^"]+?)(?:\s+"([^"]*)")?\s*$/);
+									if (m2)
+										return { name: m2[1].trim(), type: { names: [m2[2].trim()] }, optional: false, description: m2[3] ? m2[3].trim() : "" };
+									const ci = p.indexOf(":");
+									if (ci > -1) {
+										return { name: p.slice(0, ci).trim(), type: { names: [p.slice(ci + 1).trim()] }, optional: false, description: "" };
+									}
+									return { name: p, type: { names: ["*"] }, optional: false, description: "" };
+								})
+						: [];
+					return { params, returnType };
+				}
+
+				/**
+				 * Extract a %%sig: ...%% marker from a JSDoc description string.
+				 * @param {string} desc - Raw description string (may contain HTML)
+				 * @returns {{ sig: string|null, cleanDesc: string }}
+				 */
+				function extractSigFromDesc(desc) {
+					if (!desc) return { sig: null, cleanDesc: "", examples: [] };
+					const sigMatch = desc.match(/%%sig:\s*([^%]+)%%/);
+					const exampleMatches = [...desc.matchAll(/%%example:\s*([^%]*)%%/g)];
+					const examples = exampleMatches.map((em) => em[1].trim().split("|").join("\n"));
+					const cleanDesc = desc
+						.replace(/\s*%%sig:[^%]+%%/, "")
+						.replace(/\s*%%example:[^%]*%%/g, "")
+						.trim();
+					return { sig: sigMatch ? sigMatch[1].trim() : null, cleanDesc, examples };
+				}
+
+				// Section rendering: function-type properties become #### sub-sections (rendered first)
+				const fnProps = typedef.properties.filter(isFunction);
+				if (fnProps.length > 0) {
+					output += "\n";
+					fnProps.forEach((prop) => {
+						const pa = propAnchorFor(prop);
+						const rawName = prop.name.replace(/^\[|\]$/g, "");
+						const isOptional = prop.name.startsWith("[");
+						// Extract sig early so we can put params and return type into the #### heading
+						const _rawDesc = (prop.description || "").replace(/^<p>|<\/p>$/g, "").trim();
+						const { sig: _headingSigStr, cleanDesc: _cleanDesc, examples: _examples } = extractSigFromDesc(_rawDesc);
+						const _headingImpl = _headingSigStr ? parseFunctionSig(_headingSigStr) : null;
+						// Fall back to return type encoded in the function type annotation (e.g. {function(): Object})
+						const _typeAnnotationReturn =
+							!_headingImpl?.returnType && prop.type?.names?.[0]
+								? (prop.type.names[0].match(/^function\s*\(\s*\)\s*:\s*(.+)$/i) || [])[1] || null
+								: null;
+						const _effectiveReturnType = _headingImpl?.returnType || _typeAnnotationReturn;
+						const _paramList = _headingImpl?.params?.length
+							? _headingImpl.params.map((p) => (p.optional ? `[${p.name}]` : p.name)).join(", ")
+							: "";
+						const _retSuffix = _effectiveReturnType ? ` ⇒ <code>${helper.escapeHtml(_effectiveReturnType)}</code>` : "";
+						const displayName = isOptional ? `[api.${rawName}(${_paramList})]${_retSuffix}` : `api.${rawName}(${_paramList})${_retSuffix}`;
+						output += `<a id="${pa}"></a>\n\n`;
+						output += `#### ${displayName}\n\n`;
+						if (_cleanDesc) output += `${_cleanDesc}\n\n`;
+						if (rawName.startsWith("slothlet.diag")) {
+							output += `> **Requires**: \`diagnostics: true\` in config\n\n`;
+						}
+						output += `**Kind**: function property of [<code>${typedef.simpleName || typedef.name}</code>](#${anchor})\n\n`;
+
+						// Use already-parsed sig (extracted above for the heading)
+						const impl = _headingImpl;
+
+						if (impl && impl.params && impl.params.length > 0) {
+							// Filter to top-level params only (no dotted sub-params in signature row)
+							const hasDefaults = impl.params.some((p) => p.defaultvalue !== undefined);
+							output += `| Param | Type | ${hasDefaults ? "Default | " : ""}Description |\n`;
+							output += `| --- | --- | ${hasDefaults ? "--- | " : ""}--- |\n`;
+							impl.params.forEach((param) => {
+								const pName = param.optional ? `[${param.name}]` : param.name;
+								const pType = param.type && param.type.names ? `<code>${format.typeForTableWithLinks(param.type)}</code>` : "";
+								const pDesc = (param.description || "").replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ");
+								const pDefault = hasDefaults ? `${param.defaultvalue !== undefined ? `<code>${param.defaultvalue}</code>` : ""} | ` : "";
+								output += `| ${pName} | ${pType} | ${pDefault}${pDesc} |\n`;
+							});
+							output += "\n";
+						}
+
+						if (_effectiveReturnType) {
+							output += `**Returns**: <code>${helper.escapeHtml(_effectiveReturnType)}</code>\n\n`;
+						}
+
+						if (_examples && _examples.length > 0) {
+							_examples.forEach((ex) => {
+								output += `**Example**\n\`\`\`javascript\n${ex}\n\`\`\`\n\n`;
+							});
+						}
+
+						output += `* * *\n\n`;
+					});
+				}
+
+				// Table section: non-function properties (namespaces, booleans, config values, metadata)
+				const tableProps = typedef.properties.filter((p) => !isFunction(p));
+				if (tableProps.length > 0) {
+					const hasDefaults = tableProps.some((p) => p.defaultvalue !== undefined);
+					if (hasDefaults) {
+						output += "\n| Property | Type | Default | Description |\n";
+						output += "| --- | --- | --- | --- |\n";
+					} else {
+						output += "\n| Property | Type | Description |\n";
+						output += "| --- | --- | --- |\n";
 					}
-
-					output += `| ${name} | ${type} | ${defaultValue} | ${description} |\n`;
-				});
-				output += "\n";
+					tableProps.forEach((prop) => {
+						const name = prop.optional ? `[${prop.name}]` : prop.name;
+						const type = prop.type ? `<code>${prop.type.names.join(" \\| ")}</code>` : "";
+						let description = prop.description ? format.escapeForTable(prop.description) : "";
+						const pa = propAnchorFor(prop);
+						if (hasDefaults) {
+							const defaultValue = prop.defaultvalue !== undefined ? `<code>${prop.defaultvalue}</code>` : "";
+							output += `| <a id="${pa}"></a>${name} | ${type} | ${defaultValue} | ${description} |\n`;
+						} else {
+							output += `| <a id="${pa}"></a>${name} | ${type} | ${description} |\n`;
+						}
+					});
+					output += "\n";
+				}
 			}
 
 			output = partials.examples(typedef, output);
@@ -1944,7 +2294,14 @@ const partials = {
 
 		// Use the central processing function to get organized data
 		const processedData = functions.processDoclets(doclets, baseModuleLongname);
-		const { items, constants, typedefs } = processedData;
+		const { items, constants, typedefs, globalTypedefs } = processedData;
+
+		// Seed availableTypedefs so return-typedef sub-trees can be built in the TOC.
+		// partialIntegratedTOC runs before partialIntegratedModules, so we seed here too
+		// to ensure typedefs are available when buildReturnTypedefSubtree is called.
+		if (!availableTypedefs.length) {
+			availableTypedefs = [...new Set([...typedefs, ...(globalTypedefs || [])])];
+		}
 
 		// console.log(items);
 		// process.exit(0);
@@ -1958,6 +2315,73 @@ const partials = {
 		let output = "";
 
 		// Recursive function to build TOC from nested structure
+		/**
+		 * Build a nested TOC sub-tree from a typedef's flat property list.
+		 * Properties like "slothlet", "slothlet.shutdown", "slothlet.api" are grouped
+		 * into a hierarchy and rendered as indented TOC lines.
+		 * @param {object} typedef - The typedef object from availableTypedefs
+		 * @param {string} typedefAnchor - Base anchor for the typedef
+		 * @param {number} startDepth - Indent depth to start at
+		 * @returns {string} Formatted TOC subtree lines
+		 */
+		function buildReturnTypedefSubtree(typedef, typedefAnchor, startDepth) {
+			if (!typedef?.properties?.length) return "";
+			let treeOut = "";
+
+			// Build a nested tree from flat dot-notated property names
+			const tree = {};
+			typedef.properties.forEach((prop) => {
+				// Strip wrapping [] from optional names like "[slothlet.diag]"
+				const rawName = prop.name.replace(/^\[|\]$/g, "");
+				const parts = rawName.split(".");
+				let node = tree;
+				parts.forEach((part, idx) => {
+					if (!node[part]) node[part] = { _prop: null, _children: {} };
+					if (idx === parts.length - 1) node[part]._prop = prop;
+					node = node[part]._children;
+				});
+			});
+
+			/**
+			 * Recursively render the tree node.
+			 * @param {object} node - Current tree node
+			 * @param {number} depth - Current depth
+			 */
+			function renderNode(node, depth) {
+				const ind = "  ".repeat(depth);
+				Object.keys(node).forEach((key) => {
+					const entry = node[key];
+					const prop = entry._prop;
+					if (!prop) return;
+					const isFunc = prop.type?.names?.some((n) => n === "Function" || n === "function");
+					const isOptional = prop.optional;
+					const displayKey = isOptional ? `\\[.${key}\\]` : `.${key}`;
+					const params = isFunc ? "()" : "";
+					// For function-typed properties, the type IS the function — omit return arrow
+					// to avoid misleading "⇒ <code>function</code>" (matches api_test convention)
+					const retTypes = !isFunc && prop.type?.names?.length ? prop.type.names : [];
+					const retStr = retTypes.length ? ` ⇒ <code>${helper.escapeHtml(retTypes.join(" | "))}</code>` : "";
+					// Anchor for this individual property — dash-separated path keeps it readable.
+					const rawName = prop.name.replace(/^\[|\]$/g, "");
+					const propAnchor = `${typedefAnchor}_prop_${rawName.replace(/\./g, "-")}`;
+					// Only link function-typed props: their anchors are standalone <a id> sections
+					// (resolvable by the markdown linter). Non-function props have their anchors
+					// embedded inside table cells, which fragment-link checkers cannot resolve.
+					if (isFunc) {
+						treeOut += `${ind}* [${displayKey}${params}](#${propAnchor})${retStr}\n`;
+					} else {
+						treeOut += `${ind}* ${displayKey}${retStr}\n`;
+					}
+					if (Object.keys(entry._children).length > 0) {
+						renderNode(entry._children, depth + 1);
+					}
+				});
+			}
+
+			renderNode(tree, startDepth);
+			return treeOut;
+		}
+
 		function buildTOCRecursive(structure, depth = 0) {
 			const indent = depth > 0 ? "  ".repeat(depth) : "";
 			const prefix = depth > 0 ? "* " : "";
@@ -1976,7 +2400,7 @@ const partials = {
 				// Direct item, nested item, or child item - create a link
 				const doclet = item.doclet;
 				if (doclet) {
-					if (doclet.kind === "function" || doclet.kind === "member" || doclet.kind === "module" || doclet.kind === "namespace") {
+					if (doclet.kind === "function" || doclet.kind === "member" || doclet.kind === "namespace") {
 						// const returns =
 						// 	constant.doclet?.type && constant.doclet.type.names
 						// 		? ` ⇒ <code>${helper.escapeHtml(constant.doclet.type.names.join(" | "))}</code>`
@@ -1985,14 +2409,36 @@ const partials = {
 						// const returns = doclet.returns ? ` ⇒ <code>${format.returnsForTOC(doclet.returns)}</code>` : "";
 						// const anchor = item.anchor || doclet.anchor;
 						// output += `${indent}${prefix}[${key}(${format.paramsForTOC(doclet.params)})](#${anchor})${returns}\n`;
+					} else if (doclet.kind === "module") {
+						// Module containers are already rendered as ## headings by the template.
+						// Skip the TOC entry to avoid a self-referencing link, but still recurse.
 					} else if (doclet.kind === "constant" || doclet.kind === "object") {
-						// const anchor = item.anchor || doclet.anchor;
-						// output += `${indent}${prefix}[${key}](#${anchor})\n`;
+						// Module bridge constants (e.g., math, tcp, rootstring via @alias) should
+						// appear in the TOC just like namespaces do.
+						output += partials.tocTreeOutput(doclet, item, indent, prefix, key);
 					}
 
-					// Process children
+					// Process children — or expand the return-typedef as a nested sub-tree
 					if (item.children && Object.keys(item.children).length > 0) {
 						buildTOCRecursive(item.children, depth + 1);
+					} else if (doclet.returns?.length) {
+						// If this item has no children but returns a typedef, expand its properties
+						const returnTypeNames = doclet.returns[0]?.type?.names || [];
+						for (const typeName of returnTypeNames) {
+							const candidates = [typeName];
+							const inner = typeName.match(/\.<([^>]+)>$/);
+							if (inner) candidates.push(inner[1]);
+							for (const name of candidates) {
+								const typedef = Array.isArray(availableTypedefs)
+									? availableTypedefs.find((td) => td.name === name && td.properties?.length > 0)
+									: null;
+								if (typedef) {
+									const typedefAnchor = typedef.anchor || format.generateAnchor(typedef.id || typedef.name);
+									output += buildReturnTypedefSubtree(typedef, typedefAnchor, depth + 1);
+									break;
+								}
+							}
+						}
 					}
 				}
 				// }
@@ -2004,8 +2450,11 @@ const partials = {
 
 		if (output !== "") {
 			output = `**Structure**\n\n` + output;
+			// For the main slothlet module, append a link to the runtime sub-module
+			if (baseModuleLongname === "module:@cldmv/slothlet") {
+				output += `\n[@cldmv/slothlet/runtime](#at_cldmv_slash_slothlet_slash_runtime)\n`;
+			}
 		}
-
 		// Add constants section if any
 		if (constants && constants.length > 0) {
 			output += `\n\n`;
@@ -2019,18 +2468,6 @@ const partials = {
 					constant.doclet?.type && constant.doclet.type.names
 						? ` ⇒ <code>${helper.escapeHtml(constant.doclet.type.names.join(" | "))}</code>`
 						: "";
-				output += `  * [${simpleName}](#${anchor})${typeInfo}\n`;
-			});
-		}
-
-		// Add typedefs section if any
-		if (typedefs && typedefs.length > 0) {
-			output += `\n\n`;
-			output += `**Type Definitions**\n\n`;
-			typedefs.forEach((typedef) => {
-				const anchor = typedef?.anchor || format.generateAnchor(typedef?.id);
-				const simpleName = typedef?.simpleName || typedef?.name;
-				const typeInfo = typedef?.type && typedef.type.names ? ` : <code>${helper.escapeHtml(typedef.type.names.join(" | "))}</code>` : "";
 				output += `  * [${simpleName}](#${anchor})${typeInfo}\n`;
 			});
 		}
@@ -2064,6 +2501,15 @@ const partials = {
 				// if (item.type === "module" || item.type === "direct" || item.type === "item") {
 				const doclet = item.doclet;
 				if (!doclet) return;
+
+				// Module-kind items are section containers already rendered at the ## level by the
+				// template. Skip the duplicate ### header/description but still recurse into children.
+				if (doclet.kind === "module") {
+					if (item.children && Object.keys(item.children).length > 0) {
+						sectionOutput += generateModuleSection(item.children, fullPath);
+					}
+					return;
+				}
 
 				// Use pre-calculated anchor
 				sectionOutput += `\n* * *\n\n`;
@@ -2118,10 +2564,15 @@ const partials = {
 		// Generate the main module documentation
 		output += generateModuleSection(items);
 
-		// Add constants section if any
-		// if (constants && constants.length > 0) {
-		// 	output = partials.exportedConstantsBlock(constants, output, baseModuleName, baseModuleLongname);
-		// }
+		// For the main slothlet module, inline the typedef definitions here so they
+		// appear within ## @cldmv/slothlet — before ## @cldmv/slothlet/runtime.
+		if (baseModuleLongname === "module:@cldmv/slothlet" && availableTypedefs.length > 0) {
+			slothletTypedefsInlined = false; // allow the call below to produce output
+			const typedefBlock = partials.globalTypedefDefinitions();
+			// Strip the "## Type Definitions" H2 header so content stays inside this module
+			output += typedefBlock.replace(/[\r\n]*## Type Definitions\n+/, "\n\n");
+			slothletTypedefsInlined = true;
+		}
 
 		return output;
 	},

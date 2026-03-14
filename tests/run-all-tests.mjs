@@ -1,209 +1,189 @@
-#!/usr/bin/env node
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/run-all-tests.mjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
 
 /**
- * @fileoverview Comprehensive test runner for all slothlet test files.
+ * @fileoverview Test runner - runs all files found in tests/node/.
  * @module @cldmv/slothlet/tests/run-all-tests
  * @package
  * @internal
- * @description
- * Runs all test files in the tests/ directory and reports results.
- * Supports both .mjs and .cjs test files and aggregates results.
- * If any test fails, the script exits with code 1 to fail the build.
- *
- * Key features:
- * - Discovers all test files automatically
- * - Runs tests in sequence to avoid conflicts
- * - Captures output and exit codes
- * - Provides summary report
- * - Fails fast or continues based on configuration
- *
- * Technical implementation:
- * - Uses child_process.spawn to run test files
- * - Captures stdout/stderr for reporting
- * - Tracks test timing and results
- * - Excludes utility files and specific patterns
  *
  * @example
- * // Run all tests
- * npm run test:all
- *
- * @example
- * // Run directly
  * node tests/run-all-tests.mjs
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const testsDir = __dirname;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const nodeDir = path.join(__dirname, "node");
 
 /**
- * Run a single test file and capture its output.
- * @internal
- * @private
- * @param {string} testFile - Path to the test file
- * @returns {Promise<{success: boolean, output: string, duration: number}>} Test result
+ * Ensure slothlet dev conditions are set when running against src/ (no dist/ present).
+ * Respawns the current process with the required NODE_OPTIONS flags if needed.
+ * @returns {boolean} True if a child process was spawned (caller should return immediately).
+ * @example
+ * if (ensureDevEnvFlags()) process.exit();
  */
-async function runSingleTest(testFile) {
+function ensureDevEnvFlags() {
+	const distPath = path.join(__dirname, "../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
+	/**
+	 * @param {string[]} args
+	 * @param {string} condition
+	 * @returns {boolean}
+	 */
+	const hasCondition = (args, condition) =>
+		args.some((arg) => arg.startsWith("--conditions=") && arg.slice("--conditions=".length).split(/[|,]/u).includes(condition));
+
+	process.env.NODE_ENV = "development";
+
+	const requiredConditions = ["slothlet-dev"];
+	const nextExecArgv = [...process.execArgv];
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production");
+
+	let needsRespawn = false;
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		// Check both command-line execArgv AND NODE_OPTIONS env var — NODE_OPTIONS flags are active
+		// but never appear in process.execArgv, so checking only execArgv causes a needless respawn.
+		const inExecArgv = hasCondition(nextExecArgv, condition);
+		const inNodeOptions = envConditions.some((token) => token === flag);
+		if (!inExecArgv && !inNodeOptions) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
+
+if (ensureDevEnvFlags()) process.exit();
+
+/**
+ * Run a single test file and return the result.
+ * @param {string} filePath - Absolute path to the test file
+ * @returns {Promise<{success: boolean, output: string, duration: number, exitCode: number}>}
+ */
+async function runTest(filePath) {
 	return new Promise((resolve) => {
 		const startTime = Date.now();
-		const child = spawn("node", [testFile], {
-			cwd: path.dirname(testsDir),
+		const child = spawn("node", [filePath], {
+			cwd: path.dirname(__dirname),
 			stdio: ["ignore", "pipe", "pipe"]
 		});
+
 		let output = "";
-		let errorOutput = "";
-
-		child.stdout?.on("data", (data) => {
-			output += data.toString();
-		});
-
-		child.stderr?.on("data", (data) => {
-			errorOutput += data.toString();
-		});
+		child.stdout.on("data", (d) => (output += d));
+		child.stderr.on("data", (d) => (output += d));
 
 		child.on("close", (code) => {
-			const duration = Date.now() - startTime;
-			const success = code === 0;
-			const fullOutput = output + (errorOutput ? `\nSTDERR:\n${errorOutput}` : "");
-
-			resolve({
-				success,
-				output: fullOutput,
-				duration,
-				exitCode: code
-			});
+			resolve({ success: code === 0, output, duration: Date.now() - startTime, exitCode: code });
 		});
 
-		child.on("error", (error) => {
-			const duration = Date.now() - startTime;
-			resolve({
-				success: false,
-				output: `Failed to start test: ${error.message}`,
-				duration,
-				exitCode: -1
-			});
+		child.on("error", (err) => {
+			resolve({ success: false, output: err.message, duration: Date.now() - startTime, exitCode: -1 });
 		});
 	});
 }
 
 /**
- * Main test runner function.
- * @package
- * @async
+ * Discover and run all test files in tests/node/.
  * @returns {Promise<void>}
- * @throws {Error} When tests fail and process should exit with code 1
  */
 async function runAllTests() {
 	console.log("🧪 Running All Slothlet Tests");
 	console.log("=".repeat(50));
 
-	try {
-		// Discover test files
-		const files = await readdir(testsDir);
+	const files = (await readdir(nodeDir)).filter((f) => f.endsWith(".mjs") || f.endsWith(".cjs")).sort();
 
-		// Utility files that should NOT be run as standalone tests
-		const excludeExactFiles = [
-			"test-utils.mjs",
-			"test-helper.mjs",
-			"run-all-tests.mjs",
-			"test-conditional.mjs",
-			"dump-full-api.mjs",
-			"validate-typescript.mjs"
-		];
+	if (files.length === 0) {
+		console.log("⚠️  No test files found in tests/node/");
+		return;
+	}
 
-		// Pattern-based exclusions
-		const excludePatterns = [
-			/^debug-/, // Debug tools
-			/performance-benchmark/, // Performance tests (run separately)
-			/\.vest\.mjs$/ // Vitest files (handled by npm test)
-		];
+	console.log(`Found ${files.length} test files:`);
+	files.forEach((f) => console.log(`  📄 ${f}`));
+	console.log("");
 
-		const testFiles = files
-			.filter((file) => file.endsWith(".mjs") || file.endsWith(".cjs"))
-			.filter((file) => !excludeExactFiles.includes(file))
-			.filter((file) => !excludePatterns.some((pattern) => pattern.test(file)))
-			.sort();
-		if (testFiles.length === 0) {
-			console.log("⚠️  No test files found");
-			return;
+	const results = [];
+	let totalDuration = 0;
+
+	for (const file of files) {
+		console.log(`🔄 Running ${file}...`);
+		const result = await runTest(path.join(nodeDir, file));
+		results.push({ file, ...result });
+		totalDuration += result.duration;
+
+		if (result.success) {
+			console.log(`✅ ${file} passed (${result.duration}ms)`);
+		} else {
+			console.log(`❌ ${file} failed (${result.duration}ms) - Exit code: ${result.exitCode}`);
+			const lines = result.output.trimEnd().split("\n");
+			const show = lines.slice(-20);
+			if (lines.length > 20) console.log(`   ... (${lines.length - 20} lines omitted)`);
+			show.forEach((l) => console.log(`   ${l}`));
 		}
-
-		console.log(`Found ${testFiles.length} test files:`);
-		testFiles.forEach((file) => console.log(`  📄 ${file}`));
 		console.log("");
+	}
 
-		const results = [];
-		let totalDuration = 0;
+	const passed = results.filter((r) => r.success).length;
+	const failed = results.filter((r) => !r.success).length;
 
-		// Run tests sequentially
-		for (const file of testFiles) {
-			const filePath = path.join(testsDir, file);
-			console.log(`🔄 Running ${file}...`);
+	console.log("📊 Test Results Summary");
+	console.log("=".repeat(50));
+	console.log(`✅ Passed: ${passed}`);
+	console.log(`❌ Failed: ${failed}`);
+	console.log(`⏱️  Total: ${totalDuration}ms`);
 
-			const result = await runSingleTest(filePath);
-			results.push({ file, ...result });
-			totalDuration += result.duration;
-			if (result.success) {
-				console.log(`✅ ${file} passed (${result.duration}ms)`);
-			} else {
-				console.log(`❌ ${file} failed (${result.duration}ms) - Exit code: ${result.exitCode}`);
-				// Show last 20 lines of output for debugging
-				const lines = result.output.split("\n");
-				const totalLines = lines.length;
-				const lastLines = lines.slice(-20);
-				if (totalLines > 20) {
-					console.log(`   ... (${totalLines - 20} lines omitted, showing last 20 lines)`);
-				}
-				lastLines.forEach((line) => console.log(`   ${line}`));
-			}
-			console.log("");
-		}
-
-		// Summary
-		console.log("📊 Test Results Summary");
-		console.log("=".repeat(50));
-
-		const passed = results.filter((r) => r.success).length;
-		const failed = results.filter((r) => !r.success).length;
-
-		console.log(`✅ Passed: ${passed}`);
-		console.log(`❌ Failed: ${failed}`);
-		console.log(`⏱️  Total Duration: ${totalDuration}ms`);
-		console.log("");
-
-		if (failed > 0) {
-			console.log("❌ Failed Tests:");
-			results
-				.filter((r) => !r.success)
-				.forEach((r) => {
-					console.log(`   ${r.file} (exit code: ${r.exitCode})`);
-				});
-			console.log("");
-			console.log("💡 Run individual tests for detailed output:");
-			results
-				.filter((r) => !r.success)
-				.forEach((r) => {
-					console.log(`   node tests/${r.file}`);
-				});
-
-			process.exit(1);
-		}
-
-		console.log("🎉 All tests passed!");
-	} catch (error) {
-		console.error("❌ Test runner failed:", error.message);
+	if (failed > 0) {
+		console.log("\n❌ Failed:");
+		results.filter((r) => !r.success).forEach((r) => console.log(`   node tests/node/${r.file}`));
 		process.exit(1);
 	}
+
+	console.log("\n🎉 All tests passed!");
 }
 
-// Run if called directly
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith("run-all-tests.mjs")) {
-	runAllTests();
-}
-
-export { runAllTests };
+runAllTests();

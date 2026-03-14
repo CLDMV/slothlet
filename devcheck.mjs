@@ -1,3 +1,16 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /devcheck.mjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:36 -08:00 (1772425296)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -5,7 +18,7 @@ import path from "node:path";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const srcPath = path.join(__dirname, "src");
-// const distPath = path.join(__dirname, "dist");
+const distPath = path.join(__dirname, "dist");
 
 // Detect if we're running in a CI environment
 const isCI = !!(
@@ -19,31 +32,68 @@ const isCI = !!(
 	process.env.TF_BUILD // Azure DevOps
 );
 
-if (existsSync(srcPath) && !isCI) {
-	// if (existsSync(srcPath) && !existsSync(distPath)) {
+if (existsSync(srcPath) && !existsSync(distPath) && !isCI) {
 	const nodeEnv = process.env.NODE_ENV?.toLowerCase();
-	const hasSlothletDev = process.env.NODE_OPTIONS?.includes("--conditions=slothlet-dev");
+	const nodeOptions = process.env.NODE_OPTIONS || "";
 
-	if (!nodeEnv || (!["dev", "development"].includes(nodeEnv) && !hasSlothletDev)) {
-		console.error("❌ Development environment not properly configured!");
-		console.error("📁 Source folder detected but NODE_ENV/NODE_OPTIONS not set for slothlet development.");
-		console.error("");
-		console.error("🔧 To fix this, run one of these commands:");
-		console.error("   Windows (cmd):");
-		console.error("     set NODE_ENV=development");
-		console.error("     set NODE_OPTIONS=--conditions=slothlet-dev");
-		console.error("");
-		console.error("   Windows (PowerShell):");
-		console.error("     $env:NODE_ENV='development'");
-		console.error("     $env:NODE_OPTIONS='--conditions=slothlet-dev'");
-		console.error("");
-		console.error("   Unix/Linux/macOS:");
-		console.error("     export NODE_ENV=development");
-		console.error("     export NODE_OPTIONS=--conditions=slothlet-dev");
-		console.error("");
-		console.error("💡 This ensures slothlet loads from src/ instead of dist/ for development.");
-		console.error("🔧 Using 'slothlet-dev' prevents conflicts with consumer development settings.");
-		console.error("🚀 CI environments automatically skip this check.");
+	// Check if running from node_modules (parent folder is node_modules)
+	const parentFolder = path.basename(path.dirname(__dirname));
+	const isInstalledPackage = parentFolder === "node_modules";
+
+	// Parse conditions from NODE_OPTIONS
+	const hasSlothletDev = nodeOptions.indexOf("--conditions=slothlet-dev") !== -1;
+	const hasGenericDev = nodeOptions.indexOf("--conditions=development") !== -1;
+	const hasDevEnv = nodeEnv === "dev" || nodeEnv === "development";
+
+	// Only check if we're in the slothlet repo (not installed in node_modules)
+	if (!isInstalledPackage && !hasSlothletDev) {
+		let errorMessage = "";
+
+		// Determine which error message to show based on current state
+		if (hasDevEnv && hasGenericDev) {
+			// They have generic dev settings - tell them to switch to slothlet-dev
+			errorMessage =
+				"❌ Incorrect development environment detected!\n" +
+				"📁 You have generic development settings (NODE_ENV=development, --conditions=development).\n" +
+				"\n" +
+				"⚠️  This causes slothlet to load from src/ which breaks tests and builds!\n" +
+				"\n" +
+				"🔧 Switch to slothlet-specific development settings:\n" +
+				"   Windows (cmd):\n" +
+				"     set NODE_OPTIONS=--conditions=slothlet-dev\n" +
+				"\n" +
+				"   Windows (PowerShell):\n" +
+				"     $env:NODE_OPTIONS='--conditions=slothlet-dev'\n" +
+				"\n" +
+				"   Unix/Linux/macOS:\n" +
+				"     export NODE_OPTIONS=--conditions=slothlet-dev\n" +
+				"\n" +
+				"💡 Using 'slothlet-dev' prevents conflicts with apps that use slothlet.";
+		} else {
+			// They don't have proper settings at all
+			errorMessage =
+				"❌ Development environment not properly configured!\n" +
+				"📁 Source folder detected but NODE_ENV/NODE_OPTIONS not set for slothlet development.\n" +
+				"\n" +
+				"🔧 To fix this, run one of these commands:\n" +
+				"   Windows (cmd):\n" +
+				"     set NODE_ENV=development\n" +
+				"     set NODE_OPTIONS=--conditions=slothlet-dev\n" +
+				"\n" +
+				"   Windows (PowerShell):\n" +
+				"     $env:NODE_ENV='development'\n" +
+				"     $env:NODE_OPTIONS='--conditions=slothlet-dev'\n" +
+				"\n" +
+				"   Unix/Linux/macOS:\n" +
+				"     export NODE_ENV=development\n" +
+				"     export NODE_OPTIONS=--conditions=slothlet-dev\n" +
+				"\n" +
+				"💡 This ensures slothlet loads from src/ instead of dist/ for development.\n" +
+				"🔧 Using 'slothlet-dev' prevents conflicts with consumer development settings.\n" +
+				"🚀 CI environments automatically skip this check.";
+		}
+
+		console.error(errorMessage);
 		process.exit(1);
 	}
 }

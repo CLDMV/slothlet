@@ -1,19 +1,19 @@
-# Hook System Documentation
+# Hook System
 
-The Hook System is a comprehensive interceptor framework for API function calls in slothlet. It enables you to intercept, modify, and observe function execution with minimal overhead and maximum flexibility.
+The Hook System is a comprehensive interceptor framework for API function calls. It enables you to intercept, modify, and observe function execution with minimal overhead and maximum flexibility.
 
 ## Overview
 
-Hooks work seamlessly across all loading modes (eager/lazy) and runtime types (async/live), providing a unified API for function interception regardless of your slothlet configuration.
+Hooks work across all loading modes (eager/lazy) and runtime types (async/live), providing a unified API for function interception regardless of your slothlet configuration.
 
-**Key Features:**
+**Key capabilities:**
 
 - Four hook types: `before`, `after`, `always`, and `error`
-- Pattern matching with wildcards and exact matches
-- Priority-based execution ordering
-- Runtime enable/disable globally or by pattern
+- Pattern matching with wildcards, brace expansion, and negation
+- Priority-based execution ordering within three-phase subsets
+- Runtime enable/disable globally or by filter
 - Short-circuit execution support
-- Detailed error source tracking
+- Synchronous hooks with correct async function handling
 - Zero-overhead when disabled
 
 ## Table of Contents
@@ -21,39 +21,43 @@ Hooks work seamlessly across all loading modes (eager/lazy) and runtime types (a
 - [Hook Configuration](#hook-configuration)
 - [Hook Types](#hook-types)
 - [Basic Usage](#basic-usage)
+- [Hook Handler Context](#hook-handler-context)
 - [Short-Circuit Execution](#short-circuit-execution)
 - [Pattern Matching](#pattern-matching)
 - [Priority and Chaining](#priority-and-chaining)
+- [Hook Subsets](#hook-subsets)
 - [Runtime Control](#runtime-control)
 - [Hook Management](#hook-management)
 - [Error Handling](#error-handling)
 - [Error Source Tracking](#error-source-tracking)
-- [Cross-Mode Compatibility](#cross-mode-compatibility)
+- [Sync and Async Function Behavior](#sync-and-async-function-behavior)
+
+---
 
 ## Hook Configuration
 
-Hooks can be configured when creating a slothlet instance:
+Hooks are configured when creating a slothlet instance:
 
 ```javascript
 // Enable hooks (simple boolean)
 const api = await slothlet({
 	dir: "./api",
-	hooks: true // Enable all hooks with default pattern "**"
+	hook: true
 });
 
-// Enable with custom pattern
+// Enable with default pattern filter
 const api = await slothlet({
 	dir: "./api",
-	hooks: "database.*" // Only enable for database functions
+	hook: "database.*" // Only intercept database functions by default
 });
 
 // Full configuration object
 const api = await slothlet({
 	dir: "./api",
-	hooks: {
-		enabled: true, // Enable or disable hook execution
-		pattern: "**", // Default pattern for filtering
-		suppressErrors: false // Control error throwing behavior
+	hook: {
+		enabled: true,
+		pattern: "**",
+		suppressErrors: false
 	}
 });
 ```
@@ -61,401 +65,515 @@ const api = await slothlet({
 ### Configuration Options
 
 - **`enabled`** (boolean): Enable or disable hook execution
-- **`pattern`** (string): Default pattern for filtering which functions hooks apply to
+- **`pattern`** (string): Default pattern filter for which functions hooks apply to
 - **`suppressErrors`** (boolean): Control error throwing behavior
-  - `false` (default): Errors are sent to error hooks, THEN thrown (normal behavior)
-  - `true`: Errors are sent to error hooks, BUT NOT thrown (returns `undefined`)
+  - `false` (default): Errors are sent to error hooks AND then re-thrown
+  - `true`: Errors are sent to error hooks but NOT thrown (returns `undefined`)
 
-### Error Suppression Behavior
+### Error Suppression
 
-Error hooks **ALWAYS receive errors** regardless of this setting. The `suppressErrors` option only controls whether errors are thrown after error hooks execute.
+Error hooks **always receive errors** regardless of this setting. `suppressErrors` only controls whether the error is thrown after all error hooks have executed.
 
-> **⚠️ Important**: Error hooks (and all hooks) only execute when `hooks.enabled: true`. If hooks are disabled, errors are thrown normally without any hook execution.
-
-When `suppressErrors: true`, errors are caught and sent to error hooks, but not thrown:
+> Hooks (including error hooks) only execute when `hook.enabled: true`. If hooks are disabled entirely, errors throw normally with no hook execution.
 
 ```javascript
 const api = await slothlet({
 	dir: "./api",
-	hooks: {
-		enabled: true,
-		pattern: "**",
-		suppressErrors: true // Suppress all errors
-	}
+	hook: { enabled: true, suppressErrors: true }
 });
 
-// Register error hook to monitor failures
-api.hooks.on(
-	"error-monitor",
-	"error",
-	({ path, error, source }) => {
-		console.error(`Error in ${path}:`, error.message);
-		// Log to monitoring service without crashing
-	},
-	{ pattern: "**" }
-);
+api.slothlet.hook.on("error:**", ({ path, error }) => {
+	console.error(`Error in ${path}:`, error.message);
+	// Send to monitoring service
+});
 
-// Function errors won't crash the application
 const result = await api.riskyOperation();
 if (result === undefined) {
-	// Function failed but didn't throw
-	console.log("Operation failed gracefully");
+	// Operation failed silently - error hook was called
 }
 ```
 
 ### Error Flow
 
 1. Error occurs (in before hook, function, or after hook)
-2. Error hooks execute and receive the error
-3. **If `suppressErrors: false`** → Error is thrown (crashes if uncaught)
-4. **If `suppressErrors: true`** → Error is NOT thrown, function returns `undefined`
+2. Error hooks execute with full source context
+3. If `suppressErrors: false` → error is re-thrown
+4. If `suppressErrors: true` → error is NOT thrown; function returns `undefined`
 
-### What Gets Suppressed
-
-When `suppressErrors: true`:
-
-- ✅ Before hook errors → Sent to error hooks, NOT thrown
-- ✅ Function execution errors → Sent to error hooks, NOT thrown
-- ✅ After hook errors → Sent to error hooks, NOT thrown
-- ✅ Always hook errors → Sent to error hooks, never thrown (regardless of setting)
-
-> **💡 Use Case**: Enable `suppressErrors: true` for resilient systems where you want to monitor failures without crashing. Perfect for background workers, batch processors, or systems with comprehensive error monitoring.
-
-> **⚠️ Critical Operations**: For validation or authorization hooks where errors MUST stop execution, use `suppressErrors: false` (default) to ensure errors propagate normally.
+---
 
 ## Hook Types
 
-Four hook types with distinct responsibilities:
-
 ### before
 
-Intercept before function execution:
+Executes before the target function. Can:
 
-- Modify arguments passed to functions
-- Cancel execution and return custom values (short-circuit)
-- Execute validation or logging before function runs
+- Modify the arguments passed to the function
+- Cancel execution and return a custom value (short-circuit)
+- Execute validation or authorization logic
+
+**Must be synchronous.** Returning a Promise throws an error.
 
 ### after
 
-Transform results after successful execution:
+Executes after successful function completion. Can:
 
-- Transform function return values
-- Only runs if function executes (skipped on short-circuit)
-- Chain multiple transformations in priority order
+- Transform the function's return value
+- Access the original args alongside the result
+
+Runs only if the function executes (skipped on short-circuit). Attaches to the Promise chain for async functions.
 
 ### always
 
-Observe final result with full execution context:
-
-- Always executes after function completes
-- Runs even when `before` hooks cancel execution or errors occur
-- Receives complete context: `{ path, result, hasError, errors }`
-- Cannot modify result (read-only observation)
-- Perfect for unified logging of both success and error scenarios
+Executes after the function completes regardless of success or failure. Receives full execution context including error information. **Return value is ignored** - read-only observer.
 
 ### error
 
-Monitor and handle errors:
+Executes only when an error occurs. Receives the error with detailed source tracking (where the error originated - before hook, the function itself, after hook, etc.).
 
-- Receives detailed error context with source tracking
-- Error source types: 'before', 'function', 'after', 'always', 'unknown'
-- Includes error type, hook ID, hook tag, timestamp, and stack trace
-- Perfect for error monitoring, logging, and alerting
+---
 
 ## Basic Usage
 
 ```javascript
 import slothlet from "@cldmv/slothlet";
 
-const api = await slothlet({
-	dir: "./api",
-	hooks: true // Enable hooks
-});
+const api = await slothlet({ dir: "./api", hook: true });
 
 // Before hook: Modify arguments
-api.hooks.on(
-	"validate-input",
-	"before",
+api.slothlet.hook.on(
+	"before:math.add",
 	({ path, args }) => {
-		console.log(`Calling ${path} with args:`, args);
-		// Return modified args or original
-		return [args[0] * 2, args[1] * 2];
+		console.log(`Calling ${path} with:`, args);
+		return [args[0] * 2, args[1] * 2]; // Return array to modify args
 	},
-	{ pattern: "math.add", priority: 100 }
+	{ id: "double-args", priority: 100 }
 );
 
 // After hook: Transform result
-api.hooks.on(
-	"format-output",
-	"after",
+api.slothlet.hook.on(
+	"after:math.*",
 	({ path, result }) => {
 		console.log(`${path} returned:`, result);
-		// Return transformed result
-		return result * 10;
+		return result * 10; // Return value to replace result
 	},
-	{ pattern: "math.*", priority: 100 }
+	{ id: "multiply-result", priority: 100 }
 );
 
-// Always hook: Observe final result with error context
-api.hooks.on(
-	"log-execution",
-	"always",
+// Always hook: Observe final result (read-only)
+api.slothlet.hook.on(
+	"always:**",
 	({ path, result, hasError, errors }) => {
 		if (hasError) {
-			console.log(`${path} failed with ${errors.length} error(s):`, errors);
+			console.log(`${path} failed:`, errors);
 		} else {
-			console.log(`${path} succeeded with result:`, result);
+			console.log(`${path} succeeded:`, result);
 		}
-		// Return value ignored - read-only observer
+		// Return value ignored
 	},
-	{ pattern: "**" }
-); // All functions
+	{ id: "logger" }
+);
 
-// Call function - hooks execute automatically
 const result = await api.math.add(2, 3);
-// Logs: "Calling math.add with args: [2, 3]"
-// Logs: "math.add returned: 10" (4+6)
-// Logs: "Final result for math.add: 100" (10*10)
+// Hooks execute: args doubled → 4+6=10 → result×10 → 100
 // result === 100
 ```
 
-## Short-Circuit Execution
+---
 
-`before` hooks can cancel function execution and return custom values:
+## Hook Handler Context
+
+Each hook type receives a context object:
+
+### Before hook context
 
 ```javascript
-// Caching hook example
+api.slothlet.hook.on("before:math.*", ({ path, args, api, ctx }) => {
+	// path: string - API path being called (e.g. "math.add")
+	// args: Array - current arguments
+	// api: object - the live API object (self)
+	// ctx: object - the current context object
+});
+```
+
+**Return values:**
+- Return an `Array` → replaces arguments
+- Return any other non-`undefined` value → short-circuits (function not called, returned value becomes result)
+- Return `undefined` / no return → continue with existing args
+
+### After hook context
+
+```javascript
+api.slothlet.hook.on("after:math.*", ({ path, args, result, api, ctx }) => {
+	// path: string - API path
+	// args: Array - original arguments
+	// result: * - current result value (may have been modified by earlier after hooks)
+	// api, ctx - as above
+});
+```
+
+**Return values:**
+- Return any non-`undefined` value → replaces result
+- Return `undefined` / no return → result unchanged
+
+### Always hook context
+
+```javascript
+api.slothlet.hook.on("always:**", ({ path, args, result, hasError, errors, api, ctx }) => {
+	// path: string - API path
+	// args: Array - original arguments
+	// result: * - final result (undefined if hasError)
+	// hasError: boolean - whether an error occurred
+	// errors: Array<Error> - array of errors that occurred
+	// api, ctx - as above
+	// Return value is ignored
+});
+```
+
+### Error hook context
+
+```javascript
+api.slothlet.hook.on("error:**", ({ path, args, error, errorType, source, timestamp, api, ctx }) => {
+	// path: string - API path
+	// args: Array - function arguments
+	// error: Error - the error object
+	// errorType: string - error constructor name
+	// timestamp: Date - when the error occurred
+	// source: object - error source details
+	//   source.type: "before" | "after" | "always" | "function" | "unknown"
+	//   source.subset: hook subset (if hook error)
+	//   source.hookId: hook ID (if hook error)
+	//   source.hookTag: hook tag/name (if hook error)
+	//   source.timestamp: epoch ms
+	//   source.stack: full stack trace
+	// api, ctx - as above
+});
+```
+
+---
+
+## Short-Circuit Execution
+
+Before hooks can cancel function execution entirely:
+
+```javascript
 const cache = new Map();
 
-api.hooks.on(
-	"cache-check",
-	"before",
+// Cache check - short-circuit on hit
+api.slothlet.hook.on(
+	"before:**",
 	({ path, args }) => {
 		const key = JSON.stringify({ path, args });
 		if (cache.has(key)) {
-			console.log(`Cache hit for ${path}`);
-			return cache.get(key); // Short-circuit: return cached value
+			return cache.get(key); // Non-array, non-undefined → short-circuit
 		}
-		// Return undefined to continue to function
+		// Return undefined → continue to function
 	},
-	{ pattern: "**", priority: 1000 }
-); // High priority
+	{ id: "cache-check", priority: 1000 }
+);
 
-api.hooks.on(
-	"cache-store",
-	"after",
+// Cache store - save result after function runs
+api.slothlet.hook.on(
+	"after:**",
 	({ path, args, result }) => {
 		const key = JSON.stringify({ path, args });
 		cache.set(key, result);
-		return result; // Pass through
+		return result;
 	},
-	{ pattern: "**", priority: 100 }
+	{ id: "cache-store", priority: 100 }
 );
-
-// First call - executes function and caches
-await api.math.add(2, 3); // Computes and stores
-
-// Second call - returns cached value (function not executed)
-await api.math.add(2, 3); // Cache hit! No computation
 ```
+
+When a before hook short-circuits:
+- The function is not called
+- After hooks are skipped
+- Always hooks still execute with the short-circuit result
+
+---
 
 ## Pattern Matching
 
-Hooks support flexible pattern matching:
+The typePattern argument to `hook.on()` has the format `"type:pattern"`:
 
 ```javascript
-// Exact match
-api.hooks.on("hook1", "before", handler, { pattern: "math.add" });
+// type = "before", pattern = "math.add"
+api.slothlet.hook.on("before:math.add", handler);
 
-// Wildcard: all functions in namespace
-api.hooks.on("hook2", "before", handler, { pattern: "math.*" });
+// type = "after", pattern = "math.*" (all math functions)
+api.slothlet.hook.on("after:math.*", handler);
 
-// Wildcard: specific function in all namespaces
-api.hooks.on("hook3", "before", handler, { pattern: "*.add" });
+// type = "always", pattern = "**" (all functions)
+api.slothlet.hook.on("always:**", handler);
 
-// Global: all functions
-api.hooks.on("hook4", "before", handler, { pattern: "**" });
+// type = "error", pattern = "database.*"
+api.slothlet.hook.on("error:database.*", handler);
 ```
+
+### Supported Pattern Syntax
+
+| Syntax | Description | Example |
+|---|---|---|
+| `exact.path` | Exact match | `"math.add"` |
+| `namespace.*` | All functions in namespace | `"math.*"` |
+| `*.funcName` | Function name in any namespace | `"*.add"` |
+| `**` | All functions | `"**"` |
+| `{a,b,c}` | Brace expansion - matches "a", "b", or "c" | `"{math,utils}.*"` |
+| `!pattern` | Negation - matches anything except pattern | `"!internal.*"` |
+
+### Pattern Examples
+
+```javascript
+// Match all functions except internal ones
+api.slothlet.hook.on("before:!internal.*", handler);
+
+// Match math or database functions
+api.slothlet.hook.on("before:{math,database}.*", handler);
+
+// Match specific methods across all namespaces
+api.slothlet.hook.on("after:*.{add,update,delete}", handler);
+```
+
+### Diagnostic: Test a Pattern
+
+```javascript
+// Compile a pattern to test it
+const matcher = api.slothlet.diag.hook.compilePattern("math.*");
+console.log(matcher("math.add"));   // true
+console.log(matcher("other.func")); // false
+```
+
+---
 
 ## Priority and Chaining
 
-Multiple hooks execute in priority order (highest first):
+Within each subset, hooks execute in priority order (highest first):
 
 ```javascript
 // High priority - runs first
-api.hooks.on(
-	"validate",
-	"before",
+api.slothlet.hook.on(
+	"before:math.*",
 	({ args }) => {
-		if (args[0] < 0) throw new Error("Negative numbers not allowed");
+		if (args[0] < 0) throw new Error("Negative not allowed");
 		return args;
 	},
-	{ pattern: "math.*", priority: 1000 }
+	{ id: "validate", priority: 1000 }
 );
 
 // Medium priority - runs second
-api.hooks.on(
-	"double",
-	"before",
-	({ args }) => {
-		return [args[0] * 2, args[1] * 2];
-	},
-	{ pattern: "math.*", priority: 500 }
+api.slothlet.hook.on(
+	"before:math.*",
+	({ args }) => [args[0] * 2, args[1] * 2],
+	{ id: "double", priority: 500 }
 );
 
 // Low priority - runs last
-api.hooks.on(
-	"log",
-	"before",
+api.slothlet.hook.on(
+	"before:math.*",
 	({ path, args }) => {
 		console.log(`Final args for ${path}:`, args);
 		return args;
 	},
-	{ pattern: "math.*", priority: 100 }
+	{ id: "log", priority: 100 }
 );
 ```
+
+---
+
+## Hook Subsets
+
+Each hook type supports three ordered execution phases (`subset`):
+
+| Subset | Order | Typical use |
+|---|---|---|
+| `"before"` | First | Auth checks, security validation, initialization |
+| `"primary"` | Middle (default) | Main hook logic, business rules |
+| `"after"` | Last | Cleanup, audit trails, notifications |
+
+Within each subset, hooks still sort by priority (highest first), then registration order.
+
+```javascript
+// Auth (before subset) - must run before any other before-hooks
+api.slothlet.hook.on(
+	"before:protected.*",
+	({ ctx }) => {
+		if (!ctx.user) throw new Error("Unauthorized");
+	},
+	{ id: "auth", subset: "before", priority: 2000 }
+);
+
+// Business validation (primary subset) - default
+api.slothlet.hook.on(
+	"before:math.*",
+	({ args }) => {
+		if (args[0] < 0) throw new Error("Invalid input");
+		return args;
+	},
+	{ id: "validate", subset: "primary", priority: 1000 }
+);
+
+// Audit log (after subset) - runs after all other before-hooks
+api.slothlet.hook.on(
+	"before:**",
+	({ path, args }) => {
+		console.log(`[AUDIT] Executing ${path} with args:`, args);
+		return args;
+	},
+	{ id: "audit", subset: "after", priority: 100 }
+);
+```
+
+**Complete execution order** for a function call:
+
+```text
+before hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
+↓ function executes
+after hooks:   [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
+always hooks:  [subset=before, ↓priority] → [subset=primary, ↓priority] → [subset=after, ↓priority]
+```
+
+---
 
 ## Runtime Control
 
-Enable and disable hooks at runtime:
+Enable and disable hooks at runtime without unregistering them:
 
 ```javascript
-const api = await slothlet({ dir: "./api", hooks: true });
-
-// Add hooks
-api.hooks.on("test", "before", handler, { pattern: "math.*" });
+const api = await slothlet({ dir: "./api", hook: true });
 
 // Disable all hooks
-api.hooks.disable();
-await api.math.add(2, 3); // No hooks execute
+api.slothlet.hook.disable();
 
 // Re-enable all hooks
-api.hooks.enable();
-await api.math.add(2, 3); // Hooks execute
+api.slothlet.hook.enable();
 
-// Enable specific pattern only
-api.hooks.disable();
-api.hooks.enable("math.*"); // Only math.* pattern enabled
-await api.math.add(2, 3); // math.* hooks execute
-await api.other.func(); // No hooks execute
+// Disable only a specific pattern
+api.slothlet.hook.disable({ pattern: "math.*" });
+
+// Re-enable by type
+api.slothlet.hook.enable({ type: "before" });
+
+// Disable a specific hook by ID
+api.slothlet.hook.disable({ id: "my-expensive-hook" });
 ```
+
+---
 
 ## Hook Management
 
+### Registering
+
 ```javascript
-// List registered hooks
-const beforeHooks = api.hooks.list("before");
-const afterHooks = api.hooks.list("after");
-const allHooks = api.hooks.list(); // All types
-
-// Remove specific hook by ID
-const id = api.hooks.on("temp", "before", handler, { pattern: "math.*" });
-api.hooks.off(id);
-
-// Remove all hooks matching pattern
-api.hooks.off("math.*");
-
-// Clear all hooks of a type
-api.hooks.clear("before"); // Remove all before hooks
-api.hooks.clear(); // Remove all hooks
+// Returns the hook ID (auto-generated if not specified in options)
+const hookId = api.slothlet.hook.on(
+	"before:math.*",
+	({ args }) => args,
+	{ id: "my-hook", priority: 100, subset: "primary" }
+);
 ```
+
+### Removing
+
+```javascript
+// Remove by ID
+api.slothlet.hook.remove({ id: hookId });
+
+// Remove all before hooks matching a pattern
+api.slothlet.hook.remove({ type: "before", pattern: "math.*" });
+
+// Remove all hooks of a type
+api.slothlet.hook.remove({ type: "error" });
+
+// off() is an alias for remove - accepts ID string or filter object
+api.slothlet.hook.off(hookId);
+api.slothlet.hook.off({ pattern: "math.*" });
+
+// clear() is also an alias for remove
+api.slothlet.hook.clear({ type: "before" });
+api.slothlet.hook.clear(); // Remove all hooks
+```
+
+### Listing
+
+```javascript
+// List all hooks
+const all = api.slothlet.hook.list();
+
+// List by type
+const beforeHooks = api.slothlet.hook.list({ type: "before" });
+
+// List only enabled hooks
+const active = api.slothlet.hook.list({ enabled: true });
+
+// List by pattern
+const mathHooks = api.slothlet.hook.list({ pattern: "math.*" });
+```
+
+---
 
 ## Error Handling
 
-Hooks have a special `error` type for observing function errors with detailed source tracking:
+The `error` hook type receives detailed context about any error in the execution chain:
 
 ```javascript
-api.hooks.on(
-	"error-logger",
-	"error",
+api.slothlet.hook.on(
+	"error:**",
 	({ path, error, source }) => {
 		console.error(`Error in ${path}:`, error.message);
-		console.error(`Source: ${source.type}`); // 'before', 'after', 'always', 'function', 'unknown'
+		console.error(`Source type: ${source.type}`); // "before" | "function" | "after" | "always" | "unknown"
 
 		if (source.type === "function") {
-			console.error("Error occurred in function execution");
-		} else if (["before", "after", "always"].includes(source.type)) {
-			console.error(`Error occurred in ${source.type} hook:`);
-			console.error(`  Hook ID: ${source.hookId}`);
-			console.error(`  Hook Tag: ${source.hookTag}`);
+			console.error("Error in function body");
+		} else {
+			console.error(`Error in ${source.type} hook: ${source.hookTag}`);
 		}
-
-		console.error(`Timestamp: ${source.timestamp}`);
-		console.error(`Stack trace:\n${source.stack}`);
-
-		// Log to monitoring service with full context
-		// Error is re-thrown after all error hooks execute
 	},
-	{ pattern: "**" }
+	{ id: "error-monitor" }
 );
-
-try {
-	await api.validateData({ invalid: true });
-} catch (error) {
-	// Error hooks executed before this catch block
-	console.log("Caught error:", error);
-}
 ```
+
+**Important notes:**
+
+- Errors from `before` and `after` hooks are re-thrown after error hooks run (unless `suppressErrors: true`)
+- Errors from `always` hooks are caught and passed to error hooks, but do NOT re-throw (never crash execution)
+- Error hooks do not receive errors thrown by other error hooks (no recursion)
+
+---
 
 ## Error Source Tracking
 
-Error hooks receive detailed context about where errors originated:
-
 ### Source Types
 
-- `"function"`: Error occurred during function execution
-- `"before"`: Error occurred in a before hook
-- `"after"`: Error occurred in an after hook
-- `"always"`: Error occurred in an always hook
-- `"unknown"`: Error source could not be determined
+| `source.type` | Description |
+|---|---|
+| `"function"` | Error in the target function body |
+| `"before"` | Error in a before hook |
+| `"after"` | Error in an after hook |
+| `"always"` | Error in an always hook |
+| `"unknown"` | Source could not be determined |
 
-### Source Metadata
+### Source Properties
 
-- `source.type`: Error source type (see above)
-- `source.hookId`: Hook identifier (for hook errors)
-- `source.hookTag`: Hook tag/name (for hook errors)
-- `source.timestamp`: ISO timestamp when error occurred
-- `source.stack`: Full stack trace
+- `source.type` - source type (see above)
+- `source.subset` - hook subset where error occurred (for hook errors)
+- `source.hookId` - ID of the hook that failed (for hook errors)
+- `source.hookTag` - name/tag of the hook that failed (for hook errors)
+- `source.timestamp` - epoch millisecond when error occurred
+- `source.stack` - full stack trace string
 
-### Example: Comprehensive Error Monitoring
+### Comprehensive Error Monitoring Example
 
 ```javascript
-const errorStats = {
-	function: 0,
-	before: 0,
-	after: 0,
-	always: 0,
-	byHook: {}
-};
+const errorStats = { function: 0, before: 0, after: 0, always: 0, byHook: {} };
 
-api.hooks.on(
-	"error-analytics",
-	"error",
+api.slothlet.hook.on(
+	"error:**",
 	({ path, error, source }) => {
-		// Track error source statistics
-		errorStats[source.type]++;
+		errorStats[source.type] = (errorStats[source.type] || 0) + 1;
 
-		if (source.hookId) {
-			if (!errorStats.byHook[source.hookTag]) {
-				errorStats.byHook[source.hookTag] = 0;
-			}
-			errorStats.byHook[source.hookTag]++;
+		if (source.hookTag) {
+			errorStats.byHook[source.hookTag] = (errorStats.byHook[source.hookTag] || 0) + 1;
 		}
 
-		// Log detailed error info
-		console.error(`[${source.timestamp}] Error in ${path}:`);
-		console.error(`  Type: ${source.type}`);
-		console.error(`  Message: ${error.message}`);
-
-		if (source.type === "function") {
-			// Function-level error - might be a bug in implementation
-			console.error("  Action: Review function implementation");
-		} else {
-			// Hook-level error - might be a bug in hook logic
-			console.error(`  Action: Review ${source.hookTag} hook (${source.type})`);
-		}
-
-		// Send to monitoring service
 		sendToMonitoring({
 			timestamp: source.timestamp,
 			path,
@@ -466,128 +584,103 @@ api.hooks.on(
 			stack: source.stack
 		});
 	},
-	{ pattern: "**" }
+	{ id: "error-analytics" }
 );
-
-// Later: Analyze error patterns
-console.log("Error Statistics:", errorStats);
-// {
-//   function: 5,
-//   before: 2,
-//   after: 1,
-//   always: 0,
-//   byHook: {
-//     "validate-input": 2,
-//     "format-output": 1
-//   }
-// }
 ```
-
-### Important Notes
-
-- Errors from `before` and `after` hooks are re-thrown after error hooks execute
-- Errors from `always` hooks are caught and logged but do NOT crash execution
-- Error hooks themselves do not receive errors from other error hooks (no recursion)
-- The `_hookSourceReported` flag prevents double-reporting of errors
-
-## Cross-Mode Compatibility
-
-Hooks work identically across all configurations:
-
-```javascript
-// Eager + AsyncLocalStorage
-const api1 = await slothlet({ dir: "./api", lazy: false, runtime: "async", hooks: true });
-
-// Eager + Live Bindings
-const api2 = await slothlet({ dir: "./api", lazy: false, runtime: "live", hooks: true });
-
-// Lazy + AsyncLocalStorage
-const api3 = await slothlet({ dir: "./api", lazy: true, runtime: "async", hooks: true });
-
-// Lazy + Live Bindings
-const api4 = await slothlet({ dir: "./api", lazy: true, runtime: "live", hooks: true });
-
-// Same hook code works with all configurations
-[api1, api2, api3, api4].forEach((api) => {
-	api.hooks.on(
-		"universal",
-		"before",
-		({ args }) => {
-			return [args[0] * 10, args[1] * 10];
-		},
-		{ pattern: "math.add" }
-	);
-});
-```
-
-### Key Benefits
-
-- ✅ **Universal**: Works across all 4 mode/runtime combinations
-- ✅ **Flexible**: Pattern matching with wildcards and priorities
-- ✅ **Powerful**: Modify args, transform results, observe execution
-- ✅ **Composable**: Chain multiple hooks with priority control
-- ✅ **Dynamic**: Enable/disable at runtime globally or by pattern
-- ✅ **Observable**: Separate hook types for different responsibilities
-
-## API Reference
-
-### api.hooks.on(id, type, handler, options)
-
-Register a new hook.
-
-**Parameters:**
-
-- `id` (string): Unique identifier for the hook
-- `type` (string): Hook type - "before", "after", "always", or "error"
-- `handler` (function): Hook handler function
-- `options` (object): Hook configuration
-  - `pattern` (string): Pattern to match against function paths
-  - `priority` (number): Execution priority (higher = earlier)
-
-**Returns:** string - The hook ID
-
-### api.hooks.off(idOrPattern)
-
-Remove hooks by ID or pattern.
-
-**Parameters:**
-
-- `idOrPattern` (string): Hook ID or pattern to match
-
-### api.hooks.enable(pattern?)
-
-Enable hooks globally or by pattern.
-
-**Parameters:**
-
-- `pattern` (string, optional): Pattern to enable (all if omitted)
-
-### api.hooks.disable()
-
-Disable all hooks.
-
-### api.hooks.list(type?)
-
-List registered hooks.
-
-**Parameters:**
-
-- `type` (string, optional): Hook type to filter by
-
-**Returns:** array - Array of hook objects
-
-### api.hooks.clear(type?)
-
-Clear all hooks of a specific type or all hooks.
-
-**Parameters:**
-
-- `type` (string, optional): Hook type to clear (all if omitted)
 
 ---
 
-For more information, see:
+## Sync and Async Function Behavior
 
-- [Changelog v2.6](../changelog/v2.6.md) - Hook system introduction
-- [API Reference](API.md) - Complete API documentation
-- [README](../../README.md) - Main project documentation
+Hook handlers are **synchronous functions**. Returning a Promise from a before hook throws. Returning a Promise from after/always/error hooks is silently ignored (the return value is unused or treated as the non-async value).
+
+The hook system intelligently handles both sync and async *target functions*:
+
+**For synchronous functions:**
+
+```text
+executeBeforeHooks() → fn() → executeAfterHooks() → executeAlwaysHooks()
+```
+All steps run synchronously in sequence.
+
+**For async functions:**
+
+```text
+executeBeforeHooks() → fn() returns Promise → .then(executeAfterHooks, executeErrorHooks) → executeAlwaysHooks()
+```
+After, error, and always hooks attach to the Promise chain - they do not block the event loop.
+
+This design ensures:
+- Synchronous functions return synchronous values (no unwanted Promise wrapping)
+- Async functions process hooks without blocking the event loop
+- The fundamental contract of all modes is preserved
+
+---
+
+## API Reference
+
+### api.slothlet.hook.on(typePattern, handler, options?)
+
+Register a hook.
+
+**Parameters:**
+
+- `typePattern` (string) - Combined type and pattern, format: `"type:pattern"` (e.g. `"before:math.*"`)
+- `handler` (Function) - Synchronous hook handler
+- `options.id` (string, optional) - Unique identifier (auto-generated if omitted)
+- `options.priority` (number, optional) - Execution priority; higher executes first (default: `0`)
+- `options.subset` (string, optional) - Execution phase: `"before"`, `"primary"` (default), or `"after"`
+
+**Returns:** string - The hook ID
+
+### api.slothlet.hook.remove(filter?)
+
+Remove hooks matching filter criteria.
+
+**Parameters:**
+
+- `filter.id` (string) - Remove exact hook by ID
+- `filter.type` (string) - Remove all hooks of this type
+- `filter.pattern` (string) - Remove all hooks matching this pattern
+
+**Returns:** number - Count of hooks removed
+
+### api.slothlet.hook.off(idOrFilter)
+
+Alias for `remove()`. Accepts a bare ID string or a filter object.
+
+### api.slothlet.hook.clear(filter?)
+
+Alias for `remove()`.
+
+### api.slothlet.hook.enable(filter?)
+
+Enable hooks. Empty filter enables all.
+
+**Parameters:** Same filter object as `remove()`.
+
+**Returns:** number - Count of hooks enabled
+
+### api.slothlet.hook.disable(filter?)
+
+Disable hooks without unregistering them. Empty filter disables all.
+
+**Returns:** number - Count of hooks disabled
+
+### api.slothlet.hook.list(filter?)
+
+List registered hooks matching filter.
+
+**Parameters:**
+
+- `filter.id`, `filter.type`, `filter.pattern` - As above
+- `filter.enabled` (boolean) - Filter by enabled state
+
+**Returns:** Array of hook objects
+
+---
+
+## See Also
+
+- [Context Propagation](CONTEXT-PROPAGATION.md) - `ctx` object available in hook handlers
+- [README](../README.md) - Main project documentation

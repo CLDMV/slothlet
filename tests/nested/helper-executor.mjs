@@ -1,10 +1,23 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/nested/helper-executor.mjs
+ *	@Date: 2026-01-04T16:31:08-08:00 (1767573068)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:39 -08:00 (1772425299)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview Helper executor in nested directory for path resolution testing
  * @module nested/helper-executor
  * @description
- * This file exists in a nested directory (tests/nested/) to test that addApi
+ * This file exists in a nested directory (tests/nested/) to test that api.slothlet.api.add
  * resolves paths correctly even when called through a function in a different directory.
- * The path resolution should be relative to where addApi was DEFINED (the test file),
+ * The path resolution should be relative to where api.slothlet.api.add was DEFINED (the test file),
  * not where this executor is located.
  */
 
@@ -20,14 +33,13 @@ export async function executeWithApi(api, fn) {
 }
 
 /**
- * Execute addApi through this nested helper
+ * Execute api.slothlet.api.add through this nested helper
  * @param {object} api - Slothlet API instance
  * @param {string} apiPath - API path
  * @param {string} folderPath - Folder path (relative to caller, not this file)
- * @param {object} metadata - Metadata object
  * @param {object} options - Options object
  * @returns {Promise<void>}
  */
-export async function addApiFromNested(api, apiPath, folderPath, metadata = {}, options = {}) {
-	return await api.addApi(apiPath, folderPath, metadata, options);
+export async function addApiFromNested(api, apiPath, folderPath, options = {}) {
+	return await api.slothlet.api.add(apiPath, folderPath, options);
 }

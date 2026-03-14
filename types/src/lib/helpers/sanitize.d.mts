@@ -1,97 +1,98 @@
 /**
- * @function sanitizePathName
- * @package
- * @internal
- * @param {string} input - The input string to sanitize (e.g., file name, path segment)
- * @param {Object} [opts={}] - Sanitization configuration options
- * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
- * @param {boolean} [opts.preserveAllUpper=false] - Automatically preserve any identifier that is already in all-uppercase format
- * @param {boolean} [opts.preserveAllLower=false] - Automatically preserve any identifier that is already in all-lowercase format
- * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns: *, ?, **STRING**)
- * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
- * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
- * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE (supports globs and **STRING** boundary patterns)
- * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase (supports globs and **STRING** boundary patterns)
- * @returns {string} Valid JavaScript identifier safe for dot-notation property access
- * @throws {TypeError} When input parameter is not a string
- *
- * @description
- * Sanitize a string into a JS identifier suitable for dot-path usage.
- * Advanced sanitization function that applies rules intelligently before splitting while
- * maintaining proper camelCase transformation. Uses sophisticated tracking to ensure
- * rule-matched segments are preserved correctly through the transformation process.
- *
- * @example
- * // Basic sanitization (already valid identifiers unchanged)
- * sanitizePathName("autoIP");                // "autoIP"  (no change needed)
- * sanitizePathName("validIdentifier");       // "validIdentifier" (no change needed)
- * sanitizePathName("auto_ip");               // "auto_ip" (valid identifier preserved)
- *
- * @example
- * // Standard camelCase conversion
- * sanitizePathName("auto-ip");               // "autoIp" (dash becomes camelCase)
- * sanitizePathName("my file!.mjs");          // "myFileMjs" (spaces and special chars removed)
- * sanitizePathName("foo-bar-baz");           // "fooBarBaz" (multi-segment camelCase)
- *
- * @example
- * // Pre-split pattern matching (matches original filename patterns)
- * sanitizePathName("auto-ip", {
- *   rules: {
- *     upper: ["*-ip"]  // Matches before splitting
- *   }
- * }); // Result: "autoIP" (ip becomes IP due to *-ip pattern)
- *
- * @example
- * // Complex pattern matching with intelligent tracking
- * sanitizePathName("get-api-status", {
- *   rules: {
- *     upper: ["*-api-*"]  // Matches api in middle of filename
- *   }
- * }); // Result: "getAPIStatus" (api becomes API due to pattern)
- *
- * @example
- * // Automatic case preservation
- * sanitizePathName("COMMON_APPS", { preserveAllUpper: true });      // "COMMON_APPS" (preserved)
- * sanitizePathName("cOMMON_APPS", { preserveAllUpper: true });      // "cOMMON_APPS" (not all-uppercase, transformed)
- * sanitizePathName("common_apps", { preserveAllLower: true });      // "common_apps" (preserved)
- * sanitizePathName("Common_apps", { preserveAllLower: true });      // "commonApps" (not all-lowercase, transformed)
- *
- * @example
- * // Combining preserve options with other rules
- * sanitizePathName("parse-XML-data", {
- *   preserveAllUpper: true,
- *   rules: { upper: ["xml"] }
- * }); // "parseXMLData" (XML preserved by preserveAllUpper)
- *
- * @example
- * // Boundary-requiring patterns with **STRING** syntax
- * sanitizePathName("buildUrlWithParams", {
- *   rules: {
- *     upper: ["**url**"]  // Only matches "url" when surrounded by other characters
- *   }
- * }); // Result: "buildURLWithParams" (url becomes URL, surrounded by other chars)
- *
- * sanitizePathName("url", {
- *   rules: {
- *     upper: ["**url**"]  // Does NOT match standalone "url" (no surrounding chars)
- *   }
- * }); // Result: "url" (unchanged - no surrounding characters)
- *
- * sanitizePathName("parseJsonData", {
- *   rules: {
- *     upper: ["**json**"]  // Matches "json" surrounded by other characters
- *   }
- * }); // Result: "parseJSONData" (json becomes JSON)
+ * Standalone sanitizePropertyName function for backward compatibility
+ * @param {string} input - Input string to sanitize
+ * @param {object} options - Sanitization options
+ * @returns {string} Sanitized property name
+ * @public
  */
-export function sanitizePathName(input: string, opts?: {
-    lowerFirst?: boolean;
-    preserveAllUpper?: boolean;
-    preserveAllLower?: boolean;
-    rules?: {
-        leave?: string[];
-        leaveInsensitive?: string[];
-        upper?: string[];
-        lower?: string[];
-    };
-}): string;
+export function sanitizePropertyName(input: string, options?: object): string;
+/**
+ * Advanced filename sanitization with rule-based transformation
+ * @extends ComponentBase
+ * @public
+ */
+export class Sanitize extends ComponentBase {
+    static slothletProperty: string;
+    /**
+     * Advanced sanitization function with configurable rule-based transformation
+     *
+     * @description
+     * Converts arbitrary strings (filenames, path segments) into valid JavaScript identifiers
+     * suitable for dot-notation property access. Supports sophisticated rule-based transformation
+     * with glob patterns, case preservation, and intelligent segment handling.
+     *
+     * @param {string} input - String to sanitize
+     * @param {Object} [options={}] - Sanitization configuration
+     * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
+     * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
+     * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers
+     * @param {Object} [options.rules={}] - Transformation rules
+     * @param {string[]} [options.rules.leave=[]] - Preserve exactly (case-sensitive, supports globs)
+     * @param {string[]} [options.rules.leaveInsensitive=[]] - Preserve exactly (case-insensitive, supports globs)
+     * @param {string[]} [options.rules.upper=[]] - Force UPPERCASE (supports globs and **STRING**)
+     * @param {string[]} [options.rules.lower=[]] - Force lowercase (supports globs and **STRING**)
+     * @returns {string} Valid JavaScript identifier
+     * @public
+     *
+     * @example
+     * // Basic usage
+     * sanitizePropertyName("auto-ip"); // "autoIp"
+     * sanitizePropertyName("root-math"); // "rootMath"
+     *
+     * @example
+     * // Rule-based transformation
+     * sanitizePropertyName("auto-ip", {
+     *   rules: { upper: ["*-ip"] }
+     * }); // "autoIP"
+     *
+     * @example
+     * // Boundary-requiring patterns
+     * sanitizePropertyName("parseJsonData", {
+     *   rules: { upper: ["**json**"] }
+     * }); // "parseJSONData"
+     *
+     * @example
+     * // Case preservation
+     * sanitizePropertyName("COMMON_APPS", {
+     *   preserveAllUpper: true
+     * }); // "COMMON_APPS"
+     *
+     * @example
+     * // Multiple rules
+     * sanitizePropertyName("get-api-status", {
+     *   rules: {
+     *     upper: ["*-api-*", "http"],
+     *     lower: ["xml"]
+     *   }
+     * }); // "getAPIStatus"
+     */
+    public sanitizePropertyName(input: string, options?: {
+        lowerFirst?: boolean;
+        preserveAllUpper?: boolean;
+        preserveAllLower?: boolean;
+        rules?: {
+            leave?: string[];
+            leaveInsensitive?: string[];
+            upper?: string[];
+            lower?: string[];
+        };
+    }): string;
+    /**
+     * Get module ID from file path
+     * @param {string} filePath - Full file path
+     * @param {string} baseDir - Base directory
+     * @returns {string} Module ID
+     * @public
+     */
+    public getModuleId(filePath: string, baseDir: string): string;
+    /**
+     * Check if filename represents a special function name that should preserve case
+     * @param {string} name - Name to check
+     * @returns {boolean} True if special case should be preserved
+     * @public
+     */
+    public shouldPreserveFunctionCase(name: string): boolean;
+    #private;
+}
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=sanitize.d.mts.map

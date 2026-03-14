@@ -1,420 +1,461 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /src/lib/helpers/sanitize.mjs
- *	@Date: 2025-10-16 13:48:46 -07:00 (1760647726)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-09-09 08:06:19 -07:00 (1725890779)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-22 06:59:41 -07:00 (1761141581)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-04 16:57:04 -08:00 (1772672224)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview String sanitization utilities for slothlet API property names. Internal file (not exported in package.json).
- * @module @cldmv/slothlet.helpers.sanitize
- * @memberof module:@cldmv/slothlet.helpers
+ * @fileoverview Advanced filename sanitization with rule-based transformation
+ * @module @cldmv/slothlet/helpers/sanitize
  * @internal
- * @package
- *
- * @description
- * Advanced string sanitization system for converting arbitrary file names into valid JavaScript
- * property names suitable for slothlet's dot-notation API access. Implements sophisticated
- * identifier validation, segment-based transformation rules, and configurable casing policies.
- *
- * Key features:
- * - Valid identifier detection with fast-path optimization
- * - Configurable first-segment casing (lowerFirst option)
- * - Advanced rule-based transformation (leave, leaveInsensitive, upper, lower arrays) with glob pattern support
- * - Cross-platform filename compatibility
- * - Edge case handling for special characters and numeric prefixes
- * - Camel-case conversion for multi-segment identifiers
- *
- * Technical implementation:
- * - Uses regex-based validation for JavaScript identifier compliance
- * - Segment splitting on non-identifier characters [^A-Za-z0-9_$]
- * - Rule precedence: exact matches → glob patterns → default casing
- * - Lightweight glob matching using simple wildcard patterns
- * - Safety fallbacks for empty results and invalid identifier starts
- *
- * Usage context:
- * - File-to-API mapping in slothlet module loading
- * - Dynamic property name generation for module namespaces
  */
 
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+// ============================================================================
+// Sanitize Component Class
+// ============================================================================
+
 /**
- * Convert a glob pattern to a regular expression.
- * Supports * (zero or more characters), ? (single character), and **STRING** (boundary-requiring matches).
- * @private
- * @param {string} pattern - Glob pattern
- * @param {boolean} caseSensitive - Whether to be case sensitive (default: true)
- * @returns {RegExp|null} Regular expression or null if invalid
+ * Advanced filename sanitization with rule-based transformation
+ * @extends ComponentBase
+ * @public
  */
-function globToRegex(pattern, caseSensitive = true) {
-	try {
-		// Handle **STRING** pattern - matches only when surrounded by other characters
+export class Sanitize extends ComponentBase {
+	static slothletProperty = "sanitize";
+
+	// ========================================================================
+	// Pattern Matching Utilities (Private Methods)
+	// ========================================================================
+
+	/**
+	 * Convert glob pattern to RegExp, supporting *, ?, and **STRING** boundary patterns
+	 * @private
+	 * @param {string} pattern - Glob pattern
+	 * @param {boolean} caseSensitive - Case sensitivity flag
+	 * @returns {RegExp} Compiled regex
+	 */
+	#compileGlobPattern(pattern, caseSensitive = true) {
+		// **STRING** requires surrounding characters (positive lookbehind/ahead)
 		if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
 			const innerString = pattern.slice(2, -2);
-			// Escape special regex chars in the inner string
 			const escapedString = innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&");
-			// Use positive lookbehind and lookahead to ensure surrounding characters
-			// Pattern must not be at start or end of string (requires surrounding chars)
 			const flags = caseSensitive ? "" : "i";
 			return new RegExp(`(?<=.)${escapedString}(?=.)`, flags);
 		}
 
-		// Standard glob pattern processing
-		// Escape special regex chars except * and ?
-		let regexPattern = pattern
+		// Standard glob: * → .*, ? → .
+		const regexPattern = pattern
 			.replace(/[.+^${}()|[\]\\]/g, "\\$&")
 			.replace(/\*/g, ".*")
 			.replace(/\?/g, ".");
 
 		const flags = caseSensitive ? "" : "i";
 		return new RegExp(`^${regexPattern}$`, flags);
-	} catch (_) {
-		return null;
 	}
-}
 
-/**
- * @function sanitizePathName
- * @package
- * @internal
- * @param {string} input - The input string to sanitize (e.g., file name, path segment)
- * @param {Object} [opts={}] - Sanitization configuration options
- * @param {boolean} [opts.lowerFirst=true] - Lowercase the first character of the first segment for camelCase convention
- * @param {boolean} [opts.preserveAllUpper=false] - Automatically preserve any identifier that is already in all-uppercase format
- * @param {boolean} [opts.preserveAllLower=false] - Automatically preserve any identifier that is already in all-lowercase format
- * @param {Object} [opts.rules={}] - Advanced segment transformation rules (supports glob patterns: *, ?, **STRING**)
- * @param {string[]} [opts.rules.leave=[]] - Segments to preserve exactly as-is (case-sensitive, supports globs)
- * @param {string[]} [opts.rules.leaveInsensitive=[]] - Segments to preserve exactly as-is (case-insensitive, supports globs)
- * @param {string[]} [opts.rules.upper=[]] - Segments to force to UPPERCASE (supports globs and **STRING** boundary patterns)
- * @param {string[]} [opts.rules.lower=[]] - Segments to force to lowercase (supports globs and **STRING** boundary patterns)
- * @returns {string} Valid JavaScript identifier safe for dot-notation property access
- * @throws {TypeError} When input parameter is not a string
- *
- * @description
- * Sanitize a string into a JS identifier suitable for dot-path usage.
- * Advanced sanitization function that applies rules intelligently before splitting while
- * maintaining proper camelCase transformation. Uses sophisticated tracking to ensure
- * rule-matched segments are preserved correctly through the transformation process.
- *
- * @example
- * // Basic sanitization (already valid identifiers unchanged)
- * sanitizePathName("autoIP");                // "autoIP"  (no change needed)
- * sanitizePathName("validIdentifier");       // "validIdentifier" (no change needed)
- * sanitizePathName("auto_ip");               // "auto_ip" (valid identifier preserved)
- *
- * @example
- * // Standard camelCase conversion
- * sanitizePathName("auto-ip");               // "autoIp" (dash becomes camelCase)
- * sanitizePathName("my file!.mjs");          // "myFileMjs" (spaces and special chars removed)
- * sanitizePathName("foo-bar-baz");           // "fooBarBaz" (multi-segment camelCase)
- *
- * @example
- * // Pre-split pattern matching (matches original filename patterns)
- * sanitizePathName("auto-ip", {
- *   rules: {
- *     upper: ["*-ip"]  // Matches before splitting
- *   }
- * }); // Result: "autoIP" (ip becomes IP due to *-ip pattern)
- *
- * @example
- * // Complex pattern matching with intelligent tracking
- * sanitizePathName("get-api-status", {
- *   rules: {
- *     upper: ["*-api-*"]  // Matches api in middle of filename
- *   }
- * }); // Result: "getAPIStatus" (api becomes API due to pattern)
- *
- * @example
- * // Automatic case preservation
- * sanitizePathName("COMMON_APPS", { preserveAllUpper: true });      // "COMMON_APPS" (preserved)
- * sanitizePathName("cOMMON_APPS", { preserveAllUpper: true });      // "cOMMON_APPS" (not all-uppercase, transformed)
- * sanitizePathName("common_apps", { preserveAllLower: true });      // "common_apps" (preserved)
- * sanitizePathName("Common_apps", { preserveAllLower: true });      // "commonApps" (not all-lowercase, transformed)
- *
- * @example
- * // Combining preserve options with other rules
- * sanitizePathName("parse-XML-data", {
- *   preserveAllUpper: true,
- *   rules: { upper: ["xml"] }
- * }); // "parseXMLData" (XML preserved by preserveAllUpper)
- *
- * @example
- * // Boundary-requiring patterns with **STRING** syntax
- * sanitizePathName("buildUrlWithParams", {
- *   rules: {
- *     upper: ["**url**"]  // Only matches "url" when surrounded by other characters
- *   }
- * }); // Result: "buildURLWithParams" (url becomes URL, surrounded by other chars)
- *
- * sanitizePathName("url", {
- *   rules: {
- *     upper: ["**url**"]  // Does NOT match standalone "url" (no surrounding chars)
- *   }
- * }); // Result: "url" (unchanged - no surrounding characters)
- *
- * sanitizePathName("parseJsonData", {
- *   rules: {
- *     upper: ["**json**"]  // Matches "json" surrounded by other characters
- *   }
- * }); // Result: "parseJSONData" (json becomes JSON)
- */
-export function sanitizePathName(input, opts = {}) {
-	const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = opts;
-
-	const leaveRules = (rules.leave || []).map((s) => String(s));
-	const leaveInsensitiveRules = (rules.leaveInsensitive || []).map((s) => String(s));
-	const upperRules = (rules.upper || []).map((s) => String(s));
-	const lowerRules = (rules.lower || []).map((s) => String(s));
-
-	let s = String(input).trim();
-
-	// Always apply rules - don't skip for valid identifiers
-	// Users expect rules to work on valid identifiers too
-
-	// Split the string into segments
-	let parts = s.split(/[^A-Za-z0-9_$]+/).filter(Boolean);
-	if (parts.length === 0) return "_";
-
-	// Ensure the first usable part starts with a valid identifier-start
-	while (parts.length && !/^[A-Za-z_$]/.test(parts[0][0])) {
-		parts[0] = parts[0].replace(/^[^A-Za-z_$]+/, "");
-		if (!parts[0]) parts.shift();
-	}
-	if (parts.length === 0) return "_";
-
-	// Helper function to check if a pattern matches the original string and affects a specific segment
-	const segmentMatchesPreSplitPattern = (segment, patterns, caseSensitive = false) => {
+	/**
+	 * Check if input matches any pattern in the rule array
+	 * @private
+	 * @param {string} input - String to test
+	 * @param {string[]} patterns - Array of literal strings or glob patterns
+	 * @param {boolean} caseSensitive - Case sensitivity flag
+	 * @returns {boolean} True if any pattern matches
+	 */
+	#matchesAnyPattern(input, patterns, caseSensitive = false) {
 		for (const pattern of patterns) {
-			// For patterns like "*-ip", "*-api-*", check if:
-			// 1. The pattern matches the original string
-			// 2. The segment is the relevant part of that pattern
-
 			if (pattern.includes("*") || pattern.includes("?")) {
-				const regex = globToRegex(pattern, caseSensitive);
-				if (regex && regex.test(s)) {
-					// Pattern matches original string, now check if this segment is the target
-					// Extract the literal parts from the pattern
-					const literalParts = pattern.split(/[*?]+/).filter(Boolean);
+				const regex = this.#compileGlobPattern(pattern, caseSensitive);
+				if (regex && regex.test(input)) return true;
+			} else {
+				const match = caseSensitive ? input === pattern : input.toLowerCase() === pattern.toLowerCase();
+				if (match) return true;
+			}
+		}
+		return false;
+	}
 
-					for (const literal of literalParts) {
-						// Remove non-alphanumeric separators for comparison
-						const cleanLiteral = literal.replace(/[^A-Za-z0-9_$]/g, "");
-						if (cleanLiteral) {
-							const match = caseSensitive ? segment === cleanLiteral : segment.toLowerCase() === cleanLiteral.toLowerCase();
-							if (match) {
-								return true;
-							}
+	/**
+	 * Extract literal segments from glob pattern for segment-level matching
+	 * @private
+	 * @param {string} pattern - Glob pattern
+	 * @returns {string[]} Array of literal segments
+	 */
+	#extractPatternLiterals(pattern) {
+		return pattern.split(/[*?]+/).filter(Boolean);
+	}
+
+	// ========================================================================
+	// Segment Transformation Logic (Private Methods)
+	// ========================================================================
+
+	/**
+	 * Apply transformation rules to a single segment within context of original string
+	 * @private
+	 * @param {string} segment - Current segment being processed
+	 * @param {number} index - Segment index (0-based)
+	 * @param {string} originalString - Original input before splitting
+	 * @param {Object} config - Transformation configuration
+	 * @returns {string} Transformed segment
+	 */
+	#applySegmentRules(segment, index, originalString, config) {
+		const { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules } = config;
+
+		// Rule 1: Exact preservation (case-sensitive)
+		if (this.#matchesAnyPattern(segment, leaveRules, true)) {
+			return segment;
+		}
+
+		// Rule 2: Exact preservation (case-insensitive)
+		if (this.#matchesAnyPattern(segment, leaveInsensitiveRules, false)) {
+			return segment;
+		}
+
+		// Rule 3: Preserve all-uppercase segments
+		// Only applies to this specific segment, not requiring entire string to be uppercase
+		if (preserveAllUpper && segment === segment.toUpperCase() && segment !== segment.toLowerCase() && /[A-Z]/.test(segment)) {
+			return segment;
+		}
+
+		// Rule 4: Preserve all-lowercase segments
+		// Only applies to this specific segment, not requiring entire string to be lowercase
+		if (preserveAllLower && segment === segment.toLowerCase() && segment !== segment.toUpperCase() && /[a-z]/.test(segment)) {
+			return segment;
+		}
+
+		// Rule 5: Pre-split pattern matching (original string context)
+		// Check if segment is target of a pattern that matched the original string
+		for (const pattern of [...upperRules, ...lowerRules]) {
+			if (pattern.includes("*") || pattern.includes("?")) {
+				const regex = this.#compileGlobPattern(pattern, false);
+				if (regex && regex.test(originalString)) {
+					// Pattern matched original string - check if this segment is the target
+					const literals = this.#extractPatternLiterals(pattern);
+					for (const literal of literals) {
+						// Clean literal but also trim underscores at boundaries since we're matching sub-segments
+						const cleanLiteral = literal.replace(/[^A-Za-z0-9_$]/g, "").replace(/^_+|_+$/g, "");
+						if (cleanLiteral && segment.toLowerCase() === cleanLiteral.toLowerCase()) {
+							return upperRules.includes(pattern) ? segment.toUpperCase() : segment.toLowerCase();
 						}
 					}
 				}
 			} else {
-				// Exact pattern match
-				const match = caseSensitive ? segment === pattern : segment.toLowerCase() === pattern.toLowerCase();
-				if (match) {
-					return true;
+				// Exact match on segment
+				if (segment.toLowerCase() === pattern.toLowerCase()) {
+					return upperRules.includes(pattern) ? segment.toUpperCase() : segment.toLowerCase();
 				}
 			}
 		}
-		return false;
-	};
 
-	const applyRule = (seg, index) => {
-		// 1) leave: return unchanged (case-sensitive matching)
-		if (segmentMatchesPreSplitPattern(seg, leaveRules, true)) {
-			return seg;
+		// Rule 6: Within-segment pattern-based transformation
+		let transformed = this.#applyWithinSegmentPatterns(segment, upperRules, lowerRules);
+		if (transformed !== segment) {
+			return transformed;
 		}
 
-		// 2) leaveInsensitive: return unchanged (case-insensitive matching)
-		if (segmentMatchesPreSplitPattern(seg, leaveInsensitiveRules, false)) {
-			return seg;
-		}
+		// Rule 7: Default behavior - preserve segment case
+		// (camelCase transformation happens at primary segment level, not here)
+		return segment;
+	}
 
-		// 3) preserveAllUpper: preserve segments that are already all-uppercase
-		if (preserveAllUpper && seg === seg.toUpperCase() && seg !== seg.toLowerCase() && /[A-Z]/.test(seg)) {
-			return seg;
-		}
+	/**
+	 * Apply pattern-based transformations within a segment (for **STRING** patterns)
+	 * @private
+	 * @param {string} segment - Segment to transform
+	 * @param {string[]} upperRules - Patterns requiring uppercase
+	 * @param {string[]} lowerRules - Patterns requiring lowercase
+	 * @returns {string} Transformed segment
+	 */
+	#applyWithinSegmentPatterns(segment, upperRules, lowerRules) {
+		let result = segment;
 
-		// 4) preserveAllLower: preserve segments that are already all-lowercase
-		if (preserveAllLower && seg === seg.toLowerCase() && seg !== seg.toUpperCase() && /[a-z]/.test(seg)) {
-			return seg;
-		}
+		const applyBoundaryPattern = (pattern, toUpper) => {
+			// **STRING** requires surrounding characters (positive lookbehind/ahead)
+			if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
+				const innerString = pattern.slice(2, -2);
+				const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
+				const matches = [...result.matchAll(innerRegex)];
 
-		// 5) upper: force full uppercase (for pre-split pattern matches)
-		if (segmentMatchesPreSplitPattern(seg, upperRules, false)) {
-			return seg.toUpperCase();
-		}
+				for (const match of matches) {
+					const startPos = match.index;
+					const endPos = startPos + match[0].length;
+					const hasCharBefore = startPos > 0;
+					const hasCharAfter = endPos < result.length;
 
-		// 6) lower: force full lowercase (for pre-split pattern matches)
-		if (segmentMatchesPreSplitPattern(seg, lowerRules, false)) {
-			return seg.toLowerCase();
-		}
-
-		// 7) Apply pattern-based transformations within the segment (for within-segment patterns)
-		let transformedSeg = seg;
-
-		// Apply upper rule patterns that don't match pre-split
-		for (const pattern of upperRules) {
-			if (pattern.includes("*") || pattern.includes("?")) {
-				// Only apply within-segment transformation if this pattern doesn't match pre-split
-				if (!segmentMatchesPreSplitPattern(seg, [pattern], false)) {
-					// Handle **STRING** boundary-requiring patterns
-					if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
-						const innerString = pattern.slice(2, -2);
-						// Check if the string contains the pattern surrounded by other characters
-						// Create a simple regex that matches the inner string case-insensitively
-						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
-
-						// Check all matches to see if any are surrounded by other characters
-						const matches = [...transformedSeg.matchAll(innerRegex)];
-						for (const match of matches) {
-							const startPos = match.index;
-							const endPos = startPos + match[0].length;
-
-							// Check if the match is surrounded by other characters
-							const hasCharBefore = startPos > 0;
-							const hasCharAfter = endPos < transformedSeg.length;
-
-							if (hasCharBefore && hasCharAfter) {
-								// Replace this occurrence with the uppercase version
-								transformedSeg = transformedSeg.substring(0, startPos) + innerString.toUpperCase() + transformedSeg.substring(endPos);
-								break; // Only replace the first surrounded occurrence
-							}
-						}
-					} else {
-						// Standard within-segment transformation
-						const literalParts = pattern.split(/[*?]+/).filter(Boolean);
-						for (const literal of literalParts) {
-							if (literal) {
-								// Create case-insensitive regex for the literal part
-								const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
-								transformedSeg = transformedSeg.replace(literalRegex, literal.toUpperCase());
-							}
-						}
+					if (hasCharBefore && hasCharAfter) {
+						const replacement = toUpper ? innerString.toUpperCase() : innerString.toLowerCase();
+						result = result.substring(0, startPos) + replacement + result.substring(endPos);
+						break;
 					}
 				}
 			}
+			// *STRING* matches anywhere within segment (glob pattern)
+			else if (pattern.includes("*") && !pattern.startsWith("**")) {
+				// Extract the literal part (remove asterisks)
+				const literalParts = pattern.split("*").filter(Boolean);
+				for (const literal of literalParts) {
+					const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
+					const replacement = toUpper ? literal.toUpperCase() : literal.toLowerCase();
+					result = result.replace(literalRegex, replacement);
+				}
+			}
+		};
+
+		upperRules.forEach((pattern) => applyBoundaryPattern(pattern, true));
+		lowerRules.forEach((pattern) => applyBoundaryPattern(pattern, false));
+
+		return result;
+	}
+
+	// ========================================================================
+	// Public Methods
+	// ========================================================================
+
+	/**
+	 * Advanced sanitization function with configurable rule-based transformation
+	 *
+	 * @description
+	 * Converts arbitrary strings (filenames, path segments) into valid JavaScript identifiers
+	 * suitable for dot-notation property access. Supports sophisticated rule-based transformation
+	 * with glob patterns, case preservation, and intelligent segment handling.
+	 *
+	 * @param {string} input - String to sanitize
+	 * @param {Object} [options={}] - Sanitization configuration
+	 * @param {boolean} [options.lowerFirst=true] - Lowercase first character of first segment
+	 * @param {boolean} [options.preserveAllUpper=false] - Preserve all-uppercase identifiers
+	 * @param {boolean} [options.preserveAllLower=false] - Preserve all-lowercase identifiers
+	 * @param {Object} [options.rules={}] - Transformation rules
+	 * @param {string[]} [options.rules.leave=[]] - Preserve exactly (case-sensitive, supports globs)
+	 * @param {string[]} [options.rules.leaveInsensitive=[]] - Preserve exactly (case-insensitive, supports globs)
+	 * @param {string[]} [options.rules.upper=[]] - Force UPPERCASE (supports globs and **STRING**)
+	 * @param {string[]} [options.rules.lower=[]] - Force lowercase (supports globs and **STRING**)
+	 * @returns {string} Valid JavaScript identifier
+	 * @public
+	 *
+	 * @example
+	 * // Basic usage
+	 * sanitizePropertyName("auto-ip"); // "autoIp"
+	 * sanitizePropertyName("root-math"); // "rootMath"
+	 *
+	 * @example
+	 * // Rule-based transformation
+	 * sanitizePropertyName("auto-ip", {
+	 *   rules: { upper: ["*-ip"] }
+	 * }); // "autoIP"
+	 *
+	 * @example
+	 * // Boundary-requiring patterns
+	 * sanitizePropertyName("parseJsonData", {
+	 *   rules: { upper: ["**json**"] }
+	 * }); // "parseJSONData"
+	 *
+	 * @example
+	 * // Case preservation
+	 * sanitizePropertyName("COMMON_APPS", {
+	 *   preserveAllUpper: true
+	 * }); // "COMMON_APPS"
+	 *
+	 * @example
+	 * // Multiple rules
+	 * sanitizePropertyName("get-api-status", {
+	 *   rules: {
+	 *     upper: ["*-api-*", "http"],
+	 *     lower: ["xml"]
+	 *   }
+	 * }); // "getAPIStatus"
+	 */
+	sanitizePropertyName(input, options = {}) {
+		const { lowerFirst = true, preserveAllUpper = false, preserveAllLower = false, rules = {} } = options;
+
+		// Normalize rules to string arrays
+		const leaveRules = (rules.leave || []).map((s) => String(s));
+		const leaveInsensitiveRules = (rules.leaveInsensitive || []).map((s) => String(s));
+		const upperRules = (rules.upper || []).map((s) => String(s));
+		const lowerRules = (rules.lower || []).map((s) => String(s));
+
+		const originalString = String(input).trim();
+
+		// Check if entire string matches the preserve criteria
+		const isAllUpper =
+			originalString === originalString.toUpperCase() && originalString !== originalString.toLowerCase() && /[A-Z]/.test(originalString);
+		const isAllLower =
+			originalString === originalString.toLowerCase() && originalString !== originalString.toUpperCase() && /[a-z]/.test(originalString);
+
+		if (preserveAllUpper && isAllUpper) {
+			return originalString;
+		}
+		// For preserveAllLower, only return early if string has NO hyphens/separators
+		// If it has separators, we need to process and remove them first
+		if (preserveAllLower && isAllLower && !/-/.test(originalString)) {
+			return originalString;
 		}
 
-		// Apply lower rule patterns that don't match pre-split
-		for (const pattern of lowerRules) {
-			if (pattern.includes("*") || pattern.includes("?")) {
-				// Only apply within-segment transformation if this pattern doesn't match pre-split
-				if (!segmentMatchesPreSplitPattern(seg, [pattern], false)) {
-					// Handle **STRING** boundary-requiring patterns
-					if (pattern.startsWith("**") && pattern.endsWith("**") && pattern.length > 4) {
-						const innerString = pattern.slice(2, -2);
-						// Check if the string contains the pattern surrounded by other characters
-						// Create a simple regex that matches the inner string case-insensitively
-						const innerRegex = new RegExp(innerString.replace(/[.+^${}()|[\]\\*?]/g, "\\$&"), "gi");
+		// Split into segments at hyphens and non-identifier characters (NOT underscores)
+		// These are "primary segments" that will be camelCased together
+		let primarySegments = originalString.split(/[-]+|[^A-Za-z0-9_$]+/).filter(Boolean);
 
-						// Check all matches to see if any are surrounded by other characters
-						const matches = [...transformedSeg.matchAll(innerRegex)];
-						for (const match of matches) {
-							const startPos = match.index;
-							const endPos = startPos + match[0].length;
+		// Edge case: empty result
+		if (primarySegments.length === 0) return "_";
 
-							// Check if the match is surrounded by other characters
-							const hasCharBefore = startPos > 0;
-							const hasCharAfter = endPos < transformedSeg.length;
+		// Ensure first segment starts with valid identifier character
+		while (primarySegments.length && !/^[A-Za-z_$]/.test(primarySegments[0][0])) {
+			primarySegments[0] = primarySegments[0].replace(/^[^A-Za-z_$]+/, "");
+			if (!primarySegments[0]) primarySegments.shift();
+		}
+		if (primarySegments.length === 0) return "_";
 
-							if (hasCharBefore && hasCharAfter) {
-								// Replace this occurrence with the lowercase version
-								transformedSeg = transformedSeg.substring(0, startPos) + innerString.toLowerCase() + transformedSeg.substring(endPos);
-								break; // Only replace the first surrounded occurrence
+		// Process each primary segment:
+		// 1. Split by underscores into sub-segments (capturing separators to preserve underscore count)
+		// 2. Apply rules to each sub-segment
+		// 3. Rejoin with original separators
+		// Track which segments had lower rules applied for camelCase processing
+		const lowerRuleApplied = [];
+		const processedPrimarySegments = primarySegments.map((primarySeg, primaryIdx) => {
+			// Split by underscores, capturing the separators to preserve exact count
+			const parts = primarySeg.split(/(_+)/);
+
+			// Process only the non-separator parts (odd indices are separators)
+			const processedParts = parts.map((part, partIdx) => {
+				// Keep separators as-is
+				if (partIdx % 2 === 1) return part;
+				if (!part) return part;
+
+				// Clean and process sub-segment
+				const cleanSeg = part.replace(/[^A-Za-z0-9_$]/g, "");
+
+				// Apply segment rules (without camelCase - that happens at primary level)
+				const config = { preserveAllUpper, preserveAllLower, leaveRules, leaveInsensitiveRules, upperRules, lowerRules };
+				const result = this.#applySegmentRules(cleanSeg, 0, originalString, config);
+
+				// Track if a lower rule was applied
+				// Check if any lower rule pattern matches the original string
+				const matchesLower = lowerRules.some((pattern) => {
+					if (pattern.includes("*") || pattern.includes("?")) {
+						const regex = this.#compileGlobPattern(pattern, false);
+						if (regex && regex.test(originalString)) {
+							// Check if this segment is a target of the pattern
+							const literals = this.#extractPatternLiterals(pattern);
+							for (const literal of literals) {
+								const cleanLiteral = literal.replace(/[^A-Za-z0-9_$]/g, "").replace(/^_+|_+$/g, "");
+								if (cleanLiteral && cleanSeg.toLowerCase() === cleanLiteral.toLowerCase()) {
+									return true;
+								}
 							}
 						}
 					} else {
-						// Standard within-segment transformation
-						const literalParts = pattern.split(/[*?]+/).filter(Boolean);
-						for (const literal of literalParts) {
-							if (literal) {
-								const literalRegex = new RegExp(literal.replace(/[.+^${}()|[\]\\]/g, "\\$&"), "gi");
-								transformedSeg = transformedSeg.replace(literalRegex, literal.toLowerCase());
-							}
+						// Exact match on segment
+						if (cleanSeg.toLowerCase() === pattern.toLowerCase()) {
+							return true;
 						}
 					}
+					return false;
+				});
+
+				if (matchesLower && result === cleanSeg.toLowerCase()) {
+					lowerRuleApplied[primaryIdx] = true;
+				}
+
+				return result;
+			});
+
+			// Rejoin with original separators preserved
+			return processedParts.join("");
+		});
+
+		// Apply camelCase transformation to primary segments (unless rules prevent it)
+		const camelCasedSegments = processedPrimarySegments.map((seg, idx) => {
+			// Check if this segment matches any rules that would prevent camelCase
+			const matchesLeave = this.#matchesAnyPattern(seg, leaveRules, true);
+			const matchesLeaveInsensitive = this.#matchesAnyPattern(seg, leaveInsensitiveRules, false);
+			const matchesUpper = this.#matchesAnyPattern(seg, upperRules, false);
+			// Only check preserveAllUpper/Lower if segment doesn't contain underscores
+			// (underscore-separated parts were already handled individually)
+			const hasUnderscores = seg.includes("_");
+			const isAllUpper = !hasUnderscores && preserveAllUpper && seg === seg.toUpperCase() && seg !== seg.toLowerCase() && /[A-Z]/.test(seg);
+			const isAllLower = !hasUnderscores && preserveAllLower && seg === seg.toLowerCase() && seg !== seg.toUpperCase() && /[a-z]/.test(seg);
+
+			// If any rule matches, preserve the segment as-is (don't apply camelCase)
+			if (matchesLeave || matchesLeaveInsensitive || matchesUpper || isAllUpper || isAllLower) {
+				return seg;
+			}
+
+			// V3: Apply camelCase at PRIMARY segment level only
+			// CamelCase transformation based on segment position
+			let transformed;
+			if (idx === 0) {
+				// First primary segment: lowercase first character
+				transformed = lowerFirst ? seg[0].toLowerCase() + seg.slice(1) : seg;
+			} else {
+				// Subsequent primary segments: capitalize first character (unless lower rule applied)
+				// Check if a lower rule was applied to this segment during processing
+				if (lowerRuleApplied[idx]) {
+					transformed = seg; // Keep lowercase from lower rule
+				} else {
+					transformed = seg[0].toUpperCase() + seg.slice(1);
 				}
 			}
-		}
 
-		// 8) Check for full segment upper/lower rules (for exact/non-glob patterns)
-		// upper: force full uppercase (only for exact matches, not glob patterns)
-		for (const pattern of upperRules) {
-			if (!pattern.includes("*") && !pattern.includes("?")) {
-				// Exact pattern match
-				const match = seg.toLowerCase() === pattern.toLowerCase();
-				if (match) {
-					return seg.toUpperCase();
-				}
-			}
-		}
+			return transformed;
+		});
 
-		// 9) lower: force full lowercase (only for exact matches, not glob patterns)
-		for (const pattern of lowerRules) {
-			if (!pattern.includes("*") && !pattern.includes("?")) {
-				// Exact pattern match
-				const match = seg.toLowerCase() === pattern.toLowerCase();
-				if (match) {
-					return seg.toLowerCase();
-				}
-			}
-		}
+		// Join primary segments (no delimiter - camelCase)
+		let result = camelCasedSegments.join("");
+		result = result.replace(/[^A-Za-z0-9_$]/g, "");
 
-		// If transformations were applied, return the transformed segment
-		if (transformedSeg !== seg) {
-			return transformedSeg;
-		}
+		return result;
+	}
 
-		// Default behavior:
-		if (index === 0) {
-			// first segment: optionally lowercase only first char
-			return lowerFirst ? seg[0].toLowerCase() + seg.slice(1) : seg;
-		}
-		// subsequent segments: Uppercase first char (camel)
-		return seg[0].toUpperCase() + seg.slice(1);
-	};
+	/**
+	 * Get module ID from file path
+	 * @param {string} filePath - Full file path
+	 * @param {string} baseDir - Base directory
+	 * @returns {string} Module ID
+	 * @public
+	 */
+	getModuleId(filePath, baseDir) {
+		// Remove base directory and extension
+		let relative = filePath.replace(baseDir, "").replace(/\\/g, "/");
+		relative = relative.replace(/^\//, ""); // Remove leading slash
+		relative = relative.replace(/\.(mjs|cjs|js)$/, ""); // Remove extension
 
-	// Transform
-	let out = parts.map((seg, i) => applyRule(seg.replace(/[^A-Za-z0-9_$]/g, ""), i)).join("");
+		return relative;
+	}
 
-	// Final cleanup & safety
-	out = out.replace(/[^A-Za-z0-9_$]/g, "");
-	if (!out || !/^[A-Za-z_$]/.test(out[0])) out = "_" + out;
+	/**
+	 * Check if filename represents a special function name that should preserve case
+	 * @param {string} name - Name to check
+	 * @returns {boolean} True if special case should be preserved
+	 * @public
+	 */
+	shouldPreserveFunctionCase(name) {
+		const preservePatterns = [
+			/^[A-Z]{2,}$/, // All caps (IP, HTTP, API, JSON, etc.)
+			/[A-Z]{2,}/ // Contains multiple consecutive caps
+		];
 
-	return out;
+		return preservePatterns.some((pattern) => pattern.test(name));
+	}
 }
 
-// --- Examples ---
-/*
-sanitizePathName("autoIP");                // "autoIP"  (unchanged)
-sanitizePathName("auto-ip");               // "autoIp"
-sanitizePathName("my file!.mjs");          // "myFileMjs"
-sanitizePathName("2autoIP");               // "autoIP"
-sanitizePathName("foo-API");               // "fooAPI"
-sanitizePathName("auto_ip");               // "auto_ip" (unchanged: valid id)
-sanitizePathName("My-File");               // "myFile"  (lowerFirst default true)
-sanitizePathName("My-File", { lowerFirst:false }); // "MyFile"
+// ============================================================================
+// Standalone Function Export (for backward compatibility)
+// ============================================================================
 
-// With exact rules:
-sanitizePathName("foo-api-json", {
-  rules: { leave: ["foo"], upper: ["api"], lower: ["JSON"] }
-}); // "fooAPIjson" (leave 'foo' as-is, 'api' upper, 'json' lower)
-
-// With glob patterns:
-sanitizePathName("parseJSONData", {
-  rules: { leave: ["*JSON*"] }
-}); // "parseJSONData" (preserved due to *JSON* glob)
-
-sanitizePathName("getHTTPStatus", {
-  rules: { upper: ["http*", "*api*"] }
-}); // "getHTTPStatus" (HTTP matched by http* glob)
-
-sanitizePathName("validateUserId", {
-  rules: { lower: ["*id", "uuid*"] }
-}); // "validateUserid" (Id matched by *id glob)
-*/
+/**
+ * Standalone sanitizePropertyName function for backward compatibility
+ * @param {string} input - Input string to sanitize
+ * @param {object} options - Sanitization options
+ * @returns {string} Sanitized property name
+ * @public
+ */
+export function sanitizePropertyName(input, options = {}) {
+	const sanitizer = new Sanitize(null); // No slothlet instance needed for this method
+	return sanitizer.sanitizePropertyName(input, options);
+}

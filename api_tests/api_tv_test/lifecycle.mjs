@@ -1,25 +1,25 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /api_tests/api_tv_test/lifecycle.mjs
- *	@Date: 2025-10-30 09:25:21 -07:00 (1761841521)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-10-30T11:42:43-07:00 (1761849763)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-10-30 10:17:26 -07:00 (1761844646)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:17 -08:00 (1772425277)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Module lifecycle utility functions.
- * @module @cldmv/node-android-tv-remote/utils/lifecycle
- * @public
- *
- * @description
- * Provides utilities for managing module initialization, monitoring, and shutdown
- * across the entire API surface. This centralizes the logic for discovering and
- * calling lifecycle methods on all modules.
+ * @fileoverview Lifecycle management API module for TV Remote testing.
+ * @module api_tv_test.lifecycle
+ * @memberof module:api_tv_test
+ */
+/**
+ * @namespace lifecycle
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.lifecycle
  */
 
 // Slothlet runtime imports for live bindings
@@ -49,6 +49,31 @@
  *
  * // Shutdown excluding connection module
  * await self.utils.lifecycle.callAll('shutdown', [], { exclude: ['connection'] });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.lifecycle.callAll('myName');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.lifecycle.callAll('myName');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.lifecycle.callAll('myName');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.lifecycle.callAll('myName');
  */
 export async function callAll(methodName, _ = []) {
 	// Dummy implementation - return success result
@@ -80,6 +105,31 @@ export async function callAll(methodName, _ = []) {
  * @example
  * const initModules = self.utils.lifecycle.getModules('initialize');
  * console.log('Modules with initialize:', initModules);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.lifecycle.getModules('myName');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.lifecycle.getModules('myName');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.lifecycle.getModules('myName');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.lifecycle.getModules('myName');
  */
 export function getModules(methodName, _ = []) {
 	// Dummy implementation - return empty array
@@ -108,3 +158,4 @@ export const methods = {
 
 // Export empty default object to maintain namespace since utils/defaults.mjs exports default
 export default {};
+

@@ -1,4 +1,17 @@
 /**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test_mixed/math-cjs.cjs
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:14 -08:00 (1772425274)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
  * @fileoverview CJS math operations for slothlet mixed API testing.
  * @module api_test_mixed.mathCjs
  * @memberof module:api_test_mixed
@@ -70,12 +83,16 @@ const mathCjs =
 		 * console.log(await api_test_mixed.mathCjs.multiply(2, 3)); // 6
 		 */
 		async multiply(a, b) {
-			console.log(`CJS Math: Multiplying ${a} * ${b}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Math: Multiplying ${a} * ${b}`);
+			}
 
 			// Get live bindings from runtime
 			const { context } = await import("@cldmv/slothlet/runtime");
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			return a * b;
 		},
@@ -114,12 +131,16 @@ const mathCjs =
 		 * console.log(await api_test_mixed.mathCjs.divide(10, 2)); // 5
 		 */
 		async divide(a, b) {
-			console.log(`CJS Math: Dividing ${a} / ${b}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Math: Dividing ${a} / ${b}`);
+			}
 
 			// Get live bindings from runtime
 			const { context } = await import("@cldmv/slothlet/runtime");
 
-			console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			if (process.env.DEBUG_MOCK === "1" || process.env.DEBUG_MOCK === "true") {
+				console.log(`CJS Context: User=${context.user}, Instance=${context.instanceName}`);
+			}
 
 			if (b === 0) throw new Error("Division by zero");
 			return a / b;

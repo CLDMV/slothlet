@@ -1,20 +1,31 @@
 /**
- * @fileoverview Helper functions for testing metadataAPI from within slothlet context.
- * @module api_test.metadataTestHelper
- * @memberof module:api_test
- * @public
- *
- * @description
- * Provides test helper functions that access metadataAPI from within the slothlet
- * execution context where runtime bindings (self, context, reference) are available.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/metadata-test-helper.mjs
+ *	@Date: 2026-01-01T15:01:05-08:00 (1767308465)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-12 21:33:02 -07:00 (1773376382)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-// Import runtime bindings - these establish the execution context
+/**
+ * @fileoverview Helper functions for testing metadata API from within slothlet context.
+ * @module api_test.metadataTestHelper
+ * @memberof module:api_test
+ */
+/**
+ * @namespace metadataTestHelper
+ * @memberof module:api_test
+ */
 
-import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
+// Import runtime bindings
+import { self } from "@cldmv/slothlet/runtime";
 
 /**
- * Test helper that calls metadataAPI.get() from within slothlet context.
+ * Test helper that calls self.slothlet.metadata.get() from within slothlet context.
  *
  * @function getMetadata
  * @public
@@ -23,23 +34,49 @@ import { self as _, metadataAPI } from "@cldmv/slothlet/runtime";
  *
  * @description
  * This function runs inside the slothlet API context where runtime.self
- * is available, allowing metadataAPI.get() to access the API root.
+ * is available, allowing self.slothlet.metadata.get() to access the API root.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getMetadata("plugins.mathEsm.add");
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.getMetadata('./file.mjs');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.getMetadata('./file.mjs');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.getMetadata('./file.mjs');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.getMetadata('./file.mjs');
  */
 export async function getMetadata(path) {
-	const result = await metadataAPI.get(path);
+	const result = await self.slothlet.metadata.get(path);
 	// Debug: Show what we got
 	if (process.env.SLOTHLET_DEBUG) {
 		console.log("[getMetadata] Result for", path, ":", result);
 	}
-	return result;
+	// Convert null to undefined for test consistency
+	return result === null ? undefined : result;
 }
 
 /**
- * Test helper that calls metadataAPI.self() from within slothlet context.
+ * Test helper that calls self.slothlet.metadata.self() from within slothlet context.
  *
  * @function getSelfMetadata
  * @public
@@ -47,18 +84,43 @@ export async function getMetadata(path) {
  *
  * @description
  * Returns the metadata of this helper function itself, demonstrating
- * that metadataAPI.self() works within the slothlet context.
+ * that self.slothlet.metadata.self() works within the slothlet context.
  *
  * @example
  * // From test file
  * const meta = await api.metadataTestHelper.getSelfMetadata();
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.getSelfMetadata();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.getSelfMetadata();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.getSelfMetadata();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.getSelfMetadata();
  */
 export async function getSelfMetadata() {
-	return await metadataAPI.self();
+	return await self.slothlet.metadata.self();
 }
 
 /**
- * Test helper that simulates a caller detection scenario for metadataAPI.caller().
+ * Test helper that simulates a caller detection scenario for self.slothlet.metadata.caller().
  *
  * @function testCaller
  * @public
@@ -66,17 +128,42 @@ export async function getSelfMetadata() {
  *
  * @description
  * This function calls an inner function which checks its caller's metadata
- * using metadataAPI.caller(). Used to test the caller tracking functionality.
+ * using self.slothlet.metadata.caller(). Used to test the caller tracking functionality.
  *
  * @example
  * // From test file
  * const result = await api.metadataTestHelper.testCaller();
  * console.log(result.callerMeta); // Should show testCaller's metadata
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.testCaller();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.testCaller();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.testCaller();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.testCaller();
  */
 export async function testCaller() {
 	// Inner function that will check who called it
 	async function innerFunction() {
-		const callerMeta = await metadataAPI.caller();
+		const callerMeta = await self.slothlet.metadata.caller();
 		return { callerMeta };
 	}
 
@@ -98,9 +185,107 @@ export async function testCaller() {
  * @example
  * // From test file
  * const result = await api.metadataTestHelper.verifyMetadata("plugins.mathEsm.add");
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.verifyMetadata('./file.mjs');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.verifyMetadata('./file.mjs');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.verifyMetadata('./file.mjs');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.verifyMetadata('./file.mjs');
+ */
+/**
+ * Invokes callerTest.getCallerMeta() via the slothlet runtime self binding.
+ *
+ * When callerTest.getCallerMeta() executes, the context manager's callerWrapper
+ * is set to this function's wrapper. So caller() inside getCallerMeta returns
+ * this function's metadata (system metadata from metadata-test-helper.mjs).
+ *
+ * @function invokeCallerTest
+ * @public
+ * @returns {Promise<object|null>} Metadata of this function as seen by the callee
+ *
+ * @example
+ * const meta = await api.metadataTestHelper.invokeCallerTest();
+ * console.log(meta.filePath); // → path to metadata-test-helper.mjs
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.invokeCallerTest();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.invokeCallerTest();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.metadata-test-await helper.invokeCallerTest();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.metadata-test-await helper.invokeCallerTest();
+ */
+export async function invokeCallerTest() {
+	return self.callerTest.getCallerMeta();
+}
+
+/**
+ * verifyMetadata.
+ * @param {*} path - path.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.metadata-test-helper.verifyMetadata(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.metadata-test-helper.verifyMetadata(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   await api_test.metadata-test-helper.verifyMetadata(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * await api_test.metadata-test-helper.verifyMetadata(null);
  */
 export async function verifyMetadata(path) {
-	const meta = await metadataAPI.get(path);
+	const meta = await self.slothlet.metadata.get(path);
 	return {
 		exists: meta !== null,
 		hasSourceFolder: meta?.sourceFolder !== undefined,

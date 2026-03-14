@@ -1,14 +1,57 @@
 /**
- * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Live Bindings runtime behavior.
- * This module provides comprehensive tests to verify runtime isolation, context management, and live bindings.
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_test/runtime-test.mjs
+ *	@Date: 2025-11-10T09:52:57-08:00 (1762797177)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-12 21:33:03 -07:00 (1773376383)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
-import { self, context, reference, instanceId } from "@cldmv/slothlet/runtime";
+/**
+ * @fileoverview Dual-runtime verification module for testing AsyncLocalStorage vs Live Bindings runtime behavior.
+ * @module api_test.runtimeTest
+ * @memberof module:api_test
+ */
+/**
+ * @namespace runtimeTest
+ * @memberof module:api_test
+ */
+
+import { self, context, instanceID } from "@cldmv/slothlet/runtime";
 
 /**
  * Comprehensive runtime verification that tests all aspects of the runtime system.
  * @function verifyRuntime
  * @returns {object} Complete runtime verification results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.verifyRuntime();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.verifyRuntime();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.verifyRuntime();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.verifyRuntime();
  */
 export function verifyRuntime() {
 	const results = {
@@ -39,10 +82,14 @@ export function verifyRuntime() {
 	// Test 2: Context availability and data access
 	try {
 		const contextData = context || {};
-		results.contextTest.data = contextData;
+		// CRITICAL: Extract actual values from proxy, don't store proxy reference!
+		// Storing the proxy causes issues when reading results outside the execution context
+		results.contextTest.data = { ...contextData };
 		// Context can be an object OR a function (live binding proxy) - check if it has data
+		// Check if context has any keys (not just specifically 'user')
+		const contextKeys = Object.keys(contextData);
 		results.contextTest.available =
-			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && !!contextData.user;
+			((typeof contextData === "object" && contextData !== null) || typeof contextData === "function") && contextKeys.length > 0;
 		results.contextTest.hasUserData = !!contextData.user;
 		results.contextTest.userData = contextData.user;
 
@@ -59,9 +106,9 @@ export function verifyRuntime() {
 		results.contextTest.error = error.message;
 	}
 
-	// Test 3: Reference availability
+	// Test 3: Reference availability (accessed via self.slothlet.diag.reference)
 	try {
-		const referenceData = reference || {};
+		const referenceData = self?.slothlet?.diag?.reference || {};
 		results.referenceTest.data = referenceData;
 		results.referenceTest.available = typeof referenceData === "object" && referenceData !== null;
 		results.referenceTest.hasData = Object.keys(referenceData).length > 0;
@@ -73,7 +120,7 @@ export function verifyRuntime() {
 		results.referenceTest.error = error.message;
 	}
 
-	// Test 4: Runtime type detection using instanceId availability
+	// Test 4: Runtime type detection using instanceId availability (accessed via self.slothlet.diag.inspect().instanceID)
 	try {
 		// Try to access instanceId and detect if it's really available
 		let instanceIdValue = "undefined";
@@ -81,7 +128,8 @@ export function verifyRuntime() {
 
 		try {
 			// Try to coerce instanceId to string to see if it exists
-			instanceIdValue = String(instanceId);
+			const diagData = self?.slothlet?.diag?.inspect ? self.slothlet.diag.inspect() : null;
+			instanceIdValue = diagData?.instanceID ? String(diagData.instanceID) : "undefined";
 			// Check if it's actually available (not "undefined" or empty proxy)
 			hasInstanceId = instanceIdValue && instanceIdValue !== "undefined" && instanceIdValue !== "" && instanceIdValue !== "null";
 		} catch (_) {
@@ -109,7 +157,7 @@ export function verifyRuntime() {
 					results.runtimeType = "async";
 				}
 			}
-		} catch (_) {
+		} catch (____error) {
 			results.runtimeType = "unknown";
 		}
 	} catch (error) {
@@ -126,6 +174,31 @@ export function verifyRuntime() {
  * @param {number} a - First number
  * @param {number} b - Second number
  * @returns {object} Cross-call test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfCrossCall(1, 1);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfCrossCall(1, 1);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfCrossCall(1, 1);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfCrossCall(1, 1);
  */
 export function testSelfCrossCall(a = 5, b = 3) {
 	const results = {
@@ -140,16 +213,17 @@ export function testSelfCrossCall(a = 5, b = 3) {
 	};
 
 	try {
-		// Check if self.math.add is directly available (don't rely on Object.keys for proxies)
-		if (self && self.math && typeof self.math.add === "function") {
+		// Check if self.rootMath.add is directly available (use rootMath to avoid the
+		// math.mjs / math/ folder collision which adds +1000 to results)
+		if (self && self.rootMath && typeof self.rootMath.add === "function") {
 			results.selfAvailable = true;
 			results.mathAvailable = true;
-			results.actual = self.math.add(a, b);
+			results.actual = self.rootMath.add(a, b);
 			results.success = results.actual === results.expected;
 		} else {
-			results.error = "self.math.add not available";
+			results.error = "self.rootMath.add not available";
 			results.selfAvailable = !!self;
-			results.mathAvailable = !!(self && self.math);
+			results.mathAvailable = !!(self && self.rootMath);
 		}
 	} catch (error) {
 		results.error = error.message;
@@ -162,6 +236,31 @@ export function testSelfCrossCall(a = 5, b = 3) {
  * Test context isolation by checking for unique context data.
  * @function testContextIsolation
  * @returns {object} Context isolation test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testContextIsolation();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testContextIsolation();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testContextIsolation();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testContextIsolation();
  */
 export function testContextIsolation() {
 	const results = {
@@ -198,6 +297,31 @@ export function testContextIsolation() {
  * Performance test to help distinguish between runtime types.
  * @function testPerformance
  * @returns {object} Performance test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testPerformance();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testPerformance();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testPerformance();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testPerformance();
  */
 export function testPerformance() {
 	const results = {
@@ -235,6 +359,31 @@ export function testPerformance() {
  * Comprehensive runtime test that combines all verification methods.
  * @function comprehensiveRuntimeTest
  * @returns {object} Complete runtime test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.comprehensiveRuntimeTest();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.comprehensiveRuntimeTest();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.comprehensiveRuntimeTest();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.comprehensiveRuntimeTest();
  */
 export function comprehensiveRuntimeTest() {
 	return {
@@ -243,4 +392,300 @@ export function comprehensiveRuntimeTest() {
 		isolation: testContextIsolation(),
 		performance: testPerformance()
 	};
+}
+
+/**
+ * Test self and reference propagation through API function calls.
+ * @function testSelfAndReference
+ * @returns {object} Self and reference test results
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfAndReference();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfAndReference();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.testSelfAndReference();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.testSelfAndReference();
+ */
+export function testSelfAndReference() {
+	const results = {
+		hasSelfAccess: false,
+		canCallOtherModules: false,
+		referenceValues: {},
+		context: {}
+	};
+
+	try {
+		// Test self access - check if self is defined and has properties
+		results.hasSelfAccess = !!(self && typeof self === "object");
+
+		// Test calling other modules through self
+		// Use rootMath as it's a simpler module that should always be available
+		if (self && self.rootMath) {
+			const sum = self.rootMath(1, 2);
+			results.canCallOtherModules = sum === 3;
+		} else if (self && self.math && typeof self.math === "object" && self.math.add) {
+			const sum = self.math.add(1, 2);
+			results.canCallOtherModules = sum === 3;
+		}
+
+		// Test reference access (reference values are attached directly to self)
+		if (self) {
+			// Reference values are attached to self directly
+			results.referenceValues.testValue = self.testValue;
+			results.referenceValues.testFunc = self.testFunc;
+			results.referenceValues.nested = self.nested;
+		}
+
+		// Test context access
+		if (context) {
+			results.context = {
+				userId: context.userId,
+				appName: context.appName,
+				requestId: context.requestId,
+				version: context.version
+			};
+		}
+	} catch (error) {
+		results.error = error.message;
+		results.stack = error.stack;
+	}
+
+	return results;
+}
+
+/**
+ * Exercise all proxy traps on the `instanceID` export from the async runtime.
+ * Must be called within an active slothlet async-runtime context so the in-context
+ * branches of the get/has traps are reached.
+ * @function getAsyncInstanceID
+ * @returns {{ id: string, coerced: string, length: number, hasProp: boolean }} Proxy trap results
+ * @example
+ * const result = api.runtimeTest.getAsyncInstanceID();
+ * // result.id === api.slothlet.instanceID
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.getAsyncInstanceID();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.getAsyncInstanceID();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.getAsyncInstanceID();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.getAsyncInstanceID();
+ */
+export function getAsyncInstanceID() {
+	// get trap — prop === "toString" branch: inside context returns () => ctx.instanceID
+	const toStringFn = instanceID.toString;
+	const id = typeof toStringFn === "function" ? toStringFn() : "";
+
+	// get trap — Symbol.toPrimitive branch: String() coercion
+	const coerced = String(instanceID);
+
+	// get trap — ctx.instanceID[prop] fallback: normal string property
+	const length = instanceID.length;
+
+	// has trap — "length" exists on any string (via Object wrapping in the proxy)
+	const hasProp = "length" in instanceID;
+
+	// has trap — undefined prop should be false
+	const missingProp = "__nonexistent__" in instanceID;
+
+	return { id, coerced, length, hasProp, missingProp };
+}
+
+/**
+ * Exercise the context proxy traps on the dispatcher (runtime.mjs) that are only
+ * hit via the live runtime path: ownKeys, has, getOwnPropertyDescriptor, and set.
+ * Must be called while a live-runtime context is active (runtime: "live" instance,
+ * called directly — no async scope wrapping).
+ * @function exerciseContextDispatcherTraps
+ * @returns {{ keys: string[], hasUserId: boolean, hasMissing: boolean, descriptor: object|undefined, setWorked: boolean }} Results of each trap
+ * @example
+ * const result = api.runtimeTest.exerciseContextDispatcherTraps();
+ * expect(result.hasUserId).toBe(true);
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseContextDispatcherTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseContextDispatcherTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseContextDispatcherTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseContextDispatcherTraps();
+ */
+export function exerciseContextDispatcherTraps() {
+	// ownKeys trap (lines 99-101 in runtime.mjs)
+	const keys = Reflect.ownKeys(context);
+
+	// has trap (lines 102-104)
+	const hasUserId = "userId" in context;
+	const hasMissing = "__definitely_absent__" in context;
+
+	// getOwnPropertyDescriptor trap (lines 105-108)
+	const descriptor = Object.getOwnPropertyDescriptor(context, "userId");
+
+	// set trap (lines 109-112)
+	context.__dispatcherTestKey = "dispatcher-set-trap";
+	const setWorked = context.__dispatcherTestKey === "dispatcher-set-trap";
+
+	return { keys, hasUserId, hasMissing, descriptor, setWorked };
+}
+
+/**
+ * Exercise the instanceID proxy traps on the dispatcher (runtime.mjs).
+ * Must be called while a live-runtime context is active so getCurrentRuntime()
+ * resolves to liveRuntimeModule and instanceID is a non-null string.
+ * @function exerciseInstanceIDDispatcherTraps
+ * @returns {{ id: string|undefined, hasProp: boolean, hasMissing: boolean }} Trap results
+ * @example
+ * const result = api.runtimeTest.exerciseInstanceIDDispatcherTraps();
+ * expect(result.id).toBeTruthy();
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseInstanceIDDispatcherTraps();
+ */
+export function exerciseInstanceIDDispatcherTraps() {
+	// get trap (lines 128-130 in runtime.mjs): instanceID[prop]
+	// When live runtime is active, liveRuntimeModule.instanceID is undefined,
+	// so the trap returns undefined for any prop access.
+	const id = instanceID.toString;
+
+	// has trap (lines 131-133): prop in instanceID
+	// When liveRuntimeModule.instanceID is undefined, the trap returns false.
+	const hasProp = "length" in instanceID;
+	const hasMissing = "__nonexistent__" in instanceID;
+
+	return { id, hasProp, hasMissing };
+}
+
+/**
+ * Exercise the async runtime context proxy traps that require an active ALS context:
+ * `set` (write to context) and `getOwnPropertyDescriptor`.
+ * MUST be called within `api.slothlet.context.run()` so ALS is active — otherwise
+ * the set trap throws RUNTIME_NO_ACTIVE_CONTEXT_CONTEXT.
+ * @function exerciseAsyncContextWriteTraps
+ * @returns {{ setWorked: boolean, setError: string|null, descriptor: PropertyDescriptor|null }} Trap exercise results
+ * @example
+ * await api.slothlet.context.run({ userId: 99 }, async () => {
+ *   return api.runtimeTest.exerciseAsyncContextWriteTraps();
+ * });
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_test = await slothlet({ dir: './api_tests/api_test' });
+ *   api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_test = await slothlet({ dir: './api_tests/api_test' });
+ * api_test.runtime-test.exerciseAsyncContextWriteTraps();
+ */
+export function exerciseAsyncContextWriteTraps() {
+	// set trap — context.prop = value within active ALS context
+	// Covers runtime-asynclocalstorage.mjs lines 141-146
+	let setWorked = false;
+	let setError = null;
+	try {
+		context.__asyncWriteTest = "set-trap-covered";
+		setWorked = true;
+	} catch (err) {
+		setError = err.message;
+	}
+
+	// getOwnPropertyDescriptor trap — Object.getOwnPropertyDescriptor(context, prop) within ALS
+	// Covers runtime-asynclocalstorage.mjs lines 154-156
+	let descriptor = null;
+	try {
+		descriptor = Object.getOwnPropertyDescriptor(context, "userId");
+	} catch (_) {
+		// trap returned undefined which is fine
+	}
+
+	return { setWorked, setError, descriptor };
 }

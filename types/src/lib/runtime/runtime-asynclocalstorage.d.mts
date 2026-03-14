@@ -1,67 +1,72 @@
 /**
- * Shared AsyncLocalStorage instance for all slothlet instances.
- * Provides unified context management across all EventEmitter wrappers.
- * @type {AsyncLocalStorageType}
+ * Live binding to the current API (self-reference)
+ * @type {Proxy}
  * @public
- */
-export const sharedALS: AsyncLocalStorageType;
-/**
- * Per-request AsyncLocalStorage instance for request-scoped context.
- * Stores temporary context data that merges with instance context.
- * @type {AsyncLocalStorageType}
- * @public
- */
-export const requestALS: AsyncLocalStorageType;
-export function runWithCtx(ctx: object, fn: Function, thisArg: any, args: any[]): any;
-export function getCtx(): object | null;
-export function makeWrapper(ctx: object): Function;
-/**
- * @constant self
- * @memberof module:@cldmv/slothlet/runtime
- * @export module:@cldmv/slothlet/runtime
- * @public
- * @type {function|object}
  *
  * @description
- * Live binding to the current instance's 'self' reference from AsyncLocalStorage context.
+ * A proxy that provides access to the full API object within the current context.
+ * Automatically resolves to the correct instance's API in AsyncLocalStorage context.
  *
  * @example
- * // Access current instance self
- * console.log(self); // Current slothlet instance
+ * import { self } from "@cldmv/slothlet/runtime/async";
+ *
+ * export function callOtherFunction() {
+ *   // Call another function in the same API
+ *   return self.otherFunction();
+ * }
  */
-export const self: Function | object;
+export const self: ProxyConstructor;
 /**
- * @constant context
- * @memberof module:@cldmv/slothlet/runtime
- * @export module:@cldmv/slothlet/runtime
+ * User-provided context object
+ * @type {Proxy}
  * @public
- * @type {object}
  *
  * @description
- * Live binding to the current instance's 'context' data from AsyncLocalStorage context.
+ * A proxy that provides access to user-provided context data (e.g., request data, user info).
+ * Can be set via `slothlet.run()` or `slothlet.scope()`.
  *
  * @example
- * // Access current context data
- * console.log(context); // Current context object
+ * import { context } from "@cldmv/slothlet/runtime/async";
+ *
+ * export function getUserInfo() {
+ *   // Access user-provided context
+ *   return {
+ *     userId: context.userId,
+ *     userName: context.userName
+ *   };
+ * }
  */
-export const context: object;
+export const context: ProxyConstructor;
 /**
- * @constant reference
- * @memberof module:@cldmv/slothlet/runtime
- * @export module:@cldmv/slothlet/runtime
+ * Reference to initialization reference object
+ * @type {Proxy}
  * @public
- * @type {object}
  *
  * @description
- * Live binding to the current instance's 'reference' object from AsyncLocalStorage context.
+ * The reference object is merged directly into the API at initialization using the add API system.
+ * It is NOT available as a runtime export. Access it directly from the API or via api.slothlet.diag.reference().
  *
  * @example
- * // Access current reference object
- * console.log(reference); // Current reference data
+ * // Reference merged into API - access directly:
+ * export function useReferenceData() {
+ *   return self.myData; // if reference had myData property
+ * }
  */
-export const reference: object;
-export { metadataAPI };
-export type AsyncLocalStorageType = AsyncLocalStorage<any>;
-import { metadataAPI } from "@cldmv/slothlet/helpers/metadata-api";
-import { AsyncLocalStorage } from "node:async_hooks";
+/**
+ * Current instance ID
+ * @type {Proxy}
+ * @public
+ *
+ * @description
+ * A proxy that provides access to the current slothlet instance ID.
+ * Useful for debugging and tracking which instance is handling a request.
+ *
+ * @example
+ * import { instanceID } from "@cldmv/slothlet/runtime/async";
+ *
+ * export function getInstanceInfo() {
+ *   return { instanceID };
+ * }
+ */
+export const instanceID: ProxyConstructor;
 //# sourceMappingURL=runtime-asynclocalstorage.d.mts.map

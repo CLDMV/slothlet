@@ -1,12 +1,60 @@
 /**
- * @file api/devices/firetv.mjs - Fire TV control (stripped for testing)
- * @description Minimal device control module for testing slothlet proxy behavior
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /api_tests/api_tv_test/devices/firetv.mjs
+ *	@Date: 2025-11-04T20:54:38-08:00 (1762318478)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:16 -08:00 (1772425276)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * Initializes Fire TV/Android TV controller (mock)
- * @param {Object} config - Android TV configuration
- * @returns {Promise<Object|null>} Mock device instance or null if disabled
+ * @fileoverview FireTV device module for TV Remote testing.
+ * @module api_tv_test.devices.firetv
+ * @memberof module:api_tv_test
+ */
+/**
+ * @namespace devices
+ * @memberof module:api_tv_test
+ * @alias module:api_tv_test.devices
+ */
+/**
+ * @namespace firetv
+ * @memberof module:api_tv_test.devices
+ * @alias module:api_tv_test.devices.firetv
+ */
+
+/**
+ * initialize.
+ * @param {*} config - config.
+ * @returns {Promise.<*>}
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.initialize(null);
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.initialize(null);
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.initialize(null);
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.initialize(null);
  */
 export async function initialize(config) {
 	if (!config || !config.enabled) {
@@ -29,6 +77,31 @@ export async function initialize(config) {
  * Powers on Fire TV device (mock)
  * @param {string} deviceId - Device identifier
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.powerOn('emulator-5554');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.powerOn('emulator-5554');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.powerOn('emulator-5554');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.powerOn('emulator-5554');
  */
 export async function powerOn(deviceId = "default") {
 	console.log(`Mock: Powering on Fire TV device: ${deviceId}`);
@@ -39,6 +112,31 @@ export async function powerOn(deviceId = "default") {
  * Powers off Fire TV device (mock)
  * @param {string} deviceId - Device identifier
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.powerOff('emulator-5554');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.powerOff('emulator-5554');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.powerOff('emulator-5554');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.powerOff('emulator-5554');
  */
 export async function powerOff(deviceId = "default") {
 	console.log(`Mock: Powering off Fire TV device: ${deviceId}`);
@@ -50,6 +148,31 @@ export async function powerOff(deviceId = "default") {
  * @param {string} deviceId - Device identifier
  * @param {string} keyCode - Key to send
  * @returns {Promise<boolean>} Success status
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.sendKey('emulator-5554', 'myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.sendKey('emulator-5554', 'myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   await api_tv_test.devices.firetv.sendKey('emulator-5554', 'myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * await api_tv_test.devices.firetv.sendKey('emulator-5554', 'myKey');
  */
 export async function sendKey(deviceId = "default", keyCode) {
 	console.log(`Mock: Sending key ${keyCode} to Fire TV device: ${deviceId}`);
@@ -99,7 +222,33 @@ export const REMOTE_KEYS = {
  * @returns {boolean} True if key is valid
  * @example
  * isValidRemoteKey(REMOTE_KEYS.POWER); // true
+ *
+ * @example // ESM usage via slothlet API
+ * import slothlet from "@cldmv/slothlet";
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.firetv.isValidRemoteKey('myKey');
+ *
+ * @example // ESM usage via slothlet API (inside async function)
+ * async function example() {
+ *   const { default: slothlet } = await import("@cldmv/slothlet");
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.firetv.isValidRemoteKey('myKey');
+ * }
+ *
+ * @example // CJS usage via slothlet API (top-level)
+ * let slothlet;
+ * (async () => {
+ *   ({ slothlet } = await import("@cldmv/slothlet"));
+ *   const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ *   api_tv_test.devices.firetv.isValidRemoteKey('myKey');
+ * })();
+ *
+ * @example // CJS usage via slothlet API (inside async function)
+ * const slothlet = require("@cldmv/slothlet");
+ * const api_tv_test = await slothlet({ dir: './api_tests/api_tv_test' });
+ * api_tv_test.devices.firetv.isValidRemoteKey('myKey');
  */
 export function isValidRemoteKey(key) {
 	return Object.values(REMOTE_KEYS).includes(key);
 }
+

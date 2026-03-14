@@ -1,11 +1,6 @@
-# Slothlet API Rules - Comprehensive Documentation (v2)
+# Slothlet API Rules
 
-**Complete Guide to All API Generation Behaviors with Cross-Referenced Implementation Details**
-
-- **Version**: 2.0
-- **Date**: January 3, 2026
-- **Purpose**: Maintainer and contributor guide documenting all API generation rules with verified examples and technical cross-references
-- **Status**: ✅ **VERIFIED AND CURRENT**
+**Complete Guide to All API Generation Behaviors**
 
 ---
 
@@ -14,49 +9,53 @@
 This is the **middle layer** of slothlet's three-tier documentation system:
 
 ```text
-📋 API-FLATTENING-v2.md (F##)     ← User Guide: Clear examples and flowcharts
-     ↑ links to                    ↓ links to
-📊 API-RULES-v2.md (1-12)         ← YOU ARE HERE: Complete behavior catalog
-     ↑ links to                    ↓ links to
-🔧 API-RULES-CONDITIONS-v2.md     ← Technical: Exact source code locations
+📋 API-RULES/API-FLATTENING.md (F##)     ← User Guide: Clear examples and flowcharts
+          ↑ links to                          ↓ links to
+📊 API-RULES.md (1-13)                   ← YOU ARE HERE: Complete behavior catalog
+          ↑ links to                          ↓ links to
+🔧 API-RULES/API-RULES-CONDITIONS.md     ← Technical: Exact source code locations
+                                              ↓ mapped in
+🗺️ API-RULES/API-RULE-MAPPING.md         ← Traceability Matrix: Rule # ↔ F## ↔ C##
 ```
 
 **Cross-Reference Navigation:**
 
-- **⬆️ For Users**: See [API-FLATTENING-v2.md](API-FLATTENING-v2.md) for user-friendly explanations with examples
-- **⬇️ For Developers**: See [API-RULES-CONDITIONS-v2.md](API-RULES-CONDITIONS-v2.md) for exact source code locations
+- **For Users**: See [API-RULES/API-FLATTENING.md](API-RULES/API-FLATTENING.md) for user-friendly explanations with examples
+- **For Developers**: See [API-RULES/API-RULES-CONDITIONS.md](API-RULES/API-RULES-CONDITIONS.md) for exact source code locations
+- **Rule Mapping**: See [API-RULES/API-RULE-MAPPING.md](API-RULES/API-RULE-MAPPING.md) for complete Rule # ↔ F## ↔ C## traceability matrix
 
 ---
 
 ## Overview
 
-This document catalogs **all 12 API generation behaviors** in slothlet with:
+This document catalogs **all 13 API generation behaviors** in slothlet with:
 
-- **Verified examples** from actual test files with source attribution
-- **Cross-references** to user guide ([F##](API-FLATTENING-v2.md)) and technical details ([C##](API-RULES-CONDITIONS-v2.md))
-- **Source code locations** with function names and file references
-- **Test file sources** demonstrating each behavior in action
-- **Processing contexts** (Root/Subfolder/Multi-Default/AddApi)
+- Verified examples from actual test files with source attribution
+- Cross-references to user guide (F##) and technical details (C##)
+- Source code locations with function names and file references
+- Test file sources demonstrating each behavior in action
+- Processing contexts (Root/Subfolder/Multi-Default/AddApi)
 
-**Why 12 Rules vs 7 Flattening Patterns?**
+**Why 13 Rules vs Flattening Patterns?**
 
-The [FLATTENING guide](API-FLATTENING-v2.md) focuses on **when content gets promoted/flattened** (7 patterns). This comprehensive guide covers **all API behaviors** including cases where flattening doesn't occur but specific handling is still needed:
+The [Flattening guide](API-RULES/API-FLATTENING.md) focuses on **when content gets promoted/flattened**. This comprehensive guide covers **all API behaviors** including cases where flattening doesn't occur but specific handling is still needed:
 
-- **Flattening Rules** (1, 7, 8, 10, 11, 12): Map to F01-F07 patterns
-- **Non-Flattening Rules** (2, 3, 4, 5, 6, 9): Export collection, function naming, empty modules, mixed exports, self-referential protection
+- **Flattening Rules** (1, 7, 8, 10, 11, 13): Core flattening patterns
+- **Non-Flattening Rules** (2, 3, 4, 5, 6, 9): Export collection, function naming, empty modules, mixed exports
+- **AddApi Rules** (11, 12, 13): Runtime API extension behaviors
 
-**Methodology**: Each rule has been systematically verified against test files and source code to ensure accuracy.
+**Methodology**: Each rule has been systematically verified against test files and source code.
 
 ---
 
 ## Rule Categories
 
-| Category              | Rules       | Focus                      | Cross-References                                                        |
-| --------------------- | ----------- | -------------------------- | ----------------------------------------------------------------------- |
-| **Basic Flattening**  | 1, 7, 8     | Core flattening patterns   | [F01-F05](API-FLATTENING-v2.md) → [C01-C11](API-RULES-CONDITIONS-v2.md) |
-| **Export Handling**   | 2, 4, 5     | Default vs Named exports   | [F04-F05](API-FLATTENING-v2.md) → [C08-C21](API-RULES-CONDITIONS-v2.md) |
-| **Special Cases**     | 3, 6, 9, 10 | Edge cases and protections | → [C10, C01, C16-C19](API-RULES-CONDITIONS-v2.md)                       |
-| **AddApi Extensions** | 11, 12      | Runtime API extensions     | [F06-F07](API-FLATTENING-v2.md) → [C33](API-RULES-CONDITIONS-v2.md)     |
+| Category              | Rules        | Focus                       | Cross-References |
+| --------------------- | ------------ | --------------------------- | ---------------- |
+| **Basic Flattening**  | 1, 7, 8      | Core flattening patterns    | [F01-F05](API-RULES/API-FLATTENING.md) → [C01-C11](API-RULES/API-RULES-CONDITIONS.md) |
+| **Export Handling**   | 2, 4, 5      | Default vs Named exports    | [F04-F05](API-RULES/API-FLATTENING.md) → [C08-C21](API-RULES/API-RULES-CONDITIONS.md) |
+| **Special Cases**     | 3, 6, 9, 10  | Edge cases and protections  | [C10, C01, C16-C19](API-RULES/API-RULES-CONDITIONS.md) |
+| **AddApi Extensions** | 11, 12, 13   | Runtime API extensions      | [F06-F08](API-RULES/API-FLATTENING.md) → [C33, C34](API-RULES/API-RULES-CONDITIONS.md) |
 
 ---
 
@@ -74,17 +73,18 @@ The [FLATTENING guide](API-FLATTENING-v2.md) focuses on **when content gets prom
 10. [Rule 10: Generic Filename Parent-Level Promotion](#rule-10-generic-filename-parent-level-promotion)
 11. [Rule 11: AddApi Special File Pattern](#rule-11-addapi-special-file-pattern)
 12. [Rule 12: Module Ownership and Selective API Overwriting](#rule-12-module-ownership-and-selective-api-overwriting)
-13. [Verification Status](#verification-status)
-14. [Cross-Reference Index](#cross-reference-index)
+13. [Rule 13: AddApi Path Deduplication Flattening](#rule-13-addapi-path-deduplication-flattening)
+14. [Verification Status](#verification-status)
+15. [Cross-Reference Index](#cross-reference-index)
 
 ---
 
 ## Rule 1: Filename Matches Container Flattening
 
 **Category**: Basic Flattening  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: [FLATTENING F01](API-FLATTENING-v2.md#f01-folder-file-name-matching)  
-**Technical**: [CONDITIONS C05, C09b](API-RULES-CONDITIONS-v2.md#c05)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**User Guide**: [F01](API-RULES/API-FLATTENING.md#f01-folder-file-name-matching)  
+**Technical**: [C05, C09b](API-RULES/API-RULES-CONDITIONS.md#c05)
 
 **Condition**: Filename matches folder name AND no default export AND has named exports  
 **Source Files**: `api_tests/api_test/math/math.mjs`  
@@ -101,24 +101,20 @@ export function subtract(a, b) {
 	return a - b;
 }
 
-// Expected API Structure:
-api.math.add(2, 3); // ✅ 5 - Flattened (no math.math.add)
-api.math.subtract(5, 2); // ✅ 3 - Direct access to folder level
-
-// Without Rule 1: api.math.math.add(2, 3) ❌ (redundant nesting)
-// With Rule 1: api.math.add(2, 3) ✅ (clean flattening)
+// Without Rule 1: api.math.math.add(2, 3)  ❌ (redundant nesting)
+// With Rule 1:    api.math.add(2, 3)        ✅ (clean flattening)
+api.math.add(2, 3);      // 5
+api.math.subtract(5, 2); // 3
 ```
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C05](API-RULES-CONDITIONS-v2.md#c05) - `fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0`
-- **Processing**: [C09b](API-RULES-CONDITIONS-v2.md#c09b) - `flattenToCategory: true` → category-level flattening
-
-**Complete Source Code Implementation**:
+- **Primary Condition**: [C05](API-RULES/API-RULES-CONDITIONS.md#c05) - `fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0`
+- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) - `flattenToCategory: true` → category-level flattening
 
 ```javascript
 // C05: Filename Matches Container (Category-Level Flatten)
-// Location: src/lib/helpers/api_builder/decisions.mjs Line 154
+// Location: src/lib/helpers/api_builder/decisions.mjs
 if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys.length > 0) {
 	return {
 		shouldFlatten: true,
@@ -132,34 +128,19 @@ if (categoryName && fileName === categoryName && !moduleHasDefault && moduleKeys
 ```
 
 **Processing Path**: Subfolder processing via `getFlatteningDecision()` (currentDepth > 0)  
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()` function [Lines 87-189]  
-**Git Commit Reference**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`
-
-**Test Verification**:
-
-```bash
-# Comprehensive verification command
-node tests/debug-slothlet.mjs
-# Look for: "bound.math.add(2, 3) 5" and "bound.string.upper('abc') ABC"
-# Confirms flattening works: api.math.add (not api.math.math.add)
-
-# Quick verification command
-node -e "(async () => { const api = await (await import('./index.mjs')).default({ dir: './api_tests/api_test' }); console.log('math.add:', api.math.add(2,3)); console.log('math.math exists:', 'math' in api.math); })()"
-# Expected: math.add: 5, math.math exists: false
-```
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `getFlatteningDecision()`
 
 ---
 
 ## Rule 2: Named-Only Export Collection
 
 **Category**: Export Handling  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: [FLATTENING Pattern D](API-FLATTENING-v2.md#examples) (covered in examples)  
-**Technical**: [CONDITIONS C15, C09d](API-RULES-CONDITIONS-v2.md#c15)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)  
+**Technical**: [C15, C09d](API-RULES/API-RULES-CONDITIONS.md#c15)
 
 **Condition**: Directory contains files with only named exports (no default exports)  
-**Behavior**: All named exports collected and made accessible at appropriate namespace level  
-**Source Files**: Multiple test files with named-only exports
+**Behavior**: All named exports collected and made accessible at the appropriate namespace level  
 
 **Verified Examples**:
 
@@ -172,167 +153,104 @@ export const E = 2.71828;
 export const SUCCESS = "Operation completed";
 export const ERROR = "Operation failed";
 
-// Expected API Structure:
-api.constants.values.PI; // ✅ 3.14159 - Named exports preserved
-api.constants.values.E; // ✅ 2.71828
-api.constants.messages.SUCCESS; // ✅ "Operation completed"
-api.constants.messages.ERROR; // ✅ "Operation failed"
+api.constants.values.PI;          // 3.14159
+api.constants.values.E;           // 2.71828
+api.constants.messages.SUCCESS;   // "Operation completed"
+api.constants.messages.ERROR;     // "Operation failed"
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C15](API-RULES-CONDITIONS-v2.md#c15) - `defaultExportCount === 0`
-- **Processing**: [C09d](API-RULES-CONDITIONS-v2.md#c09d) - Standard namespace preservation
+- **Detection**: [C15](API-RULES/API-RULES-CONDITIONS.md#c15) - `defaultExportCount === 0`
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Standard namespace preservation
 - **Strategy**: `processingStrategy = "named-only"` → category-level collection
-
-**Complete Source Code Implementation**:
-
-```javascript
-// When no default function detected, preserve as namespace (named exports become object)
-else {
-    // Traditional: preserve as namespace
-    apiAssignments[apiPathKey] = mod;
-    namespaced = true;
-}
-```
-
-**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()` function [Lines 315-466]  
-**Git Commit Reference**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
-**Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
-
-**Test Verification**:
-
-```bash
-# Comprehensive verification
-node tests/debug-slothlet.mjs
-# Look for: bound.config showing object with host, username, etc.
-# Confirms named-only exports become accessible object properties
-
-# Quick verification
-node -e "(async () => { const api = await (await import('./index.mjs')).default({ dir: './api_tests/api_test' }); console.log('config.host:', api.config.host); console.log('config object keys:', Object.keys(api.config)); })();"
-# Expected: config.host: https://slothlet, config object keys: [host, username, password, site, secure, verbose]
-```
 
 **Key Behavior**:
 
-- ✅ Preserves all named export names and values
-- ✅ Maintains clear namespace separation between files
-- ✅ No unwanted flattening of complex named export structures
-- ❌ Does not flatten when multiple named exports exist (prevents naming conflicts)
+- Preserves all named export names and values
+- Maintains clear namespace separation between files
+- No flattening when multiple named exports exist (prevents naming conflicts)
+
+**Source Code Location**: `src/lib/helpers/api_builder/decisions.mjs` - `processModuleForAPI()`  
+**Processing Path**: Both Root and Subfolder processing via `processModuleForAPI`
 
 ---
 
 ## Rule 3: Empty Module Handling
 
 **Category**: Special Cases  
-**Status**: ✅ **VERIFIED** (debug testing)  
-**User Guide**: Not applicable (internal edge case)  
-**Technical**: [CONDITIONS C10](API-RULES-CONDITIONS-v2.md#c10)
+**Status**: ✅ Verified  
+**Technical**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10)
 
 **Condition**: Directory contains no loadable module files  
-**Behavior**: Graceful handling with appropriate warnings or empty namespace creation  
+**Behavior**: Graceful handling - creates empty namespace  
 **Processing Path**: Early detection in `buildCategoryDecisions()`
+
+**Mode Differences**:
+
+- **EAGER**: Empty folder → `{}` object (not callable)
+- **LAZY**: Empty folder → lazy proxy that resolves to `{}` when called
 
 **Technical Implementation**:
 
-- **Detection**: [C10](API-RULES-CONDITIONS-v2.md#c10) - `moduleFiles.length === 0`
+- **Detection**: [C10](API-RULES/API-RULES-CONDITIONS.md#c10) - `moduleFiles.length === 0`
 - **Strategy**: `processingStrategy = "empty"` → graceful empty handling
-- **Result**: May create empty namespace or skip directory entirely
-
-**Complete Source Code Implementation**:
 
 ```javascript
 // Detection in analyzeDirectoryStructure
 if (moduleFiles.length === 0) {
 	processingStrategy = "empty";
-	// Handle gracefully - may create empty namespace or skip
 }
 ```
 
-**Source Code Location**: `src/slothlet.mjs` [Lines 318-319] and `src/lib/helpers/api_builder/analysis.mjs`  
-**Git Commit Reference**: `a50531d1ba712f0c4efd9ab9b7cf8f62a0d379da`  
+**Source Code Location**: `src/lib/helpers/api_builder/analysis.mjs`  
 **Processing Path**: All paths (detected in `analyzeDirectoryStructure`)
-
-**Mode Differences**:
-
-- **EAGER**: Empty folder → `{}` object (not callable)
-- **LAZY**: Empty folder → lazy function that resolves to `{}` when called
-
-**Test Verification**:
-
-```bash
-# Test empty folder behavior
-node tests/debug-slothlet.mjs
-# EAGER Mode: "Target is object, not function. Returning object directly." → bound.empty() {}
-# LAZY Mode:  "About to call function with args: []" → await bound.empty() {}
-
-# Quick verification
-node -e "(async () => { const api = await (await import('./index.mjs')).default({ dir: './api_tests/api_test' }); console.log('empty_folder type:', typeof api.empty_folder); console.log('empty_folder content:', JSON.stringify(api.empty_folder)); })();"
-# Expected: empty_folder type: object, empty_folder content: {}
-```
-
-- **Detection**: [C10](API-RULES-CONDITIONS-v2.md#c10) - `moduleFiles.length === 0`
-- **Strategy**: `processingStrategy = "empty"` → graceful empty handling
-- **Result**: May create empty namespace or skip directory entirely
 
 ---
 
 ## Rule 4: Named Export with Function Name Preservation
 
 **Category**: Export Handling  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: [FLATTENING F04](API-FLATTENING-v2.md#f04-named-export-function-names)  
-**Technical**: [CONDITIONS C16, C23](API-RULES-CONDITIONS-v2.md#c16)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**User Guide**: [F04](API-RULES/API-FLATTENING.md#f04)  
+**Technical**: [C16, C23](API-RULES/API-RULES-CONDITIONS.md#c16)
 
-**Condition**: Named export with function name that differs from filename  
-**Behavior**: Preserves original function name rather than using filename  
+**Condition**: Named export with a function name that differs from the sanitized filename  
+**Behavior**: Preserves the original function name rather than using the filename-derived name  
 **Priority**: Function names take precedence over filename-based naming
 
 **Verified Examples**:
 
 ```javascript
 // File: auto-ip.mjs
-export function autoIP(interface) {
-	/* ... */
-}
-
-// Expected API Structure:
+export function autoIP() { /* ... */ }
 api.autoIP(); // ✅ Function name preserved (not api.autoIp)
-// Named function takes precedence over filename sanitization
 
 // File: json-parser.mjs
-export function parseJSON(data) {
-	/* ... */
-}
-
-// Expected API Structure:
-api.parseJSON(data); // ✅ Original casing preserved
-// Function name "parseJSON" wins over "jsonParser" from filename
+export function parseJSON(data) { /* ... */ }
+api.parseJSON(data); // ✅ Original casing preserved (not api.jsonParser)
 ```
-
-**Technical Implementation**:
-
-- **Detection**: [C16](API-RULES-CONDITIONS-v2.md#c16) - Function name availability check
-- **Processing**: [C23](API-RULES-CONDITIONS-v2.md#c23) - Function name takes precedence
-- **Strategy**: Original function name preserved over filename-based sanitization
 
 **Function Name Priority**:
 
-1. ✅ **Original function name** (if available)
-2. ✅ Filename-based sanitization (if no function name)
-3. ❌ Never modify existing function names
+1. Original function name (if available)
+2. Filename-based sanitization (if no function name)
+
+**Technical Implementation**:
+
+- **Detection**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - Function name availability check
+- **Processing**: [C23](API-RULES/API-RULES-CONDITIONS.md#c23) - Function name takes precedence
 
 ---
 
 ## Rule 5: Multiple Module Default Export Handling
 
 **Category**: Export Handling  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: Not explicitly covered (standard behavior)  
-**Technical**: [CONDITIONS C08, C09d](API-RULES-CONDITIONS-v2.md#c08)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**Technical**: [C08, C09d](API-RULES/API-RULES-CONDITIONS.md#c08)
 
 **Condition**: Category contains multiple modules with default exports  
-**Behavior**: Each module maintains its own namespace with default export accessible  
+**Behavior**: Each module maintains its own namespace with the default export accessible directly  
 **Processing Path**: Standard namespace preservation (no flattening)
 
 **Verified Examples**:
@@ -344,76 +262,62 @@ export default function validateEmail(email) { /* ... */ }
 // File: validators/phone.mjs
 export default function validatePhone(phone) { /* ... */ }
 
-// Expected API Structure:
-api.validators.email("test@example.com"); // ✅ Default function accessible
-api.validators.phone("+1234567890");      // ✅ Default function accessible
-
-// No flattening occurs due to multiple modules
+api.validators.email("test@example.com"); // ✅ Default function callable
+api.validators.phone("+1234567890");      // ✅ Default function callable
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C08](API-RULES-CONDITIONS-v2.md#c08) - `moduleCount > 1 && defaultExportCount > 0`
-- **Processing**: [C09d](API-RULES-CONDITIONS-v2.md#c09d) - Standard namespace preservation
+- **Detection**: [C08](API-RULES/API-RULES-CONDITIONS.md#c08) - `moduleCount > 1 && defaultExportCount > 0`
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Standard namespace preservation
 - **Strategy**: `processingStrategy = "standard"` → no flattening
 
 **Key Behavior**:
 
-- ✅ Maintains clear namespace separation
-- ✅ Prevents naming conflicts between modules
-- ❌ No automatic flattening (safer with multiple defaults)
+- Maintains clear namespace separation between modules
+- Prevents naming conflicts where multiple defaults would collide
+- No automatic flattening when multiple defaults are present
 
 ---
 
 ## Rule 6: Multiple Module Mixed Exports
 
 **Category**: Special Cases  
-**Status**: ✅ **VERIFIED** (api_tests/api_test_mixed)  
-**User Guide**: Not explicitly covered (complex behavior)  
-**Technical**: [CONDITIONS C14, C09d](API-RULES-CONDITIONS-v2.md#c14)
+**Status**: ✅ Verified (`api_tests/api_test_mixed`)  
+**Technical**: [C14, C09d](API-RULES/API-RULES-CONDITIONS.md#c14)
 
 **Condition**: Category contains modules with mixed export types (some default, some named-only)  
-**Behavior**: Standard namespace processing - each module maintains distinct namespace  
+**Behavior**: Standard namespace processing - each module maintains a distinct namespace  
 **Processing Path**: Conservative approach to prevent conflicts
 
 **Verified Examples**:
 
 ```javascript
 // File: mixed/calculator.mjs (default export)
-export default function calculate(operation, a, b) {
-	/* ... */
-}
+export default function calculate(operation, a, b) { /* ... */ }
 
 // File: mixed/constants.mjs (named exports only)
 export const PI = 3.14159;
 export const E = 2.71828;
 
-// Expected API Structure:
 api.mixed.calculator("add", 2, 3); // ✅ Default accessible
-api.mixed.constants.PI; // ✅ Named exports accessible
-api.mixed.constants.E; // ✅ Clear namespace separation
+api.mixed.constants.PI;            // ✅ Named exports accessible
+api.mixed.constants.E;             // ✅ Clear namespace separation
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C14](API-RULES-CONDITIONS-v2.md#c14) - Mixed export types present
-- **Processing**: [C09d](API-RULES-CONDITIONS-v2.md#c09d) - Conservative namespace preservation
-- **Strategy**: Prevents complex flattening that could cause conflicts
-
-**Safety Priority**:
-
-- ✅ Predictable structure over aggressive flattening
-- ✅ Clear namespace boundaries
-- ❌ No automatic merging of different export types
+- **Detection**: [C14](API-RULES/API-RULES-CONDITIONS.md#c14) - Mixed export types present
+- **Processing**: [C09d](API-RULES/API-RULES-CONDITIONS.md#c09d) - Conservative namespace preservation
 
 ---
 
 ## Rule 7: Single Module Named Export Flattening
 
 **Category**: Basic Flattening  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: [FLATTENING F02](API-FLATTENING-v2.md#f02-single-module-named-exports)  
-**Technical**: [CONDITIONS C06, C09b](API-RULES-CONDITIONS-v2.md#c06)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**User Guide**: [F02](API-RULES/API-FLATTENING.md#f02)  
+**Technical**: [C06, C09b](API-RULES/API-RULES-CONDITIONS.md#c06)
 
 **Condition**: Category has one module file, module has named exports (no default export), filename ≠ category name  
 **Source Files**: `api_tests/api_test/config/settings.mjs`  
@@ -427,35 +331,26 @@ export const DATABASE_URL = "mongodb://localhost:27017/testdb";
 export const API_PORT = 3000;
 export const DEBUG_MODE = true;
 
-// Expected API Structure:
-api.config.DATABASE_URL; // ✅ "mongodb://localhost:27017/testdb" - Flattened
-api.config.API_PORT; // ✅ 3000 - Direct access to category level
-api.config.DEBUG_MODE; // ✅ true - No settings.DATABASE_URL nesting
-
-// Without Rule 7: api.config.settings.DATABASE_URL ❌ (unnecessary nesting)
-// With Rule 7: api.config.DATABASE_URL ✅ (clean flattening)
+// Without Rule 7: api.config.settings.DATABASE_URL  ❌ (unnecessary nesting)
+// With Rule 7:    api.config.DATABASE_URL            ✅ (clean flattening)
+api.config.DATABASE_URL; // "mongodb://localhost:27017/testdb"
+api.config.API_PORT;     // 3000
+api.config.DEBUG_MODE;   // true
 ```
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C06](API-RULES-CONDITIONS-v2.md#c06) - `moduleCount === 1 && !moduleHasDefault && moduleKeys.length > 0`
-- **Processing**: [C09b](API-RULES-CONDITIONS-v2.md#c09b) - `flattenToCategory: true` → category-level flattening
-
-**Test Verification**:
-
-```bash
-node -e "(async () => { const api = await (await import('./index.mjs')).default({ dir: './api_tests/api_test' }); console.log('config.DATABASE_URL:', api.config.DATABASE_URL); console.log('config.settings exists:', 'settings' in api.config); })()"
-# Expected: config.DATABASE_URL: mongodb://localhost:27017/testdb, config.settings exists: false
-```
+- **Primary Condition**: [C06](API-RULES/API-RULES-CONDITIONS.md#c06) - `moduleCount === 1 && !moduleHasDefault && moduleKeys.length > 0`
+- **Processing**: [C09b](API-RULES/API-RULES-CONDITIONS.md#c09b) - `flattenToCategory: true`
 
 ---
 
 ## Rule 8: Single Module Default Export Promotion
 
 **Category**: Basic Flattening  
-**Status**: ✅ **VERIFIED** (api_tests/api_test)  
-**User Guide**: [FLATTENING F03](API-FLATTENING-v2.md#f03-single-module-default-export)  
-**Technical**: [CONDITIONS C07, C09c](API-RULES-CONDITIONS-v2.md#c07)
+**Status**: ✅ Verified (`api_tests/api_test`)  
+**User Guide**: [F03](API-RULES/API-FLATTENING.md#f03)  
+**Technical**: [C07, C09c](API-RULES/API-RULES-CONDITIONS.md#c07)
 
 **Condition**: Category has one module file with a default export  
 **Source Files**: `api_tests/api_test/logger.mjs`  
@@ -469,175 +364,137 @@ export default function logger(message) {
 	console.log(`[LOG] ${message}`);
 }
 
-// Expected API Structure:
-api.logger("Hello World"); // ✅ [LOG] Hello World - Direct callable
-// Without Rule 8: api.logger.logger("Hello World") ❌ (redundant nesting)
-// With Rule 8: api.logger("Hello World") ✅ (clean promotion)
+// Without Rule 8: api.logger.logger("Hello World")  ❌ (redundant nesting)
+// With Rule 8:    api.logger("Hello World")          ✅ (direct callable)
+api.logger("Hello World"); // [LOG] Hello World
+typeof api.logger;         // "function"
 ```
+
+**Callable Namespace Pattern**: When a folder contains a file matching the folder name with a default export (e.g. `logger/logger.mjs`), the default function becomes the namespace itself. Other files in the folder become properties on that function:
+
+```javascript
+// File: logger/logger.mjs → export default function log()
+// File: logger/utils.mjs  → named exports
+api.logger("message");       // calls the default function
+api.logger.utils.debug("x"); // other files remain as namespace properties
+```
+
+This pattern applies consistently at root level and category level.
 
 **Technical Implementation**:
 
-- **Primary Condition**: [C07](API-RULES-CONDITIONS-v2.md#c07) - `moduleCount === 1 && moduleHasDefault`
-- **Processing**: [C09c](API-RULES-CONDITIONS-v2.md#c09c) - `promoteToCategory: true` → category becomes callable
-
-**Test Verification**:
-
-```bash
-node -e "(async () => { const api = await (await import('./index.mjs')).default({ dir: './api_tests/api_test' }); api.logger('test message'); console.log('logger type:', typeof api.logger); })()"
-# Expected: [LOG] test message, logger type: function
-```
+- **Primary Condition**: [C07](API-RULES/API-RULES-CONDITIONS.md#c07) - `moduleCount === 1 && moduleHasDefault`
+- **Processing**: [C09c](API-RULES/API-RULES-CONDITIONS.md#c09c) - `promoteToCategory: true`
 
 ---
 
 ## Rule 9: Function Name Preference Over Sanitization
 
 **Category**: Special Cases  
-**Status**: ✅ **FULLY VERIFIED** (Multiple examples verified: autoIP, parseJSON, getHTTPStatus, XMLParser)  
-**User Guide**: [FLATTENING Name Preservation](API-FLATTENING-v2.md#benefits) (covered in intuitive organization)  
-**Technical**: [CONDITIONS C16, C19](API-RULES-CONDITIONS-v2.md#c16)
+**Status**: ✅ Fully Verified (autoIP, parseJSON, getHTTPStatus, XMLParser)  
+**User Guide**: [API-RULES/API-FLATTENING.md - Name Preservation](API-RULES/API-FLATTENING.md)  
+**Technical**: [C16, C19](API-RULES/API-RULES-CONDITIONS.md#c16)
 
-**Condition**: Exported function has explicit name that differs from sanitized filename  
-**Behavior**: Preserve original function name over filename-based API path  
-**Source Files**: Test cases with technical function names
+**Condition**: Exported function has an explicit name that differs from the sanitized filename  
+**Behavior**: Preserve the original function name over the filename-based API path  
 
 **Verified Examples**:
 
-**Example A: Technical Abbreviations**
-
 ```javascript
 // File: auto-ip.mjs
-export function autoIP() {
-	/* Get automatic IP */
-}
+export function autoIP() { /* Get automatic IP */ }
+// Sanitized filename: "autoIp"      ❌
+// Function name:      "autoIP"      ✅
 
-// Without Rule 9: api.autoIp() ❌ (sanitized filename)
-// With Rule 9: api.autoIP() ✅ (preserves technical abbreviation)
-```
-
-**Example B: Protocol Names**
-
-```javascript
 // File: get-http-status.mjs
-export function getHTTPStatus() {
-	/* HTTP status logic */
-}
+export function getHTTPStatus() { /* ... */ }
+// Sanitized filename: "getHttpStatus"   ❌
+// Function name:      "getHTTPStatus"   ✅
 
-// Without Rule 9: api.getHttpStatus() ❌ (loses HTTP casing)
-// With Rule 9: api.getHTTPStatus() ✅ (preserves protocol name)
-```
-
-**Example C: Data Format Names**
-
-```javascript
 // File: parse-json.mjs
-export function parseJSON(data) {
-	/* JSON parsing */
-}
-
-// Without Rule 9: api.parseJson() ❌ (generic casing)
-// With Rule 9: api.parseJSON() ✅ (preserves JSON format name)
+export function parseJSON(data) { /* ... */ }
+// Sanitized filename: "parseJson"   ❌
+// Function name:      "parseJSON"   ✅
 ```
 
 **Technical Implementation**:
 
-- **Primary Check**: [C16](API-RULES-CONDITIONS-v2.md#c16) - `exportedFunctionName !== sanitizedName`
-- **Detailed Check**: [C19](API-RULES-CONDITIONS-v2.md#c19) - `exportedFunction.name !== sanitizedFileName`
+- **Primary Check**: [C16](API-RULES/API-RULES-CONDITIONS.md#c16) - `exportedFunctionName !== sanitizedName`
+- **Detailed Check**: [C19](API-RULES/API-RULES-CONDITIONS.md#c19) - `exportedFunction.name !== sanitizedFileName`
 - **Precedence**: Function name takes precedence over filename in API structure
 
-**Semantic Value Preservation**:
+**Common Preserved Patterns**:
 
-- ✅ **Technical Acronyms**: IP, HTTP, API, URL, JSON, XML, HTML
-- ✅ **Protocol Names**: TCP, UDP, FTP, SSH, SSL, TLS
-- ✅ **Format Specifications**: JSON, XML, CSV, YAML, TOML
-- ✅ **Industry Standards**: OAuth, JWT, REST, GraphQL
-- ✅ **Camel Case Precision**: Exact developer intent preserved
+- Technical acronyms: IP, HTTP, API, URL, JSON, XML, HTML
+- Protocol names: TCP, UDP, FTP, SSH, SSL, TLS
+- Format specs: JSON, XML, CSV, YAML, TOML
+- Industry standards: OAuth, JWT, REST, GraphQL
 
 ---
 
 ## Rule 10: Generic Filename Parent-Level Promotion
 
 **Category**: Special Cases  
-**Status**: ✅ **VERIFIED** (nest4/singlefile.mjs example verified with api_tests/api_test)  
-**User Guide**: [FLATTENING Transparent Naming](API-FLATTENING-v2.md#f02-index-file-pattern) (similar to index pattern)  
-**Technical**: [CONDITIONS C17](API-RULES-CONDITIONS-v2.md#c17)
+**Status**: ✅ Verified (`api_tests/api_test/nest4/singlefile.mjs`)  
+**User Guide**: [API-RULES/API-FLATTENING.md - Index File Pattern](API-RULES/API-FLATTENING.md)  
+**Technical**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17)
 
-**Condition**: Files with generic names (index, main, default, etc.) get promoted to parent level  
-**Behavior**: Generic filenames become transparent, content promoted to meaningful parent name  
-**Source Files**: `api_tests/api_test/nest4/singlefile.mjs`
+**Condition**: File has a generic name (`index`, `main`, `default`, etc.)  
+**Behavior**: Generic filename becomes transparent; content is promoted to the meaningful parent name  
 
 **Verified Examples**:
 
 ```javascript
 // File: database/main.mjs
-export function connect() {
-	/* ... */
-}
-export function query() {
-	/* ... */
-}
+export function connect() { /* ... */ }
+export function query() { /* ... */ }
 
-// Without Rule 10: api.database.main.connect() ❌ (generic 'main' adds no value)
-// With Rule 10: api.database.connect() ✅ (promoted to meaningful parent level)
+// Without Rule 10: api.database.main.connect()  ❌ (generic 'main' adds no value)
+// With Rule 10:    api.database.connect()        ✅ (promoted to parent level)
 
 // File: auth/index.mjs
-export function login() {
-	/* ... */
-}
-export function logout() {
-	/* ... */
-}
+export function login() { /* ... */ }
+export function logout() { /* ... */ }
 
-// Without Rule 10: api.auth.index.login() ❌ (generic 'index' is noise)
-// With Rule 10: api.auth.login() ✅ (clean parent-level promotion)
+// Without Rule 10: api.auth.index.login()  ❌ (generic 'index' is noise)
+// With Rule 10:    api.auth.login()        ✅ (clean parent-level promotion)
 ```
 
 **Technical Implementation**:
 
-- **Detection**: [C17](API-RULES-CONDITIONS-v2.md#c17) - `isGenericFilename(fileName)`
-- **Promotion**: Content promoted to parent namespace
-- **Transparency**: Generic filename becomes invisible in API structure
+- **Detection**: [C17](API-RULES/API-RULES-CONDITIONS.md#c17) - `isGenericFilename(fileName)`
+- **Promotion**: Content promoted to parent namespace; generic filename becomes invisible
 
-**Promotion Logic**:
-
-- ✅ **Meaningful Parent**: Generic content promoted to semantically meaningful parent directory name
-- ✅ **Noise Reduction**: Eliminates generic names that add no semantic value
-- ✅ **Developer Intent**: Preserves intended API structure without implementation details
-- ❌ **Name Collision Risk**: Checked against existing parent namespace properties
+**Note**: Promotion is guarded against name collisions - checked against existing parent namespace properties before promoting.
 
 ---
 
 ## Rule 11: AddApi Special File Pattern
 
 **Category**: AddApi  
-**Status**: ✅ **VERIFIED** (api_tests/api_smart_flatten_addapi)  
-**User Guide**: [FLATTENING F06](API-FLATTENING-v2.md#f06-addapi-special-file-pattern)  
-**Technical**: [CONDITIONS C33](API-RULES-CONDITIONS-v2.md#c33)
+**Status**: ✅ Verified (`api_tests/api_smart_flatten_addapi`)  
+**User Guide**: [F06](API-RULES/API-FLATTENING.md#f06)  
+**Technical**: [C33](API-RULES/API-RULES-CONDITIONS.md#c33)
 
-**Condition**: Files named `addapi.mjs` loaded via `addApi()` method  
-**Behavior**: Always flatten regardless of `autoFlatten` setting - designed for API extensions  
-**Processing Path**: Special case handling in `addApiFromFolder()`
+**Condition**: A file named `addapi.mjs` is loaded via `api.slothlet.api.add()`  
+**Behavior**: Exports are always flattened to the mount namespace regardless of other settings  
+**Processing Path**: Detection in `getFlatteningDecision()` (`src/lib/processors/flatten.mjs`); execution in `src/lib/builders/modes-processor.mjs`
 
-**Always-Flatten Behavior**:
+**Verified Example**:
 
 ```javascript
-// File: plugins/addapi.mjs
-export function initializePlugin() {
-	/* ... */
-}
-export function cleanup() {
-	/* ... */
-}
-export function configure() {
-	/* ... */
-}
+// File: plugin-folder/addapi.mjs
+export function initializePlugin() { /* ... */ }
+export function cleanup() { /* ... */ }
+export function configure() { /* ... */ }
 
-// API Usage:
-await api.addApi("plugins", "./plugin-folder");
+await api.slothlet.api.add("plugins", "./plugin-folder");
 
-// Expected Result:
-api.plugins.initializePlugin(); // ✅ Always flattened (no .addapi. level)
-api.plugins.cleanup(); // ✅ Direct extension of plugins namespace
-api.plugins.configure(); // ✅ Seamless API extension
+// addapi.mjs exports are always flattened - never nested:
+api.plugins.initializePlugin(); // ✅
+api.plugins.cleanup();          // ✅
+api.plugins.configure();        // ✅
+// NOT: api.plugins.addapi.initializePlugin() ❌
 ```
 
 **Technical Implementation**:
@@ -648,213 +505,208 @@ if (moduleKeys.includes("addapi")) {
 	const addapiModule = newModules["addapi"];
 	const otherModules = { ...newModules };
 	delete otherModules["addapi"];
-
-	// Always flatten addapi contents
 	modulesToMerge = { ...addapiModule, ...otherModules };
 }
 ```
 
 **Use Cases**:
 
-- 🔌 **Plugin Systems**: Runtime plugin loading and API extension
-- 🔄 **Hot Reloading**: Dynamic API updates during development
-- 📦 **Modular Extensions**: Clean extension of existing API surfaces
-- 🎯 **Targeted Integration**: Specific API namespace enhancement
+- Plugin systems that extend the API at a known namespace
+- Hot-reloadable API extension points
+- Clean integration of external modules into a live API surface
 
 ---
 
 ## Rule 12: Module Ownership and Selective API Overwriting
 
 **Category**: AddApi  
-**Status**: ✅ **IMPLEMENTED** - Full ownership tracking for safe hot-reloading  
-**User Guide**: [FLATTENING F07](API-FLATTENING-v2.md#f07-addapi-root-level-file-matching) (related to AddApi patterns)  
-**Technical**: [CONDITIONS C19-C22](API-RULES-CONDITIONS-v2.md#c19-c22)
+**Status**: ✅ Implemented (`src/lib/handlers/ownership.mjs`)  
+**User Guide**: [F07](API-RULES/API-FLATTENING.md#f07)  
+**Technical**: [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19)
 
-**Purpose**: Enable safe hot-reloading where modules can selectively overwrite only APIs they originally registered  
-**Implementation**: Full ownership tracking system with Map-based validation and moduleId-based protection  
-**Source Code**: `src/slothlet.mjs` (ownership tracking), `src/lib/helpers/api_builder/add_api.mjs` (validation), `tests/test-rule-12.mjs` (test suite)
+**Purpose**: Track which module registered each API path, enabling safe hot-reloading and cross-module conflict protection.
 
-**Configuration**:
+**Implementation**: Stack-based ownership system. Each API path maintains an independent ownership history stack. Removing a module automatically rolls back to the previous owner. Collision behavior is controlled by the `api.collision` configuration.
+
+### Configuration
 
 ```javascript
 const api = await slothlet({
 	dir: "./api",
-	enableModuleOwnership: true, // ✅ Enables ownership tracking
-	allowApiOverwrite: false // Global protection (optional)
+	api: {
+		collision: {
+			initial: "merge",   // During initial API build
+			api: "replace"      // During api.slothlet.api.add()
+		}
+	}
 });
 ```
 
-**Example Usage**:
+### moduleId Tracking
+
+Each `api.slothlet.api.add()` call accepts an optional `moduleId`. This is the key for ownership tracking:
 
 ```javascript
-// Module A registers plugins
-await api.addApi(
-	"plugins.moduleA",
-	"./modules/moduleA",
-	{},
-	{
-		moduleId: "moduleA", // Track ownership
-		forceOverwrite: true // Override global allowApiOverwrite
-	}
-);
+// Module A registers plugins namespace
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA", {}, {
+	moduleId: "moduleA"
+});
 
-// Module B registers in same namespace
-await api.addApi(
-	"plugins.moduleB",
-	"./modules/moduleB",
-	{},
-	{
-		moduleId: "moduleB",
-		forceOverwrite: true
-	}
-);
+// Module B registers in the same parent namespace
+await api.slothlet.api.add("plugins.moduleB", "./modules/moduleB", {}, {
+	moduleId: "moduleB"
+});
 
-// Hot-reload Module A - only affects APIs it owns
-await api.addApi(
-	"plugins.moduleA",
-	"./modules/moduleA-v2",
-	{},
-	{
-		moduleId: "moduleA",
-		forceOverwrite: true // ✅ Allowed - moduleA owns these APIs
-	}
-);
+// Hot-reload Module A - ownership system allows this because moduleA owns these paths
+await api.slothlet.api.add("plugins.moduleA", "./modules/moduleA-v2", {}, {
+	moduleId: "moduleA",
+	forceOverwrite: true
+});
 
-// Cross-module overwrite protection
-await api.addApi(
-	"plugins.moduleB",
-	"./modules/malicious",
-	{},
-	{
-		moduleId: "moduleA", // ❌ Error - moduleA cannot overwrite moduleB's APIs
-		forceOverwrite: true
-	}
-);
+// Cross-module overwrite - blocked if collision mode is "error"
+await api.slothlet.api.add("plugins.moduleB", "./modules/other", {}, {
+	moduleId: "moduleA",        // moduleA does not own moduleB's paths
+	forceOverwrite: true        // Throws OWNERSHIP_CONFLICT in "error" mode
+});
 ```
 
-**Security Features**:
+### Ownership Stack
 
-- ✅ **Ownership Tracking**: Each API property tracks its originating module
-- ✅ **Cross-Module Protection**: Prevents modules from overwriting others' APIs
-- ✅ **Hot-Reload Safety**: Enables safe runtime updates
-- ✅ **Configuration Flexibility**: Global and per-operation controls
+Each API path has a history stack. When a module is removed, the previous owner is automatically restored:
 
-**Implementation Plan**:
+```javascript
+// Stack for "plugins.tools": [module-a, module-b]  (module-b is current owner)
+await api.slothlet.api.remove("module-b");
+// Stack restored to: [module-a]  (module-a is active again)
+```
 
-- **Phase 1**: Ownership metadata tracking in API properties ⚠️ **IN PROGRESS**
-- **Phase 2**: Cross-module validation logic ⏳ **PLANNED**
-- **Phase 3**: Hot-reload integration and testing ⏳ **PLANNED**
+### Collision Modes
+
+| Mode | Behavior |
+| ---- | -------- |
+| `"merge"` (default) | Preserve existing properties, add new ones |
+| `"merge-replace"` | Add new properties, overwrite existing |
+| `"replace"` | Completely replace the existing value |
+| `"skip"` | Keep existing value, silently ignore new |
+| `"warn"` | Keep existing value, log a warning |
+| `"error"` | Throw `OWNERSHIP_CONFLICT` error |
+
+### forceOverwrite
+
+`forceOverwrite: true` requires an explicit `moduleId` and performs a complete replacement regardless of collision mode. Use for cases where a module must fully replace its own prior registration:
+
+```javascript
+await api.slothlet.api.add("config", "./new-config", {}, {
+	moduleId: "config-v2",
+	forceOverwrite: true
+});
+```
+
+**Source Code**: `src/lib/handlers/ownership.mjs`
 
 ---
 
-**Planned Technical Implementation**:
+## Rule 13: AddApi Path Deduplication Flattening
+
+> **New in v3**
+
+**Category**: AddApi  
+**Status**: ✅ Implemented (`api_tests/smart_flatten/api_smart_flatten_folder_config`)  
+**User Guide**: [F08](API-RULES/API-FLATTENING.md#f08)  
+**Technical**: [C34](API-RULES/API-RULES-CONDITIONS.md#c34)
+
+**Purpose**: When `api.slothlet.api.add("config", folder)` is called and the folder contains a subfolder whose name matches the last segment of the mount path (e.g. `config/config.mjs`), prevent double-nesting `api.config.config.*` by hoisting the subfolder's exports up to `api.config.*`.
+
+**Condition**: After `buildAPI` returns `newApi`, if `newApi` contains a key equal to `lastPart` (last segment of `normalizedPath`) AND the matching value's `filePath` has its parent directory equal to `resolvedFolderPath/lastPart` (direct child check), hoist that key's own exports to the same level as the other keys in `newApi` and remove the duplicate key.
+
+**Verified Example**:
 
 ```javascript
-// Enhanced conflict resolution in add_api.mjs
-if (instance.config.enableModuleOwnership && options.forceOverwrite && options.moduleId) {
-	const existingOwner = getApiOwnership(instance, apiPath);
-	if (existingOwner && existingOwner.moduleId !== options.moduleId) {
-		throw new Error(`Cannot overwrite API owned by "${existingOwner.moduleId}"`);
-	}
-	// Allow overwrite - module owns this API
-} else if (!instance.config.allowApiOverwrite) {
-	// Fall back to global logic
-	console.warn(`Skipping addApi: allowApiOverwrite is false`);
-	return;
-}
+// Folder structure: api_smart_flatten_folder_config/
+//   main.mjs          ← exports getRootInfo, setRootConfig
+//   config/
+//     config.mjs      ← exports getNestedConfig, setNestedConfig
+
+await api.slothlet.api.add("config", "./api_smart_flatten_folder_config", {});
+
+// Without Rule 13 (double-nested):
+api.config.config.getNestedConfig(); // ❌
+
+// With Rule 13 (hoisted):
+api.config.getNestedConfig(); // ✅ subfolder exports promoted
+api.config.setNestedConfig(); // ✅
+api.config.main.getRootInfo(); // ✅ other files unaffected
 ```
 
-**Key Features** (Planned):
+**Guard - `isDirectChild`**: Rule 13 only fires when the matching key's `filePath` is **directly** inside `resolvedFolderPath/lastPart`. This prevents false positives when a deeper nested folder coincidentally shares the mount-path name:
 
-- **Ownership Tracking**: Each API path tracks which module registered it
-- **Selective Overwrites**: `forceOverwrite` only works on module's own APIs
-- **Namespace Sharing**: Multiple modules can safely extend same namespace
-- **Performance Conscious**: Only active when `enableModuleOwnership: true`
-- **Precedence Logic**: `forceOverwrite` takes precedence over `allowApiOverwrite`
+```javascript
+// Should NOT hoist (services/services/services.mjs):
+// api.add("services", folder)  →  newApi has key "services"
+// but filePath = .../services/services/services.mjs
+//     dirname  = .../services/services   ≠ resolvedFolderPath/services
+// → Rule 13 does NOT fire
+// → api.services.services.getNestedService remains properly nested ✅
+```
 
-**Implementation TODO**:
-
-- [ ] Add ownership tracking data structure to slothlet instance
-- [ ] Implement `getApiOwnership()` and `registerApiOwnership()` functions
-- [ ] Add ownership validation to `add_api.mjs` conflict resolution
-- [ ] Add corresponding conditions to [API-RULES-CONDITIONS-v2.md](API-RULES-CONDITIONS-v2.md)
-- [ ] Comprehensive testing with multi-module scenarios
+**Implementation**: `src/lib/handlers/api-manager.mjs` - immediately after `buildAPI` call, before `setValueAtPath`
 
 ---
 
 ## Verification Status
 
-| Rule | Title                                          | Status            | Test Source                                 |
-| ---- | ---------------------------------------------- | ----------------- | ------------------------------------------- |
-| 1    | Filename Matches Container Flattening          | ✅ VERIFIED       | api_tests/api_test                          |
-| 2    | Named-Only Export Collection                   | ✅ VERIFIED       | api_tests/api_test                          |
-| 3    | Empty Module Handling                          | ✅ VERIFIED       | debug testing                               |
-| 4    | Default Export Container Pattern               | ✅ VERIFIED       | api_tests/api_test + api_tv_test            |
-| 5    | Multi-Default Export Mixed Pattern             | ✅ VERIFIED       | api_tests/api_tv_test                       |
-| 6    | Self-Referential Export Protection             | ✅ VERIFIED       | api_tests/api_test                          |
-| 7    | Auto-Flattening Single Named Export            | ✅ VERIFIED       | api_tests/api_test                          |
-| 8    | Single-File Auto-Flattening Patterns           | ✅ FULLY VERIFIED | Multiple test files                         |
-| 9    | Function Name Preference Over Sanitization     | ✅ FULLY VERIFIED | autoIP, parseJSON, getHTTPStatus, XMLParser |
-| 10   | Generic Filename Parent-Level Promotion        | ✅ VERIFIED       | nest4/singlefile.mjs                        |
-| 11   | AddApi Special File Pattern                    | ✅ VERIFIED       | api_tests/api_smart_flatten_addapi          |
-| 12   | Module Ownership and Selective API Overwriting | ⚠️ IN DEVELOPMENT | Not yet implemented                         |
+| Rule | Title                                          | Status       | Test Source |
+| ---- | ---------------------------------------------- | ------------ | ----------- |
+| 1    | Filename Matches Container Flattening          | ✅ Verified  | `api_tests/api_test` |
+| 2    | Named-Only Export Collection                   | ✅ Verified  | `api_tests/api_test` |
+| 3    | Empty Module Handling                          | ✅ Verified  | debug testing |
+| 4    | Named Export with Function Name Preservation   | ✅ Verified  | `api_tests/api_test`, `api_tests/api_tv_test` |
+| 5    | Multiple Module Default Export Handling        | ✅ Verified  | `api_tests/api_tv_test` |
+| 6    | Multiple Module Mixed Exports                  | ✅ Verified  | `api_tests/api_test_mixed` |
+| 7    | Single Module Named Export Flattening          | ✅ Verified  | `api_tests/api_test` |
+| 8    | Single Module Default Export Promotion         | ✅ Verified  | Multiple test files |
+| 9    | Function Name Preference Over Sanitization     | ✅ Verified  | autoIP, parseJSON, getHTTPStatus, XMLParser |
+| 10   | Generic Filename Parent-Level Promotion        | ✅ Verified  | `api_tests/api_test/nest4/singlefile.mjs` |
+| 11   | AddApi Special File Pattern                    | ✅ Verified  | `api_tests/api_smart_flatten_addapi` |
+| 12   | Module Ownership and Selective API Overwriting | ✅ Verified  | `src/lib/handlers/ownership.mjs` |
+| 13   | AddApi Path Deduplication Flattening           | ✅ Verified  | `api_tests/smart_flatten/api_smart_flatten_folder_config` |
 
 ---
 
 ## Cross-Reference Index
 
-### By FLATTENING Rules (F##)
+### By Flattening Pattern (F##)
 
-| Flattening Rule                 | API Rules                  | Technical Conditions                                        |
-| ------------------------------- | -------------------------- | ----------------------------------------------------------- |
-| [F01](API-FLATTENING-v2.md#f01) | Rule 1                     | [C05, C09b, C11](API-RULES-CONDITIONS-v2.md#c05)            |
-| [F02](API-FLATTENING-v2.md#f02) | Rule 8 (Pattern A)         | [C12, C21a](API-RULES-CONDITIONS-v2.md#c12)                 |
-| [F03](API-FLATTENING-v2.md#f03) | Rule 7                     | [C04, C09a, C18, C21c, C30](API-RULES-CONDITIONS-v2.md#c04) |
-| [F04](API-FLATTENING-v2.md#f04) | Rule 4, Rule 8 (Pattern B) | [C08c, C24](API-RULES-CONDITIONS-v2.md#c08c)                |
-| [F05](API-FLATTENING-v2.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES-CONDITIONS-v2.md#c08c)                |
-| [F06](API-FLATTENING-v2.md#f06) | Rule 11                    | [C33](API-RULES-CONDITIONS-v2.md#c33)                       |
-| [F07](API-FLATTENING-v2.md#f07) | Rule 12 (planned)          | _Implementation pending_                                    |
+| Flattening Pattern | API Rules | Technical Conditions |
+| ------------------ | --------- | -------------------- |
+| [F01](API-RULES/API-FLATTENING.md#f01) | Rule 1 | [C05, C09b, C11](API-RULES/API-RULES-CONDITIONS.md#c05) |
+| [F02](API-RULES/API-FLATTENING.md#f02) | Rule 8 (Pattern A) | [C12, C21a](API-RULES/API-RULES-CONDITIONS.md#c12) |
+| [F03](API-RULES/API-FLATTENING.md#f03) | Rule 7 | [C04, C09a, C18, C21c, C30](API-RULES/API-RULES-CONDITIONS.md#c04) |
+| [F04](API-RULES/API-FLATTENING.md#f04) | Rule 4, Rule 8 (Pattern B) | [C08c, C24](API-RULES/API-RULES-CONDITIONS.md#c08c) |
+| [F05](API-RULES/API-FLATTENING.md#f05) | Rule 4, Rule 8 (Pattern C) | [C08c, C11](API-RULES/API-RULES-CONDITIONS.md#c08c) |
+| [F06](API-RULES/API-FLATTENING.md#f06) | Rule 11 | [C33](API-RULES/API-RULES-CONDITIONS.md#c33) |
+| [F07](API-RULES/API-FLATTENING.md#f07) | Rule 12 | [C19-C22](API-RULES/API-RULES-CONDITIONS.md#c19) |
+| [F08](API-RULES/API-FLATTENING.md#f08) | Rule 13 | [C34](API-RULES/API-RULES-CONDITIONS.md#c34) |
 
-### By Technical Conditions (C##)
+### By Technical Condition (C##)
 
-| Condition                                  | API Rules                     | Flattening Rules        |
-| ------------------------------------------ | ----------------------------- | ----------------------- |
-| [C01-C07](API-RULES-CONDITIONS-v2.md#c01)  | Rules 1, 6, 7, 8              | F01, F03                |
-| [C08-C09d](API-RULES-CONDITIONS-v2.md#c08) | Rules 4, 6, 7                 | F04, F05                |
-| [C10-C21d](API-RULES-CONDITIONS-v2.md#c10) | Rules 1, 2, 3, 5, 7, 8, 9, 10 | F01, F02, F03           |
-| [C22-C26](API-RULES-CONDITIONS-v2.md#c22)  | Rules 4, 6                    | F04, F05                |
-| [C27-C32](API-RULES-CONDITIONS-v2.md#c27)  | Rules 5, 6, 7                 | Multi-default scenarios |
-| [C33](API-RULES-CONDITIONS-v2.md#c33)      | Rule 11                       | F06                     |
+| Condition | API Rules | Flattening Patterns |
+| --------- | --------- | ------------------- |
+| [C01-C07](API-RULES/API-RULES-CONDITIONS.md#c01) | Rules 1, 6, 7, 8 | F01, F03 |
+| [C08-C09d](API-RULES/API-RULES-CONDITIONS.md#c08) | Rules 4, 6, 7 | F04, F05 |
+| [C10-C21d](API-RULES/API-RULES-CONDITIONS.md#c10) | Rules 1, 2, 3, 5, 7, 8, 9, 10 | F01, F02, F03 |
+| [C22-C26](API-RULES/API-RULES-CONDITIONS.md#c22) | Rules 4, 6 | F04, F05 |
+| [C27-C32](API-RULES/API-RULES-CONDITIONS.md#c27) | Rules 5, 6, 7 | Multi-default scenarios |
+| [C33](API-RULES/API-RULES-CONDITIONS.md#c33) | Rule 11 | F06 |
+| [C34](API-RULES/API-RULES-CONDITIONS.md#c34) | Rule 13 | F08 |
 
 ### By Processing Context
 
-| Context                     | Rules         | Primary Conditions                             |
-| --------------------------- | ------------- | ---------------------------------------------- |
-| **Single-File Directories** | 1, 7, 8, 10   | C11, C12, C04, C17                             |
-| **Multi-File Directories**  | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19                     |
-| **Multi-Default Scenarios** | 5, 6, 7       | C02, C03, C27-C32                              |
-| **AddApi Operations**       | 11, 12        | C33, [C19-C22](API-RULES-CONDITIONS-v2.md#c19) |
-| **Root-Level Processing**   | 4, 8, 10      | C08c, C22, C17                                 |
-| **Subfolder Processing**    | 4, 6, 8       | C08d, C20, C24                                 |
-
----
-
-## Document Maintenance
-
-**Version**: 2.0  
-**Last Full Review**: January 3, 2026  
-**Test Verification**: All examples verified against current test files  
-**Cross-References**: Enhanced linking to FLATTENING-v2 and CONDITIONS-v2  
-**Implementation Status**: 12/12 rules fully implemented and verified
-
-**Update Triggers**:
-
-- Source code changes affecting API generation logic
-- New test cases that demonstrate additional behaviors
-- Changes to file structure or function signatures in api_builder/
-
-**Cross-Reference Maintenance**:
-
-- **FLATTENING-v2**: Update F## references when user guide changes
-- **CONDITIONS-v2**: Update C## references when technical implementation changes
-- **Test Files**: Verify examples remain accurate when test structure evolves
+| Context | Rules | Primary Conditions |
+| ------- | ----- | ------------------ |
+| **Single-File Directories** | 1, 7, 8, 10 | C11, C12, C04, C17 |
+| **Multi-File Directories** | 1, 2, 5, 7, 9 | C13, C15, C21a-d, C16, C19 |
+| **Multi-Default Scenarios** | 5, 6, 7 | C02, C03, C27-C32 |
+| **AddApi Operations** | 11, 12, 13 | C33, C34, C19-C22 |
+| **Root-Level Processing** | 4, 8, 10 | C08c, C22, C17 |
+| **Subfolder Processing** | 4, 6, 8 | C08d, C20, C24 |

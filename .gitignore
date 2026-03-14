@@ -1,14 +1,16 @@
 # custom
+.vitest-coverage-blobs/
+.vitest-coverage-tmp/
 trash/
 other_drivers/
 dist
 dist/
 types/dist
 types/dist/
-build/
+/build/
 build.zip
-build/zips/
-build/tmp/
+/build/zips/
+/build/tmp/
 *copy/
 *copy (*)/
 *copy */
@@ -43,10 +45,10 @@ coverage
 # custom
 trash/
 other_drivers/
-build/
+/build/
 build.zip
-build/zips/
-build/tmp/
+/build/zips/
+/build/tmp/
 *copy/
 *copy (*)/
 *copy.*
@@ -184,3 +186,4 @@ aider.conf.yml
 *instructions*.md
 prompts/
 .github/copilot-instructions.md
+.github/instructions

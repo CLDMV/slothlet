@@ -1,0 +1,170 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /tests/vitests/suites/smart-flattening/smart-flattening-case1-case2.test.vitest.mjs
+ *	@Date: 2026-01-12T23:44:38-08:00 (1768290278)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-01 20:21:55 -08:00 (1772425315)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Smart flattening tests - Case 1 (Single file) and Case 2 (Special addapi files).
+ * @module smart-flattening-case1-case2.test.vitest
+ *
+ * @description
+ * Tests Cases 1-2:
+ * - Case 1: Single file matching API path (config.mjs -> avoid config.config)
+ * - Case 2: Special addapi.* files (always flatten)
+ */
+
+import { describe, test, expect } from "vitest";
+import slothlet from "@cldmv/slothlet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getMatrixConfigs, API_TEST_BASE } from "../../setup/vitest-helper.mjs";
+
+const _filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(_filename);
+
+/**
+ * Helper function to trigger materialization in lazy mode
+ */
+async function materialize(func, ...args) {
+	if (typeof func === "function") {
+		await func(...args);
+	}
+}
+
+describe.each(getMatrixConfigs({}))("Smart Flattening Case 1-2 - $name", ({ name: ___name, config }) => {
+	// ========================================================================
+	// CASE 1: SINGLE FILE MATCHING API PATH
+	// ========================================================================
+
+	test("Single file matching API path - autoFlatten=true", async () => {
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+
+		// Should flatten: api.config.{functions} not api.config.config.{functions}
+		expect(typeof api.config.getConfig).toBe("function");
+		expect(typeof api.config.setConfig).toBe("function");
+		expect(typeof api.config.validateConfig).toBe("function");
+		expect(api.config.config).toBeUndefined();
+
+		// Test function execution
+		await materialize(api.config.getConfig);
+		const result = await api.config.getConfig();
+		expect(result).toBe("config-value");
+
+		await api.shutdown();
+	});
+
+	test("Single file matching API path - autoFlatten=false", async () => {
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add("config", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_single`), {});
+
+		// Should flatten: Rule 7 auto-flattening always applies regardless of autoFlatten parameter
+		expect(typeof api.config.getConfig).toBe("function");
+		expect(api.config.config).toBeUndefined();
+
+		// Test function execution
+		await materialize(api.config.getConfig);
+		const result = await api.config.getConfig();
+		expect(result).toBe("config-value");
+
+		await api.shutdown();
+	});
+
+	// ========================================================================
+	// CASE 2: SPECIAL ADDAPI FILES
+	// ========================================================================
+
+	test("Special addapi.mjs file - autoFlatten=true", async () => {
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
+
+		// Should flatten: api.plugins.{functions} not api.plugins.addapi.{functions}
+		expect(typeof api.plugins.initializePlugin).toBe("function");
+		expect(typeof api.plugins.pluginMethod).toBe("function");
+		expect(typeof api.plugins.cleanup).toBe("function");
+		expect(api.plugins.addapi).toBeUndefined();
+
+		// Verify default export properties are accessible (default becomes the namespace)
+		expect(api.plugins.special).toBe("addapi-file");
+		expect(api.plugins.autoFlatten).toBe(true);
+
+		// Test function execution
+		await materialize(api.plugins.initializePlugin);
+		const result = await api.plugins.initializePlugin();
+		expect(result).toBe("Plugin initialized");
+
+		await api.shutdown();
+	});
+
+	test("Special addapi.mjs file - autoFlatten=false", async () => {
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add("plugins", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi`), {});
+
+		// Should still flatten addapi files even when autoFlatten=false (special case)
+		expect(typeof api.plugins.initializePlugin).toBe("function");
+		expect(api.plugins.addapi).toBeUndefined();
+		
+		// Verify default export properties are accessible
+		expect(api.plugins.special).toBe("addapi-file");
+		expect(api.plugins.autoFlatten).toBe(true);
+
+		await api.shutdown();
+	});
+
+	// ========================================================================
+	// CASE 2b: ADDAPI WITH FUNCTION DEFAULT
+	// ========================================================================
+
+	test("Special addapi.mjs with function default - namespace is callable", async () => {
+		const api = await slothlet({
+			...config,
+			dir: path.join(__dirname, `../../../../${API_TEST_BASE}/api_test`)
+		});
+
+		await api.slothlet.api.add("pluginFunc", path.join(__dirname, `../../../../${API_TEST_BASE}/smart_flatten/api_smart_flatten_addapi_function`), {});
+
+		// Namespace should be callable (the default function)
+		expect(typeof api.pluginFunc).toBe("function");
+		expect(api.pluginFunc.addapi).toBeUndefined();
+
+		// Named exports should be properties of the namespace
+		expect(typeof api.pluginFunc.initialize).toBe("function");
+		expect(typeof api.pluginFunc.configure).toBe("function");
+
+		// Test calling the namespace function (default export)
+		await materialize(api.pluginFunc);
+		const result = await api.pluginFunc();
+		expect(result).toBe("Plugin function called");
+
+		// Test calling named exports
+		await materialize(api.pluginFunc.initialize);
+		const initResult = await api.pluginFunc.initialize();
+		expect(initResult).toBe("Plugin initialized (function default)");
+
+		await api.shutdown();
+	});
+});

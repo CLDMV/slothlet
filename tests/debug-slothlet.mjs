@@ -1,20 +1,109 @@
 /**
  *	@Project: @cldmv/slothlet
  *	@Filename: /tests/debug-slothlet.mjs
- *	@Date: 2025-10-21 14:29:00 -07:00 (1761082140)
- *	@Author: Nate Hyson <CLDMV>
+ *	@Date: 2025-09-09T08:06:19-07:00 (1757430379)
+ *	@Author: Nate Corcoran <CLDMV>
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
- *	@Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2025-11-09 22:10:15 -08:00 (1762755015)
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-13 07:00:18 -07:00 (1773410418)
  *	-----
- *	@Copyright: Copyright (c) 2013-2025 Catalyzed Motivation Inc. All rights reserved.
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 import chalk from "chalk";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
-import slothlet from "@cldmv/slothlet";
-import crypto from "crypto";
+// Populated after ensureDevEnvFlags() confirms slothlet-dev condition is active.
+// Must NOT be a static top-level import - that fires before the respawn check and
+// fails when NODE_OPTIONS=--conditions=slothlet-dev is not yet set.
+let resolveWrapper;
+
+let slothlet;
+const verbose =
+	process.argv.includes("--verbose") ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "1" ||
+	process.env.SLOTHLET_DEBUG_SCRIPT_VERBOSE === "true";
+
+function ensureDevEnvFlags() {
+	const distPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+	if (existsSync(distPath)) {
+		return false;
+	}
+
+	/**
+	 * @param {string[]} args
+	 * @param {string} condition
+	 * @returns {boolean}
+	 */
+	const hasCondition = (args, condition) =>
+		args.some((arg) => arg.startsWith("--conditions=") && arg.slice("--conditions=".length).split(/[|,]/u).includes(condition));
+
+	process.env.NODE_ENV = "development";
+
+	// Use V3 slothlet-dev condition
+	const allExecArgv = [...process.execArgv];
+	const envOptions = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const ____allConditions = [...allExecArgv, ...envOptions];
+
+	const slothletCondition = "slothlet-dev";
+
+	const requiredConditions = [slothletCondition, "development"];
+	const nextExecArgv = [...process.execArgv];
+	const envConditions = (process.env.NODE_OPTIONS ?? "")
+		.split(/\s+/u)
+		.filter(Boolean)
+		.filter((token) => token !== "--conditions=development|production");
+
+	let needsRespawn = process.env.NODE_ENV !== "development";
+
+	for (const condition of requiredConditions) {
+		const flag = `--conditions=${condition}`;
+		if (!hasCondition(nextExecArgv, condition)) {
+			nextExecArgv.push(flag);
+			needsRespawn = true;
+		}
+		if (!envConditions.includes(flag)) {
+			envConditions.push(flag);
+		}
+	}
+
+	process.env.NODE_OPTIONS = envConditions.join(" ");
+
+	if (!needsRespawn) {
+		return false;
+	}
+
+	process.stderr.write(
+		`[debug-slothlet] Missing env flags detected - relaunching with: NODE_ENV=development NODE_OPTIONS="${process.env.NODE_OPTIONS}"\n` +
+			`[debug-slothlet] All output below is from the respawned child process.\n` +
+			`[debug-slothlet] -------------------------------------------------------\n`
+	);
+
+	const child = spawn(process.argv[0], [...nextExecArgv, ...process.argv.slice(1)], {
+		env: { ...process.env, NODE_ENV: "development", NODE_OPTIONS: process.env.NODE_OPTIONS },
+		stdio: "inherit"
+	});
+
+	child.on("exit", (code, signal) => {
+		if (signal) {
+			process.kill(process.pid, signal);
+			return;
+		}
+		process.exit(code ?? 0);
+	});
+
+	return true;
+}
+
+const verboseLog = (...args) => {
+	if (verbose) {
+		console.log(...args);
+	}
+};
 
 /**
  * Returns the MD5 hash of a string.
@@ -52,6 +141,57 @@ export function compareApiShapes(
 	visitedB = null
 ) {
 	const { maxDepth = 10 } = options;
+
+	/**
+	 * Normalizes wrapper proxies to their underlying implementation when available.
+	 * @param {unknown} value - Value to normalize for comparison.
+	 * @returns {unknown} Normalized value for comparison.
+	 */
+	const normalizeForCompare = (value) => {
+		if (value === null || value === undefined) {
+			return value;
+		}
+		const valueType = typeof value;
+		if (valueType !== "object" && valueType !== "function") {
+			return value;
+		}
+		const wrapper = resolveWrapper(value);
+		if (wrapper && typeof wrapper === "object") {
+			const impl = wrapper.____slothletInternal.impl;
+			// Children are stored directly on the wrapper, not in a separate childCache
+			const childKeys = Object.keys(wrapper).filter((k) => !k.startsWith("_") && !k.startsWith("__"));
+			if (impl && typeof impl === "object") {
+				const descriptors = Object.getOwnPropertyDescriptors(impl);
+				const view = Object.create(Object.getPrototypeOf(impl) || Object.prototype, descriptors);
+				// Add children from wrapper
+				for (const key of childKeys) {
+					if (!Object.prototype.hasOwnProperty.call(view, key)) {
+						Object.defineProperty(view, key, {
+							value: wrapper[key],
+							writable: false,
+							enumerable: true,
+							configurable: true
+						});
+					}
+				}
+				return view;
+			}
+			if ((impl === null || impl === undefined) && childKeys.length > 0) {
+				const view = {};
+				for (const key of childKeys) {
+					view[key] = wrapper[key];
+				}
+				return view;
+			}
+			if (impl !== undefined && impl !== null) {
+				return impl;
+			}
+		}
+		return value;
+	};
+
+	a = normalizeForCompare(a);
+	b = normalizeForCompare(b);
 
 	// Initialize checkedPaths set on first call
 	if (checkedPaths === null) {
@@ -113,10 +253,16 @@ export function compareApiShapes(
 		};
 	}
 
+	/**
+	 * Collects keys for comparison without traversing noisy function prototype helpers.
+	 * @param {unknown} obj - Value to inspect for keys.
+	 * @returns {Array<string|symbol>} Keys to compare.
+	 */
 	const getAllKeys = (obj) => {
 		if (obj === null || obj === undefined) return [];
 		if (typeof obj === "function") {
-			return [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+			const allKeys = [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
+			return allKeys.filter((key) => !["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key));
 		}
 		if (typeof obj === "object") {
 			return [...new Set([...Object.getOwnPropertyNames(obj), ...Object.keys(obj)])];
@@ -128,11 +274,26 @@ export function compareApiShapes(
 	const keysB = new Set(getAllKeys(b));
 
 	// Helper function to check if a key should be skipped
-	const shouldSkipKey = (key, obj) => {
-		return (
-			["constructor", "prototype", "__proto__", "__ctx", "_impl", "length", "name", "__slothletDefault"].includes(key) &&
-			typeof obj === "function"
-		);
+	/**
+	 * Determines whether a key should be skipped during API shape comparison.
+	 * @param {string|symbol} key - Key being inspected.
+	 * @param {unknown} obj - Object or function containing the key.
+	 * @returns {boolean} True when the key should be ignored.
+	 */
+	const shouldSkipKey = (key, ____obj) => {
+		// Always skip internal path properties - these may differ between modes
+		// but don't affect user-facing API behavior
+		if (key === "____slothletInternal") {
+			return true;
+		}
+		if (key === "instanceID") {
+			return true;
+		}
+		// Skip ____slothlet property (inherited from ComponentBase, not part of user API)
+		if (key === "____slothlet") {
+			return true;
+		}
+		return false;
 	};
 
 	const onlyInA = [...keysA].filter((k) => !keysB.has(k) && !shouldSkipKey(k, a)).map((k) => (currentPath ? `${currentPath}.${k}` : k));
@@ -148,16 +309,17 @@ export function compareApiShapes(
 		if (shouldSkipKey(key, a)) {
 			continue;
 		}
-
 		const valA = a[key];
 		const valB = b[key];
 		const fullPath = currentPath ? `${currentPath}.${key}` : key;
+		const normalizedValA = normalizeForCompare(valA);
+		const normalizedValB = normalizeForCompare(valB);
 
 		// Skip circular references dynamically by checking if the property value
 		// is the same object reference as any ancestor in the path
 		if (
-			(valA !== null && typeof valA === "object" && visitedA.has(valA)) ||
-			(valB !== null && typeof valB === "object" && visitedB.has(valB))
+			(normalizedValA !== null && typeof normalizedValA === "object" && visitedA.has(normalizedValA)) ||
+			(normalizedValB !== null && typeof normalizedValB === "object" && visitedB.has(normalizedValB))
 		) {
 			// This is a circular reference, skip it
 			continue;
@@ -166,47 +328,77 @@ export function compareApiShapes(
 		// Add this path to checked paths
 		checkedPaths.add(fullPath);
 
-		if (typeof valA === "function" && typeof valB === "function") {
+		if (typeof normalizedValA === "function" && typeof normalizedValB === "function") {
 			// Compare function signatures and implementations
-			// Safely extract function properties
+			// Extract name, length, and toString from ORIGINAL proxies, not normalized impls
+			// This ensures we get the API-path-derived names and actual impl toString
 			const aName = typeof valA.name === "string" ? valA.name : "anonymous";
 			const bName = typeof valB.name === "string" ? valB.name : "anonymous";
 			const aLength = typeof valA.length === "number" ? valA.length : 0;
 			const bLength = typeof valB.length === "number" ? valB.length : 0;
 
-			if (aLength !== bLength || valA.toString() !== valB.toString()) {
+			// Call toString through the proxy to get the actual impl's toString
+			const aToString = typeof valA.toString === "function" ? valA.toString() : normalizedValA.toString();
+			const bToString = typeof valB.toString === "function" ? valB.toString() : normalizedValB.toString();
+
+			if (aLength !== bLength || aToString !== bToString) {
 				differingFunctions.push({
 					path: fullPath,
 					aSignature: `${aName}(${aLength} params)`,
 					bSignature: `${bName}(${bLength} params)`,
 					aLength: aLength,
-					bLength: bLength
+					bLength: bLength,
+					aToString: aToString.substring(0, 100),
+					bToString: bToString.substring(0, 100)
 				});
 			}
 
 			// Recursively compare function properties (functions can have properties too)
-			const funcComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
+			const funcComparison = compareApiShapes(
+				normalizedValA,
+				normalizedValB,
+				options,
+				fullPath,
+				currentDepth + 1,
+				checkedPaths,
+				visitedA,
+				visitedB
+			);
 			nestedDifferences.push(...funcComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...funcComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
 			nestedDifferences.push(...funcComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
 			nestedDifferences.push(...funcComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
 			nestedDifferences.push(...funcComparison.nestedDifferences);
-		} else if (typeof valA === "object" && typeof valB === "object" && valA !== null && valB !== null) {
+		} else if (
+			typeof normalizedValA === "object" &&
+			typeof normalizedValB === "object" &&
+			normalizedValA !== null &&
+			normalizedValB !== null
+		) {
 			// Recursively compare nested objects
-			const nestedComparison = compareApiShapes(valA, valB, options, fullPath, currentDepth + 1, checkedPaths, visitedA, visitedB);
+			const nestedComparison = compareApiShapes(
+				normalizedValA,
+				normalizedValB,
+				options,
+				fullPath,
+				currentDepth + 1,
+				checkedPaths,
+				visitedA,
+				visitedB
+			);
 			nestedDifferences.push(...nestedComparison.onlyInA.map((p) => ({ type: "onlyInA", path: p })));
 			nestedDifferences.push(...nestedComparison.onlyInB.map((p) => ({ type: "onlyInB", path: p })));
 			nestedDifferences.push(...nestedComparison.differingFunctions.map((f) => ({ type: "differingFunction", ...f })));
 			nestedDifferences.push(...nestedComparison.differingValues.map((v) => ({ type: "differingValue", ...v })));
 			nestedDifferences.push(...nestedComparison.nestedDifferences);
-		} else if (typeof valA !== typeof valB || valA !== valB) {
+		} else if (typeof normalizedValA !== typeof normalizedValB || normalizedValA !== normalizedValB) {
 			// Values differ in type or content
 			differingValues.push({
 				path: fullPath,
-				aValue: valA,
-				bValue: valB,
-				aType: typeof valA,
-				bType: typeof valB
+				aValue: normalizedValA,
+				bValue: normalizedValB,
+				aType: typeof normalizedValA,
+				bType: typeof normalizedValB
 			});
 		}
 	}
@@ -230,6 +422,56 @@ export function compareApiShapes(
 	};
 }
 
+/**
+ * Materializes all lazy wrappers reachable from a root value to normalize comparisons.
+ * @param {unknown} root - Root value to traverse for lazy wrapper materialization.
+ * @returns {Promise<void>} Resolves after traversal and materialization.
+ */
+async function materializeLazyWrappers(root) {
+	const visited = new WeakSet();
+	const queue = [root];
+
+	while (queue.length > 0) {
+		const current = queue.pop();
+		if (current === null || current === undefined) {
+			continue;
+		}
+		const currentType = typeof current;
+		if (currentType !== "object" && currentType !== "function") {
+			continue;
+		}
+		if (visited.has(current)) {
+			continue;
+		}
+		visited.add(current);
+
+		const currentWrapper = resolveWrapper(current);
+		if (currentWrapper && typeof current._materialize === "function") {
+			const state = currentWrapper.____slothletInternal.state;
+			if (state && !state.materialized && !state.inFlight) {
+				await current._materialize();
+			}
+		}
+
+		const keys = new Set([...Object.getOwnPropertyNames(current), ...Object.keys(current)]);
+		for (const key of keys) {
+			if (typeof key === "string") {
+				if (key.startsWith("__") || key.startsWith("_")) {
+					continue;
+				}
+				if (currentType === "function" && ["toString", "valueOf", "apply", "bind", "call", "prototype", "name", "length"].includes(key)) {
+					continue;
+				}
+			}
+			try {
+				queue.push(current[key]);
+			} catch (____error) {
+				// Ignore getter errors during traversal
+			}
+		}
+	}
+}
+
 // Error tracking arrays (global to collect errors from both runs)
 const nanResults = [];
 const callErrors = [];
@@ -248,10 +490,12 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	let bound;
 	// if (awaitCalls) {
 
+	// Use V3 API test directory
+	const apiTestDir = "../api_tests/api_test";
+
 	// if (modeLabel === "EAGER") bound = await slothletEager({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
 	// else bound = await slothletLazy({ ...config, dir: "../api_test", api_mode: "function", reference: { md5 } });
-	if (modeLabel === "EAGER") bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
-	else bound = await slothlet({ ...config, dir: "../api_tests/api_test", reference: { md5 } });
+	bound = await slothlet({ ...config, dir: apiTestDir, reference: { md5 } });
 
 	// bound = await slothlet.create({ ...config, dir: "./api_test" });
 	// } else {
@@ -259,15 +503,15 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	// }
 	// const bound = await slothlet.create({ ...config, debug: true, dir: "./api_test" });
 	// const bound = slothlet.createBoundApi({});
-	console.log("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n");
+	console.log(chalk.green("\n===== DEBUG MODE: " + modeLabel + (awaitCalls ? " (awaited)" : "") + " =====\n"));
 
 	// console.dir(bound, { depth: null });
-	console.log("bound api (before calls): ", bound);
+	verboseLog("bound api (before calls): ", bound);
 	// process.exit(0);
 	// console.log(await bound.describe());
 	// console.dir(await bound.describe(), { depth: null });
 
-	console.log("\n===== DIRECT HELLO TEST START =====\n");
+	console.log(chalk.green("\n===== DIRECT HELLO TEST START =====\n"));
 	try {
 		let directResult;
 		if (awaitCalls) {
@@ -279,7 +523,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 	} catch (e) {
 		console.error("Error during direct hello test:", e);
 	}
-	console.log("\n===== DIRECT HELLO TEST END =====\n");
+	console.log(chalk.green("\n===== DIRECT HELLO TEST END =====\n"));
 
 	// List of debug API calls to run
 	const tests = [
@@ -325,6 +569,12 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 				{ path: ["math", "add"], args: [2, 3] },
 				{ path: ["math", "multiply"], args: [2, 3] }
 			]
+		},
+
+		// deep math
+		{
+			section: "deep2.folder.math",
+			calls: [{ path: ["deep2", "folder", "math", "add"], args: [2, 3] }]
 		},
 
 		// multi_func
@@ -546,14 +796,23 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		{
 			section: "empty (empty folder/object)",
 			calls: [{ path: ["empty"], args: [], isObject: true }]
+		},
+
+		// deep config
+		{
+			section: "deep.folder.config",
+			// calls: [{ path: ["deep", "folder", "config"], args: [], isObject: true }]
+			calls: [{ path: ["deep", "folder", "config", "get"], args: ["host"] }]
 		}
 	];
 
 	let testCounter = 0;
 	const testBeforeOutput = 40;
 
+	console.log(chalk.green("\n===== TEST RUNNING START =====\n"));
+
 	for (const test of tests) {
-		console.log(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
+		verboseLog(chalk.magentaBright.bold(`--- Debug: ${test.section} ---`));
 		for (const call of test.calls) {
 			// Auto-generate label from path and args
 			const pathStr = call.path.join(".");
@@ -570,7 +829,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			// Single-shot property access for correct Proxy getter behavior
 			let fn;
 			try {
-				console.log("calling: " + chalk.cyanBright(`${awaitCalls ? "await " : ""}${label}`));
+				verboseLog("calling: " + chalk.cyanBright(`${awaitCalls ? "await " : ""}${label}`));
 				if (pathStr) {
 					fn = call.path.reduce((acc, key) => acc && acc[key], bound);
 				} else {
@@ -588,7 +847,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 
 				console.log = (...args) => {
 					capturedOutput.push({ type: "log", args });
-					originalConsoleLog(...args);
+					if (verbose) originalConsoleLog(...args);
 				};
 				console.error = (...args) => {
 					capturedOutput.push({ type: "error", args });
@@ -596,16 +855,16 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 				};
 				console.warn = (...args) => {
 					capturedOutput.push({ type: "warn", args });
-					originalConsoleWarn(...args);
+					if (verbose) originalConsoleWarn(...args);
 				};
 
 				let result;
 				if (call.isObject) {
 					// Object access - just return the object/property, don't call it
-					console.log("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
+					verboseLog("[DEBUG_SCRIPT] Accessing object property:", call.path.join("."));
 					result = fn;
 				} else if (typeof fn === "function") {
-					console.log("[DEBUG_SCRIPT] About to call function with args:", call.args);
+					verboseLog("[DEBUG_SCRIPT] About to call function with args:", call.args);
 					if (awaitCalls) {
 						result = await fn(...call.args);
 					} else {
@@ -613,7 +872,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 					}
 				} else if (typeof fn === "object" && fn !== null) {
 					// Handle objects - don't try to call them, just return the object
-					console.log("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
+					verboseLog("[DEBUG_SCRIPT] Target is object, not function. Returning object directly.");
 					result = fn;
 				} else {
 					// Fallback to eval for dynamic property/function chains
@@ -707,34 +966,75 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 			}
 			testCounter++;
 			if (testCounter === testBeforeOutput) {
-				console.log("bound api (after " + testCounter + " calls): ", bound);
+				verboseLog("bound api (after " + testCounter + " calls): ", bound);
 			}
 		}
 	}
 	// await slothlet.shutdown();
-	if (awaitCalls) console.log("bound api (after calls): ", bound);
+
+	console.log(chalk.green("\n===== TEST RUNNING END =====\n"));
+
+	if (awaitCalls) verboseLog("bound api (after calls): ", bound);
 	return bound;
 }
 
 (async () => {
-	// Command line param: e/eager or l/lazy
-	// const modeArg = process.argv.find((arg) => arg === "e" || arg === "eager" || arg === "l" || arg === "lazy");
+	if (ensureDevEnvFlags()) {
+		return;
+	}
+
+	// Now safe to import - slothlet-dev condition is active
+	({ resolveWrapper } = await import("@cldmv/slothlet/handlers/unified-wrapper"));
+
+	const module = await import("@cldmv/slothlet");
+	// Prefer default export, fallback to named, then module itself
+	slothlet = module?.default ?? module?.slothlet ?? module;
+	if (typeof slothlet !== "function") {
+		throw new Error("slothlet entrypoint did not export a callable function");
+	}
+
+	// Check for mode-specific arguments
+	const eagerOnly = process.argv.includes("--eager");
+	const lazyOnly = process.argv.includes("--lazy");
+
+	if (eagerOnly && lazyOnly) {
+		throw new Error("Cannot specify both --eager and --lazy. Choose one or neither.");
+	}
+
+	if (eagerOnly) {
+		console.log("\n" + chalk.yellowBright.bold("===== EAGER MODE TEST ONLY ====="));
+		console.log(chalk.cyanBright("Running EAGER mode tests...\n"));
+		await runDebug({ mode: "eager" }, "EAGER", false);
+		console.log(chalk.cyanBright("FINISHED EAGER mode tests...\n"));
+		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER MODE TEST ====="));
+		return;
+	}
+
+	if (lazyOnly) {
+		console.log("\n" + chalk.yellowBright.bold("===== LAZY MODE TEST ONLY ====="));
+		console.log(chalk.cyanBright("Running LAZY mode tests...\n"));
+		await runDebug({ mode: "lazy" }, "LAZY", true);
+		console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
+		console.log("\n" + chalk.yellowBright.bold("===== COMPLETED LAZY MODE TEST ====="));
+		return;
+	}
 
 	console.log("\n" + chalk.yellowBright.bold("===== EAGER & LAZY MODE TEST ====="));
 	console.log(chalk.cyanBright("Running EAGER & LAZY mode tests...\n"));
 
-	let lazy = false;
 	let label = "EAGER";
 	let awaitCalls = false;
-	const _eagerBound = await runDebug({ lazy }, label, awaitCalls);
-	// if (modeArg === "l" || modeArg === "lazy") {
-	lazy = true;
+	const _eagerBound = await runDebug({ mode: "eager" }, label, awaitCalls);
+	console.log(chalk.cyanBright("FINISHED EAGER mode tests...\n"));
+
 	label = "LAZY";
 	awaitCalls = true;
-	// }
-	const _lazyBound = await runDebug({ lazy }, label, awaitCalls);
+	const _lazyBound = await runDebug({ mode: "lazy" }, label, awaitCalls);
+	console.log(chalk.cyanBright("FINISHED LAZY mode tests...\n"));
 
 	console.log("\n" + chalk.yellowBright.bold("===== COMPLETED EAGER & LAZY MODE TEST ====="));
+
+	await materializeLazyWrappers(_lazyBound);
 
 	const compared = compareApiShapes(_eagerBound, _lazyBound);
 
@@ -823,6 +1123,10 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		console.log(chalk.yellowBright("⚠️  Function signature differences:"));
 		compared.differingFunctions.forEach((diff) => {
 			console.log(`  - ${diff.path}: ${diff.aSignature} [eager] vs ${diff.bSignature} [lazy]`);
+			if (diff.aToString && diff.bToString) {
+				console.log(chalk.gray(`    Eager toString: ${diff.aToString}`));
+				console.log(chalk.gray(`    Lazy toString:  ${diff.bToString}`));
+			}
 		});
 		console.log();
 	}
@@ -843,10 +1147,17 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		}
 	}
 
-	if (compared.nestedDifferences.length > 0) {
+	// Filter out expected nested differences (mode configs naturally differ between eager and lazy)
+	const significantNestedDifferences = compared.nestedDifferences.filter(
+		(diff) =>
+			// __childFilePaths is lazy-mode only metadata for file path tracking (expected difference)
+			!diff.path.includes("__childFilePaths")
+	);
+
+	if (significantNestedDifferences.length > 0) {
 		hasErrors = true;
 		console.log(chalk.magentaBright("🔍 Nested differences:"));
-		compared.nestedDifferences.forEach((diff) => {
+		significantNestedDifferences.forEach((diff) => {
 			const typeLabel = diff.type === "onlyInA" ? "only in eager" : diff.type === "onlyInB" ? "only in lazy" : diff.type;
 			console.log(`  - [${typeLabel}] ${diff.path}`);
 		});
@@ -858,7 +1169,7 @@ async function runDebug(config, modeLabel, awaitCalls = false) {
 		compared.onlyInB.length === 0 &&
 		compared.differingFunctions.length === 0 &&
 		compared.differingValues.length === 0 &&
-		compared.nestedDifferences.length === 0
+		significantNestedDifferences.length === 0
 	) {
 		console.log(chalk.greenBright("✅ APIs are structurally identical!"));
 	}

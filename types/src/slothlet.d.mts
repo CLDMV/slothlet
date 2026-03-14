@@ -1,152 +1,225 @@
 /**
- * Live-binding reference to the current API instance.
- * This is updated whenever a new API instance is created.
- * Dynamically imported modules can access this at runtime.
- * @type {object}
- * @private
- * @internal
+ * Create a new Slothlet instance and load an API from a directory.
+ * This is the sole public entry point for slothlet. Each call produces an independent
+ * API instance with its own component graph, context store, and lifecycle.
+ * @alias module:@cldmv/slothlet
+ * @async
+ * @param {SlothletOptions} config - Configuration options
+ * @returns {Promise<SlothletAPI>} Fully loaded, proxy-based API object
+ * @public
+ * @example
+ * // Minimal usage
+ * const api = await slothlet({ dir: "./api" });
+ * const result = await api.math.add(2, 3);
+ * await api.slothlet.shutdown();
+ *
+ * @example
+ * // Lazy mode with background materialization
+ * const api = await slothlet({
+ *   dir: "./api",
+ *   mode: "lazy",
+ *   backgroundMaterialize: true
+ * });
+ *
+ * @example
+ * // With hooks
+ * const api = await slothlet({ dir: "./api", hook: true });
+ * api.slothlet.hook.on("before", "**", (endpoint, args) => { /* ... *\/ });
+ *
+ * @example
+ * // Hot-reload a module at runtime
+ * await api.slothlet.api.reload("./api/math.mjs");
+ *
+ * @example
+ * // Strict collision control
+ * const api = await slothlet({
+ *   dir: "./api",
+ *   api: { collision: { initial: "merge", api: "error" } }
+ * });
  */
-export const self: object;
-/**
- * Live-binding reference for contextual data.
- * @type {object}
- * @private
- * @internal
- */
-export const context: object;
-/**
- * Live-binding reference for reference data.
- * @type {object}
- * @private
- * @internal
- */
-export const reference: object;
+export function slothlet(config: SlothletOptions): Promise<SlothletAPI>;
 export default slothlet;
+/**
+ * Configuration options passed to `slothlet()`.
+ */
 export type SlothletOptions = {
     /**
-     * - Directory to load API modules from.
-     * - Can be absolute or relative path.
-     * - If relative, resolved from the calling file's location.
-     * - Defaults to "api" directory relative to caller.
+     * - Directory to scan for API modules. Relative paths are resolved from the calling file.
      */
-    dir?: string;
+    dir: string;
     /**
-     * - Loading strategy (legacy option):
-     * - `true`: Lazy loading - modules loaded on-demand when accessed (lower initial load, proxy overhead)
-     * - `false`: Eager loading - all modules loaded immediately (default, higher initial load, direct access)
+     * - Loading strategy.
+     * - `"eager"` — all modules are loaded immediately at startup (default).
+     * - `"lazy"` — modules are loaded on first access via a Proxy.
+     * Also accepted: `"immediate"` / `"preload"` (eager aliases); `"deferred"` / `"proxy"` (lazy aliases).
      */
-    lazy?: boolean;
+    mode?: "eager" | "lazy";
     /**
-     * - Loading mode (alternative to lazy option):
-     * - `"lazy"`: Lazy loading - modules loaded on-demand when accessed (same as lazy: true)
-     * - `"eager"`: Eager loading - all modules loaded immediately (same as lazy: false)
-     * - `"singleton"`, `"vm"`, `"worker"`, `"fork"`: Execution engine mode (legacy, use engine option instead)
-     * - Takes precedence over lazy option when both are provided
+     * - Context propagation runtime.
+     * - `"async"` — AsyncLocalStorage (Node.js built-in, recommended for production).
+     * - `"live"` — Experimental live bindings.
+     * Also accepted: `"asynclocalstorage"` / `"als"` / `"node"` as aliases for `"async"`.
      */
-    mode?: string;
+    runtime?: "async" | "live";
     /**
-     * - Execution environment mode:
-     * - `"singleton"`: Single shared instance within current process (default, fastest)
-     * - `"vm"`: Isolated VM context for security/isolation
-     * - `"worker"`: Web Worker or Worker Thread execution
-     * - `"fork"`: Child process execution for complete isolation
-     */
-    engine?: string;
-    /**
-     * - Runtime binding system:
-     * - `"async"` or `"asynclocalstorage"`: Use AsyncLocalStorage for context isolation (default, recommended)
-     * - `"live"` or `"livebindings"`: Use live binding system for dynamic context updates
-     * - Controls how `self`, `context`, and `reference` bindings are managed across function calls
-     */
-    runtime?: string;
-    /**
-     * - Directory traversal depth control:
-     * - `Infinity`: Traverse all subdirectories recursively (default)
-     * - `0`: Only load files in root directory, no subdirectories
-     * - `1`, `2`, etc.: Limit traversal to specified depth levels
+     * - Directory traversal depth. `Infinity` scans all subdirectories (default). `0` scans only the root.
      */
     apiDepth?: number;
     /**
-     * - Debug output control:
-     * - `true`: Enable verbose logging for module loading, API construction, and binding operations
-     * - `false`: Silent operation (default)
-     * - Can be set via command line flag `--slothletdebug`, environment variable `SLOTHLET_DEBUG=true`, or options parameter
-     * - Command line and environment settings become the default for all instances unless overridden
+     * - Object merged into the per-request context accessible inside API functions via `import { context } from "@cldmv/slothlet/runtime"`.
      */
-    debug?: boolean;
+    context?: object | null;
     /**
-     * - API structure and calling convention:
-     * - `"auto"`: Auto-detect based on root module exports (function vs object) - recommended (default)
-     * - `"function"`: Force API to be callable as function with properties attached
-     * - `"object"`: Force API to be plain object with method properties
+     * - Object whose properties are merged directly onto the root API and also available as `api.slothlet.reference`.
      */
-    api_mode?: string;
+    reference?: object | null;
     /**
-     * - Controls whether addApi can overwrite existing API endpoints:
-     * - `true`: Allow overwrites (default, backwards compatible)
-     * - `false`: Prevent overwrites, log warning and skip when attempting to overwrite existing endpoints
-     * - Applies to both function and object overwrites at the final key of the API path
+     * - Controls how per-request scope data is merged. `"shallow"` merges top-level keys; `"deep"` recurses into nested objects.
      */
-    allowApiOverwrite?: boolean;
-    /**
-     * - Enable module-based API ownership tracking for selective overwrites:
-     * - `true`: Track which modules register APIs, enable forceOverwrite with moduleId validation
-     * - `false`: Disable ownership tracking (default, no performance overhead)
-     * - When enabled, supports hot-reloading scenarios where modules can selectively overwrite only their own APIs
-     * - Requires moduleId parameter in addApi options when using forceOverwrite capability
-     */
-    enableModuleOwnership?: boolean;
-    /**
-     * - Context data object injected into live-binding `context` reference.
-     * - Available to all loaded modules via `import { context } from "@cldmv/slothlet/runtime"`. Useful for request data,
-     * - user sessions, environment configs, etc.
-     */
-    context?: object;
-    /**
-     * - Reference object merged into the API root level.
-     * - Properties not conflicting with loaded modules are added directly to the API.
-     * - Useful for utility functions, constants, or external service connections.
-     */
-    reference?: object;
-    /**
-     * - Filename sanitization options for API property names.
-     * - Controls how file names are converted to valid JavaScript identifiers.
-     * - Default behavior: camelCase conversion with lowerFirst=true.
-     */
-    sanitize?: {
-        lowerFirst?: boolean;
-        preserveAllUpper?: boolean;
-        preserveAllLower?: boolean;
-        rules?: {
-            leave?: string[];
-            leaveInsensitive?: string[];
-            upper?: string[];
-            lower?: string[];
-        };
+    scope?: {
+        merge: "shallow" | "deep";
     };
-};
-export type SlothletAPI = {
     /**
-     * - Shuts down the API instance and cleans up all resources
+     * - API build and mutation settings.
      */
-    shutdown: () => Promise<void>;
+    api?: {
+        collision?: string | {
+            initial: string;
+            api: string;
+        };
+        mutations?: object;
+    };
     /**
-     * - Dynamically adds API modules from a folder to a specified API path
+     * - Hook system configuration.
+     * - `false` — disabled (default).
+     * - `true` — enabled, all endpoints.
+     * - `string` — enabled with a default glob pattern.
+     * - `object` — full control: `{ enabled: boolean, pattern?: string, suppressErrors?: boolean }`.
      */
-    addApi: (apiPath: string, folderPath: string) => Promise<void>;
+    hook?: boolean | string | object;
     /**
-     * - Returns metadata about the current API instance configuration. In lazy mode with showAll=false, returns an array of property keys. In lazy mode with showAll=true, returns a Promise resolving to an object. In eager mode, returns a plain object.
+     * - Enable verbose internal logging. `true` enables all categories.
+     * Pass an object with sub-keys `builder`, `api`, `index`, `modes`, `wrapper`, `ownership`, `context` to target specific subsystems.
      */
-    describe: (showAll?: boolean) => ((string | symbol)[] | object | Promise<object>);
+    debug?: boolean | object;
+    /**
+     * - Suppress all console output from slothlet (warnings, deprecations). Does not affect `debug`.
+     */
+    silent?: boolean;
+    /**
+     * - Enable the `api.slothlet.diag.*` introspection namespace. Intended for testing; do not enable in production.
+     */
+    diagnostics?: boolean;
+    /**
+     * - Enable internal tracking. Pass `true` or `{ materialization: true }` to track lazy-mode materialization progress.
+     */
+    tracking?: boolean | object;
+    /**
+     * - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
+     */
+    backgroundMaterialize?: boolean;
+    /**
+     * - Internationalization settings (dev-facing, process-global).
+     * `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
+     */
+    i18n?: object;
+    /**
+     * - TypeScript support.
+     * - `false` — disabled (default).
+     * - `true` or `"fast"` — esbuild transpilation, no type checking.
+     * - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
+     * See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
+     */
+    typescript?: boolean | "fast" | "strict" | object;
 };
 /**
- * Creates a slothlet API instance with the specified configuration.
- * This is the main entry point that can be called directly as a function.
- * @async
- * @alias module:@cldmv/slothlet
- * @param {SlothletOptions} [options={}] - Configuration options for creating the API
- * @returns {Promise<SlothletAPI>} The bound API object or function with management methods
- * @public
+ * Bound API object returned by `slothlet()`.
+ * The root contains all loaded module exports plus the reserved `slothlet` namespace.
  */
-export function slothlet(options?: SlothletOptions): Promise<SlothletAPI>;
+export type SlothletAPI = {
+    /**
+     * - Like `shutdown()` but additionally invokes registered destroy hooks before teardown. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.destroy();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.destroy();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.destroy();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.destroy();%%
+     */
+    destroy: () => void;
+    /**
+     * - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.shutdown();%%
+     */
+    shutdown: () => void;
+    /**
+     * - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
+     */
+    slothlet: {
+        api: {
+            add: Function;
+            reload: Function;
+            remove: Function;
+        };
+        context: {
+            get: Function;
+            inspect: () => any;
+            run: Function;
+            scope: Function;
+            set: Function;
+        };
+        diag?: {
+            caches?: {
+                get?: () => any;
+                getAllModuleIDs?: () => string[];
+                has?: Function;
+            };
+            context?: object;
+            describe?: Function;
+            getAPI?: () => any;
+            getOwnership?: () => any;
+            hook?: object;
+            inspect?: () => any;
+            owner?: {
+                get?: Function;
+            };
+            reference?: object;
+            SlothletWarning?: () => SlothletWarning;
+        };
+        hook: {
+            clear: Function;
+            disable: Function;
+            enable: Function;
+            list: Function;
+            off: Function;
+            on: Function;
+            remove: Function;
+        };
+        lifecycle: {
+            off: Function;
+            on: Function;
+        };
+        materialize: {
+            get: () => any;
+            materialized: boolean;
+            wait: () => Promise<void>;
+        };
+        metadata: {
+            caller: () => any | null;
+            get: Function;
+            remove: Function;
+            removeFor: Function;
+            self: () => any | null;
+            set: Function;
+            setFor: Function;
+            setGlobal: Function;
+        };
+        owner: {
+            get: Function;
+        };
+        ownership: {
+            get: Function;
+            unregister: Function;
+        };
+        reference?: object;
+        reload: Function;
+        run: Function;
+        scope: Function;
+        shutdown: () => Promise<void>;
+    };
+};
+import { SlothletWarning } from "@cldmv/slothlet/errors";
 //# sourceMappingURL=slothlet.d.mts.map
