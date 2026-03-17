@@ -265,3 +265,39 @@ describe("resolvePathFromCaller — invoked via slothlet config.dir resolution",
 		await api.shutdown();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// 7. Regression: caller file named index.mjs must NOT be treated as internal
+// ---------------------------------------------------------------------------
+describe("resolvePathFromCaller — caller file named index.mjs (regression)", () => {
+	it("resolves relative to the index.mjs fixture directory, NOT process.cwd()", async () => {
+		// Before the fix, #isSlothletInternal() used a bare basename check that treated
+		// ANY file named index.mjs as internal. This caused relative dirs to fall back
+		// to process.cwd() when slothlet() was called from a user's index.mjs entry file.
+		//
+		// The fixture calls resolver.resolvePathFromCaller(".") from INSIDE an index.mjs
+		// file (tests/vitests/suites/helpers/fixtures/index.mjs). After the fix, that
+		// file is recognized as user code (its dir does not match SLOTHLET_PKG_ROOT),
+		// so resolution returns the fixture's own directory.
+		const { resolveFromHere, FIXTURE_DIR } = await import("./fixtures/index.mjs");
+
+		const result = resolveFromHere(".");
+
+		// Must resolve to the fixture directory, not the project CWD.
+		expect(result).toBe(FIXTURE_DIR);
+		expect(result).not.toBe(process.cwd());
+	});
+
+	it("does not fall back to process.cwd() for a relative path called from index.mjs", async () => {
+		const { resolveFromHere } = await import("./fixtures/index.mjs");
+
+		// Resolve a path that only exists relative to the fixture directory.
+		// If cwd fallback were used (the bug), it would resolve to a non-existent
+		// cwd-relative path instead of the correct fixture-relative path.
+		const result = resolveFromHere(".");
+
+		// The result must be an absolute path inside the test tree, not the project root.
+		expect(path.isAbsolute(result)).toBe(true);
+		expect(result).toContain("fixtures");
+	});
+});
