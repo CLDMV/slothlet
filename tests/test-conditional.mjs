@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	@Last modified time: 2026-03-17 17:05:36 -07:00 (1773792336)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -64,9 +64,7 @@ function buildTestNodeEnv() {
 		const token = tokens[i];
 		if (token === "--conditions" && i + 1 < tokens.length) {
 			// Space-separated form: --conditions slothlet-dev
-			const conditions = tokens[i + 1]
-				.split(/[|,]/u)
-				.filter((c) => c !== "slothlet-dev");
+			const conditions = tokens[i + 1].split(/[|,]/u).filter((c) => c !== "slothlet-dev");
 			if (conditions.length > 0) cleaned.push(`--conditions=${conditions.join(",")}`);
 			i += 2;
 		} else if (token.startsWith("--conditions=")) {
