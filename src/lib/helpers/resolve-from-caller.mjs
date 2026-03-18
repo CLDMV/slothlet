@@ -34,7 +34,7 @@ import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
-
+const SLOTHLET_PKG_ROOT = path.normalize(path.resolve(__dirname, "../../..")); // package root (one level above src/ or dist/)
 /**
  * Path resolver component
  * @class Resolver
@@ -103,15 +103,18 @@ export class Resolver extends ComponentBase {
 			return true;
 		}
 
-		// Explicitly check for entry point files at any location
+		// Check for Slothlet's own package entry-point files (index.mjs / index.cjs).
+		// IMPORTANT: scope this to the slothlet package root only. A bare basename check
+		// would incorrectly treat any user file named index.mjs (e.g. backend/src/index.mjs)
+		// as internal, causing dir to silently resolve via process.cwd() instead of the
+		// actual caller directory. See: https://github.com/CLDMV/slothlet/issues — index.mjs footgun.
 		const basename = path.basename(normalized);
-		// Unreachable in practice: every call path that reaches basename-check is from
-		// a V8 stack that contains the slothlet lib root, so the lib-root path.startsWith
-		// guard above already returns true for index.mjs/index.cjs found inside the
-		// package. A bare index file outside the lib root never appears on the test stack.
-		/* v8 ignore next */
 		if (basename === "index.mjs" || basename === "index.cjs") {
-			return true;
+			// Only internal when the file sits directly in the slothlet package root.
+			// Unreachable in tests: the slothlet-dev condition routes imports to src/,
+			// so package-root index files never appear on V8 stacks during test execution.
+			/* v8 ignore next */
+			if (path.dirname(normalized) === SLOTHLET_PKG_ROOT) return true;
 		}
 
 		return false;

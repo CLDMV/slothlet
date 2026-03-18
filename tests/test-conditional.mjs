@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:40 -08:00 (1772425300)
+ *	@Last modified time: 2026-03-17 17:05:36 -07:00 (1773792336)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -35,6 +35,15 @@ function getNodeMajorVersion() {
  * Build an environment object safe for running test:node.
  * When src/ has been deleted (post-build), strips the slothlet-dev
  * condition from NODE_OPTIONS so that imports resolve to dist/ instead.
+ *
+ * Uses the same token-aware stripping as run-all-tests.mjs to handle all
+ * NODE_OPTIONS formats used in CI, including combined conditions such as
+ * `--conditions=slothlet-dev,other` and the space-separated form
+ * `--conditions slothlet-dev`.  A simple exact-token match would silently
+ * fail for those cases and leave slothlet-dev active, causing every
+ * `@cldmv/slothlet/*` sub-path import to resolve to the (deleted) src/
+ * tree instead of dist/.
+ *
  * @returns {NodeJS.ProcessEnv} Environment object to pass to execSync.
  */
 function buildTestNodeEnv() {
@@ -47,15 +56,42 @@ function buildTestNodeEnv() {
 	// Post-build: src/ was removed by ci-cleanup-src — strip slothlet-dev
 	// from NODE_OPTIONS so package exports resolve to dist/ correctly.
 	console.log("ℹ️  src/ not found — running test:node against dist/ (stripping slothlet-dev condition)");
-	const cleaned = (process.env.NODE_OPTIONS ?? "")
-		.split(/\s+/)
-		.filter((token) => token !== "--conditions=slothlet-dev" && token !== "")
-		.join(" ");
 
-	return {
-		...process.env,
-		NODE_OPTIONS: cleaned || undefined
-	};
+	const tokens = (process.env.NODE_OPTIONS ?? "").split(/\s+/u).filter(Boolean);
+	const cleaned = [];
+	let i = 0;
+	while (i < tokens.length) {
+		const token = tokens[i];
+		if (token === "--conditions" && i + 1 < tokens.length) {
+			// Space-separated form: --conditions slothlet-dev
+			const conditions = tokens[i + 1].split(/[|,]/u).filter((c) => c !== "slothlet-dev");
+			if (conditions.length > 0) cleaned.push(`--conditions=${conditions.join(",")}`);
+			i += 2;
+		} else if (token.startsWith("--conditions=")) {
+			// Equals form: --conditions=slothlet-dev or --conditions=slothlet-dev,other
+			const conditions = token
+				.slice("--conditions=".length)
+				.split(/[|,]/u)
+				.filter((c) => c !== "slothlet-dev");
+			if (conditions.length > 0) cleaned.push(`--conditions=${conditions.join(",")}`);
+			i += 1;
+		} else {
+			cleaned.push(token);
+			i += 1;
+		}
+	}
+
+	// Do NOT use `|| undefined` — in some Node.js versions (notably Node 16) an
+	// undefined env value is stringified to the literal string "undefined", which
+	// is an invalid NODE_OPTIONS flag.  Delete the key entirely when nothing remains.
+	const env = { ...process.env };
+	const cleanedStr = cleaned.join(" ");
+	if (cleanedStr) {
+		env.NODE_OPTIONS = cleanedStr;
+	} else {
+		delete env.NODE_OPTIONS;
+	}
+	return env;
 }
 
 /**

@@ -32,10 +32,13 @@ const nodeDir = path.join(__dirname, "node");
 
 /**
  * Ensure slothlet dev conditions are set when running against src/ (no dist/ present).
+ * When dist/ IS present, actively strips the slothlet-dev condition from NODE_OPTIONS so
+ * that child test processes (spawned via spawn()) do not inherit it and accidentally resolve
+ * package imports via src/ (which may have been deleted by ci:cleanup-src in a prior CI step).
  * Respawns the current process with the required NODE_OPTIONS flags if needed.
  * @returns {boolean} True if a child process was spawned (caller should return immediately).
  * @example
- * if (ensureDevEnvFlags()) process.exit();
+ * if (ensureDevEnvFlags()) return; // parent stays alive; child.on('exit') calls process.exit(child_code)
  */
 function ensureDevEnvFlags() {
 	const distPath = path.join(__dirname, "../dist");
@@ -99,7 +102,13 @@ function ensureDevEnvFlags() {
 	return true;
 }
 
-if (ensureDevEnvFlags()) process.exit();
+// When ensureDevEnvFlags() returns true a child process has been spawned and
+// child.on("exit") will call process.exit(code) with the child's real exit code.
+// DO NOT call process.exit() here — that would kill the parent immediately (exit 0)
+// before the child finishes, causing test-conditional.mjs to see a false success.
+if (!ensureDevEnvFlags()) {
+	runAllTests();
+}
 
 /**
  * Run a single test file and return the result.
@@ -185,5 +194,3 @@ async function runAllTests() {
 
 	console.log("\n🎉 All tests passed!");
 }
-
-runAllTests();
