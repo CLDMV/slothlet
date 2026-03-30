@@ -192,6 +192,21 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		delete process.env.__SLOTHLET_VALID__;
 	});
 
+	it("env.include: all-non-string entries falls back to full snapshot", async () => {
+		process.env.__SLOTHLET_NONSTR_FULL__ = "full-fallback";
+
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			silent: true,
+			// All non-string entries — filtered list is empty, must fall back to full snapshot
+			env: { include: [42, null] }
+		});
+
+		expect(api.slothlet.env.__SLOTHLET_NONSTR_FULL__).toBe("full-fallback");
+
+		delete process.env.__SLOTHLET_NONSTR_FULL__;
+	});
+
 	it("env config omitted entirely falls back to full snapshot", async () => {
 		process.env.__SLOTHLET_OMIT_TEST__ = "present";
 

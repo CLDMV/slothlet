@@ -401,8 +401,9 @@ class Slothlet {
 	 */
 	_captureEnvSnapshot(envConfig) {
 		const rawInclude = envConfig?.include;
-		const include = Array.isArray(rawInclude) && rawInclude.length > 0 ? rawInclude : null;
-		const raw = include
+		const include = Array.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const useAllowlist = include !== null && include.length > 0;
+		const raw = useAllowlist
 			? include.reduce((acc, key) => {
 					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
 						acc[key] = process.env[key];
