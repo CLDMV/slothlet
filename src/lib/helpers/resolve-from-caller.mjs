@@ -1,0 +1,225 @@
+/**
+ *	@Project: @cldmv/slothlet
+ *	@Filename: /src/lib/helpers/resolve-from-caller.mjs
+ *	@Date: 2025-09-09 08:06:19 -07:00 (1725890779)
+ *	@Author: Nate Corcoran <CLDMV>
+ *	@Email: <Shinrai@users.noreply.github.com>
+ *	-----
+ *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+ *	@Last modified time: 2026-03-05 16:19:48 -08:00 (1772756388)
+ *	-----
+ *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
+ */
+
+/**
+ * @fileoverview Path resolution from caller context
+ * @description
+ * Resolves relative paths based on where slothlet() was called from.
+ * @module @cldmv/slothlet/helpers/resolve-from-caller
+ * @internal
+ * @package
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+
+/**
+ * Calculate slothlet source directory path ONCE at module initialization.
+ * This file is at src3/lib/helpers/resolve-from-caller.mjs, so 2 levels up is src3/
+ * In other versions: src/lib/helpers/... -> src/ or dist/lib/helpers/... -> dist/
+ * @private
+ */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SLOTHLET_LIB_ROOT = path.resolve(__dirname, "../..");
+const SLOTHLET_PKG_ROOT = path.normalize(path.resolve(__dirname, "../../..")); // package root (one level above src/ or dist/)
+/**
+ * Path resolver component
+ * @class Resolver
+ * @extends ComponentBase
+ * @package
+ */
+export class Resolver extends ComponentBase {
+	static slothletProperty = "resolver";
+
+	/**
+	 * Get V8 stack trace as CallSite array.
+	 * @param {Function} [skipFn] - Optional function to skip from stack trace
+	 * @returns {Array} Array of CallSite objects
+	 * @public
+	 */
+	getStack(skipFn) {
+		const orig = Error.prepareStackTrace;
+		try {
+			Error.prepareStackTrace = (_, s) => s; // V8 CallSite[]
+			const e = new Error("Stack trace");
+			if (skipFn) Error.captureStackTrace(e, skipFn);
+			return e.stack;
+		} finally {
+			Error.prepareStackTrace = orig;
+		}
+	}
+
+	/**
+	 * Internal version for module use
+	 * @returns {Array} Array of CallSite objects
+	 * @private
+	 */
+	#getStack() {
+		const originalPrepare = Error.prepareStackTrace;
+		Error.prepareStackTrace = (___, stack) => stack;
+		const stack = new Error().stack;
+		Error.prepareStackTrace = originalPrepare;
+		return stack;
+	}
+
+	/**
+	 * Convert file:// URL to filesystem path or return as-is.
+	 * @param {any} v - Value to convert
+	 * @returns {string|null} Filesystem path or null
+	 * @public
+	 */
+	toFsPath(v) {
+		if (!v) return null;
+		const str = String(v);
+		return str.startsWith("file://") ? fileURLToPath(str) : str;
+	}
+
+	/**
+	 * Check if file path is a slothlet internal file.
+	 * @param {string} filePath - File path to check
+	 * @returns {boolean} True if internal file
+	 * @private
+	 */
+	#isSlothletInternal(filePath) {
+		// Normalize path for comparison
+		const normalized = path.normalize(filePath);
+		const normalizedLibRoot = path.normalize(SLOTHLET_LIB_ROOT);
+
+		// Check if file is within the slothlet source directory (src3/, src/, or dist/)
+		if (normalized.startsWith(normalizedLibRoot)) {
+			return true;
+		}
+
+		// Check for Slothlet's own package entry-point files (index.mjs / index.cjs).
+		// IMPORTANT: scope this to the slothlet package root only. A bare basename check
+		// would incorrectly treat any user file named index.mjs (e.g. backend/src/index.mjs)
+		// as internal, causing dir to silently resolve via process.cwd() instead of the
+		// actual caller directory. See: https://github.com/CLDMV/slothlet/issues — index.mjs footgun.
+		const basename = path.basename(normalized);
+		if (basename === "index.mjs" || basename === "index.cjs") {
+			// Only internal when the file sits directly in the slothlet package root.
+			// Unreachable in tests: the slothlet-dev condition routes imports to src/,
+			// so package-root index files never appear on V8 stacks during test execution.
+			/* v8 ignore next */
+			if (path.dirname(normalized) === SLOTHLET_PKG_ROOT) return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Find the caller's base file from stack trace.
+	 * @returns {string|null} Caller file path or null
+	 * @private
+	 */
+	#findCallerBase() {
+		const stack = this.#getStack();
+		const files = stack.map((s) => this.toFsPath(s.getFileName())).filter(Boolean);
+
+		// Find slothlet.mjs in the stack
+		const slothletIndex = files.findIndex((f) => path.basename(f).toLowerCase() === "slothlet.mjs");
+
+		if (slothletIndex === -1) {
+			// No slothlet.mjs in stack, find first non-internal file
+			for (const file of files) {
+				if (!this.#isSlothletInternal(file)) {
+					return file;
+				}
+			}
+			// Unreachable in practice: the test runner's own file is always on the V8
+			// stack and is non-internal, so the loop above always finds a candidate and
+			// returns before reaching here. Null would only occur if every frame were a
+			// slothlet-internal path — impossible during test execution.
+			/* v8 ignore next */
+			return null;
+		}
+
+		// Start after slothlet.mjs and find first user code
+		for (let i = slothletIndex + 1; i < files.length; i++) {
+			const file = files[i];
+
+			// Skip node: modules
+			if (file.startsWith?.("node:")) continue;
+
+			// Skip internal files
+			if (this.#isSlothletInternal(file)) continue;
+
+			// Found user code!
+			return file;
+		}
+
+		// Fallback: return first non-internal file
+		// Unreachable in practice: slothlet.mjs is always present on the V8 stack in
+		// tests, so slothletIndex is never -1, and the loop above (after slothlet.mjs)
+		// always finds the test file as user code. This fallback only fires if ALL
+		// frames after slothlet.mjs are internal — impossible during test execution.
+		/* v8 ignore next */
+		for (const file of files) {
+			if (!this.#isSlothletInternal(file)) {
+				return file;
+			}
+		}
+
+		// Unreachable in practice: the fallback loop above always finds the test file
+		// (a non-internal frame), so null is never returned. Null would require every
+		// file on the entire stack to be a slothlet-internal path.
+		/* v8 ignore next */
+		return null;
+	}
+
+	/**
+	 * Resolve relative path from caller's context.
+	 * @param {string} rel - Relative path to resolve
+	 * @returns {string} Absolute filesystem path
+	 * @public
+	 */
+	resolvePathFromCaller(rel) {
+		// Short-circuit: already absolute or file:// URL
+		if (rel.startsWith?.("file://")) return fileURLToPath(rel);
+		if (path.isAbsolute(rel)) return rel;
+
+		// Find caller's base directory
+		const callerFile = this.#findCallerBase();
+
+		// Unreachable in practice: #findCallerBase always resolves to the test
+		// file's path because the test runner is always on the V8 stack. callerFile
+		// is only null if the entire stack is slothlet-internal — never in tests.
+		/* v8 ignore next */
+		if (!callerFile) {
+			// Fallback: resolve from current working directory
+			return path.resolve(process.cwd(), rel);
+		}
+
+		// Resolve relative to caller's directory
+		const callerDir = path.dirname(callerFile);
+		const resolved = path.resolve(callerDir, rel);
+
+		// Check if resolved path exists, otherwise try from cwd
+		if (fs.existsSync(resolved)) {
+			return resolved;
+		}
+
+		// Fallback: try from cwd
+		const cwdResolved = path.resolve(process.cwd(), rel);
+		if (fs.existsSync(cwdResolved)) {
+			return cwdResolved;
+		}
+
+		// Return the caller-based resolution even if it doesn't exist
+		// (let the actual loader handle the error)
+		return resolved;
+	}
+}
