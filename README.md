@@ -59,7 +59,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 - **Environment Snapshot** — `api.slothlet.env` exposes a frozen copy of `process.env` captured at initialization time; every module accesses it via `self.slothlet.env`
 - **`env.include` Allowlist** — restrict the snapshot to specific keys with `env: { include: ["NODE_ENV", "PORT"] }`; empty array falls back to full snapshot
-- **Reload Immunity** — snapshot is captured once on first `load()` and never replaced on subsequent `api.reload()` calls
+- **Reload Immunity** — snapshot is captured once on first `load()` and never replaced on subsequent `api.slothlet.reload()` calls (including partial `api.slothlet.api.reload()` calls)
 - [View full v3.1.0 Changelog](./docs/changelog/v3/v3.1.0.md)
 
 ### Recent Releases
