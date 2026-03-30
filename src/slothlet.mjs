@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
+ *	@Last modified time: 2026-03-30 00:08:57 -07:00 (1774854537)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -123,6 +123,9 @@ class Slothlet {
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
+
+		// Environment snapshot (captured before any module lifecycle in load())
+		this.envSnapshot = null;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
 		this._totalLazyCount = 0; // Total lazy wrappers created
@@ -373,6 +376,44 @@ class Slothlet {
 	}
 
 	/**
+	 * Capture a frozen snapshot of `process.env` at initialization time.
+	 *
+	 * @description
+	 * Called at the very start of `load()`, before config normalization and before any
+	 * module `register()` / `init()` lifecycle hooks run. When `envConfig.include` is
+	 * provided only the listed keys are captured; otherwise every key present in
+	 * `process.env` is included.
+	 *
+	 * @param {Object|undefined} envConfig - Raw env option from user config.
+	 * @param {string[]} [envConfig.include] - Allowlist of env key names to capture.
+	 * @returns {Object} Frozen shallow copy of the selected environment variables.
+	 * @private
+	 *
+	 * @example
+	 * // Full snapshot (default — no include filter)
+	 * this.envSnapshot = this._captureEnvSnapshot(undefined);
+	 * // => Object.freeze({ NODE_ENV: "test", PATH: "/usr/bin", ... })
+	 *
+	 * @example
+	 * // Filtered snapshot via include allowlist
+	 * this.envSnapshot = this._captureEnvSnapshot({ include: ["NODE_ENV"] });
+	 * // => Object.freeze({ NODE_ENV: "test" })
+	 */
+	_captureEnvSnapshot(envConfig) {
+		const rawInclude = envConfig?.include;
+		const include = Array.isArray(rawInclude) && rawInclude.length > 0 ? rawInclude : null;
+		const raw = include
+			? include.reduce((acc, key) => {
+					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+						acc[key] = process.env[key];
+					}
+					return acc;
+				}, {})
+			: { ...process.env };
+		return Object.freeze(raw);
+	}
+
+	/**
 	 * Load API from directory
 	 * @param {Object} config - Configuration options
 	 * @param {string} config.dir - Directory to load API from
@@ -392,6 +433,15 @@ class Slothlet {
 	async load(config = {}, preservedInstanceID = null) {
 		// Store raw config for components to access if needed
 		this.config = config;
+
+		// Capture process.env snapshot before any module lifecycle runs.
+		// Uses raw config.env so the snapshot precedes config normalization and
+		// any module register()/init() calls.
+		// Guard: preserve the snapshot across reloads — the spec requires it to be
+		// immutable for the lifetime of the instance.
+		if (!this.envSnapshot) {
+			this.envSnapshot = this._captureEnvSnapshot(config.env);
+		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
 		// produced inside _initializeComponents() are visible even before transformConfig runs.
