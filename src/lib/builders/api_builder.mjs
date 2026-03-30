@@ -1083,8 +1083,10 @@ export class ApiBuilder extends ComponentBase {
 			 * before any module `register()` / `init()` lifecycle runs.
 			 *
 			 * @description
-			 * The object is the result of `Object.freeze({ ...process.env })` (or a filtered
-			 * subset when the `env.include` config option was provided). It is immutable for
+			 * The object is created from the current `process.env` values (or a filtered
+			 * subset when the `env.include` config option was provided) and then frozen.
+			 * When `env.include` is used, the result has a null prototype to safely handle
+			 * env var names such as `__proto__`. It is immutable for
 			 * the lifetime of this Slothlet instance — reloads do NOT refresh the snapshot.
 			 *
 			 * Access any environment variable by key:
