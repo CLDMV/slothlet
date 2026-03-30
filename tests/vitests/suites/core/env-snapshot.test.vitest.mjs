@@ -192,6 +192,24 @@ describe("api.slothlet.env — env.include allowlist filtering", () => {
 		delete process.env.__SLOTHLET_VALID__;
 	});
 
+	it("env.include: __proto__ key is captured as a data property, not silently dropped", async () => {
+		// If the accumulator is a plain {} object, acc["__proto__"] = "string" triggers the
+		// __proto__ setter which silently ignores string values — the key is never stored.
+		// Using Object.create(null) as the accumulator avoids the setter, storing it correctly.
+		process.env.__proto__ = "proto-value";
+
+		api = await slothlet({
+			dir: TEST_DIRS.API_TEST,
+			silent: true,
+			env: { include: ["__proto__"] }
+		});
+
+		expect(Object.prototype.hasOwnProperty.call(api.slothlet.env, "__proto__")).toBe(true);
+		expect(api.slothlet.env["__proto__"]).toBe("proto-value");
+
+		delete process.env.__proto__;
+	});
+
 	it("env.include: all-non-string entries falls back to full snapshot", async () => {
 		process.env.__SLOTHLET_NONSTR_FULL__ = "full-fallback";
 
