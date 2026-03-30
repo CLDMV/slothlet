@@ -369,7 +369,8 @@ export class Config extends ComponentBase {
 			tracking: trackingConfig,
 			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true,
-			typescript: this.normalizeTypeScript(config.typescript)
+			typescript: this.normalizeTypeScript(config.typescript),
+			env: this.normalizeEnv(config.env)
 		};
 	}
 
@@ -414,5 +415,46 @@ export class Config extends ComponentBase {
 
 		// Unknown type, disable
 		return null;
+	}
+
+	/**
+	 * Normalize env snapshot configuration.
+	 *
+	 * @description
+	 * Validates the `env` option from user config. When `include` is a non-empty
+	 * string array, returns `{ include }` (the allowlist used by `_captureEnvSnapshot`).
+	 * Any other value — including `undefined`, `null`, `{}`, or an empty `include`
+	 * array — is normalised to `null`, meaning the full `process.env` snapshot is used.
+	 *
+	 * @param {Object|null|undefined} env - Raw env option from user config.
+	 * @param {string[]} [env.include] - Allowlist of env variable names to capture.
+	 * @returns {{ include: string[] }|null} Normalized env config, or `null` for full snapshot.
+	 * @public
+	 *
+	 * @example
+	 * // No restriction — full snapshot
+	 * normalizeEnv(undefined); // => null
+	 * normalizeEnv(null);      // => null
+	 * normalizeEnv({});        // => null
+	 *
+	 * @example
+	 * // Include allowlist
+	 * normalizeEnv({ include: ["NODE_ENV", "PORT"] });
+	 * // => { include: ["NODE_ENV", "PORT"] }
+	 *
+	 * @example
+	 * // Non-string keys in the include array are filtered out
+	 * normalizeEnv({ include: ["NODE_ENV", 42, null] });
+	 * // => { include: ["NODE_ENV"] }
+	 */
+	normalizeEnv(env) {
+		if (!env || typeof env !== "object") {
+			return null; // No restriction — full snapshot
+		}
+		const include = Array.isArray(env.include) ? env.include.filter((k) => typeof k === "string") : null;
+		if (include && include.length > 0) {
+			return { include };
+		}
+		return null; // Empty or invalid include — treat as no restriction
 	}
 }

@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
+ *	@Last modified time: 2026-03-30 15:52:20 -07:00 (1774911140)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -123,6 +123,9 @@ class Slothlet {
 		this.isLoaded = false;
 		this.reference = null;
 		this.context = null;
+
+		// Environment snapshot (captured before any module lifecycle in load())
+		this.envSnapshot = null;
 
 		// Lazy materialization tracking (for api.slothlet.materialize)
 		this._totalLazyCount = 0; // Total lazy wrappers created
@@ -373,6 +376,45 @@ class Slothlet {
 	}
 
 	/**
+	 * Capture a frozen snapshot of `process.env` at initialization time.
+	 *
+	 * @description
+	 * Called at the very start of `load()`, before config normalization and before any
+	 * module `register()` / `init()` lifecycle hooks run. When `envConfig.include` is
+	 * provided only the listed keys are captured; otherwise every key present in
+	 * `process.env` is included.
+	 *
+	 * @param {Object|undefined} envConfig - Raw env option from user config.
+	 * @param {string[]} [envConfig.include] - Allowlist of env key names to capture.
+	 * @returns {Object} Frozen shallow copy of the selected environment variables.
+	 * @private
+	 *
+	 * @example
+	 * // Full snapshot (default — no include filter)
+	 * this.envSnapshot = this._captureEnvSnapshot(undefined);
+	 * // => Object.freeze({ NODE_ENV: "test", PATH: "/usr/bin", ... })
+	 *
+	 * @example
+	 * // Filtered snapshot via include allowlist
+	 * this.envSnapshot = this._captureEnvSnapshot({ include: ["NODE_ENV"] });
+	 * // => Object.freeze({ NODE_ENV: "test" })
+	 */
+	_captureEnvSnapshot(envConfig) {
+		const rawInclude = envConfig?.include;
+		const include = Array.isArray(rawInclude) ? rawInclude.filter((key) => typeof key === "string") : null;
+		const useAllowlist = include !== null && include.length > 0;
+		const raw = useAllowlist
+			? include.reduce((acc, key) => {
+					if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+						acc[key] = process.env[key];
+					}
+					return acc;
+				}, Object.create(null))
+			: { ...process.env };
+		return Object.freeze(raw);
+	}
+
+	/**
 	 * Load API from directory
 	 * @param {Object} config - Configuration options
 	 * @param {string} config.dir - Directory to load API from
@@ -392,6 +434,15 @@ class Slothlet {
 	async load(config = {}, preservedInstanceID = null) {
 		// Store raw config for components to access if needed
 		this.config = config;
+
+		// Capture process.env snapshot before any module lifecycle runs.
+		// Uses raw config.env so the snapshot precedes config normalization and
+		// any module register()/init() calls.
+		// Guard: preserve the snapshot across reloads — the spec requires it to be
+		// immutable for the lifetime of the instance.
+		if (!this.envSnapshot) {
+			this.envSnapshot = this._captureEnvSnapshot(config.env);
+		}
 
 		// Early-init debug logger with raw config so that debug.initialization messages
 		// produced inside _initializeComponents() are visible even before transformConfig runs.
@@ -952,6 +1003,11 @@ export default slothlet;
  * @property {boolean} [backgroundMaterialize=false] - When `mode: "lazy"`, immediately begins materializing all paths in the background after init.
  * @property {object} [i18n] - Internationalization settings (dev-facing, process-global).
  *   `{ language: string }` — selects the locale for framework messages (e.g. `"en-us"`, `"fr-fr"`, `"ja-jp"`).
+ * @property {object} [env] - Environment variable snapshot configuration.
+ *   Pass `{ include: ["KEY"] }` to capture only the listed variable names in `api.slothlet.env`.
+ *   Omit (or pass `undefined`) to capture a full frozen snapshot of `process.env`.
+ *   Non-string entries in `include` are silently ignored; an all-non-string array falls back to the full snapshot.
+ * @property {string[]} [env.include] - Allowlist of environment variable names to capture. Only string entries are used.
  * @property {boolean|"fast"|"strict"|object} [typescript=false] - TypeScript support.
  *   - `false` — disabled (default).
  *   - `true` or `"fast"` — esbuild transpilation, no type checking.
@@ -966,6 +1022,7 @@ export default slothlet;
  * @property {function(): void} destroy - Like `shutdown()` but additionally invokes registered destroy hooks before teardown. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.destroy();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.destroy();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.destroy();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.destroy();%%
  * @property {function(): void} shutdown - Convenience alias for `slothlet.shutdown()`. Shuts down the instance and invokes any user-provided shutdown hook first. %%sig: (): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.shutdown();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.shutdown();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.shutdown();%%
  * @property {object} slothlet - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
+ * @property {Readonly<Record<string, string|undefined>>} slothlet.env - Frozen snapshot of `process.env` captured once at instance creation (before any module lifecycle runs). Immutable for the lifetime of the instance — reloads do NOT refresh it. When `env.include` is configured, only the listed keys are captured; otherwise, the full environment is snapshotted.
  * @property {object} slothlet.api - Runtime API mutation methods — availability controlled by `api.mutations` config option.
  * @property {Function} slothlet.api.add - Mount a new API module at runtime. %%sig: (apiPath: string, folderPath: string, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.slothlet.api.add('utils.math', './api/utils/math');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.slothlet.api.add('utils.math', './api/utils/math');%%
  * @property {Function} slothlet.api.reload - Hot-reload a specific module or directory path. %%sig: ([pathOrModuleId]: string|null, [options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  // Reload a specific module|  await api.slothlet.api.reload('utils.math');|  // Reload everything|  await api.slothlet.api.reload();|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|// Reload a specific module|await api.slothlet.api.reload('utils.math');|// Reload everything|await api.slothlet.api.reload();%%

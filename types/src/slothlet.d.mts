@@ -124,6 +124,15 @@ export type SlothletOptions = {
      */
     i18n?: object;
     /**
+     * - Environment variable snapshot configuration.
+     * Pass `{ include: ["KEY"] }` to capture only the listed variable names in `api.slothlet.env`.
+     * Omit (or pass `undefined`) to capture a full frozen snapshot of `process.env`.
+     * Non-string entries in `include` are silently ignored; an all-non-string array falls back to the full snapshot.
+     */
+    env?: {
+        include?: string[];
+    };
+    /**
      * - TypeScript support.
      * - `false` — disabled (default).
      * - `true` or `"fast"` — esbuild transpilation, no type checking.
@@ -149,6 +158,7 @@ export type SlothletAPI = {
      * - Built-in control namespace. All framework internals live here to avoid collisions with loaded modules.
      */
     slothlet: {
+        env: Readonly<Record<string, string | undefined>>;
         api: {
             add: Function;
             reload: Function;

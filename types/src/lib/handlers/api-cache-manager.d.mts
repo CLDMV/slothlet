@@ -29,6 +29,12 @@
 export class ApiCacheManager extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create ApiCacheManager instance
+     * @param {object} slothlet - Slothlet instance
+     * @public
+     */
+    constructor(slothlet: object);
+    /**
      * Cache storage - moduleID → CacheEntry
      * @type {Map<string, CacheEntry>}
      * @private

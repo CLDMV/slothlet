@@ -55,23 +55,20 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.0.0 (February 2026)
+### Latest: v3.1.0 (March 2026)
 
-- **Unified Wrapper Architecture** - consistent proxy surface for all modes and operations
-- **Hook System Redesigned** - `hook:` config key, `api.slothlet.hook.*`, three-phase subset ordering
-- **Full i18n Support** - 9 languages for all error and debug messages
-- **Background Materialization** - pre-load lazy modules without blocking startup
-- **Lifecycle Event System** - `api.slothlet.lifecycle.on/off()` for module lifecycle events
-- **Collision Modes** - fine-grained control over API namespace conflicts
-- **Mutation Controls** - per-operation access restrictions for API mutations
-- [View full v3.0 Changelog](./docs/changelog/v3.0.md)
+- **Environment Snapshot** — `api.slothlet.env` exposes a frozen copy of `process.env` captured at initialization time; every module accesses it via `self.slothlet.env`
+- **`env.include` Allowlist** — restrict the snapshot to specific keys with `env: { include: ["NODE_ENV", "PORT"] }`; empty array falls back to full snapshot
+- **Reload Immunity** — snapshot is captured once on first `load()` and never replaced on subsequent `api.slothlet.reload()` calls (including partial `api.slothlet.api.reload()` calls)
+- [View full v3.1.0 Changelog](./docs/changelog/v3/v3.1.0.md)
 
 ### Recent Releases
 
-- **v2.11.0** - AddApi Special File Pattern (Rule 11), smart flattening enhancements ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.11.md))
-- **v2.10.0** - Function metadata tagging and introspection capabilities ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.10.md))
-- **v2.9** - Per-Request Context Isolation ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md))
-- **v2.7** - Hook system introduced ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.7.md))
+- **v3.0.1** (March 2026) — Resolver fix for user `index.mjs` mis-classified as internal; CI `slothlet-dev` stripping hardening; respawn race fix; resilient `build:dist` script ([Changelog](./docs/changelog/v3/v3.0.1.md))
+- **v3.0.0** (February 2026) — Unified Wrapper architecture, redesigned hook system, full i18n, background materialization, lifecycle events, collision modes, mutation controls ([Changelog](./docs/changelog/v3.0.md))
+- **v2.11.0** — AddApi Special File Pattern (Rule 11), smart flattening enhancements ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.11.md))
+- **v2.10.0** — Function metadata tagging and introspection capabilities ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.10.md))
+- **v2.9** — Per-Request Context Isolation ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 

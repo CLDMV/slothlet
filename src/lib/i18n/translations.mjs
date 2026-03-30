@@ -57,6 +57,8 @@ function i18n_detectLanguage() {
 		const lang = envLang.split(".")[0].split("_")[0].toLowerCase();
 		// Convert to our format (e.g., "en" -> "en-us")
 		if (lang === "en") return "en-us";
+		// POSIX C locale ("C" or "POSIX") has no language preference — treat as English
+		if (lang === "c" || lang === "posix") return "en-us";
 		if (lang === "es") return "es-mx";
 		return lang;
 	}

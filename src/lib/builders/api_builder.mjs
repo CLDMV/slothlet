@@ -1076,7 +1076,40 @@ export class ApiBuilder extends ComponentBase {
 					on: handler.on.bind(handler),
 					off: handler.off.bind(handler)
 				};
-			})()
+			})(),
+
+			/**
+			 * Frozen snapshot of `process.env` captured at instance initialization time,
+			 * before any module `register()` / `init()` lifecycle runs.
+			 *
+			 * @description
+			 * The object is created from the current `process.env` values (or a filtered
+			 * subset when the `env.include` config option was provided) and then frozen.
+			 * When `env.include` is used, the result has a null prototype to safely handle
+			 * env var names such as `__proto__`. It is immutable for
+			 * the lifetime of this Slothlet instance — reloads do NOT refresh the snapshot.
+			 *
+			 * Access any environment variable by key:
+			 * ```
+			 * import { self } from "@cldmv/slothlet/runtime";
+			 * self.slothlet.env.NODE_ENV;        // e.g. "production"
+			 * self.slothlet.env.MY_API_KEY;      // string or undefined
+			 * ```
+			 *
+			 * @type {Readonly<Record<string, string|undefined>>}
+			 * @public
+			 *
+			 * @example
+			 * // Full snapshot (default — no include filter configured)
+			 * api.slothlet.env.NODE_ENV    // => "production"
+			 * api.slothlet.env.PORT        // => "3000"
+			 *
+			 * @example
+			 * // Filtered snapshot (env: { include: ["NODE_ENV"] } in config)
+			 * api.slothlet.env.NODE_ENV    // => "production"
+			 * api.slothlet.env.PORT        // => undefined (not captured)
+			 */
+			env: slothlet.envSnapshot
 		};
 
 		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)

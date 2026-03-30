@@ -91,6 +91,39 @@ export class Config extends ComponentBase {
      * @public
      */
     public normalizeTypeScript(typescript: boolean | string | any): any | null;
+    /**
+     * Normalize env snapshot configuration.
+     *
+     * @description
+     * Validates the `env` option from user config. When `include` is a non-empty
+     * string array, returns `{ include }` (the allowlist used by `_captureEnvSnapshot`).
+     * Any other value — including `undefined`, `null`, `{}`, or an empty `include`
+     * array — is normalised to `null`, meaning the full `process.env` snapshot is used.
+     *
+     * @param {Object|null|undefined} env - Raw env option from user config.
+     * @param {string[]} [env.include] - Allowlist of env variable names to capture.
+     * @returns {{ include: string[] }|null} Normalized env config, or `null` for full snapshot.
+     * @public
+     *
+     * @example
+     * // No restriction — full snapshot
+     * normalizeEnv(undefined); // => null
+     * normalizeEnv(null);      // => null
+     * normalizeEnv({});        // => null
+     *
+     * @example
+     * // Include allowlist
+     * normalizeEnv({ include: ["NODE_ENV", "PORT"] });
+     * // => { include: ["NODE_ENV", "PORT"] }
+     *
+     * @example
+     * // Non-string keys in the include array are filtered out
+     * normalizeEnv({ include: ["NODE_ENV", 42, null] });
+     * // => { include: ["NODE_ENV"] }
+     */
+    public normalizeEnv(env: any | null | undefined): {
+        include: string[];
+    } | null;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=config.d.mts.map
