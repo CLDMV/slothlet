@@ -815,6 +815,73 @@ class Slothlet {
 	}
 
 	/**
+	 * Drain any in-flight lazy-mode materializations before shutdown.
+	 *
+	 * Walks the internal API tree and collects every `materializationPromise` that
+	 * is still pending (i.e. `state.inFlight === true`), then awaits them all via
+	 * `Promise.allSettled` so that background `import()` calls can complete before
+	 * the Vitest worker (or process) tears down the module registry.
+	 *
+	 * @returns {Promise<void>}
+	 * @private
+	 *
+	 * @example
+	 * await this._drainInFlightLoads();
+	 */
+	async _drainInFlightLoads() {
+		if (!this.api) return;
+
+		const pending = [];
+		const seen = new Set();
+
+		/**
+		 * Recursively walk the API tree and collect in-flight materialization promises.
+		 * @param {object} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 to avoid cycles).
+		 * @returns {void}
+		 */
+		const collect = (obj, depth = 0) => {
+			if (!obj || typeof obj !== "object" || depth > 15 || seen.has(obj)) return;
+			seen.add(obj);
+
+			try {
+				// Skip version dispatcher proxies — they have no materialization promises.
+				if (obj.__isVersionDispatcher === true) return;
+
+				// Only access ____slothletInternal on raw UnifiedWrapper instances, never on
+				// proxy-wrapped ones. The proxy GET trap handles "____slothletInternal" and
+				// may return incomplete state that crashes here. Object.hasOwn confirms the
+				// property is a real own property (raw wrapper) vs. proxy-intercepted.
+				if (Object.hasOwn(obj, "____slothletInternal")) {
+					const mat = obj.____slothletInternal.materializationPromise;
+					if (mat) pending.push(mat);
+
+					// Walk wrapper child keys (filtering internal prefixes to avoid cycles).
+					for (const key of Object.keys(obj)) {
+						if (!key.startsWith("____")) collect(obj[key], depth + 1);
+					}
+					return;
+				}
+
+				for (const key of Object.keys(obj)) {
+					collect(obj[key], depth + 1);
+				}
+			} catch {
+				// Drain is best-effort; ignore errors from partially-constructed or
+				// attack-state wrappers so shutdown always completes cleanly.
+			}
+		};
+
+		for (const key of Object.keys(this.api)) {
+			collect(this.api[key]);
+		}
+
+		if (pending.length > 0) {
+			await Promise.allSettled(pending);
+		}
+	}
+
+	/**
 	 * Shutdown instance and cleanup resources
 	 * @public
 	 */
@@ -822,6 +889,11 @@ class Slothlet {
 		if (!this.isLoaded) {
 			return;
 		}
+
+		// Drain any in-flight lazy-mode module loads before tearing down, so that
+		// background import() calls can complete and won't cause "Closing rpc while
+		// fetch was pending" errors in Vitest workers.
+		await this._drainInFlightLoads();
 
 		// Disable EventEmitter patching and cleanup AsyncResources
 		disableEventEmitterPatching();
