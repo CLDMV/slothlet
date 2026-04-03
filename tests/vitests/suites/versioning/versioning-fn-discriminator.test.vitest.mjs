@@ -112,4 +112,22 @@ describe.each(getMatrixConfigs())("Versioning > Function Discriminator > $name",
 		const result = api.v2Caller.callLogin("user", "pass");
 		expect(result.version).toBe("v2");
 	});
+
+	it("discriminator function that throws falls back to the default version", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			versionDispatcher: () => {
+				throw new Error("discriminator exploded");
+			}
+		});
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "v2" });
+
+		// Discriminator throws → resolveForPath catches it → returns null → getDefaultVersion fallback
+		// v1 is explicit default, so result.version should be "v1"
+		const result = api.unversionedCaller.callLogin("testUser");
+		expect(result.version).toBe("v1");
+	});
 });

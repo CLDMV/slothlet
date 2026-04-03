@@ -68,4 +68,16 @@ describe.each(getMatrixConfigs())("Versioning > Default Auto > $name", ({ config
 		// v8 > v1 numerically
 		expect(info.default).toBe("v8");
 	});
+
+	it("semver tiebreak: stable tag wins over pre-release tag with same numeric parts", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		// "2.0.0" and "2.0.0-alpha" normalise to the same [2,0,0] tuple.
+		// Tiebreak (aSuffix - bSuffix) should prefer "2.0.0" (stable, no suffix) over "2.0.0-alpha".
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "2.0.0-alpha" });
+		await api.slothlet.api.add("auth", `${BASE}/v2`, {}, { version: "2.0.0" });
+
+		const info = api.slothlet.versioning.list("auth");
+		expect(info.default).toBe("2.0.0");
+	});
 });

@@ -911,6 +911,9 @@ class Slothlet {
 			this.handlers.ownership.clear();
 		}
 
+		// Shutdown versioning manager — clears all dispatcher/registry/metadata state.
+		this.handlers.versionManager?.shutdown();
+
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
 		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).
 		this.isLoaded = false;

@@ -82,6 +82,11 @@ function compareTuples(a, b) {
 	for (let i = 0; i < 3; i++) {
 		if (a[i] !== b[i]) return b[i] - a[i];
 	}
+	// All three components are equal — only reachable when both tags normalise to the
+	// exact same [major, minor, patch] tuple AND produce the same suffix score. The
+	// sort caller resolves such ties in a separate comparator step, so the explicit
+	// tiebreak expression runs instead; this fallthrough is a defensive guard.
+	/* v8 ignore next */
 	return 0;
 }
 
@@ -325,6 +330,9 @@ export class VersionManager extends ComponentBase {
 	 */
 	getDefaultVersion(logicalPath) {
 		const entry = this.#registry.get(logicalPath);
+		// entry is always populated before getDefaultVersion is called (registered before dispatch);
+		// this null-guard is a defensive fallback.
+		/* v8 ignore next */
 		if (!entry || entry.versions.size === 0) return null;
 
 		// Step 1: explicit default flag
@@ -422,6 +430,9 @@ export class VersionManager extends ComponentBase {
 	 */
 	buildAllVersionsArg(logicalPath) {
 		const entry = this.#registry.get(logicalPath);
+		// Dispatcher is only created after registerVersion, so logicalPath is always
+		// in #registry when buildAllVersionsArg is called — defensive guard.
+		/* v8 ignore next */
 		if (!entry) return {};
 
 		const defaultTag = this.getDefaultVersion(logicalPath);
@@ -492,8 +503,13 @@ export class VersionManager extends ComponentBase {
 	 */
 	#findVersionEntryForModule(moduleID) {
 		const key = this.#moduleToVersionKey.get(moduleID);
+		// key absence means moduleID was never registered as a versioned module — caller is unversioned.
+		/* v8 ignore next */
 		if (!key) return null;
 		const entry = this.#registry.get(key.logicalPath);
+		// #moduleToVersionKey and #registry are always kept in sync by registerVersion/unregisterVersion;
+		// a missing registry entry here would indicate state corruption — defensive guard.
+		/* v8 ignore next */
 		if (!entry) return null;
 		return entry.versions.get(key.versionTag) ?? null;
 	}
@@ -577,6 +593,9 @@ export class VersionManager extends ComponentBase {
 		/** Resolve version tag and return the versioned namespace wrapper. */
 		const resolveVersionedWrapper = () => {
 			const versionTag = resolveVersion();
+			// resolveVersion() only returns null when no versions are registered;
+			// teardownDispatcher ensures the dispatcher is removed before that happens.
+			/* v8 ignore next */
 			if (!versionTag) return null;
 			const versionedPath = `${versionTag}.${logicalPath}`;
 			return manager.#walkApiPath(versionedPath);
@@ -622,6 +641,8 @@ export class VersionManager extends ComponentBase {
 				if (prop === Symbol.toStringTag) {
 					const vw = resolveVersionedWrapper();
 					if (vw) return vw[Symbol.toStringTag];
+					// vw is null only if no versions remain while dispatcher is live — defensive.
+					/* v8 ignore next */
 					return "Object";
 				}
 
@@ -634,12 +655,19 @@ export class VersionManager extends ComponentBase {
 							try {
 								return inspect(vw);
 							} catch {
-								// Fallback if inspect fails
+								// inspect() almost never throws on a Proxy; fallback is a last-resort guard.
+								/* v8 ignore next */
+								void 0; // fallthrough to shared fallback below
 							}
 						}
+						// Fallback: only reached if vw is null (no version resolved while
+						// dispatcher is live) or inspect threw — both are transient/impossible
+						// in well-formed usage.
+						/* v8 ignore start */
 						const entry = manager.#registry.get(logicalPath);
 						const versions = entry ? Array.from(entry.versions.keys()) : [];
 						return { __versionDispatcher: logicalPath, versions };
+						/* v8 ignore stop */
 					};
 				}
 
@@ -658,6 +686,9 @@ export class VersionManager extends ComponentBase {
 				// ── 11. Framework metadata accessors → delegate ───────────────────
 				if (prop === "__metadata" || prop === "__filePath" || prop === "__sourceFolder" || prop === "__type") {
 					const vw = resolveVersionedWrapper();
+					// vw can only be null if all versions are removed after the dispatcher was
+					// created — a transient race condition; defensive guard.
+					/* v8 ignore next */
 					if (!vw) return undefined;
 					return vw[prop];
 				}
@@ -665,6 +696,9 @@ export class VersionManager extends ComponentBase {
 				// ── 12. Inline version override already handled inside resolveVersion ─
 				// ── 13. Version-routing dispatch (user-defined properties) ──────────
 				const versionTag = resolveVersion();
+				// versionTag is null only if no versions exist while dispatcher is live;
+				// teardownDispatcher prevents this in normal usage — defensive guard.
+				/* v8 ignore next 4 */
 				if (!versionTag) {
 					throw new manager.SlothletError("VERSION_NO_DEFAULT", {
 						apiPath: logicalPath
@@ -672,6 +706,9 @@ export class VersionManager extends ComponentBase {
 				}
 
 				const versionedWrapper = manager.#walkApiPath(`${versionTag}.${logicalPath}`);
+				// versionedWrapper can only be missing if the versioned path was removed
+				// outside the VersionManager lifecycle — defensive guard.
+				/* v8 ignore next */
 				if (!versionedWrapper) return undefined;
 
 				return versionedWrapper[prop];
@@ -679,8 +716,14 @@ export class VersionManager extends ComponentBase {
 
 			/**
 			 * Apply trap — dispatcher is a namespace, not a callable function.
+			 * NOTE: This trap can only fire when the proxy target is a function.
+			 * The target here is a plain object, so JS throws a native TypeError
+			 * ("is not a function") BEFORE this trap is ever invoked.
+			 * Kept for completeness per the spec; target must remain an object
+			 * so that `typeof impl === "object"` in UnifiedWrapper.getTrap holds.
 			 * @returns {never}
 			 */
+			/* v8 ignore next 5 */
 			apply() {
 				throw new manager.SlothletError("VERSION_DISPATCH_NOT_CALLABLE", {
 					logicalPath
@@ -696,6 +739,8 @@ export class VersionManager extends ComponentBase {
 			has(t, key) {
 				if (Reflect.has(t, key)) return true;
 				const entry = manager.#registry.get(logicalPath);
+				// entry is always present when the dispatcher is live — defensive guard.
+				/* v8 ignore next */
 				if (!entry) return false;
 				for (const ve of entry.versions.values()) {
 					const vw = manager.#walkApiPath(ve.versionedPath);

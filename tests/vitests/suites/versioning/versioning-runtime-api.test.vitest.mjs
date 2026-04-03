@@ -96,4 +96,34 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		const info = api.slothlet.versioning.list("nonexistent");
 		expect(info).toBeUndefined();
 	});
+
+	it("version.setDefault throws VERSION_NOT_FOUND for unknown path", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		expect(() => api.slothlet.versioning.setDefault("nonexistent", "v1")).toThrow("VERSION_NOT_FOUND");
+	});
+
+	it("version.setDefault throws VERSION_NOT_FOUND for unknown version tag", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+
+		expect(() => api.slothlet.versioning.setDefault("auth", "v99")).toThrow("VERSION_NOT_FOUND");
+	});
+
+	it("version.unregister returns false for unknown path", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		const result = await api.slothlet.versioning.unregister("nonexistent", "v1");
+		expect(result).toBe(false);
+	});
+
+	it("version.unregister returns false for unknown version tag", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+
+		const result = await api.slothlet.versioning.unregister("auth", "v99");
+		expect(result).toBe(false);
+	});
 });
