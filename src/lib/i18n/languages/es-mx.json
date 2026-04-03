@@ -367,7 +367,20 @@
 		"NO_CONTEXT_MANAGER": "No se ha configurado ningún gestor de contexto para esta instancia de slothlet.",
 		"HINT_NO_CONTEXT_MANAGER": "Las operaciones de contexto requieren un gestor de contexto. Inicialice slothlet con 'contextManager: new AsyncContextManager()' o 'contextManager: new LiveContextManager()' en su configuración.",
 		"UNSUPPORTED_CONTEXT_MANAGER": "Gestor de contexto no soportado: '{manager}'. Solo se soportan AsyncContextManager y LiveContextManager.",
-		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Use AsyncContextManager para aislamiento de contexto basado en async/ALS o LiveContextManager para contexto de enlace en vivo síncrono."
+		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Use AsyncContextManager para aislamiento de contexto basado en async/ALS o LiveContextManager para contexto de enlace en vivo síncrono.",
+		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher must be a string (metadata key) or a function, received {received}",
+		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version must be a non-empty string, received {received}",
+		"VERSION_NOT_FOUND": "Version '{version}' is not registered at path '{apiPath}'",
+		"VERSION_NO_DEFAULT": "No default version configured for path '{apiPath}' and no version could be resolved from caller metadata",
+		"VERSION_DISPATCH_NOT_CALLABLE": "The versioned dispatcher at '{apiPath}' is a namespace, not a callable function",
+		"VERSION_REGISTER_DUPLICATE": "Version '{version}' is already registered at path '{apiPath}'. Use collisionMode 'replace' to overwrite",
+		"HINT_VERSION_REGISTER_DUPLICATE": "Call api.slothlet.versioning.unregister('{apiPath}', '{version}') first, or register with a different version tag.",
+		"HINT_VERSION_NOT_FOUND": "Call api.slothlet.versioning.list('{apiPath}') to see which version tags are currently registered at that path.",
+		"VERSION_DISCRIMINATOR_INVALID_RETURN": "versionDispatcher function returned '{returned}' which is not a registered version tag for path '{apiPath}'",
+		"DEBUG_VERSION_RESOLVED": "Version resolved: {version} for path {apiPath} (caller: {callerModule})",
+		"DEBUG_VERSION_DEFAULT_USED": "No discriminator match for path {apiPath}; using default version {version}",
+		"DEBUG_VERSION_REGISTERED": "Version {version} registered at {logicalPath} (moduleID: {moduleID})",
+		"DEBUG_VERSION_UNREGISTERED": "Version {version} unregistered from {logicalPath}"
 	},
 	"metadata": {
 		"code": "es-mx",

@@ -367,7 +367,20 @@
 		"NO_CONTEXT_MANAGER": "Nenhum gerenciador de contexto está configurado para esta instância do slothlet.",
 		"HINT_NO_CONTEXT_MANAGER": "As operações de contexto requerem um gerenciador de contexto. Inicialize o slothlet com 'contextManager: new AsyncContextManager()' ou 'contextManager: new LiveContextManager()' em sua configuração.",
 		"UNSUPPORTED_CONTEXT_MANAGER": "Gerenciador de contexto não suportado: '{manager}'. Apenas AsyncContextManager e LiveContextManager são suportados.",
-		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Use AsyncContextManager para isolamento de contexto baseado em async/ALS ou LiveContextManager para contexto síncrono de live-binding."
+		"HINT_UNSUPPORTED_CONTEXT_MANAGER": "Use AsyncContextManager para isolamento de contexto baseado em async/ALS ou LiveContextManager para contexto síncrono de live-binding.",
+		"INVALID_CONFIG_VERSION_DISPATCHER": "config.versionDispatcher must be a string (metadata key) or a function, received {received}",
+		"INVALID_CONFIG_VERSION_TAG": "versionConfig.version must be a non-empty string, received {received}",
+		"VERSION_NOT_FOUND": "Version '{version}' is not registered at path '{apiPath}'",
+		"VERSION_NO_DEFAULT": "No default version configured for path '{apiPath}' and no version could be resolved from caller metadata",
+		"VERSION_DISPATCH_NOT_CALLABLE": "The versioned dispatcher at '{apiPath}' is a namespace, not a callable function",
+		"VERSION_REGISTER_DUPLICATE": "Version '{version}' is already registered at path '{apiPath}'. Use collisionMode 'replace' to overwrite",
+		"HINT_VERSION_REGISTER_DUPLICATE": "Call api.slothlet.versioning.unregister('{apiPath}', '{version}') first, or register with a different version tag.",
+		"HINT_VERSION_NOT_FOUND": "Call api.slothlet.versioning.list('{apiPath}') to see which version tags are currently registered at that path.",
+		"VERSION_DISCRIMINATOR_INVALID_RETURN": "versionDispatcher function returned '{returned}' which is not a registered version tag for path '{apiPath}'",
+		"DEBUG_VERSION_RESOLVED": "Version resolved: {version} for path {apiPath} (caller: {callerModule})",
+		"DEBUG_VERSION_DEFAULT_USED": "No discriminator match for path {apiPath}; using default version {version}",
+		"DEBUG_VERSION_REGISTERED": "Version {version} registered at {logicalPath} (moduleID: {moduleID})",
+		"DEBUG_VERSION_UNREGISTERED": "Version {version} unregistered from {logicalPath}"
 	},
 	"metadata": {
 		"code": "pt-br",
