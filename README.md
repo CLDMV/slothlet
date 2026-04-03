@@ -55,20 +55,22 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.1.0 (March 2026)
+### Latest: v3.2.0 (April 2026)
 
-- **Environment Snapshot** — `api.slothlet.env` exposes a frozen copy of `process.env` captured at initialization time; every module accesses it via `self.slothlet.env`
-- **`env.include` Allowlist** — restrict the snapshot to specific keys with `env: { include: ["NODE_ENV", "PORT"] }`; empty array falls back to full snapshot
-- **Reload Immunity** — snapshot is captured once on first `load()` and never replaced on subsequent `api.slothlet.reload()` calls (including partial `api.slothlet.api.reload()` calls)
-- [View full v3.1.0 Changelog](./docs/changelog/v3/v3.1.0.md)
+- **API Path Versioning** — register the same logical path (e.g. `auth`) under multiple version tags (`v1`, `v2`); a configurable discriminator routes each caller to the correct version at dispatch time
+- **`versionDispatcher` config** — `"version"` (string key lookup), custom function `(allVersions, caller) => tag`, or omit to use the `"version"` default
+- **`api.slothlet.versioning.*`** — runtime management: `list()`, `setDefault()`, `unregister()`, `getVersionMetadata()`
+- **Separate version metadata** — `versionConfig.metadata` stored in VersionManager; never merged with `options.metadata` (regular Metadata system)
+- **Shutdown race fix** — `shutdown()` now drains in-flight lazy-mode ESM `import()` calls before teardown, preventing unhandled rejections on worker exit
+- [View full v3.2.0 Changelog](./docs/changelog/v3/v3.2.0.md)
 
 ### Recent Releases
 
+- **v3.1.0** (March 2026) — Frozen `api.slothlet.env` snapshot; `env.include` allowlist; reload immunity ([Changelog](./docs/changelog/v3/v3.1.0.md))
 - **v3.0.1** (March 2026) — Resolver fix for user `index.mjs` mis-classified as internal; CI `slothlet-dev` stripping hardening; respawn race fix; resilient `build:dist` script ([Changelog](./docs/changelog/v3/v3.0.1.md))
 - **v3.0.0** (February 2026) — Unified Wrapper architecture, redesigned hook system, full i18n, background materialization, lifecycle events, collision modes, mutation controls ([Changelog](./docs/changelog/v3.0.md))
 - **v2.11.0** — AddApi Special File Pattern (Rule 11), smart flattening enhancements ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.11.md))
 - **v2.10.0** — Function metadata tagging and introspection capabilities ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.10.md))
-- **v2.9** — Per-Request Context Isolation ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.9.md))
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 
@@ -327,6 +329,7 @@ await api.slothlet.api.reload("database.*");
 | `backgroundMaterialize`   | `boolean` | `false`       | In lazy mode: start background pre-loading of all modules immediately after init; automatically enables materialization tracking and the `materialized:complete` lifecycle event                              |
 | `api.collision`           | `mixed`   | `"merge"`     | Collision mode for API namespace conflicts: `"merge"`, `"skip"`, `"overwrite"`, `"throw"` - or `{ initial: "merge", api: "skip" }` to set independently for load vs runtime `add()`                          |
 | `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true }` - set any to `false` to disable                                                                                                 |
+| `versionDispatcher`       | `mixed`   | `undefined`   | Version routing discriminator: `"version"` (or any string key) looks up that key in the caller's version metadata; a function receives `(allVersions, caller)` and returns a tag or `null`; `undefined` behaves like `"version"` |
 | `i18n`                    | `object`  | `{}`          | Internationalization settings: `{ language: "en" }` - supported: `en`, `es`, `fr`, `de`, `pt`, `it`, `ja`, `zh`, `ko`                                                                                       |
 
 ---

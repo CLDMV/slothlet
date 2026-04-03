@@ -29,7 +29,7 @@ When you register the same logical path more than once with `versionConfig`, Slo
 - [Argument Signature Compatibility](#argument-signature-compatibility)
 - [Dispatcher Proxy Behavior](#dispatcher-proxy-behavior)
 - [Inline Version Override](#inline-version-override)
-- [Runtime API — api.slothlet.version](#runtime-api--apislothletversion)
+- [Runtime API — api.slothlet.versioning](#runtime-api--apislothletversioning)
 - [Versioned vs Regular Metadata](#versioned-vs-regular-metadata)
 - [Lifecycle](#lifecycle)
 - [Error Reference](#error-reference)
@@ -296,7 +296,7 @@ This is useful for testing, admin overrides, or when the calling module needs to
 
 ---
 
-## Runtime API — api.slothlet.version
+## Runtime API — api.slothlet.versioning
 
 ### `api.slothlet.versioning.list(logicalPath)`
 
