@@ -740,7 +740,8 @@ class Slothlet {
 					// operation.options is always provided during api.add() replay; {} fallback is dead code.
 					/* v8 ignore next */
 					options: { ...(operation.options || {}), recordHistory: false },
-					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleID for replay
+					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}`, // Generate new moduleID for replay
+					versionConfig: operation.versionConfig || null
 				});
 				// All operations are "add" or "remove"; no third type exists — false arm is dead code.
 				/* v8 ignore next */

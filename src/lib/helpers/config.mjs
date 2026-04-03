@@ -189,7 +189,8 @@ export class Config extends ComponentBase {
 				ownership: false,
 				context: false,
 				initialization: false,
-				materialize: false
+				materialize: false,
+				versioning: false
 			};
 		}
 
@@ -204,7 +205,8 @@ export class Config extends ComponentBase {
 				ownership: true,
 				context: true,
 				initialization: true,
-				materialize: true
+				materialize: true,
+				versioning: true
 			};
 		}
 
@@ -219,7 +221,8 @@ export class Config extends ComponentBase {
 				ownership: debug.ownership || false,
 				context: debug.context || false,
 				initialization: debug.initialization || false,
-				materialize: debug.materialize || false
+				materialize: debug.materialize || false,
+				versioning: debug.versioning || false
 			};
 		}
 
@@ -233,7 +236,8 @@ export class Config extends ComponentBase {
 			ownership: false,
 			context: false,
 			initialization: false,
-			materialize: false
+			materialize: false,
+			versioning: false
 		};
 	}
 
@@ -339,6 +343,16 @@ export class Config extends ComponentBase {
 			trackingConfig.materialization = true;
 		}
 
+		// Validate versionDispatcher option
+		if (config.versionDispatcher !== undefined && config.versionDispatcher !== null) {
+			if (typeof config.versionDispatcher !== "string" && typeof config.versionDispatcher !== "function") {
+				throw new this.SlothletError("INVALID_CONFIG_VERSION_DISPATCHER", {
+					received: typeof config.versionDispatcher,
+					validationError: true
+				});
+			}
+		}
+
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
 		if (config.i18n && typeof config.i18n === "object") {
@@ -370,7 +384,8 @@ export class Config extends ComponentBase {
 			backgroundMaterialize: config.backgroundMaterialize === true,
 			silent: config.silent === true,
 			typescript: this.normalizeTypeScript(config.typescript),
-			env: this.normalizeEnv(config.env)
+			env: this.normalizeEnv(config.env),
+			versionDispatcher: config.versionDispatcher ?? null
 		};
 	}
 
