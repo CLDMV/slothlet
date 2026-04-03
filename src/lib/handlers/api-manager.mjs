@@ -1137,7 +1137,7 @@ export class ApiManager extends ComponentBase {
 	async addApiComponent(params) {
 		// params is always provided; options is always provided; both fallbacks are unreachable.
 		/* v8 ignore next */
-		const { apiPath, folderPath, options = {} } = params || {};
+		const { apiPath, folderPath, options = {}, versionConfig = null } = params || {};
 
 		// Handle array of paths - process each sequentially
 		if (Array.isArray(folderPath)) {
@@ -1146,7 +1146,8 @@ export class ApiManager extends ComponentBase {
 				const moduleID = await this.addApiComponent({
 					apiPath,
 					folderPath: singlePath,
-					options
+					options,
+					versionConfig
 				});
 				moduleIDs.push(moduleID);
 			}
@@ -1162,6 +1163,21 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+
+		// Compute effective (versioned) mount path when versionConfig.version is present
+		let effectivePath = normalizedPath;
+		let effectiveParts = parts;
+		if (versionConfig?.version !== undefined && versionConfig?.version !== null) {
+			if (typeof versionConfig.version !== "string" || !String(versionConfig.version).trim()) {
+				throw new this.SlothletError("INVALID_CONFIG_VERSION_TAG", {
+					received: versionConfig.version,
+					validationError: true
+				});
+			}
+			const versionTag = String(versionConfig.version).trim();
+			effectivePath = `${versionTag}.${normalizedPath}`;
+			effectiveParts = effectivePath.split(".");
+		}
 
 		// Resolve path - supports both files and directories
 		const { resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath);
@@ -1233,7 +1249,8 @@ export class ApiManager extends ComponentBase {
 			// Use apiPathPrefix so wrappers have correct full API paths
 			// User specified the path, folder loads normally under that path
 			// Empty string means root level (no prefix)
-			apiPathPrefix: normalizedPath,
+			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
+			apiPathPrefix: effectivePath,
 			collisionContext: "addApi",
 			moduleID: moduleID,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
@@ -1247,7 +1264,7 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.apiCacheManager) {
 			this.slothlet.handlers.apiCacheManager.set(moduleID, {
-				endpoint: normalizedPath,
+				endpoint: effectivePath,
 				moduleID: moduleID,
 				api: newApi,
 				folderPath: resolvedFolderPath,
@@ -1415,7 +1432,7 @@ export class ApiManager extends ComponentBase {
 				const isCallableNamespace = typeof apiToMerge === "function";
 
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
-					apiPath: normalizedPath,
+					apiPath: effectivePath,
 					mode: this.____config.mode,
 					isCallable: isCallableNamespace, // Preserve callable nature
 					moduleID: moduleID,
@@ -1428,14 +1445,14 @@ export class ApiManager extends ComponentBase {
 				apiToMerge = containerWrapper.createProxy();
 			}
 
-			const result1 = await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
+			const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleID, // Pass moduleID for lifecycle events
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
 
-			const result2 = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
+			const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
@@ -1461,6 +1478,11 @@ export class ApiManager extends ComponentBase {
 			// Helper to recursively find wrappers with pending materialization
 			const collectPendingMaterializations = (obj, depth = 0) => {
 				if (!obj || typeof obj !== "object" || depth > 10) return;
+				// Skip version dispatcher proxies — accessing their routing properties would
+				// prematurely invoke user discriminator functions during setup, before all
+				// versions are registered. Dispatchers have no pending materializations anyway.
+				/* v8 ignore next */
+				if (obj.__isVersionDispatcher === true) return;
 
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
@@ -1571,18 +1593,33 @@ export class ApiManager extends ComponentBase {
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
 					options: { ...restOptions, metadata, moduleID },
-					moduleID
+					moduleID,
+					versionConfig: versionConfig || null
 				});
 
 				// Track in operation history for reload replay
+				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
 				this.state.operationHistory.push({
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
 					options: { ...restOptions, metadata, moduleID },
-					moduleID
+					moduleID,
+					versionConfig: versionConfig || null
 				});
 			}
+		}
+
+		// Register with VersionManager if this is a versioned add
+		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
+			const versionTag = String(versionConfig.version).trim();
+			this.slothlet.handlers.versionManager.registerVersion(
+				normalizedPath,
+				versionTag,
+				moduleID,
+				versionConfig.metadata ?? {},
+				versionConfig.default ?? false
+			);
 		}
 
 		return moduleID;
@@ -1683,6 +1720,13 @@ export class ApiManager extends ComponentBase {
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = normalizedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+				}
+				// Clean up VersionManager registration if this was a versioned module
+				if (this.slothlet.handlers.versionManager) {
+					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+					if (versionKey) {
+						this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+					}
 				}
 				// Track in operation history for reload replay
 				this.state.operationHistory.push({
@@ -2096,6 +2140,11 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_MODULE_RELOAD_COMPLETE",
 			moduleID
 		});
+
+		// Notify VersionManager so its dispatcher reflects the latest state
+		if (this.slothlet.handlers.versionManager) {
+			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
+		}
 	}
 
 	/**
@@ -2628,6 +2677,31 @@ export class ApiManager extends ComponentBase {
 					}
 				} else {
 					implForReload = freshApi;
+				}
+
+				// Rule 13 (F08) dedup mirror: addApiComponent hoists a duplicate key during
+				// initial add (e.g. add("auth", v1/) + v1/auth.mjs → implForReload is {auth:{…}}
+				// but the wrapper was initially set with {login,logout,…}).  Apply the same
+				// hoisting here so the reload produces an identical impl shape.
+				// Condition: implForReload has a key matching the last segment of the endpoint
+				// AND that value is a UnifiedWrapper (i.e. came from buildAPI).
+				// IMPORTANT: Run before recursive extraction so the wrapper proxy is still intact.
+				if (parts.length > 0 && implForReload && typeof implForReload === "object") {
+					const lastEndpointPart = parts[parts.length - 1];
+					if (lastEndpointPart && Object.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
+						const dupValue = implForReload[lastEndpointPart];
+						const dupWrapperForDedup = resolveWrapper(dupValue);
+						if (dupWrapperForDedup) {
+							const hoisted = {};
+							for (const k of Object.keys(implForReload)) {
+								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
+							}
+							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
+								hoisted[k] = dupWrapperForDedup[k];
+							}
+							implForReload = hoisted;
+						}
+					}
 				}
 
 				// Recursively extract full impls from any child wrapper proxies with depleted _impl.

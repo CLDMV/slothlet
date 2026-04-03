@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
+ *	@Last modified time: 2026-04-01 21:57:24 -07:00 (1775105844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -281,18 +281,29 @@ export class ApiBuilder extends ComponentBase {
 				/**
 				 * @param {string} apiPath - API path to add modules to.
 				 * @param {string} folderPath - Folder path containing modules.
-				 * @param {Record<string, unknown>} [metadata={}] - Metadata object.
 				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
-				 * @returns {Promise<void>}
+				 * @param {object | null} [versionConfig=null] - Optional version configuration.
+				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").
+				 * @param {boolean} [versionConfig.default] - Mark this as the explicit default version.
+				 * @param {object} [versionConfig.metadata] - Version metadata stored in VersionManager only.
+				 * @returns {Promise<string>} Resolves with the moduleID.
 				 * @public
 				 *
 				 * @description
 				 * Adds API modules from a folder into the current instance at runtime.
+				 * When `versionConfig` is provided, the module is mounted at
+				 * `${versionConfig.version}.${apiPath}` and a dispatcher proxy is created
+				 * (or updated) at `${apiPath}`.
 				 *
 				 * @example
 				 * await api.slothlet.api.add("plugins", "./plugins");
+				 *
+				 * @example
+				 * // Versioned registration
+				 * await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
+				 * await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
 				 */
-				add: async function slothlet_api_add(apiPath, folderPath, options = {}) {
+				add: async function slothlet_api_add(apiPath, folderPath, options = {}, versionConfig = null) {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -314,7 +325,8 @@ export class ApiBuilder extends ComponentBase {
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
-						options: filteredOptions
+						options: filteredOptions,
+						versionConfig: versionConfig || null
 					});
 				},
 
@@ -1109,7 +1121,78 @@ export class ApiBuilder extends ComponentBase {
 			 * api.slothlet.env.NODE_ENV    // => "production"
 			 * api.slothlet.env.PORT        // => undefined (not captured)
 			 */
-			env: slothlet.envSnapshot
+			env: slothlet.envSnapshot,
+
+			/**
+			 * Version management API for versioned API paths.
+			 * @type {object}
+			 * @public
+			 */
+			versioning: {
+				/**
+				 * List all registered versions for a logical API path.
+				 * @param {string} logicalPath - Logical API path (e.g. "auth").
+				 * @returns {{ versions: object, default: string|null }} Version snapshot.
+				 * @public
+				 * @example
+				 * const info = api.slothlet.versioning.list("auth");
+				 * console.log(info.default); // "v2"
+				 */
+				list: function slothlet_version_list(logicalPath) {
+					if (!slothlet.handlers?.versionManager) return { versions: {}, default: null };
+					return slothlet.handlers.versionManager.list(logicalPath);
+				},
+
+				/**
+				 * Override the default version for a logical API path at runtime.
+				 * @param {string} logicalPath - Logical API path.
+				 * @param {string} versionTag - Version tag to set as default.
+				 * @returns {void}
+				 * @public
+				 * @example
+				 * api.slothlet.versioning.setDefault("auth", "v1");
+				 */
+				setDefault: function slothlet_version_setDefault(logicalPath, versionTag) {
+					if (!slothlet.handlers?.versionManager) return;
+					return slothlet.handlers.versionManager.setDefault(logicalPath, versionTag);
+				},
+
+				/**
+				 * Unregister a specific version from a logical API path.
+				 * Removes the versioned namespace and updates or tears down the dispatcher.
+				 * @param {string} logicalPath - Logical API path.
+				 * @param {string} versionTag - Version tag to remove.
+				 * @returns {Promise<boolean>} Resolves `true` when the version was removed.
+				 * @public
+				 * @example
+				 * await api.slothlet.versioning.unregister("auth", "v2");
+				 */
+				unregister: async function slothlet_version_unregister(logicalPath, versionTag) {
+					if (!slothlet.handlers?.versionManager) return false;
+					// Check version exists before attempting removal
+					const info = slothlet.handlers.versionManager.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) return false;
+					const versionedPath = `${versionTag}.${logicalPath}`;
+					// Remove the versioned module from the API tree.
+					// removeApiComponent internally calls versionManager.unregisterVersion via its
+					// version-lifecycle hook, so we do NOT call unregisterVersion again here.
+					await slothlet.handlers.apiManager.removeApiComponent(versionedPath);
+					return true;
+				},
+
+				/**
+				 * Retrieve the VersionManager-only metadata stored for a module ID.
+				 * @param {string} moduleID - Module ID to look up.
+				 * @returns {object | undefined} Version metadata or `undefined`.
+				 * @public
+				 * @example
+				 * const meta = api.slothlet.versioning.getVersionMetadata("auth_abc");
+				 */
+				getVersionMetadata: function slothlet_version_getVersionMetadata(moduleID) {
+					if (!slothlet.handlers?.versionManager) return undefined;
+					return slothlet.handlers.versionManager.getVersionMetadata(moduleID);
+				}
+			}
 		};
 
 		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)

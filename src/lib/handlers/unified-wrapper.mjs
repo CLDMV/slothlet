@@ -850,6 +850,14 @@ export class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 
+		// If impl is a native Proxy (e.g., a version dispatcher), skip adoption entirely.
+		// The getTrap already delegates all property access directly to the Proxy, so there
+		// is nothing to "adopt" as children. Iterating ownKeys on a dispatcher proxy would
+		// call its GET trap and potentially trigger user-supplied discriminator functions as a
+		// side-effect during module setup — which must not happen.
+		/* v8 ignore next */
+		if (util.types.isProxy(this.____slothletInternal.impl)) return;
+
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
 		const internalKeys = new Set([
