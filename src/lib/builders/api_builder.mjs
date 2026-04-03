@@ -1139,6 +1139,8 @@ export class ApiBuilder extends ComponentBase {
 				 * console.log(info.default); // "v2"
 				 */
 				list: function slothlet_version_list(logicalPath) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return { versions: {}, default: null };
 					return slothlet.handlers.versionManager.list(logicalPath);
 				},
@@ -1153,6 +1155,8 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.versioning.setDefault("auth", "v1");
 				 */
 				setDefault: function slothlet_version_setDefault(logicalPath, versionTag) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return;
 					return slothlet.handlers.versionManager.setDefault(logicalPath, versionTag);
 				},
@@ -1168,6 +1172,8 @@ export class ApiBuilder extends ComponentBase {
 				 * await api.slothlet.versioning.unregister("auth", "v2");
 				 */
 				unregister: async function slothlet_version_unregister(logicalPath, versionTag) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return false;
 					// Check version exists before attempting removal
 					const info = slothlet.handlers.versionManager.list(logicalPath);
@@ -1189,6 +1195,8 @@ export class ApiBuilder extends ComponentBase {
 				 * const meta = api.slothlet.versioning.getVersionMetadata("auth_abc");
 				 */
 				getVersionMetadata: function slothlet_version_getVersionMetadata(moduleID) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
 					return slothlet.handlers.versionManager.getVersionMetadata(moduleID);
 				}

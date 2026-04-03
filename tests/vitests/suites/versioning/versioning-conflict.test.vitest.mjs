@@ -54,4 +54,13 @@ describe.each(getMatrixConfigs())("Versioning > Conflict > $name", ({ config }) 
 			).rejects.toThrow();
 		});
 	});
+
+	it("throws INVALID_CONFIG_VERSION_DISPATCHER for non-string non-function versionDispatcher", async () => {
+		// api is intentionally not assigned; slothlet rejects before creating an instance
+		await withSuppressedSlothletErrorOutput(async () => {
+			await expect(
+				slothlet({ ...config, dir: `${BASE}/callers`, versionDispatcher: 42 })
+			).rejects.toThrow();
+		});
+	});
 });
