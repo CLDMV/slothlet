@@ -125,6 +125,7 @@
 		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
 		"baseline": "npm run vitest -- --baseline",
 		"coverage": "npm run vitest -- --coverage-quiet",
+		"ci:coverage": "npm run coverage",
 		"test": "npm run test:pre-build",
 		"test:pre-build": "node tests/test-conditional.mjs",
 		"test:post-build": "npm run test:types",
