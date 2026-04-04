@@ -16,7 +16,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 > _Where sophisticated architecture meets blazing performance - slothlet is anything but slow._
 
-[![npm version]][npm_version_url] [![npm downloads]][npm_downloads_url] <!-- [![GitHub release]][github_release_url] -->[![GitHub downloads]][github_downloads_url] [![Last commit]][last_commit_url] <!-- [![Release date]][release_date_url] -->[![npm last update]][npm_last_update_url]
+[![npm version]][npm_version_url] [![npm downloads]][npm_downloads_url] <!-- [![GitHub release]][github_release_url] -->[![GitHub downloads]][github_downloads_url] [![Last commit]][last_commit_url] <!-- [![Release date]][release_date_url] -->[![npm last update]][npm_last_update_url] [![Coverage]][coverage_url]
 
 > [!NOTE]
 > **🚀 Production Ready Modes:**
@@ -1038,6 +1038,8 @@ To my wife and children - thank you for your patience, your encouragement, and t
 [github_license_url]: https://github.com/CLDMV/slothlet/blob/HEAD/LICENSE
 [npm license]: https://img.shields.io/npm/l/%40cldmv%2Fslothlet.svg?style=for-the-badge&logo=npm&logoColor=white&labelColor=CB3837
 [npm_license_url]: https://www.npmjs.com/package/@cldmv/slothlet
+[coverage]: https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FCLDMV%2Fslothlet%2Fbadges%2Fcoverage.json&style=for-the-badge&logo=vitest&logoColor=white
+[coverage_url]: https://github.com/CLDMV/slothlet/blob/badges/coverage.json
 [contributors]: https://img.shields.io/github/contributors/CLDMV/slothlet.svg?style=for-the-badge&logo=github&logoColor=white&labelColor=181717
 [contributors_url]: https://github.com/CLDMV/slothlet/graphs/contributors
 [sponsor shinrai]: https://img.shields.io/github/sponsors/shinrai?style=for-the-badge&logo=githubsponsors&logoColor=white&labelColor=EA4AAA&label=Sponsor
