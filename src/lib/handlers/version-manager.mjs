@@ -264,6 +264,19 @@ export class VersionManager extends ComponentBase {
 	}
 
 	/**
+	 * Returns `true` when a live dispatcher proxy is tracked for the given logical path.
+	 * Used by ApiManager to detect whether a removed path was a logical dispatcher.
+	 *
+	 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+	 * @returns {boolean}
+	 * @example
+	 * versionManager.hasDispatcher("auth"); // true
+	 */
+	hasDispatcher(logicalPath) {
+		return this.#dispatchers.has(logicalPath);
+	}
+
+	/**
 	 * Retrieve the VersionManager-only metadata object stored for a module ID.
 	 *
 	 * @param {string} moduleID - Module ID.
@@ -781,7 +794,7 @@ export class VersionManager extends ComponentBase {
 			/* v8 ignore next 5 */
 			apply() {
 				throw new manager.SlothletError("VERSION_DISPATCH_NOT_CALLABLE", {
-					logicalPath
+					apiPath: logicalPath
 				});
 			},
 

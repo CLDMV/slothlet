@@ -1727,6 +1727,12 @@ export class ApiManager extends ComponentBase {
 					if (versionKey) {
 						this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
 					}
+					// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
+					// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
+					// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
+					if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
+						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
+					}
 				}
 				// Track in operation history for reload replay
 				this.state.operationHistory.push({
