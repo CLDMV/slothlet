@@ -1132,16 +1132,16 @@ export class ApiBuilder extends ComponentBase {
 				/**
 				 * List all registered versions for a logical API path.
 				 * @param {string} logicalPath - Logical API path (e.g. "auth").
-				 * @returns {{ versions: object, default: string|null }} Version snapshot.
+				 * @returns {{ versions: object, default: string|null } | undefined} Version snapshot, or `undefined` when the path is not registered.
 				 * @public
 				 * @example
 				 * const info = api.slothlet.versioning.list("auth");
-				 * console.log(info.default); // "v2"
+				 * if (info) console.log(info.default); // "v2"
 				 */
 				list: function slothlet_version_list(logicalPath) {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
-					if (!slothlet.handlers?.versionManager) return { versions: {}, default: null };
+					if (!slothlet.handlers?.versionManager) return undefined;
 					return slothlet.handlers.versionManager.list(logicalPath);
 				},
 
