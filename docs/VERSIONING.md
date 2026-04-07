@@ -397,10 +397,9 @@ await api.slothlet.api.reload({ apiPath: "v2.auth" });
 | `INVALID_CONFIG_VERSION_DISPATCHER` | `versionDispatcher` is not a string or function |
 | `INVALID_CONFIG_VERSION_TAG` | `versionConfig.version` is missing or not a non-empty string |
 | `VERSION_NOT_FOUND` | Requested version tag is not registered for the path |
-| `VERSION_NO_DEFAULT` | No default version and discriminator returned nothing resolvable |
+| `VERSION_NO_DEFAULT` | No default version and discriminator returned nothing resolvable — this includes the case where a function discriminator returns an unrecognized tag (treated as `null`, falls through to default) |
 | `VERSION_DISPATCH_NOT_CALLABLE` | Reserved for dispatcher invocation; in practice the JS engine throws a native `TypeError` before this fires, because the proxy target is a plain object |
 | `VERSION_REGISTER_DUPLICATE` | Same version tag registered twice at the same path |
-| `VERSION_DISCRIMINATOR_INVALID_RETURN` | Function discriminator returned an unrecognized version tag |
 
 ---
 
