@@ -1515,8 +1515,10 @@ export class ApiManager extends ComponentBase {
 			};
 
 			// Collect from the actual API path where we just added
-			// This ensures we catch any fire-and-forget materializations that were triggered
-			if (parts.length === 0) {
+			// This ensures we catch any fire-and-forget materializations that were triggered.
+			// Use effectiveParts (the actual mount path) — for versioned adds this is e.g. ["v1","auth"];
+			// for non-versioned adds effectiveParts === parts, so both cases are handled correctly.
+			if (effectiveParts.length === 0) {
 				// Root level - check each key we just added
 				for (const key of Object.keys(newApi)) {
 					// api[key] is always truthy immediately after assignment; FALSE never fires.
@@ -1528,7 +1530,7 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// Nested path - check the container we just modified
 				let current = this.slothlet.api;
-				for (const part of parts) {
+				for (const part of effectiveParts) {
 					// Nested container path always resolves; the missing-part else never fires in tests.
 					/* v8 ignore start */
 					if (current && current[part]) {
@@ -1579,10 +1581,12 @@ export class ApiManager extends ComponentBase {
 		}
 
 		// Register ownership for added API
+		// For versioned adds effectivePath is the actual mount point (e.g. "v1.auth"); for non-versioned
+		// effectivePath === normalizedPath, so this is always correct for both cases.
 		// ownership is always registered and moduleID is always set; FALSE arm never fires.
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership && moduleID) {
-			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, normalizedPath);
+			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
 		}
 
 		// ownership always registered; FALSE never fires.
