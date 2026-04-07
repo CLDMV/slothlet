@@ -187,11 +187,11 @@ export class VersionManager extends ComponentBase {
 
 		// Store version metadata separately (never merged into regular Metadata)
 		this.#versionMetadataByModule.set(moduleID, {
-			version: versionTag, // always injected
-			logicalPath, // always injected
 			// versionMeta is always an object by the time it reaches here — nullish fallback is unreachable.
 			/* v8 ignore next */
-			...(versionMeta ?? {}) // user fields spread after — cannot override above
+			...(versionMeta ?? {}), // user fields spread first — injected fields below always win
+			version: versionTag, // always injected; cannot be overridden by versionMeta
+			logicalPath // always injected; cannot be overridden by versionMeta
 		});
 
 		this.slothlet.debug("versioning", {
@@ -292,9 +292,10 @@ export class VersionManager extends ComponentBase {
 	 * Return a snapshot of all registered versions and the default tag for a logical path.
 	 *
 	 * @param {string} logicalPath - Logical API path.
-	 * @returns {{ versions: object, default: string | null }} Snapshot object.
+	 * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
 	 * @example
 	 * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
+	 * versionManager.list("unknown"); // undefined
 	 */
 	list(logicalPath) {
 		const entry = this.#registry.get(logicalPath);

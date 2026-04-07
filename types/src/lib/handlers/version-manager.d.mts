@@ -49,6 +49,16 @@ export class VersionManager extends ComponentBase {
         versionTag: string;
     } | undefined;
     /**
+     * Returns `true` when a live dispatcher proxy is tracked for the given logical path.
+     * Used by ApiManager to detect whether a removed path was a logical dispatcher.
+     *
+     * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+     * @returns {boolean}
+     * @example
+     * versionManager.hasDispatcher("auth"); // true
+     */
+    hasDispatcher(logicalPath: string): boolean;
+    /**
      * Retrieve the VersionManager-only metadata object stored for a module ID.
      *
      * @param {string} moduleID - Module ID.
@@ -61,14 +71,15 @@ export class VersionManager extends ComponentBase {
      * Return a snapshot of all registered versions and the default tag for a logical path.
      *
      * @param {string} logicalPath - Logical API path.
-     * @returns {{ versions: object, default: string | null }} Snapshot object.
+     * @returns {{ versions: object, default: string | null } | undefined} Snapshot object, or `undefined` if the path is not registered.
      * @example
      * versionManager.list("auth"); // { versions: { v1: {...}, v2: {...} }, default: "v2" }
+     * versionManager.list("unknown"); // undefined
      */
     list(logicalPath: string): {
         versions: object;
         default: string | null;
-    };
+    } | undefined;
     /**
      * Explicitly override the default version for a logical path at runtime.
      * Clears any previous explicit defaults and marks only the specified tag.
