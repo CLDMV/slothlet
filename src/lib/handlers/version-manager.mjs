@@ -598,7 +598,8 @@ export class VersionManager extends ComponentBase {
 	 * internal keys, stable framework accessors, `then`, symbols, routing, etc.).
 	 *
 	 * @param {string} logicalPath - Logical API path this dispatcher covers.
-	 * @returns {Proxy} A frozen-target Proxy for version-dispatched property access.
+	 * @returns {object} A Proxy instance for version-dispatched property access. The returned
+	 *   value is a Proxy wrapping a frozen plain-object target; it is NOT the Proxy constructor.
 	 * @example
 	 * const proxy = versionManager.createDispatcher("auth");
 	 * proxy.login; // resolves version then returns api.v2.auth.login

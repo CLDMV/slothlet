@@ -140,6 +140,14 @@ export type SlothletOptions = {
      * See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
      */
     typescript?: boolean | "fast" | "strict" | object;
+    /**
+     * - Version routing discriminator for versioned API paths.
+     * - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.
+     * - **function** — called as `(allVersions, caller) => versionTag | null`; return a registered version tag to force routing, or `null`/`undefined` to fall through to the automatic default.
+     * - **omitted / `undefined`** — behaves identically to `"version"`.
+     * Only relevant when modules are registered via `api.slothlet.api.add()` with a `versionConfig` argument.
+     */
+    versionDispatcher?: string | Function;
 };
 /**
  * Bound API object returned by `slothlet()`.
@@ -223,6 +231,12 @@ export type SlothletAPI = {
         ownership: {
             get: Function;
             unregister: Function;
+        };
+        versioning: {
+            list: Function;
+            setDefault: Function;
+            unregister: Function;
+            getVersionMetadata: Function;
         };
         reference?: object;
         reload: Function;

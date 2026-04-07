@@ -6,7 +6,7 @@
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
 # @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2026-04-03 17:14:58 -07:00 (1775261698)
+# @Last modified time: 2026-04-06 20:16:02 -07:00 (1775531762)
 # -----
 # @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -45,10 +45,10 @@ on:
                 required: false
                 default: "lts/*"
             min_node_version:
-                description: "Minimum Node.js version for matrix testing (default: 20, oldest non-EOL)"
+                description: "Minimum Node.js version for matrix testing (default: 16.20.2)"
                 type: string
                 required: false
-                default: "20"
+                default: "16.20.2"
             max_node_major:
                 description: "Override max Node.js major version (default: 24)"
                 type: string
@@ -115,7 +115,7 @@ jobs:
             package_name: "@cldmv/slothlet" # Required: Your NPM package name
             debug: ${{ github.event.inputs.debug == 'true' }}
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
-            min_node_version: ${{ github.event.inputs.min_node_version || '20' }}
+            min_node_version: ${{ github.event.inputs.min_node_version || '16.20.2' }}
             max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
             package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
             test_command: "npm test" # Use defaults: NODE_ENV=development, NODE_OPTIONS=--conditions=development
