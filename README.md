@@ -16,7 +16,7 @@ The name might suggest we're taking it easy, but don't be fooled. **Slothlet del
 
 > _Where sophisticated architecture meets blazing performance - slothlet is anything but slow._
 
-[![npm version]][npm_version_url] [![npm downloads]][npm_downloads_url] <!-- [![GitHub release]][github_release_url] -->[![GitHub downloads]][github_downloads_url] [![Last commit]][last_commit_url] <!-- [![Release date]][release_date_url] -->[![npm last update]][npm_last_update_url] [![Coverage]][coverage_url]
+[![npm version]][npm_version_url] [![npm downloads]][npm_downloads_url] <!-- [![GitHub release]][github_release_url] -->[![GitHub downloads]][github_downloads_url] [![Last commit]][last_commit_url] <!-- [![Release date]][release_date_url] -->[![npm last update]][npm_last_update_url] [![coverage]][coverage_url]
 
 > [!NOTE]
 > **🚀 Production Ready Modes:**
