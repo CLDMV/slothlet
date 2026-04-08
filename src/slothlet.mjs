@@ -87,6 +87,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -848,15 +849,17 @@ class Slothlet {
 				// Skip version dispatcher proxies — they have no materialization promises.
 				if (obj.__isVersionDispatcher === true) return;
 
-				// Only access ____slothletInternal on raw UnifiedWrapper instances, never on
-				// proxy-wrapped ones. The proxy GET trap handles "____slothletInternal" and
-				// may return incomplete state that crashes here. Object.hasOwn confirms the
-				// property is a real own property (raw wrapper) vs. proxy-intercepted.
-				if (Object.hasOwn(obj, "____slothletInternal")) {
-					const mat = obj.____slothletInternal.materializationPromise;
+				// ____slothletInternal is a prototype getter, not an own property, so
+				// Object.hasOwn() always returns false for both raw wrappers and their
+				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
+				// then falls back to instanceof for raw instances.
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
+					const mat = wrapper.____slothletInternal.materializationPromise;
 					if (mat) pending.push(mat);
 
-					// Walk wrapper child keys (filtering internal prefixes to avoid cycles).
+					// Walk child keys through the proxy (obj) so the get trap correctly
+					// resolves child wrappers, filtering framework-internal prefixes.
 					for (const key of Object.keys(obj)) {
 						if (!key.startsWith("____")) collect(obj[key], depth + 1);
 					}
