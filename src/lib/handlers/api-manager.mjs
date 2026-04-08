@@ -1649,78 +1649,12 @@ export class ApiManager extends ComponentBase {
 					versionConfig.default ?? false
 				);
 			} catch (error) {
-				await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath });
+				await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
 				throw error;
 			}
 		}
 
 		return moduleID;
-	}
-
-	/**
-	 * Remove the addHistory entry that matches a failed versioned add.
-	 * @param {string} normalizedPath - Logical API path stored in addHistory.
-	 * @param {string} resolvedFolderPath - Resolved folder path stored in addHistory.
-	 * @param {string} moduleID - Module ID stored in addHistory.
-	 * @returns {void}
-	 * @package
-	 *
-	 * @example
-	 * this._removeAddHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
-	 */
-	_removeAddHistoryEntry(normalizedPath, resolvedFolderPath, moduleID) {
-		const entryIndex = this.state.addHistory.findLastIndex(
-			(entry) => entry?.apiPath === normalizedPath && entry?.folderPath === resolvedFolderPath && entry?.moduleID === moduleID
-		);
-		if (entryIndex !== -1) {
-			this.state.addHistory.splice(entryIndex, 1);
-		}
-	}
-
-	/**
-	 * Remove the operationHistory entry that matches a failed versioned add.
-	 * @param {string} normalizedPath - Logical API path stored in operationHistory.
-	 * @param {string} resolvedFolderPath - Resolved folder path stored in operationHistory.
-	 * @param {string} moduleID - Module ID stored in operationHistory.
-	 * @returns {void}
-	 * @package
-	 *
-	 * @example
-	 * this._removeAddOperationHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
-	 */
-	_removeAddOperationHistoryEntry(normalizedPath, resolvedFolderPath, moduleID) {
-		const operationIndex = this.state.operationHistory.findLastIndex(
-			(entry) =>
-				entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.folderPath === resolvedFolderPath && entry?.moduleID === moduleID
-		);
-		if (operationIndex !== -1) {
-			this.state.operationHistory.splice(operationIndex, 1);
-		}
-	}
-
-	/**
-	 * Roll back a versioned add whose VersionManager registration failed.
-	 * Removes the mounted subtree via removeApiComponent (best-effort) then scrubs
-	 * the addHistory and operationHistory entries that were pushed before the failure.
-	 * @param {object} opts - Rollback parameters.
-	 * @param {string} opts.moduleID - Module ID of the failed add.
-	 * @param {string} opts.effectivePath - Versioned mount path (e.g. "v1.auth").
-	 * @param {string} opts.normalizedPath - Logical API path (e.g. "auth").
-	 * @param {string} opts.resolvedFolderPath - Absolute folder path that was mounted.
-	 * @returns {Promise<void>}
-	 * @package
-	 *
-	 * @example
-	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath });
-	 */
-	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath }) {
-		try {
-			await this.removeApiComponent(moduleID || effectivePath);
-		} catch {
-			// Best-effort rollback; always scrub the add tracking entries below.
-		}
-		this._removeAddHistoryEntry(normalizedPath, resolvedFolderPath, moduleID);
-		this._removeAddOperationHistoryEntry(normalizedPath, resolvedFolderPath, moduleID);
 	}
 
 	/**
