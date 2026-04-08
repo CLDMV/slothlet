@@ -1685,9 +1685,16 @@ export class ApiManager extends ComponentBase {
 		// removeApiComponent does not touch operationHistory. When called with
 		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
 		// entry we already recorded. Remove it explicitly so no orphaned add survives.
-		const addIndex = this.state.operationHistory.findLastIndex(
-			(entry) => entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID
-		);
+		// Use a manual reverse loop instead of findLastIndex() — findLastIndex is only
+		// available in Node ≥18, but this package declares engines.node >=16.20.2.
+		let addIndex = -1;
+		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
+			const entry = this.state.operationHistory[i];
+			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
+				addIndex = i;
+				break;
+			}
+		}
 		if (addIndex !== -1) {
 			this.state.operationHistory.splice(addIndex, 1);
 		}
