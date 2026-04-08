@@ -1175,8 +1175,12 @@ export class ApiManager extends ComponentBase {
 				});
 			}
 			const versionTag = String(versionConfig.version).trim();
-			effectivePath = `${versionTag}.${normalizedPath}`;
-			effectiveParts = effectivePath.split(".");
+			// Build effectiveParts as [versionTag, ...parts] rather than splitting effectivePath
+			// on ".". Splitting would fragment version tags that contain dots (e.g. "2.3.0" →
+			// ["2","3","0"]) creating unintended nested namespaces. Using the pre-split `parts`
+			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
+			effectiveParts = [versionTag, ...parts];
+			effectivePath = effectiveParts.join(".");
 		}
 
 		// Resolve path - supports both files and directories

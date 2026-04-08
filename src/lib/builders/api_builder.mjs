@@ -280,13 +280,16 @@ export class ApiBuilder extends ComponentBase {
 			api: {
 				/**
 				 * @param {string} apiPath - API path to add modules to.
-				 * @param {string} folderPath - Folder path containing modules.
+				 * @param {string|string[]} folderPath - Folder path (or array of paths) containing modules.
+				 *   When an array is provided, each path is processed sequentially and the return value
+				 *   is an array of moduleIDs in the same order.
 				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
 				 * @param {object | null} [versionConfig=null] - Optional version configuration.
 				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").
 				 * @param {boolean} [versionConfig.default] - Mark this as the explicit default version.
 				 * @param {object} [versionConfig.metadata] - Version metadata stored in VersionManager only.
-				 * @returns {Promise<string>} Resolves with the moduleID.
+				 * @returns {Promise<string|string[]>} Resolves with the moduleID, or an array of moduleIDs
+				 *   when `folderPath` is an array.
 				 * @public
 				 *
 				 * @description
