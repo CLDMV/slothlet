@@ -1092,7 +1092,7 @@ export default slothlet;
  *   - `true` or `"fast"` — esbuild transpilation, no type checking.
  *   - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
  *   See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
- * @property {string|Function} [versionDispatcher] - Version routing discriminator for versioned API paths.
+ * @property {string|Function|null} [versionDispatcher] - Version routing discriminator for versioned API paths.
  *   - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.
  *   - **function** — called as `(allVersions, caller) => versionTag | null`; return a registered version tag to force routing, or `null`/`undefined` to fall through to the automatic default.
  *   - **omitted / `undefined`** — behaves identically to `"version"`.

@@ -147,7 +147,7 @@ export type SlothletOptions = {
      * - **omitted / `undefined`** — behaves identically to `"version"`.
      * Only relevant when modules are registered via `api.slothlet.api.add()` with a `versionConfig` argument.
      */
-    versionDispatcher?: string | Function;
+    versionDispatcher?: string | Function | null;
 };
 /**
  * Bound API object returned by `slothlet()`.
