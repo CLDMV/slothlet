@@ -1181,11 +1181,14 @@ export class ApiBuilder extends ComponentBase {
 					// Check version exists before attempting removal
 					const info = slothlet.handlers.versionManager.list(logicalPath);
 					if (!info || !info.versions?.[versionTag]) return false;
-					const versionedPath = `${versionTag}.${logicalPath}`;
+					// Use the stored moduleID rather than reconstructing a dot-delimited path string.
+					// Path string reconstruction would re-split on "." and fragment dotted version
+					// tags (e.g. "2.3.0" → ["2","3","0"]) when passed to removeApiComponent.
+					const { moduleID: versionedModuleID } = info.versions[versionTag];
 					// Remove the versioned module from the API tree.
 					// removeApiComponent internally calls versionManager.unregisterVersion via its
 					// version-lifecycle hook, so we do NOT call unregisterVersion again here.
-					await slothlet.handlers.apiManager.removeApiComponent(versionedPath);
+					await slothlet.handlers.apiManager.removeApiComponent(versionedModuleID);
 					return true;
 				},
 

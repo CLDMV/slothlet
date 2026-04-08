@@ -1874,6 +1874,16 @@ export class ApiManager extends ComponentBase {
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
 
+			// Clean up VersionManager registration if this was a versioned module.
+			// The apiPath+moduleID branch above handles this for path-based removals;
+			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			if (this.slothlet.handlers.versionManager) {
+				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+				if (versionKey) {
+					this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+				}
+			}
+
 			// Collect all paths that were owned by this module
 			const allPaths = [...result.removed, ...result.rolledBack.map((r) => r.apiPath)];
 

@@ -174,6 +174,10 @@ export class VersionManager extends ComponentBase {
 			moduleID,
 			versionTag,
 			versionedPath: `${versionTag}.${logicalPath}`,
+			// Segment array keeping versionTag atomic even when it contains dots (e.g. "2.3.0").
+			// Used by #walkApiPath to avoid re-splitting the concatenated versionedPath string,
+			// which would fragment "2.3.0" into ["2","3","0"] and walk the wrong tree nodes.
+			versionedParts: [versionTag, ...logicalPath.split(".")],
 			// isDefault and versionMeta are always explicitly passed via registerVersion's callers.
 			/* v8 ignore next */
 			isDefault: isDefault ?? false,
@@ -478,8 +482,10 @@ export class VersionManager extends ComponentBase {
 		const result = {};
 
 		for (const [tag, ve] of entry.versions) {
-			// Resolve the mounted UnifiedWrapper for this versioned path to get regular metadata
-			const mountedWrapper = this.#walkApiPath(ve.versionedPath);
+			// Resolve the mounted UnifiedWrapper for this versioned path to get regular metadata.
+			// Use versionedParts (segment array) to avoid re-splitting versionedPath on ".", which
+			// would fragment dotted version tags like "2.3.0" into ["2","3","0"].
+			const mountedWrapper = this.#walkApiPath(ve.versionedParts);
 			// metadata handler and versionMetadataByModule are always present in normal usage.
 			/* v8 ignore next */
 			const regularMetadata = this.slothlet.handlers.metadata?.getMetadata?.(mountedWrapper) ?? {};
@@ -576,11 +582,14 @@ export class VersionManager extends ComponentBase {
 	 * this.#walkApiPath("v2.auth"); // the api.v2.auth wrapper
 	 */
 	#walkApiPath(apiPath) {
-		// apiPath is always a non-empty string at all call sites — defensive null guard.
+		// apiPath is always a non-empty string or non-empty array at all call sites — defensive null guard.
 		/* v8 ignore next */
 		if (!apiPath) return undefined;
 		let node = this.slothlet.api;
-		for (const segment of apiPath.split(".")) {
+		// Accept string or string[]. When given an array the segments are used directly,
+		// preventing a re-split that would fragment dotted version tags (e.g. "2.3.0").
+		const segments = Array.isArray(apiPath) ? apiPath : apiPath.split(".");
+		for (const segment of segments) {
 			// node can only be null/undefined if the API tree is partially torn down — defensive guard.
 			/* v8 ignore next */
 			if (node == null) return undefined;
@@ -655,8 +664,9 @@ export class VersionManager extends ComponentBase {
 			// teardownDispatcher ensures the dispatcher is removed before that happens.
 			/* v8 ignore next */
 			if (!versionTag) return null;
-			const versionedPath = `${versionTag}.${logicalPath}`;
-			return manager.#walkApiPath(versionedPath);
+			// Build segment array rather than a dot string so that dotted version tags
+			// (e.g. "2.3.0") are kept atomic and not re-fragmented by #walkApiPath.
+			return manager.#walkApiPath([versionTag, ...logicalPath.split(".")]);
 		};
 
 		const handlers = {
@@ -775,7 +785,8 @@ export class VersionManager extends ComponentBase {
 					});
 				}
 
-				const versionedWrapper = manager.#walkApiPath(`${versionTag}.${logicalPath}`);
+				// Build segment array to avoid re-fragmenting dotted version tags (e.g. "2.3.0").
+				const versionedWrapper = manager.#walkApiPath([versionTag, ...logicalPath.split(".")]);
 				// versionedWrapper can only be missing if the versioned path was removed
 				// outside the VersionManager lifecycle — defensive guard.
 				/* v8 ignore next */
@@ -816,7 +827,7 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next */
 				if (!entry) return false;
 				for (const ve of entry.versions.values()) {
-					const vw = manager.#walkApiPath(ve.versionedPath);
+					const vw = manager.#walkApiPath(ve.versionedParts);
 					// UW’s hasTrap finds child-wrapper properties directly on the auth wrapper
 					// (via ___adoptImplChildren), bypassing prop-in-impl delegation; the true-return
 					// is only reachable by accessing the raw dispatcher directly, which is not
@@ -839,7 +850,7 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next */
 				if (entry) {
 					for (const ve of entry.versions.values()) {
-						const vw = manager.#walkApiPath(ve.versionedPath);
+						const vw = manager.#walkApiPath(ve.versionedParts);
 						// vw is always present for registered versioned paths — teardownDispatcher cleans up.
 						/* v8 ignore next */
 						if (vw) {
