@@ -1591,7 +1591,11 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
 				}
 			} else {
-				const rootSegment = normalizedPath.split(".")[0];
+				// For versioned adds effectiveParts[0] is the version tag (e.g. "v1"), matching
+				// the apiPath root that wrappers receive from buildAPI( apiPathPrefix: effectivePath ).
+				// For non-versioned adds effectiveParts === parts, so effectiveParts[0] equals
+				// normalizedPath.split(".")[0] — behaviour is identical.
+				const rootSegment = effectiveParts[0];
 				this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
 			}
 		}
