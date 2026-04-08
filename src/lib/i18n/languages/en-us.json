@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "path already exists and collision mode is 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "path segment does not exist or is not traversable",
 		"API_PATH_REASON_REQUIRED": "apiPath is required for removeApi operation",
+		"API_PATH_REASON_VERSIONED_ROOT": "versioned API components cannot be mounted at the root path; provide a dot-separated path such as 'auth' or 'v1.auth'",
 		"INVALID_API_PATH": "Invalid API path: '{apiPath}' does not exist in the loaded API.",
 		"HINT_INVALID_API_PATH": "Ensure the API path exists before using it. Use a dot-separated path (e.g. 'math.add') that refers to a currently loaded module.",
 		"HOOKS_NOT_INITIALIZED": "Cannot access hook functionality: the hook manager is not initialized.",

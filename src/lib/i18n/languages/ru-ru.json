@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "Путь уже существует и режим столкновения 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "Сегмент пути не существует или не может быть пройден",
 		"API_PATH_REASON_REQUIRED": "apiPath обязателен для операции removeApi",
+		"API_PATH_REASON_VERSIONED_ROOT": "Версионированные API-компоненты нельзя монтировать в корневом пути; укажите путь через точку, например 'auth' или 'v1.auth'",
 		"INVALID_API_PATH": "Неверный API-путь: '{apiPath}' не существует в загруженной API.",
 		"HINT_INVALID_API_PATH": "Убедитесь, что путь API существует перед использованием. Используйте точечную нотацию, напр. 'math.add'.",
 		"HOOKS_NOT_INITIALIZED": "Невозможно использовать hooks: менеджер hook не инициализирован.",

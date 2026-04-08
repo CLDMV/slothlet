@@ -1168,6 +1168,18 @@ export class ApiManager extends ComponentBase {
 		let effectivePath = normalizedPath;
 		let effectiveParts = parts;
 		if (versionConfig?.version !== undefined && versionConfig?.version !== null) {
+			// Guard: the root path (empty normalizedPath) cannot host a versioned add because
+			// VersionManager would build versionedPath as "v1." (trailing dot) and mount the
+			// dispatcher at api[""] — both of which produce broken tree entries.
+			if (normalizedPath === "") {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: translate("API_PATH_REASON_VERSIONED_ROOT"),
+					index: undefined,
+					segment: undefined,
+					validationError: true
+				});
+			}
 			if (typeof versionConfig.version !== "string" || !String(versionConfig.version).trim()) {
 				throw new this.SlothletError("INVALID_CONFIG_VERSION_TAG", {
 					received: versionConfig.version,

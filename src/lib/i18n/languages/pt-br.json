@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "o caminho já existe e o modo de colisão é 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "o segmento do caminho não existe ou não é atravessável",
 		"API_PATH_REASON_REQUIRED": "apiPath é obrigatório para a operação removeApi",
+		"API_PATH_REASON_VERSIONED_ROOT": "Componentes de API versionados não podem ser montados no caminho raiz; forneça um caminho separado por pontos como 'auth' ou 'v1.auth'",
 		"INVALID_API_PATH": "Caminho de API inválido: '{apiPath}' não existe na API carregada.",
 		"HINT_INVALID_API_PATH": "Certifique-se de que o caminho da API existe antes de usá-lo. Use um caminho separado por pontos (ex: 'math.add') que se refira a um módulo carregado no momento.",
 		"HOOKS_NOT_INITIALIZED": "Não é possível acessar a funcionalidade de gancho (hook): o gerenciador de ganchos não foi inicializado.",

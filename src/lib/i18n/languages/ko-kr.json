@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "경로가 이미 존재하고 충돌 모드가 'error'임",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "경로 세그먼트가 존재하지 않거나 탐색할 수 없음",
 		"API_PATH_REASON_REQUIRED": "removeApi 작업에 apiPath가 필요함",
+		"API_PATH_REASON_VERSIONED_ROOT": "버전이 지정된 API 컴포넌트는 루트 경로에 마운트할 수 없습니다. 'auth' 또는 'v1.auth'와 같이 점으로 구분된 경로를 제공하세요",
 		"INVALID_API_PATH": "유효하지 않은 API 경로: 로드된 API에 '{apiPath}'이(가) 존재하지 않습니다.",
 		"HINT_INVALID_API_PATH": "API 경로가 사용 전에 존재하는지 확인하십시오. 현재 로드된 모듈을 가리키는 점 구분 경로(예: 'math.add')를 사용하십시오.",
 		"HOOKS_NOT_INITIALIZED": "후크 기능에 액세스할 수 없습니다: 후크 관리자가 초기화되지 않았습니다.",

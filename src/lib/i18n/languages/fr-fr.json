@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "le chemin existe déjà et le mode de collision est 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "le segment de chemin n'existe pas ou n'est pas traversable",
 		"API_PATH_REASON_REQUIRED": "apiPath est requis pour l'opération removeApi",
+		"API_PATH_REASON_VERSIONED_ROOT": "Les composants API versionnés ne peuvent pas être montés à la racine ; fournissez un chemin séparé par des points, tel que 'auth' ou 'v1.auth'",
 		"INVALID_API_PATH": "Chemin d'API invalide : '{apiPath}' n'existe pas dans l'API chargée.",
 		"HINT_INVALID_API_PATH": "Assurez-vous que le chemin d'API existe avant de l'utiliser. Utilisez un chemin séparé par des points (ex : 'math.add') qui fait référence à un module actuellement chargé.",
 		"HOOKS_NOT_INITIALIZED": "Impossible d'accéder aux fonctionnalités de hook : le gestionnaire de hook n'est pas initialisé.",

@@ -858,10 +858,13 @@ class Slothlet {
 					const mat = wrapper.____slothletInternal.materializationPromise;
 					if (mat) pending.push(mat);
 
-					// Walk child keys through the proxy (obj) so the get trap correctly
-					// resolves child wrappers, filtering framework-internal prefixes.
-					for (const key of Object.keys(obj)) {
-						if (!key.startsWith("____")) collect(obj[key], depth + 1);
+					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
+					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers
+					// during shutdown. Children are stored as own enumerable properties on the
+					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
+					// then resolves via resolveWrapper() on the next recursion.
+					for (const key of Object.keys(wrapper)) {
+						if (!key.startsWith("____")) collect(wrapper[key], depth + 1);
 					}
 					return;
 				}

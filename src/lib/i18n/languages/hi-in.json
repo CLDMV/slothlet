@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "पथ पहले से मौजूद है और टकराव मोड 'error' है",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "पथ खंड मौजूद नहीं है या पार करने योग्य नहीं है",
 		"API_PATH_REASON_REQUIRED": "removeApi ऑपरेशन के लिए apiPath आवश्यक है",
+		"API_PATH_REASON_VERSIONED_ROOT": "संस्करणित API घटकों को रूट पथ पर माउंट नहीं किया जा सकता、इसके बजाय 'auth' या 'v1.auth' जैसा डॉट-अलग पथ प्रदान करें",
 		"INVALID_API_PATH": "अमान्य API पथ: लोड की गई API में '{apiPath}' मौजूद नहीं है।",
 		"HINT_INVALID_API_PATH": "उपयोग करने से पहले सुनिश्चित करें कि API पथ मौजूद है। डॉट-सेपरेटेड पथ (उदा. 'math.add') का उपयोग करें जो वर्तमान में लोड किए गए मॉड्यूल को संदर्भित करता है।",
 		"HOOKS_NOT_INITIALIZED": "हुक कार्यक्षमता तक नहीं पहुँचा जा सकता: हुक मैनेजर प्रारंभ नहीं किया गया है।",

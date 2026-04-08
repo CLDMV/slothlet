@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "Pfad existiert bereits und Kollisionsmodus ist 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "Pfad-Segment existiert nicht oder kann nicht durchlaufen werden",
 		"API_PATH_REASON_REQUIRED": "apiPath ist für die removeApi Operation erforderlich",
+		"API_PATH_REASON_VERSIONED_ROOT": "Versionierte API-Komponenten können nicht am Root-Pfad eingehängt werden; geben Sie einen punkt-separierten Pfad an, z. B. 'auth' oder 'v1.auth'",
 		"INVALID_API_PATH": "Ungültiger API-Pfad: '{apiPath}' existiert nicht in der geladenen API.",
 		"HINT_INVALID_API_PATH": "Stellen Sie sicher, dass der API-Pfad existiert, bevor Sie ihn benutzen. Benutzen Sie einen dot-separierten Pfad (z.B. 'math.add'), der auf ein aktuell geladenes Modul verweist.",
 		"HOOKS_NOT_INITIALIZED": "Zugriff auf Hook-Funktionalität nicht möglich: Der Hook-Manager ist nicht initialisiert.",

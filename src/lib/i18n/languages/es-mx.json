@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "la ruta ya existe y el modo de colisión es 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "el segmento de ruta no existe o no se puede recorrer",
 		"API_PATH_REASON_REQUIRED": "apiPath es obligatorio para la operación removeApi",
+		"API_PATH_REASON_VERSIONED_ROOT": "Los componentes API versionados no pueden montarse en la ruta raíz; proporcione una ruta separada por puntos como 'auth' o 'v1.auth'",
 		"INVALID_API_PATH": "Ruta de API inválida: '{apiPath}' no existe en la API cargada.",
 		"HINT_INVALID_API_PATH": "Asegúrese de que la ruta de la API existe antes de usarla. Use una ruta separada por puntos (ej. 'math.add') que se refiera a un módulo cargado actualmente.",
 		"HOOKS_NOT_INITIALIZED": "No se puede acceder a la funcionalidad de ganchos: el gestor de ganchos no está inicializado.",

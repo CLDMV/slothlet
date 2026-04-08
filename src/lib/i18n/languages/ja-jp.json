@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "パスが既に存在し、衝突モードが 'error' です",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "パスセグメントが存在しないか、探索不可能です",
 		"API_PATH_REASON_REQUIRED": "removeApi 操作には apiPath が必要です",
+		"API_PATH_REASON_VERSIONED_ROOT": "バージョン管理された API コンポーネントはルートパスにマウントできません。'auth' や 'v1.auth' のようなドット区切りのパスを指定してください",
 		"INVALID_API_PATH": "無効な API パス: '{apiPath}' は読み込まれた API 内に存在しません。",
 		"HINT_INVALID_API_PATH": "API パスを使用する前に存在することを確認してください。現在読み込まれているモジュールを参照するドット区切りのパス (例: 'math.add') を使用してください。",
 		"HOOKS_NOT_INITIALIZED": "フック機能にアクセスできません: フックマネージャーが初期化されていません。",

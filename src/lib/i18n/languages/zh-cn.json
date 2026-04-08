@@ -358,6 +358,7 @@
 		"API_PATH_REASON_COLLISION_ERROR": "路径已存在且冲突模式为 'error'",
 		"API_PATH_REASON_NOT_TRAVERSABLE": "路径段不存在或不可遍历",
 		"API_PATH_REASON_REQUIRED": "removeApi 操作需要指定 apiPath",
+		"API_PATH_REASON_VERSIONED_ROOT": "已版本化的 API 组件不能挂载在根路径下；请提供以点分隔的路径，例如 'auth' 或 'v1.auth'",
 		"INVALID_API_PATH": "无效的 API 路径：'{apiPath}' 在已加载的 API 中不存在。",
 		"HINT_INVALID_API_PATH": "在使用前确保 API 路径存在。使用点分写法（例如 'math.add'）指向当前已加载的模块。",
 		"HOOKS_NOT_INITIALIZED": "无法访问钩子功能：钩子管理器未初始化。",
