@@ -65,10 +65,10 @@ const api = await slothlet({
 
 ### Configuration Options
 
-- **`versionDispatcher`** (`string | function | undefined`): Controls version routing at dispatch time.
+- **`versionDispatcher`** (`string | function | null | undefined`): Controls version routing at dispatch time.
   - **String**: the key to look up in the caller's version metadata (e.g. `"version"` reads `callerVersionMeta.version`)
   - **Function**: receives `(allVersions, caller)` objects, must return a version tag string or `null`/`undefined`
-  - **Not set**: defaults to string `"version"` behavior
+  - **`null` / not set**: behaves identically to `versionDispatcher: "version"` — reads `callerVersionMeta.version` and falls back to the default version
 
 ---
 
