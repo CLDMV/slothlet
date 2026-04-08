@@ -131,7 +131,11 @@ jobs:
             # Runs after a successful CI build; pushes a Shields.io-compatible badge
             # JSON to the `badges` branch (signed commit via bot GPG).
             # Requires: the coverage_command produces coverage/coverage-summary.json
-            enable_coverage_badge: ${{ github.event.inputs.enable_coverage_badge != 'false' }}
+            # Badge publishing is gated to: push to main/master branches, or an explicit
+            # workflow_dispatch invocation. On pull_request and all other push events
+            # github.event.inputs is empty, so the != 'false' guard alone would always
+            # evaluate to true — causing the badge job to run (and fail) on every PR.
+            enable_coverage_badge: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.enable_coverage_badge != 'false') }}
             coverage_command: ${{ github.event.inputs.coverage_command || 'npm run ci:coverage' }}
             coverage_summary_path: ${{ github.event.inputs.coverage_summary_path || 'coverage/coverage-summary.json' }}
             badges_branch: ${{ github.event.inputs.badges_branch || 'badges' }}
