@@ -1634,19 +1634,137 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
-		// Register with VersionManager if this is a versioned add
+		// Register with VersionManager if this is a versioned add.
+		// If registration fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
+		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
+		// (orphaned cache entry, ownership record, and history entries).
 		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
 			const versionTag = String(versionConfig.version).trim();
-			this.slothlet.handlers.versionManager.registerVersion(
-				normalizedPath,
-				versionTag,
-				moduleID,
-				versionConfig.metadata ?? {},
-				versionConfig.default ?? false
-			);
+			try {
+				this.slothlet.handlers.versionManager.registerVersion(
+					normalizedPath,
+					versionTag,
+					moduleID,
+					versionConfig.metadata ?? {},
+					versionConfig.default ?? false
+				);
+			} catch (error) {
+				await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath });
+				throw error;
+			}
 		}
 
 		return moduleID;
+	}
+
+	/**
+	 * Remove the addHistory entry that matches a failed versioned add.
+	 * @param {string} normalizedPath - Logical API path stored in addHistory.
+	 * @param {string} resolvedFolderPath - Resolved folder path stored in addHistory.
+	 * @param {string} moduleID - Module ID stored in addHistory.
+	 * @returns {void}
+	 * @package
+	 *
+	 * @example
+	 * this._removeAddHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
+	 */
+	_removeAddHistoryEntry(normalizedPath, resolvedFolderPath, moduleID) {
+		const entryIndex = this.state.addHistory.findLastIndex(
+			(entry) => entry?.apiPath === normalizedPath && entry?.folderPath === resolvedFolderPath && entry?.moduleID === moduleID
+		);
+		if (entryIndex !== -1) {
+			this.state.addHistory.splice(entryIndex, 1);
+		}
+	}
+
+	/**
+	 * Remove the operationHistory entry that matches a failed versioned add.
+	 * @param {string} normalizedPath - Logical API path stored in operationHistory.
+	 * @param {string} resolvedFolderPath - Resolved folder path stored in operationHistory.
+	 * @param {string} moduleID - Module ID stored in operationHistory.
+	 * @returns {void}
+	 * @package
+	 *
+	 * @example
+	 * this._removeAddOperationHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
+	 */
+	_removeAddOperationHistoryEntry(normalizedPath, resolvedFolderPath, moduleID) {
+		const operationIndex = this.state.operationHistory.findLastIndex(
+			(entry) =>
+				entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.folderPath === resolvedFolderPath && entry?.moduleID === moduleID
+		);
+		if (operationIndex !== -1) {
+			this.state.operationHistory.splice(operationIndex, 1);
+		}
+	}
+
+	/**
+	 * Roll back a versioned add whose VersionManager registration failed.
+	 * Removes the mounted subtree via removeApiComponent (best-effort) then scrubs
+	 * the addHistory and operationHistory entries that were pushed before the failure.
+	 * @param {object} opts - Rollback parameters.
+	 * @param {string} opts.moduleID - Module ID of the failed add.
+	 * @param {string} opts.effectivePath - Versioned mount path (e.g. "v1.auth").
+	 * @param {string} opts.normalizedPath - Logical API path (e.g. "auth").
+	 * @param {string} opts.resolvedFolderPath - Absolute folder path that was mounted.
+	 * @returns {Promise<void>}
+	 * @package
+	 *
+	 * @example
+	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath });
+	 */
+	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath }) {
+		try {
+			await this.removeApiComponent(moduleID || effectivePath);
+		} catch {
+			// Best-effort rollback; always scrub the add tracking entries below.
+		}
+		this._removeAddHistoryEntry(normalizedPath, resolvedFolderPath, moduleID);
+		this._removeAddOperationHistoryEntry(normalizedPath, resolvedFolderPath, moduleID);
+	}
+
+	/**
+	 * Roll back a failed versioned add.
+	 *
+	 * @description
+	 * Called when `versionManager.registerVersion()` throws after the API tree, cache,
+	 * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
+	 * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+	 * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
+	 * no spurious "remove" entry is pushed into `operationHistory`.
+	 *
+	 * The rollback is best-effort: if `removeApiComponent` itself throws the error is
+	 * swallowed and the caller re-throws the original registration error.
+	 *
+	 * @param {object} opts - Rollback context.
+	 * @param {string} opts.moduleID - The moduleID of the just-added component.
+	 * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
+	 * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
+	 * @returns {Promise<void>}
+	 * @package
+	 *
+	 * @example
+	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+	 */
+	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
+		// Scrub the orphaned "add" entry from operationHistory first. removeApiComponent does
+		// not clean operationHistory; if called with { recordHistory: false } it suppresses its
+		// own "remove" push but leaves the "add" entry we recorded before the failure.
+		const addIndex = this.state.operationHistory.findLastIndex(
+			(entry) => entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID
+		);
+		if (addIndex !== -1) {
+			this.state.operationHistory.splice(addIndex, 1);
+		}
+
+		// Remove the mounted subtree, cache entry, ownership, and addHistory entry.
+		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
+		try {
+			await this.removeApiComponent(moduleID || effectivePath, { recordHistory: false });
+		} catch {
+			// Best-effort — operationHistory was already cleaned above; the caller re-throws
+			// the original error regardless.
+		}
 	}
 
 	/**
