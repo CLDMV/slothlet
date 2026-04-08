@@ -1681,9 +1681,10 @@ export class ApiManager extends ComponentBase {
 	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
 	 */
 	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
-		// Scrub the orphaned "add" entry from operationHistory first. removeApiComponent does
-		// not clean operationHistory; if called with { recordHistory: false } it suppresses its
-		// own "remove" push but leaves the "add" entry we recorded before the failure.
+		// --- Step 1: Scrub operationHistory ---
+		// removeApiComponent does not touch operationHistory. When called with
+		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
+		// entry we already recorded. Remove it explicitly so no orphaned add survives.
 		const addIndex = this.state.operationHistory.findLastIndex(
 			(entry) => entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID
 		);
@@ -1691,13 +1692,20 @@ export class ApiManager extends ComponentBase {
 			this.state.operationHistory.splice(addIndex, 1);
 		}
 
-		// Remove the mounted subtree, cache entry, ownership, and addHistory entry.
+		// --- Step 2: Scrub addHistory ---
+		// removeApiComponent also filters addHistory internally, but only when it succeeds.
+		// Doing it here unconditionally ensures no orphaned addHistory entry remains even if
+		// the teardown call below throws.
+		this.state.addHistory = this.state.addHistory.filter((entry) => entry?.moduleID !== moduleID);
+
+		// --- Step 3: Tear down the mounted subtree, cache, and ownership ---
 		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
+		// addHistory is already clean at this point so a double-filter is harmless.
 		try {
 			await this.removeApiComponent(moduleID || effectivePath, { recordHistory: false });
 		} catch {
-			// Best-effort — operationHistory was already cleaned above; the caller re-throws
-			// the original error regardless.
+			// Best-effort — both history arrays were already cleaned above; the caller
+			// re-throws the original registerVersion error regardless.
 		}
 	}
 

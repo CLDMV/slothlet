@@ -274,49 +274,32 @@ export class ApiManager extends ComponentBase {
         options?: Record<string, unknown>;
     }): Promise<string | string[]>;
     /**
-     * Remove the addHistory entry that matches a failed versioned add.
-     * @param {string} normalizedPath - Logical API path stored in addHistory.
-     * @param {string} resolvedFolderPath - Resolved folder path stored in addHistory.
-     * @param {string} moduleID - Module ID stored in addHistory.
-     * @returns {void}
-     * @package
+     * Roll back a failed versioned add.
      *
-     * @example
-     * this._removeAddHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
-     */
-    _removeAddHistoryEntry(normalizedPath: string, resolvedFolderPath: string, moduleID: string): void;
-    /**
-     * Remove the operationHistory entry that matches a failed versioned add.
-     * @param {string} normalizedPath - Logical API path stored in operationHistory.
-     * @param {string} resolvedFolderPath - Resolved folder path stored in operationHistory.
-     * @param {string} moduleID - Module ID stored in operationHistory.
-     * @returns {void}
-     * @package
+     * @description
+     * Called when `versionManager.registerVersion()` throws after the API tree, cache,
+     * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
+     * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+     * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
+     * no spurious "remove" entry is pushed into `operationHistory`.
      *
-     * @example
-     * this._removeAddOperationHistoryEntry("auth", "/abs/path/to/v1", "auth_abc123");
-     */
-    _removeAddOperationHistoryEntry(normalizedPath: string, resolvedFolderPath: string, moduleID: string): void;
-    /**
-     * Roll back a versioned add whose VersionManager registration failed.
-     * Removes the mounted subtree via removeApiComponent (best-effort) then scrubs
-     * the addHistory and operationHistory entries that were pushed before the failure.
-     * @param {object} opts - Rollback parameters.
-     * @param {string} opts.moduleID - Module ID of the failed add.
-     * @param {string} opts.effectivePath - Versioned mount path (e.g. "v1.auth").
-     * @param {string} opts.normalizedPath - Logical API path (e.g. "auth").
-     * @param {string} opts.resolvedFolderPath - Absolute folder path that was mounted.
+     * The rollback is best-effort: if `removeApiComponent` itself throws the error is
+     * swallowed and the caller re-throws the original registration error.
+     *
+     * @param {object} opts - Rollback context.
+     * @param {string} opts.moduleID - The moduleID of the just-added component.
+     * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
+     * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
      * @returns {Promise<void>}
      * @package
      *
      * @example
-     * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath });
+     * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
      */
-    _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath, resolvedFolderPath }: {
+    _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }: {
         moduleID: string;
         effectivePath: string;
         normalizedPath: string;
-        resolvedFolderPath: string;
     }): Promise<void>;
     /**
      * Remove API modules at runtime.
