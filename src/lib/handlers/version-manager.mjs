@@ -282,14 +282,63 @@ export class VersionManager extends ComponentBase {
 
 	/**
 	 * Retrieve the VersionManager-only metadata object stored for a module ID.
+	 * Used internally by `buildAllVersionsArg` and `buildCallerArg`.
 	 *
-	 * @param {string} moduleID - Module ID.
+	 * @param {string} moduleID - Opaque module ID.
 	 * @returns {object | undefined} Stored version metadata or `undefined`.
 	 * @example
 	 * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
 	 */
 	getVersionMetadata(moduleID) {
 		return this.#versionMetadataByModule.get(moduleID);
+	}
+
+	/**
+	 * Retrieve the VersionManager-only metadata for a logical path and version tag.
+	 *
+	 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+	 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+	 * @returns {object | undefined} Stored version metadata or `undefined` if not registered.
+	 * @example
+	 * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", logicalPath: "auth", stable: true }
+	 */
+	getVersionMetadataByPath(logicalPath, versionTag) {
+		const entry = this.#registry.get(logicalPath);
+		if (!entry) return undefined;
+		const ve = entry.versions.get(versionTag);
+		if (!ve) return undefined;
+		return this.#versionMetadataByModule.get(ve.moduleID);
+	}
+
+	/**
+	 * Patch (merge) the VersionManager-only metadata for a registered logical path and version tag at runtime.
+	 * The injected `version` and `logicalPath` keys always win over any user-supplied fields in `patch`.
+	 *
+	 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+	 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+	 * @param {object} patch - Plain object of keys to merge into the stored version metadata.
+	 * @returns {void}
+	 * @throws {SlothletError} When the logical path or version tag is not registered.
+	 * @example
+	 * versionManager.setVersionMetadataByPath("auth", "v1", { stable: true });
+	 */
+	setVersionMetadataByPath(logicalPath, versionTag, patch) {
+		const entry = this.#registry.get(logicalPath);
+		if (!entry || !entry.versions.has(versionTag)) {
+			throw new this.SlothletError("VERSION_NOT_FOUND", {
+				version: versionTag,
+				apiPath: logicalPath
+			});
+		}
+		const ve = entry.versions.get(versionTag);
+		const existing = this.#versionMetadataByModule.get(ve.moduleID) ?? {};
+		// version and logicalPath are injected fields that always take precedence over user-supplied fields.
+		this.#versionMetadataByModule.set(ve.moduleID, {
+			...existing,
+			...(patch && typeof patch === "object" ? patch : {}),
+			version: ve.versionTag,
+			logicalPath
+		});
 	}
 
 	/**

@@ -473,6 +473,34 @@ export class Metadata extends ComponentBase {
 	}
 
 	/**
+	 * Get the user metadata collected from the path store for a given API path.
+	 *
+	 * @description
+	 * Traverses from root segment to leaf, merging parent → child metadata — the same
+	 * traversal used by `collectMetadataFromParents` inside `getMetadata()`. Does not
+	 * include immutable system metadata; only user-supplied path store entries are returned.
+	 *
+	 * @param {string} apiPath - Dot-notation API path (e.g. `"v1.auth"`, `"math"`).
+	 * @returns {Object} Merged user metadata for the path (not frozen).
+	 * @public
+	 * @example
+	 * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
+	 */
+	getPathMetadata(apiPath) {
+		if (!apiPath || typeof apiPath !== "string") return {};
+		const parts = apiPath.split(".");
+		const collected = {};
+		for (let i = 1; i <= parts.length; i++) {
+			const parentPath = parts.slice(0, i).join(".");
+			const parentMeta = this.#userMetadataStore.get(parentPath);
+			if (parentMeta?.metadata) {
+				Object.assign(collected, parentMeta.metadata);
+			}
+		}
+		return { ...this.#globalUserMetadata, ...collected };
+	}
+
+	/**
 	 * Remove metadata keys (or all metadata) for an API path.
 	 *
 	 * @description

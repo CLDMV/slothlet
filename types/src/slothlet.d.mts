@@ -237,6 +237,7 @@ export type SlothletAPI = {
             setDefault: Function;
             unregister: Function;
             getVersionMetadata: Function;
+            setVersionMetadata: Function;
         };
         reference?: object;
         reload: Function;

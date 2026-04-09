@@ -980,6 +980,74 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) return;
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
 					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
+				},
+
+				/**
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
+				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Sets regular module metadata on the versioned module at the given logical path and version tag.
+				 * Resolves via the version registry so dotted version tags (e.g. `"2.3.0"`) are handled safely —
+				 * no manual path construction needed. The metadata is visible in `__metadata` reads and in
+				 * `allVersions[tag].metadata` inside discriminator functions.
+				 *
+				 * @example
+				 * api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
+				 * api.slothlet.metadata.setForVersion("auth", "v1", { stable: true, region: "us" });
+				 */
+				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
+					if (!slothlet.handlers?.metadata) {
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							handlersKeys: slothlet.handlers
+								? Object.keys(slothlet.handlers).join(", ")
+								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+									/* v8 ignore next */
+									"undefined",
+							validationError: true
+						});
+					}
+					const info = slothlet.handlers?.versionManager?.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) {
+						throw new slothlet.SlothletError("VERSION_NOT_FOUND", {
+							version: versionTag,
+							apiPath: logicalPath
+						});
+					}
+					const { moduleID } = info.versions[versionTag];
+					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
+				},
+
+				/**
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @returns {Object} Merged regular user metadata for the versioned module's path.
+				 * @public
+				 *
+				 * @description
+				 * Retrieves regular module metadata set via `setFor()` or `setForVersion()` for the versioned
+				 * module at the given logical path and version tag. Does not include system metadata
+				 * (file path, moduleID, etc.) — only user-supplied path metadata.
+				 *
+				 * For full metadata including system fields, access `api[versionTag][logicalPath].__metadata` directly.
+				 *
+				 * @example
+				 * const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+				 * // { stable: true, region: "us" }
+				 */
+				getForVersion: function slothlet_metadata_getForVersion(logicalPath, versionTag) {
+					/* v8 ignore next */
+					if (!slothlet.handlers?.metadata) return {};
+					const info = slothlet.handlers?.versionManager?.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) return {};
+					const { moduleID } = info.versions[versionTag];
+					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
 				}
 			},
 
@@ -1200,18 +1268,39 @@ export class ApiBuilder extends ComponentBase {
 				},
 
 				/**
-				 * Retrieve the VersionManager-only metadata stored for a module ID.
-				 * @param {string} moduleID - Module ID to look up.
-				 * @returns {object | undefined} Version metadata or `undefined`.
+				 * Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @returns {object | undefined} Version metadata or `undefined` when the path/tag is not registered.
 				 * @public
 				 * @example
-				 * const meta = api.slothlet.versioning.getVersionMetadata("auth_abc");
+				 * const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+				 * // { version: "v1", logicalPath: "auth", stable: true }
 				 */
-				getVersionMetadata: function slothlet_version_getVersionMetadata(moduleID) {
+				getVersionMetadata: function slothlet_version_getVersionMetadata(logicalPath, versionTag) {
 					// versionManager is always registered when versioning is used; guard for completeness
 					/* v8 ignore next */
 					if (!slothlet.handlers?.versionManager) return undefined;
-					return slothlet.handlers.versionManager.getVersionMetadata(moduleID);
+					return slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag);
+				},
+
+				/**
+				 * Patch (merge) the VersionManager-only metadata for a registered version at runtime.
+				 * The injected `version` and `logicalPath` keys in the stored object always win over `patch`.
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @param {object} patch - Keys to merge into the stored version metadata.
+				 * @returns {void}
+				 * @throws {SlothletError} When the logical path or version is not registered.
+				 * @public
+				 * @example
+				 * api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true });
+				 */
+				setVersionMetadata: function slothlet_version_setVersionMetadata(logicalPath, versionTag, patch) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return;
+					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
 				}
 			}
 		};

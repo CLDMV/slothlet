@@ -60,13 +60,37 @@ export class VersionManager extends ComponentBase {
     hasDispatcher(logicalPath: string): boolean;
     /**
      * Retrieve the VersionManager-only metadata object stored for a module ID.
+     * Used internally by `buildAllVersionsArg` and `buildCallerArg`.
      *
-     * @param {string} moduleID - Module ID.
+     * @param {string} moduleID - Opaque module ID.
      * @returns {object | undefined} Stored version metadata or `undefined`.
      * @example
      * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
      */
     getVersionMetadata(moduleID: string): object | undefined;
+    /**
+     * Retrieve the VersionManager-only metadata for a logical path and version tag.
+     *
+     * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+     * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+     * @returns {object | undefined} Stored version metadata or `undefined` if not registered.
+     * @example
+     * versionManager.getVersionMetadataByPath("auth", "v1"); // { version: "v1", logicalPath: "auth", stable: true }
+     */
+    getVersionMetadataByPath(logicalPath: string, versionTag: string): object | undefined;
+    /**
+     * Patch (merge) the VersionManager-only metadata for a registered logical path and version tag at runtime.
+     * The injected `version` and `logicalPath` keys always win over any user-supplied fields in `patch`.
+     *
+     * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+     * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+     * @param {object} patch - Plain object of keys to merge into the stored version metadata.
+     * @returns {void}
+     * @throws {SlothletError} When the logical path or version tag is not registered.
+     * @example
+     * versionManager.setVersionMetadataByPath("auth", "v1", { stable: true });
+     */
+    setVersionMetadataByPath(logicalPath: string, versionTag: string, patch: object): void;
     /**
      * Return a snapshot of all registered versions and the default tag for a logical path.
      *
