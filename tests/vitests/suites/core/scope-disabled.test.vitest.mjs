@@ -27,7 +27,8 @@
  *
  * - **api_builder.mjs line 47-48** (`_resolvePathOrModuleId` moduleID history lookup):
  *   calling `api.slothlet.metadata.setFor(moduleID, ...)` where `moduleID` is the return
- *   value from `api.slothlet.api.add()` exercises the `history.findLast(entry => entry.moduleID === pathOrModuleId)`
+	 *   value from `api.slothlet.api.add()` exercises the reverse history scan for
+	 *   `entry.moduleID === pathOrModuleId`
  *   branch that was previously uncovered.
  *
  * @module tests/vitests/suites/core/scope-disabled

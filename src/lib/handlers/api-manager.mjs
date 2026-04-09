@@ -1685,8 +1685,7 @@ export class ApiManager extends ComponentBase {
 		// removeApiComponent does not touch operationHistory. When called with
 		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
 		// entry we already recorded. Remove it explicitly so no orphaned add survives.
-		// Use a manual reverse loop instead of findLastIndex() — findLastIndex is only
-		// available in Node ≥18, but this package declares engines.node >=16.20.2.
+		// Use a manual reverse loop for Node 16 compatibility.
 		let addIndex = -1;
 		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
 			const entry = this.state.operationHistory[i];
@@ -1755,10 +1754,17 @@ export class ApiManager extends ComponentBase {
 
 			// Try to find a matching moduleID
 			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-			// Use findLast to prefer the most recently registered module when multiple match,
+			// Walk from the end to prefer the most recently registered module when multiple match,
 			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
-			const matchingModule = registeredModules.findLast((m) => m === candidateModuleID || m.startsWith(`${candidateModuleID}_`));
+			let matchingModule = null;
+			for (let i = registeredModules.length - 1; i >= 0; i--) {
+				const candidate = registeredModules[i];
+				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
+					matchingModule = candidate;
+					break;
+				}
+			}
 
 			if (matchingModule) {
 				// Found a moduleID match

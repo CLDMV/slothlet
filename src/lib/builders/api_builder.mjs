@@ -58,7 +58,14 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	// the false branch (no history → return pathOrModuleId unchanged) is never triggered in tests.
 	/* v8 ignore next */
 	if (history) {
-		const match = history.findLast((entry) => entry.moduleID === pathOrModuleId);
+		let match = null;
+		for (let i = history.length - 1; i >= 0; i--) {
+			const entry = history[i];
+			if (entry?.moduleID === pathOrModuleId) {
+				match = entry;
+				break;
+			}
+		}
 		if (match) return match.apiPath;
 	}
 	return pathOrModuleId;
