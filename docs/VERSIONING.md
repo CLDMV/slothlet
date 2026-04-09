@@ -330,13 +330,22 @@ const wasRemoved = await api.slothlet.versioning.unregister("auth", "v2");
 // api.v2.auth is gone; api.auth dispatcher now routes to v1 only
 ```
 
-### `api.slothlet.versioning.getVersionMetadata(moduleID)`
+### `api.slothlet.versioning.getVersionMetadata(logicalPath, versionTag)`
 
-Retrieve the VersionManager-only metadata stored for a module ID.
+Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
 
 ```javascript
-const meta = api.slothlet.versioning.getVersionMetadata("auth.v1");
+const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
 // { version: "v1", logicalPath: "auth", deprecated: false, stable: true }
+```
+
+### `api.slothlet.versioning.setVersionMetadata(logicalPath, versionTag, patch)`
+
+Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over any fields in `patch`.
+
+```javascript
+api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, deprecated: false });
+// updated metadata is immediately visible to the discriminator via allVersions.v1.versionMetadata
 ```
 
 ---
@@ -347,10 +356,26 @@ Two separate metadata systems coexist for versioned modules:
 
 | System | Set via | Read via | Contains |
 |---|---|---|---|
-| Regular Metadata | `options.metadata` in `api.add` | `module.__metadata` / `metadata.caller()` | System + user module metadata |
-| Version Metadata | `versionConfig.metadata` in `api.add` | `api.slothlet.versioning.getVersionMetadata()` / discriminator args | VersionManager-only version data |
+| Regular Metadata | `options.metadata` in `api.add` or `metadata.setForVersion()` at runtime | `module.__metadata` / `metadata.caller()` / `metadata.getForVersion()` | System + user module metadata |
+| Version Metadata | `versionConfig.metadata` in `api.add` or `versioning.setVersionMetadata()` at runtime | `versioning.getVersionMetadata(logicalPath, versionTag)` / discriminator args | VersionManager-only version data |
 
 These two objects are **never merged**. The discriminator args expose both in separate named fields (`metadata` and `versionMetadata`) so the function can read from either independently.
+
+### Setting regular metadata on a versioned module at runtime
+
+```javascript
+// Set regular metadata on v1 of "auth" — appears in __metadata and in allVersions.v1.metadata
+api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
+api.slothlet.metadata.setForVersion("auth", "v1", { stable: true, region: "us" });
+
+// Retrieve it directly (user-supplied path metadata only — no system fields)
+const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+// { stable: true, region: "us" }
+
+// Full metadata including system fields — access the namespace directly
+const full = api.v1.auth.__metadata;
+// { stable: true, region: "us", apiPath: "v1.auth", filePath: "...", moduleID: "..." }
+```
 
 ---
 
