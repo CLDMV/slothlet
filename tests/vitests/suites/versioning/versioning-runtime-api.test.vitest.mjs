@@ -13,7 +13,8 @@
 
 /**
  * @fileoverview Runtime API — test api.slothlet.versioning.list, setDefault,
- * unregister, and getVersionMetadata.
+ * unregister, getVersionMetadata, setVersionMetadata, and
+ * metadata.setForVersion / getForVersion.
  *
  * @module tests/vitests/suites/versioning/versioning-runtime-api
  */
@@ -67,10 +68,7 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true, tier: "ga" } });
 
-		const info = api.slothlet.versioning.list("auth");
-		const v1ModuleID = info.versions.v1.moduleID;
-
-		const meta = api.slothlet.versioning.getVersionMetadata(v1ModuleID);
+		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
 		expect(meta).toHaveProperty("version", "v1"); // auto-injected
 		expect(meta).toHaveProperty("stable", true);
 		expect(meta).toHaveProperty("tier", "ga");
@@ -125,5 +123,77 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 
 		const result = await api.slothlet.versioning.unregister("auth", "v99");
 		expect(result).toBe(false);
+	});
+
+	it("version.getVersionMetadata returns undefined for unknown path", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		const meta = api.slothlet.versioning.getVersionMetadata("nonexistent", "v1");
+		expect(meta).toBeUndefined();
+	});
+
+	it("version.getVersionMetadata returns undefined for unknown version tag", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
+
+		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v99");
+		expect(meta).toBeUndefined();
+	});
+
+	it("version.setVersionMetadata merges patch into stored version metadata", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { tier: "beta" } });
+
+		api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true, tier: "ga" });
+
+		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+		expect(meta).toHaveProperty("stable", true);
+		expect(meta).toHaveProperty("tier", "ga"); // patched
+		expect(meta).toHaveProperty("version", "v1"); // injected key always wins
+		expect(meta).toHaveProperty("logicalPath", "auth"); // injected key always wins
+	});
+
+	it("version.setVersionMetadata throws VERSION_NOT_FOUND for unknown path", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		expect(() => api.slothlet.versioning.setVersionMetadata("nonexistent", "v1", { stable: true })).toThrow("VERSION_NOT_FOUND");
+	});
+
+	it("version.setVersionMetadata throws VERSION_NOT_FOUND for unknown version tag", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+
+		expect(() => api.slothlet.versioning.setVersionMetadata("auth", "v99", { stable: true })).toThrow("VERSION_NOT_FOUND");
+	});
+
+	it("metadata.setForVersion sets regular metadata on a versioned module", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true });
+
+		api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
+		api.slothlet.metadata.setForVersion("auth", "v1", { region: "us" });
+
+		const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+		expect(meta).toHaveProperty("stable", true);
+		expect(meta).toHaveProperty("region", "us");
+	});
+
+	it("metadata.getForVersion returns empty object for unknown path", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		const meta = api.slothlet.metadata.getForVersion("nonexistent", "v1");
+		expect(meta).toEqual({});
+	});
+
+	it("metadata.setForVersion throws VERSION_NOT_FOUND for unknown version tag", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+
+		expect(() => api.slothlet.metadata.setForVersion("auth", "v99", "stable", true)).toThrow("VERSION_NOT_FOUND");
 	});
 });

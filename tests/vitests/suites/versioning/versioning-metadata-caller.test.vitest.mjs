@@ -74,10 +74,7 @@ describe.each(getMatrixConfigs())("Versioning > Metadata Caller > $name", ({ con
 			{ version: "v1", default: true, metadata: { tier: "beta", versionSpecific: true } }
 		);
 
-		const info = api.slothlet.versioning.list("auth");
-		const v1ID = info.versions.v1.moduleID;
-
-		const versionMeta = api.slothlet.versioning.getVersionMetadata(v1ID);
+		const versionMeta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
 
 		// versionMeta should have versionConfig.metadata fields
 		expect(versionMeta).toHaveProperty("tier", "beta");
