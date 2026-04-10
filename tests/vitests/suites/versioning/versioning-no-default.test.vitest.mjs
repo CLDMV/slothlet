@@ -12,11 +12,16 @@
  */
 
 /**
- * @fileoverview VERSION_NO_DEFAULT error — when discriminator returns null
- * and no default can be computed (should never happen if versions exist since
- * auto-algorithm always picks highest).
+ * @fileoverview Fallback and teardown behavior when no version can be resolved.
  *
- * The real scenario: discriminator returns a tag, but that tag isn't registered.
+ * Covers two scenarios:
+ *  1. Dispatcher teardown: when the last remaining version is unregistered the
+ *     dispatcher is removed from the API tree entirely (api.auth becomes undefined).
+ *     The VERSION_NO_DEFAULT error path inside the dispatcher is a defensive guard
+ *     annotated v8-ignore because teardownDispatcher() makes it unreachable in
+ *     normal usage.
+ *  2. Default fallback: a discriminator that returns an unregistered tag causes the
+ *     version resolution to fall through to the configured default version.
  *
  * @module tests/vitests/suites/versioning/versioning-no-default
  */
@@ -35,7 +40,7 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 		api = null;
 	});
 
-	it("throws VERSION_NO_DEFAULT when no versions remain after all removed", async () => {
+	it("tears down dispatcher when last version is unregistered", async () => {
 		api = await slothlet({
 			...config,
 			dir: `${BASE}/callers`,
@@ -44,11 +49,15 @@ describe.each(getMatrixConfigs())("Versioning > No Default > $name", ({ config }
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
-		// Remove the only version  
+		// Dispatcher exists while the version is registered
+		expect(api.auth).toBeDefined();
+
+		// Remove the only version — VersionManager calls teardownDispatcher()
 		await api.slothlet.versioning.unregister("auth", "v1");
 
-		// auth dispatcher should be torn down — accessing it should throw or be undefined
-		// The dispatcher proxy is removed when all versions are gone
+		// Dispatcher is removed from the API tree; api.auth is now undefined.
+		// (VERSION_NO_DEFAULT is a defensive guard inside the dispatcher's get trap
+		// and is unreachable here because the proxy itself no longer exists.)
 		expect(api.auth).toBeUndefined();
 	});
 
