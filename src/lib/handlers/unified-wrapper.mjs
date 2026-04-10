@@ -850,6 +850,14 @@ export class UnifiedWrapper extends ComponentBase {
 			return;
 		}
 
+		// If impl is a native Proxy (e.g., a version dispatcher), skip adoption entirely.
+		// The getTrap already delegates all property access directly to the Proxy, so there
+		// is nothing to "adopt" as children. Iterating ownKeys on a dispatcher proxy would
+		// call its GET trap and potentially trigger user-supplied discriminator functions as a
+		// side-effect during module setup — which must not happen.
+		/* v8 ignore next */
+		if (util.types.isProxy(this.____slothletInternal.impl)) return;
+
 		const ownKeys = Reflect.ownKeys(this.____slothletInternal.impl);
 
 		const internalKeys = new Set([
@@ -1548,7 +1556,10 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
-					wrapper._materialize();
+					// Silently catch errors — callers that explicitly await _materialize() will
+					// observe the rejection; this fire-and-forget path must never produce an
+					// unhandled rejection (e.g. collision mode "error" during background trigger).
+					wrapper._materialize().catch(() => {});
 				}
 
 				if (prop === util.inspect.custom) {
@@ -2112,7 +2123,7 @@ export class UnifiedWrapper extends ComponentBase {
 			!wrapper.____slothletInternal.state.materialized &&
 			wrapper.____slothletInternal.materializeFunc
 		) {
-			wrapper._materialize(); // Fire-and-forget background materialization
+			wrapper._materialize().catch(() => {}); // Fire-and-forget background materialization
 		}
 
 		// Proxy target depends on whether this is callable
@@ -2276,7 +2287,7 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
-					wrapper._materialize();
+					wrapper._materialize().catch(() => {});
 				}
 
 				// Return state symbols for lazy mode if not ready
@@ -2473,7 +2484,7 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize();
+				wrapper._materialize().catch(() => {});
 			}
 
 			// If lazy mode is materialized and property doesn't exist in _impl, return undefined
@@ -2527,7 +2538,7 @@ export class UnifiedWrapper extends ComponentBase {
 						!cachedWrapper.____slothletInternal.state.materialized &&
 						!cachedWrapper.____slothletInternal.state.inFlight
 					) {
-						cachedWrapper._materialize();
+						cachedWrapper._materialize().catch(() => {});
 					}
 				}
 				// For objects and functions, return the proxy as-is
@@ -2575,7 +2586,7 @@ export class UnifiedWrapper extends ComponentBase {
 							!cachedWrapper.____slothletInternal.state.materialized &&
 							!cachedWrapper.____slothletInternal.state.inFlight
 						) {
-							cachedWrapper._materialize();
+							cachedWrapper._materialize().catch(() => {});
 						}
 					}
 					return cached;
@@ -2608,7 +2619,7 @@ export class UnifiedWrapper extends ComponentBase {
 				// never simultaneously true here, so _materialize() is never called from this path.
 				/* v8 ignore next */
 				if (!wrapper.____slothletInternal.state.materialized && !wrapper.____slothletInternal.state.inFlight) {
-					wrapper._materialize();
+					wrapper._materialize().catch(() => {});
 				}
 
 				this.slothlet.debug("wrapper", {
@@ -2798,7 +2809,7 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
-					wrapper._materialize();
+					wrapper._materialize().catch(() => {});
 				}
 
 				// Wait for materialization if in flight (returns Promise)
@@ -3013,7 +3024,7 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize();
+				wrapper._materialize().catch(() => {});
 			}
 
 			// Check wrapper properties (children), filter internals
@@ -3048,7 +3059,7 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize();
+				wrapper._materialize().catch(() => {});
 			}
 
 			if (prop === "____slothletInternal") return undefined;
@@ -3104,7 +3115,7 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
-				wrapper._materialize();
+				wrapper._materialize().catch(() => {});
 			}
 
 			const keys = new Set();

@@ -37,9 +37,12 @@
 process.env.SLOTHLET_INTERNAL_TEST_MODE = "true";
 
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
 import { TEST_DIRS, suppressSlothletDebugOutput } from "../../setup/vitest-helper.mjs";
+
+const ____dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let restoreDebugOutput;
 
@@ -167,7 +170,7 @@ describe.each(EAGER_CONFIGS)("addApiComponent — invalid file extension ($name)
 		// Create a temp path that looks like a .json file (won't exist but isFile check needs it)
 		// The resolvePath check happens before extension check, so we need a file that exists
 		// Use package.json from project root
-		await expect(api.slothlet.api.add("bad", "/srv/repos/slothlet/package.json")).rejects.toThrow();
+		await expect(api.slothlet.api.add("bad", path.resolve(____dirname, "../../../../package.json"))).rejects.toThrow();
 	});
 });
 

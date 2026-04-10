@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:49:51 -07:00 (1773024591)
+ *	@Last modified time: 2026-04-01 21:57:24 -07:00 (1775105844)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -58,7 +58,14 @@ function _resolvePathOrModuleId(slothlet, pathOrModuleId) {
 	// the false branch (no history → return pathOrModuleId unchanged) is never triggered in tests.
 	/* v8 ignore next */
 	if (history) {
-		const match = history.findLast((entry) => entry.moduleID === pathOrModuleId);
+		let match = null;
+		for (let i = history.length - 1; i >= 0; i--) {
+			const entry = history[i];
+			if (entry?.moduleID === pathOrModuleId) {
+				match = entry;
+				break;
+			}
+		}
 		if (match) return match.apiPath;
 	}
 	return pathOrModuleId;
@@ -280,19 +287,33 @@ export class ApiBuilder extends ComponentBase {
 			api: {
 				/**
 				 * @param {string} apiPath - API path to add modules to.
-				 * @param {string} folderPath - Folder path containing modules.
-				 * @param {Record<string, unknown>} [metadata={}] - Metadata object.
+				 * @param {string|string[]} folderPath - Folder path (or array of paths) containing modules.
+				 *   When an array is provided, each path is processed sequentially and the return value
+				 *   is an array of moduleIDs in the same order.
 				 * @param {Record<string, unknown>} [options={}] - Add options (metadata goes here).
-				 * @returns {Promise<void>}
+				 * @param {object | null} [versionConfig=null] - Optional version configuration.
+				 * @param {string} versionConfig.version - Version tag (e.g. "v1", "2.3.0").
+				 * @param {boolean} [versionConfig.default] - Mark this as the explicit default version.
+				 * @param {object} [versionConfig.metadata] - Version metadata stored in VersionManager only.
+				 * @returns {Promise<string|string[]>} Resolves with the moduleID, or an array of moduleIDs
+				 *   when `folderPath` is an array.
 				 * @public
 				 *
 				 * @description
 				 * Adds API modules from a folder into the current instance at runtime.
+				 * When `versionConfig` is provided, the module is mounted at
+				 * `${versionConfig.version}.${apiPath}` and a dispatcher proxy is created
+				 * (or updated) at `${apiPath}`.
 				 *
 				 * @example
 				 * await api.slothlet.api.add("plugins", "./plugins");
+				 *
+				 * @example
+				 * // Versioned registration
+				 * await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
+				 * await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
 				 */
-				add: async function slothlet_api_add(apiPath, folderPath, options = {}) {
+				add: async function slothlet_api_add(apiPath, folderPath, options = {}, versionConfig = null) {
 					// Check if add mutation is allowed
 					if (!config.api?.mutations?.add) {
 						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
@@ -314,7 +335,8 @@ export class ApiBuilder extends ComponentBase {
 					return slothlet.handlers.apiManager.addApiComponent({
 						apiPath,
 						folderPath,
-						options: filteredOptions
+						options: filteredOptions,
+						versionConfig: versionConfig || null
 					});
 				},
 
@@ -958,6 +980,74 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.metadata) return;
 					const resolvedPath = _resolvePathOrModuleId(slothlet, pathOrModuleId);
 					return slothlet.handlers.metadata.removePathMetadata(resolvedPath, key);
+				},
+
+				/**
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @param {string|Object} keyOrObj - Single key string (with `value`) or metadata object.
+				 * @param {unknown} [value] - Value when `keyOrObj` is a string key.
+				 * @returns {void}
+				 * @public
+				 *
+				 * @description
+				 * Sets regular module metadata on the versioned module at the given logical path and version tag.
+				 * Resolves via the version registry so dotted version tags (e.g. `"2.3.0"`) are handled safely —
+				 * no manual path construction needed. The metadata is visible in `__metadata` reads and in
+				 * `allVersions[tag].metadata` inside discriminator functions.
+				 *
+				 * @example
+				 * api.slothlet.metadata.setForVersion("auth", "v1", "stable", true);
+				 * api.slothlet.metadata.setForVersion("auth", "v1", { stable: true, region: "us" });
+				 */
+				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
+					if (!slothlet.handlers?.metadata) {
+						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
+							handlersKeys: slothlet.handlers
+								? Object.keys(slothlet.handlers).join(", ")
+								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
+									/* v8 ignore next */
+									"undefined",
+							validationError: true
+						});
+					}
+					const info = slothlet.handlers?.versionManager?.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) {
+						throw new slothlet.SlothletError("VERSION_NOT_FOUND", {
+							version: versionTag,
+							apiPath: logicalPath
+						});
+					}
+					const { moduleID } = info.versions[versionTag];
+					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					return slothlet.handlers.metadata.setPathMetadata(resolvedPath, keyOrObj, value);
+				},
+
+				/**
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @returns {Object} Merged regular user metadata for the versioned module's path.
+				 * @public
+				 *
+				 * @description
+				 * Retrieves regular module metadata set via `setFor()` or `setForVersion()` for the versioned
+				 * module at the given logical path and version tag. Does not include system metadata
+				 * (file path, moduleID, etc.) — only user-supplied path metadata.
+				 *
+				 * For full metadata including system fields, access `api[versionTag][logicalPath].__metadata` directly.
+				 *
+				 * @example
+				 * const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+				 * // { stable: true, region: "us" }
+				 */
+				getForVersion: function slothlet_metadata_getForVersion(logicalPath, versionTag) {
+					/* v8 ignore next */
+					if (!slothlet.handlers?.metadata) return {};
+					const info = slothlet.handlers?.versionManager?.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) return {};
+					const { moduleID } = info.versions[versionTag];
+					const resolvedPath = _resolvePathOrModuleId(slothlet, moduleID);
+					return slothlet.handlers.metadata.getPathMetadata(resolvedPath);
 				}
 			},
 
@@ -1109,7 +1199,110 @@ export class ApiBuilder extends ComponentBase {
 			 * api.slothlet.env.NODE_ENV    // => "production"
 			 * api.slothlet.env.PORT        // => undefined (not captured)
 			 */
-			env: slothlet.envSnapshot
+			env: slothlet.envSnapshot,
+
+			/**
+			 * Version management API for versioned API paths.
+			 * @type {object}
+			 * @public
+			 */
+			versioning: {
+				/**
+				 * List all registered versions for a logical API path.
+				 * @param {string} logicalPath - Logical API path (e.g. "auth").
+				 * @returns {{ versions: object, default: string|null } | undefined} Version snapshot, or `undefined` when the path is not registered.
+				 * @public
+				 * @example
+				 * const info = api.slothlet.versioning.list("auth");
+				 * if (info) console.log(info.default); // "v2"
+				 */
+				list: function slothlet_version_list(logicalPath) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return undefined;
+					return slothlet.handlers.versionManager.list(logicalPath);
+				},
+
+				/**
+				 * Override the default version for a logical API path at runtime.
+				 * @param {string} logicalPath - Logical API path.
+				 * @param {string} versionTag - Version tag to set as default.
+				 * @returns {void}
+				 * @public
+				 * @example
+				 * api.slothlet.versioning.setDefault("auth", "v1");
+				 */
+				setDefault: function slothlet_version_setDefault(logicalPath, versionTag) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return;
+					return slothlet.handlers.versionManager.setDefault(logicalPath, versionTag);
+				},
+
+				/**
+				 * Unregister a specific version from a logical API path.
+				 * Removes the versioned namespace and updates or tears down the dispatcher.
+				 * @param {string} logicalPath - Logical API path.
+				 * @param {string} versionTag - Version tag to remove.
+				 * @returns {Promise<boolean>} Resolves `true` when the version was removed.
+				 * @public
+				 * @example
+				 * await api.slothlet.versioning.unregister("auth", "v2");
+				 */
+				unregister: async function slothlet_version_unregister(logicalPath, versionTag) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return false;
+					// Check version exists before attempting removal
+					const info = slothlet.handlers.versionManager.list(logicalPath);
+					if (!info || !info.versions?.[versionTag]) return false;
+					// Use the stored moduleID rather than reconstructing a dot-delimited path string.
+					// Path string reconstruction would re-split on "." and fragment dotted version
+					// tags (e.g. "2.3.0" → ["2","3","0"]) when passed to removeApiComponent.
+					const { moduleID: versionedModuleID } = info.versions[versionTag];
+					// Remove the versioned module from the API tree.
+					// removeApiComponent internally calls versionManager.unregisterVersion via its
+					// version-lifecycle hook, so we do NOT call unregisterVersion again here.
+					await slothlet.handlers.apiManager.removeApiComponent(versionedModuleID);
+					return true;
+				},
+
+				/**
+				 * Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`.
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @returns {object | undefined} Version metadata or `undefined` when the path/tag is not registered.
+				 * @public
+				 * @example
+				 * const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+				 * // { version: "v1", logicalPath: "auth", stable: true }
+				 */
+				getVersionMetadata: function slothlet_version_getVersionMetadata(logicalPath, versionTag) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return undefined;
+					return slothlet.handlers.versionManager.getVersionMetadataByPath(logicalPath, versionTag);
+				},
+
+				/**
+				 * Patch (merge) the VersionManager-only metadata for a registered version at runtime.
+				 * The injected `version` and `logicalPath` keys in the stored object always win over `patch`.
+				 * @param {string} logicalPath - Logical API path (e.g. `"auth"`).
+				 * @param {string} versionTag - Version tag (e.g. `"v1"`, `"2.3.0"`).
+				 * @param {object} patch - Keys to merge into the stored version metadata.
+				 * @returns {void}
+				 * @throws {SlothletError} When the logical path or version is not registered.
+				 * @public
+				 * @example
+				 * api.slothlet.versioning.setVersionMetadata("auth", "v1", { stable: true });
+				 */
+				setVersionMetadata: function slothlet_version_setVersionMetadata(logicalPath, versionTag, patch) {
+					// versionManager is always registered when versioning is used; guard for completeness
+					/* v8 ignore next */
+					if (!slothlet.handlers?.versionManager) return;
+					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
+				}
+			}
 		};
 
 		// Remove hooks namespace when hooks are disabled (unless diagnostics mode)

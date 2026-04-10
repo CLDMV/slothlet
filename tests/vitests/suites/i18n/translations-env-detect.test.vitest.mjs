@@ -74,6 +74,58 @@ afterEach(() => {
 	setLanguage("en-us");
 });
 
+// ─── "en" branch ────────────────────────────────────────────────────────────────
+
+describe("i18n_detectLanguage() — English env var (lang === 'en')", () => {
+	it("detects English and returns 'en-us' when LANG is en_US.UTF-8", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+		try {
+			process.env.LANG = "en_US.UTF-8";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+
+	it("detects English and returns 'en-us' when LANG is bare 'en'", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+		try {
+			process.env.LANG = "en";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+});
+
+// ─── "c" / "posix" branch ──────────────────────────────────────────────────────
+
+describe("i18n_detectLanguage() — C/POSIX locale (lang === 'c' || lang === 'posix')", () => {
+	it("returns 'en-us' when LANG is 'C'", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+		try {
+			process.env.LANG = "C";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+
+	it("returns 'en-us' when LANG is 'POSIX'", () => {
+		const saved = clearEnvVars(LANG_KEYS);
+		try {
+			process.env.LANG = "POSIX";
+			initI18n();
+			expect(getLanguage()).toBe("en-us");
+		} finally {
+			restoreEnvVars(saved);
+		}
+	});
+});
+
 // ─── line 59: "es" branch ─────────────────────────────────────────────────────
 
 describe("i18n_detectLanguage() — Spanish env var (line 59)", () => {

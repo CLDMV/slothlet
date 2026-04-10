@@ -1,6 +1,6 @@
 {
 	"name": "@cldmv/slothlet",
-	"version": "3.1.0",
+	"version": "3.2.0",
 	"moduleVersions": {
 		"lazy": "3.0.0",
 		"eager": "3.0.0",
@@ -125,6 +125,7 @@
 		"vitest": "node tests/vitests/run-all-vitest.mjs --workers 8",
 		"baseline": "npm run vitest -- --baseline",
 		"coverage": "npm run vitest -- --coverage-quiet",
+		"ci:coverage": "npm run coverage",
 		"test": "npm run test:pre-build",
 		"test:pre-build": "node tests/test-conditional.mjs",
 		"test:post-build": "npm run test:types",
@@ -132,6 +133,7 @@
 		"test:node": "node tests/run-all-tests.mjs",
 		"test:all": "node tests/test-conditional.mjs && npm run test:node",
 		"test:types": "node tests/validate-typescript.mjs",
+		"ci:test:types": "npm run build:dist && npm run build:types && npm run test:types",
 		"test:performance": "node tests/performance/performance-benchmark-aggregated.mjs",
 		"test:performance-simple": "node tests/performance/performance-benchmark.mjs",
 		"lint": "eslint --config .configs/eslint.config.mjs .",
@@ -141,7 +143,8 @@
 		"fix:headers": "node tools/dev/fix-headers.mjs",
 		"build": "npm run build:dev",
 		"build:ci": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run ci:cleanup-src",
-		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run build:cleanup",
+		"build:dev": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
+		"build:dev:test": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license && npm run build:cleanup",
 		"build:unsafe": "npm run build:cleanup && npm run build:dist && npm run build:types && npm run build:exports && npm run test:types && npm run build:prepend-license",
 		"ci:cleanup-src": "node tools/ci/ci-cleanup-src.mjs",
 		"build:cleanup": "shx rm -rf types && shx rm -rf dist",

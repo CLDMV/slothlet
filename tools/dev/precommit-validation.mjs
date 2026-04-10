@@ -48,6 +48,7 @@ async function main() {
 		{ name: "Build Distribution", command: "npm", args: ["run", "build:dist"] },
 		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] },
 		{ name: "Build TypeScript Types", command: "npm", args: ["run", "build:types"] },
+		{ name: "Build Export Declarations", command: "npm", args: ["run", "build:exports"] },
 		{ name: "Validate TypeScript", command: "npm", args: ["run", "test:types"] }
 	];
 

@@ -6,11 +6,6 @@
  */
 export class Metadata extends ComponentBase {
     static slothletProperty: string;
-    /**
-     * Create Metadata instance
-     * @param {Object} slothlet - Slothlet instance
-     */
-    constructor(slothlet: any);
     _instanceId: any;
     /**
      * Tag system metadata (SECURE, IMMUTABLE)
@@ -121,6 +116,21 @@ export class Metadata extends ComponentBase {
      * @public
      */
     public setPathMetadata(apiPath: string, keyOrObj: string | any, value?: unknown): void;
+    /**
+     * Get the user metadata collected from the path store for a given API path.
+     *
+     * @description
+     * Traverses from root segment to leaf, merging parent → child metadata — the same
+     * traversal used by `collectMetadataFromParents` inside `getMetadata()`. Does not
+     * include immutable system metadata; only user-supplied path store entries are returned.
+     *
+     * @param {string} apiPath - Dot-notation API path (e.g. `"v1.auth"`, `"math"`).
+     * @returns {Object} Merged user metadata for the path (not frozen).
+     * @public
+     * @example
+     * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
+     */
+    public getPathMetadata(apiPath: string): any;
     /**
      * Remove metadata keys (or all metadata) for an API path.
      *

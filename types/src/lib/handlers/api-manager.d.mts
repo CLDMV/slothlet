@@ -15,19 +15,6 @@
  */
 export class ApiManager extends ComponentBase {
     static slothletProperty: string;
-    /**
-     * Create an ApiManager instance.
-     * @param {object} slothlet - Slothlet class instance.
-     * @package
-     *
-     * @description
-     * Initializes manager state with empty add history, removed module tracking,
-     * and stores the initial configuration.
-     *
-     * @example
-     * const manager = new ApiManager(slothlet);
-     */
-    constructor(slothlet: object);
     state: {
         addHistory: any[];
         initialConfig: any;
@@ -286,6 +273,34 @@ export class ApiManager extends ComponentBase {
         folderPath: string | string[];
         options?: Record<string, unknown>;
     }): Promise<string | string[]>;
+    /**
+     * Roll back a failed versioned add.
+     *
+     * @description
+     * Called when `versionManager.registerVersion()` throws after the API tree, cache,
+     * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
+     * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+     * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
+     * no spurious "remove" entry is pushed into `operationHistory`.
+     *
+     * The rollback is best-effort: if `removeApiComponent` itself throws the error is
+     * swallowed and the caller re-throws the original registration error.
+     *
+     * @param {object} opts - Rollback context.
+     * @param {string} opts.moduleID - The moduleID of the just-added component.
+     * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
+     * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
+     * @returns {Promise<void>}
+     * @package
+     *
+     * @example
+     * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+     */
+    _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }: {
+        moduleID: string;
+        effectivePath: string;
+        normalizedPath: string;
+    }): Promise<void>;
     /**
      * Remove API modules at runtime.
      * @param {string} pathOrModuleId - API path (with dots) or module ID (with underscore) to remove.

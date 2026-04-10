@@ -15,18 +15,6 @@
 export class Builder extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create Builder instance.
-     * @param {object} slothlet - Slothlet orchestrator instance.
-     * @package
-     *
-     * @description
-     * Stores Slothlet reference for accessing configuration and components.
-     *
-     * @example
-     * const builder = new Builder(slothlet);
-     */
-    constructor(slothlet: object);
-    /**
      * Build API from directory or file.
      * @param {Object} options - Build options
      * @param {string} options.dir - Directory or file to build from

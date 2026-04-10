@@ -136,7 +136,7 @@ describe("removeApiComponent — return false (line 1543)", () => {
 
 	it("returns false when removing with a moduleID that does not exist", async () => {
 		api = await makeApi();
-		// non-existent moduleID is not found via findLast and getCurrentOwner → return false
+		// non-existent moduleID is not found by the reverse module scan and getCurrentOwner → return false
 		const result = await api.slothlet.api.remove("nonExistentModuleId_xyz_abc");
 		expect(result).toBe(false);
 	});
@@ -145,7 +145,7 @@ describe("removeApiComponent — return false (line 1543)", () => {
 // ---------------------------------------------------------------------------
 // 4. removeApiComponent — restore with restoredValue (lines 1597-1610)
 //    Uses a custom moduleID (no path-prefix) so that pathOrModuleId="custom-plug"
-//    falls through the findLast check and hits getCurrentOwner → apiPath+moduleID branch.
+//    falls through the reverse module scan and hits getCurrentOwner → apiPath+moduleID branch.
 //    With a forceOverwrite second add, ownership stacks → action="restore".
 // ---------------------------------------------------------------------------
 
@@ -172,7 +172,7 @@ describe("removeApiComponent — apiPath+moduleID restore via setValueAtPath (li
 		// Remove by API path string "cstplug".
 		// Detection:
 		//   candidateModuleID = "cstplug"
-		//   findLast(m === "cstplug" || m.startsWith("cstplug_")) → NO match ("layer-one" / "layer-two")
+		//   reverse module scan for "cstplug" / "cstplug_*" → NO match ("layer-one" / "layer-two")
 		//   getCurrentOwner("cstplug") → { moduleID: "layer-two" }
 		//   → apiPath="cstplug", moduleID="layer-two" → if (apiPath && moduleID) branch
 		// ownership.removePath("cstplug", "layer-two") → action="restore", restoreModuleId="layer-one"

@@ -76,6 +76,7 @@ const BASE_DIR = TEST_DIRS.API_TEST;
  */
 const ALWAYS_PRESENT_KEYS = [
 	"version",
+	"versioning",
 	"instanceID",
 	"types",
 	"api",
@@ -185,13 +186,21 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 		// ─── Always-present endpoints ─────────────────────────────────────
 
 		describe("always-present top-level keys", () => {
-			it("should have all 15 always-present keys defined on api.slothlet", () => {
+			it("should have all 16 always-present keys defined on api.slothlet", () => {
 				expectKeysPresent(api.slothlet, ALWAYS_PRESENT_KEYS, "api.slothlet");
 			});
 
 			it("api.slothlet.version should be a non-empty string", () => {
 				expect(typeof api.slothlet.version).toBe("string");
 				expect(api.slothlet.version.length).toBeGreaterThan(0);
+			});
+
+			it("api.slothlet.versioning should be the VersionManager API namespace", () => {
+				expect(typeof api.slothlet.versioning).toBe("object");
+				expect(typeof api.slothlet.versioning.list).toBe("function");
+				expect(typeof api.slothlet.versioning.setDefault).toBe("function");
+				expect(typeof api.slothlet.versioning.unregister).toBe("function");
+				expect(typeof api.slothlet.versioning.getVersionMetadata).toBe("function");
 			});
 
 			it("api.slothlet.instanceID should be a non-empty string", () => {
@@ -279,7 +288,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expectKeysAbsent(api.slothlet, DIAG_ONLY_KEYS, "api.slothlet");
 				});
 
-				it("api.slothlet should have exactly the 15 always-present keys and no more", () => {
+				it("api.slothlet should have exactly the 16 always-present keys and no more", () => {
 					const actualKeys = Object.keys(api.slothlet);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);
@@ -337,7 +346,7 @@ describe("api.slothlet - diagnostics endpoint availability", () => {
 					expect(api.slothlet.diag.hook.enabled).toBe(hook.enabled);
 				});
 
-				it("api.slothlet should have exactly the 15 always-present keys plus diag", () => {
+				it("api.slothlet should have exactly the 16 always-present keys plus diag", () => {
 					const actualKeys = Object.keys(api.slothlet);
 					for (const key of ALWAYS_PRESENT_KEYS) {
 						expect(actualKeys, `key "${key}" should be in Object.keys`).toContain(key);

@@ -1137,7 +1137,7 @@ export class ApiManager extends ComponentBase {
 	async addApiComponent(params) {
 		// params is always provided; options is always provided; both fallbacks are unreachable.
 		/* v8 ignore next */
-		const { apiPath, folderPath, options = {} } = params || {};
+		const { apiPath, folderPath, options = {}, versionConfig = null } = params || {};
 
 		// Handle array of paths - process each sequentially
 		if (Array.isArray(folderPath)) {
@@ -1146,7 +1146,8 @@ export class ApiManager extends ComponentBase {
 				const moduleID = await this.addApiComponent({
 					apiPath,
 					folderPath: singlePath,
-					options
+					options,
+					versionConfig
 				});
 				moduleIDs.push(moduleID);
 			}
@@ -1162,6 +1163,37 @@ export class ApiManager extends ComponentBase {
 		}
 
 		const { apiPath: normalizedPath, parts } = this.normalizeApiPath(apiPath);
+
+		// Compute effective (versioned) mount path when versionConfig.version is present
+		let effectivePath = normalizedPath;
+		let effectiveParts = parts;
+		if (versionConfig?.version !== undefined && versionConfig?.version !== null) {
+			// Guard: the root path (empty normalizedPath) cannot host a versioned add because
+			// VersionManager would build versionedPath as "v1." (trailing dot) and mount the
+			// dispatcher at api[""] — both of which produce broken tree entries.
+			if (normalizedPath === "") {
+				throw new this.SlothletError("INVALID_CONFIG_API_PATH_INVALID", {
+					apiPath,
+					reason: translate("API_PATH_REASON_VERSIONED_ROOT"),
+					index: undefined,
+					segment: undefined,
+					validationError: true
+				});
+			}
+			if (typeof versionConfig.version !== "string" || !String(versionConfig.version).trim()) {
+				throw new this.SlothletError("INVALID_CONFIG_VERSION_TAG", {
+					received: versionConfig.version,
+					validationError: true
+				});
+			}
+			const versionTag = String(versionConfig.version).trim();
+			// Build effectiveParts as [versionTag, ...parts] rather than splitting effectivePath
+			// on ".". Splitting would fragment version tags that contain dots (e.g. "2.3.0" →
+			// ["2","3","0"]) creating unintended nested namespaces. Using the pre-split `parts`
+			// array keeps the version tag atomic and handles empty normalizedPath cleanly.
+			effectiveParts = [versionTag, ...parts];
+			effectivePath = effectiveParts.join(".");
+		}
 
 		// Resolve path - supports both files and directories
 		const { resolvedPath, isDirectory, isFile } = await this.resolvePath(folderPath);
@@ -1233,7 +1265,8 @@ export class ApiManager extends ComponentBase {
 			// Use apiPathPrefix so wrappers have correct full API paths
 			// User specified the path, folder loads normally under that path
 			// Empty string means root level (no prefix)
-			apiPathPrefix: normalizedPath,
+			// When versioned, effectivePath = "v1.auth" so wrappers get versioned paths
+			apiPathPrefix: effectivePath,
 			collisionContext: "addApi",
 			moduleID: moduleID,
 			// CRITICAL: Pass collision mode so lifecycle handlers can register ownership correctly
@@ -1247,7 +1280,7 @@ export class ApiManager extends ComponentBase {
 		/* v8 ignore next */
 		if (this.slothlet.handlers.apiCacheManager) {
 			this.slothlet.handlers.apiCacheManager.set(moduleID, {
-				endpoint: normalizedPath,
+				endpoint: effectivePath,
 				moduleID: moduleID,
 				api: newApi,
 				folderPath: resolvedFolderPath,
@@ -1415,7 +1448,7 @@ export class ApiManager extends ComponentBase {
 				const isCallableNamespace = typeof apiToMerge === "function";
 
 				const containerWrapper = new UnifiedWrapper(this.slothlet, {
-					apiPath: normalizedPath,
+					apiPath: effectivePath,
 					mode: this.____config.mode,
 					isCallable: isCallableNamespace, // Preserve callable nature
 					moduleID: moduleID,
@@ -1428,14 +1461,14 @@ export class ApiManager extends ComponentBase {
 				apiToMerge = containerWrapper.createProxy();
 			}
 
-			const result1 = await this.setValueAtPath(this.slothlet.api, parts, apiToMerge, {
+			const result1 = await this.setValueAtPath(this.slothlet.api, effectiveParts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleID, // Pass moduleID for lifecycle events
 				sourceFolder: resolvedFolderPath // Pass sourceFolder for wrapper creation
 			});
 
-			const result2 = await this.setValueAtPath(this.slothlet.boundApi, parts, apiToMerge, {
+			const result2 = await this.setValueAtPath(this.slothlet.boundApi, effectiveParts, apiToMerge, {
 				mutateExisting,
 				collisionMode,
 				moduleID, // Pass moduleID for lifecycle events (boundApi container needs it too)
@@ -1461,6 +1494,11 @@ export class ApiManager extends ComponentBase {
 			// Helper to recursively find wrappers with pending materialization
 			const collectPendingMaterializations = (obj, depth = 0) => {
 				if (!obj || typeof obj !== "object" || depth > 10) return;
+				// Skip version dispatcher proxies — accessing their routing properties would
+				// prematurely invoke user discriminator functions during setup, before all
+				// versions are registered. Dispatchers have no pending materializations anyway.
+				/* v8 ignore next */
+				if (obj.__isVersionDispatcher === true) return;
 
 				const wrapper = resolveWrapper(obj);
 				if (wrapper) {
@@ -1493,8 +1531,10 @@ export class ApiManager extends ComponentBase {
 			};
 
 			// Collect from the actual API path where we just added
-			// This ensures we catch any fire-and-forget materializations that were triggered
-			if (parts.length === 0) {
+			// This ensures we catch any fire-and-forget materializations that were triggered.
+			// Use effectiveParts (the actual mount path) — for versioned adds this is e.g. ["v1","auth"];
+			// for non-versioned adds effectiveParts === parts, so both cases are handled correctly.
+			if (effectiveParts.length === 0) {
 				// Root level - check each key we just added
 				for (const key of Object.keys(newApi)) {
 					// api[key] is always truthy immediately after assignment; FALSE never fires.
@@ -1506,7 +1546,7 @@ export class ApiManager extends ComponentBase {
 			} else {
 				// Nested path - check the container we just modified
 				let current = this.slothlet.api;
-				for (const part of parts) {
+				for (const part of effectiveParts) {
 					// Nested container path always resolves; the missing-part else never fires in tests.
 					/* v8 ignore start */
 					if (current && current[part]) {
@@ -1551,16 +1591,22 @@ export class ApiManager extends ComponentBase {
 					this.slothlet.handlers.metadata.registerUserMetadata(key, metadata);
 				}
 			} else {
-				const rootSegment = normalizedPath.split(".")[0];
+				// For versioned adds effectiveParts[0] is the version tag (e.g. "v1"), matching
+				// the apiPath root that wrappers receive from buildAPI( apiPathPrefix: effectivePath ).
+				// For non-versioned adds effectiveParts === parts, so effectiveParts[0] equals
+				// normalizedPath.split(".")[0] — behaviour is identical.
+				const rootSegment = effectiveParts[0];
 				this.slothlet.handlers.metadata.registerUserMetadata(rootSegment, metadata);
 			}
 		}
 
 		// Register ownership for added API
+		// For versioned adds effectivePath is the actual mount point (e.g. "v1.auth"); for non-versioned
+		// effectivePath === normalizedPath, so this is always correct for both cases.
 		// ownership is always registered and moduleID is always set; FALSE arm never fires.
 		/* v8 ignore next */
 		if (this.slothlet.handlers.ownership && moduleID) {
-			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, normalizedPath);
+			this.slothlet.handlers.ownership.registerSubtree(apiToMerge, moduleID, effectivePath);
 		}
 
 		// ownership always registered; FALSE never fires.
@@ -1571,21 +1617,102 @@ export class ApiManager extends ComponentBase {
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
 					options: { ...restOptions, metadata, moduleID },
-					moduleID
+					moduleID,
+					versionConfig: versionConfig || null
 				});
 
 				// Track in operation history for reload replay
+				// Use normalizedPath (not effectivePath) so replay can re-apply versionConfig correctly
 				this.state.operationHistory.push({
 					type: "add",
 					apiPath: normalizedPath,
 					folderPath: resolvedFolderPath,
 					options: { ...restOptions, metadata, moduleID },
-					moduleID
+					moduleID,
+					versionConfig: versionConfig || null
 				});
 			}
 		}
 
+		// Register with VersionManager if this is a versioned add.
+		// If registration fails (e.g. VERSION_REGISTER_DUPLICATE), roll back the just-mounted
+		// subtree so addApiComponent() does not leave the instance in a partially-mutated state
+		// (orphaned cache entry, ownership record, and history entries).
+		if (versionConfig?.version && this.slothlet.handlers.versionManager) {
+			const versionTag = String(versionConfig.version).trim();
+			try {
+				this.slothlet.handlers.versionManager.registerVersion(
+					normalizedPath,
+					versionTag,
+					moduleID,
+					versionConfig.metadata ?? {},
+					versionConfig.default ?? false
+				);
+			} catch (error) {
+				await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+				throw error;
+			}
+		}
+
 		return moduleID;
+	}
+
+	/**
+	 * Roll back a failed versioned add.
+	 *
+	 * @description
+	 * Called when `versionManager.registerVersion()` throws after the API tree, cache,
+	 * ownership, and history have already been mutated by `addApiComponent()`. Scrubs
+	 * the orphaned "add" entry from `operationHistory`, then delegates tree/cache/ownership
+	 * and `addHistory` cleanup to `removeApiComponent({ recordHistory: false })` so that
+	 * no spurious "remove" entry is pushed into `operationHistory`.
+	 *
+	 * The rollback is best-effort: if `removeApiComponent` itself throws the error is
+	 * swallowed and the caller re-throws the original registration error.
+	 *
+	 * @param {object} opts - Rollback context.
+	 * @param {string} opts.moduleID - The moduleID of the just-added component.
+	 * @param {string} opts.effectivePath - The effective (versioned) mount path, e.g. "v1.auth".
+	 * @param {string} opts.normalizedPath - The logical path, e.g. "auth".
+	 * @returns {Promise<void>}
+	 * @package
+	 *
+	 * @example
+	 * await this._rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath });
+	 */
+	async _rollbackFailedVersionedAdd({ moduleID, effectivePath, normalizedPath }) {
+		// --- Step 1: Scrub operationHistory ---
+		// removeApiComponent does not touch operationHistory. When called with
+		// { recordHistory: false } it suppresses its own "remove" push but leaves the "add"
+		// entry we already recorded. Remove it explicitly so no orphaned add survives.
+		// Use a manual reverse loop for Node 16 compatibility.
+		let addIndex = -1;
+		for (let i = this.state.operationHistory.length - 1; i >= 0; i--) {
+			const entry = this.state.operationHistory[i];
+			if (entry?.type === "add" && entry?.apiPath === normalizedPath && entry?.moduleID === moduleID) {
+				addIndex = i;
+				break;
+			}
+		}
+		if (addIndex !== -1) {
+			this.state.operationHistory.splice(addIndex, 1);
+		}
+
+		// --- Step 2: Scrub addHistory ---
+		// removeApiComponent also filters addHistory internally, but only when it succeeds.
+		// Doing it here unconditionally ensures no orphaned addHistory entry remains even if
+		// the teardown call below throws.
+		this.state.addHistory = this.state.addHistory.filter((entry) => entry?.moduleID !== moduleID);
+
+		// --- Step 3: Tear down the mounted subtree, cache, and ownership ---
+		// { recordHistory: false } prevents removeApiComponent from pushing a "remove" entry.
+		// addHistory is already clean at this point so a double-filter is harmless.
+		try {
+			await this.removeApiComponent(moduleID || effectivePath, { recordHistory: false });
+		} catch {
+			// Best-effort — both history arrays were already cleaned above; the caller
+			// re-throws the original registerVersion error regardless.
+		}
 	}
 
 	/**
@@ -1627,10 +1754,17 @@ export class ApiManager extends ComponentBase {
 
 			// Try to find a matching moduleID
 			// This allows api.remove("removableInternal") to remove "removableInternal_abc123"
-			// Use findLast to prefer the most recently registered module when multiple match,
+			// Walk from the end to prefer the most recently registered module when multiple match,
 			// as stale entries from prior add/remove cycles may linger due to async lazy materialization.
 			const registeredModules = Array.from(this.slothlet.handlers.ownership.moduleToPath.keys());
-			const matchingModule = registeredModules.findLast((m) => m === candidateModuleID || m.startsWith(`${candidateModuleID}_`));
+			let matchingModule = null;
+			for (let i = registeredModules.length - 1; i >= 0; i--) {
+				const candidate = registeredModules[i];
+				if (candidate === candidateModuleID || candidate.startsWith(`${candidateModuleID}_`)) {
+					matchingModule = candidate;
+					break;
+				}
+			}
 
 			if (matchingModule) {
 				// Found a moduleID match
@@ -1683,6 +1817,19 @@ export class ApiManager extends ComponentBase {
 				if (this.slothlet.handlers.metadata) {
 					const rootSegment = normalizedPath.split(".")[0];
 					this.slothlet.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+				}
+				// Clean up VersionManager registration if this was a versioned module
+				if (this.slothlet.handlers.versionManager) {
+					const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+					if (versionKey) {
+						this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+					}
+					// If the path being removed is a logical dispatcher (e.g. api.remove("auth")), clean up
+					// the #dispatchers entry. getVersionKeyForModule won't find it (the dispatcher's
+					// synthetic moduleID is not in #moduleToVersionKey), so we check explicitly.
+					if (this.slothlet.handlers.versionManager.hasDispatcher(normalizedPath)) {
+						this.slothlet.handlers.versionManager.teardownDispatcher(normalizedPath);
+					}
 				}
 				// Track in operation history for reload replay
 				this.state.operationHistory.push({
@@ -1739,6 +1886,16 @@ export class ApiManager extends ComponentBase {
 			// ownership is always registered and unregister() always returns a valid result; falsy fallback unreachable.
 			/* v8 ignore next */
 			const result = this.slothlet.handlers.ownership?.unregister?.(moduleIDKey) || { removed: [], rolledBack: [] };
+
+			// Clean up VersionManager registration if this was a versioned module.
+			// The apiPath+moduleID branch above handles this for path-based removals;
+			// this branch handles moduleID-only removals (e.g. from api.slothlet.versioning.unregister).
+			if (this.slothlet.handlers.versionManager) {
+				const versionKey = this.slothlet.handlers.versionManager.getVersionKeyForModule(moduleIDKey);
+				if (versionKey) {
+					this.slothlet.handlers.versionManager.unregisterVersion(versionKey.logicalPath, versionKey.versionTag);
+				}
+			}
 
 			// Collect all paths that were owned by this module
 			const allPaths = [...result.removed, ...result.rolledBack.map((r) => r.apiPath)];
@@ -2096,6 +2253,11 @@ export class ApiManager extends ComponentBase {
 			key: "DEBUG_MODE_MODULE_RELOAD_COMPLETE",
 			moduleID
 		});
+
+		// Notify VersionManager so its dispatcher reflects the latest state
+		if (this.slothlet.handlers.versionManager) {
+			this.slothlet.handlers.versionManager.onVersionedModuleReload(moduleID);
+		}
 	}
 
 	/**
@@ -2628,6 +2790,31 @@ export class ApiManager extends ComponentBase {
 					}
 				} else {
 					implForReload = freshApi;
+				}
+
+				// Rule 13 (F08) dedup mirror: addApiComponent hoists a duplicate key during
+				// initial add (e.g. add("auth", v1/) + v1/auth.mjs → implForReload is {auth:{…}}
+				// but the wrapper was initially set with {login,logout,…}).  Apply the same
+				// hoisting here so the reload produces an identical impl shape.
+				// Condition: implForReload has a key matching the last segment of the endpoint
+				// AND that value is a UnifiedWrapper (i.e. came from buildAPI).
+				// IMPORTANT: Run before recursive extraction so the wrapper proxy is still intact.
+				if (parts.length > 0 && implForReload && typeof implForReload === "object") {
+					const lastEndpointPart = parts[parts.length - 1];
+					if (lastEndpointPart && Object.prototype.hasOwnProperty.call(implForReload, lastEndpointPart)) {
+						const dupValue = implForReload[lastEndpointPart];
+						const dupWrapperForDedup = resolveWrapper(dupValue);
+						if (dupWrapperForDedup) {
+							const hoisted = {};
+							for (const k of Object.keys(implForReload)) {
+								if (k !== lastEndpointPart) hoisted[k] = implForReload[k];
+							}
+							for (const k of Object.keys(dupWrapperForDedup).filter((k) => !k.startsWith("_") && !k.startsWith("__"))) {
+								hoisted[k] = dupWrapperForDedup[k];
+							}
+							implForReload = hoisted;
+						}
+					}
 				}
 
 				// Recursively extract full impls from any child wrapper proxies with depleted _impl.

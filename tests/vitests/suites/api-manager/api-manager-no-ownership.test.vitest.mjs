@@ -164,7 +164,7 @@ describe("resolveFolderPath — input validation and path checks (lines 257-283)
 		api = await slothlet({ dir: TEST_DIRS.API_TEST, mode: "eager", silent: true });
 		const sl = getSlInstance(api);
 		// package.json is a real file (not a directory)
-		await expect(sl.handlers.apiManager.resolveFolderPath("/srv/repos/slothlet/package.json")).rejects.toMatchObject({
+		await expect(sl.handlers.apiManager.resolveFolderPath(path.resolve(____dirname, "../../../../package.json"))).rejects.toMatchObject({
 			code: "INVALID_CONFIG_DIR_INVALID"
 		});
 	});

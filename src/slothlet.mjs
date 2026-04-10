@@ -87,6 +87,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { getContextManager } from "@cldmv/slothlet/factories/context";
 import { SlothletError, SlothletWarning, SlothletDebug } from "@cldmv/slothlet/errors";
 import { registerInstance } from "@cldmv/slothlet/handlers/lifecycle-token";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { initI18n } from "@cldmv/slothlet/i18n";
 import {
 	enableEventEmitterPatching,
@@ -740,7 +741,8 @@ class Slothlet {
 					// operation.options is always provided during api.add() replay; {} fallback is dead code.
 					/* v8 ignore next */
 					options: { ...(operation.options || {}), recordHistory: false },
-					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}` // Generate new moduleID for replay
+					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}`, // Generate new moduleID for replay
+					versionConfig: operation.versionConfig || null
 				});
 				// All operations are "add" or "remove"; no third type exists — false arm is dead code.
 				/* v8 ignore next */
@@ -814,6 +816,83 @@ class Slothlet {
 	}
 
 	/**
+	 * Drain any in-flight lazy-mode materializations before shutdown.
+	 *
+	 * Walks the internal API tree and collects every `materializationPromise` that
+	 * is still pending (i.e. `state.inFlight === true`), then awaits them all via
+	 * `Promise.allSettled` so that background `import()` calls can complete before
+	 * the Vitest worker (or process) tears down the module registry.
+	 *
+	 * @returns {Promise<void>}
+	 * @private
+	 *
+	 * @example
+	 * await this._drainInFlightLoads();
+	 */
+	async _drainInFlightLoads() {
+		if (!this.api) return;
+
+		const pending = [];
+		const seen = new Set();
+
+		/**
+		 * Recursively walk the API tree and collect in-flight materialization promises.
+		 * @param {object} obj - Node to inspect.
+		 * @param {number} depth - Current recursion depth (capped at 15 to avoid cycles).
+		 * @returns {void}
+		 */
+		const collect = (obj, depth = 0) => {
+			// Allow function-type values through: in lazy mode every UnifiedWrapper proxy has
+			// typeof === "function" (because callability is unknown until materialization), so
+			// excluding functions would silently skip ALL lazy wrappers and their pending
+			// materializationPromises, making this drain a no-op in exactly the mode it exists for.
+			const objType = typeof obj;
+			if (!obj || (objType !== "object" && objType !== "function") || depth > 15 || seen.has(obj)) return;
+			seen.add(obj);
+
+			try {
+				// Skip version dispatcher proxies — they have no materialization promises.
+				if (obj.__isVersionDispatcher === true) return;
+
+				// ____slothletInternal is a prototype getter, not an own property, so
+				// Object.hasOwn() always returns false for both raw wrappers and their
+				// proxies. Use resolveWrapper() instead: checks the proxy registry first,
+				// then falls back to instanceof for raw instances.
+				const wrapper = resolveWrapper(obj);
+				if (wrapper) {
+					const mat = wrapper.____slothletInternal.materializationPromise;
+					if (mat) pending.push(mat);
+
+					// Walk child keys on the raw wrapper (not the proxy) to avoid triggering
+					// ownKeysTrap, which calls _materialize() on lazy+unmaterialized wrappers
+					// during shutdown. Children are stored as own enumerable properties on the
+					// raw wrapper; accessing wrapper[key] returns the child proxy, which collect
+					// then resolves via resolveWrapper() on the next recursion.
+					for (const key of Object.keys(wrapper)) {
+						if (!key.startsWith("____")) collect(wrapper[key], depth + 1);
+					}
+					return;
+				}
+
+				for (const key of Object.keys(obj)) {
+					collect(obj[key], depth + 1);
+				}
+			} catch {
+				// Drain is best-effort; ignore errors from partially-constructed or
+				// attack-state wrappers so shutdown always completes cleanly.
+			}
+		};
+
+		for (const key of Object.keys(this.api)) {
+			collect(this.api[key]);
+		}
+
+		if (pending.length > 0) {
+			await Promise.allSettled(pending);
+		}
+	}
+
+	/**
 	 * Shutdown instance and cleanup resources
 	 * @public
 	 */
@@ -821,6 +900,11 @@ class Slothlet {
 		if (!this.isLoaded) {
 			return;
 		}
+
+		// Drain any in-flight lazy-mode module loads before tearing down, so that
+		// background import() calls can complete and won't cause "Closing rpc while
+		// fetch was pending" errors in Vitest workers.
+		await this._drainInFlightLoads();
 
 		// Disable EventEmitter patching and cleanup AsyncResources
 		disableEventEmitterPatching();
@@ -837,6 +921,9 @@ class Slothlet {
 		if (this.handlers.ownership) {
 			this.handlers.ownership.clear();
 		}
+
+		// Shutdown versioning manager — clears all dispatcher/registry/metadata state.
+		this.handlers.versionManager?.shutdown();
 
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
 		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).
@@ -1013,6 +1100,11 @@ export default slothlet;
  *   - `true` or `"fast"` — esbuild transpilation, no type checking.
  *   - `"strict"` — tsc compilation with type checking and `.d.ts` generation.
  *   See [TYPESCRIPT.md](docs/TYPESCRIPT.md) for the full configuration reference.
+ * @property {string|Function|null} [versionDispatcher] - Version routing discriminator for versioned API paths.
+ *   - **string** (e.g. `"version"`) — at dispatch time, reads that key from the calling module's version metadata to select a version tag.
+ *   - **function** — called as `(allVersions, caller) => versionTag | null`; return a registered version tag to force routing, or `null`/`undefined` to fall through to the automatic default.
+ *   - **omitted / `undefined`** — behaves identically to `"version"`.
+ *   Only relevant when modules are registered via `api.slothlet.api.add()` with a `versionConfig` argument.
  */
 
 /**
@@ -1077,6 +1169,12 @@ export default slothlet;
  * @property {object} slothlet.ownership - Module ownership registry.
  * @property {Function} slothlet.ownership.get - Get the set of moduleIDs that own a given API path. %%sig: (apiPath: string): Set.<string>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  const owners = api.slothlet.ownership.get('math.add');|  // Set { 'utils/math.mjs' }|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|const owners = api.slothlet.ownership.get('math.add');|// Set { 'utils/math.mjs' }%%
  * @property {Function} slothlet.ownership.unregister - Unregister a module from all ownership records. %%sig: (moduleID: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.slothlet.api.remove('math');|  api.slothlet.ownership.unregister('utils/math.mjs');|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.slothlet.api.remove('math');|api.slothlet.ownership.unregister('utils/math.mjs');%%
+ * @property {object} slothlet.versioning - Runtime version management API. This namespace is always present on `api.slothlet`; before any module has been registered via `api.slothlet.api.add()` with a `versionConfig` argument, its methods return `undefined` where documented or otherwise have no effect until versioning data exists.
+ * @property {Function} slothlet.versioning.list - List all registered versions for a logical API path. Returns `undefined` if the path has no registered versions or if versioning has not yet been used. %%sig: (logicalPath: string): {versions: object, default: string|null}|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', default: true });|const info = api.slothlet.versioning.list('auth');|if (info) console.log(info.default); // "v1"%%
+ * @property {Function} slothlet.versioning.setDefault - Override the default version for a logical API path at runtime. If no versions are registered for the path, this call has no effect until versioning data exists. %%sig: (logicalPath: string, versionTag: string): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|api.slothlet.versioning.setDefault('auth', 'v1');%%
+ * @property {Function} slothlet.versioning.unregister - Unregister a specific version from a logical API path. Removes the versioned namespace (`vX.path`) and updates or tears down the dispatcher. If the logical path/version is not registered, this resolves without removing anything. %%sig: (logicalPath: string, versionTag: string): Promise.<boolean>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|await api.slothlet.api.add('auth', './api/v2', {}, { version: 'v2' });|const removed = await api.slothlet.versioning.unregister('auth', 'v2'); // true%%
+ * @property {Function} slothlet.versioning.getVersionMetadata - Retrieve the VersionManager-only metadata stored at registration time via `versionConfig.metadata`. Returns `undefined` if the path or version is not registered, or if versioning has not yet been used. %%sig: (logicalPath: string, versionTag: string): object|undefined%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1', metadata: { stable: true } });|const meta = api.slothlet.versioning.getVersionMetadata('auth', 'v1'); // { stable: true, version: 'v1', logicalPath: 'auth' }%%
+ * @property {Function} slothlet.versioning.setVersionMetadata - Patch (merge) the VersionManager-only metadata for a registered version at runtime. The injected `version` and `logicalPath` keys always win over supplied patch fields. Throws `VERSION_NOT_FOUND` if the path or version is not registered. %%sig: (logicalPath: string, versionTag: string, patch: object): void%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api', versionDispatcher: "version" });|await api.slothlet.api.add('auth', './api/v1', {}, { version: 'v1' });|api.slothlet.versioning.setVersionMetadata('auth', 'v1', { stable: true });%%
  * @property {object} [slothlet.reference] - The `reference` object from config, merged onto the root API and accessible here.
  * @property {Function} slothlet.reload - Reload the entire instance (re-scans the directory and recreates all module references). Accepts `{ keepInstanceID: boolean }`. %%sig: ([options]: Object): Promise.<void>%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|await api.slothlet.reload(); // full reload%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  await api.slothlet.reload(); // full reload|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  await api.slothlet.reload(); // full reload|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|await api.slothlet.reload(); // full reload%%
  * @property {Function} slothlet.run - Execute a callback with isolated per-request context data. Convenience alias for `slothlet.context.run()`. %%sig: (contextData: Object, callback: function, args: *): *%% %%example: // ESM usage via slothlet API|import slothlet from "@cldmv/slothlet";|const api = await slothlet({ dir: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%% %%example: // ESM usage via slothlet API (inside async function)|async function example() {|  const { default: slothlet } = await import("@cldmv/slothlet");|  const api = await slothlet({ dir: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|}%% %%example: // CJS usage via slothlet API (top-level)|let slothlet;|(async () => {|  ({ slothlet } = await import("@cldmv/slothlet"));|  const api = await slothlet({ dir: './api' });|  const result = await api.slothlet.run({ userId: 42 }, async () => {|    return api.myModule.getUser();|  });|})();%% %%example: // CJS usage via slothlet API (inside async function)|const slothlet = require("@cldmv/slothlet");|const api = await slothlet({ dir: './api' });|const result = await api.slothlet.run({ userId: 42 }, async () => {|  return api.myModule.getUser();|});%%
