@@ -925,14 +925,82 @@ export class VersionManager extends ComponentBase {
 			 * @returns {PropertyDescriptor | undefined}
 			 */
 			getOwnPropertyDescriptor(t, prop) {
-				// For frozen target's own properties, reflect the actual descriptor.
 				const targetDesc = Reflect.getOwnPropertyDescriptor(t, prop);
-				if (targetDesc) return { configurable: true, enumerable: true, writable: false, value: t[prop] };
+				if (targetDesc) {
+					if (!targetDesc.configurable) {
+						// Non-configurable property mirrored from a defineProperty call.
+						// Return the actual descriptor so V8's §10.5.5 invariant (trap must
+						// report non-configurable when the target property is non-configurable)
+						// and §10.5.8 get-trap invariant (get must return exact value for
+						// non-configurable+non-writable property) are both satisfied.
+						return targetDesc;
+					}
+					// Configurable target properties (e.g. __isVersionDispatcher, __logicalPath):
+					// always report as configurable so version resolution retains maximum freedom.
+					return { configurable: true, enumerable: true, writable: false, value: t[prop] };
+				}
 
-				// For all other enumerable keys (routing keys from versioned namespaces),
-				// return a stub descriptor. Do NOT call handlers.get() here — that would
-				// invoke resolveVersion() which runs the user discriminator function prematurely.
+				// Key not on raw target — return a stub without invoking resolveVersion(),
+				// which would run the user discriminator function prematurely.
 				return { configurable: true, enumerable: true, writable: false, value: undefined };
+			},
+
+			/**
+			 * defineProperty trap — forwards property definitions to the resolved versioned
+			 * wrapper rather than allowing them to land on the raw dispatcher target.
+			 *
+			 * Without this trap, `Object.defineProperty(dispatcherProxy, prop, descriptor)`
+			 * falls through to `Reflect.defineProperty(rawTarget, prop, descriptor)`. If the
+			 * descriptor is non-configurable and non-writable, V8's proxy invariant (ES2024
+			 * §10.5.6 step 28) requires the raw proxy target to also hold a non-configurable
+			 * descriptor for that property; if not, V8 throws a TypeError. Meanwhile the `get`
+			 * trap routes reads to the versioned wrapper which may not have the property at
+			 * all, violating the §10.5.8 get-trap invariant.
+			 *
+			 * Error 1: a module writes a non-configurable property via `self.env.IS_TEST_MODE =`
+			 * or `Object.defineProperty(self.env, "IS_TEST_MODE", { configurable: false })`.
+			 * The get trap later routes to the versioned path, violating the invariant.
+			 *
+			 * Error 2: concurrent/sequential modules both call
+			 * `Object.defineProperty(self.cache, "redisClient", { configurable: false })`.
+			 * The second call throws "Cannot redefine property" because the first call
+			 * permanently sealed the raw target.
+			 *
+			 * The fix: intercept here and forward the definition to the versioned wrapper's
+			 * proxy, where the natural set-trap (or Reflect fallthrough) applies it correctly
+			 * and the property is visible via the versioned path that `get` already routes to.
+			 *
+			 * ES2024 §10.5.6 step 28 invariant: if the trap returns true for a descriptor
+			 * where `configurable === false`, V8 checks that the raw proxy target also has a
+			 * non-configurable descriptor for that property. To satisfy this without storing
+			 * the actual value on the dummy target, we mirror a minimal stub there.
+			 *
+			 * @param {object} t - Raw dispatcher target.
+			 * @param {string|symbol} prop - Property name.
+			 * @param {PropertyDescriptor} descriptor - Descriptor to apply.
+			 * @returns {boolean} True when the definition was successfully applied.
+			 */
+			defineProperty(t, prop, descriptor) {
+				const vw = resolveVersionedWrapper();
+				if (vw) {
+					Object.defineProperty(vw, prop, descriptor);
+					if (descriptor.configurable === false) {
+						const existing = Reflect.getOwnPropertyDescriptor(t, prop);
+						if (!existing || existing.configurable !== false) {
+							// Mirror the exact descriptor on the raw target so V8's §10.5.6
+							// step 27a IsCompatiblePropertyDescriptor check is satisfied: the
+							// trap returned true and V8 validates that the raw target now holds
+							// a matching non-configurable descriptor with the same value/attributes.
+							// A value-less stub would be incompatible and trigger a TypeError.
+							Reflect.defineProperty(t, prop, descriptor);
+						}
+					}
+					return true;
+				}
+				// No versioned wrapper — only reachable when no versions are registered while
+				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				/* v8 ignore next */
+				return Reflect.defineProperty(t, prop, descriptor);
 			}
 		};
 

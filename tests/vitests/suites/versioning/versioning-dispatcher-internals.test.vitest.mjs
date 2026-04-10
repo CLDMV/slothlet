@@ -184,4 +184,46 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 		const keys = Object.keys(dispatcher);
 		expect(Array.isArray(keys)).toBe(true);
 	});
+
+	// ── defineProperty trap ───────────────────────────────────────────────────
+
+	it("Object.defineProperty with configurable:false on the dispatcher does not violate the get-trap invariant", async () => {
+		api = await makeApi(config);
+		// Without a defineProperty trap, this seals rawTarget with { configurable:false }.
+		// The subsequent get read routes to the versioned wrapper (which has no such property),
+		// so the trap returns undefined. V8 §10.5.8 step 10a.i requires the trap to return
+		// the exact raw-target value when the descriptor is non-configurable+non-writable
+		// → TypeError: 'get' on proxy: property 'IS_TEST_MODE' is a read-only and
+		//   non-configurable property but the proxy did not return its actual value.
+		// Also tests V8 §10.5.6 step 28: when the defineProperty trap returns true for a
+		// non-configurable descriptor, V8 checks the raw target has a matching non-configurable
+		// descriptor — the trap must mirror a stub on the raw target to satisfy this invariant.
+		expect(() => {
+			Object.defineProperty(api.auth, "IS_TEST_MODE", {
+				value: true,
+				configurable: false,
+				writable: false,
+				enumerable: true
+			});
+		}).not.toThrow();
+		// Reading back via the dispatcher must not throw and must return the written value.
+		expect(api.auth.IS_TEST_MODE).toBe(true);
+	});
+
+	it("defining the same non-configurable property twice with the same reference does not throw", async () => {
+		api = await makeApi(config);
+		// Without a defineProperty trap, the first call seals rawTarget with
+		// { configurable:false }. The second call hits the sealed raw target and throws
+		// "Cannot redefine property: redisClient".
+		// With the trap forwarding to the versioned wrapper, repeated identical-reference
+		// definitions succeed: SameValue(client, client) === true satisfies the spec rule
+		// that allows redefining a non-configurable data property only when all attributes
+		// are identical (ES2024 §10.1.6.3 step 8e).
+		const client = { connected: true };
+		expect(() => {
+			const desc = { value: client, configurable: false, writable: false, enumerable: true };
+			Object.defineProperty(api.auth, "redisClient", desc);
+			Object.defineProperty(api.auth, "redisClient", desc);
+		}).not.toThrow();
+	});
 });
