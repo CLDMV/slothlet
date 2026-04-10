@@ -48,16 +48,16 @@ describe.each(getMatrixConfigs())("Versioning > Remove All > $name", ({ config }
 		expect(api.auth).toBeUndefined();
 	});
 
-	it("version.list returns null default when all versions gone", async () => {
+	it("version.list returns undefined when all versions are unregistered", async () => {
 		api = await slothlet({ ...config, dir: `${BASE}/callers` });
 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
 		await api.slothlet.versioning.unregister("auth", "v1");
 
-		// After teardown, list returns null or empty
+		// After teardown the path is removed from the registry entirely;
+		// list() returns undefined (not { default: null }) for unknown paths.
 		const info = api.slothlet.versioning.list("auth");
-		// When all versions are gone, the path is unregistered
 		expect(info).toBeUndefined();
 	});
 });
