@@ -14,6 +14,12 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { suppressSlothletDebugOutput } from "./vitest-helper.mjs";
+
+// Install synchronously at module-load time so every fork suppresses debug
+// noise from the very first test. The async setup() below is too late because
+// Vitest can start running tests before its awaited imports resolve.
+suppressSlothletDebugOutput();
 
 /**
  * @fileoverview Global setup for vitest - triggers devcheck validation
@@ -78,6 +84,7 @@ export async function setup() {
 	// const { SlothletWarning } = await import("@cldmv/slothlet/errors");
 	const { SlothletWarning } = await import("../../../src/lib/errors");
 	SlothletWarning.suppressConsole = true;
+
 }
 
-setup();
+await setup();
