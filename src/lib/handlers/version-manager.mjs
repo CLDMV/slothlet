@@ -289,8 +289,6 @@ export class VersionManager extends ComponentBase {
 	 * @example
 	 * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
 	 */
-	// Called by nothing in the current implementation; all callers use getVersionMetadataByPath() via the public API.
-	/* v8 ignore next */
 	getVersionMetadata(moduleID) {
 		return this.#versionMetadataByModule.get(moduleID);
 	}

@@ -1001,8 +1001,6 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.metadata.setForVersion("auth", "v1", { stable: true, region: "us" });
 				 */
 				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
-					// slothlet.handlers.metadata is always registered when setForVersion is callable; guard is defensive.
-					/* v8 ignore start */
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
@@ -1011,7 +1009,6 @@ export class ApiBuilder extends ComponentBase {
 							validationError: true
 						});
 					}
-					/* v8 ignore stop */
 					const info = slothlet.handlers?.versionManager?.list(logicalPath);
 					if (!info || !info.versions?.[versionTag]) {
 						throw new slothlet.SlothletError("VERSION_NOT_FOUND", {

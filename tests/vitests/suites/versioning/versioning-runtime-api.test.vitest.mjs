@@ -21,6 +21,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import slothlet from "@cldmv/slothlet";
+import { resolveWrapper } from "@cldmv/slothlet/handlers/unified-wrapper";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_VERSIONED;
@@ -218,5 +219,21 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
 
 		expect(() => api.slothlet.metadata.setForVersion("auth", "v99", "stable", true)).toThrow("VERSION_NOT_FOUND");
+	});
+
+	it("versionManager.getVersionMetadata returns stored metadata by moduleID directly", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", metadata: { stable: true } });
+
+		const info = api.slothlet.versioning.list("auth");
+		const { moduleID } = info.versions.v1;
+
+		// Access the internal handler directly to exercise getVersionMetadata(moduleID)
+		const sl = resolveWrapper(api.v1.auth).slothlet;
+		const meta = sl.handlers.versionManager.getVersionMetadata(moduleID);
+
+		expect(meta).toHaveProperty("version", "v1");
+		expect(meta).toHaveProperty("stable", true);
 	});
 });
