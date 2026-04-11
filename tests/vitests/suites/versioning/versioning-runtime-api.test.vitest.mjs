@@ -169,6 +169,18 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		expect(() => api.slothlet.versioning.setVersionMetadata("auth", "v99", { stable: true })).toThrow("VERSION_NOT_FOUND");
 	});
 
+	it("version.setVersionMetadata with a non-object patch silently merges nothing", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1", default: true, metadata: { stable: true } });
+
+		// Passing null as patch hits the (patch && typeof patch === "object" ? patch : {}) false branch —
+		// it spreads {} instead of the non-object, so existing metadata is preserved.
+		expect(() => api.slothlet.versioning.setVersionMetadata("auth", "v1", null)).not.toThrow();
+		const meta = api.slothlet.versioning.getVersionMetadata("auth", "v1");
+		expect(meta).toHaveProperty("stable", true);
+	});
+
 	it("metadata.setForVersion sets regular metadata on a versioned module", async () => {
 		api = await slothlet({ ...config, dir: `${BASE}/callers` });
 
@@ -186,6 +198,17 @@ describe.each(getMatrixConfigs())("Versioning > Runtime API > $name", ({ config 
 		api = await slothlet({ ...config, dir: `${BASE}/callers` });
 
 		const meta = api.slothlet.metadata.getForVersion("nonexistent", "v1");
+		expect(meta).toEqual({});
+	});
+
+	it("metadata.getForVersion returns empty object when no metadata set on versioned module", async () => {
+		api = await slothlet({ ...config, dir: `${BASE}/callers` });
+
+		// Register a versioned module with NO metadata option — exercises the getPathMetadata
+		// parent-path traversal false branch where a path segment is not in the store.
+		await api.slothlet.api.add("auth", `${BASE}/v1`, {}, { version: "v1" });
+		const meta = api.slothlet.metadata.getForVersion("auth", "v1");
+		// No metadata was set, so result should be an empty object (no user keys).
 		expect(meta).toEqual({});
 	});
 

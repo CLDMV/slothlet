@@ -487,6 +487,8 @@ export class Metadata extends ComponentBase {
 	 * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
 	 */
 	getPathMetadata(apiPath) {
+		// All callers (getForVersion) always pass a valid resolved string; the null/non-string guard is defensive.
+		/* v8 ignore next */
 		if (!apiPath || typeof apiPath !== "string") return {};
 		const parts = apiPath.split(".");
 		const collected = {};

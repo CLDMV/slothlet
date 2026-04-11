@@ -1559,6 +1559,8 @@ export class UnifiedWrapper extends ComponentBase {
 					// Silently catch errors — callers that explicitly await _materialize() will
 					// observe the rejection; this fire-and-forget path must never produce an
 					// unhandled rejection (e.g. collision mode "error" during background trigger).
+					// Rejection handler is intentionally empty — errors are surfaced via the explicit-await path.
+					/* v8 ignore next */
 					wrapper._materialize().catch(() => {});
 				}
 
@@ -2123,7 +2125,9 @@ export class UnifiedWrapper extends ComponentBase {
 			!wrapper.____slothletInternal.state.materialized &&
 			wrapper.____slothletInternal.materializeFunc
 		) {
-			wrapper._materialize().catch(() => {}); // Fire-and-forget background materialization
+			// Fire-and-forget background materialization — rejection suppressed to avoid unhandled-rejection event.
+			/* v8 ignore next */
+			wrapper._materialize().catch(() => {});
 		}
 
 		// Proxy target depends on whether this is callable
@@ -2287,6 +2291,8 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
+					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+					/* v8 ignore next */
 					wrapper._materialize().catch(() => {});
 				}
 
@@ -2538,6 +2544,8 @@ export class UnifiedWrapper extends ComponentBase {
 						!cachedWrapper.____slothletInternal.state.materialized &&
 						!cachedWrapper.____slothletInternal.state.inFlight
 					) {
+						// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+						/* v8 ignore next */
 						cachedWrapper._materialize().catch(() => {});
 					}
 				}
@@ -2809,6 +2817,8 @@ export class UnifiedWrapper extends ComponentBase {
 					!wrapper.____slothletInternal.state.materialized &&
 					!wrapper.____slothletInternal.state.inFlight
 				) {
+					// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+					/* v8 ignore next */
 					wrapper._materialize().catch(() => {});
 				}
 
@@ -3024,6 +3034,8 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
+				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+				/* v8 ignore next */
 				wrapper._materialize().catch(() => {});
 			}
 
@@ -3059,6 +3071,8 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
+				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+				/* v8 ignore next */
 				wrapper._materialize().catch(() => {});
 			}
 
@@ -3115,6 +3129,8 @@ export class UnifiedWrapper extends ComponentBase {
 				!wrapper.____slothletInternal.state.materialized &&
 				!wrapper.____slothletInternal.state.inFlight
 			) {
+				// Fire-and-forget — rejection suppressed to avoid unhandled-rejection event.
+				/* v8 ignore next */
 				wrapper._materialize().catch(() => {});
 			}
 

@@ -289,6 +289,8 @@ export class VersionManager extends ComponentBase {
 	 * @example
 	 * versionManager.getVersionMetadata("auth_abc123"); // { version: "v1", logicalPath: "auth", stable: true }
 	 */
+	// Called by nothing in the current implementation; all callers use getVersionMetadataByPath() via the public API.
+	/* v8 ignore next */
 	getVersionMetadata(moduleID) {
 		return this.#versionMetadataByModule.get(moduleID);
 	}
@@ -331,6 +333,8 @@ export class VersionManager extends ComponentBase {
 			});
 		}
 		const ve = entry.versions.get(versionTag);
+		// #versionMetadataByModule is always populated at registerVersion time; the ?? {} fallback is defensive.
+		/* v8 ignore next */
 		const existing = this.#versionMetadataByModule.get(ve.moduleID) ?? {};
 		// version and logicalPath are injected fields that always take precedence over user-supplied fields.
 		this.#versionMetadataByModule.set(ve.moduleID, {
@@ -637,6 +641,8 @@ export class VersionManager extends ComponentBase {
 		let node = this.slothlet.api;
 		// Accept string or string[]. When given an array the segments are used directly,
 		// preventing a re-split that would fragment dotted version tags (e.g. "2.3.0").
+		// All current callers pass pre-split arrays; the string-split path is a defensive fallback.
+		/* v8 ignore next */
 		const segments = Array.isArray(apiPath) ? apiPath : apiPath.split(".");
 		for (const segment of segments) {
 			// node can only be null/undefined if the API tree is partially torn down — defensive guard.
@@ -982,25 +988,23 @@ export class VersionManager extends ComponentBase {
 			 */
 			defineProperty(t, prop, descriptor) {
 				const vw = resolveVersionedWrapper();
-				if (vw) {
-					Object.defineProperty(vw, prop, descriptor);
-					if (descriptor.configurable === false) {
-						const existing = Reflect.getOwnPropertyDescriptor(t, prop);
-						if (!existing || existing.configurable !== false) {
-							// Mirror the exact descriptor on the raw target so V8's §10.5.6
-							// step 27a IsCompatiblePropertyDescriptor check is satisfied: the
-							// trap returned true and V8 validates that the raw target now holds
-							// a matching non-configurable descriptor with the same value/attributes.
-							// A value-less stub would be incompatible and trigger a TypeError.
-							Reflect.defineProperty(t, prop, descriptor);
-						}
-					}
-					return true;
-				}
 				// No versioned wrapper — only reachable when no versions are registered while
 				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
 				/* v8 ignore next */
-				return Reflect.defineProperty(t, prop, descriptor);
+				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
+				Object.defineProperty(vw, prop, descriptor);
+				if (descriptor.configurable === false) {
+					const existing = Reflect.getOwnPropertyDescriptor(t, prop);
+					if (!existing || existing.configurable !== false) {
+						// Mirror the exact descriptor on the raw target so V8's §10.5.6
+						// step 27a IsCompatiblePropertyDescriptor check is satisfied: the
+						// trap returned true and V8 validates that the raw target now holds
+						// a matching non-configurable descriptor with the same value/attributes.
+						// A value-less stub would be incompatible and trigger a TypeError.
+						Reflect.defineProperty(t, prop, descriptor);
+					}
+				}
+				return true;
 			}
 		};
 

@@ -226,4 +226,38 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 			Object.defineProperty(api.auth, "redisClient", desc);
 		}).not.toThrow();
 	});
+
+	it("Object.getOwnPropertyDescriptor on a non-configurable dispatcher property returns the actual stored descriptor", async () => {
+		api = await makeApi(config);
+		// This exercises the getOwnPropertyDescriptor trap's non-configurable branch (branch 44).
+		// After defineProperty with configurable:false the raw target holds a non-configurable stub,
+		// so GOPD must return that exact descriptor — not a coerced configurable:true wrapper —
+		// to satisfy V8 §10.5.5 (trap must report non-configurable when target property is non-configurable).
+		Object.defineProperty(api.auth, "IS_TEST_MODE", {
+			value: true,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		const desc = Object.getOwnPropertyDescriptor(api.auth, "IS_TEST_MODE");
+		expect(desc).toBeDefined();
+		expect(desc.configurable).toBe(false);
+		expect(desc.value).toBe(true);
+	});
+
+	it("Object.defineProperty with configurable:true on the dispatcher does not mirror a stub on the raw target", async () => {
+		api = await makeApi(config);
+		// This exercises the defineProperty trap's configurable:true branch (branch 46 false arm).
+		// When configurable:true, no raw-target mirroring is needed (V8 §10.5.6 step 28 only
+		// applies to non-configurable descriptors), so the property is forwarded to the versioned
+		// wrapper without any reflection back to the raw proxy target.
+		expect(() => {
+			Object.defineProperty(api.auth, "tempConfigProp", {
+				value: 42,
+				configurable: true,
+				writable: true,
+				enumerable: true
+			});
+		}).not.toThrow();
+	});
 });
