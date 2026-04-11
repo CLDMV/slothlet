@@ -12,8 +12,8 @@
  */
 
 /**
- * @fileoverview Runs the mandatory pre-commit validation sequence (debug → test:node →
- * build:dev → vitest) and exits non-zero if any step fails, preventing the
+ * @fileoverview Runs the mandatory pre-commit validation sequence (build:dev → debug →
+ * test:node → vitest) and exits non-zero if any step fails, preventing the
  * commit. Invoked automatically by the Husky pre-commit hook.
  * @module @cldmv/slothlet/tools/precommit-validation
  * @title npm run precommit
@@ -42,10 +42,9 @@ async function main() {
 	console.log("==========================================");
 
 	const validationSteps = [
-		{ name: "Clean Build Artifacts", command: "npm", args: ["run", "build:cleanup"] },
+		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
-		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] }
 	];
 

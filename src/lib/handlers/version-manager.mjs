@@ -976,13 +976,25 @@ export class VersionManager extends ComponentBase {
 			 *
 			 * ES2024 §10.5.6 step 28 invariant: if the trap returns true for a descriptor
 			 * where `configurable === false`, V8 checks that the raw proxy target also has a
-			 * non-configurable descriptor for that property. To satisfy this without storing
-			 * the actual value on the dummy target, we mirror a minimal stub there.
+			 * non-configurable descriptor for that property. We mirror the descriptor on the
+			 * raw target first (before writing to the versioned wrapper) so that we only
+			 * return true when both the target invariant and the versioned write succeed.
+			 * `Reflect.defineProperty` is used on the versioned wrapper so that a `false`
+			 * return from its own trap propagates cleanly instead of throwing as
+			 * `Object.defineProperty` would in strict mode.
 			 *
 			 * @param {object} t - Raw dispatcher target.
 			 * @param {string|symbol} prop - Property name.
 			 * @param {PropertyDescriptor} descriptor - Descriptor to apply.
-			 * @returns {boolean} True when the definition was successfully applied.
+			 * @returns {boolean} `true` when the definition was successfully applied to the
+			 *   versioned wrapper; `false` when the raw-target invariant mirror failed or when
+			 *   the versioned wrapper's own `defineProperty` trap rejected the operation.
+			 * @example
+			 * // Propagates transparently — callers use the dispatcher proxy normally.
+			 * Reflect.defineProperty(api.auth, "CACHE_TTL", { value: 300, configurable: false, writable: false });
+			 * // The descriptor lands on the resolved versioned wrapper (e.g. api.v2.auth),
+			 * // the raw dispatcher target receives a matching non-configurable mirror stub,
+			 * // and the trap returns true so V8's §10.5.6 invariant is satisfied.
 			 */
 			defineProperty(t, prop, descriptor) {
 				const vw = resolveVersionedWrapper();
@@ -990,19 +1002,26 @@ export class VersionManager extends ComponentBase {
 				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
 				/* v8 ignore next */
 				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
-				Object.defineProperty(vw, prop, descriptor);
 				if (descriptor.configurable === false) {
 					const existing = Reflect.getOwnPropertyDescriptor(t, prop);
 					if (!existing || existing.configurable !== false) {
 						// Mirror the exact descriptor on the raw target so V8's §10.5.6
 						// step 27a IsCompatiblePropertyDescriptor check is satisfied: the
-						// trap returned true and V8 validates that the raw target now holds
-						// a matching non-configurable descriptor with the same value/attributes.
-						// A value-less stub would be incompatible and trigger a TypeError.
-						Reflect.defineProperty(t, prop, descriptor);
+						// trap may return true only if the raw target now holds a matching
+						// non-configurable descriptor with the same value/attributes.
+						// Apply to the raw target first so we do not report success if target
+						// invariants cannot be satisfied.
+						// t is a plain extensible object and the guard above ensures the prop
+						// either does not exist or is still configurable, so this never returns
+						// false in practice; the guard is retained for spec-correctness.
+						/* v8 ignore next */
+						if (!Reflect.defineProperty(t, prop, descriptor)) return false;
 					}
 				}
-				return true;
+				// Use Reflect.defineProperty so a false return from vw's own trap propagates
+				// as false here rather than throwing (Object.defineProperty throws in strict
+				// mode when the target trap returns false).
+				return Reflect.defineProperty(vw, prop, descriptor);
 			}
 		};
 
