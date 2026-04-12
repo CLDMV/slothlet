@@ -1023,6 +1023,13 @@ export class VersionManager extends ComponentBase {
 					if (currentDescriptor) {
 						Reflect.defineProperty(shadow, prop, currentDescriptor);
 					}
+					// t is fresh plain object created in createDispatcher() that is never
+					// exposed outside this closure. Plain objects stay extensible regardless
+					// of how many non-configurable properties are defined on them, and nothing
+					// in this codebase can reach t to call preventExtensions/freeze/seal.
+					// The branch exists to keep the shadow accurate for future-proofing but
+					// is unreachable in all current execution paths.
+					/* v8 ignore next */
 					if (!Reflect.isExtensible(t)) {
 						Reflect.preventExtensions(shadow);
 					}
