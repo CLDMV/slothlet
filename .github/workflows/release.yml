@@ -5,8 +5,8 @@
 # @Author: Nate Hyson <CLDMV>
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
-# @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2026-01-04 15:48:53 -08:00 (1767570533)
+# @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+# @Last modified time: 2026-04-11 19:29:19 -07:00 (1775960959)
 # -----
 # @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -95,7 +95,7 @@ jobs:
             github.actor != 'cldmv-bot[bot]' && 
             github.actor != 'github-actions[bot]' &&
             !startsWith(github.event.head_commit.message, 'chore: bump version')
-        uses: CLDMV/.github/.github/workflows/workflow-release.yml@v1
+        uses: CLDMV/.github/.github/workflows/workflow-release.yml@v2
         with:
             package_name: "@cldmv/slothlet" # Required: Your NPM package name
             debug: ${{ github.event.inputs.debug == 'true' }}
@@ -124,7 +124,7 @@ jobs:
             NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
             # CLDMV Bot credentials for enhanced permissions and proper attribution
             # Uncomment these lines to use your bot instead of github-actions[bot]
-            BOT_APP_ID: ${{ secrets.CLDMV_BOT_APP_ID }}
+            BOT_APP_CLIENT_ID: ${{ secrets.CLDMV_BOT_APP_CLIENT_ID }}
             BOT_APP_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_APP_PRIVATE_KEY }}
             # Optional: GPG signing credentials (only needed if use_gpg: true)
             TAGGER_NAME: ${{ secrets.CLDMV_BOT_NAME }}
