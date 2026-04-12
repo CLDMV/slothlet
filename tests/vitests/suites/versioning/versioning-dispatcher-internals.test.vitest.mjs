@@ -184,4 +184,141 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 		const keys = Object.keys(dispatcher);
 		expect(Array.isArray(keys)).toBe(true);
 	});
+
+	// ── defineProperty trap ───────────────────────────────────────────────────
+
+	it("Object.defineProperty with configurable:false on the dispatcher does not violate the get-trap invariant", async () => {
+		api = await makeApi(config);
+		// Without a defineProperty trap, this seals rawTarget with { configurable:false }.
+		// The subsequent get read routes to the versioned wrapper (which has no such property),
+		// so the trap returns undefined. V8 §10.5.8 step 10a.i requires the trap to return
+		// the exact raw-target value when the descriptor is non-configurable+non-writable
+		// → TypeError: 'get' on proxy: property 'IS_TEST_MODE' is a read-only and
+		//   non-configurable property but the proxy did not return its actual value.
+		// Also tests V8 §10.5.6 step 28: when the defineProperty trap returns true for a
+		// non-configurable descriptor, V8 checks the raw target has a matching non-configurable
+		// descriptor — the trap must mirror a stub on the raw target to satisfy this invariant.
+		expect(() => {
+			Object.defineProperty(api.auth, "IS_TEST_MODE", {
+				value: true,
+				configurable: false,
+				writable: false,
+				enumerable: true
+			});
+		}).not.toThrow();
+		// Reading back via the dispatcher must not throw and must return the written value.
+		expect(api.auth.IS_TEST_MODE).toBe(true);
+	});
+
+	it("defining the same non-configurable property twice with the same reference does not throw", async () => {
+		api = await makeApi(config);
+		// Without a defineProperty trap, the first call seals rawTarget with
+		// { configurable:false }. The second call hits the sealed raw target and throws
+		// "Cannot redefine property: redisClient".
+		// With the trap forwarding to the versioned wrapper, repeated identical-reference
+		// definitions succeed: SameValue(client, client) === true satisfies the spec rule
+		// that allows redefining a non-configurable data property only when all attributes
+		// are identical (ES2024 §10.1.6.3 step 8e).
+		const client = { connected: true };
+		expect(() => {
+			const desc = { value: client, configurable: false, writable: false, enumerable: true };
+			Object.defineProperty(api.auth, "redisClient", desc);
+			Object.defineProperty(api.auth, "redisClient", desc);
+		}).not.toThrow();
+	});
+
+	it("redefining a non-configurable dispatcher property with an incompatible descriptor returns false without mutating the versioned wrapper", async () => {
+		api = await makeApi(config);
+		// First definition — seals prop on the raw target with value 1.
+		const succeeded = Reflect.defineProperty(api.auth, "SEALED_PROP", {
+			value: 1,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(succeeded).toBe(true);
+		// Second definition — incompatible value. Without the fix, the guard
+		// `existing.configurable !== false` was false so the raw-target mirror was skipped,
+		// the versioned wrapper was mutated, and V8 threw a proxy-invariant TypeError after
+		// the fact. With the fix, Reflect.defineProperty(t, ...) returns false (plain-object
+		// semantics for incompatible non-configurable redefine) and the trap exits without
+		// touching the versioned wrapper.
+		const rejected = Reflect.defineProperty(api.auth, "SEALED_PROP", {
+			value: 2,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(rejected).toBe(false);
+		// Versioned wrapper must not have been mutated — value stays 1.
+		expect(api.auth.SEALED_PROP).toBe(1);
+	});
+
+	it("when vw already has a non-configurable property and the dispatcher receives an incompatible redefinition, the raw dispatcher target t is not polluted", async () => {
+		api = await makeApi(config);
+		// The dispatcher resolves to the DEFAULT version (v1) when there is no caller context.
+		// Seal a property directly on the v1 per-versioned wrapper so that the dispatcher's
+		// resolved vw already holds it as non-configurable. Then attempt to redefine it via
+		// the logical dispatcher path with an incompatible value.
+		// With the old code (mirror t first): t would be left with an orphaned non-configurable
+		// property when vw then rejects, violating the §10.5.8 get-trap invariant (GOPD reports
+		// the t descriptor while the get trap returns the differing vw value → V8 TypeError).
+		// With the fix (vw-first ordering): vw is written first; if vw rejects, t is untouched.
+		const directSucceeded = Reflect.defineProperty(api.v1.auth, "VERSIONED_SEALED", {
+			value: "v1-original",
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(directSucceeded).toBe(true);
+		// The dispatcher resolves to v1 (default) at call time; vw already holds an incompatible
+		// non-configurable descriptor → vw rejects → trap must return false without mutating t.
+		const rejected = Reflect.defineProperty(api.auth, "VERSIONED_SEALED", {
+			value: "dispatcher-val",
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(rejected).toBe(false);
+		// t must not have been polluted. GOPD on the dispatcher proxy must NOT return a
+		// non-configurable descriptor for VERSIONED_SEALED (that would indicate t was written
+		// before vw rejected), and reading the property must not trigger a §10.5.8 TypeError.
+		const desc = Object.getOwnPropertyDescriptor(api.auth, "VERSIONED_SEALED");
+		expect(desc?.configurable).not.toBe(false);
+		expect(() => api.auth.VERSIONED_SEALED).not.toThrow();
+	});
+
+	it("Object.getOwnPropertyDescriptor on a non-configurable dispatcher property returns the actual stored descriptor", async () => {
+		api = await makeApi(config);
+		// This exercises the getOwnPropertyDescriptor trap's non-configurable branch (branch 44).
+		// After defineProperty with configurable:false the raw target holds a non-configurable stub,
+		// so GOPD must return that exact descriptor — not a coerced configurable:true wrapper —
+		// to satisfy V8 §10.5.5 (trap must report non-configurable when target property is non-configurable).
+		Object.defineProperty(api.auth, "IS_TEST_MODE", {
+			value: true,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		const desc = Object.getOwnPropertyDescriptor(api.auth, "IS_TEST_MODE");
+		expect(desc).toBeDefined();
+		expect(desc.configurable).toBe(false);
+		expect(desc.value).toBe(true);
+	});
+
+	it("Object.defineProperty with configurable:true on the dispatcher does not mirror a stub on the raw target", async () => {
+		api = await makeApi(config);
+		// This exercises the defineProperty trap's configurable:true branch (branch 46 false arm).
+		// When configurable:true, no raw-target mirroring is needed (V8 §10.5.6 step 28 only
+		// applies to non-configurable descriptors), so the property is forwarded to the versioned
+		// wrapper without any reflection back to the raw proxy target.
+		expect(() => {
+			Object.defineProperty(api.auth, "tempConfigProp", {
+				value: 42,
+				configurable: true,
+				writable: true,
+				enumerable: true
+			});
+		}).not.toThrow();
+	});
 });

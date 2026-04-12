@@ -6,7 +6,7 @@
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
 # @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2026-04-06 20:16:02 -07:00 (1775531762)
+# @Last modified time: 2026-04-11 19:29:07 -07:00 (1775960947)
 # -----
 # @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -110,7 +110,7 @@ on:
 jobs:
     ci:
         name: 🏗️ Continuous Integration
-        uses: CLDMV/.github/.github/workflows/workflow-ci.yml@v1
+        uses: CLDMV/.github/.github/workflows/workflow-ci.yml@v2
         with:
             package_name: "@cldmv/slothlet" # Required: Your NPM package name
             debug: ${{ github.event.inputs.debug == 'true' }}
@@ -156,7 +156,7 @@ jobs:
             NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
             # Optional: CLDMV Bot credentials for enhanced permissions and proper attribution
             # If not provided, will use default GITHUB_TOKEN with GitHub Actions bot attribution
-            BOT_APP_ID: ${{ secrets.CLDMV_BOT_APP_ID }}
+            BOT_APP_CLIENT_ID: ${{ secrets.CLDMV_BOT_APP_CLIENT_ID }}
             BOT_APP_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_APP_PRIVATE_KEY }}
             # Required when enable_coverage_badge: true
             BOT_NAME: ${{ secrets.CLDMV_BOT_NAME }}

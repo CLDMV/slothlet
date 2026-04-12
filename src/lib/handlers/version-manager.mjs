@@ -331,6 +331,8 @@ export class VersionManager extends ComponentBase {
 			});
 		}
 		const ve = entry.versions.get(versionTag);
+		// #versionMetadataByModule is always populated at registerVersion time; the ?? {} fallback is defensive.
+		/* v8 ignore next */
 		const existing = this.#versionMetadataByModule.get(ve.moduleID) ?? {};
 		// version and logicalPath are injected fields that always take precedence over user-supplied fields.
 		this.#versionMetadataByModule.set(ve.moduleID, {
@@ -637,6 +639,8 @@ export class VersionManager extends ComponentBase {
 		let node = this.slothlet.api;
 		// Accept string or string[]. When given an array the segments are used directly,
 		// preventing a re-split that would fragment dotted version tags (e.g. "2.3.0").
+		// All current callers pass pre-split arrays; the string-split path is a defensive fallback.
+		/* v8 ignore next */
 		const segments = Array.isArray(apiPath) ? apiPath : apiPath.split(".");
 		for (const segment of segments) {
 			// node can only be null/undefined if the API tree is partially torn down — defensive guard.
@@ -721,7 +725,7 @@ export class VersionManager extends ComponentBase {
 		const handlers = {
 			/**
 			 * Get trap — routes property access based on the version resolution algorithm.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} prop - Property being accessed.
 			 * @returns {any} Resolved property value.
 			 */
@@ -862,7 +866,7 @@ export class VersionManager extends ComponentBase {
 
 			/**
 			 * Has trap — reports keys as union of all versioned path keys.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} key - Property to check.
 			 * @returns {boolean}
 			 */
@@ -889,7 +893,7 @@ export class VersionManager extends ComponentBase {
 
 			/**
 			 * ownKeys trap — union of all versioned path keys.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @returns {Array<string|symbol>}
 			 */
 			ownKeys(t) {
@@ -920,19 +924,125 @@ export class VersionManager extends ComponentBase {
 			 * property enumeration (e.g. Object.keys, for...in, collectPendingMaterializations).
 			 * The actual value is lazily provided by the GET trap when the property is accessed.
 			 *
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} prop - Property name.
 			 * @returns {PropertyDescriptor | undefined}
 			 */
 			getOwnPropertyDescriptor(t, prop) {
-				// For frozen target's own properties, reflect the actual descriptor.
 				const targetDesc = Reflect.getOwnPropertyDescriptor(t, prop);
-				if (targetDesc) return { configurable: true, enumerable: true, writable: false, value: t[prop] };
+				if (targetDesc) {
+					if (!targetDesc.configurable) {
+						// Non-configurable property mirrored from a defineProperty call.
+						// Return the actual descriptor so V8's §10.5.5 invariant (trap must
+						// report non-configurable when the target property is non-configurable)
+						// and §10.5.8 get-trap invariant (get must return exact value for
+						// non-configurable+non-writable property) are both satisfied.
+						return targetDesc;
+					}
+					// Configurable target properties (e.g. __isVersionDispatcher, __logicalPath):
+					// always report as configurable so version resolution retains maximum freedom.
+					return { configurable: true, enumerable: true, writable: false, value: t[prop] };
+				}
 
-				// For all other enumerable keys (routing keys from versioned namespaces),
-				// return a stub descriptor. Do NOT call handlers.get() here — that would
-				// invoke resolveVersion() which runs the user discriminator function prematurely.
+				// Key not on raw target — return a stub without invoking resolveVersion(),
+				// which would run the user discriminator function prematurely.
 				return { configurable: true, enumerable: true, writable: false, value: undefined };
+			},
+
+			/**
+			 * defineProperty trap — forwards property definitions to the resolved versioned
+			 * wrapper rather than allowing them to land on the raw dispatcher target.
+			 *
+			 * Without this trap, `Object.defineProperty(dispatcherProxy, prop, descriptor)`
+			 * falls through to `Reflect.defineProperty(rawTarget, prop, descriptor)`. If the
+			 * descriptor is non-configurable and non-writable, V8's proxy invariant (ES2024
+			 * §10.5.6 step 28) requires the raw proxy target to also hold a non-configurable
+			 * descriptor for that property; if not, V8 throws a TypeError. Meanwhile the `get`
+			 * trap routes reads to the versioned wrapper which may not have the property at
+			 * all, violating the §10.5.8 get-trap invariant.
+			 *
+			 * Error 1: a module writes a non-configurable property via `self.env.IS_TEST_MODE =`
+			 * or `Object.defineProperty(self.env, "IS_TEST_MODE", { configurable: false })`.
+			 * The get trap later routes to the versioned path, violating the invariant.
+			 *
+			 * Error 2: concurrent/sequential modules both call
+			 * `Object.defineProperty(self.cache, "redisClient", { configurable: false })`.
+			 * The second call throws "Cannot redefine property" because the first call
+			 * permanently sealed the raw target.
+			 *
+			 * The fix: intercept here and forward the definition to the versioned wrapper's
+			 * proxy, where the natural set-trap (or Reflect fallthrough) applies it correctly
+			 * and the property is visible via the versioned path that `get` already routes to.
+			 *
+			 * ES2024 §10.5.6 step 28 invariant: if the trap returns true for a descriptor
+			 * where `configurable === false`, V8 checks that the raw proxy target also has a
+			 * matching non-configurable descriptor. We satisfy this by mirroring onto the raw
+			 * target only AFTER a successful write to the versioned wrapper. Mirroring first
+			 * would leave the raw target with an orphaned non-configurable property when vw
+			 * rejects (e.g. the property was independently defined on the versioned path with
+			 * an incompatible value). The §10.5.8 get-trap invariant would then be violated:
+			 * `getOwnPropertyDescriptor` reports the raw-target descriptor while the get trap
+			 * returns the differing value from vw — V8 throws a TypeError on the next read.
+			 * A shadow preflight checks whether t would accept the descriptor without any
+			 * mutation so both the raw target and vw remain untouched on failure.
+			 * `Reflect.defineProperty` is used so a `false` return from the versioned
+			 * wrapper's own trap propagates cleanly instead of throwing, as
+			 * `Object.defineProperty` would on failure.
+			 *
+			 * @param {object} t - Raw dispatcher target.
+			 * @param {string|symbol} prop - Property name.
+			 * @param {PropertyDescriptor} descriptor - Descriptor to apply.
+			 * @returns {boolean} `true` when both the versioned wrapper and the raw proxy
+			 *   target accepted the definition; `false` when the shadow preflight predicts
+			 *   `t` would reject the descriptor, or when the versioned wrapper's own trap
+			 *   rejects the operation.
+			 * @example
+			 * // Propagates transparently — callers use the dispatcher proxy normally.
+			 * Reflect.defineProperty(api.auth, "CACHE_TTL", { value: 300, configurable: false, writable: false });
+			 * // The descriptor is written to the versioned wrapper (e.g. api.v2.auth) first.
+			 * // Only after acceptance does the trap mirror the non-configurable descriptor
+			 * // onto the raw dispatcher target to satisfy V8's §10.5.6 step 28 invariant.
+			 * // A second call with a different value returns false (incompatible redefine)
+			 * // without polluting the raw target or mutating the versioned wrapper.
+			 */
+			defineProperty(t, prop, descriptor) {
+				const vw = resolveVersionedWrapper();
+				// No versioned wrapper — only reachable when no versions are registered while
+				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				/* v8 ignore next */
+				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
+				if (descriptor.configurable === false) {
+					// Preflight whether t would accept this descriptor WITHOUT mutating t.
+					// If t were mirrored first and vw then rejected (e.g. the property was
+					// previously defined directly on the versioned path with an incompatible
+					// value), t would be left with an orphaned non-configurable property.
+					// The §10.5.8 get-trap invariant would be violated: GOPD reports the t
+					// descriptor; get returns the differing vw value — V8 throws TypeError.
+					const shadow = Object.create(Reflect.getPrototypeOf(t));
+					const currentDescriptor = Reflect.getOwnPropertyDescriptor(t, prop);
+					if (currentDescriptor) {
+						Reflect.defineProperty(shadow, prop, currentDescriptor);
+					}
+					// t is fresh plain object created in createDispatcher() that is never
+					// exposed outside this closure. Plain objects stay extensible regardless
+					// of how many non-configurable properties are defined on them, and nothing
+					// in this codebase can reach t to call preventExtensions/freeze/seal.
+					// The branch exists to keep the shadow accurate for future-proofing but
+					// is unreachable in all current execution paths.
+					/* v8 ignore next */
+					if (!Reflect.isExtensible(t)) {
+						Reflect.preventExtensions(shadow);
+					}
+					if (!Reflect.defineProperty(shadow, prop, descriptor)) return false;
+					// t would accept. Write to vw first — on rejection t is untouched.
+					if (!Reflect.defineProperty(vw, prop, descriptor)) return false;
+					// Both accept. Mirror onto the raw proxy target so V8's §10.5.6 step 28
+					// invariant is satisfied: the target must hold a matching non-configurable
+					// descriptor whenever the trap returns true for configurable:false.
+					return Reflect.defineProperty(t, prop, descriptor);
+				}
+				// configurable:true — V8's §10.5.6 step 28 does not apply; delegate directly.
+				return Reflect.defineProperty(vw, prop, descriptor);
 			}
 		};
 

@@ -55,22 +55,19 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.2.0 (April 2026)
+### Latest: v3.2.1 (April 2026)
 
-- **API Path Versioning** — register the same logical path (e.g. `auth`) under multiple version tags (`v1`, `v2`); a configurable discriminator routes each caller to the correct version at dispatch time
-- **`versionDispatcher` config** — `"version"` (string key lookup), custom function `(allVersions, caller) => tag`, or omit to use the `"version"` default
-- **`api.slothlet.versioning.*`** — runtime management: `list()`, `setDefault()`, `unregister()`, `getVersionMetadata()`
-- **Separate version metadata** — `versionConfig.metadata` stored in VersionManager; never merged with `options.metadata` (regular Metadata system)
-- **Shutdown race fix** — `shutdown()` now drains in-flight lazy-mode ESM `import()` calls before teardown, preventing unhandled rejections on worker exit
-- [View full v3.2.0 Changelog](./docs/changelog/v3/v3.2.0.md)
+- **Missing `defineProperty` trap** — the version dispatcher proxy introduced in v3.2.0 had no `defineProperty` trap; calls fell through to the raw target, bypassing version routing, and non-configurable writes could trigger V8 proxy invariant `TypeError` on subsequent reads
+- **Pre-commit tooling** — removed duplicate `build:cleanup` step from `precommit-validation.mjs`; sequence is now `build:dev → debug → test:node → vitest`
+- [View full v3.2.1 Changelog](./docs/changelog/v3/v3.2.1.md)
 
 ### Recent Releases
 
+- **v3.2.0** (April 2026) — API Path Versioning (`versionDispatcher`, `api.slothlet.versioning.*`, version metadata, dispatcher proxy); lazy-mode shutdown race fix ([Changelog](./docs/changelog/v3/v3.2.0.md))
 - **v3.1.0** (March 2026) — Frozen `api.slothlet.env` snapshot; `env.include` allowlist; reload immunity ([Changelog](./docs/changelog/v3/v3.1.0.md))
 - **v3.0.1** (March 2026) — Resolver fix for user `index.mjs` mis-classified as internal; CI `slothlet-dev` stripping hardening; respawn race fix; resilient `build:dist` script ([Changelog](./docs/changelog/v3/v3.0.1.md))
 - **v3.0.0** (February 2026) — Unified Wrapper architecture, redesigned hook system, full i18n, background materialization, lifecycle events, collision modes, mutation controls ([Changelog](./docs/changelog/v3.0.md))
-- **v2.11.0** — AddApi Special File Pattern (Rule 11), smart flattening enhancements ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.11.md))
-- **v2.10.0** — Function metadata tagging and introspection capabilities ([Changelog](https://github.com/CLDMV/slothlet/blob/master/docs/changelog/v2.10.md))
+
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
 

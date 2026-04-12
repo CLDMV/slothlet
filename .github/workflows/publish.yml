@@ -5,8 +5,8 @@
 # @Author: Nate Hyson <CLDMV>
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
-# @Last modified by: Nate Hyson <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2026-01-04 15:52:07 -08:00 (1767570727)
+# @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
+# @Last modified time: 2026-04-11 19:29:13 -07:00 (1775960953)
 # -----
 # @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -79,7 +79,7 @@ permissions:
 jobs:
     publish-package:
         if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
-        uses: CLDMV/.github/.github/workflows/workflow-publish.yml@v1
+        uses: CLDMV/.github/.github/workflows/workflow-publish.yml@v2
         with:
             package_name: "@cldmv/slothlet" # Required: Your NPM package name
             debug: ${{ github.event.inputs.debug == 'true' }}
@@ -104,7 +104,7 @@ jobs:
             use_gpg: ${{ github.event.inputs.use_gpg == 'true' }}
         secrets:
             NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-            BOT_APP_ID: ${{ secrets.CLDMV_BOT_APP_ID }}
+            BOT_APP_CLIENT_ID: ${{ secrets.CLDMV_BOT_APP_CLIENT_ID }}
             BOT_APP_PRIVATE_KEY: ${{ secrets.CLDMV_BOT_APP_PRIVATE_KEY }}
             TAGGER_NAME: ${{ secrets.CLDMV_BOT_NAME }}
             TAGGER_EMAIL: ${{ secrets.CLDMV_BOT_EMAIL }}

@@ -220,6 +220,32 @@ describe("api_builder – metadata methods guard against absent metadata handler
 		}
 	});
 
+	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handler is null — handlersKeys lists keys (line 1006)", async () => {
+		api = await makeApi();
+		const sl = getSlothlet(api);
+		const orig = sl.handlers.metadata;
+		sl.handlers.metadata = null;
+		try {
+			// handlers object is alive → truthy arm fires: Object.keys(slothlet.handlers).join(", ")
+			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+		} finally {
+			sl.handlers.metadata = orig;
+		}
+	});
+
+	it("metadata.setForVersion throws METADATA_NOT_AVAILABLE when handlers is null — handlersKeys is 'undefined' (line 1006)", async () => {
+		api = await makeApi();
+		const sl = getSlothlet(api);
+		const origHandlers = sl.handlers;
+		sl.handlers = null;
+		try {
+			// handlers itself is null → falsy arm fires: "undefined"
+			expect(() => api.slothlet.metadata.setForVersion("auth", "v1", "stable", true)).toThrow(/METADATA_NOT_AVAILABLE/);
+		} finally {
+			sl.handlers = origHandlers;
+		}
+	});
+
 	it("metadata.removeFor returns early without throwing when handler is null (line 865)", async () => {
 		api = await makeApi();
 		const sl = getSlothlet(api);

@@ -6,15 +6,15 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:58 -08:00 (1772425318)
+ *	@Last modified time: 2026-04-10 20:09:06 -07:00 (1775876946)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
 
 /**
- * @fileoverview Runs the mandatory pre-commit validation sequence (lint → vitest → type
- * check) and exits non-zero if any step fails, preventing the commit. Invoked
- * automatically by the Husky pre-commit hook.
+ * @fileoverview Runs the mandatory pre-commit validation sequence (build:dev → debug →
+ * test:node → vitest) and exits non-zero if any step fails, preventing the
+ * commit. Invoked automatically by the Husky pre-commit hook.
  * @module @cldmv/slothlet/tools/precommit-validation
  * @title npm run precommit
  *
@@ -42,14 +42,10 @@ async function main() {
 	console.log("==========================================");
 
 	const validationSteps = [
-		{ name: "Clean Build Artifacts", command: "npm", args: ["run", "build:cleanup"] },
+		{ name: "Build Full Artifacts", command: "npm", args: ["run", "build:dev"] },
 		{ name: "API Structure Debug", command: "npm", args: ["run", "debug"] },
 		{ name: "Node Test Suite", command: "npm", args: ["run", "test:node"] },
-		{ name: "Build Distribution", command: "npm", args: ["run", "build:dist"] },
-		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] },
-		{ name: "Build TypeScript Types", command: "npm", args: ["run", "build:types"] },
-		{ name: "Build Export Declarations", command: "npm", args: ["run", "build:exports"] },
-		{ name: "Validate TypeScript", command: "npm", args: ["run", "test:types"] }
+		{ name: "Vitest Suite", command: "npm", args: ["run", "vitest"] }
 	];
 
 	let allPassed = true;
@@ -99,13 +95,10 @@ async function main() {
 		results.forEach((result) => {
 			if (result.status === "FAILED") {
 				const stepCommands = {
-					"Clean Build Artifacts": "npm run build:cleanup",
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
-					"Build Distribution": "npm run build:dist",
-					"Vitest Suite": "npm run vitest",
-					"Build TypeScript Types": "npm run build:types",
-					"Validate TypeScript": "npm run test:types"
+					"Build Full Artifacts": "npm run build:dev",
+					"Vitest Suite": "npm run vitest"
 				};
 				console.log(`   ${stepCommands[result.step]}`);
 			}

@@ -1005,9 +1005,7 @@ export class ApiBuilder extends ComponentBase {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
 							handlersKeys: slothlet.handlers
 								? Object.keys(slothlet.handlers).join(", ")
-								: // slothlet.handlers is always truthy here; the : "undefined" arm is dead code.
-									/* v8 ignore next */
-									"undefined",
+								: "undefined",
 							validationError: true
 						});
 					}

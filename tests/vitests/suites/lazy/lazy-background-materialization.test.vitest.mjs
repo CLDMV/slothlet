@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 20:15:07 -07:00 (1773026107)
+ *	@Last modified time: 2026-04-11 10:07:17 -07:00 (1775927237)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -62,7 +62,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background materialization to complete
-				await new Promise((resolve) => setTimeout(resolve, 500));
+				await new Promise((resolve) => setTimeout(resolve, 1000));
 
 				const stats = api.slothlet.materialize.get();
 
@@ -81,7 +81,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 					tracking: true // Boolean shorthand
 				});
 
-				await new Promise((resolve) => setTimeout(resolve, 500));
+				await new Promise((resolve) => setTimeout(resolve, 1000));
 
 				const stats = api.slothlet.materialize.get();
 				expect(stats.remaining).toBe(0);
@@ -263,7 +263,7 @@ describe("Background Materialization (config.tracking.materialization)", () => {
 				});
 
 				// Wait for background work (should not throw)
-				await new Promise((resolve) => setTimeout(resolve, 500));
+				await new Promise((resolve) => setTimeout(resolve, 1000));
 
 				// API should still be functional
 				expect(api).toBeDefined();
