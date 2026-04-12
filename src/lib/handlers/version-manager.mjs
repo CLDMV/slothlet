@@ -987,14 +987,17 @@ export class VersionManager extends ComponentBase {
 			 * @param {string|symbol} prop - Property name.
 			 * @param {PropertyDescriptor} descriptor - Descriptor to apply.
 			 * @returns {boolean} `true` when the definition was successfully applied to the
-			 *   versioned wrapper; `false` when the raw-target invariant mirror failed or when
-			 *   the versioned wrapper's own `defineProperty` trap rejected the operation.
+			 *   versioned wrapper; `false` when the raw-target rejects the descriptor (e.g.
+			 *   an incompatible redefinition of a property already sealed as non-configurable)
+			 *   or when the versioned wrapper's own `defineProperty` trap rejected the operation.
 			 * @example
 			 * // Propagates transparently — callers use the dispatcher proxy normally.
 			 * Reflect.defineProperty(api.auth, "CACHE_TTL", { value: 300, configurable: false, writable: false });
 			 * // The descriptor lands on the resolved versioned wrapper (e.g. api.v2.auth),
-			 * // the raw dispatcher target receives a matching non-configurable mirror stub,
-			 * // and the trap returns true so V8's §10.5.6 invariant is satisfied.
+			 * // the raw dispatcher target receives a matching non-configurable mirror so
+			 * // V8's §10.5.6 invariant is satisfied, and the trap returns true.
+			 * // A second call with a different value returns false (incompatible redefine)
+			 * // without touching the versioned wrapper.
 			 */
 			defineProperty(t, prop, descriptor) {
 				const vw = resolveVersionedWrapper();
@@ -1003,20 +1006,15 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next */
 				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
 				if (descriptor.configurable === false) {
-					const existing = Reflect.getOwnPropertyDescriptor(t, prop);
-					if (!existing || existing.configurable !== false) {
-						// Mirror the exact descriptor on the raw target so V8's §10.5.6
-						// step 27a IsCompatiblePropertyDescriptor check is satisfied: the
-						// trap may return true only if the raw target now holds a matching
-						// non-configurable descriptor with the same value/attributes.
-						// Apply to the raw target first so we do not report success if target
-						// invariants cannot be satisfied.
-						// t is a plain extensible object and the guard above ensures the prop
-						// either does not exist or is still configurable, so this never returns
-						// false in practice; the guard is retained for spec-correctness.
-						/* v8 ignore next */
-						if (!Reflect.defineProperty(t, prop, descriptor)) return false;
-					}
+					// Mirror and validate the exact descriptor on the raw target first so V8's
+					// proxy invariant checks are satisfied for all non-configurable definitions,
+					// including incompatible redefinitions of an already non-configurable property
+					// (e.g. second call with a different value). If the raw target rejects the
+					// descriptor, propagate false without mutating the resolved versioned wrapper.
+					// A compatibility check on an already-non-configurable prop is intentionally
+					// delegated to plain-object semantics here: same-value redefinitions succeed,
+					// incompatible ones return false and we bail before touching vw.
+					if (!Reflect.defineProperty(t, prop, descriptor)) return false;
 				}
 				// Use Reflect.defineProperty so a false return from vw's own trap propagates
 				// as false here rather than throwing (Object.defineProperty throws in strict

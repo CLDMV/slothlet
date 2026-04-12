@@ -409,6 +409,34 @@ export const secureOperation = {
 
 ---
 
+## 🌍 Environment Snapshot (v3.1+)
+
+Slothlet captures a **frozen snapshot of `process.env` at init time** and exposes it at `api.slothlet.env`. The snapshot is deeply read-only — mutating `process.env` after init does not affect `api.slothlet.env`.
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	env: true,
+	// env: { include: ["NODE_ENV", "DATABASE_URL", "PORT"] }  // allowlist
+});
+
+// Access inside any module:
+import { self } from "@cldmv/slothlet/runtime";
+
+export const getConfig = () => ({
+	mode: self.slothlet.env.NODE_ENV,
+	dbUrl: self.slothlet.env.DATABASE_URL
+});
+```
+
+**Key behaviors:**
+- `env: true` → all `process.env` variables are captured
+- `env: { include: [...] }` → only the listed keys are captured (recommended for security)
+- `api.slothlet.env` is a frozen object — writes throw in strict mode
+- Snapshot is taken at init time — late `process.env` mutations are NOT reflected
+
+---
+
 ## 🔁 Hot Reload / Dynamic API Management
 
 ```js
@@ -454,6 +482,69 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 ```
 
 **Available events**: `"materialized:complete"`, `"impl:created"`, `"impl:changed"`, `"impl:removed"`
+
+---
+
+## 🔀 API Path Versioning (v3.2+)
+
+Mount multiple versions of the same logical path and dispatch to the correct version automatically based on the caller's version metadata.
+
+### Setup
+
+```js
+const api = await slothlet({
+	dir: "./api",
+	versionDispatcher: "version"  // use caller's versionMetadata.version field
+	// versionDispatcher: (allVersions, caller) => { ... }  // custom function
+});
+
+// Register versioned modules — 4th argument is versionConfig
+await api.slothlet.api.add("auth", "./api/v1", {}, { version: "v1", default: true });
+await api.slothlet.api.add("auth", "./api/v2", {}, { version: "v2" });
+```
+
+### Access Patterns
+
+```js
+// Dispatcher — routes via discriminator (use this in most cases)
+api.auth.login(user, pass)        // → routes to v1 or v2 based on caller metadata
+
+// Direct versioned access — bypasses dispatcher entirely
+api.v1.auth.login(user, pass)     // → always v1
+api.v2.auth.login(user, pass)     // → always v2
+```
+
+### Attaching Version Metadata to a Caller
+
+```js
+// Register a module WITH a version tag so the discriminator can use it
+await api.slothlet.api.add("services/payments", "./payments", {}, {
+	version: "v2",
+	metadata: { stable: true }    // versionConfig.metadata — stored in VersionManager only
+});
+
+// options.metadata (3rd arg)     → regular Metadata system (metadata.caller() etc.)
+// versionConfig.metadata (4th arg) → version-system only, used by the discriminator
+```
+
+### Runtime Version Management
+
+```js
+// List registered versions for a path
+api.slothlet.versioning.list("auth");
+// → { versions: { v1: { ... }, v2: { ... } }, default: "v2" }
+
+// Change the default dispatcher fallback
+api.slothlet.versioning.setDefault("auth", "v1");
+
+// Unregister a version (removes api.v1.auth; dispatcher updates automatically)
+await api.slothlet.versioning.unregister("auth", "v1");
+
+// Read version metadata stored at registration
+api.slothlet.versioning.getVersionMetadata(moduleID);
+```
+
+> 📖 See [`docs/VERSIONING.md`](docs/VERSIONING.md) for full documentation.
 
 ---
 
@@ -550,6 +641,41 @@ api.slothlet.lifecycle.on("materialized:complete", handler);
 api.slothlet.lifecycle.off("materialized:complete", handler);
 ```
 
+### ❌ Mistake 6: Assuming `api.v1.auth` Goes Through the Dispatcher
+
+```js
+// ❌ WRONG — direct versioned path bypasses the discriminator entirely
+api.v1.auth.login(user, pass);   // always v1, no routing logic
+
+// ✅ CORRECT — use the logical dispatcher path for dynamic routing
+api.auth.login(user, pass);      // routes based on caller version metadata
+```
+
+### ❌ Mistake 7: Wrong Config Key for Versioning
+
+```js
+// ❌ WRONG
+const api = await slothlet({ dir: "./api", versionResolver: "version" });
+
+// ✅ CORRECT
+const api = await slothlet({ dir: "./api", versionDispatcher: "version" });
+```
+
+### ❌ Mistake 8: Conflating versionConfig.metadata with options.metadata
+
+```js
+// ❌ WRONG — puts version tag in the regular Metadata system instead of VersionManager
+await api.slothlet.api.add("auth", "./v2", { metadata: { version: "v2" } });
+
+// ✅ CORRECT
+// options.metadata (3rd arg)       → regular Metadata system (metadata.caller() etc.)
+// versionConfig.metadata (4th arg) → VersionManager only, used by the discriminator
+await api.slothlet.api.add("auth", "./v2",
+	{ metadata: { role: "core" } },
+	{ version: "v2", metadata: { stable: true } }
+);
+```
+
 ---
 
 ## ✅ AI Agent Checklist
@@ -563,6 +689,9 @@ api.slothlet.lifecycle.off("materialized:complete", handler);
 - [ ] **Lifecycle** uses `api.slothlet.lifecycle.on/off()` only
 - [ ] **Lazy mode**: if using background materialization, use `api.slothlet.materialize.wait()` before accessing the API
 - [ ] **Hook subsets**: auth/security → `subset: "before"`, main logic → `"primary"`, audit → `"after"`
+- [ ] **Versioning config key is `versionDispatcher:`**, not `versionResolver:` or `versionDiscriminator:`
+- [ ] **Use `api.auth` (dispatcher path) for dynamic routing**, not `api.v1.auth` (direct path bypasses discriminator)
+- [ ] **`versionConfig.metadata` (4th arg)** and **`options.metadata` (3rd arg)** are separate systems — don't conflate them
 - [ ] **Double quotes everywhere** - follow Slothlet coding standards
 
 ---

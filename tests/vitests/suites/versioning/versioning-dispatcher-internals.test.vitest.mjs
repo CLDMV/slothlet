@@ -227,6 +227,33 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 		}).not.toThrow();
 	});
 
+	it("redefining a non-configurable dispatcher property with an incompatible descriptor returns false without mutating the versioned wrapper", async () => {
+		api = await makeApi(config);
+		// First definition — seals prop on the raw target with value 1.
+		const succeeded = Reflect.defineProperty(api.auth, "SEALED_PROP", {
+			value: 1,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(succeeded).toBe(true);
+		// Second definition — incompatible value. Without the fix, the guard
+		// `existing.configurable !== false` was false so the raw-target mirror was skipped,
+		// the versioned wrapper was mutated, and V8 threw a proxy-invariant TypeError after
+		// the fact. With the fix, Reflect.defineProperty(t, ...) returns false (plain-object
+		// semantics for incompatible non-configurable redefine) and the trap exits without
+		// touching the versioned wrapper.
+		const rejected = Reflect.defineProperty(api.auth, "SEALED_PROP", {
+			value: 2,
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(rejected).toBe(false);
+		// Versioned wrapper must not have been mutated — value stays 1.
+		expect(api.auth.SEALED_PROP).toBe(1);
+	});
+
 	it("Object.getOwnPropertyDescriptor on a non-configurable dispatcher property returns the actual stored descriptor", async () => {
 		api = await makeApi(config);
 		// This exercises the getOwnPropertyDescriptor trap's non-configurable branch (branch 44).

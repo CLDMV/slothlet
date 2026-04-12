@@ -95,7 +95,6 @@ async function main() {
 		results.forEach((result) => {
 			if (result.status === "FAILED") {
 				const stepCommands = {
-					"Clean Build Artifacts": "npm run build:cleanup",
 					"API Structure Debug": "npm run debug",
 					"Node Test Suite": "npm run test:node",
 					"Build Full Artifacts": "npm run build:dev",
