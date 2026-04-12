@@ -57,7 +57,7 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ### Latest: v3.2.1 (April 2026)
 
-- **`defineProperty` trap invariant fixes** — three correctness bugs in the version dispatcher proxy's `defineProperty` trap fixed: `Object.defineProperty` → `Reflect.defineProperty` to propagate rejections without throwing; descriptor now applied to the resolved versioned wrapper first, then mirrored to the raw target on success; over-broad guard on already-sealed property redefines removed to prevent silent partial mutation
+- **Missing `defineProperty` trap** — the version dispatcher proxy introduced in v3.2.0 had no `defineProperty` trap; calls fell through to the raw target, bypassing version routing, and non-configurable writes could trigger V8 proxy invariant `TypeError` on subsequent reads
 - **Pre-commit tooling** — removed duplicate `build:cleanup` step from `precommit-validation.mjs`; sequence is now `build:dev → debug → test:node → vitest`
 - [View full v3.2.1 Changelog](./docs/changelog/v3/v3.2.1.md)
 
