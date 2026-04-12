@@ -976,28 +976,34 @@ export class VersionManager extends ComponentBase {
 			 *
 			 * ES2024 §10.5.6 step 28 invariant: if the trap returns true for a descriptor
 			 * where `configurable === false`, V8 checks that the raw proxy target also has a
-			 * non-configurable descriptor for that property. We mirror the descriptor on the
-			 * raw target first (before writing to the versioned wrapper) so that we only
-			 * return true when both the target invariant and the versioned write succeed.
-			 * `Reflect.defineProperty` is used on the versioned wrapper so that a `false`
-			 * return from its own trap propagates cleanly instead of throwing as
+			 * matching non-configurable descriptor. We satisfy this by mirroring onto the raw
+			 * target only AFTER a successful write to the versioned wrapper. Mirroring first
+			 * would leave the raw target with an orphaned non-configurable property when vw
+			 * rejects (e.g. the property was independently defined on the versioned path with
+			 * an incompatible value). The §10.5.8 get-trap invariant would then be violated:
+			 * `getOwnPropertyDescriptor` reports the raw-target descriptor while the get trap
+			 * returns the differing value from vw — V8 throws a TypeError on the next read.
+			 * A shadow preflight checks whether t would accept the descriptor without any
+			 * mutation so both the raw target and vw remain untouched on failure.
+			 * `Reflect.defineProperty` is used so a `false` return from the versioned
+			 * wrapper's own trap propagates cleanly instead of throwing as
 			 * `Object.defineProperty` would in strict mode.
 			 *
 			 * @param {object} t - Raw dispatcher target.
 			 * @param {string|symbol} prop - Property name.
 			 * @param {PropertyDescriptor} descriptor - Descriptor to apply.
-			 * @returns {boolean} `true` when the definition was successfully applied to the
-			 *   versioned wrapper; `false` when the raw-target rejects the descriptor (e.g.
-			 *   an incompatible redefinition of a property already sealed as non-configurable)
-			 *   or when the versioned wrapper's own `defineProperty` trap rejected the operation.
+			 * @returns {boolean} `true` when both the versioned wrapper and the raw proxy
+			 *   target accepted the definition; `false` when the shadow preflight predicts
+			 *   `t` would reject the descriptor, or when the versioned wrapper's own trap
+			 *   rejects the operation.
 			 * @example
 			 * // Propagates transparently — callers use the dispatcher proxy normally.
 			 * Reflect.defineProperty(api.auth, "CACHE_TTL", { value: 300, configurable: false, writable: false });
-			 * // The descriptor lands on the resolved versioned wrapper (e.g. api.v2.auth),
-			 * // the raw dispatcher target receives a matching non-configurable mirror so
-			 * // V8's §10.5.6 invariant is satisfied, and the trap returns true.
+			 * // The descriptor is written to the versioned wrapper (e.g. api.v2.auth) first.
+			 * // Only after acceptance does the trap mirror the non-configurable descriptor
+			 * // onto the raw dispatcher target to satisfy V8's §10.5.6 step 28 invariant.
 			 * // A second call with a different value returns false (incompatible redefine)
-			 * // without touching the versioned wrapper.
+			 * // without polluting the raw target or mutating the versioned wrapper.
 			 */
 			defineProperty(t, prop, descriptor) {
 				const vw = resolveVersionedWrapper();
@@ -1006,19 +1012,29 @@ export class VersionManager extends ComponentBase {
 				/* v8 ignore next */
 				if (!vw) return Reflect.defineProperty(t, prop, descriptor);
 				if (descriptor.configurable === false) {
-					// Mirror and validate the exact descriptor on the raw target first so V8's
-					// proxy invariant checks are satisfied for all non-configurable definitions,
-					// including incompatible redefinitions of an already non-configurable property
-					// (e.g. second call with a different value). If the raw target rejects the
-					// descriptor, propagate false without mutating the resolved versioned wrapper.
-					// A compatibility check on an already-non-configurable prop is intentionally
-					// delegated to plain-object semantics here: same-value redefinitions succeed,
-					// incompatible ones return false and we bail before touching vw.
-					if (!Reflect.defineProperty(t, prop, descriptor)) return false;
+					// Preflight whether t would accept this descriptor WITHOUT mutating t.
+					// If t were mirrored first and vw then rejected (e.g. the property was
+					// previously defined directly on the versioned path with an incompatible
+					// value), t would be left with an orphaned non-configurable property.
+					// The §10.5.8 get-trap invariant would be violated: GOPD reports the t
+					// descriptor; get returns the differing vw value — V8 throws TypeError.
+					const shadow = Object.create(Reflect.getPrototypeOf(t));
+					const currentDescriptor = Reflect.getOwnPropertyDescriptor(t, prop);
+					if (currentDescriptor) {
+						Reflect.defineProperty(shadow, prop, currentDescriptor);
+					}
+					if (!Reflect.isExtensible(t)) {
+						Reflect.preventExtensions(shadow);
+					}
+					if (!Reflect.defineProperty(shadow, prop, descriptor)) return false;
+					// t would accept. Write to vw first — on rejection t is untouched.
+					if (!Reflect.defineProperty(vw, prop, descriptor)) return false;
+					// Both accept. Mirror onto the raw proxy target so V8's §10.5.6 step 28
+					// invariant is satisfied: the target must hold a matching non-configurable
+					// descriptor whenever the trap returns true for configurable:false.
+					return Reflect.defineProperty(t, prop, descriptor);
 				}
-				// Use Reflect.defineProperty so a false return from vw's own trap propagates
-				// as false here rather than throwing (Object.defineProperty throws in strict
-				// mode when the target trap returns false).
+				// configurable:true — V8's §10.5.6 step 28 does not apply; delegate directly.
 				return Reflect.defineProperty(vw, prop, descriptor);
 			}
 		};

@@ -254,6 +254,40 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher Internals > $name", (
 		expect(api.auth.SEALED_PROP).toBe(1);
 	});
 
+	it("when vw already has a non-configurable property and the dispatcher receives an incompatible redefinition, the raw dispatcher target t is not polluted", async () => {
+		api = await makeApi(config);
+		// The dispatcher resolves to the DEFAULT version (v1) when there is no caller context.
+		// Seal a property directly on the v1 per-versioned wrapper so that the dispatcher's
+		// resolved vw already holds it as non-configurable. Then attempt to redefine it via
+		// the logical dispatcher path with an incompatible value.
+		// With the old code (mirror t first): t would be left with an orphaned non-configurable
+		// property when vw then rejects, violating the §10.5.8 get-trap invariant (GOPD reports
+		// the t descriptor while the get trap returns the differing vw value → V8 TypeError).
+		// With the fix (vw-first ordering): vw is written first; if vw rejects, t is untouched.
+		const directSucceeded = Reflect.defineProperty(api.v1.auth, "VERSIONED_SEALED", {
+			value: "v1-original",
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(directSucceeded).toBe(true);
+		// The dispatcher resolves to v1 (default) at call time; vw already holds an incompatible
+		// non-configurable descriptor → vw rejects → trap must return false without mutating t.
+		const rejected = Reflect.defineProperty(api.auth, "VERSIONED_SEALED", {
+			value: "dispatcher-val",
+			configurable: false,
+			writable: false,
+			enumerable: true
+		});
+		expect(rejected).toBe(false);
+		// t must not have been polluted. GOPD on the dispatcher proxy must NOT return a
+		// non-configurable descriptor for VERSIONED_SEALED (that would indicate t was written
+		// before vw rejected), and reading the property must not trigger a §10.5.8 TypeError.
+		const desc = Object.getOwnPropertyDescriptor(api.auth, "VERSIONED_SEALED");
+		expect(desc?.configurable).not.toBe(false);
+		expect(() => api.auth.VERSIONED_SEALED).not.toThrow();
+	});
+
 	it("Object.getOwnPropertyDescriptor on a non-configurable dispatcher property returns the actual stored descriptor", async () => {
 		api = await makeApi(config);
 		// This exercises the getOwnPropertyDescriptor trap's non-configurable branch (branch 44).
