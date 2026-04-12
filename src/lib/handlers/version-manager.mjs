@@ -1043,6 +1043,39 @@ export class VersionManager extends ComponentBase {
 				}
 				// configurable:true — V8's §10.5.6 step 28 does not apply; delegate directly.
 				return Reflect.defineProperty(vw, prop, descriptor);
+			},
+
+			/**
+			 * Set trap — delegates property assignment to the resolved versioned wrapper.
+			 *
+			 * Without this trap, the default `[[Set]]` path consults `[[GetOwnProperty]]` on
+			 * the receiver (this proxy) via `OrdinarySetWithOwnDescriptor`. The dispatcher's
+			 * `getOwnPropertyDescriptor` trap returns `{ writable: false }` for all unknown
+			 * properties, causing `[[Set]]` to return false (throwing in strict mode) before
+			 * the value is ever written — even on the first assignment.
+			 *
+			 * With this trap, assignments are forwarded to the real versioned wrapper's own
+			 * `setTrap`, which performs the correct delete-then-`defineProperty` cycle with
+			 * `configurable: true`, keeping the property perpetually reassignable.
+			 *
+			 * @param {object} t - Raw dispatcher target.
+			 * @param {string|symbol} prop - Property name.
+			 * @param {any} value - Value to assign.
+			 * @returns {boolean} `true` when the assignment succeeded.
+			 * @example
+			 * // self.cache is a versioned dispatcher; this now reaches self.v1.cache.setTrap
+			 * self.cache.redisClient = client;
+			 */
+			set(t, prop, value) {
+				const vw = resolveVersionedWrapper();
+				// No versioned wrapper — only reachable when no versions are registered while
+				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				/* v8 ignore next */
+				if (!vw) return Reflect.set(t, prop, value, t);
+				// Delegate to the versioned wrapper's set trap (UnifiedWrapper.setTrap),
+				// which performs the correct delete → defineProperty cycle so the property
+				// remains configurable and can be reassigned on subsequent calls.
+				return Reflect.set(vw, prop, value, vw);
 			}
 		};
 
