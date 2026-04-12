@@ -986,8 +986,8 @@ export class VersionManager extends ComponentBase {
 			 * A shadow preflight checks whether t would accept the descriptor without any
 			 * mutation so both the raw target and vw remain untouched on failure.
 			 * `Reflect.defineProperty` is used so a `false` return from the versioned
-			 * wrapper's own trap propagates cleanly instead of throwing as
-			 * `Object.defineProperty` would in strict mode.
+			 * wrapper's own trap propagates cleanly instead of throwing, as
+			 * `Object.defineProperty` would on failure.
 			 *
 			 * @param {object} t - Raw dispatcher target.
 			 * @param {string|symbol} prop - Property name.
