@@ -725,7 +725,7 @@ export class VersionManager extends ComponentBase {
 		const handlers = {
 			/**
 			 * Get trap — routes property access based on the version resolution algorithm.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} prop - Property being accessed.
 			 * @returns {any} Resolved property value.
 			 */
@@ -866,7 +866,7 @@ export class VersionManager extends ComponentBase {
 
 			/**
 			 * Has trap — reports keys as union of all versioned path keys.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} key - Property to check.
 			 * @returns {boolean}
 			 */
@@ -893,7 +893,7 @@ export class VersionManager extends ComponentBase {
 
 			/**
 			 * ownKeys trap — union of all versioned path keys.
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @returns {Array<string|symbol>}
 			 */
 			ownKeys(t) {
@@ -924,7 +924,7 @@ export class VersionManager extends ComponentBase {
 			 * property enumeration (e.g. Object.keys, for...in, collectPendingMaterializations).
 			 * The actual value is lazily provided by the GET trap when the property is accessed.
 			 *
-			 * @param {object} t - Frozen proxy target.
+			 * @param {object} t - Raw proxy target.
 			 * @param {string|symbol} prop - Property name.
 			 * @returns {PropertyDescriptor | undefined}
 			 */
