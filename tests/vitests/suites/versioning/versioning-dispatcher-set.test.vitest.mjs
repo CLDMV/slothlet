@@ -142,11 +142,10 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			api.auth[Symbol.iterator] = () => {};
 		}).not.toThrow();
 
-		// Non-delegated symbols (case 10): absorbed, not visible
+		// All symbol writes are absorbed — none leak through to the versioned wrapper
 		expect(api.auth[MY_SYM]).toBeUndefined();
 		expect(api.v1.auth[MY_SYM]).toBeUndefined();
-		// Symbol.toStringTag is delegated in get (case 5) so set forwards to vw —
-		// the dispatcher is transparent; what vw returns on read is vw's concern
+		// Symbol.toStringTag is also absorbed; get still returns the computed UW value
 		expect(api.auth[Symbol.toStringTag]).toBeDefined();
 	});
 

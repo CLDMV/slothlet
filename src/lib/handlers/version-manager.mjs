@@ -738,7 +738,9 @@ export class VersionManager extends ComponentBase {
 					void 0;
 				}
 			}
-			// Fallback for direct dispatcher use before any versions are registered.
+			// Fallback: no versioned wrapper could be resolved (either no versions are
+			// registered yet, or the registry is populated but the mounted wrapper is not
+			// reachable in the live API tree).
 			const entry = manager.#registry.get(logicalPath);
 			const versions = entry ? Array.from(entry.versions.keys()) : [];
 			return { __versionDispatcher: logicalPath, versions };
@@ -1101,12 +1103,12 @@ export class VersionManager extends ComponentBase {
 			 * self.cache.redisClient = client;
 			 */
 			set(t, prop, value) {
-				// Absorb writes to symbols that get does NOT delegate to vw.
-				// get case 5 (Symbol.toStringTag) delegates to vw — must forward.
-				// get case 6 (inspect.custom) is handled by UW delegating impl[inspect.custom]()
-				// so writes to it are not meaningful — absorb silently with all other symbols.
-				// All other symbols (case 10 → undefined) — absorb silently.
-				if (typeof prop === "symbol" && prop !== Symbol.toStringTag) return true;
+				// Absorb all symbol writes — including Symbol.toStringTag.
+				// UnifiedWrapper computes Symbol.toStringTag dynamically on reads so forwarding
+				// a write would create unobservable hidden state (get/set semantics inconsistent).
+				// inspect.custom is likewise not meaningfully settable here.
+				// All other symbols return undefined from get (case 10) — absorb silently.
+				if (typeof prop === "symbol") return true;
 
 				// Framework internal string keys — get returns undefined (case 1).
 				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
