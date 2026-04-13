@@ -1139,8 +1139,10 @@ export class VersionManager extends ComponentBase {
 				const vw = resolveVersionedWrapper();
 				// No versioned wrapper — only reachable when no versions are registered while
 				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				// Absorb silently: mutating the raw target would make the key visible via ownKeys
+				// while get still throws VERSION_NO_DEFAULT (inconsistent set/get semantics).
 				/* v8 ignore next */
-				if (!vw) return Reflect.set(t, prop, value, t);
+				if (!vw) return true;
 				// Delegate to the versioned wrapper's set trap (UnifiedWrapper.setTrap),
 				// which performs the correct delete → defineProperty cycle so the property
 				// remains configurable and can be reassigned on subsequent calls.
