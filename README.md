@@ -55,18 +55,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.2.1 (April 2026)
+### Latest: v3.2.2 (April 2026)
 
-- **Missing `defineProperty` trap** — the version dispatcher proxy introduced in v3.2.0 had no `defineProperty` trap; calls fell through to the raw target, bypassing version routing, and non-configurable writes could trigger V8 proxy invariant `TypeError` on subsequent reads
-- **Pre-commit tooling** — removed duplicate `build:cleanup` step from `precommit-validation.mjs`; sequence is now `build:dev → debug → test:node → vitest`
-- [View full v3.2.1 Changelog](./docs/changelog/v3/v3.2.1.md)
+- **Missing `set` trap on version dispatchers** — plain assignment like `self.auth.someProp = value` now routes to the resolved versioned wrapper instead of falling into V8 proxy-invariant failures on the dispatcher target
+- **Inspectable logical versioned paths** — `util.inspect(api.auth)` and `console.log(api.auth)` now show the resolved versioned namespace instead of the raw dispatcher target object
+- [View full v3.2.2 Changelog](./docs/changelog/v3/v3.2.2.md)
 
 ### Recent Releases
 
+- **v3.2.1** (April 2026) — version-dispatcher `defineProperty` trap fix; pre-commit validation cleanup ([Changelog](./docs/changelog/v3/v3.2.1.md))
 - **v3.2.0** (April 2026) — API Path Versioning (`versionDispatcher`, `api.slothlet.versioning.*`, version metadata, dispatcher proxy); lazy-mode shutdown race fix ([Changelog](./docs/changelog/v3/v3.2.0.md))
 - **v3.1.0** (March 2026) — Frozen `api.slothlet.env` snapshot; `env.include` allowlist; reload immunity ([Changelog](./docs/changelog/v3/v3.1.0.md))
 - **v3.0.1** (March 2026) — Resolver fix for user `index.mjs` mis-classified as internal; CI `slothlet-dev` stripping hardening; respawn race fix; resilient `build:dist` script ([Changelog](./docs/changelog/v3/v3.0.1.md))
-- **v3.0.0** (February 2026) — Unified Wrapper architecture, redesigned hook system, full i18n, background materialization, lifecycle events, collision modes, mutation controls ([Changelog](./docs/changelog/v3.0.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -154,7 +154,7 @@ Automatic context preservation across all asynchronous boundaries:
 - **TypeScript-Friendly**: Comprehensive JSDoc annotations with auto-generated declarations
 - **Configurable Debug**: Detailed logging via CLI flags or environment variables
 - **Multiple Instances**: Parameter-based isolation for complex applications
-- **Inspectable APIs**: `console.log(api.math)` now shows real module contents (v3+)
+- **Inspectable APIs**: `console.log(api.math)` and logical versioned paths like `console.log(api.auth)` show real module contents instead of proxy internals (v3+)
 - **Development Checks**: Built-in environment detection with silent production behavior
 
 ---
@@ -969,7 +969,7 @@ try {
 - **Debug Mode**: Comprehensive i18n-translated logging via `--slothletdebug` flag or `SLOTHLET_DEBUG=true`
 - **Development Check**: `devcheck.mjs` for environment validation
 - **Source Detection**: Automatic `src/` vs `dist/` mode detection
-- **API Inspection**: `console.log(api.math)` shows real module contents (v3+)
+- **API Inspection**: `console.log(api.math)` and versioned dispatcher paths like `console.log(api.auth)` show real module contents (v3+)
 
 ---
 

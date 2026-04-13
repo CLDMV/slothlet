@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-01 21:48:16 -07:00 (1775105296)
+ *	@Last modified time: 2026-04-12 18:29:45 -07:00 (1776043785)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -722,6 +722,30 @@ export class VersionManager extends ComponentBase {
 			return manager.#walkApiPath([versionTag, ...logicalPath.split(".")]);
 		};
 
+		// Install util.inspect.custom directly on the target object.
+		// Node's util.inspect reads this symbol from the physical proxy target (bypassing
+		// all proxy traps), so it MUST be an own property of `target` — not just available
+		// via the get trap — for util.inspect(api.auth) to show the resolved versioned
+		// namespace content instead of the raw { __isVersionDispatcher, __logicalPath } target.
+		target[Symbol.for("nodejs.util.inspect.custom")] = function (_depth, options, inspectFn) {
+			const vw = resolveVersionedWrapper();
+			if (vw) {
+				try {
+					return typeof inspectFn === "function" ? inspectFn(vw, options) : inspect(vw, options);
+				} catch {
+					// inspect() almost never throws on a Proxy; last-resort guard.
+					/* v8 ignore next */
+					void 0;
+				}
+			}
+			// Fallback: no versioned wrapper could be resolved (either no versions are
+			// registered yet, or the registry is populated but the mounted wrapper is not
+			// reachable in the live API tree).
+			const entry = manager.#registry.get(logicalPath);
+			const versions = entry ? Array.from(entry.versions.keys()) : [];
+			return { __versionDispatcher: logicalPath, versions };
+		};
+
 		const handlers = {
 			/**
 			 * Get trap — routes property access based on the version resolution algorithm.
@@ -781,28 +805,30 @@ export class VersionManager extends ComponentBase {
 				}
 
 				// ── 6. util.inspect.custom ────────────────────────────────────────
-				// UnifiedWrapper's symbol catch-all at L2403 returns undefined for ALL symbols
-				// (including util.inspect.custom) before delegating to impl[prop]; this entire
-				// case is never reached through normal API access.
-				/* v8 ignore start */
-				if (typeof prop === "symbol" && prop.toString() === "Symbol(nodejs.util.inspect.custom)") {
-					return () => {
+				// Primary path: util.inspect.custom is installed as an own property on `target`
+				// before the proxy is created, so Node's util.inspect reads it directly from
+				// the target (bypassing all proxy traps). This get-trap case is a secondary path
+				// reached by explicit property access — e.g. dispatcherProxy[util.inspect.custom]
+				// or UnifiedWrapper's impl-delegation when a UW wraps this dispatcher as its impl.
+				if (prop === inspect.custom) {
+					return (_depth, options, inspectFn) => {
 						const vw = resolveVersionedWrapper();
 						if (vw) {
 							try {
-								return inspect(vw);
+								return typeof inspectFn === "function" ? inspectFn(vw, options) : inspect(vw, options);
 							} catch {
 								// inspect() almost never throws on a Proxy; last-resort guard.
+								/* v8 ignore next */
 								void 0; // fallthrough to fallback below
 							}
 						}
-						// Fallback: vw is null only if all versions removed while dispatcher is live.
+						// Fallback when no mounted versioned wrapper can be resolved for this dispatcher,
+						// including direct dispatcher use before any versions are registered.
 						const entry = manager.#registry.get(logicalPath);
 						const versions = entry ? Array.from(entry.versions.keys()) : [];
 						return { __versionDispatcher: logicalPath, versions };
 					};
 				}
-				/* v8 ignore stop */
 
 				// ── 7. toString ───────────────────────────────────────────────────
 				if (prop === "toString") return () => `[VersionDispatcher: ${logicalPath}]`;
@@ -1043,6 +1069,84 @@ export class VersionManager extends ComponentBase {
 				}
 				// configurable:true — V8's §10.5.6 step 28 does not apply; delegate directly.
 				return Reflect.defineProperty(vw, prop, descriptor);
+			},
+
+			/**
+			 * Set trap — delegates property assignment to the resolved versioned wrapper.
+			 *
+			 * Without this trap, the default `[[Set]]` path consults `[[GetOwnProperty]]` on
+			 * the receiver (this proxy) via `OrdinarySetWithOwnDescriptor`. The dispatcher's
+			 * `getOwnPropertyDescriptor` trap returns `{ writable: false }` for all unknown
+			 * properties, causing `[[Set]]` to return false (throwing in strict mode) before
+			 * the value is ever written — even on the first assignment.
+			 *
+			 * With this trap, assignments are forwarded to the real versioned wrapper's own
+			 * `setTrap`, which performs the correct delete-then-`defineProperty` cycle with
+			 * `configurable: true`, keeping the property perpetually reassignable.
+			 *
+			 * Special-case keys: the `get` trap returns fixed values (not delegating to the
+			 * versioned wrapper) for a known set of keys — framework internals, stable
+			 * accessors, well-known string props, and all symbols. Forwarding writes for those
+			 * keys to the versioned wrapper would create invisible state: the write appears to
+			 * succeed but is never observable through the dispatcher's `get` trap. To keep
+			 * `set`/`get` behaviour consistent, writes to those keys are silently absorbed
+			 * (return `true` without touching vw).
+			 *
+			 * Keys NOT absorbed (get delegates to vw): `__metadata`, `__filePath`,
+			 * `__sourceFolder`, `__type`, and all user-defined string properties.
+			 *
+			 * @param {object} t - Raw dispatcher target.
+			 * @param {string|symbol} prop - Property name.
+			 * @param {any} value - Value to assign.
+			 * @returns {boolean} `true` when the assignment succeeded.
+			 * @example
+			 * // self.cache is a versioned dispatcher; this now reaches self.v1.cache.setTrap
+			 * self.cache.redisClient = client;
+			 */
+			set(t, prop, value) {
+				// Absorb all symbol writes — including Symbol.toStringTag.
+				// UnifiedWrapper computes Symbol.toStringTag dynamically on reads so forwarding
+				// a write would create unobservable hidden state (get/set semantics inconsistent).
+				// inspect.custom is likewise not meaningfully settable here.
+				// All other symbols return undefined from get (case 10) — absorb silently.
+				if (typeof prop === "symbol") return true;
+
+				// Framework internal string keys — get returns undefined (case 1).
+				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
+					return true;
+
+				// Stable framework accessors — get returns fixed non-vw values (case 2).
+				if (
+					prop === "__isVersionDispatcher" ||
+					prop === "__mode" ||
+					prop === "__apiPath" ||
+					prop === "__slothletPath" ||
+					prop === "__isCallable" ||
+					prop === "__materializeOnCreate" ||
+					prop === "__materialized" ||
+					prop === "__inFlight" ||
+					prop === "__displayName" ||
+					prop === "__moduleID" ||
+					prop === "_materialize" ||
+					prop === "length" ||
+					prop === "name"
+				)
+					return true;
+
+				// Thenable / structural props — get returns fixed values (cases 3, 4, 7, 8, 9).
+				if (prop === "then" || prop === "constructor" || prop === "toString" || prop === "valueOf" || prop === "toJSON") return true;
+
+				const vw = resolveVersionedWrapper();
+				// No versioned wrapper — only reachable when no versions are registered while
+				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.
+				// Absorb silently: mutating the raw target would make the key visible via ownKeys
+				// while get still throws VERSION_NO_DEFAULT (inconsistent set/get semantics).
+				/* v8 ignore next */
+				if (!vw) return true;
+				// Delegate to the versioned wrapper's set trap (UnifiedWrapper.setTrap),
+				// which performs the correct delete → defineProperty cycle so the property
+				// remains configurable and can be reassigned on subsequent calls.
+				return Reflect.set(vw, prop, value, vw);
 			}
 		};
 
