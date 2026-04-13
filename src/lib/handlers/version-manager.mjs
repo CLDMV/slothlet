@@ -727,11 +727,11 @@ export class VersionManager extends ComponentBase {
 		// all proxy traps), so it MUST be an own property of `target` — not just available
 		// via the get trap — for util.inspect(api.auth) to show the resolved versioned
 		// namespace content instead of the raw { __isVersionDispatcher, __logicalPath } target.
-		target[Symbol.for("nodejs.util.inspect.custom")] = function () {
+		target[Symbol.for("nodejs.util.inspect.custom")] = function (_depth, options, inspectFn) {
 			const vw = resolveVersionedWrapper();
 			if (vw) {
 				try {
-					return inspect(vw);
+					return typeof inspectFn === "function" ? inspectFn(vw, options) : inspect(vw, options);
 				} catch {
 					// inspect() almost never throws on a Proxy; last-resort guard.
 					/* v8 ignore next */
@@ -808,12 +808,12 @@ export class VersionManager extends ComponentBase {
 				// the target (bypassing all proxy traps). This get-trap case is a secondary path
 				// reached by explicit property access — e.g. dispatcherProxy[util.inspect.custom]
 				// or UnifiedWrapper's impl-delegation when a UW wraps this dispatcher as its impl.
-				if (typeof prop === "symbol" && prop.toString() === "Symbol(nodejs.util.inspect.custom)") {
-					return () => {
+				if (prop === inspect.custom) {
+					return (_depth, options, inspectFn) => {
 						const vw = resolveVersionedWrapper();
 						if (vw) {
 							try {
-								return inspect(vw);
+								return typeof inspectFn === "function" ? inspectFn(vw, options) : inspect(vw, options);
 							} catch {
 								// inspect() almost never throws on a Proxy; last-resort guard.
 								/* v8 ignore next */

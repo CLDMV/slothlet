@@ -192,8 +192,26 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// get trap case 6 fires on explicit symbol property access
 		const customFn = api.auth[customSym];
 		expect(typeof customFn).toBe("function");
+		// Called with no args: falls back to inspect(vw, undefined)
 		const result = customFn();
 		// Returns a string that represents the resolved versioned namespace
+		expect(typeof result).toBe("string");
+		expect(result).toContain("login");
+		// Called with options forwarding: honoured by inspectFn
+		const { inspect: inspectFn } = await import("node:util");
+		const resultWithOptions = customFn(3, { depth: 3, colors: false }, inspectFn);
+		expect(typeof resultWithOptions).toBe("string");
+		expect(resultWithOptions).toContain("login");
+	});
+
+	it("raw target inspect function called without inspectFn uses inspect() fallback", async () => {
+		api = await makeApi(config);
+		const customSym = Symbol.for("nodejs.util.inspect.custom");
+		// GOPD on the proxy returns the raw-target function (not the get-trap arrow function).
+		// Calling it without an inspectFn exercises the false branch of the ternary at line 734.
+		const rawTargetFn = Object.getOwnPropertyDescriptor(api.auth, customSym)?.value;
+		expect(typeof rawTargetFn).toBe("function");
+		const result = rawTargetFn();
 		expect(typeof result).toBe("string");
 		expect(result).toContain("login");
 	});
