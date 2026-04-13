@@ -28,7 +28,9 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import { inspect } from "node:util";
 import slothlet from "@cldmv/slothlet";
+import { VersionManager } from "@cldmv/slothlet/handlers/version-manager";
 import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_VERSIONED;
@@ -140,10 +142,12 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 			api.auth[Symbol.iterator] = () => {};
 		}).not.toThrow();
 
-		// Symbol reads from the dispatcher return undefined for unknown symbols
+		// Non-delegated symbols (case 10): absorbed, not visible
 		expect(api.auth[MY_SYM]).toBeUndefined();
-		// The versioned wrapper must NOT have the symbol as a hidden side-effect
 		expect(api.v1.auth[MY_SYM]).toBeUndefined();
+		// Symbol.toStringTag is delegated in get (case 5) so set forwards to vw —
+		// the dispatcher is transparent; what vw returns on read is vw's concern
+		expect(api.auth[Symbol.toStringTag]).toBeDefined();
 	});
 
 	it("absorbed writes do not pollute the versioned wrapper", async () => {
@@ -156,5 +160,76 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// from UnifiedWrapper's own get trap regardless of what we write to the dispatcher
 		expect(api.v1.auth.__isCallable).toBe(false);
 		expect(typeof api.v1.auth.toString).not.toBe("string");
+	});
+
+	it("writes to framework internal string keys are absorbed (case 1 set guard)", async () => {
+		api = await makeApi(config);
+		// These keys return undefined from the get trap (case 1); writes must be absorbed silently.
+		expect(() => {
+			api.auth.____slothletInternal = "corrupted";
+			api.auth._impl = "corrupted";
+			api.auth.__impl = "corrupted";
+			api.auth.__state = "corrupted";
+			api.auth.__invalid = "corrupted";
+		}).not.toThrow();
+		// Internal keys are never visible through the dispatcher
+		expect(api.auth.____slothletInternal).toBeUndefined();
+		expect(api.auth._impl).toBeUndefined();
+	});
+
+	it("util.inspect shows the resolved versioned namespace (inspection transparency)", async () => {
+		api = await makeApi(config);
+		const result = inspect(api.auth, { depth: 3, colors: false });
+		// Must show default-version namespace content, not the raw dispatcher target.
+		// The raw target only has __isVersionDispatcher and __logicalPath.
+		expect(result).toContain("login");
+		expect(result).not.toContain("__isVersionDispatcher");
+	});
+
+	it("[util.inspect.custom] is accessible via explicit property access (get trap case 6)", async () => {
+		api = await makeApi(config);
+		const customSym = Symbol.for("nodejs.util.inspect.custom");
+		// get trap case 6 fires on explicit symbol property access
+		const customFn = api.auth[customSym];
+		expect(typeof customFn).toBe("function");
+		const result = customFn();
+		// Returns a string that represents the resolved versioned namespace
+		expect(typeof result).toBe("string");
+		expect(result).toContain("login");
+	});
+
+	it("direct dispatcher use before registration returns the fallback inspect payload", () => {
+		const versionManager = new VersionManager({
+			contextManager: { tryGetContext: () => null },
+			handlers: { metadata: null, apiManager: null },
+			debug() {}
+		});
+		const dispatcher = versionManager.createDispatcher("auth");
+		const customSym = Symbol.for("nodejs.util.inspect.custom");
+
+		// Node's util.inspect reads the symbol installed directly on the dispatcher target.
+		expect(inspect(dispatcher)).toBe("{ __versionDispatcher: 'auth', versions: [] }");
+		// Explicit property access hits get-trap case 6 and must return the same fallback payload.
+		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: [] });
+	});
+
+	it("direct dispatcher fallback lists registered versions when registry exists but no wrapper is mounted", () => {
+		const versionManager = new VersionManager({
+			api: {},
+			contextManager: { tryGetContext: () => null },
+			handlers: {
+				metadata: null,
+				apiManager: { setValueAtPath() {} }
+			},
+			debug() {}
+		});
+		versionManager.registerVersion("auth", "v1", "module:v1", {}, true);
+		const dispatcher = versionManager.createDispatcher("auth");
+		const customSym = Symbol.for("nodejs.util.inspect.custom");
+
+		// Registry has an entry, but slothlet.api does not have a mounted v1.auth wrapper,
+		// so resolveVersionedWrapper() returns undefined and the fallback exposes versions.
+		expect(inspect(dispatcher)).toBe("{ __versionDispatcher: 'auth', versions: [ 'v1' ] }");
+		expect(dispatcher[customSym]()).toEqual({ __versionDispatcher: "auth", versions: ["v1"] });
 	});
 });

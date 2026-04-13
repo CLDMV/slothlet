@@ -722,6 +722,28 @@ export class VersionManager extends ComponentBase {
 			return manager.#walkApiPath([versionTag, ...logicalPath.split(".")]);
 		};
 
+		// Install util.inspect.custom directly on the target object.
+		// Node's util.inspect reads this symbol from the physical proxy target (bypassing
+		// all proxy traps), so it MUST be an own property of `target` — not just available
+		// via the get trap — for util.inspect(api.auth) to show the resolved versioned
+		// namespace content instead of the raw { __isVersionDispatcher, __logicalPath } target.
+		target[Symbol.for("nodejs.util.inspect.custom")] = function () {
+			const vw = resolveVersionedWrapper();
+			if (vw) {
+				try {
+					return inspect(vw);
+				} catch {
+					// inspect() almost never throws on a Proxy; last-resort guard.
+					/* v8 ignore next */
+					void 0;
+				}
+			}
+			// Fallback for direct dispatcher use before any versions are registered.
+			const entry = manager.#registry.get(logicalPath);
+			const versions = entry ? Array.from(entry.versions.keys()) : [];
+			return { __versionDispatcher: logicalPath, versions };
+		};
+
 		const handlers = {
 			/**
 			 * Get trap — routes property access based on the version resolution algorithm.
@@ -781,10 +803,11 @@ export class VersionManager extends ComponentBase {
 				}
 
 				// ── 6. util.inspect.custom ────────────────────────────────────────
-				// UnifiedWrapper's symbol catch-all at L2403 returns undefined for ALL symbols
-				// (including util.inspect.custom) before delegating to impl[prop]; this entire
-				// case is never reached through normal API access.
-				/* v8 ignore start */
+				// Primary path: util.inspect.custom is installed as an own property on `target`
+				// before the proxy is created, so Node's util.inspect reads it directly from
+				// the target (bypassing all proxy traps). This get-trap case is a secondary path
+				// reached by explicit property access — e.g. dispatcherProxy[util.inspect.custom]
+				// or UnifiedWrapper's impl-delegation when a UW wraps this dispatcher as its impl.
 				if (typeof prop === "symbol" && prop.toString() === "Symbol(nodejs.util.inspect.custom)") {
 					return () => {
 						const vw = resolveVersionedWrapper();
@@ -793,16 +816,16 @@ export class VersionManager extends ComponentBase {
 								return inspect(vw);
 							} catch {
 								// inspect() almost never throws on a Proxy; last-resort guard.
+								/* v8 ignore next */
 								void 0; // fallthrough to fallback below
 							}
 						}
-						// Fallback: vw is null only if all versions removed while dispatcher is live.
+						// Fallback for direct dispatcher use before any versions are registered.
 						const entry = manager.#registry.get(logicalPath);
 						const versions = entry ? Array.from(entry.versions.keys()) : [];
 						return { __versionDispatcher: logicalPath, versions };
 					};
 				}
-				/* v8 ignore stop */
 
 				// ── 7. toString ───────────────────────────────────────────────────
 				if (prop === "toString") return () => `[VersionDispatcher: ${logicalPath}]`;
@@ -1078,9 +1101,12 @@ export class VersionManager extends ComponentBase {
 			 * self.cache.redisClient = client;
 			 */
 			set(t, prop, value) {
-				// All symbols: get returns undefined for every symbol (case 10), so a write
-				// would create unobservable state on the versioned wrapper. Absorb silently.
-				if (typeof prop === "symbol") return true;
+				// Absorb writes to symbols that get does NOT delegate to vw.
+				// get case 5 (Symbol.toStringTag) delegates to vw — must forward.
+				// get case 6 (inspect.custom) is handled by UW delegating impl[inspect.custom]()
+				// so writes to it are not meaningful — absorb silently with all other symbols.
+				// All other symbols (case 10 → undefined) — absorb silently.
+				if (typeof prop === "symbol" && prop !== Symbol.toStringTag) return true;
 
 				// Framework internal string keys — get returns undefined (case 1).
 				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
