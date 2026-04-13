@@ -207,7 +207,7 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		api = await makeApi(config);
 		const customSym = Symbol.for("nodejs.util.inspect.custom");
 		// GOPD on the proxy returns the raw-target function (not the get-trap arrow function).
-		// Calling it without an inspectFn exercises the false branch of the ternary at line 734.
+		// Calling it without an inspectFn exercises the fallback branch used when inspectFn is not provided.
 		const rawTargetFn = Object.getOwnPropertyDescriptor(api.auth, customSym)?.value;
 		expect(typeof rawTargetFn).toBe("function");
 		const result = rawTargetFn();

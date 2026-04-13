@@ -822,7 +822,8 @@ export class VersionManager extends ComponentBase {
 								void 0; // fallthrough to fallback below
 							}
 						}
-						// Fallback for direct dispatcher use before any versions are registered.
+						// Fallback when no mounted versioned wrapper can be resolved for this dispatcher,
+						// including direct dispatcher use before any versions are registered.
 						const entry = manager.#registry.get(logicalPath);
 						const versions = entry ? Array.from(entry.versions.keys()) : [];
 						return { __versionDispatcher: logicalPath, versions };
