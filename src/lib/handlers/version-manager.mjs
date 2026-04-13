@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-01 21:48:16 -07:00 (1775105296)
+ *	@Last modified time: 2026-04-12 18:29:45 -07:00 (1776043785)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1058,6 +1058,17 @@ export class VersionManager extends ComponentBase {
 			 * `setTrap`, which performs the correct delete-then-`defineProperty` cycle with
 			 * `configurable: true`, keeping the property perpetually reassignable.
 			 *
+			 * Special-case keys: the `get` trap returns fixed values (not delegating to the
+			 * versioned wrapper) for a known set of keys — framework internals, stable
+			 * accessors, well-known string props, and all symbols. Forwarding writes for those
+			 * keys to the versioned wrapper would create invisible state: the write appears to
+			 * succeed but is never observable through the dispatcher's `get` trap. To keep
+			 * `set`/`get` behaviour consistent, writes to those keys are silently absorbed
+			 * (return `true` without touching vw).
+			 *
+			 * Keys NOT absorbed (get delegates to vw): `__metadata`, `__filePath`,
+			 * `__sourceFolder`, `__type`, and all user-defined string properties.
+			 *
 			 * @param {object} t - Raw dispatcher target.
 			 * @param {string|symbol} prop - Property name.
 			 * @param {any} value - Value to assign.
@@ -1067,6 +1078,35 @@ export class VersionManager extends ComponentBase {
 			 * self.cache.redisClient = client;
 			 */
 			set(t, prop, value) {
+				// All symbols: get returns undefined for every symbol (case 10), so a write
+				// would create unobservable state on the versioned wrapper. Absorb silently.
+				if (typeof prop === "symbol") return true;
+
+				// Framework internal string keys — get returns undefined (case 1).
+				if (prop === "____slothletInternal" || prop === "_impl" || prop === "__impl" || prop === "__state" || prop === "__invalid")
+					return true;
+
+				// Stable framework accessors — get returns fixed non-vw values (case 2).
+				if (
+					prop === "__isVersionDispatcher" ||
+					prop === "__mode" ||
+					prop === "__apiPath" ||
+					prop === "__slothletPath" ||
+					prop === "__isCallable" ||
+					prop === "__materializeOnCreate" ||
+					prop === "__materialized" ||
+					prop === "__inFlight" ||
+					prop === "__displayName" ||
+					prop === "__moduleID" ||
+					prop === "_materialize" ||
+					prop === "length" ||
+					prop === "name"
+				)
+					return true;
+
+				// Thenable / structural props — get returns fixed values (cases 3, 4, 7, 8, 9).
+				if (prop === "then" || prop === "constructor" || prop === "toString" || prop === "valueOf" || prop === "toJSON") return true;
+
 				const vw = resolveVersionedWrapper();
 				// No versioned wrapper — only reachable when no versions are registered while
 				// the dispatcher is still live; teardownDispatcher prevents this in normal usage.

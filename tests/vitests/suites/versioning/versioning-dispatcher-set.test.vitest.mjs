@@ -100,4 +100,61 @@ describe.each(getMatrixConfigs())("Versioning > Dispatcher set trap > $name", ({
 		// v2.auth should NOT have it (different wrapper)
 		expect(api.v2.auth.sharedClient).toBeUndefined();
 	});
+
+	// ── Special-case key absorption ──────────────────────────────────────────
+	// The get trap returns fixed values for a known set of keys (framework internals,
+	// stable accessors, thenable/structural props, all symbols). Writing to those keys
+	// would create invisible hidden state on the versioned wrapper — never observable
+	// through the dispatcher's get trap. The set trap absorbs those writes silently.
+
+	it("write to a framework accessor key is silently absorbed without throwing", async () => {
+		api = await makeApi(config);
+		// These would return fixed dispatcher values from get; writes must not throw
+		// and must not alter what get returns.
+		expect(() => {
+			api.auth.__isVersionDispatcher = false;
+			api.auth.__apiPath = "overridden";
+			api.auth.__moduleID = "hacked";
+			api.auth.toString = "not-a-function";
+			api.auth.valueOf = null;
+			api.auth.toJSON = null;
+			api.auth.then = () => {};
+			api.auth.length = 99;
+			api.auth.name = "renamed";
+		}).not.toThrow();
+
+		// Reads must return the original fixed values, not the written values
+		expect(api.auth.__isVersionDispatcher).toBe(true);
+		expect(api.auth.__apiPath).toBe("auth");
+		expect(api.auth.toString()).toBe("[VersionDispatcher: auth]");
+		expect(api.auth.then).toBeUndefined();
+		expect(api.auth.length).toBe(0);
+	});
+
+	it("write to a symbol key is silently absorbed without throwing", async () => {
+		api = await makeApi(config);
+		const MY_SYM = Symbol("test");
+		expect(() => {
+			api.auth[MY_SYM] = "symbol-value";
+			api.auth[Symbol.toStringTag] = "Overridden";
+			api.auth[Symbol.iterator] = () => {};
+		}).not.toThrow();
+
+		// Symbol reads from the dispatcher return undefined for unknown symbols
+		expect(api.auth[MY_SYM]).toBeUndefined();
+		// The versioned wrapper must NOT have the symbol as a hidden side-effect
+		expect(api.v1.auth[MY_SYM]).toBeUndefined();
+	});
+
+	it("absorbed writes do not pollute the versioned wrapper", async () => {
+		api = await makeApi(config);
+		const sentinel = {};
+		// Write special-case keys that the dispatcher absorbs
+		api.auth.__isCallable = sentinel;
+		api.auth.toString = "corrupted";
+		// The versioned wrapper (v1.auth) must be unaffected — __isCallable is always false
+		// from UnifiedWrapper's own get trap regardless of what we write to the dispatcher
+		expect(api.v1.auth.__isCallable).toBe(false);
+		expect(typeof api.v1.auth.toString).not.toBe("string");
+	});
 });
