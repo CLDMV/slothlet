@@ -55,18 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.2.2 (April 2026)
+### Latest: v3.2.3 (April 2026)
 
-- **Missing `set` trap on version dispatchers** — plain assignment like `self.auth.someProp = value` now routes to the resolved versioned wrapper instead of falling into V8 proxy-invariant failures on the dispatcher target
-- **Inspectable logical versioned paths** — `util.inspect(api.auth)` and `console.log(api.auth)` now show the resolved versioned namespace instead of the raw dispatcher target object
-- [View full v3.2.2 Changelog](./docs/changelog/v3/v3.2.2.md)
+- **Publish workflow fix** — switched CI trigger from `pull_request` to `push` on master so releases publish immediately on merge without depending on the PR event payload
+- [View full v3.2.3 Changelog](./docs/changelog/v3/v3.2.3.md)
 
 ### Recent Releases
 
+- **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
 - **v3.2.1** (April 2026) — version-dispatcher `defineProperty` trap fix; pre-commit validation cleanup ([Changelog](./docs/changelog/v3/v3.2.1.md))
 - **v3.2.0** (April 2026) — API Path Versioning (`versionDispatcher`, `api.slothlet.versioning.*`, version metadata, dispatcher proxy); lazy-mode shutdown race fix ([Changelog](./docs/changelog/v3/v3.2.0.md))
 - **v3.1.0** (March 2026) — Frozen `api.slothlet.env` snapshot; `env.include` allowlist; reload immunity ([Changelog](./docs/changelog/v3/v3.1.0.md))
-- **v3.0.1** (March 2026) — Resolver fix for user `index.mjs` mis-classified as internal; CI `slothlet-dev` stripping hardening; respawn race fix; resilient `build:dist` script ([Changelog](./docs/changelog/v3/v3.0.1.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
