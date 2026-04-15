@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "Версия определена: {version} для пути {apiPath} (вызывающий: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "Нет совпадения дискриминатора для пути {apiPath}; используется версия по умолчанию {version}.",
 		"DEBUG_VERSION_REGISTERED": "Версия {version} зарегистрирована в {logicalPath} (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Версия {version} удалена из {logicalPath}"
+		"DEBUG_VERSION_UNREGISTERED": "Версия {version} удалена из {logicalPath}",
+
+		"PERMISSION_DENIED": "Доступ запрещён: вызывающий '{caller}' не имеет права доступа к '{target}'",
+		"HINT_PERMISSION_DENIED": "Проверьте правила разрешений для этой пары вызывающий/цель. Используйте api.slothlet.permissions.global.rulesForPath('{target}') для просмотра активных правил.",
+		"PERMISSION_SELF_MODIFY": "Модуль '{moduleID}' не может удалить собственное правило разрешений '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "Правила разрешений неизменяемы для модуля-владельца. Другой модуль должен удалить это правило.",
+		"INVALID_PERMISSION_RULE": "Недопустимое правило разрешений: {reason} (получено: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Правила разрешений требуют: caller (string glob), target (string glob) и effect ('allow' или 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Разрешение отклонено: вызывающий '{caller}' -> цель '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Разрешение предоставлено: вызывающий '{caller}' -> цель '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Самообход разрешений: вызывающий и цель имеют общий moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Применена политика разрешений по умолчанию: вызывающий '{caller}' -> цель '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Правило разрешений добавлено: {ruleId} ({caller} -> {target}: {effect}, владелец: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Правило разрешений удалено: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "правило должно быть ненулевым объектом",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller должно быть непустой строкой",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect должно быть 'allow' или 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "Расширение фигурных скобок превысило максимальную глубину {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в шаблонах фигурных скобок или увеличьте параметр maxDepth."
 	},
 	"metadata": {
 		"code": "ru-ru",

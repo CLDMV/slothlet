@@ -744,8 +744,6 @@ class Slothlet {
 					moduleID: `replay_${this.helpers.utilities.generateId().substring(0, 8)}`, // Generate new moduleID for replay
 					versionConfig: operation.versionConfig || null
 				});
-				// All operations are "add" or "remove"; no third type exists — false arm is dead code.
-				/* v8 ignore next */
 			} else if (operation.type === "remove") {
 				// During replay, operation.apiPath is the root path (e.g., "path1").
 				// Use deletePath directly to remove the entire subtree.
@@ -757,6 +755,14 @@ class Slothlet {
 				if (this.handlers.metadata) {
 					const rootSegment = operation.apiPath.split(".")[0];
 					this.handlers.metadata.removeUserMetadataByApiPath(rootSegment);
+				}
+			} else if (operation.type === "addPermissionRule") {
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.addRule(operation.rule, operation.ownerModuleID, operation.ruleId);
+				}
+			} else if (operation.type === "removePermissionRule") {
+				if (this.handlers.permissionManager) {
+					this.handlers.permissionManager.removeRule(operation.ruleId, operation.callerModuleID);
 				}
 			}
 		}

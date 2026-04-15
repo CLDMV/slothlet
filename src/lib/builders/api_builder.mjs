@@ -1300,6 +1300,195 @@ export class ApiBuilder extends ComponentBase {
 					if (!slothlet.handlers?.versionManager) return;
 					return slothlet.handlers.versionManager.setVersionMetadataByPath(logicalPath, versionTag, patch);
 				}
+			},
+
+			/**
+			 * Permission management API for access control.
+			 * @type {object}
+			 * @public
+			 */
+			permissions: {
+				/**
+				 * Add a permission rule.
+				 * Gated by `config.api.mutations.permissions` (defaults to `true`).
+				 *
+				 * @param {object} rule - Rule definition: `{ caller, target, effect }`.
+				 * @param {string} rule.caller - Glob pattern matching caller API paths.
+				 * @param {string} rule.target - Glob pattern matching target API paths.
+				 * @param {string} rule.effect - "allow" or "deny".
+				 * @returns {string} The generated rule ID.
+				 * @public
+				 * @example
+				 * api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+				 */
+				addRule: function slothlet_permissions_addRule(rule) {
+					if (!slothlet.handlers?.permissionManager) return undefined;
+					const ruleId = slothlet.handlers.permissionManager.addRule(rule, null);
+
+					// Record in operationHistory for replay on reload
+					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
+						slothlet.handlers.apiManager.state.operationHistory.push({
+							type: "addPermissionRule",
+							rule,
+							ownerModuleID: null,
+							ruleId,
+							timestamp: Date.now()
+						});
+					}
+
+					return ruleId;
+				},
+
+				/**
+				 * Remove a permission rule by ID.
+				 * Self-modification is blocked (a module cannot remove its own rules).
+				 *
+				 * @param {string} ruleId - The rule ID to remove.
+				 * @returns {boolean} True if the rule was removed.
+				 * @public
+				 * @example
+				 * api.slothlet.permissions.removeRule("perm-3");
+				 */
+				removeRule: function slothlet_permissions_removeRule(ruleId) {
+					if (!slothlet.handlers?.permissionManager) return false;
+					const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
+					const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
+					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
+
+					// Record in operationHistory for replay on reload
+					if (result && slothlet.handlers?.apiManager?.state?.operationHistory) {
+						slothlet.handlers.apiManager.state.operationHistory.push({
+							type: "removePermissionRule",
+							ruleId,
+							callerModuleID,
+							timestamp: Date.now()
+						});
+					}
+
+					return result;
+				},
+
+				/**
+				 * Self-scoped permission introspection (always available).
+				 * @type {object}
+				 * @public
+				 */
+				self: {
+					/**
+					 * Check if the calling module is allowed to reach a target path.
+					 *
+					 * @param {string} target - Target API path to check.
+					 * @returns {boolean} True if access is allowed.
+					 * @public
+					 * @example
+					 * const canWrite = api.slothlet.permissions.self.access("db.write");
+					 */
+					access: function slothlet_permissions_self_access(target) {
+						if (!slothlet.handlers?.permissionManager) return true;
+						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
+						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
+						const callerFilePath = callerWrapper?.____slothletInternal?.filePath ?? null;
+						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null);
+					},
+
+					/**
+					 * List all permission rules that apply to the calling module.
+					 *
+					 * @returns {Array<object>} Rules where the caller pattern matches this module.
+					 * @public
+					 * @example
+					 * const rules = api.slothlet.permissions.self.rules();
+					 */
+					rules: function slothlet_permissions_self_rules() {
+						if (!slothlet.handlers?.permissionManager) return [];
+						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
+						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
+						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
+					}
+				},
+
+				/**
+				 * Global permission diagnostics (gatable via rules).
+				 * @type {object}
+				 * @public
+				 */
+				global: {
+					/**
+					 * Check if an arbitrary caller path is allowed to reach a target path.
+					 *
+					 * @param {string} caller - Caller API path.
+					 * @param {string} target - Target API path.
+					 * @returns {boolean} True if access is allowed.
+					 * @public
+					 * @example
+					 * const ok = api.slothlet.permissions.global.checkAccess("payments.charge", "db.write");
+					 */
+					checkAccess: function slothlet_permissions_global_checkAccess(caller, target) {
+						if (!slothlet.handlers?.permissionManager) return true;
+						return slothlet.handlers.permissionManager.checkAccess(caller, target);
+					},
+
+					/**
+					 * List all rules that match a given target path.
+					 *
+					 * @param {string} path - Target API path.
+					 * @returns {Array<object>} Matching rules.
+					 * @public
+					 * @example
+					 * const rules = api.slothlet.permissions.global.rulesForPath("db.write");
+					 */
+					rulesForPath: function slothlet_permissions_global_rulesForPath(path) {
+						if (!slothlet.handlers?.permissionManager) return [];
+						return slothlet.handlers.permissionManager.getRulesForPath(path);
+					},
+
+					/**
+					 * List all rules owned by a module.
+					 *
+					 * @param {string} moduleID - Module ID to look up.
+					 * @returns {Array<object>} Rules owned by the module.
+					 * @public
+					 * @example
+					 * const rules = api.slothlet.permissions.global.rulesByModule("mod_abc123");
+					 */
+					rulesByModule: function slothlet_permissions_global_rulesByModule(moduleID) {
+						if (!slothlet.handlers?.permissionManager) return [];
+						return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
+					}
+				},
+
+				/**
+				 * Global permission control (deny-by-default).
+				 * @type {object}
+				 * @public
+				 */
+				control: {
+					/**
+					 * Enable permission enforcement globally.
+					 *
+					 * @returns {void}
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.enable();
+					 */
+					enable: function slothlet_permissions_control_enable() {
+						if (!slothlet.handlers?.permissionManager) return;
+						slothlet.handlers.permissionManager.enable();
+					},
+
+					/**
+					 * Disable permission enforcement globally (all calls allowed).
+					 *
+					 * @returns {void}
+					 * @public
+					 * @example
+					 * api.slothlet.permissions.control.disable();
+					 */
+					disable: function slothlet_permissions_control_disable() {
+						if (!slothlet.handlers?.permissionManager) return;
+						slothlet.handlers.permissionManager.disable();
+					}
+				}
 			}
 		};
 

@@ -190,7 +190,8 @@ export class Config extends ComponentBase {
 				context: false,
 				initialization: false,
 				materialize: false,
-				versioning: false
+				versioning: false,
+				permissions: false
 			};
 		}
 
@@ -206,7 +207,8 @@ export class Config extends ComponentBase {
 				context: true,
 				initialization: true,
 				materialize: true,
-				versioning: true
+				versioning: true,
+				permissions: true
 			};
 		}
 
@@ -222,7 +224,8 @@ export class Config extends ComponentBase {
 				context: debug.context || false,
 				initialization: debug.initialization || false,
 				materialize: debug.materialize || false,
-				versioning: debug.versioning || false
+				versioning: debug.versioning || false,
+				permissions: debug.permissions || false
 			};
 		}
 
@@ -237,7 +240,8 @@ export class Config extends ComponentBase {
 			context: false,
 			initialization: false,
 			materialize: false,
-			versioning: false
+			versioning: false,
+			permissions: false
 		};
 	}
 
@@ -353,6 +357,9 @@ export class Config extends ComponentBase {
 			}
 		}
 
+		// Normalize permissions configuration
+		const permissionsConfig = this.normalizePermissions(config.permissions);
+
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
 		if (config.i18n && typeof config.i18n === "object") {
@@ -385,7 +392,8 @@ export class Config extends ComponentBase {
 			silent: config.silent === true,
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
-			versionDispatcher: config.versionDispatcher ?? null
+			versionDispatcher: config.versionDispatcher ?? null,
+			permissions: permissionsConfig
 		};
 	}
 
@@ -471,5 +479,32 @@ export class Config extends ComponentBase {
 			return { include };
 		}
 		return null; // Empty or invalid include — treat as no restriction
+	}
+
+	/**
+	 * Normalize permissions configuration.
+	 *
+	 * @param {object|undefined} permissions - Raw permissions config from user.
+	 * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
+	 * @param {boolean} [permissions.enabled=true] - Global toggle.
+	 * @param {string} [permissions.audit="default"] - Audit level: "default" or "verbose".
+	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+	 * @returns {object} Normalized permissions config.
+	 *
+	 * @example
+	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", rules: [...] }
+	 */
+	normalizePermissions(permissions) {
+		if (!permissions || typeof permissions !== "object") {
+			return null;
+		}
+
+		const defaultPolicy = permissions.defaultPolicy === "deny" ? "deny" : "allow";
+		const enabled = permissions.enabled !== false;
+		const audit = permissions.audit === "verbose" ? "verbose" : "default";
+		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
+
+		return { defaultPolicy, enabled, audit, rules };
 	}
 }

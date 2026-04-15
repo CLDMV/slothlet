@@ -124,6 +124,21 @@ export class Config extends ComponentBase {
     public normalizeEnv(env: any | null | undefined): {
         include: string[];
     } | null;
+    /**
+     * Normalize permissions configuration.
+     *
+     * @param {object|undefined} permissions - Raw permissions config from user.
+     * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
+     * @param {boolean} [permissions.enabled=true] - Global toggle.
+     * @param {string} [permissions.audit="default"] - Audit level: "default" or "verbose".
+     * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+     * @returns {object} Normalized permissions config.
+     *
+     * @example
+     * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+     * // => { defaultPolicy: "deny", enabled: true, audit: "default", rules: [...] }
+     */
+    normalizePermissions(permissions: object | undefined): object;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=config.d.mts.map

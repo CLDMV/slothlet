@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "संस्करण हल किया गया: {version}, पथ: {apiPath} (कॉलर: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "पथ {apiPath} के लिए कोई Discriminator मिलान नहीं; डिफ़ॉल्ट संस्करण {version} का उपयोग किया जा रहा है।",
 		"DEBUG_VERSION_REGISTERED": "संस्करण {version} को {logicalPath} पर पंजीकृत किया गया (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "संस्करण {version} को {logicalPath} से हटाया गया"
+		"DEBUG_VERSION_UNREGISTERED": "संस्करण {version} को {logicalPath} से हटाया गया",
+
+		"PERMISSION_DENIED": "पहुँच अस्वीकृत: कॉलर '{caller}' को '{target}' तक पहुँचने की अनुमति नहीं है",
+		"HINT_PERMISSION_DENIED": "इस कॉलर/लक्ष्य जोड़ी के लिए अनुमति नियम जाँचें। सक्रिय नियमों का निरीक्षण करने के लिए api.slothlet.permissions.global.rulesForPath('{target}') का उपयोग करें।",
+		"PERMISSION_SELF_MODIFY": "मॉड्यूल '{moduleID}' अपना स्वयं का अनुमति नियम '{ruleId}' नहीं हटा सकता",
+		"HINT_PERMISSION_SELF_MODIFY": "अनुमति नियम स्वामी मॉड्यूल के लिए अपरिवर्तनीय हैं। किसी अन्य मॉड्यूल को यह नियम हटाना होगा।",
+		"INVALID_PERMISSION_RULE": "अमान्य अनुमति नियम: {reason} (प्राप्त: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "अनुमति नियमों के लिए आवश्यक: caller (string glob), target (string glob) और effect ('allow' या 'deny')।",
+		"DEBUG_PERMISSION_DENIED": "अनुमति अस्वीकृत: कॉलर '{caller}' -> लक्ष्य '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "अनुमति स्वीकृत: कॉलर '{caller}' -> लक्ष्य '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "अनुमति सेल्फ-बाइपास: कॉलर और लक्ष्य moduleID '{moduleID}' साझा करते हैं",
+		"DEBUG_PERMISSION_DEFAULT": "डिफ़ॉल्ट अनुमति नीति लागू: कॉलर '{caller}' -> लक्ष्य '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "अनुमति नियम जोड़ा गया: {ruleId} ({caller} -> {target}: {effect}, स्वामी: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "अनुमति नियम हटाया गया: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "नियम एक गैर-शून्य ऑब्जेक्ट होना चाहिए",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller एक गैर-रिक्त स्ट्रिंग होना चाहिए",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target एक गैर-रिक्त स्ट्रिंग होना चाहिए",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect 'allow' या 'deny' होना चाहिए",
+		"BRACE_EXPANSION_MAX_DEPTH": "ब्रेस विस्तार ने {maxDepth} की अधिकतम गहराई पार कर दी",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "अपने ब्रेस पैटर्न में नेस्टिंग कम करें या maxDepth विकल्प बढ़ाएं।"
 	},
 	"metadata": {
 		"code": "hi-in",

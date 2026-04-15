@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "バージョン解決済み: {version}、パス: {apiPath}（呼び出し元: {callerModule}）",
 		"DEBUG_VERSION_DEFAULT_USED": "パス {apiPath} の Discriminator に一致なし。デフォルトバージョン {version} を使用します。",
 		"DEBUG_VERSION_REGISTERED": "バージョン {version} が {logicalPath} に登録されました（moduleID: {moduleID}）",
-		"DEBUG_VERSION_UNREGISTERED": "バージョン {version} が {logicalPath} から登録解除されました"
+		"DEBUG_VERSION_UNREGISTERED": "バージョン {version} が {logicalPath} から登録解除されました",
+
+		"PERMISSION_DENIED": "アクセス拒否: 呼び出し元 '{caller}' は '{target}' へのアクセスが許可されていません",
+		"HINT_PERMISSION_DENIED": "この呼び出し元/ターゲットのペアのパーミッションルールを確認してください。api.slothlet.permissions.global.rulesForPath('{target}') を使用してアクティブなルールを検査できます。",
+		"PERMISSION_SELF_MODIFY": "モジュール '{moduleID}' は自身のパーミッションルール '{ruleId}' を削除できません",
+		"HINT_PERMISSION_SELF_MODIFY": "パーミッションルールは所有モジュールに対して不変です。別のモジュールがこのルールを削除する必要があります。",
+		"INVALID_PERMISSION_RULE": "無効なパーミッションルール: {reason}（受信値: {received}）",
+		"HINT_INVALID_PERMISSION_RULE": "パーミッションルールには caller（string glob）、target（string glob）、および effect（'allow' または 'deny'）が必要です。",
+		"DEBUG_PERMISSION_DENIED": "パーミッション拒否: 呼び出し元 '{caller}' -> ターゲット '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "パーミッション許可: 呼び出し元 '{caller}' -> ターゲット '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "パーミッション・セルフバイパス: 呼び出し元とターゲットが moduleID '{moduleID}' を共有しています",
+		"DEBUG_PERMISSION_DEFAULT": "デフォルトパーミッションポリシー適用: 呼び出し元 '{caller}' -> ターゲット '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "パーミッションルール追加: {ruleId}（{caller} -> {target}: {effect}、所有者: {ownerModuleID}）",
+		"DEBUG_PERMISSION_RULE_REMOVED": "パーミッションルール削除: {ruleId}（{caller} -> {target}: {effect}）",
+		"PERM_RULE_NOT_OBJECT": "ルールは非ヌルのオブジェクトである必要があります",
+		"PERM_RULE_CALLER_REQUIRED": "rule.callerは空でない文字列である必要があります",
+		"PERM_RULE_TARGET_REQUIRED": "rule.targetは空でない文字列である必要があります",
+		"PERM_RULE_EFFECT_INVALID": "rule.effectは'allow'または'deny'である必要があります",
+		"BRACE_EXPANSION_MAX_DEPTH": "ブレース展開が最大深度 {maxDepth} を超えました",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "ブレースパターンのネストを減らすか、maxDepthオプションを増やしてください。"
 	},
 	"metadata": {
 		"code": "ja-jp",
