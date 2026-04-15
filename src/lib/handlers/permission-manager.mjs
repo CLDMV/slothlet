@@ -62,10 +62,11 @@ export class PermissionManager extends ComponentBase {
 
 	/**
 	 * Whether the permission system is enabled globally.
+	 * Off by default — only enabled when a `permissions` config block is provided.
 	 * @type {boolean}
 	 * @private
 	 */
-	#enabled = true;
+	#enabled = false;
 
 	/**
 	 * Audit level: "default" or "verbose".
@@ -372,7 +373,7 @@ export class PermissionManager extends ComponentBase {
 		this.#rules.clear();
 		this.#resolvedCache.clear();
 		this.#compiledCache.clear();
-		this.#enabled = true;
+		this.#enabled = false;
 		this.#defaultPolicy = "allow";
 		this.#audit = "default";
 	}

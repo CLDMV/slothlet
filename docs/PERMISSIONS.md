@@ -6,6 +6,8 @@ The Permission System provides path-based access control for inter-module API ca
 
 When permissions are enabled, every inter-module call (`self.payments.charge.process(100)`) triggers a permission check. The `PermissionManager` collects all matching rules, determines the most specific one, and either allows or denies. If no rule matches, the configurable **default policy** applies.
 
+> **Note:** The permission system is **off by default**. It only activates when you provide a `permissions` configuration block. Existing users who do not configure permissions pay zero runtime cost.
+
 **Key characteristics:**
 
 - Same glob pattern syntax as hooks (`*`, `**`, `?`, `{a,b}`, `!negation`)
@@ -43,7 +45,7 @@ const api = await slothlet({
 	dir: "./api",
 	permissions: {
 		defaultPolicy: "deny",       // "allow" (default) or "deny"
-		enabled: true,               // global toggle (default: true)
+		enabled: true,               // global toggle (default: true when permissions config is provided)
 		audit: "verbose",            // "default" or "verbose"
 		rules: [
 			{ caller: "**", target: "slothlet.api.*", effect: "deny" },
@@ -58,11 +60,11 @@ const api = await slothlet({
 | Option          | Type      | Default   | Description                                                             |
 |-----------------|-----------|-----------|-------------------------------------------------------------------------|
 | `defaultPolicy` | `string`  | `"allow"` | Fallback when no rule matches: `"allow"` or `"deny"`                    |
-| `enabled`       | `boolean` | `true`    | Global toggle; when `false`, all calls are allowed without evaluation   |
+| `enabled`       | `boolean` | `true`    | Global toggle; when `false`, all calls are allowed without evaluation. Defaults to `true` when a `permissions` config block is provided; the system is off entirely when no config is provided. |
 | `audit`         | `string`  | `"default"` | Audit level: `"default"` (denied + self-bypass only) or `"verbose"` (all decisions) |
 | `rules`         | `array`   | `[]`      | Array of rule objects applied at initialization (earliest stacking order) |
 
-When `permissions` is not provided or `undefined`, the permission system initializes with `defaultPolicy: "allow"`, no rules, and is effectively invisible to existing users.
+When `permissions` is not provided or `undefined`, the permission system is **disabled** — `isEnabled()` returns `false` and no permission checks run. Existing users pay zero runtime cost.
 
 ---
 
