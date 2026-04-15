@@ -53,4 +53,18 @@ describe.each(getMatrixConfigs())("Permissions > removeRule > $name", ({ config 
 		const result = await api.callers.paymentsCaller.callCharge(100);
 		expect(result.ok).toBe(true);
 	});
+
+	it("removeRule returns false when ruleId does not exist", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			}
+		});
+
+		// Non-existent rule ID — should return false without throwing
+		const result = api.slothlet.permissions.removeRule("nonexistent-rule-id-xyz");
+		expect(result).toBe(false);
+	});
 });

@@ -50,4 +50,22 @@ describe.each(getMatrixConfigs())("Permissions > Enforcement Point > $name", ({ 
 		}
 		expect(hookFired).toBe(false);
 	});
+
+	it("external calls from user code (no active module context) are exempt from enforcement", async () => {
+		// When an API function is called directly from outside any module (e.g. from test
+		// code), there is no active callerWrapper in ALS. The permission check is skipped
+		// entirely — enforcing only inter-module calls is the designed behaviour.
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "**", target: "payments.**", effect: "deny" }]
+			}
+		});
+
+		// Direct external call: no active module context → callerWrapper is null → exempt
+		const result = await api.payments.charge.process(100);
+		expect(result.ok).toBe(true);
+	});
 });

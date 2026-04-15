@@ -931,6 +931,9 @@ class Slothlet {
 		// Shutdown versioning manager — clears all dispatcher/registry/metadata state.
 		this.handlers.versionManager?.shutdown();
 
+		// Shutdown permission manager — clears rules, cache, and resets enabled state.
+		await this.handlers.permissionManager?.shutdown();
+
 		// Mark as not loaded. Keep this.api intact so the boundApi proxy remains
 		// usable after shutdown (e.g. double-shutdown no-ops, reload-after-shutdown works).
 		this.isLoaded = false;

@@ -88,4 +88,40 @@ describe.each(getMatrixConfigs())("Permissions > Error Invalid Rule > $name", ({
 			expect(err.message).toContain("INVALID_PERMISSION_RULE");
 		}
 	});
+
+	it("INVALID_PERMISSION_RULE for null rule (non-object)", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		try {
+			api.slothlet.permissions.addRule(null);
+			expect.unreachable("Should have thrown");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
+
+	it("INVALID_PERMISSION_RULE for string rule (non-object)", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: []
+			}
+		});
+
+		try {
+			api.slothlet.permissions.addRule("invalid-string");
+			expect.unreachable("Should have thrown");
+		} catch (err) {
+			expect(err.message).toContain("INVALID_PERMISSION_RULE");
+		}
+	});
 });

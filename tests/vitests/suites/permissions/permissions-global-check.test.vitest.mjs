@@ -41,4 +41,18 @@ describe.each(getMatrixConfigs())("Permissions > global.checkAccess > $name", ({
 		const denied = api.slothlet.permissions.global.checkAccess("untrusted.plugin", "admin.manage");
 		expect(denied).toBe(false);
 	});
+
+	it("global.checkAccess returns true when permission system is disabled (no permissions config)", async () => {
+		// No permissions config → PermissionManager is constructed but #enabled = false.
+		// Calling checkAccess directly bypasses the isEnabled() guard in unified-wrapper,
+		// hitting the `if (!this.#enabled) return true` fast path in PermissionManager.
+		api = await slothlet({
+			...config,
+			dir: `${TEST_DIRS.API_TEST_PERMISSIONS}/payments`
+		});
+
+		// Even with a deny-all approach, disabled manager always allows
+		const result = api.slothlet.permissions.global.checkAccess("any.caller", "any.target");
+		expect(result).toBe(true);
+	});
 });

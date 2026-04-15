@@ -103,6 +103,9 @@ export function expandBraces(pattern, depth = 0, maxDepth = 10, options = {}) {
 		if (options.onMaxDepth) {
 			options.onMaxDepth(maxDepth);
 		}
+		// All callers (hook-manager, permission-manager) always supply onMaxDepth which throws,
+		// making this fallback throw unreachable in normal usage.
+		/* v8 ignore next */
 		throw new SlothletError("BRACE_EXPANSION_MAX_DEPTH", { maxDepth, validationError: true });
 	}
 

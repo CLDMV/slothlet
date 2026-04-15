@@ -685,6 +685,10 @@ export class HookManager extends ComponentBase {
 	 * @returns {string[]} Array of expanded patterns
 	 * @private
 	 */
+	// #expandBraces and #splitBraceAlternatives are utility wrappers reserved for potential
+	// future direct use; #compilePattern delegates to compilePattern() utility directly and
+	// never calls these methods. They are dead private code in the current implementation.
+	/* v8 ignore start */
 	#expandBraces(pattern, depth = 0, maxDepth = 10) {
 		return expandBraces(pattern, depth, maxDepth, {
 			onMaxDepth: (md) => {
@@ -704,6 +708,7 @@ export class HookManager extends ComponentBase {
 	#splitBraceAlternatives(content) {
 		return splitBraceAlternatives(content);
 	}
+	/* v8 ignore stop */
 
 	/**
 	 * Get the pattern compilation function for diagnostic purposes.

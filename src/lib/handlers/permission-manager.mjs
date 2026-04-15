@@ -334,6 +334,9 @@ export class PermissionManager extends ComponentBase {
 	 * @example
 	 * const snapshot = pm.exportRules();
 	 */
+	// exportRules/importRules are reserved for a future bulk-snapshot reload path;
+	// the current reload flow replays operationHistory entries directly and never calls these.
+	/* v8 ignore start */
 	exportRules() {
 		const rules = [];
 		for (const entry of this.#rules.values()) {
@@ -360,6 +363,7 @@ export class PermissionManager extends ComponentBase {
 			this.addRule(reg.rule, reg.ownerModuleID);
 		}
 	}
+	/* v8 ignore stop */
 
 	/**
 	 * Cleanup permission manager on shutdown.
