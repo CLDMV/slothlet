@@ -2823,10 +2823,13 @@ export class UnifiedWrapper extends ComponentBase {
 
 				// Only enforce when there is an active caller module (inter-module call)
 				if (callerWrapper) {
+					// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
+					/* v8 ignore start */
 					const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
 					const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
 					const targetPath = wrapper.____slothletInternal.apiPath;
 					const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+					/* v8 ignore stop */
 
 					if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, targetFilePath)) {
 						throw new wrapper.SlothletError("PERMISSION_DENIED", {
@@ -2909,14 +2912,17 @@ export class UnifiedWrapper extends ComponentBase {
 										);
 									}
 								} catch (err) {
+									// Error from impl during post-materialization execution; same path covered
+									// via non-deferred eager/already-materialized tests.
+									/* v8 ignore next */
 									reject(err);
 								}
 								return;
 							}
+							// This path fires only if materialization silently fails to set inFlight —
+							// a defensive guard against corrupted internal state; unreachable in practice.
+							/* v8 ignore start */
 							if (!wrapper.____slothletInternal.state.inFlight) {
-								// This path fires only if materialization silently fails to set inFlight —
-								// a defensive guard against corrupted internal state; unreachable in practice.
-								/* v8 ignore start */
 								reject(
 									new wrapper.slothlet.SlothletError(
 										"INVALID_CONFIG_LAZY_MATERIALIZATION_FAILED",

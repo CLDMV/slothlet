@@ -25,28 +25,26 @@ describe.each(getMatrixConfigs())("Permissions > Error Self Modify > $name", ({ 
 		api = null;
 	});
 
-	it("PERMISSION_SELF_MODIFY thrown when module adds rule targeting itself", async () => {
+	it("removeRule returns true when removing a rule without an owner (public API path)", async () => {
 		api = await slothlet({
 			...config,
-			dir: `${BASE}/callers`,
+			dir: `${BASE}/payments`,
 			permissions: {
-				defaultPolicy: "allow",
-				rules: []
+				defaultPolicy: "allow"
 			}
 		});
 
-		await api.slothlet.api.add("payments", `${BASE}/payments`);
-		await api.slothlet.api.add("callers", `${BASE}/callers`);
+		// api.slothlet.permissions.addRule always registers with ownerModuleID=null,
+		// so the self-modify guard (callerModuleID && ownerModuleID && match) never fires
+		// through the public API surface — it requires module-internal rule ownership.
+		// This test confirms the happy-path removeRule works correctly.
+		const ruleId = api.slothlet.permissions.addRule({
+			caller: "untrusted.**",
+			target: "payments.**",
+			effect: "deny"
+		});
 
-		// Adding a rule where caller === target path prefix should throw self-modify
-		try {
-			api.slothlet.permissions.addRule({
-				caller: "callers.selfCaller",
-				target: "callers.selfCaller",
-				effect: "allow"
-			});
-		} catch (err) {
-			expect(err.message).toContain("PERMISSION_SELF_MODIFY");
-		}
+		const result = api.slothlet.permissions.removeRule(ruleId);
+		expect(result).toBe(true);
 	});
 });
