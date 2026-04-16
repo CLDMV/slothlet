@@ -1654,6 +1654,29 @@ export class ApiManager extends ComponentBase {
 			}
 		}
 
+		// Register permission rules from options.permissions (e.g. { deny: [...], allow: [...] })
+		if (restOptions.permissions && this.slothlet.handlers?.permissionManager) {
+			const perms = restOptions.permissions;
+			const callerPattern = `${normalizedPath}.**`;
+
+			if (Array.isArray(perms.deny)) {
+				for (const target of perms.deny) {
+					this.slothlet.handlers.permissionManager.addRule(
+						{ caller: callerPattern, target, effect: "deny" },
+						moduleID
+					);
+				}
+			}
+			if (Array.isArray(perms.allow)) {
+				for (const target of perms.allow) {
+					this.slothlet.handlers.permissionManager.addRule(
+						{ caller: callerPattern, target, effect: "allow" },
+						moduleID
+					);
+				}
+			}
+		}
+
 		return moduleID;
 	}
 

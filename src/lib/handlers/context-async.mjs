@@ -120,6 +120,8 @@ export class AsyncContextManager {
 					}
 					return result;
 				} catch (error) {
+					// Rethrow framework errors directly so they propagate with their original code
+					if (error instanceof SlothletError) throw error;
 					throw new SlothletError(
 						"CONTEXT_EXECUTION_FAILED",
 						{
@@ -142,6 +144,8 @@ export class AsyncContextManager {
 				}
 				return result;
 			} catch (error) {
+				// Rethrow framework errors directly so they propagate with their original code
+				if (error instanceof SlothletError) throw error;
 				throw new SlothletError(
 					"CONTEXT_EXECUTION_FAILED",
 					{

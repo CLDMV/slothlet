@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "버전 해석됨: {version}, 경로: {apiPath} (호출자: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "경로 {apiPath}에 대한 Discriminator 일치 없음; 기본 버전 {version}을(를) 사용합니다.",
 		"DEBUG_VERSION_REGISTERED": "버전 {version}이(가) {logicalPath}에 등록됨 (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "버전 {version}이(가) {logicalPath}에서 등록 취소됨"
+		"DEBUG_VERSION_UNREGISTERED": "버전 {version}이(가) {logicalPath}에서 등록 취소됨",
+
+		"PERMISSION_DENIED": "접근 거부: 호출자 '{caller}'은(는) '{target}'에 접근할 권한이 없습니다",
+		"HINT_PERMISSION_DENIED": "이 호출자/대상 쌍의 권한 규칙을 확인하세요. api.slothlet.permissions.global.rulesForPath('{target}')를 사용하여 활성 규칙을 검사할 수 있습니다.",
+		"PERMISSION_SELF_MODIFY": "모듈 '{moduleID}'은(는) 자신의 권한 규칙 '{ruleId}'을(를) 제거할 수 없습니다",
+		"HINT_PERMISSION_SELF_MODIFY": "권한 규칙은 소유 모듈에 대해 불변입니다. 다른 모듈이 이 규칙을 제거해야 합니다.",
+		"INVALID_PERMISSION_RULE": "잘못된 권한 규칙: {reason} (수신됨: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "권한 규칙에는 caller (string glob), target (string glob), effect ('allow' 또는 'deny')가 필요합니다.",
+		"DEBUG_PERMISSION_DENIED": "권한 거부: 호출자 '{caller}' -> 대상 '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "권한 허용: 호출자 '{caller}' -> 대상 '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "권한 셀프 바이패스: 호출자와 대상이 moduleID '{moduleID}'을(를) 공유합니다",
+		"DEBUG_PERMISSION_DEFAULT": "기본 권한 정책 적용: 호출자 '{caller}' -> 대상 '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "권한 규칙 추가됨: {ruleId} ({caller} -> {target}: {effect}, 소유자: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "권한 규칙 제거됨: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "규칙은 널이 아닌 객체여야 합니다",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller는 비어 있지 않은 문자열이어야 합니다",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target은 비어 있지 않은 문자열이어야 합니다",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect는 'allow' 또는 'deny'여야 합니다",
+		"BRACE_EXPANSION_MAX_DEPTH": "중괄호 확장이 최대 깊이 {maxDepth}을(를) 초과했습니다",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "중괄호 패턴의 중첩을 줄이거나 maxDepth 옵션을 늘리세요."
 	},
 	"metadata": {
 		"code": "ko-kr",

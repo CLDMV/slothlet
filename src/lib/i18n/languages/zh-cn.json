@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "已解析版本：{version}，路径：{apiPath}（调用方：{callerModule}）",
 		"DEBUG_VERSION_DEFAULT_USED": "路径 {apiPath} 无匹配判别器；使用默认版本 {version}。",
 		"DEBUG_VERSION_REGISTERED": "版本 {version} 已在 {logicalPath} 注册（moduleID：{moduleID}）",
-		"DEBUG_VERSION_UNREGISTERED": "版本 {version} 已从 {logicalPath} 注销"
+		"DEBUG_VERSION_UNREGISTERED": "版本 {version} 已从 {logicalPath} 注销",
+
+		"PERMISSION_DENIED": "访问被拒绝：调用方 '{caller}' 无权访问 '{target}'",
+		"HINT_PERMISSION_DENIED": "请检查此调用方/目标对的权限规则。使用 api.slothlet.permissions.global.rulesForPath('{target}') 检查活动规则。",
+		"PERMISSION_SELF_MODIFY": "模块 '{moduleID}' 无法移除自身的权限规则 '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "权限规则对所属模块是不可变的。必须由另一个模块移除此规则。",
+		"INVALID_PERMISSION_RULE": "无效的权限规则：{reason}（收到：{received}）",
+		"HINT_INVALID_PERMISSION_RULE": "权限规则要求：caller（string glob）、target（string glob）和 effect（'allow' 或 'deny'）。",
+		"DEBUG_PERMISSION_DENIED": "权限被拒绝：调用方 '{caller}' -> 目标 '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "权限已允许：调用方 '{caller}' -> 目标 '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "权限自绕过：调用方和目标共享 moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "默认权限策略已应用：调用方 '{caller}' -> 目标 '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "权限规则已添加：{ruleId}（{caller} -> {target}：{effect}，所有者：{ownerModuleID}）",
+		"DEBUG_PERMISSION_RULE_REMOVED": "权限规则已移除：{ruleId}（{caller} -> {target}：{effect}）",
+		"PERM_RULE_NOT_OBJECT": "规则必须是非空对象",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller 必须是非空字符串",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target 必须是非空字符串",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect 必须是 'allow' 或 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "花括号展开超过了最大深度 {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "减少花括号模式的嵌套层数或增加 maxDepth 选项。"
 	},
 	"metadata": {
 		"code": "zh-cn",

@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "Version resolved: {version} for path {apiPath} (caller: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "No discriminator match for path {apiPath}; using default version {version}",
 		"DEBUG_VERSION_REGISTERED": "Version {version} registered at {logicalPath} (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Version {version} unregistered from {logicalPath}"
+		"DEBUG_VERSION_UNREGISTERED": "Version {version} unregistered from {logicalPath}",
+
+		"PERMISSION_DENIED": "Access denied: caller '{caller}' is not permitted to access '{target}'",
+		"HINT_PERMISSION_DENIED": "Check permission rules for this caller/target pair. Use api.slothlet.permissions.global.rulesForPath('{target}') to inspect active rules.",
+		"PERMISSION_SELF_MODIFY": "Module '{moduleID}' cannot remove its own permission rule '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "Permission rules are immutable for the owning module. Another module must remove this rule.",
+		"INVALID_PERMISSION_RULE": "Invalid permission rule: {reason} (received: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Permission rules require: caller (string glob), target (string glob), and effect ('allow' or 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Permission denied: caller '{caller}' -> target '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Permission allowed: caller '{caller}' -> target '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Permission self-bypass: caller and target share moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Permission default policy applied: caller '{caller}' -> target '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Permission rule added: {ruleId} ({caller} -> {target}: {effect}, owner: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Permission rule removed: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "rule must be a non-null object",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller must be a non-empty string",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target must be a non-empty string",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect must be 'allow' or 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "Brace expansion exceeded maximum depth of {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce nesting in your brace patterns or increase the maxDepth option."
 	},
 	"metadata": {
 		"code": "en-gb",

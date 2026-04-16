@@ -381,7 +381,26 @@
 		"DEBUG_VERSION_RESOLVED": "Versão resolvida: {version} para o caminho {apiPath} (chamador: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "Nenhuma correspondência de discriminador para o caminho {apiPath}; usando versão padrão {version}.",
 		"DEBUG_VERSION_REGISTERED": "Versão {version} registrada em {logicalPath} (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Versão {version} removida de {logicalPath}"
+		"DEBUG_VERSION_UNREGISTERED": "Versão {version} removida de {logicalPath}",
+
+		"PERMISSION_DENIED": "Acesso negado: o chamador '{caller}' não tem permissão para acessar '{target}'",
+		"HINT_PERMISSION_DENIED": "Verifique as regras de permissão para este par chamador/alvo. Use api.slothlet.permissions.global.rulesForPath('{target}') para inspecionar as regras ativas.",
+		"PERMISSION_SELF_MODIFY": "O módulo '{moduleID}' não pode remover sua própria regra de permissão '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "Regras de permissão são imutáveis para o módulo proprietário. Outro módulo deve remover esta regra.",
+		"INVALID_PERMISSION_RULE": "Regra de permissão inválida: {reason} (recebido: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Regras de permissão requerem: caller (string glob), target (string glob) e effect ('allow' ou 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Permissão negada: chamador '{caller}' -> alvo '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Permissão concedida: chamador '{caller}' -> alvo '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Auto-bypass de permissão: chamador e alvo compartilham moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Política de permissão padrão aplicada: chamador '{caller}' -> alvo '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Regra de permissão adicionada: {ruleId} ({caller} -> {target}: {effect}, proprietário: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Regra de permissão removida: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "a regra deve ser um objeto não nulo",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller deve ser uma string não vazia",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target deve ser uma string não vazia",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect deve ser 'allow' ou 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "Expansão de chaves excedeu a profundidade máxima de {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduza o aninhamento nos seus padrões de chaves ou aumente a opção maxDepth."
 	},
 	"metadata": {
 		"code": "pt-br",
