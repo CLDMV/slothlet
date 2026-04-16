@@ -1322,9 +1322,6 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
 				 */
 				addRule: function slothlet_permissions_addRule(rule) {
-					// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-					/* v8 ignore next */
-					if (!slothlet.handlers?.permissionManager) return undefined;
 					const ruleId = slothlet.handlers.permissionManager.addRule(rule, null);
 
 					// Record in operationHistory for replay on reload
@@ -1352,9 +1349,6 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.permissions.removeRule("perm-3");
 				 */
 				removeRule: function slothlet_permissions_removeRule(ruleId) {
-					// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-					/* v8 ignore next */
-					if (!slothlet.handlers?.permissionManager) return false;
 					const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
 					const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
@@ -1388,9 +1382,6 @@ export class ApiBuilder extends ComponentBase {
 					 * const canWrite = api.slothlet.permissions.self.access("db.write");
 					 */
 					access: function slothlet_permissions_self_access(target) {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return true;
 						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
 						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = callerWrapper?.____slothletInternal?.filePath ?? null;
@@ -1406,9 +1397,6 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.self.rules();
 					 */
 					rules: function slothlet_permissions_self_rules() {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return [];
 						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
 						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
 						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
@@ -1432,9 +1420,6 @@ export class ApiBuilder extends ComponentBase {
 					 * const ok = api.slothlet.permissions.global.checkAccess("payments.charge", "db.write");
 					 */
 					checkAccess: function slothlet_permissions_global_checkAccess(caller, target) {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return true;
 						return slothlet.handlers.permissionManager.checkAccess(caller, target);
 					},
 
@@ -1448,9 +1433,6 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.global.rulesForPath("db.write");
 					 */
 					rulesForPath: function slothlet_permissions_global_rulesForPath(path) {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return [];
 						return slothlet.handlers.permissionManager.getRulesForPath(path);
 					},
 
@@ -1464,9 +1446,6 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.global.rulesByModule("mod_abc123");
 					 */
 					rulesByModule: function slothlet_permissions_global_rulesByModule(moduleID) {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return [];
 						return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
 					}
 				},
@@ -1486,9 +1465,6 @@ export class ApiBuilder extends ComponentBase {
 					 * api.slothlet.permissions.control.enable();
 					 */
 					enable: function slothlet_permissions_control_enable() {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return;
 						slothlet.handlers.permissionManager.enable();
 					},
 
@@ -1501,9 +1477,6 @@ export class ApiBuilder extends ComponentBase {
 					 * api.slothlet.permissions.control.disable();
 					 */
 					disable: function slothlet_permissions_control_disable() {
-						// permissionManager is always auto-registered via slothletProperty; false arm unreachable.
-						/* v8 ignore next */
-						if (!slothlet.handlers?.permissionManager) return;
 						slothlet.handlers.permissionManager.disable();
 					}
 				}
