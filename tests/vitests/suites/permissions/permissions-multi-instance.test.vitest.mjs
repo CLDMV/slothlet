@@ -113,7 +113,7 @@ describe.each(getMatrixConfigs())("Permissions > Multi-Instance Isolation > $nam
 
 	it("context restoration after async boundary uses correct instance store", async () => {
 		// This test specifically targets the LAZY_LIVE fix in the waiting proxy's async apply.
-		// After aws boundary, runInContext is called with wrapper.instanceID (explicit) not
+		// After async boundary, runInContext is called with wrapper.instanceID (explicit) not
 		// currentInstanceID (global), so the correct per-instance store is used.
 
 		// Instance A: deny callers → admin

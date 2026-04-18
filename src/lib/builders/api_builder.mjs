@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-01 21:57:24 -07:00 (1775105844)
+ *	@Last modified time: 2026-04-17 21:13:35 -07:00 (1776485615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1003,9 +1003,7 @@ export class ApiBuilder extends ComponentBase {
 				setForVersion: function slothlet_metadata_setForVersion(logicalPath, versionTag, keyOrObj, value) {
 					if (!slothlet.handlers?.metadata) {
 						throw new slothlet.SlothletError("METADATA_NOT_AVAILABLE", {
-							handlersKeys: slothlet.handlers
-								? Object.keys(slothlet.handlers).join(", ")
-								: "undefined",
+							handlersKeys: slothlet.handlers ? Object.keys(slothlet.handlers).join(", ") : "undefined",
 							validationError: true
 						});
 					}
@@ -1322,7 +1320,25 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
 				 */
 				addRule: function slothlet_permissions_addRule(rule) {
-					const ruleId = slothlet.handlers.permissionManager.addRule(rule, null);
+					// Check if permissions mutation is allowed
+					if (!config.api?.mutations?.permissions) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.slothlet.permissions.addRule",
+							validationError: true
+						});
+					}
+
+					// Check if permission manager is available
+					const permissionManager = slothlet.handlers?.permissionManager;
+					/* v8 ignore start */
+					if (!permissionManager?.addRule) {
+						throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+							validationError: true
+						});
+					}
+					/* v8 ignore stop */
+
+					const ruleId = permissionManager.addRule(rule, null);
 
 					// Record in operationHistory for replay on reload
 					if (slothlet.handlers?.apiManager?.state?.operationHistory) {
@@ -1349,8 +1365,27 @@ export class ApiBuilder extends ComponentBase {
 				 * api.slothlet.permissions.removeRule("perm-3");
 				 */
 				removeRule: function slothlet_permissions_removeRule(ruleId) {
-					const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
-					const callerModuleID = callerWrapper?.____slothletInternal?.moduleID ?? null;
+					// Check if permissions mutation is allowed
+					if (!config.api?.mutations?.permissions) {
+						throw new slothlet.SlothletError("INVALID_CONFIG_MUTATIONS_DISABLED", {
+							operation: "api.slothlet.permissions.removeRule",
+							validationError: true
+						});
+					}
+
+					// Check if permission manager is available
+					const permissionManager = slothlet.handlers?.permissionManager;
+					/* v8 ignore start */
+					if (!permissionManager?.removeRule) {
+						throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+							validationError: true
+						});
+					}
+					/* v8 ignore stop */
+
+					const ctx = slothlet.contextManager?.tryGetContext?.();
+					const currentWrapper = ctx?.currentWrapper;
+					const callerModuleID = currentWrapper?.____slothletInternal?.moduleID ?? null;
 					const result = slothlet.handlers.permissionManager.removeRule(ruleId, callerModuleID);
 
 					// Record in operationHistory for replay on reload
@@ -1382,6 +1417,16 @@ export class ApiBuilder extends ComponentBase {
 					 * const canWrite = api.slothlet.permissions.self.access("db.write");
 					 */
 					access: function slothlet_permissions_self_access(target) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.checkAccess) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
 						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
 						const callerFilePath = callerWrapper?.____slothletInternal?.filePath ?? null;
@@ -1397,8 +1442,18 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.self.rules();
 					 */
 					rules: function slothlet_permissions_self_rules() {
-						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
-						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.getRulesForCaller) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
+						const currentWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper;
+						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
 						return slothlet.handlers.permissionManager.getRulesForCaller(callerPath);
 					}
 				},
@@ -1420,6 +1475,16 @@ export class ApiBuilder extends ComponentBase {
 					 * const ok = api.slothlet.permissions.global.checkAccess("payments.charge", "db.write");
 					 */
 					checkAccess: function slothlet_permissions_global_checkAccess(caller, target) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.checkAccess) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						return slothlet.handlers.permissionManager.checkAccess(caller, target);
 					},
 
@@ -1433,6 +1498,16 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.global.rulesForPath("db.write");
 					 */
 					rulesForPath: function slothlet_permissions_global_rulesForPath(path) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.getRulesForPath) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						return slothlet.handlers.permissionManager.getRulesForPath(path);
 					},
 
@@ -1446,6 +1521,16 @@ export class ApiBuilder extends ComponentBase {
 					 * const rules = api.slothlet.permissions.global.rulesByModule("mod_abc123");
 					 */
 					rulesByModule: function slothlet_permissions_global_rulesByModule(moduleID) {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.getRulesByModule) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						return slothlet.handlers.permissionManager.getRulesByModule(moduleID);
 					}
 				},
@@ -1465,6 +1550,16 @@ export class ApiBuilder extends ComponentBase {
 					 * api.slothlet.permissions.control.enable();
 					 */
 					enable: function slothlet_permissions_control_enable() {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.enable) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						slothlet.handlers.permissionManager.enable();
 					},
 
@@ -1477,6 +1572,16 @@ export class ApiBuilder extends ComponentBase {
 					 * api.slothlet.permissions.control.disable();
 					 */
 					disable: function slothlet_permissions_control_disable() {
+						// Check if permission manager is available
+						const permissionManager = slothlet.handlers?.permissionManager;
+						/* v8 ignore start */
+						if (!permissionManager?.disable) {
+							throw new slothlet.SlothletError("PERMISSION_MANAGER_NOT_AVAILABLE", {
+								validationError: true
+							});
+						}
+						/* v8 ignore stop */
+
 						slothlet.handlers.permissionManager.disable();
 					}
 				}

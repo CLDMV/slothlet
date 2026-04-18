@@ -33,7 +33,6 @@
  */
 
 import { SlothletError } from "@cldmv/slothlet/errors";
-import { translate } from "@cldmv/slothlet/i18n";
 
 /**
  * Compile a glob pattern into a matcher function.
@@ -43,7 +42,7 @@ import { translate } from "@cldmv/slothlet/i18n";
  * @param {string} pattern - Glob pattern
  * @param {object} [options={}] - Options
  * @param {Function} [options.onMaxDepth] - Called when brace expansion exceeds max depth.
- *   Should throw an error. If not provided, a generic Error is thrown.
+ *   Should throw an error. If not provided, a SlothletError("BRACE_EXPANSION_MAX_DEPTH") is thrown.
  * @returns {function} Matcher function that takes a path and returns boolean
  * @example
  * const matcher = compilePattern("payments.**");

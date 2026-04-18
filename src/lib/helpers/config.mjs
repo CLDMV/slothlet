@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-04-17 21:13:35 -07:00 (1776485615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -157,7 +157,7 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true };
+		const defaults = { add: true, remove: true, reload: true, permissions: true };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -168,7 +168,8 @@ export class Config extends ComponentBase {
 		return {
 			add: mutations.add === false ? false : true,
 			remove: mutations.remove === false ? false : true,
-			reload: mutations.reload === false ? false : true
+			reload: mutations.reload === false ? false : true,
+			permissions: mutations.permissions === false ? false : true
 		};
 	}
 
@@ -500,9 +501,63 @@ export class Config extends ComponentBase {
 			return null;
 		}
 
-		const defaultPolicy = permissions.defaultPolicy === "deny" ? "deny" : "allow";
+		// Validate defaultPolicy
+		let defaultPolicy;
+		if (permissions.defaultPolicy === "deny") {
+			defaultPolicy = "deny";
+		} else if (permissions.defaultPolicy === "allow") {
+			defaultPolicy = "allow";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.defaultPolicy",
+					value: permissions.defaultPolicy,
+					expected: '"allow" or "deny"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		const enabled = permissions.enabled !== false;
-		const audit = permissions.audit === "verbose" ? "verbose" : "default";
+
+		// Validate audit
+		let audit;
+		if (permissions.audit === "verbose") {
+			audit = "verbose";
+		} else if (permissions.audit === "default") {
+			audit = "default";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.audit",
+					value: permissions.audit,
+					expected: '"default" or "verbose"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Validate rules
+		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.rules",
+					value: permissions.rules,
+					expected: "array",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
 		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
 
 		return { defaultPolicy, enabled, audit, rules };
