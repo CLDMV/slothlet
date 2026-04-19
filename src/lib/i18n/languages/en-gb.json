@@ -400,7 +400,8 @@
 		"PERM_RULE_TARGET_REQUIRED": "rule.target must be a non-empty string",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect must be 'allow' or 'deny'",
 		"BRACE_EXPANSION_MAX_DEPTH": "Brace expansion exceeded maximum depth of {maxDepth}",
-		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce nesting in your brace patterns or increase the maxDepth option."
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce nesting in your brace patterns or increase the maxDepth option.",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "Permission manager is not available in this Slothlet instance"
 	},
 	"metadata": {
 		"code": "en-gb",

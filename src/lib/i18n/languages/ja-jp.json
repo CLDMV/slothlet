@@ -400,7 +400,8 @@
 		"PERM_RULE_TARGET_REQUIRED": "rule.targetは空でない文字列である必要があります",
 		"PERM_RULE_EFFECT_INVALID": "rule.effectは'allow'または'deny'である必要があります",
 		"BRACE_EXPANSION_MAX_DEPTH": "ブレース展開が最大深度 {maxDepth} を超えました",
-		"HINT_BRACE_EXPANSION_MAX_DEPTH": "ブレースパターンのネストを減らすか、maxDepthオプションを増やしてください。"
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "波括弧パターンのネストを減らすか、maxDepthオプションを増やしてください。",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "権限マネージャーはこのSlothletインスタンスで利用できません"
 	},
 	"metadata": {
 		"code": "ja-jp",

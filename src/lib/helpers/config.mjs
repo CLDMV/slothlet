@@ -17,6 +17,7 @@
  * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Configuration normalization utilities
@@ -527,7 +528,13 @@ export class Config extends ComponentBase {
 		let audit;
 		if (permissions.audit === "verbose") {
 			audit = "verbose";
-		} else if (permissions.audit === "default") {
+		} else if (permissions.audit === "default" || permissions.audit === undefined) {
+			audit = "default";
+		} else if (permissions.audit === true) {
+			// Boolean true maps to default audit level
+			audit = "default";
+		} else if (permissions.audit === false) {
+			// Boolean false maps to default audit level (no additional logging)
 			audit = "default";
 		} else {
 			throw new SlothletError(

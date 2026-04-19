@@ -400,7 +400,8 @@
 		"PERM_RULE_TARGET_REQUIRED": "rule.target должно быть непустой строкой",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect должно быть 'allow' или 'deny'",
 		"BRACE_EXPANSION_MAX_DEPTH": "Расширение фигурных скобок превысило максимальную глубину {maxDepth}",
-		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в шаблонах фигурных скобок или увеличьте параметр maxDepth."
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Уменьшите вложенность в ваших шаблонах скобок или увеличьте параметр maxDepth.",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "Менеджер разрешений недоступен в этом экземпляре Slothlet"
 	},
 	"metadata": {
 		"code": "ru-ru",
