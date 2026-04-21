@@ -76,4 +76,36 @@ describe.each(getMatrixConfigs())("Permissions > Cache Invalidation > $name", ({
 		const result = await api.callers.paymentsCaller.callCharge(100);
 		expect(result.ok).toBe(true);
 	});
+
+	it("audit events fire on every call, including cache hits", async () => {
+		const denied = [];
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "callers.**", target: "payments.**", effect: "deny" }]
+			}
+		});
+
+		api.slothlet.lifecycle.on("permission:denied", (payload) => {
+			denied.push(payload);
+		});
+
+		// First call — cache miss, event fires
+		try {
+			await api.callers.paymentsCaller.callCharge(100);
+		} catch (_) {
+			// expected
+		}
+		expect(denied.length).toBe(1);
+
+		// Second call — cache hit, event must still fire
+		try {
+			await api.callers.paymentsCaller.callCharge(100);
+		} catch (_) {
+			// expected
+		}
+		expect(denied.length).toBe(2);
+	});
 });

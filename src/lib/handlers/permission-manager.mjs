@@ -229,16 +229,19 @@ export class PermissionManager extends ComponentBase {
 			return true;
 		}
 
-		// Check resolved cache
+		// Check resolved cache — re-emit audit event on hit so every denied/allowed call is observable
 		const cacheKey = `${callerPath}::${targetPath}`;
 		if (this.#resolvedCache.has(cacheKey)) {
-			return this.#resolvedCache.get(cacheKey);
+			const cached = this.#resolvedCache.get(cacheKey);
+			this.#emitAuditEvent(cached.event, cached.payload);
+			return cached.allowed;
 		}
 
-		// Evaluate rules
-		const result = this.#evaluate(callerPath, targetPath);
-		this.#resolvedCache.set(cacheKey, result);
-		return result;
+		// Evaluate rules — returns { allowed, event, payload } without emitting
+		const entry = this.#evaluate(callerPath, targetPath);
+		this.#resolvedCache.set(cacheKey, entry);
+		this.#emitAuditEvent(entry.event, entry.payload);
+		return entry.allowed;
 	}
 
 	/**
@@ -430,7 +433,7 @@ export class PermissionManager extends ComponentBase {
 	 *
 	 * @param {string} callerPath - Caller API path.
 	 * @param {string} targetPath - Target API path.
-	 * @returns {boolean} True if allowed.
+	 * @returns {{ allowed: boolean, event: string, payload: object }} Decision record (does not emit; caller must emit).
 	 * @private
 	 */
 	#evaluate(callerPath, targetPath) {
@@ -449,12 +452,11 @@ export class PermissionManager extends ComponentBase {
 		// No matches → fall back to default policy
 		if (matches.length === 0) {
 			const allowed = this.#defaultPolicy === "allow";
-			this.#emitAuditEvent("permission:default", {
-				caller: callerPath,
-				target: targetPath,
-				policy: this.#defaultPolicy
-			});
-			return allowed;
+			return {
+				allowed,
+				event: "permission:default",
+				payload: { caller: callerPath, target: targetPath, policy: this.#defaultPolicy }
+			};
 		}
 
 		// Sort by specificity (most specific first), tiebreak by registration order (last wins)
@@ -472,22 +474,11 @@ export class PermissionManager extends ComponentBase {
 		const winner = topTier[topTier.length - 1];
 		const allowed = winner.effect === "allow";
 
-		// Emit audit event
-		if (allowed) {
-			this.#emitAuditEvent("permission:allowed", {
-				caller: callerPath,
-				target: targetPath,
-				rule: this.#serializeRule(winner)
-			});
-		} else {
-			this.#emitAuditEvent("permission:denied", {
-				caller: callerPath,
-				target: targetPath,
-				rule: this.#serializeRule(winner)
-			});
-		}
-
-		return allowed;
+		return {
+			allowed,
+			event: allowed ? "permission:allowed" : "permission:denied",
+			payload: { caller: callerPath, target: targetPath, rule: this.#serializeRule(winner) }
+		};
 	}
 
 	/**
