@@ -1427,9 +1427,9 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
-						const callerWrapper = slothlet.contextManager?.tryGetContext?.()?.callerWrapper;
-						const callerPath = callerWrapper?.____slothletInternal?.apiPath ?? "";
-						const callerFilePath = callerWrapper?.____slothletInternal?.filePath ?? null;
+						const currentWrapper = slothlet.contextManager?.tryGetContext?.()?.currentWrapper;
+						const callerPath = currentWrapper?.____slothletInternal?.apiPath ?? "";
+						const callerFilePath = currentWrapper?.____slothletInternal?.filePath ?? null;
 						return slothlet.handlers.permissionManager.checkAccess(callerPath, target, callerFilePath, null);
 					},
 

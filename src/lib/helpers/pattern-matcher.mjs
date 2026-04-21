@@ -69,9 +69,9 @@ export function compilePattern(pattern, options = {}) {
 	// Single pattern - convert to regex
 	pattern = expanded[0];
 
-	// Escape special regex characters except *, ?, and .
+	// Escape special regex characters except * and ?
 	let regexPattern = pattern
-		.replace(/[+^$()|[\]\\]/g, "\\$&") // Don't escape {} - already expanded
+		.replace(/[.+^$()|[\]\\]/g, "\\$&") // Escape . and other regex specials; {} already expanded
 		.replace(/\*\*/g, "__DOUBLESTAR__") // Placeholder for **
 		.replace(/\*/g, "[^.]*") // * matches any chars except .
 		.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .

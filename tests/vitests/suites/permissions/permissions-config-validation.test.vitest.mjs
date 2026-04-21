@@ -73,4 +73,15 @@ describe.each(getMatrixConfigs())("Permissions > Config Validation > $name", ({ 
 			expect(err.message).toBeDefined();
 		}
 	});
+
+	it("permissions config with no defaultPolicy defaults to allow", async () => {
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				rules: []
+			}
+		});
+		expect(api).toBeDefined();
+	});
 });

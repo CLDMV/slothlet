@@ -396,7 +396,7 @@
 		"DEBUG_PERMISSION_RULE_ADDED": "Règle d'autorisation ajoutée : {ruleId} ({caller} -> {target} : {effect}, propriétaire : {ownerModuleID})",
 		"DEBUG_PERMISSION_RULE_REMOVED": "Règle d'autorisation supprimée : {ruleId} ({caller} -> {target} : {effect})",
 		"PERM_RULE_NOT_OBJECT": "la règle doit être un objet non nul",
-		"PERM_RULE_CALLER_REQUIRED": "rule.caller doit être une chaîनне vide",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller doit être une chaîne non vide",
 		"PERM_RULE_TARGET_REQUIRED": "rule.target doit être une chaîne non vide",
 		"PERM_RULE_EFFECT_INVALID": "rule.effect doit être 'allow' ou 'deny'",
 		"BRACE_EXPANSION_MAX_DEPTH": "L'expansion des accolades a dépassé la profondeur maximale de {maxDepth}",

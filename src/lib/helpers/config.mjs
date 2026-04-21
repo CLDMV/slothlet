@@ -506,7 +506,7 @@ export class Config extends ComponentBase {
 		let defaultPolicy;
 		if (permissions.defaultPolicy === "deny") {
 			defaultPolicy = "deny";
-		} else if (permissions.defaultPolicy === "allow") {
+		} else if (permissions.defaultPolicy === "allow" || permissions.defaultPolicy === undefined) {
 			defaultPolicy = "allow";
 		} else {
 			throw new SlothletError(
