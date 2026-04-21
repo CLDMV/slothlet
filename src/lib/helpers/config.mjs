@@ -486,13 +486,13 @@ export class Config extends ComponentBase {
 	/**
 	 * Normalize permissions configuration.
 	 *
-	 * @param {object|undefined} permissions - Raw permissions config from user.
+	 * @param {object|null} [permissions] - Raw permissions config from user.
 	 * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
 	 * @param {boolean} [permissions.enabled=true] - Global toggle.
 	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
 	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
 	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
-	 * @returns {object} Normalized permissions config.
+	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
 	 *
 	 * @example
 	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
@@ -532,10 +532,10 @@ export class Config extends ComponentBase {
 		} else if (permissions.audit === "default" || permissions.audit === undefined) {
 			audit = "default";
 		} else if (permissions.audit === true) {
-			// Boolean true maps to default audit level
+			// Boolean true normalizes to "default" (denied + self-bypass events only)
 			audit = "default";
 		} else if (permissions.audit === false) {
-			// Boolean false maps to default audit level (no additional logging)
+			// Boolean false normalizes to "default" (denied + self-bypass events only; audit is not disabled)
 			audit = "default";
 		} else {
 			throw new SlothletError(
