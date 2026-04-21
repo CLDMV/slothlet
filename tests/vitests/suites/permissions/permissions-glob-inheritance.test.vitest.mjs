@@ -45,7 +45,7 @@ describe.each(getMatrixConfigs())("Permissions > Glob Inheritance > $name", ({ c
 
 		// payments.webhook should also be denied by the same glob rule
 		try {
-			await api.callers.paymentsCaller.callCharge(50);
+			await api.callers.paymentsCaller.callWebhook("test-event");
 			expect.unreachable("Should have thrown PERMISSION_DENIED");
 		} catch (err) {
 			expect(err.message).toMatch(/PERMISSION_DENIED/);

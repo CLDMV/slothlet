@@ -14,6 +14,7 @@
 import { self } from "@cldmv/slothlet/runtime";
 
 export const callCharge = (amount) => self.payments.charge.process(amount);
+export const callWebhook = (event) => self.payments.webhook.handleWebhook(event);
 export const callAdmin = () => self.admin.manage.createUser("test");
 export const callDbWrite = () => self.db.write.insert({ data: "test" });
 export const callDbRead = () => self.db.read.query("SELECT 1");
