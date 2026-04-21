@@ -81,4 +81,27 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		const ruleId = api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
 		expect(ruleId).toBeTypeOf("string");
 	});
+
+	it("should throw INVALID_CONFIG_MUTATIONS_DISABLED when removeRule is called and mutations.permissions is false", async () => {
+		api = await slothlet({
+			...config,
+			dir: BASE,
+			permissions: {
+				defaultPolicy: "allow"
+			},
+			api: {
+				mutations: {
+					permissions: false
+				}
+			}
+		});
+
+		try {
+			api.slothlet.permissions.removeRule("any-rule-id");
+			expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
+		} catch (error) {
+			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
+			expect(error.context?.operation).toBe("api.slothlet.permissions.removeRule");
+		}
+	});
 });
