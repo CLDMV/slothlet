@@ -18,7 +18,7 @@
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import { compilePattern, expandBraces, splitBraceAlternatives } from "@cldmv/slothlet/helpers/pattern-matcher";
+import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /**
  * Result returned by hook execution methods.
@@ -674,41 +674,6 @@ export class HookManager extends ComponentBase {
 			}
 		});
 	}
-
-	/**
-	 * Expand brace patterns {a,b,c} into multiple patterns.
-	 * Delegates to the shared pattern-matcher utility.
-	 *
-	 * @param {string} pattern - Pattern with braces to expand
-	 * @param {number} [depth=0] - Current recursion depth
-	 * @param {number} [maxDepth=10] - Maximum nesting depth
-	 * @returns {string[]} Array of expanded patterns
-	 * @private
-	 */
-	// #expandBraces and #splitBraceAlternatives are utility wrappers reserved for potential
-	// future direct use; #compilePattern delegates to compilePattern() utility directly and
-	// never calls these methods. They are dead private code in the current implementation.
-	/* v8 ignore start */
-	#expandBraces(pattern, depth = 0, maxDepth = 10) {
-		return expandBraces(pattern, depth, maxDepth, {
-			onMaxDepth: (md) => {
-				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth: md }, null, { validationError: true });
-			}
-		});
-	}
-
-	/**
-	 * Split brace alternatives on commas, respecting nested braces.
-	 * Delegates to the shared pattern-matcher utility.
-	 *
-	 * @param {string} content - Content inside braces
-	 * @returns {string[]} Array of alternatives
-	 * @private
-	 */
-	#splitBraceAlternatives(content) {
-		return splitBraceAlternatives(content);
-	}
-	/* v8 ignore stop */
 
 	/**
 	 * Get the pattern compilation function for diagnostic purposes.
