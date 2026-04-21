@@ -130,7 +130,8 @@ export class Config extends ComponentBase {
      * @param {object|undefined} permissions - Raw permissions config from user.
      * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
      * @param {boolean} [permissions.enabled=true] - Global toggle.
-     * @param {string} [permissions.audit="default"] - Audit level: "default" or "verbose".
+     * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
+     *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
      * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
      * @returns {object} Normalized permissions config.
      *
