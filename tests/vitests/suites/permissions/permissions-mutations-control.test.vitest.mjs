@@ -40,13 +40,15 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 		});
 
 		// Should throw INVALID_CONFIG_MUTATIONS_DISABLED when trying to add a rule
-		try {
-			api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
-			expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
-		} catch (error) {
-			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.slothlet.permissions.addRule");
-		}
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				api.slothlet.permissions.addRule({ caller: "untrusted.**", target: "**", effect: "deny" });
+				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
+			} catch (error) {
+				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
+				expect(error.context?.operation).toBe("api.slothlet.permissions.addRule");
+			}
+		});
 	});
 
 	it("should allow permissions.addRule when config.api.mutations.permissions is true", async () => {
@@ -96,12 +98,14 @@ describe.each(getMatrixConfigs())("Permissions > mutations control > $name", ({ 
 			}
 		});
 
-		try {
-			api.slothlet.permissions.removeRule("any-rule-id");
-			expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
-		} catch (error) {
-			expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
-			expect(error.context?.operation).toBe("api.slothlet.permissions.removeRule");
-		}
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				api.slothlet.permissions.removeRule("any-rule-id");
+				expect.unreachable("Should have thrown INVALID_CONFIG_MUTATIONS_DISABLED");
+			} catch (error) {
+				expect(error.message).toContain("INVALID_CONFIG_MUTATIONS_DISABLED");
+				expect(error.context?.operation).toBe("api.slothlet.permissions.removeRule");
+			}
+		});
 	});
 });

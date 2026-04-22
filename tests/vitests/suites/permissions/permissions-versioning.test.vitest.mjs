@@ -17,7 +17,7 @@ import { getMatrixConfigs, TEST_DIRS } from "../../setup/vitest-helper.mjs";
 
 const BASE = TEST_DIRS.API_TEST_PERMISSIONS;
 
-describe.each(getMatrixConfigs())("Permissions > Versioning > $name", ({ config }) => {
+describe.each(getMatrixConfigs())("Permissions > Dynamic api.add > $name", ({ config }) => {
 	let api;
 
 	afterEach(async () => {
@@ -25,7 +25,7 @@ describe.each(getMatrixConfigs())("Permissions > Versioning > $name", ({ config 
 		api = null;
 	});
 
-	it("rules targeting versioned physical paths are enforced", async () => {
+	it("checkAccess allows access for dynamically-added module under default allow policy", async () => {
 		api = await slothlet({
 			...config,
 			dir: `${BASE}/callers`,
@@ -36,7 +36,7 @@ describe.each(getMatrixConfigs())("Permissions > Versioning > $name", ({ config 
 
 		await api.slothlet.api.add("payments", `${BASE}/payments`);
 
-		// Verify the permissions namespace is operational with versioned paths
+		// Verify checkAccess correctly evaluates a dynamically-added module path under default allow policy
 		const allowed = api.slothlet.permissions.global.checkAccess("callers.paymentsCaller", "payments.charge");
 		expect(allowed).toBe(true);
 	});

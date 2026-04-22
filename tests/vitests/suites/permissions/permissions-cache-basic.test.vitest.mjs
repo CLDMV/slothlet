@@ -25,7 +25,7 @@ describe.each(getMatrixConfigs())("Permissions > Cache Basic > $name", ({ config
 		api = null;
 	});
 
-	it("second identical call uses cached result", async () => {
+	it("second call with different args uses cached result (cache key is caller+target, not args)", async () => {
 		api = await slothlet({
 			...config,
 			dir: BASE,
@@ -35,11 +35,11 @@ describe.each(getMatrixConfigs())("Permissions > Cache Basic > $name", ({ config
 			}
 		});
 
-		// First call
+		// First call — populates the permission cache for callers.paymentsCaller → payments.charge
 		const result1 = await api.callers.paymentsCaller.callCharge(100);
 		expect(result1.ok).toBe(true);
 
-		// Second identical call should use cache (verify by consistency)
+		// Second call with a different amount — cache hit because the key is caller+target path, not arguments
 		const result2 = await api.callers.paymentsCaller.callCharge(200);
 		expect(result2.ok).toBe(true);
 	});
