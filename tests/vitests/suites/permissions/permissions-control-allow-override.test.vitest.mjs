@@ -40,4 +40,20 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 		api.slothlet.permissions.control.disable();
 		api.slothlet.permissions.control.enable();
 	});
+
+	it("explicit allow rule permits inter-module control.enable() via self.* (callerWrapper path)", async () => {
+		// Exact-match allow rule (specificity 3) beats built-in deny (specificity 1).
+		// This test exercises the callerWrapper enforcement path in the control functions.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
+			}
+		});
+
+		// controlCaller.callEnable uses self.* — an inter-module call that has callerWrapper context
+		await api.controlCaller.callEnable();
+	});
 });

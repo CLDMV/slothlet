@@ -216,8 +216,14 @@ export class PermissionManager extends ComponentBase {
 	 * const allowed = pm.checkAccess("payments.charge", "db.write", "/src/pay.mjs", "/src/db.mjs");
 	 */
 	checkAccess(callerPath, targetPath, callerFilePath = null, targetFilePath = null) {
-		// Global toggle: when disabled, everything is allowed
-		if (!this.#enabled) return true;
+		// Global toggle: when disabled, everything is allowed.
+		// Exception: slothlet.permissions.control.** is always subject to rule evaluation
+		// regardless of enabled state, so the built-in deny rule protects the toggle
+		// surface even when the system is globally off. A module that has explicitly been
+		// granted an allow rule for control.** (added before enabling) can still call
+		// control.enable(); all other module callers are blocked by the built-in deny.
+		const isControlTarget = targetPath?.startsWith("slothlet.permissions.control.");
+		if (!this.#enabled && !isControlTarget) return true;
 
 		// Self-call bypass: same source file always allowed
 		if (callerFilePath && targetFilePath && callerFilePath === targetFilePath) {

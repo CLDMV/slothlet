@@ -1560,6 +1560,24 @@ export class ApiBuilder extends ComponentBase {
 						}
 						/* v8 ignore stop */
 
+						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
+						// Enforce the built-in deny rule manually for inter-module callers.
+						const ctx = slothlet.contextManager?.tryGetContext?.();
+						const callerWrapper = ctx?.currentWrapper;
+						if (callerWrapper) {
+							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
+							/* v8 ignore start */
+							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+							/* v8 ignore stop */
+							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.enable", callerFilePath, null)) {
+								throw new slothlet.SlothletError("PERMISSION_DENIED", {
+									caller: callerPath,
+									target: "slothlet.permissions.control.enable"
+								});
+							}
+						}
+
 						slothlet.handlers.permissionManager.enable();
 					},
 
@@ -1581,6 +1599,24 @@ export class ApiBuilder extends ComponentBase {
 							});
 						}
 						/* v8 ignore stop */
+
+						// These functions are plain objects (not UnifiedWrapper), so applyTrap never fires.
+						// Enforce the built-in deny rule manually for inter-module callers.
+						const ctx = slothlet.contextManager?.tryGetContext?.();
+						const callerWrapper = ctx?.currentWrapper;
+						if (callerWrapper) {
+							// The ?? fallbacks are defensive — apiPath and filePath are always set on live wrappers.
+							/* v8 ignore start */
+							const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+							const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+							/* v8 ignore stop */
+							if (!permissionManager.checkAccess(callerPath, "slothlet.permissions.control.disable", callerFilePath, null)) {
+								throw new slothlet.SlothletError("PERMISSION_DENIED", {
+									caller: callerPath,
+									target: "slothlet.permissions.control.disable"
+								});
+							}
+						}
 
 						slothlet.handlers.permissionManager.disable();
 					}
