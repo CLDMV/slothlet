@@ -381,7 +381,27 @@
 		"DEBUG_VERSION_RESOLVED": "Version aufgelöst: {version} für Pfad {apiPath} (Aufrufer: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "Keine Discriminator-Übereinstimmung für Pfad {apiPath}; Standardversion {version} wird verwendet.",
 		"DEBUG_VERSION_REGISTERED": "Version {version} unter {logicalPath} registriert (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Version {version} von {logicalPath} abgemeldet"
+		"DEBUG_VERSION_UNREGISTERED": "Version {version} von {logicalPath} abgemeldet",
+
+		"PERMISSION_DENIED": "Zugriff verweigert: Aufrufer '{caller}' darf nicht auf '{target}' zugreifen",
+		"HINT_PERMISSION_DENIED": "Prüfen Sie die Berechtigungsregeln für dieses Aufrufer/Ziel-Paar. Verwenden Sie api.slothlet.permissions.global.rulesForPath('{target}'), um die aktiven Regeln einzusehen.",
+		"PERMISSION_SELF_MODIFY": "Modul '{moduleID}' kann seine eigene Berechtigungsregel '{ruleId}' nicht entfernen",
+		"HINT_PERMISSION_SELF_MODIFY": "Berechtigungsregeln sind für das besitzende Modul unveränderlich. Ein anderes Modul muss diese Regel entfernen.",
+		"INVALID_PERMISSION_RULE": "Ungültige Berechtigungsregel: {reason} (erhalten: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Berechtigungsregeln erfordern: caller (String-Glob), target (String-Glob) und effect ('allow' oder 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Berechtigung verweigert: Aufrufer '{caller}' -> Ziel '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Berechtigung erteilt: Aufrufer '{caller}' -> Ziel '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Berechtigungs-Self-Bypass: Aufrufer und Ziel teilen sich moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Standard-Berechtigungsrichtlinie angewendet: Aufrufer '{caller}' -> Ziel '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Berechtigungsregel hinzugefügt: {ruleId} ({caller} -> {target}: {effect}, Besitzer: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Berechtigungsregel entfernt: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "Regel muss ein nicht-leeres Objekt sein",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller muss eine nicht-leere Zeichenkette sein",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target muss eine nicht-leere Zeichenkette sein",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect muss 'allow' oder 'deny' sein",
+		"BRACE_EXPANSION_MAX_DEPTH": "Klammerauflösung hat die maximale Tiefe von {maxDepth} überschritten",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Verringern Sie die Verschachtelung in Ihren Klammermustern oder erhöhen Sie die maxDepth-Option.",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "Berechtigungsmanager ist nicht in dieser Slothlet-Instanz verfügbar"
 	},
 	"metadata": {
 		"code": "de-de",

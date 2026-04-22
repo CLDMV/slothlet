@@ -342,3 +342,13 @@ describe("Config.transformConfig — v2 warnings suppressed by silent:true (line
                 }
         });
 });
+
+// ─── normalizePermissions — audit:false branch (line 538) ────────────────────
+
+describe("Config.normalizePermissions — audit:false maps to 'default' (line 538)", () => {
+	it("sets audit to 'default' when audit is boolean false (line 538)", () => {
+		const cfg = new Config(makeMock());
+		const result = cfg.normalizePermissions({ defaultPolicy: "allow", audit: false });
+		expect(result.audit).toBe("default");
+	});
+});

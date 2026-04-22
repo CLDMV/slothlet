@@ -18,6 +18,7 @@
  */
 
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { compilePattern } from "@cldmv/slothlet/helpers/pattern-matcher";
 
 /**
  * Result returned by hook execution methods.
@@ -660,141 +661,18 @@ export class HookManager extends ComponentBase {
 
 	/**
 	 * Compile a glob pattern into a matcher function.
-	 * Supports: * (any chars except .), ** (any chars including .), ? (single char),
-	 * {a,b} brace expansion, !pattern negation
+	 * Delegates to the shared pattern-matcher utility.
 	 *
-	 * @param {string} pattern - Glob pattern
+	 * @param {string} pattern - Glob pattern to compile
 	 * @returns {function} Matcher function that takes a path and returns boolean
 	 * @private
 	 */
 	#compilePattern(pattern) {
-		// Handle negation patterns
-		const isNegation = pattern.startsWith("!");
-		if (isNegation) {
-			pattern = pattern.slice(1);
-			const matcher = this.#compilePattern(pattern);
-			return (path) => !matcher(path);
-		}
-
-		// Expand brace patterns {a,b,c}
-		const expanded = this.#expandBraces(pattern);
-		if (expanded.length > 1) {
-			// Multiple patterns - match if ANY match
-			const matchers = expanded.map((p) => this.#compilePattern(p));
-			return (path) => matchers.some((m) => m(path));
-		}
-
-		// Single pattern - convert to regex
-		pattern = expanded[0];
-
-		// Escape special regex characters except *, ?, and .
-		let regexPattern = pattern
-			.replace(/[+^$()|[\]\\]/g, "\\$&") // Don't escape {} - already expanded
-			.replace(/\*\*/g, "__DOUBLESTAR__") // Placeholder for **
-			.replace(/\*/g, "[^.]*") // * matches any chars except .
-			.replace(/__DOUBLESTAR__/g, ".*") // ** matches any chars including .
-			.replace(/\?/g, "."); // ? matches single char
-
-		regexPattern = `^${regexPattern}$`;
-		const regex = new RegExp(regexPattern);
-
-		return (path) => regex.test(path);
-	}
-
-	/**
-	 * Expand brace patterns {a,b,c} into multiple patterns.
-	 * Supports nested braces with configurable depth limit.
-	 *
-	 * @param {string} pattern - Pattern with braces to expand
-	 * @param {number} [depth=0] - Current recursion depth
-	 * @param {number} [maxDepth=10] - Maximum nesting depth
-	 * @returns {string[]} Array of expanded patterns
-	 * @private
-	 */
-	#expandBraces(pattern, depth = 0, maxDepth = 10) {
-		// Check depth limit (>=depth allows 0-9, i.e. 10 levels)
-		if (depth >= maxDepth) {
-			throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
-		}
-
-		// Find first brace group
-		const braceStart = pattern.indexOf("{");
-		if (braceStart === -1) {
-			return [pattern]; // No braces to expand
-		}
-
-		// Find matching closing brace
-		let braceEnd = -1;
-		let depth_count = 1;
-		for (let i = braceStart + 1; i < pattern.length; i++) {
-			if (pattern[i] === "{") depth_count++;
-			if (pattern[i] === "}") {
-				depth_count--;
-				if (depth_count === 0) {
-					braceEnd = i;
-					break;
-				}
+		return compilePattern(pattern, {
+			onMaxDepth: (maxDepth) => {
+				throw new this.SlothletError("HOOK_BRACE_EXPANSION_MAX_DEPTH", { maxDepth }, null, { validationError: true });
 			}
-		}
-
-		if (braceEnd === -1) {
-			return [pattern]; // Unmatched brace - treat as literal
-		}
-
-		// Extract parts
-		const prefix = pattern.slice(0, braceStart);
-		const braceContent = pattern.slice(braceStart + 1, braceEnd);
-		const suffix = pattern.slice(braceEnd + 1);
-
-		// Split on commas (but not nested ones)
-		const alternatives = this.#splitBraceAlternatives(braceContent);
-
-		// Generate expanded patterns
-		const expanded = [];
-		for (const alt of alternatives) {
-			const combined = prefix + alt + suffix;
-			// Recursively expand nested braces
-			const recursiveExpanded = this.#expandBraces(combined, depth + 1, maxDepth);
-			expanded.push(...recursiveExpanded);
-		}
-
-		return expanded;
-	}
-
-	/**
-	 * Split brace alternatives on commas, respecting nested braces.
-	 *
-	 * @param {string} content - Content inside braces
-	 * @returns {string[]} Array of alternatives
-	 * @private
-	 */
-	#splitBraceAlternatives(content) {
-		const alternatives = [];
-		let current = "";
-		let depth = 0;
-
-		for (let i = 0; i < content.length; i++) {
-			const char = content[i];
-
-			if (char === "{") {
-				depth++;
-				current += char;
-			} else if (char === "}") {
-				depth--;
-				current += char;
-			} else if (char === "," && depth === 0) {
-				alternatives.push(current);
-				current = "";
-			} else {
-				current += char;
-			}
-		}
-
-		if (current) {
-			alternatives.push(current);
-		}
-
-		return alternatives;
+		});
 	}
 
 	/**

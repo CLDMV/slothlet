@@ -381,7 +381,27 @@
 		"DEBUG_VERSION_RESOLVED": "Version résolue : {version} pour le chemin {apiPath} (appelant : {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "Aucune correspondance de discriminateur pour le chemin {apiPath} ; utilisation de la version par défaut {version}.",
 		"DEBUG_VERSION_REGISTERED": "Version {version} enregistrée à {logicalPath} (moduleID : {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Version {version} désinscrite de {logicalPath}"
+		"DEBUG_VERSION_UNREGISTERED": "Version {version} désinscrite de {logicalPath}",
+
+		"PERMISSION_DENIED": "Accès refusé : l'appelant '{caller}' n'est pas autorisé à accéder à '{target}'",
+		"HINT_PERMISSION_DENIED": "Vérifiez les règles d'autorisation pour ce couple appelant/cible. Utilisez api.slothlet.permissions.global.rulesForPath('{target}') pour inspecter les règles actives.",
+		"PERMISSION_SELF_MODIFY": "Le module '{moduleID}' ne peut pas supprimer sa propre règle d'autorisation '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "Les règles d'autorisation sont immuables pour le module propriétaire. Un autre module doit supprimer cette règle.",
+		"INVALID_PERMISSION_RULE": "Règle d'autorisation invalide : {reason} (reçu : {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Les règles d'autorisation nécessitent : caller (string glob), target (string glob) et effect ('allow' ou 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Autorisation refusée : appelant '{caller}' -> cible '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Autorisation accordée : appelant '{caller}' -> cible '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Auto-bypass d'autorisation : l'appelant et la cible partagent le moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Politique d'autorisation par défaut appliquée : appelant '{caller}' -> cible '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Règle d'autorisation ajoutée : {ruleId} ({caller} -> {target} : {effect}, propriétaire : {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Règle d'autorisation supprimée : {ruleId} ({caller} -> {target} : {effect})",
+		"PERM_RULE_NOT_OBJECT": "la règle doit être un objet non nul",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller doit être une chaîne non vide",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target doit être une chaîne non vide",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect doit être 'allow' ou 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "L'expansion des accolades a dépassé la profondeur maximale de {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Réduisez le niveau d'imbrication dans vos motifs d'accolades ou augmentez l'option maxDepth.",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "Le gestionnaire de permissions n'est pas disponible dans cette instance Slothlet"
 	},
 	"metadata": {
 		"code": "fr-fr",

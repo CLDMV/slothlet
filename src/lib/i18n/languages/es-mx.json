@@ -381,7 +381,27 @@
 		"DEBUG_VERSION_RESOLVED": "Versión resuelta: {version} para la ruta {apiPath} (llamador: {callerModule})",
 		"DEBUG_VERSION_DEFAULT_USED": "Sin coincidencia del discriminador para la ruta {apiPath}; se usa la versión predeterminada {version}.",
 		"DEBUG_VERSION_REGISTERED": "Versión {version} registrada en {logicalPath} (moduleID: {moduleID})",
-		"DEBUG_VERSION_UNREGISTERED": "Versión {version} dada de baja de {logicalPath}"
+		"DEBUG_VERSION_UNREGISTERED": "Versión {version} dada de baja de {logicalPath}",
+
+		"PERMISSION_DENIED": "Acceso denegado: el llamador '{caller}' no tiene permiso para acceder a '{target}'",
+		"HINT_PERMISSION_DENIED": "Verifique las reglas de permisos para este par llamador/objetivo. Use api.slothlet.permissions.global.rulesForPath('{target}') para inspeccionar las reglas activas.",
+		"PERMISSION_SELF_MODIFY": "El módulo '{moduleID}' no puede eliminar su propia regla de permiso '{ruleId}'",
+		"HINT_PERMISSION_SELF_MODIFY": "Las reglas de permisos son inmutables para el módulo propietario. Otro módulo debe eliminar esta regla.",
+		"INVALID_PERMISSION_RULE": "Regla de permiso inválida: {reason} (recibido: {received})",
+		"HINT_INVALID_PERMISSION_RULE": "Las reglas de permisos requieren: caller (string glob), target (string glob) y effect ('allow' o 'deny').",
+		"DEBUG_PERMISSION_DENIED": "Permiso denegado: llamador '{caller}' -> objetivo '{target}'",
+		"DEBUG_PERMISSION_ALLOWED": "Permiso concedido: llamador '{caller}' -> objetivo '{target}'",
+		"DEBUG_PERMISSION_SELF_BYPASS": "Auto-bypass de permisos: llamador y objetivo comparten moduleID '{moduleID}'",
+		"DEBUG_PERMISSION_DEFAULT": "Política de permisos predeterminada aplicada: llamador '{caller}' -> objetivo '{target}' -> {effect}",
+		"DEBUG_PERMISSION_RULE_ADDED": "Regla de permiso agregada: {ruleId} ({caller} -> {target}: {effect}, propietario: {ownerModuleID})",
+		"DEBUG_PERMISSION_RULE_REMOVED": "Regla de permiso eliminada: {ruleId} ({caller} -> {target}: {effect})",
+		"PERM_RULE_NOT_OBJECT": "la regla debe ser un objeto no nulo",
+		"PERM_RULE_CALLER_REQUIRED": "rule.caller debe ser una cadena no vacía",
+		"PERM_RULE_TARGET_REQUIRED": "rule.target debe ser una cadena no vacía",
+		"PERM_RULE_EFFECT_INVALID": "rule.effect debe ser 'allow' o 'deny'",
+		"BRACE_EXPANSION_MAX_DEPTH": "La expansión de llaves superó la profundidad máxima de {maxDepth}",
+		"HINT_BRACE_EXPANSION_MAX_DEPTH": "Reduce el anidamiento en tus patrones de llaves o aumenta la opción maxDepth.",
+		"PERMISSION_MANAGER_NOT_AVAILABLE": "El administrador de permisos no está disponible en esta instancia de Slothlet"
 	},
 	"metadata": {
 		"code": "es-mx",

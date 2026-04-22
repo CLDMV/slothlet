@@ -55,17 +55,18 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.2.3 (April 2026)
+### Latest: v3.3.0 (April 2026)
 
-- **Publish workflow fix** — switched CI trigger from `pull_request` to `push` on master so releases publish immediately on merge without depending on the PR event payload
-- [View full v3.2.3 Changelog](./docs/changelog/v3/v3.2.3.md)
+- **Permission System** — path-based access control for inter-module calls with glob pattern rules, most-specific-wins evaluation, audit events, and runtime `api.slothlet.permissions.*` management API
+- **Shared pattern matcher** — extracted hook system's glob compilation into a shared utility for reuse across hooks and permissions
+- [View full v3.3.0 Changelog](./docs/changelog/v3/v3.3.0.md)
 
 ### Recent Releases
 
+- **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
 - **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
 - **v3.2.1** (April 2026) — version-dispatcher `defineProperty` trap fix; pre-commit validation cleanup ([Changelog](./docs/changelog/v3/v3.2.1.md))
 - **v3.2.0** (April 2026) — API Path Versioning (`versionDispatcher`, `api.slothlet.versioning.*`, version metadata, dispatcher proxy); lazy-mode shutdown race fix ([Changelog](./docs/changelog/v3/v3.2.0.md))
-- **v3.1.0** (March 2026) — Frozen `api.slothlet.env` snapshot; `env.include` allowlist; reload immunity ([Changelog](./docs/changelog/v3/v3.1.0.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -112,6 +113,19 @@ Powerful function interceptor system with 4 hook types and three-phase subset or
 Each hook type supports three ordered execution **subsets**: `"before"` → `"primary"` (default) → `"after"`. Pattern matching, priority control, runtime enable/disable, and short-circuit support included.
 
 🎣 **For complete hook system documentation, see [docs/HOOKS.md](https://github.com/CLDMV/slothlet/blob/master/docs/HOOKS.md)**
+
+### 🔐 **Permission System** _(new in v3.3)_
+
+Path-based access control for inter-module API calls:
+
+- **Glob pattern rules** — same `*`, `**`, `?`, `{a,b}` syntax as hooks
+- **Most-specific-wins** — exact patterns override broad globs; tiebreak by registration order
+- **Self-call bypass** — calls within the same source file always succeed
+- **Enforcement before hooks** — denied calls never trigger `before:` hooks or function execution
+- **Audit events** — `permission:denied`, `permission:allowed`, `permission:default`, `permission:self-bypass`
+- **Runtime management** — `api.slothlet.permissions.addRule()`, `.removeRule()`, `.self.*`, `.global.*`, `.control.*`
+
+🔐 **For complete permission system documentation, see [docs/PERMISSIONS.md](https://github.com/CLDMV/slothlet/blob/master/docs/PERMISSIONS.md)**
 
 ### 🌍 **Full Internationalization** _(new in v3)_
 
@@ -324,8 +338,9 @@ await api.slothlet.api.reload("database.*");
 | `hook`                    | `mixed`   | `false`       | Enable hook system: `true` (enable all), `"pattern"` (enable with pattern), or object with `enabled`, `pattern`, `suppressErrors` options - **note: `hook` singular, not `hooks`**                           |
 | `backgroundMaterialize`   | `boolean` | `false`       | In lazy mode: start background pre-loading of all modules immediately after init; automatically enables materialization tracking and the `materialized:complete` lifecycle event                              |
 | `api.collision`           | `mixed`   | `"merge"`     | Collision mode for API namespace conflicts: `"merge"`, `"skip"`, `"overwrite"`, `"throw"` - or `{ initial: "merge", api: "skip" }` to set independently for load vs runtime `add()`                          |
-| `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true }` - set any to `false` to disable                                                                                                 |
+| `api.mutations`           | `object`  | all `true`    | Per-operation mutation controls: `{ add: true, remove: true, reload: true, permissions: true }` - set any to `false` to disable                                                                              |
 | `versionDispatcher`       | `mixed`   | `undefined`   | Version routing discriminator: `"version"` (or any string key) looks up that key in the caller's version metadata; a function receives `(allVersions, caller)` and returns a tag or `null`; `undefined` behaves like `"version"` |
+| `permissions`             | `object`  | `undefined`   | Permission system config: `{ defaultPolicy: "allow"\|"deny", enabled: true, audit: "default"\|"verbose", rules: [...] }` — see [PERMISSIONS.md](./docs/PERMISSIONS.md)                                    |
 | `i18n`                    | `object`  | `{}`          | Internationalization settings: `{ language: "en" }` - supported: `en`, `es`, `fr`, `de`, `pt`, `it`, `ja`, `zh`, `ko`                                                                                       |
 
 ---

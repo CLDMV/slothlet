@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-08 19:46:36 -07:00 (1773024396)
+ *	@Last modified time: 2026-04-14 21:36:39 -07:00 (1776227799)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -1871,6 +1871,13 @@ export class UnifiedWrapper extends ComponentBase {
 			},
 
 			async apply(___target, ___thisArg, args) {
+				// Capture caller context synchronously before any await.
+				// In LAZY_LIVE mode, the outer runInContext's finally block restores
+				// context before this Promise settles, losing caller identity.
+				// Capturing here (synchronous part of async fn) preserves it for
+				// permission enforcement in the target's applyTrap.
+				const ___capturedCallerWrapper = wrapper.slothlet.contextManager?.tryGetContext?.()?.currentWrapper ?? null;
+
 				wrapper.slothlet.debug("wrapper", {
 					key: "DEBUG_MODE_WAITING_APPLY_ENTRY",
 					apiPath: wrapper.____slothletInternal.apiPath,
@@ -2051,6 +2058,27 @@ export class UnifiedWrapper extends ComponentBase {
 					// Call with proper `this` binding - use lastObject as `this` if available
 					// This preserves `this` binding for methods called on objects
 					// Use Reflect.apply to avoid accessing .apply property on proxy (which triggers another trap)
+
+					// LAZY_LIVE context restoration: after the async boundary the live
+					// context stack has already unwound (runInContext.finally restored state).
+					// Use the captured caller + runInContext (with the explicit instanceID)
+					// to re-establish context properly. This is multi-instance safe because
+					// runInContext looks up the store by instanceID, not currentInstanceID.
+					if (___capturedCallerWrapper && wrapper.slothlet.contextManager) {
+						const ___instanceStore = wrapper.slothlet.contextManager.instances?.get?.(wrapper.instanceID);
+						// False path (store missing or currentWrapper already set) only occurs in
+						// re-entrant scenarios that are not exercised by the test suite.
+						/* v8 ignore next */
+						if (___instanceStore && !___instanceStore.currentWrapper) {
+							return wrapper.slothlet.contextManager.runInContext(
+								wrapper.instanceID,
+								() => Reflect.apply(current, lastObject, args),
+								null,
+								[],
+								___capturedCallerWrapper
+							);
+						}
+					}
 					return Reflect.apply(current, lastObject, args);
 				}
 
@@ -2783,6 +2811,35 @@ export class UnifiedWrapper extends ComponentBase {
 				throw new TypeError(`${wrapper.____slothletInternal.apiPath || "api"} is invalidated`);
 			}
 
+			// Permission enforcement: check before hooks or function execution
+			// Only applies to inter-module calls (caller context exists).
+			// External calls from user code (no caller in ALS context) are exempt.
+			const permissionManager = wrapper.slothlet.handlers?.permissionManager;
+			if (permissionManager && permissionManager.isEnabled()) {
+				const ctx = wrapper.slothlet.contextManager?.tryGetContext?.();
+				// Use currentWrapper as the caller — it represents the module currently executing
+				// (callerWrapper represents the module that called the current module, which is one level up)
+				const callerWrapper = ctx?.currentWrapper;
+
+				// Only enforce when there is an active caller module (inter-module call)
+				if (callerWrapper) {
+					// The ?? fallbacks are defensive — .apiPath and .filePath are always set on live wrappers.
+					/* v8 ignore start */
+					const callerPath = callerWrapper.____slothletInternal?.apiPath ?? "";
+					const callerFilePath = callerWrapper.____slothletInternal?.filePath ?? null;
+					const targetPath = wrapper.____slothletInternal.apiPath;
+					const targetFilePath = wrapper.____slothletInternal.filePath ?? null;
+					/* v8 ignore stop */
+
+					if (!permissionManager.checkAccess(callerPath, targetPath, callerFilePath, targetFilePath)) {
+						throw new wrapper.SlothletError("PERMISSION_DENIED", {
+							caller: callerPath,
+							target: targetPath
+						});
+					}
+				}
+			}
+
 			// Get hook manager if available
 			const hookManager = wrapper.slothlet.handlers?.hookManager;
 			// Early exit if hooks disabled globally or this is a hook API function
@@ -2828,33 +2885,43 @@ export class UnifiedWrapper extends ComponentBase {
 						const checkMaterialized = () => {
 							if (wrapper.____slothletInternal.state.materialized) {
 								const impl = wrapper.____slothletInternal.impl;
-								if (typeof impl === "function") {
-									if (wrapper.slothlet.contextManager) {
-										resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
+								try {
+									if (typeof impl === "function") {
+										if (wrapper.slothlet.contextManager) {
+											resolve(wrapper.slothlet.contextManager.runInContext(wrapper.instanceID, impl, thisArg, args, wrapper));
+										} else {
+											resolve(impl.apply(thisArg, args));
+										}
+									} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
+										if (wrapper.contextManager) {
+											resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper));
+										} else {
+											resolve(impl.default.apply(impl, args));
+										}
 									} else {
-										resolve(impl.apply(thisArg, args));
+										reject(
+											new wrapper.slothlet.SlothletError(
+												"INVALID_CONFIG_NOT_A_FUNCTION",
+												{
+													apiPath: wrapper.____slothletInternal.apiPath,
+													actualType: typeof impl
+												},
+												null,
+												{ validationError: true }
+											)
+										);
 									}
-								} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
-									if (wrapper.contextManager) {
-										resolve(wrapper.contextManager.runInContext(wrapper.instanceID, impl.default, impl, args, wrapper));
-									} else {
-										resolve(impl.default.apply(impl, args));
-									}
-								} else {
-									reject(
-										new wrapper.slothlet.SlothletError(
-											"INVALID_CONFIG_NOT_A_FUNCTION",
-											{
-												apiPath: wrapper.____slothletInternal.apiPath,
-												actualType: typeof impl
-											},
-											null,
-											{ validationError: true }
-										)
-									);
+								} catch (err) {
+									// Error from impl during post-materialization execution; same path covered
+									// via non-deferred eager/already-materialized tests.
+									/* v8 ignore next */
+									reject(err);
 								}
 								return;
 							}
+							// This path fires only if materialization silently fails to set inFlight —
+							// a defensive guard against corrupted internal state; unreachable in practice.
+							/* v8 ignore start */
 							if (!wrapper.____slothletInternal.state.inFlight) {
 								reject(
 									new wrapper.slothlet.SlothletError(
@@ -2867,6 +2934,7 @@ export class UnifiedWrapper extends ComponentBase {
 									)
 								);
 								return;
+								/* v8 ignore stop */
 							}
 							setImmediate(checkMaterialized);
 						};

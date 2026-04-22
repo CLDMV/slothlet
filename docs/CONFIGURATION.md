@@ -171,16 +171,17 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 
 ### `api.mutations`
 
-**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean }`  
-**Default**: `{ add: true, remove: true, reload: true }`
+**Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`  
+**Default**: `{ add: true, remove: true, reload: true, permissions: true }`
 
-Controls which runtime API mutation methods are available on `api.slothlet.api`.
+Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
 
 | Property | Default | Controls |
 |---|---|---|
 | `add` | `true` | `api.slothlet.api.add()` - mount new API modules at runtime |
 | `remove` | `true` | `api.slothlet.api.remove()` - unmount API modules at runtime |
 | `reload` | `true` | `api.slothlet.api.reload()` - hot-reload a module or directory |
+| `permissions` | `true` | `api.slothlet.permissions.addRule()` / `removeRule()` - add or remove permission rules at runtime |
 
 Disable all mutations to create a locked, immutable API:
 
@@ -188,7 +189,7 @@ Disable all mutations to create a locked, immutable API:
 const api = await slothlet({
 	dir: "./api",
 	api: {
-		mutations: { add: false, remove: false, reload: false }
+		mutations: { add: false, remove: false, reload: false, permissions: false }
 	}
 });
 ```

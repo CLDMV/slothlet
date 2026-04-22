@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-03-01 20:21:38 -08:00 (1772425298)
+ *	@Last modified time: 2026-04-17 21:13:35 -07:00 (1776485615)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -17,6 +17,7 @@
  * @internal
  */
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
+import { SlothletError } from "@cldmv/slothlet/errors";
 
 /**
  * Configuration normalization utilities
@@ -157,7 +158,7 @@ export class Config extends ComponentBase {
 	 * // => { add: false, remove: false, reload: false }
 	 */
 	normalizeMutations(mutations) {
-		const defaults = { add: true, remove: true, reload: true };
+		const defaults = { add: true, remove: true, reload: true, permissions: true };
 
 		// If mutations is not an object, use defaults
 		if (!mutations || typeof mutations !== "object") {
@@ -168,7 +169,8 @@ export class Config extends ComponentBase {
 		return {
 			add: mutations.add === false ? false : true,
 			remove: mutations.remove === false ? false : true,
-			reload: mutations.reload === false ? false : true
+			reload: mutations.reload === false ? false : true,
+			permissions: mutations.permissions === false ? false : true
 		};
 	}
 
@@ -190,7 +192,8 @@ export class Config extends ComponentBase {
 				context: false,
 				initialization: false,
 				materialize: false,
-				versioning: false
+				versioning: false,
+				permissions: false
 			};
 		}
 
@@ -206,7 +209,8 @@ export class Config extends ComponentBase {
 				context: true,
 				initialization: true,
 				materialize: true,
-				versioning: true
+				versioning: true,
+				permissions: true
 			};
 		}
 
@@ -222,7 +226,8 @@ export class Config extends ComponentBase {
 				context: debug.context || false,
 				initialization: debug.initialization || false,
 				materialize: debug.materialize || false,
-				versioning: debug.versioning || false
+				versioning: debug.versioning || false,
+				permissions: debug.permissions || false
 			};
 		}
 
@@ -237,7 +242,8 @@ export class Config extends ComponentBase {
 			context: false,
 			initialization: false,
 			materialize: false,
-			versioning: false
+			versioning: false,
+			permissions: false
 		};
 	}
 
@@ -353,6 +359,9 @@ export class Config extends ComponentBase {
 			}
 		}
 
+		// Normalize permissions configuration
+		const permissionsConfig = this.normalizePermissions(config.permissions);
+
 		// Parse i18n configuration (dev-facing; process-global)
 		let i18nConfig = null;
 		if (config.i18n && typeof config.i18n === "object") {
@@ -385,7 +394,8 @@ export class Config extends ComponentBase {
 			silent: config.silent === true,
 			typescript: this.normalizeTypeScript(config.typescript),
 			env: this.normalizeEnv(config.env),
-			versionDispatcher: config.versionDispatcher ?? null
+			versionDispatcher: config.versionDispatcher ?? null,
+			permissions: permissionsConfig
 		};
 	}
 
@@ -471,5 +481,93 @@ export class Config extends ComponentBase {
 			return { include };
 		}
 		return null; // Empty or invalid include — treat as no restriction
+	}
+
+	/**
+	 * Normalize permissions configuration.
+	 *
+	 * @param {object|null} [permissions] - Raw permissions config from user.
+	 * @param {string} [permissions.defaultPolicy="allow"] - Fallback policy: "allow" or "deny".
+	 * @param {boolean} [permissions.enabled=true] - Global toggle.
+	 * @param {string|boolean} [permissions.audit="default"] - Audit level: `"default"` (denied + self-bypass only),
+	 *   `"verbose"` (all decisions). `true` and `false` are accepted and both normalize to `"default"`.
+	 * @param {Array<object>} [permissions.rules=[]] - Initial permission rules.
+	 * @returns {object|null} Normalized permissions config, or null when permissions is absent or not an object.
+	 *
+	 * @example
+	 * normalizePermissions({ defaultPolicy: "deny", rules: [{ caller: "**", target: "admin.**", effect: "deny" }] });
+	 * // => { defaultPolicy: "deny", enabled: true, audit: "default", rules: [...] }
+	 */
+	normalizePermissions(permissions) {
+		if (!permissions || typeof permissions !== "object") {
+			return null;
+		}
+
+		// Validate defaultPolicy
+		let defaultPolicy;
+		if (permissions.defaultPolicy === "deny") {
+			defaultPolicy = "deny";
+		} else if (permissions.defaultPolicy === "allow" || permissions.defaultPolicy === undefined) {
+			defaultPolicy = "allow";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.defaultPolicy",
+					value: permissions.defaultPolicy,
+					expected: '"allow" or "deny"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		const enabled = permissions.enabled !== false;
+
+		// Validate audit
+		let audit;
+		if (permissions.audit === "verbose") {
+			audit = "verbose";
+		} else if (permissions.audit === "default" || permissions.audit === undefined) {
+			audit = "default";
+		} else if (permissions.audit === true) {
+			// Boolean true normalizes to "default" (denied + self-bypass events only)
+			audit = "default";
+		} else if (permissions.audit === false) {
+			// Boolean false normalizes to "default" (denied + self-bypass events only; audit is not disabled)
+			audit = "default";
+		} else {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.audit",
+					value: permissions.audit,
+					expected: '"default" or "verbose"',
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		// Validate rules
+		if (permissions.rules !== undefined && !Array.isArray(permissions.rules)) {
+			throw new SlothletError(
+				"INVALID_CONFIG",
+				{
+					option: "permissions.rules",
+					value: permissions.rules,
+					expected: "array",
+					hint: "HINT_INVALID_CONFIG"
+				},
+				null,
+				{ validationError: true }
+			);
+		}
+
+		const rules = Array.isArray(permissions.rules) ? permissions.rules : [];
+
+		return { defaultPolicy, enabled, audit, rules };
 	}
 }

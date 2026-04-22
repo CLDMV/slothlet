@@ -150,8 +150,8 @@ describe.each(getMatrixConfigs({ hook: { enabled: true }, diagnostics: true }))(
 
 		const deepPattern = diag.compilePattern("*.*.*");
 		expect(deepPattern("a.b.c")).toBe(true);
-		// Pattern *.*.* uses greedy matching, so it matches a.b (2 dots minimum)
-		expect(deepPattern("a.b")).toBe(true);
+		// Pattern *.*.* requires exactly 3 dot-separated segments
+		expect(deepPattern("a.b")).toBe(false);
 		expect(deepPattern("a")).toBe(false);
 
 		// Test multiple patterns
