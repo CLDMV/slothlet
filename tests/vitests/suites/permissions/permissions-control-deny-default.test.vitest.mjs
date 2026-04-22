@@ -59,6 +59,24 @@ describe.each(getMatrixConfigs())("Permissions > Control Deny Default > $name", 
 		});
 	});
 
+	it("built-in deny blocks inter-module call to control.disable() even when permissions are globally disabled", async () => {
+		// Mirrors the enable() test — the disable() enforcement path in api_builder is separate code.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: { defaultPolicy: "allow", enabled: false }
+		});
+
+		await withSuppressedSlothletErrorOutput(async () => {
+			try {
+				await api.controlCaller.callDisable();
+				expect.unreachable("Should have thrown PERMISSION_DENIED");
+			} catch (err) {
+				expect(err.message).toContain("PERMISSION_DENIED");
+			}
+		});
+	});
+
 	it("explicit allow rule for control.** permits inter-module enable() even when system is disabled", async () => {
 		// An allow rule with exact caller match scores higher specificity than the built-in
 		// deny (exact=3 > multi-glob=1), so it wins and the call goes through.
