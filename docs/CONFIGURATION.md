@@ -174,7 +174,7 @@ See [METADATA.md](METADATA.md) for per-module collision mode overrides via metad
 **Type**: `{ add?: boolean, remove?: boolean, reload?: boolean, permissions?: boolean }`  
 **Default**: `{ add: true, remove: true, reload: true, permissions: true }`
 
-Controls which runtime API mutation methods are available on `api.slothlet.api`.
+Controls which runtime API mutation methods are available. Affects both `api.slothlet.api.*` (module mounting) and `api.slothlet.permissions.*` (rule management) mutation surfaces.
 
 | Property | Default | Controls |
 |---|---|---|

@@ -76,9 +76,11 @@ export class PermissionManager extends ComponentBase {
 	#audit = "default";
 
 	/**
-	 * Cache of resolved caller::target → boolean results.
+	 * Cache of resolved caller::target decision records.
 	 * Keyed by "${callerPath}::${targetPath}".
-	 * @type {Map<string, boolean>}
+	 * Each value is the decision record returned by {@link #evaluate}:
+	 * `{ allowed: boolean, event: string, payload: object }`.
+	 * @type {Map<string, {allowed: boolean, event: string, payload: object}>}
 	 * @private
 	 */
 	#resolvedCache = new Map();
