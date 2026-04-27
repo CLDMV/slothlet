@@ -18,18 +18,19 @@
  * Runs after `build:dist` (which copies src/ → dist/) and before
  * `build:prepend-license` (which prepends the Apache copyright header).
  * That ordering is intentional: esbuild strips all comments during
- * minification, so the license header must be added after, not before.
+ * processing, so the license header must be added after, not before.
  *
  * Each file is transformed individually (not bundled) so the existing
  * self-referencing import graph (`@cldmv/slothlet/...`) is preserved
- * unchanged — only whitespace, comments, and dead code are removed.
+ * unchanged — only whitespace and comments are removed; identifiers and
+ * syntax structure are left as-is.
  *
  * The `.mjs` extension is kept on every output file to maintain ESM
  * semantics and stay compatible with the package exports map.
  *
  * esbuild is an optional peer dependency. When it is not installed the
  * script exits with a clear warning rather than a hard failure so that
- * environments that don't need the minified build (e.g. `--conditions
+ * environments that don't need stripped output (e.g. `--conditions
  * slothlet-dev` dev runs) are unaffected.
  *
  * @module @cldmv/slothlet/tools/build/minify-dist
@@ -74,9 +75,9 @@ async function collectMjs(dir) {
 }
 
 /**
- * Minify all `.mjs` files in `dist/` in-place using esbuild's transform API.
- * Comments are stripped, whitespace collapsed, and identifiers mangled where
- * safe. The `.mjs` extension is preserved on every output file.
+ * Strip comments and whitespace from all `.mjs` files in `dist/` in-place
+ * using esbuild's transform API. Identifiers and syntax are left untouched.
+ * The `.mjs` extension is preserved on every output file.
  *
  * @returns {Promise<void>}
  * @throws {Error} When dist/ does not exist or esbuild transform fails for a file.
@@ -107,7 +108,7 @@ async function minifyDist() {
 		process.exit(0);
 	}
 
-	console.log(`🗜️  Minifying ${files.length} files in dist/…`);
+	console.log(`🗜️  Stripping comments and whitespace from ${files.length} files in dist/…`);
 
 	let minified = 0;
 	let failed = 0;
@@ -124,11 +125,14 @@ async function minifyDist() {
 				// Target the minimum Node version declared in package.json engines.
 				target: "node16",
 				format: "esm",
-				minify: true,
-				// Keep legal / license comments that start with /*! or @license.
-				// The Apache header is prepended after this step so this mainly
-				// ensures any user-supplied legal notices in src/ are also stripped
-				// (they will be replaced by the single canonical header).
+				// Strip whitespace and comments only — identifiers and syntax
+				// are intentionally left unchanged so the output stays readable
+				// and debuggable while still being compact.
+				minifyWhitespace: true,
+				minifyIdentifiers: false,
+				minifySyntax: false,
+				// Drop all comments including legal ones — the Apache header is
+				// prepended as the single canonical notice by build:prepend-license.
 				legalComments: "none"
 			});
 		} catch (err) {
@@ -147,7 +151,7 @@ async function minifyDist() {
 	}
 
 	const savedKb = (savedBytes / 1024).toFixed(1);
-	console.log(`✅  Minified ${minified}/${files.length} files — saved ${savedKb} KB`);
+	console.log(`✅  Stripped ${minified}/${files.length} files — saved ${savedKb} KB`);
 
 	if (failed > 0) {
 		console.error(`❌  ${failed} file(s) failed — see errors above.`);
