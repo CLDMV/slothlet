@@ -55,18 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.3.0 (April 2026)
+### Latest: v3.3.1 (April 2026)
 
-- **Permission System** — path-based access control for inter-module calls with glob pattern rules, most-specific-wins evaluation, audit events, and runtime `api.slothlet.permissions.*` management API
-- **Shared pattern matcher** — extracted hook system's glob compilation into a shared utility for reuse across hooks and permissions
-- [View full v3.3.0 Changelog](./docs/changelog/v3/v3.3.0.md)
+- **`construct` trap for proxied classes** — `new api.someModule.MyClass(args)` now correctly runs the constructor, sets own properties, and preserves the prototype chain. Previously, `new` silently produced an empty `{}`. In lazy mode, `await new api.MyClass(args)` resolves to the real instance after materialization.
+- [View full v3.3.1 Changelog](./docs/changelog/v3/v3.3.1.md)
 
 ### Recent Releases
 
+- **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 - **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
 - **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
 - **v3.2.1** (April 2026) — version-dispatcher `defineProperty` trap fix; pre-commit validation cleanup ([Changelog](./docs/changelog/v3/v3.2.1.md))
-- **v3.2.0** (April 2026) — API Path Versioning (`versionDispatcher`, `api.slothlet.versioning.*`, version metadata, dispatcher proxy); lazy-mode shutdown race fix ([Changelog](./docs/changelog/v3/v3.2.0.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**

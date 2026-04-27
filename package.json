@@ -307,11 +307,8 @@
 	"files": [
 		"index.mjs",
 		"index.cjs",
-		"README.md",
+		"REFERENCE.md",
 		"LICENSE",
-		"docs/API-RULES.md",
-		"docs/API-RULES-CONDITIONS.md",
-		"AGENT-USAGE.md",
 		"types/dist/",
 		"types/index.d.mts",
 		"types/index.d.mts.map",
