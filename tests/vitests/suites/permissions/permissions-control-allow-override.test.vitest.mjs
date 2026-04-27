@@ -56,4 +56,24 @@ describe.each(getMatrixConfigs())("Permissions > Control Allow Override > $name"
 		// controlCaller.callEnable uses self.* — an inter-module call that has callerWrapper context
 		await api.controlCaller.callEnable();
 	});
+
+	it("explicit allow rule permits inter-module control.disable() via self.* (callerWrapper false-branch)", async () => {
+		// Same setup as the enable test — the allow rule (specificity 3) beats built-in deny.
+		// Exercises the else (false) branch of `if (!checkAccess(...))` inside control.disable(),
+		// i.e. the path where checkAccess returns true (access granted) and we do NOT throw.
+		api = await slothlet({
+			...config,
+			dir: `${BASE}/callers`,
+			permissions: {
+				defaultPolicy: "allow",
+				rules: [{ caller: "controlCaller.*", target: "slothlet.permissions.control.**", effect: "allow" }]
+			}
+		});
+
+		// controlCaller.callDisable uses self.slothlet.permissions.control.disable() — inter-module
+		// call with callerWrapper set. checkAccess returns true → !true = false → no throw.
+		await api.controlCaller.callDisable();
+		// Re-enable so shutdown and subsequent operations work cleanly.
+		api.slothlet.permissions.control.enable();
+	});
 });

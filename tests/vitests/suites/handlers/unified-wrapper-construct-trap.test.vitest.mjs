@@ -135,3 +135,149 @@ describe.each(getMatrixConfigs({ mode: "lazy" }))("UnifiedWrapper > constructTra
 		expect(Object.getPrototypeOf(a)).toBe(Object.getPrototypeOf(b));
 	});
 });
+
+// ─── Lazy in-flight construct trap — Promise path ─────────────────────────────
+//
+// These tests cover lines 3424-3472: the polling-promise path in the construct
+// trap when `new proxy()` is called on a lazy, unmaterialized wrapper. The first
+// lazy guard fires `_materialize()` (setting inFlight=true synchronously), then
+// the second guard detects `inFlight===true` and returns a Promise that polls via
+// `setImmediate` until materialization completes.
+//
+// Three sub-paths are exercised:
+//   - Line 3432: impl is a function  → resolve(Reflect.construct(impl, …))
+//   - Line 3434: impl.default is fn  → resolve(Reflect.construct(impl.default, …))
+//   - Line 3436: impl is an object   → reject(INVALID_CONFIG_NOT_A_FUNCTION)
+
+describe("UnifiedWrapper > constructTrap > lazy in-flight Promise path (lines 3424-3472)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	test("resolves with constructed function instance when lazy impl is a function (line 3432)", async () => {
+		// logger/logger.mjs auto-flattens: api.logger wrapper impl becomes the `log` function.
+		// Calling `new api.logger()` before materialization enters the in-flight Promise path
+		// and, after materialization, resolves via Reflect.construct(impl, args, impl).
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		const loggerProxy = api.logger;
+		expect(loggerProxy.__mode).toBe("lazy");
+		expect(loggerProxy.__materialized).toBe(false);
+		// new on unmaterialized lazy wrapper → Promise (lines 3424-3472)
+		const inst = await new loggerProxy();
+		// impl is the log function → Reflect.construct resolves to a log instance
+		expect(typeof inst).toBe("object");
+	});
+
+	test("resolves with impl.default instance when lazy impl is {default: fn} (line 3434)", async () => {
+		// default-fn.cjs exports { default: multiply } (no named exports → CJS unwrap skipped).
+		// After materialization impl = { default: multiply }.
+		// The in-flight Promise resolves via Reflect.construct(impl.default, args, impl.default).
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		const dfProxy = api.defaultFn;
+		expect(dfProxy.__mode).toBe("lazy");
+		expect(dfProxy.__materialized).toBe(false);
+		const inst = await new dfProxy();
+		// Reflect.construct(multiply, [], multiply) → instance of multiply
+		expect(inst?.constructor?.name).toBe("multiply");
+	});
+
+	test("rejects with INVALID_CONFIG_NOT_A_FUNCTION when lazy impl is a namespace object (line 3436)", async () => {
+		// api.database is a lazy folder namespace — impl materialises to a plain object.
+		// The in-flight Promise rejects because impl is neither function nor has .default fn.
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		const dbProxy = api.database;
+		expect(dbProxy.__mode).toBe("lazy");
+		expect(dbProxy.__materialized).toBe(false);
+		await expect(new dbProxy()).rejects.toMatchObject({ code: "INVALID_CONFIG_NOT_A_FUNCTION" });
+	});
+});
+
+// ─── Materialized lazy wrapper — eager section of construct trap ──────────────
+//
+// These tests cover lines 3486-3498: when the lazy wrapper has ALREADY been
+// materialised (mode=lazy, materialized=true, inFlight=false) the two lazy
+// guards are skipped and the code falls into the "Eager or already-materialised"
+// section that has its own impl-type checks.
+//
+//   - Line 3487: impl.default is fn → Reflect.construct(impl.default, …)
+//   - Line 3490: neither           → throw INVALID_CONFIG_NOT_A_FUNCTION
+
+describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager fallback (lines 3486-3498)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	test("constructs via impl.default when materialised impl is {default: fn} (line 3487)", async () => {
+		// Materialise defaultFn explicitly so the Promise path is NOT taken.
+		// With impl = {default: multiply} the eager guard `typeof impl.default === "function"`
+		// triggers Reflect.construct(impl.default, args, impl.default).
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		const dfProxy = api.defaultFn;
+		await dfProxy._materialize();
+		expect(dfProxy.__materialized).toBe(true);
+		// Eager path: impl.default is the multiply function
+		const inst = new dfProxy(3, 4);
+		expect(inst?.constructor?.name).toBe("multiply");
+	});
+
+	test("throws INVALID_CONFIG_NOT_A_FUNCTION when materialised impl is a plain object (line 3490)", async () => {
+		// Materialise database explicitly — impl becomes a plain namespace object.
+		// The eager fallback finds no function (neither impl nor impl.default) and throws.
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+		const dbProxy = api.database;
+		await dbProxy._materialize();
+		expect(dbProxy.__materialized).toBe(true);
+		let caught = null;
+		try {
+			new dbProxy();
+		} catch (e) {
+			caught = e;
+		}
+		expect(caught).not.toBeNull();
+		expect(caught.code).toBe("INVALID_CONFIG_NOT_A_FUNCTION");
+	});
+});
+
+// ─── Invalid wrapper: construct on invalidated proxy throws TypeError ─────────
+
+describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (line 3403)", () => {
+	let api;
+
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
+
+	test("new on invalidated wrapper throws TypeError (line 3403 true branch)", async () => {
+		// Strategy: lazy mode — materialise math to get real child wrapper proxies,
+		// then reload math which triggers ___resetLazy → ___invalidate() on each child.
+		// The saved add proxy now has invalid = true; new addProxy() fires the construct
+		// trap's invalid guard at line 3403 and throws TypeError.
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		api = await slothlet({ mode: "lazy", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST });
+
+		// Materialise math so api.math.add is a real callable UnifiedWrapper proxy.
+		await api.math._materialize();
+		const addProxy = api.math.add;
+		expect(addProxy.__isCallable).toBe(true);
+
+		// Reload math — ___resetLazy is called on the math wrapper, which calls
+		// ___invalidate() on every child wrapper including add.
+		await api.slothlet.api.reload("math");
+
+		// addProxy.____slothletInternal.invalid is now true — construct trap must throw.
+		expect(() => new addProxy()).toThrow(TypeError);
+		expect(() => new addProxy()).toThrow(/invalidated/);
+	});
+});
