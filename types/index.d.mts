@@ -35,4 +35,5 @@ export default function slothlet(options?: {
     context?: object | undefined;
     reference?: object | undefined;
 }): Promise<import("./src/slothlet.mjs").SlothletAPI>;
+export { slothlet };
 //# sourceMappingURL=index.d.mts.map

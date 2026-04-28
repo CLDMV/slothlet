@@ -27,7 +27,7 @@ export namespace TYPE_STATES {
  * @public
  */
 export class UnifiedWrapper extends ComponentBase {
-    [x: number]: (____depth: any, ____options: any, ____inspect: any) => any;
+
     /**
      * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
      * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
