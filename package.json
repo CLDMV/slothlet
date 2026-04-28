@@ -230,7 +230,7 @@
 		"zero-dependencies"
 	],
 	"engines": {
-		"node": ">=16.20.2"
+		"node": ">=20.19.0"
 	},
 	"author": {
 		"name": "Shinrai",
