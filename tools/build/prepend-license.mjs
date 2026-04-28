@@ -268,15 +268,17 @@ async function prependLicenseToFile(file, banner) {
 	if (!looksTextFile(file)) return;
 	let content = await fs.readFile(file, "utf8");
 
-	// Strip block comments (/* ... */) as a fallback for when build:minify skipped (esbuild
-	// absent). When esbuild ran this is a no-op — nothing remains to strip. Without esbuild,
-	// the original /* @Project: @cldmv/slothlet ... @Copyright ... */ file-header block comments
-	// are still present in dist/. The APACHE_MARKER check below cannot detect them (they contain
-	// no Apache text), so without this stripping the Apache banner would be prepended on top of
-	// the existing header, producing duplicate headers in the published package.
+	// Strip the leading file-header block comment as a fallback for when build:minify skipped
+	// (esbuild absent). When esbuild ran this is a no-op — nothing remains to strip. Without
+	// esbuild, the original /* @Project: @cldmv/slothlet ... @Copyright ... */ file-header block
+	// comment is still present in dist/. The APACHE_MARKER check below cannot detect it (it
+	// contains no Apache text), so without this stripping the Apache banner would be prepended on
+	// top of the existing header, producing duplicate headers in the published package.
+	// Anchored to position 0 so only the leading header is removed — string/template literals and
+	// JSDoc comments elsewhere in the file are never touched.
 	const fileExt = path.extname(file).toLowerCase();
 	if (fileExt === ".js" || fileExt === ".mjs" || fileExt === ".cjs") {
-		content = content.replace(/\/\*[\s\S]*?\*\//g, "");
+		content = content.replace(/^\/\*[\s\S]*?\*\/\s*/, "");
 	}
 
 	if (content.includes(APACHE_MARKER)) return;
