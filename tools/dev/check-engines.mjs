@@ -37,15 +37,26 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.j
 
 /**
  * Parse a Node version string like "16.20.2" or "16" into a [major, minor, patch] tuple.
+ * Pre-release/build suffixes (e.g. "-rc.1", "+build.1") are ignored, and extra
+ * dot-separated segments beyond the first three are discarded.
  *
  * @param {string} versionStr - A version string.
  * @returns {[number, number, number]} The parsed [major, minor, patch] tuple.
  * @example
- * parseVersion("16.20.2"); // [16, 20, 2]
- * parseVersion("18");      // [18, 0, 0]
+ * parseVersion("16.20.2");    // [16, 20, 2]
+ * parseVersion("18");         // [18, 0, 0]
+ * parseVersion("20.0.0-rc.1"); // [20, 0, 0]
  */
 function parseVersion(versionStr) {
-	const clean = versionStr.replace(/^v/, "").split(".").map(Number);
+	const clean = versionStr
+		.replace(/^v/, "")
+		.replace(/[-+].*$/, "")
+		.split(".")
+		.slice(0, 3)
+		.map((part) => {
+			const value = Number(part);
+			return Number.isFinite(value) ? value : 0;
+		});
 	return [clean[0] ?? 0, clean[1] ?? 0, clean[2] ?? 0];
 }
 
