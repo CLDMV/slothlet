@@ -54,6 +54,11 @@ on:
                 type: string
                 required: false
                 default: "24"
+            lts_only_matrix:
+                description: "Only include even-numbered (LTS) Node.js majors in the test matrix. Required when deps declare engines that exclude odd-numbered releases (e.g. rolldown)."
+                type: boolean
+                required: false
+                default: true
             package_manager:
                 description: "Package manager (npm or yarn)"
                 type: string
@@ -117,6 +122,7 @@ jobs:
             node_version: ${{ github.event.inputs.node_version || 'lts/*' }}
             min_node_version: ${{ github.event.inputs.min_node_version || '20.19.0' }}
             max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
+            lts_only_matrix: ${{ github.event.inputs.lts_only_matrix != 'false' }}
             package_manager: ${{ github.event.inputs.package_manager || 'npm' }}
             test_command: "npm test" # Use defaults: NODE_ENV=development, NODE_OPTIONS=--conditions=development
             # test_command: "NODE_OPTIONS='--conditions=slothlet-dev' npm test"  # Override NODE_OPTIONS only
