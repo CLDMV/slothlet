@@ -7,6 +7,11 @@
 export class Flatten extends ComponentBase {
     static slothletProperty: string;
     /**
+     * Create a Flatten instance
+     * @param {Object} slothlet - Slothlet instance
+     */
+    constructor(slothlet: any);
+    /**
      * Core flattening decision function.
      * Implements conditions C01-C07 from getFlatteningDecision().
      * @param {object} options - Decision options
