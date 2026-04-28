@@ -15,6 +15,19 @@
  */
 export class ApiManager extends ComponentBase {
     static slothletProperty: string;
+    /**
+     * Create an ApiManager instance.
+     * @param {object} slothlet - Slothlet class instance.
+     * @package
+     *
+     * @description
+     * Initializes manager state with empty add history, removed module tracking,
+     * and stores the initial configuration.
+     *
+     * @example
+     * const manager = new ApiManager(slothlet);
+     */
+    constructor(slothlet: object);
     state: {
         addHistory: any[];
         initialConfig: any;
