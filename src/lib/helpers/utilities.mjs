@@ -53,9 +53,9 @@ export class Utilities extends ComponentBase {
 	 *   the merge starts from `{}` so the returned sub-tree is always a fresh copy.
 	 * - If either top-level argument is not a plain object, returns `source` as-is.
 	 *
-	 * @param {Object} target - Base object (not mutated).
-	 * @param {Object} source - Source object whose keys are merged in.
-	 * @returns {Object} New merged object.
+	 * @param {unknown} target - Base object (not mutated).
+	 * @param {unknown} source - Source object whose keys are merged in.
+	 * @returns {unknown} New merged object, or `source` as-is if either argument is not a plain object.
 	 * @public
 	 */
 	deepMerge(target, source) {

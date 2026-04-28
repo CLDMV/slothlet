@@ -28,10 +28,11 @@ export class ApiManager extends ComponentBase {
      * const manager = new ApiManager(slothlet);
      */
     constructor(slothlet: object);
+    /** @type {{ addHistory: object[], initialConfig: object|null, operationHistory: object[] }} */
     state: {
-        addHistory: never[];
-        initialConfig: any;
-        operationHistory: never[];
+        addHistory: object[];
+        initialConfig: object | null;
+        operationHistory: object[];
     };
     /**
      * Normalize and validate an API path.

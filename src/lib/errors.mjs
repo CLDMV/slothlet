@@ -178,6 +178,7 @@ export class SlothletWarning {
 
 		this.name = "SlothletWarning";
 		this.code = code;
+		/** @type {string} */
 		this.message = translatedMessage;
 		this.context = context;
 

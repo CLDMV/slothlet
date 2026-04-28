@@ -29,8 +29,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const projectRoot = new URL("../../", import.meta.url).pathname;
+const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 const nodeModulesDir = path.join(projectRoot, "node_modules");
 const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 

@@ -94,7 +94,8 @@ async function minifyDist() {
 	// Load esbuild — it is an optional peer dep; fail gracefully when absent.
 	let esbuild;
 	try {
-		esbuild = (await import("esbuild")).default ?? (await import("esbuild"));
+		const mod = await import("esbuild");
+		esbuild = mod.default ?? mod;
 	} catch {
 		console.warn("⚠️  esbuild not found — skipping dist minification.");
 		console.warn("   Install it with: npm install --save-dev esbuild");

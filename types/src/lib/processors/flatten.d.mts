@@ -20,7 +20,7 @@ export class Flatten extends ComponentBase {
      * @param {string} options.categoryName - Category/folder name
      * @param {object} options.analysis - Export analysis
      * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
-     * @param {array} options.moduleKeys - Keys from module
+     * @param {string[]} options.moduleKeys - Keys from module
      * @param {function} options.t - Translation function
      * @returns {Promise<object>} Flattening decision
      * @public
@@ -31,7 +31,7 @@ export class Flatten extends ComponentBase {
         categoryName: string;
         analysis: object;
         hasMultipleDefaults: boolean;
-        moduleKeys: array;
+        moduleKeys: string[];
         t: Function;
     }): Promise<object>;
     /**
@@ -81,9 +81,9 @@ export class Flatten extends ComponentBase {
      * @param {string} options.moduleName - Module name
      * @param {string} options.fileBaseName - File base name
      * @param {object} options.analysis - Export analysis
-     * @param {array} options.moduleKeys - Module keys
+     * @param {string[]} options.moduleKeys - Module keys
      * @param {number} options.currentDepth - Current depth
-     * @param {array} options.moduleFiles - Files in category
+     * @param {unknown[]} options.moduleFiles - Files in category
      * @param {function} options.t - Translation function
      * @returns {Promise<object>} Category decision
      * @public
@@ -94,9 +94,9 @@ export class Flatten extends ComponentBase {
         moduleName: string;
         fileBaseName: string;
         analysis: object;
-        moduleKeys: array;
+        moduleKeys: string[];
         currentDepth: number;
-        moduleFiles: array;
+        moduleFiles: unknown[];
         t: Function;
     }): Promise<object>;
     /**

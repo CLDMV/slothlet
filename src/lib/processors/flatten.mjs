@@ -90,7 +90,7 @@ export class Flatten extends ComponentBase {
 	 * Rule 7 (F02, F03) - Condition C04 from API-RULES-CONDITIONS.md.
 	 * @param {object} mod - Module exports
 	 * @param {string} moduleName - Name of the module
-	 * @param {array} moduleKeys - Keys of module exports
+	 * @param {string[]} moduleKeys - Keys of module exports
 	 * @returns {boolean} True if should auto-flatten
 	 * @private
 	 */
@@ -108,7 +108,7 @@ export class Flatten extends ComponentBase {
 	 * @param {string} options.categoryName - Category/folder name
 	 * @param {object} options.analysis - Export analysis
 	 * @param {boolean} options.hasMultipleDefaults - Multiple defaults in folder
-	 * @param {array} options.moduleKeys - Keys from module
+	 * @param {string[]} options.moduleKeys - Keys from module
 	 * @param {function} options.t - Translation function
 	 * @returns {Promise<object>} Flattening decision
 	 * @public
@@ -375,9 +375,9 @@ export class Flatten extends ComponentBase {
 	 * @param {string} options.moduleName - Module name
 	 * @param {string} options.fileBaseName - File base name
 	 * @param {object} options.analysis - Export analysis
-	 * @param {array} options.moduleKeys - Module keys
+	 * @param {string[]} options.moduleKeys - Module keys
 	 * @param {number} options.currentDepth - Current depth
-	 * @param {array} options.moduleFiles - Files in category
+	 * @param {unknown[]} options.moduleFiles - Files in category
 	 * @param {function} options.t - Translation function
 	 * @returns {Promise<object>} Category decision
 	 * @public

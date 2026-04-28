@@ -54,7 +54,8 @@ export class SlothletWarning {
     });
     name: string;
     code: string;
-    message: any;
+    /** @type {string} */
+    message: string;
     context: {
         key?: string | undefined;
     };
