@@ -6,7 +6,7 @@
 # @Email: <Shinrai@users.noreply.github.com>
 # -----
 # @Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
-# @Last modified time: 2026-04-27 22:55:38 -07:00 (1777355738)
+# @Last modified time: 2026-04-11 19:29:07 -07:00 (1775960947)
 # -----
 # @Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
 #
@@ -16,8 +16,8 @@ name: 🧪 CI Tests & Build
 
 on:
     pull_request:
-        types: [ opened, synchronize, reopened, ready_for_review ]
-        branches: [ master, main ]
+        types: [opened, synchronize, reopened, ready_for_review]
+        branches: [master, main]
         paths-ignore:
             - "**.md"
             - "docs/**"
@@ -25,7 +25,7 @@ on:
             - "LICENSE"
             - ".gitignore"
     push:
-        branches: [ "**" ]
+        branches: ["**"]
         paths-ignore:
             - "**.md"
             - "docs/**"
@@ -60,8 +60,7 @@ on:
                 required: false
                 default: "npm"
             test_environment:
-                description: "Environment for tests (affects NODE_ENV and NODE_OPTIONS
-                    --conditions flag)"
+                description: "Environment for tests (affects NODE_ENV and NODE_OPTIONS --conditions flag)"
                 type: string
                 required: false
                 default: "slothlet-dev"
@@ -136,21 +135,15 @@ jobs:
             # workflow_dispatch invocation. On pull_request and all other push events
             # github.event.inputs is empty, so the != 'false' guard alone would always
             # evaluate to true — causing the badge job to run (and fail) on every PR.
-            enable_coverage_badge: ${{ (github.event_name == 'push' && (github.ref ==
-                'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-                (github.event_name == 'workflow_dispatch' &&
-                github.event.inputs.enable_coverage_badge != 'false') }}
-            coverage_command: ${{ github.event.inputs.coverage_command || 'npm run
-                ci:coverage' }}
-            coverage_summary_path: ${{ github.event.inputs.coverage_summary_path ||
-                'coverage/coverage-summary.json' }}
+            enable_coverage_badge: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.enable_coverage_badge != 'false') }}
+            coverage_command: ${{ github.event.inputs.coverage_command || 'npm run ci:coverage' }}
+            coverage_summary_path: ${{ github.event.inputs.coverage_summary_path || 'coverage/coverage-summary.json' }}
             badges_branch: ${{ github.event.inputs.badges_branch || 'badges' }}
             badge_filename: ${{ github.event.inputs.badge_filename || 'coverage.json' }}
             upload_coverage_artifact: ${{ github.event.inputs.upload_coverage_artifact != 'false' }}
 
             # ── Type check (runs inside the coverage-badge job) ────────────────────
-            type_check_command: ${{ github.event.inputs.type_check_command || 'npm run
-                ci:test:types' }}
+            type_check_command: ${{ github.event.inputs.type_check_command || 'npm run ci:test:types' }}
             skip_type_check: ${{ github.event.inputs.skip_type_check == 'true' }}
 
         # Authentication & Bot Configuration
