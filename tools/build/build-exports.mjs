@@ -153,7 +153,15 @@ async function buildExports() {
 		if (fs.existsSync(indexDmtsPath)) {
 			const content = fs.readFileSync(indexDmtsPath, "utf8");
 			if (!content.includes("export { slothlet }")) {
-				fs.writeFileSync(indexDmtsPath, content.trimEnd() + "\nexport { slothlet };\n", "utf8");
+				// Insert before the sourceMappingURL comment so it remains the last line,
+				// as required by source map tools that only recognise it there.
+				const mapMarker = "//# sourceMappingURL=";
+				const mapIdx = content.lastIndexOf(mapMarker);
+				const patched =
+					mapIdx !== -1
+						? content.slice(0, mapIdx).trimEnd() + "\nexport { slothlet };\n" + content.slice(mapIdx)
+						: content.trimEnd() + "\nexport { slothlet };\n";
+				fs.writeFileSync(indexDmtsPath, patched, "utf8");
 				console.log("✅ Patched types/index.d.mts — added named export { slothlet }");
 			}
 		}
@@ -161,12 +169,31 @@ async function buildExports() {
 		// tsc converts [util.inspect.custom] (a Symbol-keyed method) to a numeric index signature
 		// [x: number]: ... in the declaration, which makes UnifiedWrapper appear array-like.
 		// This is a known tsc limitation with JS computed-symbol class methods; strip it here.
+		// The regex match (with m flag) stops before the \n, so the replacement leaves an empty line
+		// rather than removing the line — overall line count is preserved and subsequent source map
+		// positions remain correct. We still need to clear the VLQ segment for the now-empty line
+		// in the companion .map file so that tooling doesn't map it to a stale source location.
 		const uwDmtsPath = path.join(projectRoot, "types", "src", "lib", "handlers", "unified-wrapper.d.mts");
 		if (fs.existsSync(uwDmtsPath)) {
 			const content = fs.readFileSync(uwDmtsPath, "utf8");
-			const patched = content.replace(/^[ \t]*\[x: number\]:.*?;\s*$/m, "");
-			if (patched !== content) {
+			const lineMatch = content.match(/^[ \t]*\[x: number\]:.*?;\s*$/m);
+			if (lineMatch) {
+				// Determine the 0-based line number of the matched content.
+				const lineNumber = content.slice(0, lineMatch.index).split("\n").length - 1;
+				const patched = content.replace(lineMatch[0], "");
 				fs.writeFileSync(uwDmtsPath, patched, "utf8");
+
+				// Clear the VLQ segment for the now-empty line in the companion source map.
+				const uwMapPath = `${uwDmtsPath}.map`;
+				if (fs.existsSync(uwMapPath)) {
+					const mapData = JSON.parse(fs.readFileSync(uwMapPath, "utf8"));
+					const lines = mapData.mappings.split(";");
+					if (lineNumber < lines.length) {
+						lines[lineNumber] = "";
+					}
+					mapData.mappings = lines.join(";");
+					fs.writeFileSync(uwMapPath, JSON.stringify(mapData), "utf8");
+				}
 				console.log("✅ Patched unified-wrapper.d.mts — removed bogus [x: number] index signature");
 			}
 		}

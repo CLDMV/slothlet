@@ -251,8 +251,8 @@
 	},
 	"type": "module",
 	"peerDependencies": {
-		"esbuild": "^0.27.3",
-		"typescript": "^5.9.3"
+		"esbuild": "^0.28.0",
+		"typescript": "^6.0.3"
 	},
 	"peerDependenciesMeta": {
 		"esbuild": {

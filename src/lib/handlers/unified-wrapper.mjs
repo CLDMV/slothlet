@@ -3427,11 +3427,15 @@ export class UnifiedWrapper extends ComponentBase {
 							const impl = wrapper.____slothletInternal.impl;
 							try {
 								if (typeof impl === "function") {
-									// Use impl as newTarget so [[Prototype]] resolves to impl.prototype (the real
-									// class prototype) rather than through the proxy getTrap.
-									resolve(Reflect.construct(impl, args, impl));
+									// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
+									// to impl.prototype (the real class prototype) rather than flowing through the
+									// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
+									// subclass), forward it unchanged so derived construction semantics are preserved.
+									const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
+									resolve(Reflect.construct(impl, args, effectiveNewTarget));
 								} else if (impl && typeof impl === "object" && typeof impl.default === "function") {
-									resolve(Reflect.construct(impl.default, args, impl.default));
+									const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
+									resolve(Reflect.construct(impl.default, args, effectiveNewTarget));
 								} else {
 									reject(
 										new wrapper.slothlet.SlothletError(
@@ -3480,11 +3484,17 @@ export class UnifiedWrapper extends ComponentBase {
 			const impl = wrapper.____slothletInternal.impl;
 
 			if (typeof impl === "function") {
-				return Reflect.construct(impl, args, impl);
+				// When newTarget is the proxy itself, substitute impl so [[Prototype]] resolves
+				// to impl.prototype (the real class prototype) rather than flowing through the
+				// proxy getTrap. When newTarget is a derived class (e.g. super() inside a
+				// subclass), forward it unchanged so derived construction semantics are preserved.
+				const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl : newTarget;
+				return Reflect.construct(impl, args, effectiveNewTarget);
 			}
 
 			if (impl && typeof impl === "object" && typeof impl.default === "function") {
-				return Reflect.construct(impl.default, args, impl.default);
+				const effectiveNewTarget = newTarget === wrapper.____slothletInternal.proxy ? impl.default : newTarget;
+				return Reflect.construct(impl.default, args, effectiveNewTarget);
 			}
 
 			throw new wrapper.SlothletError(
