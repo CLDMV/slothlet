@@ -7,12 +7,6 @@
 export class LazyMode extends ComponentBase {
     static slothletProperty: string;
     /**
-     * Create LazyMode instance.
-     * @param {object} slothlet - Slothlet orchestrator instance.
-     * @package
-     */
-    constructor(slothlet: object);
-    /**
      * Create a named async materialization function for lazy subdirectories.
      * @param {string} apiPath - API path to derive the function name from.
      * @param {Function} handler - Async handler that performs materialization.

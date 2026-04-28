@@ -6,11 +6,6 @@
  */
 export class Metadata extends ComponentBase {
     static slothletProperty: string;
-    /**
-     * Create Metadata instance
-     * @param {Object} slothlet - Slothlet instance
-     */
-    constructor(slothlet: any);
     _instanceId: any;
     /**
      * Tag system metadata (SECURE, IMMUTABLE)
