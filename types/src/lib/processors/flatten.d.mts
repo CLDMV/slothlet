@@ -10,7 +10,7 @@ export class Flatten extends ComponentBase {
      * Create a Flatten instance
      * @param {Object} slothlet - Slothlet instance
      */
-    constructor(slothlet: any);
+    constructor(slothlet: Object);
     /**
      * Core flattening decision function.
      * Implements conditions C01-C07 from getFlatteningDecision().
@@ -31,7 +31,7 @@ export class Flatten extends ComponentBase {
         categoryName: string;
         analysis: object;
         hasMultipleDefaults: boolean;
-        moduleKeys: any[];
+        moduleKeys: array;
         t: Function;
     }): Promise<object>;
     /**
@@ -66,9 +66,9 @@ export class Flatten extends ComponentBase {
         propertyName: string;
         moduleKeys: string[];
         analysis: object;
-        file?: object;
-        collisionContext?: string;
-        apiPathPrefix?: string;
+        file?: object | undefined;
+        collisionContext?: string | undefined;
+        apiPathPrefix?: string | undefined;
     }): {
         moduleContent: object | Function;
     };
@@ -94,9 +94,9 @@ export class Flatten extends ComponentBase {
         moduleName: string;
         fileBaseName: string;
         analysis: object;
-        moduleKeys: any[];
+        moduleKeys: array;
         currentDepth: number;
-        moduleFiles: any[];
+        moduleFiles: array;
         t: Function;
     }): Promise<object>;
     /**

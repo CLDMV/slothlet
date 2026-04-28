@@ -44,9 +44,9 @@ export class HookManager extends ComponentBase {
      * }, { priority: 100 });
      */
     public on(typePattern: string, handler: Function, options?: {
-        id?: string;
-        priority?: number;
-        subset?: string;
+        id?: string | undefined;
+        priority?: number | undefined;
+        subset?: string | undefined;
     }): string;
     /**
      * Remove hooks matching filter criteria.
@@ -59,9 +59,9 @@ export class HookManager extends ComponentBase {
      * @public
      */
     public remove(filter?: {
-        id?: string;
-        type?: string;
-        pattern?: string;
+        id?: string | undefined;
+        type?: string | undefined;
+        pattern?: string | undefined;
     }): number;
     /**
      * Enable hooks matching filter criteria.
@@ -142,7 +142,7 @@ export class HookManager extends ComponentBase {
      * @param {object} ctx - User context object
      * @public
      */
-    public executeAlwaysHooks(path: string, args: any[], resultOrError: any, hasError: boolean, errors: Array<Error>, api: object, ctx: object): void;
+    public executeAlwaysHooks(path: string, args: any[], resultOrError: any, hasError: boolean | undefined, errors: Array<Error> | undefined, api: object, ctx: object): void;
     /**
      * Execute error hooks for an API path.
      *

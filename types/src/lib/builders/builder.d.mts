@@ -58,15 +58,15 @@ export class Builder extends ComponentBase {
      */
     public buildAPI(options: {
         dir: string;
-        mode?: string;
-        ownership?: any;
-        contextManager?: any;
-        instanceID?: string;
-        config?: any;
-        apiPathPrefix?: string;
-        collisionContext?: string;
-        fileFilter?: Function | null;
-    }): Promise<any>;
+        mode?: string | undefined;
+        ownership?: Object | undefined;
+        contextManager?: Object | undefined;
+        instanceID?: string | undefined;
+        config?: Object | undefined;
+        apiPathPrefix?: string | undefined;
+        collisionContext?: string | undefined;
+        fileFilter?: Function | null | undefined;
+    }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=builder.d.mts.map

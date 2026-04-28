@@ -32,7 +32,7 @@ export class Config extends ComponentBase {
      * normalizeCollision({ initial: "warn", api: "error" })
      * // => { initial: "warn", api: "error" }
      */
-    public normalizeCollision(collision: string | any): any;
+    public normalizeCollision(collision: string | Object): Object;
     /**
      * Normalize runtime input to internal standard format
      * @param {string} runtime - Input runtime type (various formats accepted)
@@ -68,14 +68,14 @@ export class Config extends ComponentBase {
      * normalizeMutations({ add: false, remove: false, reload: false })
      * // => { add: false, remove: false, reload: false }
      */
-    public normalizeMutations(mutations: any): any;
+    public normalizeMutations(mutations: Object): Object;
     /**
      * Normalize debug configuration
      * @param {boolean|Object} debug - Debug flag or object with targeted flags
      * @returns {Object} Normalized debug object with all flags
      * @public
      */
-    public normalizeDebug(debug: boolean | any): any;
+    public normalizeDebug(debug: boolean | Object): Object;
     /**
      * Transform and validate configuration
      * @param {Object} config - Raw configuration options
@@ -83,14 +83,14 @@ export class Config extends ComponentBase {
      * @throws {SlothletError} If configuration is invalid
      * @public
      */
-    public transformConfig(config?: any): any;
+    public transformConfig(config?: Object): Object;
     /**
      * Normalize TypeScript configuration
      * @param {boolean|string|Object} typescript - TypeScript config (true, "fast", or { mode: "fast"|"strict", ... })
      * @returns {Object|null} Normalized TypeScript configuration or null if disabled
      * @public
      */
-    public normalizeTypeScript(typescript: boolean | string | any): any | null;
+    public normalizeTypeScript(typescript: boolean | string | Object): Object | null;
     /**
      * Normalize env snapshot configuration.
      *
@@ -121,7 +121,7 @@ export class Config extends ComponentBase {
      * normalizeEnv({ include: ["NODE_ENV", 42, null] });
      * // => { include: ["NODE_ENV"] }
      */
-    public normalizeEnv(env: any | null | undefined): {
+    public normalizeEnv(env: Object | null | undefined): {
         include: string[];
     } | null;
     /**

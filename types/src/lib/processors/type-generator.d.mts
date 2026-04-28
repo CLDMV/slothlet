@@ -11,7 +11,7 @@
 export function generateTypes(api: object, options: {
     output: string;
     interfaceName: string;
-    includeDocumentation?: boolean;
+    includeDocumentation?: boolean | undefined;
 }): Promise<{
     output: string;
     filePath: string;

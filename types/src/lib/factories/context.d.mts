@@ -4,7 +4,7 @@
  * @returns {Object} Context manager instance
  * @public
  */
-export function getContextManager(runtime?: string): any;
+export function getContextManager(runtime?: string): Object;
 /**
  * Default context manager (async)
  * @public

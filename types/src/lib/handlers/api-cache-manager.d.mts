@@ -184,7 +184,7 @@ export type CacheEntry = {
     /**
      * - Complete buildAPI result tree (primary storage)
      */
-    api: any;
+    api: Object;
     /**
      * - Source folder path
      */
@@ -196,7 +196,7 @@ export type CacheEntry = {
     /**
      * - Sanitization configuration
      */
-    sanitizeOptions: any;
+    sanitizeOptions: Object;
     /**
      * - Collision handling mode
      */
@@ -204,7 +204,7 @@ export type CacheEntry = {
     /**
      * - Config snapshot at add time
      */
-    config: any;
+    config: Object;
     /**
      * - Cache creation time (Unix ms)
      */

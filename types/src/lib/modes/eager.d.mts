@@ -30,13 +30,13 @@ export class EagerMode extends ComponentBase {
      */
     public buildAPI({ dir, apiPathPrefix, collisionContext, moduleID, apiDepth, cacheBust, fileFilter }: {
         dir: string;
-        apiPathPrefix?: string;
-        collisionContext?: string;
-        moduleID?: string;
-        apiDepth?: number;
-        cacheBust?: string | null;
-        fileFilter?: Function | null;
-    }): Promise<any>;
+        apiPathPrefix?: string | undefined;
+        collisionContext?: string | undefined;
+        moduleID?: string | undefined;
+        apiDepth?: number | undefined;
+        cacheBust?: string | null | undefined;
+        fileFilter?: Function | null | undefined;
+    }): Promise<Object>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=eager.d.mts.map

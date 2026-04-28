@@ -122,8 +122,11 @@ async function minifyDist() {
 			result = await esbuild.transform(source, {
 				// Transform only — do NOT bundle; preserves all import specifiers.
 				loader: "js",
-				// Target the minimum Node version declared in package.json engines.
-				target: "node16",
+				// esnext: no syntax lowering — we want zero transformations beyond
+				// whitespace/comment stripping. Using a versioned target (e.g. node16)
+				// causes esbuild to downlevel class syntax (static fields, private
+				// fields) which breaks TypeScript's ability to generate declarations.
+				target: "esnext",
 				format: "esm",
 				// Strip whitespace and comments only — identifiers and syntax
 				// are intentionally left unchanged so the output stays readable

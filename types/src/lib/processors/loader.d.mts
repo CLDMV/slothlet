@@ -15,7 +15,7 @@ export class Loader extends ComponentBase {
      * @returns {Promise<Object>} Loaded module
      * @public
      */
-    public loadModule(filePath: string, instanceID?: string, moduleID?: string, cacheBust?: number | null): Promise<any>;
+    public loadModule(filePath: string, instanceID?: string, moduleID?: string, cacheBust?: number | null): Promise<Object>;
     /**
      * Scan directory for module files
      * @param {string} dir - Directory to scan
@@ -28,18 +28,18 @@ export class Loader extends ComponentBase {
      * @public
      */
     public scanDirectory(dir: string, options?: {
-        isRootScan?: boolean;
-        currentDepth?: number;
-        maxDepth?: number;
-        fileFilter?: Function | null;
-    }): Promise<any>;
+        isRootScan?: boolean | undefined;
+        currentDepth?: number | undefined;
+        maxDepth?: number | undefined;
+        fileFilter?: Function | null | undefined;
+    }): Promise<Object>;
     /**
      * Extract exports from module
      * @param {Object} module - Loaded module
      * @returns {Object} Extracted exports
      * @public
      */
-    public extractExports(module: any): any;
+    public extractExports(module: Object): Object;
     #private;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";

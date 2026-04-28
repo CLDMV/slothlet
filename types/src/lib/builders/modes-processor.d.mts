@@ -12,8 +12,8 @@ export class ModesProcessor extends ComponentBase {
      *
      * @param {Object} slothlet - Parent slothlet instance
      */
-    constructor(slothlet: any);
-    processFiles(api: any, files: any, directory: any, currentDepth: any, mode: any, isRoot: any, recursive: any, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: any, sourceFolder?: any, cacheBust?: any, collisionModeOverride?: any): Promise<any>;
+    constructor(slothlet: Object);
+    processFiles(api: any, files: any, directory: any, currentDepth: any, mode: any, isRoot: any, recursive: any, populateDirectly?: boolean, apiPathPrefix?: string, collisionContext?: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, collisionModeOverride?: null): Promise<any>;
     /**
      * Create lazy wrapper for subdirectory (lazy mode only)
      * @param {Object} dir - Directory structure
@@ -22,7 +22,7 @@ export class ModesProcessor extends ComponentBase {
      * @returns {Proxy} Lazy unified wrapper
      * @public
      */
-    public createLazySubdirectoryWrapper(dir: any, apiPath: string, moduleID?: any, sourceFolder?: any, cacheBust?: any, fileFolderCollisionImpl?: any, collisionMode?: string): ProxyConstructor;
+    public createLazySubdirectoryWrapper(dir: Object, apiPath: string, moduleID?: null, sourceFolder?: null, cacheBust?: null, fileFolderCollisionImpl?: null, collisionMode?: string): ProxyConstructor;
     /**
      * Apply root contributor pattern - merge API into root function
      * @param {Object} api - API object with properties
@@ -32,7 +32,7 @@ export class ModesProcessor extends ComponentBase {
      * @returns {Promise<Object|Function>} Final API (function if root contributor, object otherwise)
      * @public
      */
-    public applyRootContributor(api: any, rootFunction: Function | null, mode: string): Promise<any | Function>;
+    public applyRootContributor(api: Object, rootFunction: Function | null, mode: string): Promise<Object | Function>;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
 //# sourceMappingURL=modes-processor.d.mts.map

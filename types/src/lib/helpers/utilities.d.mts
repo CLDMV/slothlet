@@ -30,7 +30,7 @@ export class Utilities extends ComponentBase {
      * @returns {Object} New merged object.
      * @public
      */
-    public deepMerge(target: any, source: any): any;
+    public deepMerge(target: Object, source: Object): Object;
     /**
      * Deep clone a value, handling Proxy objects and functions that `structuredClone`
      * cannot serialise.

@@ -29,7 +29,7 @@ export class ApiBuilder extends ComponentBase {
      * @returns {Promise<Object>} Final API with built-ins attached
      * @public
      */
-    public buildFinalAPI(userApi: any): Promise<any>;
+    public buildFinalAPI(userApi: Object): Promise<Object>;
     /**
      * @param {object} userApi - User API object (for diagnostics).
      * @returns {Promise<object>} Slothlet namespace object.

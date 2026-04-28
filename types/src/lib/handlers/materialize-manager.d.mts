@@ -53,7 +53,7 @@ export class MaterializeManager extends ComponentBase {
      * const stats = api.slothlet.materialize.get();
      * // { total: 5, materialized: 3, remaining: 2, percentage: 60 }
      */
-    public get(): any;
+    public get(): Object;
     /**
      * Wait for full materialization (all lazy folders loaded)
      * Returns immediately if already fully materialized

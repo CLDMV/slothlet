@@ -10,8 +10,8 @@ export class Metadata extends ComponentBase {
      * Create Metadata instance
      * @param {Object} slothlet - Slothlet instance
      */
-    constructor(slothlet: any);
-    _instanceId: any;
+    constructor(slothlet: Object);
+    _instanceId: null;
     /**
      * Tag system metadata (SECURE, IMMUTABLE)
      * Called internally during wrapper/function creation
@@ -35,7 +35,7 @@ export class Metadata extends ComponentBase {
      * @returns {Object|null} System metadata or null
      * @package
      */
-    getSystemMetadata(target: Function | any): any | null;
+    getSystemMetadata(target: Function | Object): Object | null;
     /**
      * Get metadata for a target (combines system + user)
      * For wrappers: checks current impl to ensure metadata is current
@@ -43,7 +43,7 @@ export class Metadata extends ComponentBase {
      * @returns {Object} Combined metadata (deeply frozen)
      * @public
      */
-    public getMetadata(target: Function | any): any;
+    public getMetadata(target: Function | Object): Object;
     /**
      * Set global user metadata (applies to all functions)
      * @param {string} key - Metadata key
@@ -89,7 +89,7 @@ export class Metadata extends ComponentBase {
      * @param {Object} metadata - User metadata object to merge
      * @package
      */
-    registerUserMetadata(identifier: string, metadata: any): void;
+    registerUserMetadata(identifier: string, metadata: Object): void;
     /**
      * Remove all user metadata for an apiPath
      *
@@ -120,7 +120,7 @@ export class Metadata extends ComponentBase {
      * @param {unknown} [value] - Value when `keyOrObj` is a string key
      * @public
      */
-    public setPathMetadata(apiPath: string, keyOrObj: string | any, value?: unknown): void;
+    public setPathMetadata(apiPath: string, keyOrObj: string | Object, value?: unknown): void;
     /**
      * Get the user metadata collected from the path store for a given API path.
      *
@@ -135,7 +135,7 @@ export class Metadata extends ComponentBase {
      * @example
      * metadata.getPathMetadata("v1.auth"); // { stable: true, category: "auth" }
      */
-    public getPathMetadata(apiPath: string): any;
+    public getPathMetadata(apiPath: string): Object;
     /**
      * Remove metadata keys (or all metadata) for an API path.
      *
@@ -162,7 +162,7 @@ export class Metadata extends ComponentBase {
      * @package
      */
     exportUserState(): {
-        globalMetadata: any;
+        globalMetadata: Object;
         userMetadataStore: Map<any, any>;
     };
     /**
@@ -182,7 +182,7 @@ export class Metadata extends ComponentBase {
      * @package
      */
     importUserState(state: {
-        globalMetadata: any;
+        globalMetadata: Object;
         userMetadataStore: Map<any, any>;
     }): void;
     /**

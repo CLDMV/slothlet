@@ -29,9 +29,9 @@ export class ApiManager extends ComponentBase {
      */
     constructor(slothlet: object);
     state: {
-        addHistory: any[];
+        addHistory: never[];
         initialConfig: any;
-        operationHistory: any[];
+        operationHistory: never[];
     };
     /**
      * Normalize and validate an API path.
@@ -284,7 +284,7 @@ export class ApiManager extends ComponentBase {
     addApiComponent(params: {
         apiPath: string;
         folderPath: string | string[];
-        options?: Record<string, unknown>;
+        options?: Record<string, unknown> | undefined;
     }): Promise<string | string[]>;
     /**
      * Roll back a failed versioned add.

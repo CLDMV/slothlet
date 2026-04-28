@@ -27,6 +27,7 @@ export namespace TYPE_STATES {
  * @public
  */
 export class UnifiedWrapper extends ComponentBase {
+    [x: number]: (____depth: any, ____options: any, ____inspect: any) => any;
     /**
      * Shallow-clone a non-Proxy object implementation to prevent ___adoptImplChildren
      * from mutating shared module export references via its `delete this.____slothletInternal.impl[key]`
@@ -90,16 +91,16 @@ export class UnifiedWrapper extends ComponentBase {
      * 	materializeFunc: async () => import("./math.mjs")
      * });
      */
-    constructor(slothlet: any, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, moduleID, sourceFolder }: {
+    constructor(slothlet: Object, { mode, apiPath, initialImpl, materializeFunc, isCallable, materializeOnCreate, filePath, moduleID, sourceFolder }: {
         mode: string;
         apiPath: string;
-        initialImpl?: any;
-        materializeFunc?: Function;
-        isCallable?: boolean;
-        materializeOnCreate?: boolean;
-        filePath?: string;
-        moduleID?: string;
-        sourceFolder?: string;
+        initialImpl?: Object | undefined;
+        materializeFunc?: Function | undefined;
+        isCallable?: boolean | undefined;
+        materializeOnCreate?: boolean | undefined;
+        filePath?: string | undefined;
+        moduleID?: string | undefined;
+        sourceFolder?: string | undefined;
     });
     /**
      * Internal state accessor used by framework-internal code only.
@@ -113,13 +114,13 @@ export class UnifiedWrapper extends ComponentBase {
      * throw because the prototype object was never constructed and has no `#internal` field.
      * @returns {Object|undefined} Internal state container, or undefined for non-instances
      */
-    get ____slothletInternal(): any | undefined;
+    get ____slothletInternal(): Object | undefined;
     /**
      * Get current implementation
      * @returns {Object|null} Current __impl value
      * @public
      */
-    public get __impl(): any | null;
+    public get __impl(): Object | null;
     /**
      * Core implementation-application logic shared by ___setImpl and lazy materialization.
      * Clones the implementation (protecting the API cache from ___adoptImplChildren's
@@ -237,14 +238,8 @@ export class UnifiedWrapper extends ComponentBase {
      * @public
      */
     public createProxy(): ProxyConstructor;
-    lastSyncError: any;
-    /**
-     * Custom inspect output for Node.js util.inspect.
-     * @returns {*} The actual implementation for inspection.
-     */
-    [util.inspect.custom](____depth: any, ____options: any, ____inspect: any): any;
+    lastSyncError: unknown;
     #private;
 }
 import { ComponentBase } from "@cldmv/slothlet/factories/component-base";
-import util from "node:util";
 //# sourceMappingURL=unified-wrapper.d.mts.map

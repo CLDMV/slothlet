@@ -10,9 +10,9 @@
  * @public
  */
 export function transformTypeScript(filePath: string, options?: {
-    target?: string;
-    format?: string;
-    sourcemap?: boolean;
+    target?: string | undefined;
+    format?: string | undefined;
+    sourcemap?: boolean | undefined;
 }): Promise<string>;
 /**
  * Create a data URL for dynamic import with cache busting
@@ -35,11 +35,11 @@ export function createDataUrl(code: string): string;
  * @public
  */
 export function transformTypeScriptStrict(filePath: string, options?: {
-    target?: string;
-    module?: string;
-    strict?: boolean;
-    skipTypeCheck?: boolean;
-    typeDefinitionPath?: string;
+    target?: string | undefined;
+    module?: string | undefined;
+    strict?: boolean | undefined;
+    skipTypeCheck?: boolean | undefined;
+    typeDefinitionPath?: string | undefined;
 }): Promise<{
     code: string;
     diagnostics: object[];
