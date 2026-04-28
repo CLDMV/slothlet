@@ -140,6 +140,7 @@
 		"lint": "eslint --config .configs/eslint.config.mjs .",
 		"inspect": "node tools/dev/inspect-api-structure.mjs",
 		"check:node-versions": "node tools/dev/check-node-versions.mjs",
+		"check:engines": "node tools/dev/check-engines.mjs",
 		"analyze": "node tools/dev/analyze-errors.mjs",
 		"fix:headers": "node tools/dev/fix-headers.mjs",
 		"build": "npm run build:dev",
