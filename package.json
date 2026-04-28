@@ -312,6 +312,7 @@
 	"files": [
 		"index.mjs",
 		"index.cjs",
+		"README.md",
 		"REFERENCE.md",
 		"LICENSE",
 		"types/dist/",
