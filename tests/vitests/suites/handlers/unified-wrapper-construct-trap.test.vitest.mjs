@@ -249,6 +249,87 @@ describe("UnifiedWrapper > constructTrap > materialized lazy wrapper — eager f
 	});
 });
 
+// ─── Derived-class construction: newTarget !== proxy (false branch, lines 3477 & 3482) ───────
+
+// Line 3477 — impl is a function, newTarget is a derived class (not the proxy):
+//   `const effectiveNewTarget = newTarget === proxy ? impl : newTarget;`
+//   The FALSE branch fires when a user subclasses the proxy via `class Derived extends api.Foo {}`.
+//   In that case newTarget is `Derived`, not the proxy, so effectiveNewTarget = newTarget = Derived.
+
+describe.each(getMatrixConfigs({ mode: "eager" }))(
+	"UnifiedWrapper > constructTrap > derived-class subclassing (line 3477 false branch) > Config: '$name'",
+	({ config }) => {
+		let api;
+
+		beforeEach(async () => {
+			const { default: slothlet } = await import("@cldmv/slothlet");
+			api = await slothlet({ ...config, dir: TEST_DIRS.API_TEST, collision: { initial: "replace", api: "replace" } });
+		});
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		test("derived class instance has correct prototype and own properties (line 3477 false branch)", () => {
+			// class Derived extends api.classes.Counter triggers construct trap with
+			// newTarget = Derived (not the proxy), so effectiveNewTarget = newTarget = Derived.
+			// Reflect.construct(impl, args, Derived) produces an instance whose
+			// [[Prototype]] is Derived.prototype — the derived constructor body runs correctly.
+			class DerivedCounter extends api.classes.Counter {
+				constructor(start) {
+					super(start);
+					this.doubled = start * 2;
+				}
+			}
+
+			const inst = new DerivedCounter(10);
+			expect(inst.value).toBe(10);
+			expect(inst.doubled).toBe(20);
+			expect(Object.getPrototypeOf(inst)).toBe(DerivedCounter.prototype);
+		});
+	}
+);
+
+// Line 3482 — impl is {default: fn}, newTarget is a derived class (not the proxy):
+//   `const effectiveNewTarget = newTarget === proxy ? impl.default : newTarget;`
+//   Same derived-class scenario but for CJS modules loaded as { default: fn }.
+
+describe(
+	"UnifiedWrapper > constructTrap > derived-class subclassing CJS impl.default (line 3482 false branch)",
+	() => {
+		let api;
+
+		beforeEach(async () => {
+			const { default: slothlet } = await import("@cldmv/slothlet");
+			// Eager mode: CJS default-fn loads as impl = { default: multiply }
+			api = await slothlet({ mode: "eager", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+		});
+
+		afterEach(async () => {
+			if (api) await api.shutdown();
+			api = null;
+		});
+
+		test("derived class instance from CJS impl.default has correct prototype (line 3482 false branch)", () => {
+			// api.defaultFn: impl = { default: multiply } (CJS module, no named exports).
+			// class Derived extends api.defaultFn triggers construct trap with newTarget = Derived.
+			// effectiveNewTarget = newTarget = Derived → Reflect.construct(impl.default, args, Derived).
+			// The resulting instance has [[Prototype]] = Derived.prototype.
+			class DerivedMultiplier extends api.defaultFn {
+				constructor() {
+					super();
+					this.isDerived = true;
+				}
+			}
+
+			const inst = new DerivedMultiplier();
+			expect(Object.getPrototypeOf(inst)).toBe(DerivedMultiplier.prototype);
+			expect(inst.isDerived).toBe(true);
+		});
+	}
+);
+
 // ─── Invalid wrapper: construct on invalidated proxy throws TypeError ─────────
 
 describe("UnifiedWrapper > constructTrap > invalid wrapper throws TypeError (line 3403)", () => {
