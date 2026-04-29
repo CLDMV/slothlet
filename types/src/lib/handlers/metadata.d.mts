@@ -11,7 +11,8 @@ export class Metadata extends ComponentBase {
      * @param {Object} slothlet - Slothlet instance
      */
     constructor(slothlet: Object);
-    _instanceId: null;
+    /** @type {string | null} */
+    _instanceId: string | null;
     /**
      * Tag system metadata (SECURE, IMMUTABLE)
      * Called internally during wrapper/function creation

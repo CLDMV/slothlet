@@ -137,7 +137,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * prototype chain walk via `Object.getPrototypeOf` - without throwing a TypeError.
 	 * Without the brand check, `Object.getPrototypeOf(proxy).____slothletInternal` would
 	 * throw because the prototype object was never constructed and has no `#internal` field.
-	 * @returns {Object|undefined} Internal state container, or undefined for non-instances
+	 * @returns {Record<string, any>|undefined} Internal state container, or undefined for non-instances
 	 */
 	get ____slothletInternal() {
 		if (!(#internal in this)) return undefined;
@@ -149,7 +149,7 @@ export class UnifiedWrapper extends ComponentBase {
 	 * @param {Object} options - Configuration options
 	 * @param {string} options.mode - "lazy" or "eager"
 	 * @param {string} options.apiPath - API path for this wrapper (e.g., "math.advanced.calc")
-	 * @param {Object} [options.initialImpl=null] - Initial implementation (null for lazy mode)
+	 * @param {Function|Object|null} [options.initialImpl=null] - Initial implementation (null for lazy mode)
 	 * @param {Function} [options.materializeFunc=null] - Async function to materialize lazy modules
 	 * @param {boolean} [options.isCallable=false] - Whether the wrapper should be callable
 	 * @param {boolean} [options.materializeOnCreate=false] - Whether to materialize on creation
@@ -367,7 +367,7 @@ export class UnifiedWrapper extends ComponentBase {
 
 	/**
 	 * Get current implementation
-	 * @returns {Object|null} Current __impl value
+	 * @returns {Function|Object|null} Current __impl value
 	 * @public
 	 */
 	get __impl() {

@@ -38,6 +38,7 @@ export class Metadata extends ComponentBase {
 	#userMetadataStore = new Map(); // moduleID → { metadata: {}, apiPaths: Set<string> }
 	#globalUserMetadata = {}; // global user metadata (applies to all)
 
+	/** @type {string | null} */
 	_instanceId = null;
 
 	/**

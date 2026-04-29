@@ -6,7 +6,7 @@
  *	@Email: <Shinrai@users.noreply.github.com>
  *	-----
  *	@Last modified by: Nate Corcoran <CLDMV> (Shinrai@users.noreply.github.com)
- *	@Last modified time: 2026-04-26 20:42:36 -07:00 (1777261356)
+ *	@Last modified time: 2026-04-28 19:38:46 -07:00 (1777430326)
  *	-----
  *	@Copyright: Copyright (c) 2013-2026 Catalyzed Motivation Inc. All rights reserved.
  */
@@ -295,40 +295,37 @@ describe.each(getMatrixConfigs({ mode: "eager" }))(
 //   `const effectiveNewTarget = newTarget === proxy ? impl.default : newTarget;`
 //   Same derived-class scenario but for CJS modules loaded as { default: fn }.
 
-describe(
-	"UnifiedWrapper > constructTrap > derived-class subclassing CJS impl.default (line 3482 false branch)",
-	() => {
-		let api;
+describe("UnifiedWrapper > constructTrap > derived-class subclassing CJS impl.default (line 3482 false branch)", () => {
+	let api;
 
-		beforeEach(async () => {
-			const { default: slothlet } = await import("@cldmv/slothlet");
-			// Eager mode: CJS default-fn loads as impl = { default: multiply }
-			api = await slothlet({ mode: "eager", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
-		});
+	beforeEach(async () => {
+		const { default: slothlet } = await import("@cldmv/slothlet");
+		// Eager mode: CJS default-fn loads as impl = { default: multiply }
+		api = await slothlet({ mode: "eager", runtime: "async", hook: { enabled: false }, dir: TEST_DIRS.API_TEST_CJS });
+	});
 
-		afterEach(async () => {
-			if (api) await api.shutdown();
-			api = null;
-		});
+	afterEach(async () => {
+		if (api) await api.shutdown();
+		api = null;
+	});
 
-		test("derived class instance from CJS impl.default has correct prototype (line 3482 false branch)", () => {
-			// api.defaultFn: impl = { default: multiply } (CJS module, no named exports).
-			// class Derived extends api.defaultFn triggers construct trap with newTarget = Derived.
-			// effectiveNewTarget = newTarget = Derived → Reflect.construct(impl.default, args, Derived).
-			// The resulting instance has [[Prototype]] = Derived.prototype.
-			class DerivedMultiplier extends api.defaultFn {
-				constructor() {
-					super();
-					this.isDerived = true;
-				}
+	test("derived class instance from CJS impl.default has correct prototype (line 3482 false branch)", () => {
+		// api.defaultFn: impl = { default: multiply } (CJS module, no named exports).
+		// class Derived extends api.defaultFn triggers construct trap with newTarget = Derived.
+		// effectiveNewTarget = newTarget = Derived → Reflect.construct(impl.default, args, Derived).
+		// The resulting instance has [[Prototype]] = Derived.prototype.
+		class DerivedMultiplier extends api.defaultFn {
+			constructor() {
+				super();
+				this.isDerived = true;
 			}
+		}
 
-			const inst = new DerivedMultiplier();
-			expect(Object.getPrototypeOf(inst)).toBe(DerivedMultiplier.prototype);
-			expect(inst.isDerived).toBe(true);
-		});
-	}
-);
+		const inst = new DerivedMultiplier();
+		expect(Object.getPrototypeOf(inst)).toBe(DerivedMultiplier.prototype);
+		expect(inst.isDerived).toBe(true);
+	});
+});
 
 // ─── Invalid wrapper: construct on invalidated proxy throws TypeError ─────────
 
