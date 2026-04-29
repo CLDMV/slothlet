@@ -55,17 +55,17 @@ Every feature has been hardened with a comprehensive test suite - over **5,300 t
 
 ## ✨ What's New
 
-### Latest: v3.3.1 (April 2026)
+### Latest: v3.3.2 (April 2026)
 
-- **`construct` trap for proxied classes** — `new api.someModule.MyClass(args)` now correctly runs the constructor, sets own properties, and preserves the prototype chain. Previously, `new` silently produced an empty `{}`. In lazy mode, `await new api.MyClass(args)` resolves to the real instance after materialization.
-- [View full v3.3.1 Changelog](./docs/changelog/v3/v3.3.1.md)
+- **Workflow maintenance** — `release.yml` and `publish.yml` now match `ci.yml`: minimum Node.js raised to `20.19.0` and `lts_only_matrix` input added (default `true`) to keep matrix tests on LTS-only Node releases.
+- [View full v3.3.2 Changelog](./docs/changelog/v3/v3.3.2.md)
 
 ### Recent Releases
 
+- **v3.3.1** (April 2026) — `construct` trap for proxied classes; Node.js engine requirement raised to ≥ 20.19.0; type declaration fixes ([Changelog](./docs/changelog/v3/v3.3.1.md))
 - **v3.3.0** (April 2026) — Permission System: path-based access control for inter-module calls with glob rules, audit events, and `api.slothlet.permissions.*` runtime API ([Changelog](./docs/changelog/v3/v3.3.0.md))
 - **v3.2.3** (April 2026) — publish workflow fix ([Changelog](./docs/changelog/v3/v3.2.3.md))
 - **v3.2.2** (April 2026) — missing `set` trap on version dispatchers; `util.inspect(api.auth)` now shows resolved versioned namespace ([Changelog](./docs/changelog/v3/v3.2.2.md))
-- **v3.2.1** (April 2026) — version-dispatcher `defineProperty` trap fix; pre-commit validation cleanup ([Changelog](./docs/changelog/v3/v3.2.1.md))
 
 
 📚 **For complete version history and detailed release notes, see [docs/changelog/](./docs/changelog/) folder.**
@@ -175,8 +175,7 @@ Automatic context preservation across all asynchronous boundaries:
 
 ### Requirements
 
-- **Node.js v16.20.2 or higher** (required for stack trace API fixes used in path resolution)
-  - Node.js 16.4–16.19 has a stack trace regression. For these versions, use slothlet 2.10.0: `npm install @cldmv/slothlet@2.10.0`
+- **Node.js v20.19.0 or higher**
 
 ### Install
 

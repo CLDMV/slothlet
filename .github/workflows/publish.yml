@@ -62,12 +62,19 @@ on:
                 description: "Minimum Node.js version for matrix testing (enables matrix when set)"
                 type: string
                 required: false
-                default: "16.20.2"
+                default: "20.19.0"
             max_node_major:
                 description: "Override max Node.js major version (default: 24)"
                 type: string
                 required: false
                 default: "24"
+            lts_only_matrix:
+                description: "Only include even-numbered (LTS) Node.js majors in the test
+                    matrix. Required when deps declare engines that exclude
+                    odd-numbered releases (e.g. rolldown)."
+                type: boolean
+                required: false
+                default: true
             use_gpg:
                 description: "Enable GPG signing (if GPG secrets provided)"
                 type: boolean
@@ -98,8 +105,9 @@ jobs:
             publish_to_github_packages: ${{ github.event.inputs.publish_to_github_packages != 'false' }}
             publish_command: ""
             github_packages_publish_command: ""
-            min_node_version: ${{ github.event.inputs.min_node_version || '16.20.2' }}
+            min_node_version: ${{ github.event.inputs.min_node_version || '20.19.0' }}
             max_node_major: ${{ github.event.inputs.max_node_major || '24' }}
+            lts_only_matrix: ${{ github.event.inputs.lts_only_matrix != 'false' }}
             test_command: "npm test"
             test_environment: "slothlet-dev"
             build_command: "npm run build:ci"
